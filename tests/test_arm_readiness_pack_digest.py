@@ -6,7 +6,9 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import joulewise.arm_readiness as readiness
 from joulewise.arm_readiness import (
     PACK_DIGEST_DOMAIN,
     ArmReadinessError,
@@ -70,35 +72,62 @@ class CommittedPackDigestTests(unittest.TestCase):
                 finally:
                     temporary.cleanup()
 
-    def test_non_utf8_path_and_git_symlink_modes_refuse(self) -> None:
+    def test_non_utf8_git_tree_path_refuses_without_filesystem_construction(self) -> None:
         temporary, repo, pack = self.make_repo()
         self.addCleanup(temporary.cleanup)
-        bad = os.fsencode(pack) + b"/bad-\xff"
-        try:
-            descriptor = os.open(bad, os.O_CREAT | os.O_WRONLY, 0o644)
-        except OSError:
-            # The fixture cannot exist everywhere: bare APFS refuses
-            # undecodable name bytes with EILSEQ (errno 92), and some managed
-            # macOS sandboxes reject them earlier with PermissionError.  The
-            # validator branch remains exercised on filesystems that admit
-            # the fixture (Linux CI); the symlink-mode case below is
-            # independent and must still run everywhere.
-            descriptor = None
-        if descriptor is not None:
-            os.write(descriptor, b"bad")
-            os.close(descriptor)
-            subprocess.run([b"git", b"add", b"--", bad], cwd=os.fsencode(repo), check=True)
-            subprocess.run(["git", "commit", "-qm", "non utf8"], cwd=repo, check=True)
-            with self.assertRaisesRegex(ArmReadinessError, "non-UTF-8"):
+        tree = b"100644 blob " + b"a" * 40 + b"\tpack/bad-\xff\0"
+        with mock.patch.object(
+            readiness,
+            "_repository_and_pack_relative",
+            return_value=(repo, b"pack", "pack"),
+        ), mock.patch.object(readiness, "_run_git", return_value=tree):
+            with self.assertRaises(ArmReadinessError) as caught:
                 committed_pack_tree_sha256(pack)
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_pack_namespace_anomalous"
+        )
+        self.assertIn("non-UTF-8", str(caught.exception))
 
-        temporary2, repo2, pack2 = self.make_repo()
-        self.addCleanup(temporary2.cleanup)
-        (pack2 / "tracked-link").symlink_to("a.txt")
-        subprocess.run(["git", "add", "."], cwd=repo2, check=True)
-        subprocess.run(["git", "commit", "-qm", "symlink"], cwd=repo2, check=True)
+    def test_git_symlink_mode_refuses(self) -> None:
+        temporary, repo, pack = self.make_repo()
+        self.addCleanup(temporary.cleanup)
+        (pack / "tracked-link").symlink_to("a.txt")
+        subprocess.run(["git", "add", "."], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "symlink"], cwd=repo, check=True)
         with self.assertRaisesRegex(ArmReadinessError, "mode/type"):
-            committed_pack_tree_sha256(pack2)
+            committed_pack_tree_sha256(pack)
+
+    def test_gitlink_mode_160000_commit_refuses_before_disk_synthesis(self) -> None:
+        temporary, repo, pack = self.make_repo()
+        self.addCleanup(temporary.cleanup)
+        blobs = {
+            "a" * 40: b"alpha\n",
+            "c" * 40: b"#!/bin/sh\nexit 0\n",
+        }
+        tree = b"".join(
+            (
+                b"100644 blob " + b"a" * 40 + b"\tpack/a.txt\0",
+                b"160000 commit " + b"b" * 40 + b"\tpack/gitlink\0",
+                b"100755 blob " + b"c" * 40 + b"\tpack/sub/run.sh\0",
+            )
+        )
+
+        def git_output(_root: Path, *args: str) -> bytes:
+            if args[0] == "ls-tree":
+                return tree
+            return blobs[args[-1]]
+
+        with mock.patch.object(
+            readiness,
+            "_repository_and_pack_relative",
+            return_value=(repo, b"pack", "pack"),
+        ), mock.patch.object(readiness, "_run_git", side_effect=git_output):
+            with self.assertRaises(ArmReadinessError) as caught:
+                committed_pack_tree_sha256(pack)
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_pack_namespace_anomalous"
+        )
+        self.assertIn("mode/type", str(caught.exception))
 
     def test_governed_namespace_anomaly_refuses_and_external_arm_has_no_hash_cycle(self) -> None:
         temporary, _repo, pack = self.make_repo()

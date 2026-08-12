@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -160,6 +161,7 @@ SYNTHETIC_DOMAINS = (
 )
 
 _LOWER_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_LOWER_GIT_OID_RE = re.compile(r"^[0-9a-f]{40}$")
 _RECEIPT_NAME_RE = {
     "freeze": re.compile(r"^freeze-([0-9]{4,})\.json$"),
     "arm": re.compile(r"^arm-([0-9]{4,})\.json$"),
@@ -290,6 +292,7 @@ ARM_RECEIPT_KEYS = {
     "status",
     "arm_disposition",
     "issued_at_utc",
+    "boot_session_id",
     "valid_until_monotonic_ns",
     "pack",
     "reviewed_main",
@@ -324,6 +327,7 @@ EVIDENCE_RECEIPT_KEYS = {
     "kind",
     "status",
     "issued_at_utc",
+    "boot_session_id",
     "valid_until_monotonic_ns",
     "pack_sha256",
     "head_commit",
@@ -341,6 +345,262 @@ CONSUMPTION_RECEIPT_KEYS = {
     "head_commit",
     "volatile_checks",
     "assurance",
+}
+
+# D-134's row table is design authority for these requirements.  The registry
+# deliberately remains the exact-key row/kind vocabulary; content and source
+# admissibility are derived here from those existing evidence kinds.
+_EVIDENCE_SOURCE_KINDS = {
+    "ACCEPTANCE_OWNER": frozenset({"PROBE"}),
+    "ACCEPTANCE_SUCCESSOR": frozenset({"PACK", "PROBE"}),
+    "BACKUP_PREFLIGHT": frozenset({"PROBE"}),
+    "CLOCK_ATTESTATION": frozenset({"OPERATOR_ATTESTATION", "PROBE"}),
+    "CLOCK_PROBE": frozenset({"PROBE"}),
+    "DOCTRINE_PIN": frozenset({"PACK"}),
+    "DRY_RUN_REHEARSAL": frozenset(),
+    "ESTIMATOR_IDENTITY": frozenset({"PACK"}),
+    "GIT_CHECKOUT": frozenset({"GIT"}),
+    "IDENTITY_PIN_PROJECTION": frozenset(),
+    "LAUNCH_RECIPE": frozenset({"PACK", "PROBE"}),
+    "LEDGER_RESERVATION": frozenset({"PROBE"}),
+    "MACHINE_PREFLIGHT": frozenset({"PROBE"}),
+    "MAINTENANCE_CENSUS": frozenset({"OPERATOR_ATTESTATION", "PROBE"}),
+    "MINT_TRUST": frozenset({"PROBE"}),
+    "MULTICELL_MINT": frozenset({"PROBE"}),
+    "OFFLINE_INPUT_INVENTORY": frozenset({"PROBE"}),
+    "PACK_AUTHENTICATION": frozenset({"GIT", "PACK", "PROBE"}),
+    "PACK_FAMILY": frozenset({"PACK"}),
+    "POWERMETRICS_PROBE": frozenset({"PROBE"}),
+    "POWER_PREFLIGHT": frozenset({"PROBE"}),
+    "PRIVILEGE_INSTALLATION": frozenset({"PROBE"}),
+    "PROCESS_CENSUS": frozenset({"PROBE"}),
+    "REASON_CODE_COVERAGE": frozenset({"PROBE"}),
+    "RECEIPT_ORACLE": frozenset({"PROBE"}),
+    "RECOVERY_LEDGER_TEST": frozenset({"PROBE"}),
+    "ROOT_PREFLIGHT": frozenset({"PROBE"}),
+    "TERMINAL_REVIEW": frozenset({"GIT", "PROBE"}),
+    "THREE_WINDOW_REGRESSION": frozenset({"PROBE"}),
+}
+
+_LOWER_SHA256_CONTENT = object()
+_PREDICATE_CONTENT_REQUIREMENTS: dict[str, Mapping[str, Any]] = {
+    "clock.correct_and_prior_state.v1": {
+        "independent_clock_attestation": True,
+        "prior_systemsetup_state_captured": True,
+    },
+    "clock.network_time_off.v1": {
+        "fresh_probe": True,
+        "network_time": "off",
+    },
+    "clock.restore_recipe.v1": {
+        "close_out_recipe_hashes_match_pack": True,
+        "restore_after_both_backups": True,
+        "restore_after_verdict": True,
+    },
+    "desk.acceptance_owner.v1": {
+        "active_acceptance_artifact_authenticated": True,
+        "copied_scalar_accepted": False,
+        "domain_owner_verified": True,
+        "unknown_key_accepted": False,
+        "writer_test_status": "PASS",
+    },
+    "desk.acceptance_successor.v1": {
+        "selected_before_member_one": True,
+        "successor_receipt_authenticated": True,
+        "successor_receipt_status": "PASS",
+    },
+    "desk.arming_procedure.v1": {
+        "frozen_launch_recipe_hash_matches_pack": True,
+        "runbook_section_hashes_match_pack": True,
+        "runbook_sections": ["5", "5A", "5B", "5C", "6", "10"],
+    },
+    "desk.current_pack.v1": {
+        "attempt_policy_status": "PASS",
+        "committed_pack_digest_status": "PASS",
+        "extraction_specification_status": "PASS",
+        "manifest_validator_status": "PASS",
+        "pack_generator_check_status": "PASS",
+        "plan_validator_status": "PASS",
+    },
+    "desk.estimator_identity.v1": {
+        "admitted_by_mint_registry": True,
+        "cli_estimator_id_accepted": False,
+        "estimator_id_derived_from_frozen_plan": True,
+    },
+    "desk.identity_pin_projection.v1": {
+        "projection_status": "PASS",
+    },
+    "desk.mint_trust.v1": {
+        "profile_test_status": "PASS",
+        "same_head": True,
+        "same_pack_digest": True,
+    },
+    "desk.multicell_mint.v1": {
+        "focused_integration_status": "PASS",
+        "mint_schemas_match_committed_sources": True,
+        "pinsets_match_committed_sources": True,
+    },
+    "desk.pack_family.v1": {
+        "floor_transport_identities_consistent": True,
+        "pack_receipts": ["ALPHA", "BETA", "GAMMA"],
+        "same_reviewed_head": True,
+    },
+    "desk.reason_code_plumbing.v1": {
+        "all_produced_refusals_are_closed": True,
+        "rehearsal_receipt_status": "PASS",
+        "registry_coverage_test_status": "PASS",
+    },
+    "desk.receipt_oracle.v1": {
+        "derived_from_committed_ledger_implementation": True,
+        "exact_pack_oracle_match": True,
+    },
+    "desk.recovery_ledger_path.v1": {
+        "bound_head": True,
+        "recovery_ledger_focused_suite_status": "PASS",
+    },
+    "desk.reviewed_checkout.v1": {
+        "exact_tree_equality": True,
+        "head_equals_local_main": True,
+        "head_equals_origin_main": True,
+        "status_empty_including_untracked": True,
+    },
+    "desk.terminal_review.v1": {
+        "same_head_tree": True,
+        "same_pack_digest": True,
+        "terminal_review_status": "PASS",
+    },
+    "desk.three_window_regression.v1": {
+        "profiles": ["ALPHA", "BETA", "GAMMA"],
+        "same_head": True,
+        "three_window_live_ledger_regression_status": "PASS",
+    },
+    "desk.under_lease_rehearsal.v1": {
+        "real_reservation_cli_execute": "PASS",
+        "real_writer_entry_post": "PASS",
+        "real_writer_entry_pre": "PASS",
+        "same_head_pack_binding": "PASS",
+    },
+    "privilege.activation_fence.v1": {
+        "inactive_state_preceded_activation": True,
+        "separate_ed_visible_activation": True,
+    },
+    "privilege.fresh_authorization.v1": {
+        "fresh_authorization_sequence": True,
+        "sudo_k_reviewed": True,
+    },
+    "privilege.installed_bytes.v1": {
+        "installed_digests_match_pack_staged_digests": True,
+    },
+    "privilege.isolated_interpreter.v1": {
+        "frozen_isolated_interpreter_contract": True,
+    },
+    "t0.background_quiet.v1": {
+        "observation_status": "PASS",
+    },
+    "t0.campaign_lock_absent.v1": {
+        "fresh_root_receipt": True,
+        "live_lock_absent": True,
+        "stale_lock_absent": True,
+        "unreadable_lock_absent": True,
+    },
+    "t0.display_thermal_idle.v1": {
+        "display_predicate": True,
+        "idle_predicate": True,
+        "prewindow_check_wait_status": "PASS",
+        "quiet_mac_prep_status": "PASS",
+        "screensaver_predicate": True,
+        "thermal_predicate": True,
+    },
+    "t0.fresh_roots_waivers.v1": {
+        "roots_absolute": True,
+        "roots_derived_from_frozen_leaves_and_arm_context": True,
+        "roots_distinct": True,
+        "roots_empty": True,
+        "waiver_bytes_decoded": [],
+    },
+    "t0.ledger_reservation.v1": {
+        "diagnostic_status": "PASS",
+        "events": ["calibration_pre_reserve_authorized"],
+        "execute_mode": True,
+        "plan_sha256": _LOWER_SHA256_CONTENT,
+        "status": "reserved",
+    },
+    "t0.machine_readiness.v1": {
+        "current": True,
+        "frozen_prewindow_check_wait_command": True,
+        "same_plan": True,
+        "same_roots": True,
+        "status": "READY",
+    },
+    "t0.no_stray_keepawake.v1": {
+        "absent_process_classes": ["agent", "browser", "keep_awake", "monitor"],
+        "fresh_process_census": True,
+    },
+    "t0.offline_inputs.v1": {
+        "file_inventory_matches_frozen_inputs": True,
+        "no_network_fetch": True,
+        "u11_live_derivation_matches_frozen_inputs": True,
+    },
+    "t0.passwordless_powermetrics.v1": {
+        "exact_reviewed_sudo_n_powermetrics_command": True,
+        "exit_code": 0,
+    },
+    "t0.power_path.v1": {
+        "ac_state_matches_frozen_policy": True,
+        "negotiation_matches_frozen_policy": True,
+        "power_policy_matches": True,
+        "supply_matches_frozen_policy": True,
+    },
+    "t0.single_launch_capability.v1": {
+        "atomic_single_use_capability_available": True,
+        "attempt_ids_unused": True,
+        "exact_launch_command_frozen": True,
+        "session_id_unused": True,
+    },
+    "t0.storage_backup_capacity.v1": {
+        "destinations_distinct": True,
+        "destinations_exist": True,
+        "destinations_have_required_capacity": True,
+        "destinations_writable": True,
+    },
+}
+
+_PREDICATE_EVIDENCE_KIND = {
+    "clock.correct_and_prior_state.v1": "CLOCK_ATTESTATION",
+    "clock.network_time_off.v1": "CLOCK_PROBE",
+    "clock.restore_recipe.v1": "DOCTRINE_PIN",
+    "desk.acceptance_owner.v1": "ACCEPTANCE_OWNER",
+    "desk.acceptance_successor.v1": "ACCEPTANCE_SUCCESSOR",
+    "desk.arming_procedure.v1": "DOCTRINE_PIN",
+    "desk.current_pack.v1": "PACK_AUTHENTICATION",
+    "desk.estimator_identity.v1": "ESTIMATOR_IDENTITY",
+    "desk.identity_pin_projection.v1": "IDENTITY_PIN_PROJECTION",
+    "desk.mint_trust.v1": "MINT_TRUST",
+    "desk.multicell_mint.v1": "MULTICELL_MINT",
+    "desk.pack_family.v1": "PACK_FAMILY",
+    "desk.reason_code_plumbing.v1": "REASON_CODE_COVERAGE",
+    "desk.receipt_oracle.v1": "RECEIPT_ORACLE",
+    "desk.recovery_ledger_path.v1": "RECOVERY_LEDGER_TEST",
+    "desk.reviewed_checkout.v1": "GIT_CHECKOUT",
+    "desk.terminal_review.v1": "TERMINAL_REVIEW",
+    "desk.three_window_regression.v1": "THREE_WINDOW_REGRESSION",
+    "desk.under_lease_rehearsal.v1": "DRY_RUN_REHEARSAL",
+    "privilege.activation_fence.v1": "PRIVILEGE_INSTALLATION",
+    "privilege.fresh_authorization.v1": "PRIVILEGE_INSTALLATION",
+    "privilege.installed_bytes.v1": "PRIVILEGE_INSTALLATION",
+    "privilege.isolated_interpreter.v1": "PRIVILEGE_INSTALLATION",
+    "t0.background_quiet.v1": "MAINTENANCE_CENSUS",
+    "t0.campaign_lock_absent.v1": "ROOT_PREFLIGHT",
+    "t0.display_thermal_idle.v1": "MACHINE_PREFLIGHT",
+    "t0.fresh_roots_waivers.v1": "ROOT_PREFLIGHT",
+    "t0.ledger_reservation.v1": "LEDGER_RESERVATION",
+    "t0.machine_readiness.v1": "MACHINE_PREFLIGHT",
+    "t0.no_stray_keepawake.v1": "PROCESS_CENSUS",
+    "t0.offline_inputs.v1": "OFFLINE_INPUT_INVENTORY",
+    "t0.passwordless_powermetrics.v1": "POWERMETRICS_PROBE",
+    "t0.power_path.v1": "POWER_PREFLIGHT",
+    "t0.single_launch_capability.v1": "LAUNCH_RECIPE",
+    "t0.storage_backup_capacity.v1": "BACKUP_PREFLIGHT",
 }
 
 
@@ -416,6 +676,65 @@ def _require_lower_sha256(value: object, where: str) -> str:
         return _identity_require_lower_sha256(value, where)
     except IdentityPinProjectionError as exc:
         raise ArmReadinessError("readiness_schema_invalid", str(exc)) from exc
+
+
+def _require_lower_git_oid(value: object, where: str) -> str:
+    if not isinstance(value, str) or _LOWER_GIT_OID_RE.fullmatch(value) is None:
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"{where} must be exactly 40 lowercase hexadecimal characters",
+        )
+    return value
+
+
+def _require_boot_session_id(value: object, where: str) -> str:
+    if not isinstance(value, str):
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} must be a canonical UUID"
+        )
+    try:
+        canonical = str(uuid.UUID(value))
+    except (ValueError, AttributeError) as exc:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} must be a canonical UUID"
+        ) from exc
+    if value != canonical:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} must be a canonical UUID"
+        )
+    return value
+
+
+def _current_boot_session_id() -> str:
+    """Derive Darwin's boot epoch; callers must fail closed if unavailable."""
+
+    try:
+        completed = subprocess.run(
+            ("/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"),
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ArmReadinessError(
+            "readiness_io_error", f"cannot derive kern.bootsessionuuid: {exc}"
+        ) from exc
+    if completed.returncode != 0:
+        detail = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise ArmReadinessError(
+            "readiness_io_error",
+            f"cannot derive kern.bootsessionuuid: {detail or 'sysctl failed'}",
+        )
+    try:
+        value = completed.stdout.decode("ascii", errors="strict").strip().lower()
+    except UnicodeDecodeError as exc:
+        raise ArmReadinessError(
+            "readiness_io_error", "kern.bootsessionuuid is not ASCII"
+        ) from exc
+    try:
+        return _require_boot_session_id(value, "kern.bootsessionuuid")
+    except ArmReadinessError as exc:
+        raise ArmReadinessError("readiness_io_error", str(exc)) from exc
 
 
 def _pairs_no_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -805,8 +1124,12 @@ def validate_evidence_receipt(value: object) -> Mapping[str, Any]:
         raise ArmReadinessError(
             "readiness_schema_invalid", "evidence receipt schema is invalid"
         )
-    for name in ("evidence_id", "kind", "issued_at_utc", "head_commit"):
+    for name in ("evidence_id", "kind", "issued_at_utc"):
         _require_string(receipt[name], f"evidence receipt.{name}")
+    _require_boot_session_id(
+        receipt["boot_session_id"], "evidence receipt.boot_session_id"
+    )
+    _require_lower_git_oid(receipt["head_commit"], "evidence receipt.head_commit")
     if receipt["status"] not in RECEIPT_STATUSES:
         raise ArmReadinessError(
             "readiness_schema_invalid", "evidence status is invalid"
@@ -944,6 +1267,7 @@ def validate_arm_receipt(value: object) -> Mapping[str, Any]:
         )
     for name in ("receipt_id", "issued_at_utc"):
         _require_string(receipt[name], f"arm receipt.{name}")
+    _require_boot_session_id(receipt["boot_session_id"], "arm receipt.boot_session_id")
     _require_int(
         receipt["valid_until_monotonic_ns"],
         "arm receipt.valid_until_monotonic_ns",
@@ -952,7 +1276,7 @@ def validate_arm_receipt(value: object) -> Mapping[str, Any]:
     _validate_pack(receipt["pack"], "arm receipt.pack")
     reviewed = _require_exact_keys(receipt["reviewed_main"], REVIEWED_MAIN_KEYS, "reviewed_main")
     for name in ("head_commit", "head_tree_oid", "local_main_commit", "origin_main_commit"):
-        _require_string(reviewed[name], f"reviewed_main.{name}")
+        _require_lower_git_oid(reviewed[name], f"reviewed_main.{name}")
     if not isinstance(reviewed["clean"], bool) or not isinstance(reviewed["exact_match"], bool):
         raise ArmReadinessError(
             "readiness_schema_invalid", "reviewed_main booleans are invalid"
@@ -1045,7 +1369,7 @@ def validate_consumption_receipt(value: object) -> Mapping[str, Any]:
     _require_relative_path(arm["path"], "arm_receipt.path")
     _require_lower_sha256(arm["sha256"], "arm_receipt.sha256")
     _require_lower_sha256(receipt["pack_sha256"], "consumption receipt.pack_sha256")
-    _require_string(receipt["head_commit"], "consumption receipt.head_commit")
+    _require_lower_git_oid(receipt["head_commit"], "consumption receipt.head_commit")
     if not isinstance(receipt["volatile_checks"], list) or receipt["volatile_checks"] != sorted(set(receipt["volatile_checks"])):
         raise ArmReadinessError(
             "readiness_schema_invalid", "volatile_checks must be sorted and unique"
@@ -1717,8 +2041,8 @@ def _identity_projection_pseudo_receipt(
             [
                 {
                     "fact_id": "desk.identity_pin_projection.v1",
-                    "value_type": "BOOLEAN",
-                    "value": True,
+                    "value_type": "OBJECT",
+                    "value": {"projection_status": "PASS"},
                 }
             ]
             if status == "PASS"
@@ -2008,6 +2332,7 @@ def _authenticate_generic_evidence_item(
     *,
     expected_pack_sha256: str | None = None,
     expected_head_commit: str | None = None,
+    expected_boot_session_id: str | None = None,
     now_monotonic_ns: int | None = None,
 ) -> Mapping[str, Any]:
     _validate_evidence_item(item, "evidence item")
@@ -2070,6 +2395,13 @@ def _authenticate_generic_evidence_item(
             "evidence item is stale for pack or HEAD",
         )
     if (
+        expected_boot_session_id is not None
+        and receipt["boot_session_id"] != expected_boot_session_id
+    ):
+        raise ArmReadinessError(
+            "readiness_record_expired", "evidence item belongs to a prior boot session"
+        )
+    if (
         now_monotonic_ns is not None
         and receipt["valid_until_monotonic_ns"] < now_monotonic_ns
     ):
@@ -2103,6 +2435,7 @@ def _discover_evidence(
     *,
     pack_sha256: str | None,
     head_commit: str | None,
+    boot_session_id: str | None,
     now_monotonic_ns: int | None,
     include_pack: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]], list[dict[str, Any]]]:
@@ -2172,6 +2505,14 @@ def _discover_evidence(
                         "readiness_evidence_digest_mismatch", "evidence is stale for pack/HEAD"
                     )
                 if (
+                    boot_session_id is not None
+                    and receipt["boot_session_id"] != boot_session_id
+                ):
+                    raise ArmReadinessError(
+                        "readiness_record_expired",
+                        "evidence receipt belongs to a prior boot session",
+                    )
+                if (
                     now_monotonic_ns is not None
                     and receipt["valid_until_monotonic_ns"] < now_monotonic_ns
                 ):
@@ -2229,20 +2570,60 @@ def _discover_evidence(
     return items, receipts, refusals
 
 
+def _content_matches(value: object, required: object) -> bool:
+    if required is _LOWER_SHA256_CONTENT:
+        return isinstance(value, str) and _LOWER_SHA256_RE.fullmatch(value) is not None
+    if isinstance(required, Mapping):
+        return isinstance(value, Mapping) and all(
+            key in value and _content_matches(value[key], expected)
+            for key, expected in required.items()
+        )
+    return value == required
+
+
 def _predicate_passes(receipt: Mapping[str, Any], predicate_id: str) -> bool:
-    if receipt["status"] != "PASS":
+    """Apply the D-134 row's content and source derivation predicate."""
+
+    if receipt.get("status") != "PASS":
         return False
-    if any(
-        fact["fact_id"] == predicate_id
-        and fact["value_type"] == "BOOLEAN"
-        and fact["value"] is True
-        for fact in receipt["facts"]
-    ):
+    expected_kind = _PREDICATE_EVIDENCE_KIND.get(predicate_id)
+    required = _PREDICATE_CONTENT_REQUIREMENTS.get(predicate_id)
+    if expected_kind is None or required is None or receipt.get("kind") != expected_kind:
+        return False
+    facts = receipt.get("facts")
+    if not isinstance(facts, list):
+        return False
+    if expected_kind in {"IDENTITY_PIN_PROJECTION", "DRY_RUN_REHEARSAL"}:
+        return any(
+            isinstance(fact, Mapping)
+            and fact.get("fact_id") == predicate_id
+            and fact.get("value_type") == "OBJECT"
+            and _content_matches(fact.get("value"), required)
+            for fact in facts
+        )
+    admitted_sources = _EVIDENCE_SOURCE_KINDS[expected_kind]
+    for fact in facts:
+        if (
+            not isinstance(fact, Mapping)
+            or fact.get("fact_id") != predicate_id
+            or fact.get("value_type") != "OBJECT"
+            or fact.get("source_kind") not in admitted_sources
+            or not _content_matches(fact.get("value"), required)
+        ):
+            continue
+        value = fact["value"]
+        if predicate_id == "t0.background_quiet.v1":
+            source_kind = fact["source_kind"]
+            if source_kind == "OPERATOR_ATTESTATION" and value.get(
+                "closed_operator_observation"
+            ) is not True:
+                continue
+            if source_kind == "PROBE" and value.get(
+                "fresh_maintenance_census"
+            ) is not True:
+                continue
         return True
-    return any(
-        check["check_id"] == predicate_id and check["status"] == "PASS"
-        for check in receipt["checks"]
-    )
+    return False
 
 
 def _missing_row_code(row_id: str) -> str:
@@ -2400,6 +2781,7 @@ def _load_freeze_reference(
     )
     semantic_receipts: dict[str, Mapping[str, Any]] = {}
     identity_reasons: list[str] = []
+    boot_session_id = _current_boot_session_id()
     generic_items = [
         item
         for item in receipt["evidence"]
@@ -2438,7 +2820,12 @@ def _load_freeze_reference(
                 "freeze evidence must be pack-relative",
             )
         semantic_receipts[item["evidence_id"]] = (
-            _authenticate_generic_evidence_item(item, pack_root, pack_root)
+            _authenticate_generic_evidence_item(
+                item,
+                pack_root,
+                pack_root,
+                expected_boot_session_id=boot_session_id,
+            )
         )
     identity_items = [
         item
@@ -2524,13 +2911,17 @@ def _freeze_evidence_for_arm(
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]]]:
     items = copy.deepcopy(list(freeze_receipt["evidence"]))
     receipts: dict[str, Mapping[str, Any]] = {}
+    boot_session_id = _current_boot_session_id()
     plan_identity_item, plan_identity_receipt, _reasons = (
         _load_frozen_identity_evidence(pack_root, tree)
     )
     for item in items:
         if item["schema_version"] == EVIDENCE_RECEIPT_SCHEMA:
             receipts[item["evidence_id"]] = _authenticate_generic_evidence_item(
-                item, pack_root, pack_root
+                item,
+                pack_root,
+                pack_root,
+                expected_boot_session_id=boot_session_id,
             )
         elif item["schema_version"] == IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA:
             if item != plan_identity_item or plan_identity_receipt is None:
@@ -2590,11 +2981,13 @@ def generate_freeze_receipt(pack_root: Path | str) -> dict[str, Any]:
     head = reviewed_main(root)["head_commit"]
     custody_pack_root = root
     evaluated_at_monotonic_ns = time.monotonic_ns()
+    boot_session_id = _current_boot_session_id()
     evidence_items, evidence_receipts, evidence_refusals = _discover_evidence(
         root,
         custody_pack_root,
         pack_sha256=None,
         head_commit=None,
+        boot_session_id=boot_session_id,
         now_monotonic_ns=evaluated_at_monotonic_ns,
     )
     identity_item, identity_receipt, identity_reasons = _load_frozen_identity_evidence(
@@ -3007,6 +3400,10 @@ def _latest_dry_run(
 
 def _dry_run_semantic_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
     status = str(receipt["status"])
+    check_statuses = {
+        str(check["check_id"]): str(check["status"])
+        for check in receipt["checks"]
+    }
     return {
         "kind": "DRY_RUN_REHEARSAL",
         "status": status,
@@ -3014,8 +3411,13 @@ def _dry_run_semantic_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
             [
                 {
                     "fact_id": "desk.under_lease_rehearsal.v1",
-                    "value_type": "BOOLEAN",
-                    "value": True,
+                    "value_type": "OBJECT",
+                    "value": {
+                        check_id: check_statuses.get(check_id)
+                        for check_id in _PREDICATE_CONTENT_REQUIREMENTS[
+                            "desk.under_lease_rehearsal.v1"
+                        ]
+                    },
                 }
             ]
             if status == "PASS"
@@ -3177,11 +3579,13 @@ def generate_arm_receipt(
     prior_receipts = [item["receipt"] for item in existing]
     number = max((item["number"] for item in existing), default=0) + 1
     evaluated_at_monotonic_ns = time.monotonic_ns()
+    boot_session_id = _current_boot_session_id()
     evidence_items, evidence_receipts, evidence_refusals = _discover_evidence(
         root,
         custody_pack_root,
         pack_sha256=pack["pack_sha256"],
         head_commit=reviewed["head_commit"],
+        boot_session_id=boot_session_id,
         now_monotonic_ns=evaluated_at_monotonic_ns,
         include_pack=False,
     )
@@ -3282,6 +3686,7 @@ def generate_arm_receipt(
         "status": status,
         "arm_disposition": "NO_GO" if refusals else "GO",
         "issued_at_utc": _utc_now(),
+        "boot_session_id": boot_session_id,
         "valid_until_monotonic_ns": valid_until,
         "pack": pack,
         "reviewed_main": reviewed,
@@ -3352,6 +3757,7 @@ def _derive_arm_semantics_for_verification(
         custody_pack_root,
         pack_sha256=pack["pack_sha256"],
         head_commit=reviewed["head_commit"],
+        boot_session_id=str(receipt["boot_session_id"]),
         now_monotonic_ns=time.monotonic_ns(),
         include_pack=False,
     )
@@ -3500,6 +3906,10 @@ def verify_arm_receipt(
     if receipt["receipt_kind"] != "arm":
         raise ArmReadinessError(
             "readiness_dry_run_used_as_arm_record", "only an arm receipt may verify"
+        )
+    if receipt["boot_session_id"] != _current_boot_session_id():
+        raise ArmReadinessError(
+            "readiness_record_expired", "arm receipt belongs to a prior boot session"
         )
     if time.monotonic_ns() > receipt["valid_until_monotonic_ns"]:
         raise ArmReadinessError(

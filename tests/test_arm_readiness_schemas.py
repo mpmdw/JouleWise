@@ -36,6 +36,28 @@ from joulewise.arm_readiness import (
 
 ROOT = Path(__file__).resolve().parents[1]
 ZERO_SHA = "0" * 64
+TEST_BOOT_SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
+
+def predicate_content(predicate_id: str) -> dict[str, Any]:
+    content = copy.deepcopy(readiness._PREDICATE_CONTENT_REQUIREMENTS[predicate_id])
+    if predicate_id == "t0.ledger_reservation.v1":
+        content["plan_sha256"] = ZERO_SHA
+    elif predicate_id == "t0.background_quiet.v1":
+        content["closed_operator_observation"] = True
+        content["fresh_maintenance_census"] = True
+    return content
+
+
+def predicate_source_kind(evidence_kind: str) -> str:
+    preferred = {
+        "GIT_CHECKOUT": "GIT",
+        "DOCTRINE_PIN": "PACK",
+        "ESTIMATOR_IDENTITY": "PACK",
+        "PACK_FAMILY": "PACK",
+        "LAUNCH_RECIPE": "PROBE",
+    }
+    return preferred.get(evidence_kind, "PROBE")
 
 
 def registry_reference(profile: str = "ALPHA") -> dict[str, Any]:
@@ -117,6 +139,7 @@ def sample_arm(root: Path | str = "/tmp/readiness") -> dict[str, Any]:
         "status": "PASS",
         "arm_disposition": "GO",
         "issued_at_utc": "2026-08-11T00:00:00Z",
+        "boot_session_id": TEST_BOOT_SESSION_ID,
         "valid_until_monotonic_ns": 10**30,
         "pack": pack_record(),
         "reviewed_main": {
@@ -174,14 +197,15 @@ def sample_evidence() -> dict[str, Any]:
         "kind": "PACK_AUTHENTICATION",
         "status": "PASS",
         "issued_at_utc": "2026-08-11T00:00:00Z",
+        "boot_session_id": TEST_BOOT_SESSION_ID,
         "valid_until_monotonic_ns": 10**30,
         "pack_sha256": ZERO_SHA,
         "head_commit": "a" * 40,
         "facts": [
             {
                 "fact_id": "desk.current_pack.v1",
-                "value_type": "BOOLEAN",
-                "value": True,
+                "value_type": "OBJECT",
+                "value": predicate_content("desk.current_pack.v1"),
                 "source_kind": "GIT",
                 "source_path": "source.json",
                 "source_sha256": ZERO_SHA,
@@ -463,6 +487,206 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             with self.subTest(schema="evidence", value=invalid):
                 with self.assertRaises(ArmReadinessError):
                     validate_evidence_receipt(evidence)
+
+    def test_four_git_oid_fields_require_exact_lowercase_hex(self) -> None:
+        cases = [
+            (
+                "head_commit",
+                sample_evidence,
+                validate_evidence_receipt,
+                lambda value: value,
+            ),
+            (
+                "head_tree_oid",
+                sample_arm,
+                validate_arm_receipt,
+                lambda value: value["reviewed_main"],
+            ),
+            (
+                "local_main_commit",
+                sample_arm,
+                validate_arm_receipt,
+                lambda value: value["reviewed_main"],
+            ),
+            (
+                "origin_main_commit",
+                sample_arm,
+                validate_arm_receipt,
+                lambda value: value["reviewed_main"],
+            ),
+        ]
+        for field, factory, validator, target in cases:
+            value = factory()
+            target(value)[field] = "A" * 40
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ArmReadinessError, "40 lowercase"):
+                    validator(value)
+
+    def test_boot_session_schema_amendment_is_exact_and_canonical(self) -> None:
+        for name, factory, validator in (
+            ("arm", sample_arm, validate_arm_receipt),
+            ("evidence", sample_evidence, validate_evidence_receipt),
+        ):
+            for invalid in ("not-a-uuid", TEST_BOOT_SESSION_ID.upper(), ""):
+                value = factory()
+                value["boot_session_id"] = invalid
+                with self.subTest(schema=name, value=invalid):
+                    with self.assertRaisesRegex(ArmReadinessError, "canonical UUID"):
+                        validator(value)
+            missing = factory()
+            del missing["boot_session_id"]
+            with self.subTest(schema=name, value="missing"):
+                with self.assertRaises(ArmReadinessError):
+                    validator(missing)
+
+    def _generic_predicate_receipt(
+        self, row: Mapping[str, Any], *, source_kind: str | None = None
+    ) -> dict[str, Any]:
+        receipt = sample_evidence()
+        evidence_kind = row["required_evidence_kinds"][0]
+        receipt["kind"] = evidence_kind
+        receipt["facts"] = [
+            {
+                "fact_id": row["predicate_id"],
+                "value_type": "OBJECT",
+                "value": predicate_content(row["predicate_id"]),
+                "source_kind": source_kind or predicate_source_kind(evidence_kind),
+                "source_path": "source.json",
+                "source_sha256": ZERO_SHA,
+            }
+        ]
+        validate_evidence_receipt(receipt)
+        return receipt
+
+    def test_all_35_contract_predicates_require_named_content_and_admissible_sources(self) -> None:
+        registry, _raw = load_registry(ROOT)
+        self.assertEqual(
+            set(readiness._PREDICATE_CONTENT_REQUIREMENTS),
+            {row["predicate_id"] for row in registry["rows"]},
+        )
+        self.assertEqual(
+            set(readiness._EVIDENCE_SOURCE_KINDS),
+            {
+                kind
+                for row in registry["rows"]
+                for kind in row["required_evidence_kinds"]
+            },
+        )
+        for row in registry["rows"]:
+            predicate_id = row["predicate_id"]
+            kind = row["required_evidence_kinds"][0]
+            if kind == "IDENTITY_PIN_PROJECTION":
+                receipt = readiness._identity_projection_pseudo_receipt(
+                    status="PASS", reason_codes=[]
+                )
+            elif kind == "DRY_RUN_REHEARSAL":
+                dry_run = sample_dry_run()
+                dry_run["checks"] = [
+                    readiness._dry_run_check(check_id, [check_id], 0, "", "")
+                    for check_id in readiness._PREDICATE_CONTENT_REQUIREMENTS[
+                        predicate_id
+                    ]
+                ]
+                receipt = readiness._dry_run_semantic_receipt(dry_run)
+            else:
+                receipt = self._generic_predicate_receipt(row)
+            with self.subTest(row=row["row_id"], case="genuine"):
+                self.assertTrue(readiness._predicate_passes(receipt, predicate_id))
+
+            missing_content = copy.deepcopy(receipt)
+            missing_fact = next(
+                item
+                for item in missing_content["facts"]
+                if item["fact_id"] == predicate_id
+            )
+            missing_fact["value"].pop(
+                next(iter(readiness._PREDICATE_CONTENT_REQUIREMENTS[predicate_id]))
+            )
+            with self.subTest(row=row["row_id"], case="missing-content"):
+                self.assertFalse(
+                    readiness._predicate_passes(missing_content, predicate_id)
+                )
+
+            mutated = copy.deepcopy(receipt)
+            fact = next(
+                item for item in mutated["facts"] if item["fact_id"] == predicate_id
+            )
+            fact["value_type"] = "BOOLEAN"
+            fact["value"] = True
+            with self.subTest(row=row["row_id"], case="bare-boolean"):
+                self.assertFalse(readiness._predicate_passes(mutated, predicate_id))
+
+            if kind not in {"IDENTITY_PIN_PROJECTION", "DRY_RUN_REHEARSAL"}:
+                operator = self._generic_predicate_receipt(
+                    row, source_kind="OPERATOR_ATTESTATION"
+                )
+                with self.subTest(row=row["row_id"], case="operator-source"):
+                    self.assertEqual(
+                        readiness._predicate_passes(operator, predicate_id),
+                        row["row_id"]
+                        in {
+                            "clock.correct_and_prior_state",
+                            "t0.background_quiet",
+                        },
+                    )
+
+    def test_ledger_boolean_forgery_refuses_with_closed_code(self) -> None:
+        registry, _raw = load_registry(ROOT)
+        row = next(
+            row
+            for row in registry["rows"]
+            if row["row_id"] == "t0.ledger_reservation"
+        )
+        evidence = sample_evidence()
+        evidence["kind"] = "LEDGER_RESERVATION"
+        evidence["facts"][0].update(
+            {
+                "fact_id": "t0.ledger_reservation.v1",
+                "source_kind": "OPERATOR_ATTESTATION",
+                "value_type": "BOOLEAN",
+                "value": True,
+            }
+        )
+        validated = validate_evidence_receipt(evidence)
+        self.assertFalse(
+            readiness._predicate_passes(validated, "t0.ledger_reservation.v1")
+        )
+        rows, refusals = readiness._evaluate_rows(
+            [row],
+            {validated["evidence_id"]: validated},
+            clock_route="MANUAL",
+            successor_acceptance=False,
+        )
+        self.assertEqual(rows[0]["verdict"], "REFUSE")
+        self.assertEqual(
+            [refusal["code"] for refusal in refusals],
+            ["readiness_ledger_preflight_refused"],
+        )
+        check_forgery = copy.deepcopy(validated)
+        check_forgery["facts"] = []
+        check_forgery["checks"] = [
+            {"check_id": "t0.ledger_reservation.v1", "status": "PASS"}
+        ]
+        self.assertFalse(
+            readiness._predicate_passes(
+                check_forgery, "t0.ledger_reservation.v1"
+            )
+        )
+
+    def test_contract_manual_observations_still_accept_operator_attestation(self) -> None:
+        registry, _raw = load_registry(ROOT)
+        rows = {row["row_id"]: row for row in registry["rows"]}
+        for row_id in (
+            "clock.correct_and_prior_state",
+            "t0.background_quiet",
+        ):
+            receipt = self._generic_predicate_receipt(
+                rows[row_id], source_kind="OPERATOR_ATTESTATION"
+            )
+            with self.subTest(row=row_id):
+                self.assertTrue(
+                    readiness._predicate_passes(receipt, rows[row_id]["predicate_id"])
+                )
 
     def test_assurance_and_closed_refusals_are_literal(self) -> None:
         self.assertEqual(

@@ -10,7 +10,9 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import joulewise.arm_readiness as readiness
 from joulewise.arm_readiness import (
     ArmReadinessError,
     _pack_record,
@@ -32,6 +34,7 @@ from tests.test_arm_readiness_schemas import (
     sample_freeze,
     sample_frozen_projection,
     sample_identity_receipt,
+    TEST_BOOT_SESSION_ID,
 )
 
 
@@ -145,6 +148,13 @@ def make_go_fixture(
 
 
 class ArmReadinessLifecycleTests(unittest.TestCase):
+    def setUp(self) -> None:
+        patcher = mock.patch.object(
+            readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def write_namespace_receipt(self, root: Path, name: str, receipt: dict) -> Path:
         root.mkdir(parents=True, exist_ok=True)
         path = root / name
@@ -221,6 +231,30 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 with self.assertRaises(ArmReadinessError):
                     scan_receipt_namespace(root, "arm")
 
+    def test_duplicate_parsed_arm_numbers_refuse_even_with_distinct_spellings(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "receipts"
+            first = sample_arm(temporary)
+            first["receipt_id"] = "arm-00001"
+            first_path = self.write_namespace_receipt(
+                root, "arm-00001.json", first
+            )
+            first_raw = first_path.read_bytes()
+            second = sample_arm(temporary)
+            second["receipt_id"] = "arm-0001"
+            second["supersedes"] = {
+                "receipt_id": first["receipt_id"],
+                "receipt_path": "arm_readiness.receipts/arm-00001.json",
+                "receipt_sha256": hashlib.sha256(first_raw).hexdigest(),
+                "pack_id": first["pack"]["pack_id"],
+                "pack_sha256": first["pack"]["pack_sha256"],
+            }
+            self.write_namespace_receipt(root, "arm-0001.json", second)
+            with self.assertRaisesRegex(
+                ArmReadinessError, "duplicate/nonpositive receipt number"
+            ):
+                scan_receipt_namespace(root, "arm")
+
     def test_semantic_successor_stales_predecessor(self) -> None:
         temporary, _repo, pack, custody, arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
@@ -258,8 +292,6 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             install_passing_evidence,
             synthetic_identity_verifier,
         )
-        from unittest import mock
-
         temporary, repo, pack, custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
         clear_initial_arm(custody, pack.name)
@@ -303,8 +335,106 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             thread.join(timeout=10)
         self.assertEqual(outcomes.count("CONSUMED"), 1, outcomes)
         self.assertEqual(outcomes.count("readiness_record_consumed"), 7, outcomes)
-        with self.assertRaisesRegex(ArmReadinessError, "already consumed"):
+        self.assertNotIn("readiness_lock_unavailable", outcomes)
+        with self.assertRaisesRegex(
+            ArmReadinessError, "already consumed"
+        ) as replay:
             consume_launch_capability(pack, arm_path, custody)
+        self.assertEqual(replay.exception.reason_code, "readiness_record_consumed")
+        self.assertNotEqual(replay.exception.reason_code, "readiness_lock_unavailable")
+
+    def test_boot_session_change_voids_verification_and_consumption(self) -> None:
+        from tests.test_arm_readiness_dry_run import install_passing_freeze
+        from tests.test_arm_readiness_integration import (
+            clear_initial_arm,
+            install_passing_evidence,
+            synthetic_identity_verifier,
+        )
+
+        temporary, repo, pack, custody, _arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        clear_initial_arm(custody, pack.name)
+        install_passing_freeze(repo, pack)
+        dry = generate_dry_run_receipt(
+            pack,
+            custody,
+            "boot-rehearsal",
+            Path(temporary.name) / "boot-synthetic",
+        )
+        self.assertEqual(dry["status"], "PASS", dry)
+        install_passing_evidence(pack, custody)
+        context = sample_arm(Path(temporary.name) / "context")["arm_context"]
+        with mock.patch.object(
+            readiness,
+            "verify_frozen_projection",
+            side_effect=synthetic_identity_verifier,
+        ):
+            arm_result = generate_arm_receipt(pack, context, custody)
+        self.assertEqual(arm_result["status"], "PASS", arm_result)
+        arm_path = Path(arm_result["receipt_path"])
+
+        same_boot = verify_arm_receipt(pack, arm_path)
+        self.assertEqual(same_boot["status"], "PASS")
+        changed_boot = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        with mock.patch.object(
+            readiness, "_current_boot_session_id", return_value=changed_boot
+        ):
+            for operation in (
+                lambda: verify_arm_receipt(pack, arm_path),
+                lambda: consume_launch_capability(pack, arm_path, custody),
+            ):
+                with self.subTest(operation=operation):
+                    with self.assertRaises(ArmReadinessError) as caught:
+                        operation()
+                    self.assertEqual(
+                        caught.exception.reason_code, "readiness_record_expired"
+                    )
+                    self.assertIn("prior boot session", str(caught.exception))
+
+    def test_consume_collision_never_emits_defensive_lock_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            pack.mkdir()
+            custody = root / "custody"
+            arm_path = (
+                custody
+                / pack.name
+                / "arm_readiness.receipts"
+                / "arm-0001.json"
+            )
+            arm_path.parent.mkdir(parents=True)
+            arm_path.write_bytes(b"placeholder\n")
+            receipt = sample_arm(root / "context")
+            with mock.patch.object(
+                readiness,
+                "verify_arm_receipt",
+                return_value={"pack_sha256": "0" * 64},
+            ), mock.patch.object(
+                readiness,
+                "_read_arm_with_sidecar",
+                return_value=(receipt, b"placeholder\n", "0" * 64),
+            ), mock.patch.object(
+                readiness,
+                "reviewed_main",
+                return_value=receipt["reviewed_main"],
+            ), mock.patch.object(
+                readiness, "_root_policy_refusals", return_value=([], set())
+            ), mock.patch.object(
+                readiness,
+                "_exclusive_write",
+                side_effect=ArmReadinessError(
+                    "readiness_output_collision", "synthetic O_EXCL loser"
+                ),
+            ):
+                with self.assertRaises(ArmReadinessError) as caught:
+                    consume_launch_capability(pack, arm_path, custody)
+            self.assertEqual(
+                caught.exception.reason_code, "readiness_record_consumed"
+            )
+            self.assertNotEqual(
+                caught.exception.reason_code, "readiness_lock_unavailable"
+            )
 
     def test_dry_run_is_rejected_by_launcher(self) -> None:
         temporary, _repo, pack, custody, arm_path = make_go_fixture()
@@ -330,6 +460,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             "--evidence-path",
             "--reason-code",
             "--output",
+            "--boot-session-id",
         )
         for option in forbidden:
             completed = subprocess.run(
@@ -350,6 +481,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             "evidence_path",
             "reason_code",
             "output",
+            "boot_session_id",
         }
         for function in (
             generate_freeze_receipt,

@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import joulewise.arm_readiness as readiness
 from joulewise.arm_readiness import (
@@ -22,7 +23,12 @@ from joulewise.arm_readiness import (
     validate_dry_run_receipt,
 )
 from tests.test_arm_readiness_lifecycle import PACK_NAME, git, make_go_fixture
-from tests.test_arm_readiness_schemas import sample_dry_run
+from tests.test_arm_readiness_schemas import (
+    TEST_BOOT_SESSION_ID,
+    predicate_content,
+    predicate_source_kind,
+    sample_dry_run,
+)
 
 
 def install_passing_freeze(repo: Path, pack: Path) -> None:
@@ -45,16 +51,17 @@ def install_passing_freeze(repo: Path, pack: Path) -> None:
         facts = []
         for row in rows:
             source_relative = f"arm_readiness.sources/{row['row_id']}.json"
+            content = predicate_content(row["predicate_id"])
             source_raw = render_json(
-                {"predicate_id": row["predicate_id"], "status": "PASS"}
+                {"predicate_id": row["predicate_id"], "value": content}
             )
             (pack / source_relative).write_bytes(source_raw)
             facts.append(
                 {
                     "fact_id": row["predicate_id"],
-                    "value_type": "BOOLEAN",
-                    "value": True,
-                    "source_kind": "PACK",
+                    "value_type": "OBJECT",
+                    "value": content,
+                    "source_kind": predicate_source_kind(kind),
                     "source_path": source_relative,
                     "source_sha256": hashlib.sha256(source_raw).hexdigest(),
                 }
@@ -65,6 +72,7 @@ def install_passing_freeze(repo: Path, pack: Path) -> None:
             "kind": kind,
             "status": "PASS",
             "issued_at_utc": "2026-08-11T00:00:00Z",
+            "boot_session_id": TEST_BOOT_SESSION_ID,
             "valid_until_monotonic_ns": 10**30,
             "pack_sha256": "0" * 64,
             "head_commit": "a" * 40,
@@ -87,6 +95,7 @@ def install_passing_freeze(repo: Path, pack: Path) -> None:
         pack,
         pack_sha256=None,
         head_commit=None,
+        boot_session_id=TEST_BOOT_SESSION_ID,
         now_monotonic_ns=None,
     )
     self_identity_item, self_identity_receipt, identity_reasons = (
@@ -145,6 +154,13 @@ def install_passing_freeze(repo: Path, pack: Path) -> None:
 
 
 class ArmReadinessDryRunTests(unittest.TestCase):
+    def setUp(self) -> None:
+        patcher = mock.patch.object(
+            readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_dry_run_schema_can_never_authorize(self) -> None:
         receipt = sample_dry_run()
         validate_dry_run_receipt(receipt)

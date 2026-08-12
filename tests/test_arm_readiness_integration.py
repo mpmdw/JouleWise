@@ -30,7 +30,13 @@ from joulewise.arm_readiness import (
 from joulewise.identity_pins import IdentityPinProjectionError
 from tests.test_arm_readiness_dry_run import install_passing_freeze
 from tests.test_arm_readiness_lifecycle import git, make_go_fixture
-from tests.test_arm_readiness_schemas import sample_dry_run, sample_identity_receipt
+from tests.test_arm_readiness_schemas import (
+    TEST_BOOT_SESSION_ID,
+    predicate_content,
+    predicate_source_kind,
+    sample_dry_run,
+    sample_identity_receipt,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,8 +68,12 @@ def install_passing_dry_run(pack: Path, custody: Path) -> None:
         pack_record["pack_sha256"],
     ]
     receipt["checks"] = [
-        readiness._dry_run_check(
-            "same_head_pack_binding", command, 0, reviewed["head_commit"], ""
+        readiness._dry_run_check(check_id, command, 0, reviewed["head_commit"], "")
+        for check_id in (
+            "real_reservation_cli_execute",
+            "real_writer_entry_post",
+            "real_writer_entry_pre",
+            "same_head_pack_binding",
         )
     ]
     write_receipt(
@@ -95,6 +105,7 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
             "kind": kind,
             "status": "PASS",
             "issued_at_utc": "2026-08-11T00:00:00Z",
+            "boot_session_id": TEST_BOOT_SESSION_ID,
             "valid_until_monotonic_ns": time.monotonic_ns() + 10**15,
             "pack_sha256": pack_sha,
             "head_commit": head,
@@ -105,16 +116,17 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
         }
         for row in rows:
             source_relative = f"sources/{row['row_id']}.json"
+            content = predicate_content(row["predicate_id"])
             source_raw = render_json(
-                {"predicate_id": row["predicate_id"], "status": "PASS"}
+                {"predicate_id": row["predicate_id"], "value": content}
             )
             (custody / pack.name / source_relative).write_bytes(source_raw)
             receipt["facts"].append(
                 {
                     "fact_id": row["predicate_id"],
-                    "value_type": "BOOLEAN",
-                    "value": True,
-                    "source_kind": "PROBE",
+                    "value_type": "OBJECT",
+                    "value": content,
+                    "source_kind": predicate_source_kind(kind),
                     "source_path": source_relative,
                     "source_sha256": hashlib.sha256(source_raw).hexdigest(),
                 }
@@ -175,6 +187,13 @@ def synthetic_identity_verifier(
 
 class ArmReadinessIntegrationTests(unittest.TestCase):
     maxDiff = None
+
+    def setUp(self) -> None:
+        patcher = mock.patch.object(
+            readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def prepare_profile(self, profile: str):
         temporary, repo, pack, custody, _arm_path = make_go_fixture(PACKS[profile], profile)
@@ -287,6 +306,48 @@ class ArmReadinessIntegrationTests(unittest.TestCase):
         receipt = json.loads(Path(refused["receipt_path"]).read_text())
         terminal = next(row for row in receipt["rows"] if row["row_id"] == "desk.terminal_review")
         self.assertEqual(terminal["verdict"], "REFUSE")
+
+    def test_verification_recomputes_current_pack_bytes_despite_skip_worktree(self) -> None:
+        temporary, repo, pack, custody, _arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        clear_initial_arm(custody, pack.name)
+        install_passing_freeze(repo, pack)
+        inert = pack / "pack-digest-replay-sentinel.txt"
+        inert.write_text("committed sentinel\n")
+        git(repo, "add", ".")
+        git(repo, "commit", "-qm", "add pack digest replay sentinel")
+        git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        install_passing_dry_run(pack, custody)
+        install_passing_evidence(pack, custody)
+        context_root = Path(temporary.name) / "context"
+        context = copy.deepcopy(
+            __import__(
+                "tests.test_arm_readiness_schemas", fromlist=["arm_context"]
+            ).arm_context(context_root)
+        )
+        with mock.patch.object(
+            readiness,
+            "verify_frozen_projection",
+            side_effect=synthetic_identity_verifier,
+        ):
+            result = generate_arm_receipt(pack, context, custody)
+        self.assertEqual(result["status"], "PASS", result)
+
+        relative = inert.relative_to(repo).as_posix()
+        git(repo, "update-index", "--skip-worktree", relative)
+        inert.write_text("different current bytes hidden from status\n")
+        status = subprocess.run(
+            ["git", "status", "--porcelain=v1"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        ).stdout
+        self.assertEqual(status, b"")
+        with self.assertRaises(ArmReadinessError) as caught:
+            verify_arm_receipt(pack, result["receipt_path"])
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_pack_digest_mismatch"
+        )
 
     def test_uncommitted_row_registry_bytes_refuse_even_when_pack_is_unchanged(self) -> None:
         temporary, _repo, pack, _custody, _context = self.prepare_profile("ALPHA")
