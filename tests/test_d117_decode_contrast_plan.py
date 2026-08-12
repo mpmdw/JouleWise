@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.schemas import BenchmarkConfig
+from joulewise.detection_floor import two_shared_edge_common_mode_registration
 from joulewise.identity_pins import (
     IDENTITY_PIN_DERIVATION_CONTRACT,
     scientific_config_identity_sha256,
@@ -29,9 +30,9 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
-    "calibration_plan.json": "bb3ccd602fbd3b4e802645be9fa569ebe07f2bffb611c4ab589fb2031217c68f",
-    "plan_tree.json": "b775d1cdc0cfd3764cecbefff30b8ac6ca56abaa385339c39eebc2bf3505a499",
-    "analysis_manifest_v3.json": "f4f3287445356a09a49884d4f57b4586423683cf21c3ebd84f5c4fe1e14734dd",
+    "calibration_plan.json": "4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218",
+    "plan_tree.json": "fa9e46abc0b0fa3e3015498c0b162bb0cb1f8b36d438dcdc546f669fbd2cad91",
+    "analysis_manifest_v3.json": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
     "prefill_prompt_candidate.json": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
     "consumer_family_declaration.json": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
 }
@@ -326,24 +327,23 @@ class D117GammaPlanTest(unittest.TestCase):
             self.assertEqual(workload["output_tokens"], 512)
             self.assertEqual(workload["prompt_text"], text)
 
-    def test_withdrawn_d124_estimator_is_not_registered(self) -> None:
+    def test_d124_estimator_is_registered_for_both_shared_edge_contrasts(self) -> None:
         self.assertEqual(
             self.tree["acceptance_policy"]["selection"],
             "issued_d116_artifact_only",
         )
-        decode = next(
-            cell
-            for cell in self.plan["floor_cells"]
-            if cell["measurement_arm"] == "decode"
-        )
-        self.assertNotIn("floor_estimator_registration", decode)
-        analysis_decode = next(
-            contrast
-            for contrast in self.analysis["contrasts"]
-            if contrast["measurement_arm"] == "decode"
-        )
-        self.assertNotIn("floor_estimator_registration", analysis_decode)
-        self.assertNotIn("D-124", self.plan["authorities"])
+        canonical = two_shared_edge_common_mode_registration()
+        for cell in self.plan["floor_cells"]:
+            self.assertEqual(cell["floor_estimator_registration"], canonical)
+            self.assertEqual(
+                cell["floor_estimator_registration"]["parameter_sha256"],
+                "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
+            )
+        for contrast in self.analysis["contrasts"]:
+            self.assertEqual(
+                contrast["floor_estimator_registration"], canonical
+            )
+        self.assertIn("D-124", self.plan["authorities"])
 
     def test_consumer_family_is_a_declaration_not_a_pinset(self) -> None:
         declaration = read_json(PACK / "consumer_family_declaration.json")

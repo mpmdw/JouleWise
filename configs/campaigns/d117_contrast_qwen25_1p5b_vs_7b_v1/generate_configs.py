@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
     canonical_domain_sha256,
+    two_shared_edge_common_mode_registration,
 )
 from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
@@ -490,7 +491,7 @@ def build_plan(
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N_BLOCKS,
-        "authorities": ["D-117", "D-122", "D-123", "D-125"],
+        "authorities": ["D-117", "D-122", "D-123", "D-124", "D-125"],
         "stack_scope": {
             "hardware_target": "macbook_m3_max",
             "runtime_backend": "mlx",
@@ -526,6 +527,7 @@ def build_plan(
                 "target_precheck_path": ["phase", "decode"],
                 "difference_orientation": "condition_b_minus_condition_a",
                 "point_estimator": "abba_block_arm_mean_difference_t_v1",
+                "floor_estimator_registration": two_shared_edge_common_mode_registration(),
                 "test": "two_sided",
                 "scientific_hypothesis_direction": "positive",
                 "family_alpha": 0.05,
@@ -549,6 +551,7 @@ def build_plan(
                 "target_precheck_path": ["phase", "prefill"],
                 "difference_orientation": "condition_b_minus_condition_a",
                 "point_estimator": "abba_block_arm_mean_difference_t_v1",
+                "floor_estimator_registration": two_shared_edge_common_mode_registration(),
                 "prompt_candidate": {
                     "path": "prefill_prompt_candidate.json",
                     "sha256": prompt_sha,
@@ -1055,6 +1058,7 @@ def build_analysis_manifest(
             "condition_b_id": family_id(measurement_arm, "B"),
             "difference_orientation": "condition_b_minus_condition_a",
             "point_estimator": "abba_block_arm_mean_difference_t_v1",
+            "floor_estimator_registration": two_shared_edge_common_mode_registration(),
             "block_ids": [block_id(measurement_arm, block) for block in range(1, N_BLOCKS + 1)],
             "members": [
                 {
@@ -1402,7 +1406,7 @@ This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is
 not armable and makes no data, verdict, receipt, or artifact-byte claim.
 
-Authority order is D-117, D-122, D-123, then D-125. D-122 supersedes
+Authority order is D-117, D-122, D-123, D-124, then D-125. D-122 supersedes
 the older design-memo and plan-factory decode-only text. The plan tree uses
 the shared `joulewise.d117_plan_tree.v1` schema family and every top-level
 artifact declares `draft_status = unfrozen_draft`.
@@ -1428,8 +1432,8 @@ records {oracle['receipt_count']} physical receipts for
 {oracle['logical_operation_count']} logical operations per finalized pre/post
 bracket session. Actual receipt bytes and the absolute terminal sequence remain
 empty until arm and collection. Identity pins remain EMPTY pending U11. The
-The withdrawn D-124 estimator is not registered. Contrasts use the default
-worst-case floors; the prefill contrast therefore has reduced claim capability.
+Both shared-edge ABBA contrast cells register the canonical D-124 common-mode
+floor estimator treatment required to match their floor-calibration cells.
 
 Regenerate or check:
 

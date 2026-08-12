@@ -36,8 +36,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.detection_floor import (  # noqa: E402
+    COMMON_MODE_ESTIMATOR_ID,
     CONDITION_FAMILY_DOMAIN,
     canonical_domain_sha256,
+    two_shared_edge_common_mode_registration,
+)
+from joulewise.floor_mint_estimator import (  # noqa: E402
+    selection_from_authenticated_spec,
 )
 import joulewise.floor_extraction as floor_extraction  # noqa: E402
 from joulewise.floor_extraction import (  # noqa: E402
@@ -52,15 +57,15 @@ from scripts.extract_detection_floors import main as extract_main  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "4faa4d9a0101495ff4c9d9c3943ccd733ce6474647af3d61c02f82f00846ea2c"
+EXPECTED_PACK_SHA256 = "fe66aa19b7dd138bcfb436f25922e8f48d79934117438b9b14cc82204b15d2e8"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "bd9636908687700cb622af50f190276a0814e2336163a8e9fc80bf7bb7183f8c",
-    "calibration_plan.json": "7fe65f3192e721289bafb1353354af282f54e1039233e7cf68a7efbf7b419dc7",
-    "calibration_plan.sha256": "26151e8b6653e26518ae2aeac34dca4a1b4e1bc04af8999bd0097d1a0aa97579",
-    "order_manifest.json": "d8b6efe989a20f7569ee62290cd8b9a16726a0eb8ac0f528f3c5b0f5c0ab4d5f",
-    "plan_tree.json": "3289fc2bf422c38024e2c779fe899b0f1faa24adf6cbbbe73dc8fbb77467f1e9",
-    "plan_tree.sha256": "1889dfff7296b246ca0fbf00c101233c5739eb073a763aadc6a268eb72fcb5be",
-    "producer_contract.json": "2ffe9d44b81e36a5e0af2d89049d9d6e09e43065f45694ef7fde140515ace6c5",
+    "generate_configs.py": "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06",
+    "calibration_plan.json": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d",
+    "calibration_plan.sha256": "707712fb1152ed41b6d48432932bacf16e6856c8432dafb699e951b077e09312",
+    "order_manifest.json": "5c5bd84579ff6bcfe4c0e3c800550f35bd4a04a5cd0061e105c9c3e4775f9fff",
+    "plan_tree.json": "12c3310ab64b1c7568c13e7e47551eaf71e770bb4a900d8a74b0af4953f27f43",
+    "plan_tree.sha256": "62e026fa31a3b2f9d1c75ae7dd55b3427fdf457759aaaf0812e576bdcef06dc5",
+    "producer_contract.json": "ab22c62caf8c9b49a20c0ce94a7353334a060c108ef5d4a67a3d6b62de0235dc",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"
     ),
@@ -71,7 +76,7 @@ EXPECTED_FILE_SHA256 = {
         "c7d2b28276791ab8c5c10b27460bbccba6cb7aad75470e9d74ba4b64ed4ef9f2"
     ),
 }
-EXPECTED_SPEC_SHA256 = "e665727a9ff168b937a6d2967856f3af0feb7862f203caecf9d78270fd6849e2"
+EXPECTED_SPEC_SHA256 = "d98ae4deb787caaf8a80f972b88b2c85ecc2f96a13092e9127c1e1a661640fd2"
 EXPECTED_FAMILY_DOMAIN_SHA256 = {
     "df-ph-decode": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
     "df-ph-prefill-p128-qwen25-1p5b": (
@@ -656,7 +661,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 hashlib.sha256(floor_only_bytes).hexdigest(),
             )
 
-    def test_issued_acceptance_and_default_estimator_path_are_registered(self) -> None:
+    def test_issued_acceptance_and_common_mode_estimator_path_are_registered(self) -> None:
         self.assertEqual(
             self.tree["acceptance_policy"]["selection"],
             "issued_d116_artifact_only",
@@ -680,12 +685,39 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         for cell in (self.spec["cells"][0], self.spec["cells"][2], self.spec["cells"][4]):
             self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
         for cell in (self.spec["cells"][1], self.spec["cells"][3], self.spec["cells"][5]):
-            self.assertNotIn("estimator", cell)
-            self.assertNotIn("estimator_registration", cell)
+            self.assertEqual(cell["estimator"], COMMON_MODE_ESTIMATOR_ID)
+            self.assertEqual(
+                cell["estimator_registration"],
+                two_shared_edge_common_mode_registration(),
+            )
+            self.assertEqual(
+                cell["estimator_registration"]["parameter_sha256"],
+                "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
+            )
+            self.assertEqual(
+                selection_from_authenticated_spec(
+                    cell,
+                    calibration_acceptance=load_json(
+                        ROOT / "configs/calibration/calibration_acceptance_d079_v2.json"
+                    ),
+                    calibration_acceptance_sha256=(
+                        "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
+                    ),
+                    calibration_allowance_projection={
+                        "observed_drift_s": "0.001000",
+                        "allowance_rule": "max(observed_drift_s,0.010818)",
+                        "bracket_screen_s": "0.010818",
+                        "applied_allowance_s": "0.010818",
+                        "allowance_embedding_count": 1,
+                    },
+                    declared_calibration_scope="production_window",
+                ),
+                "common_mode",
+            )
         for cell in (self.plan["floor_cells"][0], self.plan["floor_cells"][2], self.plan["floor_cells"][4]):
             self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
         for cell in (self.plan["floor_cells"][1], self.plan["floor_cells"][3], self.plan["floor_cells"][5]):
-            self.assertNotIn("estimator", cell)
+            self.assertEqual(cell["estimator"], COMMON_MODE_ESTIMATOR_ID)
             self.assertNotIn("estimator_registration", cell)
 
     def test_typed_launch_recipes_are_complete_and_portable(self) -> None:
