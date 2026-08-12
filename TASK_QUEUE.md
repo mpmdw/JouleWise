@@ -308,7 +308,15 @@ test_torn_and_fsynced_append_boundaries_resume_from_fresh_processes;
 class WO-CALEXITS-RELIABILITY fixed for test_calibration_exits — the
 remedy shape is the same lineage: replace CPU-amplifying fake fixtures and
 timing-dependent waits with event-driven synchronization; never identity
-machinery. Interim: PR #135 gives the module an exclusive CI job (120-min
+machinery. AMENDED (2026-08-12, T6, CH-1 pre-merge lens): after CH-1's
+harness fix (synthetic repos copy the canonical acceptance artifact), the
+ambient-hook witness crosses preflight and executes the FULL writer at
+time-scale 0.001 — on a loaded bench it stalls at the detector invocation
+past the internal 600 s per-case ceiling (instrument_evidence.json never
+written). Hosted fresh-runner legs pass within ceilings (PR #142 both
+interpreters green) so the canonical gate holds, but the module's cost went
+UP; the event-driven rework should also make the detector invocation
+test-clock-aware. Lens record: T6 scratchpad ch1-lens-out.md. Interim: PR #135 gives the module an exclusive CI job (120-min
 ceiling) so ordinary shards return fast signal; that PR does NOT shorten
 the module itself. Closure: the module completes under 15 minutes on a
 hosted runner with no internal per-case timeout, and the exclusive-job
