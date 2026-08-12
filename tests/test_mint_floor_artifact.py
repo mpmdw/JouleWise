@@ -118,7 +118,7 @@ class StackIdentityParityTests(unittest.TestCase):
         self.assertNotIn("version", prepare)
         self.assertIn("mlx_version", prepare)
 
-        minted = mint._derive_stack_identity(raw_config, metadata)
+        minted = mint.build_stack_identity(raw_config, metadata)
         claimed = floor_stack_identity(raw_config, metadata)
 
         self.assertEqual(claimed, minted)
@@ -177,11 +177,7 @@ class StackIdentityParityTests(unittest.TestCase):
         prepare["version"] = prepare["mlx_version"]
         metadata["workload_provenance"].pop("sampler")
 
-        with self.assertRaisesRegex(
-            mint.MintError,
-            "source stack identity fields are unavailable",
-        ):
-            mint._derive_stack_identity(raw_config, metadata)
+        self.assertIsNone(mint.build_stack_identity(raw_config, metadata))
         self.assertIsNone(floor_stack_identity(raw_config, metadata))
 
     def test_required_stack_fields_remain_fail_closed(self) -> None:
@@ -205,8 +201,7 @@ class StackIdentityParityTests(unittest.TestCase):
 
         for label, candidate in cases.items():
             with self.subTest(label=label):
-                with self.assertRaises(mint.MintError):
-                    mint._derive_stack_identity(raw_config, candidate)
+                self.assertIsNone(mint.build_stack_identity(raw_config, candidate))
                 self.assertIsNone(
                     floor_stack_identity(raw_config, candidate)
                 )
@@ -218,7 +213,7 @@ class StackIdentityParityTests(unittest.TestCase):
             r"C:\models\Qwen2.5-1.5B-Instruct-4bit"
         )
 
-        minted = mint._derive_stack_identity(raw_config, metadata)
+        minted = mint.build_stack_identity(raw_config, metadata)
         claimed = floor_stack_identity(raw_config, metadata)
 
         self.assertEqual(claimed, minted)
@@ -1148,7 +1143,7 @@ class AuthenticationTests(unittest.TestCase):
             paths = self._a10_tree(tmp)
             with (
                 mock.patch.object(
-                    mint, "_derive_stack_identity", return_value=stack_identity()
+                    mint, "build_stack_identity", return_value=stack_identity()
                 ),
                 mock.patch.object(
                     mint,
@@ -1180,7 +1175,7 @@ class AuthenticationTests(unittest.TestCase):
             paths.report_path.write_text(json.dumps(report), encoding="utf-8")
             with (
                 mock.patch.object(
-                    mint, "_derive_stack_identity", return_value=stack_identity()
+                    mint, "build_stack_identity", return_value=stack_identity()
                 ),
                 mock.patch.object(
                     mint,
@@ -1220,7 +1215,7 @@ class AuthenticationTests(unittest.TestCase):
                     with (
                         mock.patch.object(
                             mint,
-                            "_derive_stack_identity",
+                            "build_stack_identity",
                             return_value=stack_identity(),
                         ),
                         mock.patch.object(
@@ -1269,7 +1264,7 @@ class AuthenticationTests(unittest.TestCase):
 
             with (
                 mock.patch.object(
-                    mint, "_derive_stack_identity", return_value=stack_identity()
+                    mint, "build_stack_identity", return_value=stack_identity()
                 ),
                 mock.patch.object(
                     mint,
@@ -1311,7 +1306,7 @@ class AuthenticationTests(unittest.TestCase):
                     with (
                         mock.patch.object(
                             mint,
-                            "_derive_stack_identity",
+                            "build_stack_identity",
                             return_value=stack_identity(),
                         ),
                         mock.patch.object(
@@ -1562,7 +1557,7 @@ class BinderTests(unittest.TestCase):
             with (
                 mock.patch.object(
                     mint,
-                    "_derive_stack_identity",
+                    "build_stack_identity",
                     return_value=artifact["cells"][0]["source_regime"][
                         "stack_identity"
                     ],
@@ -1594,7 +1589,7 @@ class BinderTests(unittest.TestCase):
             with (
                 mock.patch.object(
                     mint,
-                    "_derive_stack_identity",
+                    "build_stack_identity",
                     return_value=artifact["cells"][0]["source_regime"][
                         "stack_identity"
                     ],
@@ -1645,7 +1640,7 @@ class BinderTests(unittest.TestCase):
             with (
                 mock.patch.object(
                     mint,
-                    "_derive_stack_identity",
+                    "build_stack_identity",
                     return_value=artifact["cells"][0]["source_regime"][
                         "stack_identity"
                     ],
@@ -1677,7 +1672,7 @@ class BinderTests(unittest.TestCase):
             with (
                 mock.patch.object(
                     mint,
-                    "_derive_stack_identity",
+                    "build_stack_identity",
                     return_value=artifact["cells"][0]["source_regime"][
                         "stack_identity"
                     ],

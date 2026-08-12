@@ -11,6 +11,11 @@ from contextlib import redirect_stderr
 from copy import deepcopy
 from io import StringIO
 from pathlib import Path
+
+from joulewise.identity_pins import (
+    IDENTITY_PIN_DERIVATION_CONTRACT,
+    scientific_config_identity_sha256,
+)
 from typing import Any, Iterable
 from unittest import mock
 
@@ -44,15 +49,15 @@ from scripts.extract_detection_floors import main as extract_main  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "83e94be5ee9fb69897a080e81f6ea27b967f9ab3bdb14457d374123b7b619a67"
+EXPECTED_PACK_SHA256 = "63a1bfe4202f849034a887443d711dd8ae4d1a438960eae9802f3f21d2eaad3f"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "5450cdcf011817e0b50056be812ef06394a34ac93f54bb035569e9140ee335c4",
+    "generate_configs.py": "67b111fbfe58579617bddffb81728efdb35e14a2155013d7ea6aae593e213d99",
     "calibration_plan.json": "56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182",
     "calibration_plan.sha256": "7e38e1f7730e56614c37f778a916098eb7a7655ef4409a9e7bd0a5a97cbd5f9f",
     "order_manifest.json": "cc288667de9f38726d80318a08e24e7788c94fd965e9f2cf84c650a26bb11595",
-    "plan_tree.json": "17d53575e6e9520be645ba9a9e535cdc91607177801b2bc7b8cd7a5b0d1133ca",
-    "plan_tree.sha256": "f2abf116f4093eb9eccac4a0fad4c97ae21b1833a8a829d88b1ea542aa1daf8b",
-    "producer_contract.json": "986c267eb2b88bc2624f9322e5d49a73c38021b7d87e77211ce7c1c680c8b736",
+    "plan_tree.json": "b43dc49f549f9b2bc68d8f10acd0d4b6c41e1445a124294406ec7819761af185",
+    "plan_tree.sha256": "1960ba47d639afca9651d62c6e2b2878fd085c2420a0ec51b83274565a03dd54",
+    "producer_contract.json": "7067c9c5714e0dc442163ee73268aa570a681511ad9d0ef6622a55635a1b1c70",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"
     ),
@@ -694,8 +699,24 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         projection = self.producer["identity_pin_projection"]
         self.assertEqual(projection["work_order"], "D117-U11-IDPIN-PROJECTION")
         self.assertEqual(projection["mode"], "derive_never_operator_enter")
-        self.assertEqual(set(projection["projected_pins"].values()), {None})
+        self.assertEqual(projection["state"], "unprojected")
+        self.assertEqual(projection["derivation_contract"], IDENTITY_PIN_DERIVATION_CONTRACT)
+        self.assertEqual(projection["supersedes"], [])
+        self.assertEqual(len(projection["identity_units"]), 1)
+        unit = projection["identity_units"][0]
+        self.assertEqual(unit["identity_unit_id"], "alpha")
+        self.assertEqual(set(unit["model_runtime_config"].values()), {None})
+        computed_config_hashes = {
+            scientific_config_identity_sha256(load_json(PACK_ROOT / row["path"]))
+            for row in unit["config_inventory"]
+        }
+        self.assertEqual(len(computed_config_hashes), 1)
+        for row in unit["config_inventory"]:
+            self.assertEqual(row["sha256"], sha256_file(PACK_ROOT / row["path"]))
         self.assertIsNone(projection["projection_receipt"])
+        self.assertEqual(
+            self.tree["arm_attachments"]["identity_pin_projection"], projection
+        )
 
     def test_receipt_oracle_is_recomputed_from_the_production_model(self) -> None:
         expected = derive_bracket_session_receipt_oracle()

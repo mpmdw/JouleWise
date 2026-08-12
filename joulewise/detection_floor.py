@@ -34,6 +34,11 @@ from joulewise.authentication_io import (
     read_authentication_input,
     sha256_authentication_input,
 )
+from joulewise.identity_pins import (
+    STACK_IDENTITY_DOMAIN,
+    STACK_IDENTITY_FIELDS,
+    stack_identity_sha256,
+)
 from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -80,7 +85,6 @@ SCHEMA_VERSION = "joulewise.detection_floor_artifact.v2"
 METHOD_ID = "d054_false_effect_guard.v1"
 GUARD_RULE_ID = "residual_df_ratio_to_n10.v1"
 TRANSPORT_RULE_ID = "same_stack_componentwise_worst_case.v1"
-STACK_IDENTITY_DOMAIN = "joulewise.stack_identity.v1"
 CONDITION_FAMILY_DOMAIN = "joulewise.condition_family.v1"
 
 # Frozen operational safety factor, ACCEPTED by C-028 ADJUDICATION.md:
@@ -179,20 +183,7 @@ _ENVELOPE_MAX_FIELDS = (
     "bracketing_sample_gap_s_max",
 )
 _ENVELOPE_FIELDS = _ENVELOPE_MIN_FIELDS + _ENVELOPE_MAX_FIELDS
-_STACK_IDENTITY_FIELDS = (
-    "hardware_unit",
-    "os_version",
-    "runtime_version",
-    "kernel_library",
-    "model_artifact_sha256",
-    "quantization",
-    "tokenizer_identity",
-    "sampler_output_policy",
-    "batching_concurrency_policy",
-    "measurement_boundary_label",
-    "telemetry_backend",
-)
-_STACK_IDENTITY_KEYS = set(_STACK_IDENTITY_FIELDS)
+_STACK_IDENTITY_KEYS = set(STACK_IDENTITY_FIELDS)
 _CONDITION_FAMILY_KEYS = {
     "condition_family_id",
     "condition_family_definition",
@@ -953,10 +944,7 @@ def _normalized_source_regime(source_regime: Mapping) -> dict:
     stack_identity = record.get("stack_identity")
     if not isinstance(stack_identity, Mapping):
         raise ValueError("component source_regime requires stack_identity")
-    record["stack_identity_sha256"] = canonical_domain_sha256(
-        STACK_IDENTITY_DOMAIN,
-        stack_identity,
-    )
+    record["stack_identity_sha256"] = stack_identity_sha256(stack_identity)
     if not isinstance(record.get("stress_observed"), Mapping):
         raise ValueError("component source_regime requires stress_observed")
     return record
@@ -1152,7 +1140,7 @@ def build_transport_group(
 ) -> dict:
     composed = compose_transport_group(source_cells)
     stack = dict(stack_identity)
-    stack_hash = canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack)
+    stack_hash = stack_identity_sha256(stack)
     record = {
         "transport_group_id": transport_group_id,
         "rule_id": TRANSPORT_RULE_ID,

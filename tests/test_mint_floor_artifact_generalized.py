@@ -399,7 +399,7 @@ def _configure_fixture_core(core: object) -> object:
         )
 
     core._authenticate_component = authenticate
-    core._derive_stack_identity = lambda _config, _metadata: stack_identity()
+    core.build_stack_identity = lambda _config, _metadata: stack_identity()
     core.scientific_config_identity = lambda _config: {"synthetic": "same"}
     return core
 
@@ -2350,7 +2350,7 @@ def install_production_extracted_v2_cli_fixture(root: Path):
             )
 
         core._authenticate_component = authenticate
-        core._derive_stack_identity = lambda _config, _metadata: stack_identity()
+        core.build_stack_identity = lambda _config, _metadata: stack_identity()
         core.scientific_config_identity = lambda _config: {"synthetic": "same"}
         core.load_calibration_ledger_snapshot = lambda **kwargs: (
             load_calibration_ledger_snapshot(
@@ -4385,7 +4385,7 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
     producer["extraction_spec"].update(
         {"sha256": spec_sha256, "member_count": len(all_spec_bundle_ids)}
     )
-    seed_stack = mint1._derive_stack_identity(
+    seed_stack = mint1.build_stack_identity(
         load_json(evidence_root / ordered_bundle_ids[0] / "config.json"),
         load_json(evidence_root / ordered_bundle_ids[0] / "metadata.json"),
     )
@@ -4969,6 +4969,20 @@ class V2PinsetAndMintTests(unittest.TestCase):
     def test_producer_inventory_covers_governed_non_mint_spec_members(
         self,
     ) -> None:
+        stack = {
+            "hardware_unit": "synthetic",
+            "os_version": "synthetic",
+            "runtime_version": "synthetic",
+            "kernel_library": "synthetic",
+            "model_artifact_sha256": "a" * 64,
+            "quantization": "int4",
+            "tokenizer_identity": "synthetic",
+            "sampler_output_policy": "greedy",
+            "batching_concurrency_policy": "single-request sequential",
+            "measurement_boundary_label": "synthetic",
+            "telemetry_backend": "synthetic",
+        }
+        runtime_config = generalized.derive_model_runtime_config(stack, "c" * 64)
         component = SimpleNamespace(
             spec_sha256="s" * 64,
             spec={
@@ -4984,8 +4998,8 @@ class V2PinsetAndMintTests(unittest.TestCase):
             },
             members=(SimpleNamespace(bundle_id="mint-member"),),
             source_regime={
-                "stack_identity": {"model_artifact_sha256": "m" * 64},
-                "stack_identity_sha256": "r" * 64,
+                "stack_identity": stack,
+                "stack_identity_sha256": runtime_config["runtime_identity_sha256"],
             },
             scientific_config_identity_sha256="c" * 64,
         )
@@ -5004,11 +5018,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 "derivation_rule_id": "rule",
             },
             "extraction_spec": {"sha256": "s" * 64, "member_count": 2},
-            "model_runtime_config": {
-                "model_artifact_sha256": "m" * 64,
-                "runtime_identity_sha256": "r" * 64,
-                "config_set_sha256": "c" * 64,
-            },
+            "model_runtime_config": runtime_config,
         }
         inputs = SimpleNamespace(
             plan_sha256="p" * 64,
@@ -7323,7 +7333,7 @@ class FullPathTests(unittest.TestCase):
                     side_effect=authenticate,
                 ),
                 mock.patch.object(
-                    mint1, "_derive_stack_identity", return_value=stack_identity()
+                    mint1, "build_stack_identity", return_value=stack_identity()
                 ),
                 mock.patch.object(
                     mint1,
