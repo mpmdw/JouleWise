@@ -3295,12 +3295,21 @@ class RegisteredCommonModeExtractionTests(unittest.TestCase):
             "ctr-d117-prefill-p256-qwen25-1p5b-vs-7b",
             "Q8 p256 dedicated floor cells",
         }
+        # The a5 corpus is untracked machine-local evidence (and
+        # evidence_parent is deliberately the collection checkout, not
+        # repository_root); where it is unavailable the a5 root is a
+        # legitimate absence, and only the margin half of the pin skips.
+        a5_root = candidates["a5 decode root"][0]
+        if not a5_root.is_dir():
+            expected_absent = expected_absent | {"a5 decode root"}
         self.assertEqual(
             absent,
             expected_absent,
             "candidate evidence inventory changed; re-inventory every named "
             f"root/cell before proceeding (admitted margins={admitted_margins!r})",
         )
+        if "a5 decode root" in absent:
+            self.skipTest(f"source corpus unavailable: {a5_root}")
         self.assertEqual(set(admitted_margins), {"a5 decode root"})
         self.assertGreater(
             admitted_margins["a5 decode root"],
