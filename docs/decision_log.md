@@ -8776,3 +8776,51 @@ D-134 consult under
 `docs/process_traces/2026-08-11-5c-readiness-contract/consult.md`. That consult
 is preserved historical evidence and is not edited; this later decision is
 the authority for the amended v1 schema.
+### D-133 cl.4 execution ratification + Q8 budget ratification — 2026-08-12 (Ed, T6 session start)
+
+Three Ed rulings taken at the T6 session's first interactive exchange
+(recorded verbatim from the AskUserQuestion round; the T5 checkpoint had
+flagged all three as ED-OWED):
+
+1. **D-133 clause 4 conditional: EXECUTE.** PR #140 (WO-MINT-ESTIMATOR-VOCAB)
+   merged at `e11b1ad` with all F1–F12 met, mechanically satisfying the
+   clause-4 conditions (ALT-D120 + terminal delta + mintvocab, all
+   pre-freeze-wave). Ed ratified executing the re-spec on its own ruled
+   terms: both floor packs re-spec to the tighter **1.869502 J** floor
+   (vs the 8.611855 J default) via a separate generator run + gate before
+   FREEZE. The paper swap is mechanical via PR #133's merged
+   conditional-insert block. Reversal condition 5 (hold the freeze for an
+   explicit go) was offered and declined — the ruled default proceeds.
+2. **Q8 quiet-window budgets: RATIFIED as computed.** The p256 cells are
+   REAL new bundles (50→100 members/pack, PR #138): **~6.28 h per 1.5B
+   pack / ~6.48 h per 7B pack, 20% margin included** — now the planning
+   numbers for window arming.
+3. **Window night: TONIGHT (2026-08-12).** Ed does the live
+   sudo/powermetrics checklist (gates reliance on #127's production
+   sampler) and the §5A taps tonight; the freeze lane drives to ARMED
+   today. R2 perishable-resource discipline applies for the rest of the
+   session.
+
+### Item-(1) mechanism ruling — 2026-08-12 (magistrate, consult-adopted): WO-COLLECTION-MARGIN-01
+
+The freeze-plan addendum's LIVE item (1) — record each registered comparative
+cell's minimum window-duration margin at collection — lost its named
+mechanism when FCM-01 withdrew (D-133). Pre-decision Sol xhigh consult
+(1 round, rule-2 default) REJECTED the magistrate's candidate (a §5C
+readiness-registry collection-time row) on a verified structural blocker:
+the D-134 registry carries exactly two evaluation phases (FREEZE_AND_ARM,
+ARM_ONLY), both pre-launch, and the ARM receipt is atomically consumed — a
+collection-time row would either refuse every arm, gate nothing, or break
+the two-stage append-only authorization contract. Drop REJECTED as
+indefensible (WO-4/Q9 37/50 not_resolvable evidence; item (3) forbids the
+"p256 windows are expected longer" inference). ADOPTED: a dedicated
+append-only collection-margin receipt (WO-COLLECTION-MARGIN-01, registered
+in TASK_QUEUE with the full ratified design). Gate split: PACK FREEZE gates
+on the mechanism existing (schema + registered-cell inventory + deterministic
+namespace); COLLECTION CLOSE-OUT gates on the resulting receipt. Receipt
+PASS asserts derivation completeness from authenticated bytes, never margin
+positivity — D-133 ruled no new acceptance threshold. Residual risk recorded:
+the receipt exposes inadequate temporal support; it cannot repair it —
+an inadequate p256 result still requires recollection, claim demotion, or a
+separately ruled disposition. Sol's design win logged to the codex-delegation
+field-note scorecard.

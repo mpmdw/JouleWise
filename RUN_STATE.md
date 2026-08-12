@@ -10,9 +10,40 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-12 (~17:45Z, Ed stop order) — **T5 FINAL CHECKPOINT below; /clear-SAFE; A NEW SESSION STARTS THERE.**
+Last updated: 2026-08-12 (T6 session LIVE, Fable magistrate; window night TONIGHT per Ed ruling)
 
-## ▶▶ T5 FINAL CHECKPOINT (2026-08-12, Ed stop order) — /clear-SAFE; A NEW SESSION STARTS HERE
+## ▶▶ T6 SESSION (2026-08-12, LIVE) — 72h continuous-operation directive; window TONIGHT
+
+**Ed rulings at session start (recorded in decision log, pushed 985d67a):**
+D-133 cl.4 EXECUTE (packs re-spec to 1.869502 J tighter floor before FREEZE);
+Q8 budgets RATIFIED (~6.28 h 1.5B / ~6.48 h 7B per pack, 20% margin);
+window night TONIGHT — freeze lane drives to ARMED today, R2 applies.
+
+**Done this session:** #140 mintvocab MERGED e11b1ad (terminal D-121 with live
+F1/F11c verification + bench 358×2 focused matrices; conformance table on the
+PR). #135 CI gremlin ROOT-CAUSED (merge conflict suppresses pull_request runs
+— no merge ref) and fixed by rebase (head 455db5d); 12/14 green, crash-matrix
+jobs running. §5C branches found UNPUSHED contra checkpoint — all four pushed.
+C-057 landed + T5 skill rows reconstructed (no rows existed, contra
+checkpoint) + Ed rulings recorded (985d67a).
+
+**In flight:** Sol xhigh resolving the 19-file §5C×(Q8+#140) merge conflict in
+wtD-5c-integ (regeneration rules; full dual-interpreter suite gate). Sol high
+building CH-1 (arming blocker: authenticated acceptance replaces the writer's
+copied literal) in wtCH1. Opus mechanic finalizing the T5 run report. B3
+three-window regression early-signal GREEN at main (23 OK, 3 skips to examine
+at final head).
+
+**Lane order to ARMED:** §5C merge → tighter-floor re-spec (generator + gate)
+→ regenerate all three packs at the reviewed head → FREEZE → U11 freeze
+projections → D-134 freeze receipts → freeze-gated literal fills → §5C lead
+live verification (non-delegable) → U11 arm re-verification (EXACTLY ONE run)
+→ arm packet from the corrected skeleton (~/JouleWise-window-custody/
+t4-session-20260810/). Open magistrate item: freeze-plan addendum item (1)
+margin mechanism (dead with FCM-01) — re-home or recorded drop. Ed tonight:
+sudo/powermetrics checklist + §5A taps.
+
+## ▶▶ T5 FINAL CHECKPOINT (2026-08-12, Ed stop order) — superseded by T6 LIVE above; kept as record
 
 **Nothing in flight.** All Sol runs harvested, all monitors/watchers stopped,
 zero live codex/suite processes at checkpoint. Everything load-bearing is
