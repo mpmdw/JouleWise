@@ -45,17 +45,6 @@ DECODE_FAMILY_ID = "df-ph-decode-qwen25-7b"
 PREFILL_FAMILY_ID = "df-ph-prefill-p128-qwen25-7b"
 CAMPAIGN_TAG = "d117-floor-qwen25-7b-v1"
 DRAFT_STATUS = "unfrozen_draft"
-D124_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
-D124_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
-D124_SIBLING_ASSUMPTION_ID = (
-    "d124_block_timescale_shared_edges_stationarity_transfer_v1"
-)
-D124_EVIDENCE_RECORD_PATH = (
-    "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
-)
-D124_COVARIANCE_TREATMENT = (
-    "two_shared_edges_plus_bundle_specific_adversarial_terms"
-)
 IDENTITY_PROJECTION_WORK_ORDER = "D117-U11-IDPIN-PROJECTION"
 SUCCESSOR_REGENERATION_RULE = (
     "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
@@ -397,36 +386,6 @@ def calibration_basis() -> dict[str, Any]:
     }
 
 
-def common_mode_registration() -> dict[str, Any]:
-    return {
-        "estimator_id": D124_ESTIMATOR_ID,
-        "status": "candidate_pending_floor_commonmode_01",
-        "transfer_assumption": {
-            "assumption_id": D124_ASSUMPTION_ID,
-            "statement": (
-                "Within an ABBA block governed by one calibration bracket, onset "
-                "and offset fiducial terms are shared edges; bundle-specific "
-                "residual terms remain adversarial."
-            ),
-            "evidence": [
-                D124_EVIDENCE_RECORD_PATH,
-                "docs/decision_log.md#d-124",
-            ],
-            "limitation": (
-                "Historical evidence records uncertainty bounds, not realized "
-                "member-level timing errors."
-            ),
-        },
-        "sibling_assumption_cross_reference": {
-            "assumption_id": D124_SIBLING_ASSUMPTION_ID,
-            "shared_gate": "FLOOR-COMMONMODE-01",
-            "shared_evidence_record_path": D124_EVIDENCE_RECORD_PATH,
-        },
-        "covariance_treatment": D124_COVARIANCE_TREATMENT,
-        "never_zero_allowance_application_count": 1,
-    }
-
-
 def extraction_spec(
     *,
     decode: Mapping[str, Any],
@@ -517,8 +476,6 @@ def extraction_spec(
             "condition_family_id": definition["condition_family_id"],
             "condition_family_definitions": {"A": family, "B": dict(family)},
             "expected_n": N,
-            "estimator": D124_ESTIMATOR_ID,
-            "estimator_registration": common_mode_registration(),
             "order_manifest": root_pin,
             "evidence_root_id": EVIDENCE_ROOT_ID,
             "member_config_sha256": member_hashes(comparative_rows),
@@ -1235,10 +1192,6 @@ def plan_tree(
                     "id": IDENTITY_PROJECTION_WORK_ORDER,
                     "status": "required_before_arm",
                 },
-                {
-                    "id": "FLOOR-COMMONMODE-01",
-                    "status": "implementation_identity_required_before_release",
-                },
             ],
         },
         "condition_families": family_rows,
@@ -1378,7 +1331,6 @@ def readme() -> bytes:
         "finalized pre/post bracket session. Actual receipt bytes and the absolute "
         "terminal sequence remain arm-time evidence. Arm-time identities require "
         "U11 projection, "
-        "the D-124 estimator identity still requires implementation confirmation, "
         "and lead review must complete before any later release step.\n\n"
         f"{SUCCESSOR_REGENERATION_RULE}\n\n"
         "Regenerate or check with:\n\n"
@@ -1441,7 +1393,7 @@ def build_artifacts() -> dict[Path, bytes]:
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
-        "authorities": ["D-116", "D-117", "D-123", "D-124"],
+        "authorities": ["D-116", "D-117", "D-123"],
         "stack_scope": {
             "hardware_target": "macbook_m3_max",
             "runtime_backend": "mlx",
@@ -1479,7 +1431,6 @@ def build_artifacts() -> dict[Path, bytes]:
                 "metric": "phase_energy_j.decode",
                 "condition_family_id": DECODE_FAMILY_ID,
                 "ordered_blocks": blocks,
-                "estimator": D124_ESTIMATOR_ID,
             },
             {
                 "cell_id": PREFILL_ABSOLUTE_CELL,
@@ -1495,7 +1446,6 @@ def build_artifacts() -> dict[Path, bytes]:
                 "metric": "phase_energy_j.prefill",
                 "condition_family_id": PREFILL_FAMILY_ID,
                 "ordered_blocks": blocks,
-                "estimator": D124_ESTIMATOR_ID,
             },
         ],
         "reported_energy_cells": [
