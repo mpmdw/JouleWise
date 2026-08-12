@@ -743,6 +743,28 @@ class BinderTests(unittest.TestCase):
         component = registered_component()
         artifact = self.artifact(0.1)
         artifact["cells"].append(copy.deepcopy(artifact["cells"][0]))
+        mutant_core = self.core(
+            side_effect=mint1.MintError(
+                "root: artifact widths differ from authenticated source bytes"
+            )
+        )
+        mutant_accepted = self.pre_fix_swallow_negative_control(
+            self.binder_kwargs(mutant_core, component, artifact)
+        )
+        self.assertEqual(
+            mutant_accepted,
+            {
+                name: tuple(
+                    artifact["cells"][0]["provenance"][name][
+                        "bundle_sha256s"
+                    ]
+                )
+                for name in ("absolute", "comparative")
+            },
+            "reverted swallow accepted the first cell and ignored the second",
+        )
+        mutant_core.bind_floor_artifact_evidence.assert_called_once()
+
         core = self.core(return_value={})
         with self.assertRaisesRegex(ValueError, "one isolated cell"):
             core.bind_floor_artifact_evidence(

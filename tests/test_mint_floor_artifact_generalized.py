@@ -1427,6 +1427,8 @@ def _mixed_common_mode_seams(
 
 def freeze_mixed_estimator_v2_pinset(
     root: Path,
+    *,
+    install_binding_evidence: bool = False,
 ) -> tuple[
     Path,
     str,
@@ -1578,6 +1580,174 @@ def freeze_mixed_estimator_v2_pinset(
             }
         )
 
+    if install_binding_evidence:
+        for producer in pinset["producer_plans"]:
+            plan_id = producer["plan"]["plan_id"]
+            inputs = mixed_inputs[plan_id]
+            plan_path = root / producer["plan"]["relative_path"]
+            plan_path.parent.mkdir(exist_ok=True)
+            plan_path.write_text(
+                json.dumps(inputs.plan, sort_keys=True), encoding="utf-8"
+            )
+            plan_sha256 = file_sha256(plan_path)
+            producer["plan"]["sha256"] = plan_sha256
+            producer["plan"]["declared_sha256"] = plan_sha256
+            evidence_root = root / producer["evidence_root_id"]
+            evidence_root.mkdir()
+            campaign_path = evidence_root / "campaign_log.jsonl"
+            campaign_path.write_text(
+                json.dumps({"synthetic": True}) + "\n", encoding="utf-8"
+            )
+            campaign_sha256 = file_sha256(campaign_path)
+
+            member_inputs = {}
+            for cell in inputs.cells.values():
+                for component in (cell.absolute, cell.comparative):
+                    divisor = 1 if component.kind == "absolute" else 4
+                    for index, member in enumerate(component.members):
+                        width_index = index // divisor
+                        half_width = component.widths_j[width_index]
+                        if component.kind == "comparative":
+                            half_width /= 2.0
+                        observed = (member.metric_value_j, half_width)
+                        previous = member_inputs.setdefault(member.bundle_id, observed)
+                        if previous != observed:
+                            raise AssertionError(
+                                "mixed binding fixture reused inconsistent member bytes"
+                            )
+            installed = {}
+            for bundle_id, (metric_value, half_width) in member_inputs.items():
+                bundle_sha256, config_sha256 = _write_bundle(
+                    evidence_root,
+                    bundle_id=bundle_id,
+                    metric_value_j=metric_value,
+                    half_width_j=half_width,
+                    plan_sha256=producer["plan"]["sha256"],
+                )
+                summary_path = evidence_root / bundle_id / "summary_metrics.json"
+                summary = load_json(summary_path)
+                summary["phase_energy_j"]["prefill"] = metric_value
+                summary["energy_anchor_shift_envelopes"][
+                    "/phase_energy_j/prefill"
+                ] = copy.deepcopy(
+                    summary["energy_anchor_shift_envelopes"][
+                        "/phase_energy_j/decode"
+                    ]
+                )
+                summary_path.write_text(
+                    json.dumps(summary, sort_keys=True), encoding="utf-8"
+                )
+                installed[bundle_id] = (
+                    complete_bundle_sha256(evidence_root / bundle_id),
+                    config_sha256,
+                )
+
+            repaired_cells = {}
+            for role, cell in inputs.cells.items():
+                repaired_components = {}
+                for component_name in ("absolute", "comparative"):
+                    component = getattr(cell, component_name)
+                    members = tuple(
+                        replace(
+                            member,
+                            bundle_sha256=installed[member.bundle_id][0],
+                            config_sha256=installed[member.bundle_id][1],
+                        )
+                        for member in component.members
+                    )
+                    report_cell = copy.deepcopy(component.cell)
+                    for row in report_cell["members"]:
+                        row["bundle_sha256"], row["config_sha256"] = installed[
+                            row["bundle_id"]
+                        ]
+                    bracket = copy.deepcopy(component.whole_window_calibration_bracket)
+                    for endpoint in bracket.values():
+                        endpoint["bracket_runs_root"] = str(evidence_root.resolve())
+                        endpoint["bracket_plan_sha256"] = plan_sha256
+                    order_manifest = copy.deepcopy(component.order_manifest)
+                    order_manifest["calibration_plan_sha256"] = plan_sha256
+                    repaired_components[component_name] = replace(
+                        component,
+                        campaign_log_sha256=campaign_sha256,
+                        cell=report_cell,
+                        members=members,
+                        order_manifest=order_manifest,
+                        order_manifest_sha256=_fixture_artifact_sha256(
+                            order_manifest
+                        ),
+                        whole_window_calibration_bracket=bracket,
+                    )
+                repaired_cells[role] = replace(cell, **repaired_components)
+
+            report = copy.deepcopy(inputs.cells["decode"].absolute.report)
+            report["runs_root"] = str(evidence_root)
+            report["cells"] = [
+                copy.deepcopy(getattr(repaired_cells[role], component_name).cell)
+                for role in ("decode", "prefill")
+                for component_name in ("absolute", "comparative")
+            ]
+            report_sha256 = _fixture_artifact_sha256(report)
+            repaired_cells = {
+                role: replace(
+                    cell,
+                    absolute=replace(
+                        cell.absolute,
+                        report=report,
+                        report_sha256=report_sha256,
+                    ),
+                    comparative=replace(
+                        cell.comparative,
+                        report=report,
+                        report_sha256=report_sha256,
+                    ),
+                )
+                for role, cell in repaired_cells.items()
+            }
+            binding = copy.deepcopy(inputs.bracket_binding)
+            binding["runs_root"] = str(evidence_root.resolve())
+            binding["plan_sha256"] = plan_sha256
+            binding["binding_digest"] = _fixture_canonical_sha256(
+                {key: value for key, value in binding.items() if key != "binding_digest"}
+            )
+            binding_sha256 = _fixture_artifact_sha256(binding)
+            observations = []
+            for observation in (
+                inputs.authenticated_pre_observation,
+                inputs.authenticated_post_observation,
+            ):
+                values = vars(observation).copy()
+                values["bracket_runs_root"] = str(evidence_root.resolve())
+                values["bracket_plan_sha256"] = plan_sha256
+                observations.append(SimpleNamespace(**values))
+            mixed_inputs[plan_id] = replace(
+                inputs,
+                cells=repaired_cells,
+                evidence_root=evidence_root,
+                plan_sha256=plan_sha256,
+                plan_declared_sha256=plan_sha256,
+                bracket_binding=binding,
+                bracket_binding_sha256=binding_sha256,
+                authenticated_pre_observation=observations[0],
+                authenticated_post_observation=observations[1],
+            )
+            for cell_pin in producer["cells"]:
+                role = cell_pin["role"]
+                cell = repaired_cells[role]
+                cell_pin["absolute"] = _v2_component_pin(cell.absolute)
+                cell_pin["comparative"] = _v2_component_pin(cell.comparative)
+                terminal_head = cell_pin["postcollection"][
+                    "terminal_ledger_head_sha256"
+                ]
+                cell_pin["postcollection"] = _v2_postcollection(
+                    cell.absolute,
+                    cell.comparative,
+                    bracket_binding=binding,
+                    bracket_binding_sha256=binding_sha256,
+                    extraction_report_sha256=report_sha256,
+                )
+                cell_pin["postcollection"][
+                    "terminal_ledger_head_sha256"
+                ] = terminal_head
     _repair_v2_pinset_self_hashes(pinset)
     provisional_path, provisional_digest = write_pinset(root, pinset)
     loaded = generalized.load_pinset(provisional_path, provisional_digest)
@@ -6316,7 +6486,8 @@ class V2PinsetAndMintTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
-                root
+                root,
+                install_binding_evidence=True,
             )
             manifest_path = root / "manifest.json"
             head_path = root / "ledger.head.json"
@@ -6325,24 +6496,64 @@ class V2PinsetAndMintTests(unittest.TestCase):
             floor_path = root / "floor.json"
             statement_path = root / "single-count.txt"
             original_core_loader = generalized._fresh_original_core
-            pinned_binds = 0
+            pinned_binds = []
             events = []
 
             def load_core():
                 core = original_core_loader()
+                original_strict_bundle = core._strict_bundle
+                original_bind = core.bind_floor_artifact_evidence
                 original_write = core.write_outputs_exclusive
+                strict_hashes = []
 
-                def pinned_bind(*_args, **_kwargs):
-                    nonlocal pinned_binds
-                    pinned_binds += 1
+                def authenticated_summaries(
+                    runs_root,
+                    referenced_bundle_ids,
+                    _evaluation_basis_sha256,
+                    *,
+                    consumption_semantics_id=None,
+                    **_kwargs,
+                ):
+                    return (
+                        {
+                            bundle_id: load_json(
+                                runs_root / bundle_id / "summary_metrics.json"
+                            )
+                            for bundle_id in referenced_bundle_ids
+                        },
+                        consumption_semantics_id,
+                    )
+
+                def track_strict_bundle(*args, **kwargs):
+                    member = original_strict_bundle(*args, **kwargs)
+                    strict_hashes.append(member.bundle_sha256)
+                    return member
+
+                def track_pinned_bind(*args, **kwargs):
+                    strict_hashes.clear()
+                    cell = args[0]["cells"][0]
+                    core.build_stack_identity = lambda _config, _metadata: (
+                        cell["source_regime"]["stack_identity"]
+                    )
+                    result = original_bind(*args, **kwargs)
+                    absolute_n = len(core._record_rows("absolute", cell))
+                    expected = {
+                        "absolute": tuple(strict_hashes[:absolute_n]),
+                        "comparative": tuple(strict_hashes[absolute_n:]),
+                    }
+                    pinned_binds.append((cell["cell_id"], result, expected))
                     events.append("bind")
-                    return {}
+                    return result
 
                 def ordered_write(*args, **kwargs):
                     events.append("write")
                     return original_write(*args, **kwargs)
 
-                core.bind_floor_artifact_evidence = pinned_bind
+                core._authenticated_consumption_summaries = (
+                    authenticated_summaries
+                )
+                core._strict_bundle = track_strict_bundle
+                core.bind_floor_artifact_evidence = track_pinned_bind
                 core.write_outputs_exclusive = ordered_write
                 return core
 
@@ -6399,24 +6610,45 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     strict_validator=lambda _path, _strict: [],
                 )
             self.assertEqual(bind_site.call_count, 4)
-            self.assertEqual(pinned_binds, 4)
+            self.assertEqual(len(pinned_binds), 4)
             self.assertEqual(events, ["bind", "bind", "bind", "bind", "write"])
             self.assertTrue(floor_path.is_file())
             self.assertTrue(statement_path.is_file())
-            self.assertEqual(load_json(floor_path), artifact)
-            common_source = inputs[
-                "synthetic-d117-floor-plan-0"
-            ].cells["decode"].comparative.cell["floor"]
-            self.assertEqual(
-                artifact["cells"][0]["floor_cmp_j"],
-                common_source["drift_widened_guarded_floor_j"],
-            )
-            self.assertEqual(
-                artifact["cells"][0]["comparative"][
-                    "admissible_half_widths_j"
-                ],
-                common_source["admissible_half_widths_j"],
-            )
+            written = load_json(floor_path)
+            self.assertEqual(written, artifact)
+            written_cells = {cell["cell_id"]: cell for cell in written["cells"]}
+            for cell_id, verified, strict in pinned_binds:
+                self.assertEqual(verified, strict)
+                cell = written_cells[cell_id]
+                for component_name in ("absolute", "comparative"):
+                    self.assertEqual(
+                        tuple(
+                            cell["provenance"][component_name][
+                                "bundle_sha256s"
+                            ]
+                        ),
+                        verified[component_name],
+                    )
+            for cell in written["cells"]:
+                if not cell["cell_id"].endswith("decode"):
+                    continue
+                producer_index = int(cell["cell_id"].split("-")[1])
+                comparative = inputs[
+                    f"synthetic-d117-floor-plan-{producer_index}"
+                ].cells["decode"].comparative
+                registered = comparative.cell["floor"]
+                self.assertEqual(
+                    cell["floor_cmp_j"],
+                    registered["drift_widened_guarded_floor_j"],
+                )
+                self.assertEqual(
+                    cell["comparative"]["admissible_half_widths_j"],
+                    registered["admissible_half_widths_j"],
+                )
+                self.assertNotEqual(
+                    cell["comparative"]["admissible_half_widths_j"],
+                    list(comparative.widths_j),
+                )
 
     def test_spec_swap_refuses_before_any_estimator_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
