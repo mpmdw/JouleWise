@@ -868,10 +868,10 @@
       "fences": [
         {
           "authority": {
-            "label": "D-131 freeze and readiness ordering",
+            "label": "D-131/D-134 freeze, readiness, and launch ordering",
             "path": "docs/decision_log.md"
           },
-          "rule": "Every D-117 pack-freeze or arm row remains downstream of this phase gate; real-model freeze and U8 readiness GO remain lead-owned follow-ons"
+          "rule": "Every D-117 pack freeze and arm remains downstream of U11: freeze pins the committed identity projection, T-0 re-verifies it read-only, and only a same-HEAD/pack non-authorizing dry run, complete live evidence, ledger reservation, external GO arm receipt, and atomic capability consumption may precede Ed's physical launch; no automated word is launch authority"
         }
       ],
       "flags": [],
@@ -1243,7 +1243,7 @@
         {
           "evidence": null,
           "kind": "artifact",
-          "required": "A reviewed FROZEN-PLAN READINESS RECORD exists before any collection night: frozen plan digest, issued calibration acceptance artifact, clean pinned head, empty waivers, fresh roots, and environment preflight, launcher-verified",
+          "required": "A pack-pinned, non-authorizing freeze receipt exists before any collection night. At T-0, only after the frozen plan digest, issued calibration acceptance artifact, clean pinned HEAD, empty waivers, fresh roots, environment preflight, same-HEAD/pack non-authorizing dry run, and ledger reservation verify may an external pack-binding arm receipt carry GO; atomic consumption of that exact unexpired, unsuperseded receipt must precede Ed's physical launch, and no automated word is launch authority",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
@@ -1297,7 +1297,7 @@
             "label": "D-113 clauses 8-9 hard start fence",
             "path": "docs/decision_log.md"
           },
-          "rule": "Before any collection night, the ordinary launcher verifies a reviewed FROZEN-PLAN READINESS RECORD binding the frozen plan digest, issued calibration acceptance artifact, clean pinned head, empty waivers, fresh roots, and environment preflight"
+          "rule": "Before any collection night, the ordinary launcher verifies the two-stage D-134 lifecycle: a pack-pinned, non-authorizing freeze receipt, then an external pack-binding arm receipt created only after the frozen plan digest, issued calibration acceptance artifact, clean pinned HEAD, empty waivers, fresh roots, environment preflight, same-HEAD/pack non-authorizing dry run, and ledger reservation verify; only the exact unexpired, unsuperseded GO receipt may be atomically consumed before Ed's physical launch, and no automated word is launch authority"
         },
         {
           "authority": {

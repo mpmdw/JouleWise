@@ -19,8 +19,11 @@ header figure into a "do-not-return-before" cell.
 
 **HARD GATES before night 1 (none are optional):** U1/U1b two-slot ledger
 bracket session + writer integration; U3 pinset v2 / multi-cell mint; U4
-three-window regression green; U5-U7
-packs frozen + readiness validator green; reason-code plumbing (register
+three-window regression green; U5-U7 packs each carrying a plan-pinned,
+non-authorizing freeze receipt; a non-authorizing D-134 dry-run receipt at the
+final reviewed HEAD and committed-pack digest; T-0 external arm receipt only
+after live readiness and ledger reservation; atomic consumption of that exact
+unsuperseded `GO` receipt before Ed's physical launch; reason-code plumbing (register
 item, Ed ruling #3); absolute runs-dir paths in every launch command
 (night-strander R6 mitigation); campaign.lock absent at arm; NEVER kill a
 running verdict (R7 — it can exceed 2 minutes by design).<br> **2026-08-08 SUPERSESSION NOTE (D-126):** The U2 successor-engine prerequisite above is superseded for this three-night window: keep U2 frozen for its post-window work, and govern ALPHA, BETA, and GAMMA with the issued D-079 calibration-acceptance artifact. **The U2 item has been struck from the enumeration above; this note records why.**
@@ -56,7 +59,20 @@ Science payload: the proven decode-floor shape—10 absolute repeats plus 10 nul
 
 ## T-minus preparation — REMOTE OK
 
-- [ ] Readiness record passes with no warning or exception.
+- [ ] Authenticate the pack-pinned freeze receipt for this night. Require the
+  pinned path and SHA-256, `status: PASS`, and
+  `arm_disposition: NOT_APPLICABLE`; this receipt cannot authorize launch.
+- [ ] Authenticate the reviewed-head dry-run receipt for this night. Require
+  `status: PASS`, `arm_disposition: NOT_APPLICABLE`, and the exact final
+  reviewed HEAD and committed-pack digest; this receipt cannot authorize
+  launch.
+- [ ] At T-0, after live readiness and ledger reservation pass, authenticate
+  the external pack-binding arm receipt for this night. Require the exact,
+  unexpired, unsuperseded `status: PASS`, `arm_disposition: GO` receipt; no
+  automated word authorizes Ed.
+- [ ] Immediately before Ed's physical launch, atomically consume that exact
+  arm receipt. Require its no-clobber consumption receipt; consumption
+  licenses one launch but never performs it.
 - [ ] Reviewed `main` is clean and equals the recorded commit.
 - [ ] Plan ID, plan-tree hash, chain hash, policy hash, calibration-acceptance hash, and ledger-head pin are recorded.
 - [ ] Exact science membership and order are frozen:
@@ -74,6 +90,16 @@ Science payload: the proven decode-floor shape—10 absolute repeats plus 10 nul
 
 ## Arm sequence — ED PRESENT
 
+- [ ] Authenticate the freeze receipt path and SHA-256 pinned by this night's
+  `plan_tree.json`. Require `status: PASS` and
+  `arm_disposition: NOT_APPLICABLE`; it cannot authorize launch.
+- [ ] Authenticate the latest D-134 `dry-run-NNNN.json` receipt under this
+  pack's window-custody directory. Require `status: PASS`,
+  `arm_disposition: NOT_APPLICABLE`, and the exact final reviewed HEAD and
+  committed-pack digest. It exercised the real reservation and both ledger
+  writers, but no live MLX or `powermetrics` capture. Any reboot since freeze
+  voids the pre-reboot readiness receipts and evidence; stop and repeat
+  re-verification.
 - [ ] Connect the approved 140 W Anker supply and approved cable. Confirm external AC, `ac_high_power`, low-power mode off, and 140 W negotiated. Do not change them afterward.
 - [ ] Finish or pause Time Machine, updates, indexing, downloads, and cloud uploads.
 - [ ] Confirm thermal pressure is nominal and passwordless `powermetrics` works.
@@ -110,12 +136,22 @@ Science payload: the proven decode-floor shape—10 absolute repeats plus 10 nul
   output to echo the frozen-plan SHA-256; require the reservation to emit
   `calibration_pre_reserve_authorized` and finish with `status: reserved`.
   `needs_pin_commit: true` ends the night — no override exists at night.
+- [ ] Only now run the frozen D-134 `arm` command. Require the derived
+  `CUSTODY_ROOT/PACK_ID/arm_readiness.receipts/arm-NNNN.json` and sidecar to
+  verify as the exact, unexpired, unsuperseded `status: PASS`,
+  `arm_disposition: GO` receipt for this HEAD, pack, bracket session, roots,
+  backups, waivers, and reservation. No automated word authorizes Ed.
+- [ ] Run the frozen D-134 `consume` command against that exact arm-receipt
+  path. Require its no-clobber consumption receipt. Consumption licenses one
+  physical launch; it never performs the launch. A used capability is never
+  reused.
 - [ ] Do not hand-count another idle or settle here. The completed
   `prewindow_check.sh --wait` already fulfilled §5's ≥10-minute untouched
   idle and covered the post-`sudo` interval; after launch the chain performs
   its own 180-second settle before the pre-calibration.
 - [ ] Tell everyone nearby: do not touch the Mac, lid, display, charger, or cable.
-- [ ] Launch exactly once from the ordinary foreground shell:
+- [ ] After successful consumption, physically launch exactly once from the
+  ordinary foreground shell:
 
   ```sh
   WINDOW_PLAN_ROOT="[PLACEHOLDER: PLAN ROOT]"
@@ -194,7 +230,20 @@ Science payload: 10 decode absolute repeats plus 10 null-ABBA blocks/40 members 
 
 ## T-minus preparation — REMOTE OK
 
-- [ ] Readiness record passes with no exception.
+- [ ] Authenticate the pack-pinned freeze receipt for this night. Require the
+  pinned path and SHA-256, `status: PASS`, and
+  `arm_disposition: NOT_APPLICABLE`; this receipt cannot authorize launch.
+- [ ] Authenticate the reviewed-head dry-run receipt for this night. Require
+  `status: PASS`, `arm_disposition: NOT_APPLICABLE`, and the exact final
+  reviewed HEAD and committed-pack digest; this receipt cannot authorize
+  launch.
+- [ ] At T-0, after live readiness and ledger reservation pass, authenticate
+  the external pack-binding arm receipt for this night. Require the exact,
+  unexpired, unsuperseded `status: PASS`, `arm_disposition: GO` receipt; no
+  automated word authorizes Ed.
+- [ ] Immediately before Ed's physical launch, atomically consume that exact
+  arm receipt. Require its no-clobber consumption receipt; consumption
+  licenses one launch but never performs it.
 - [ ] Clean reviewed commit, policy hash, calibration-acceptance hash, ledger head, plan hash, and launcher hash are recorded.
 - [ ] Exact stages are frozen:
   - before midpoint: `[PLACEHOLDER: 7B ABSOLUTE + NULL BLOCKS 1–5 CONFIG IDS]`
@@ -209,6 +258,16 @@ Science payload: 10 decode absolute repeats plus 10 null-ABBA blocks/40 members 
 
 ## Arm sequence — ED PRESENT
 
+- [ ] Authenticate the freeze receipt path and SHA-256 pinned by this night's
+  `plan_tree.json`. Require `status: PASS` and
+  `arm_disposition: NOT_APPLICABLE`; it cannot authorize launch.
+- [ ] Authenticate the latest D-134 `dry-run-NNNN.json` receipt under this
+  pack's window-custody directory. Require `status: PASS`,
+  `arm_disposition: NOT_APPLICABLE`, and the exact final reviewed HEAD and
+  committed-pack digest. It exercised the real reservation and both ledger
+  writers, but no live MLX or `powermetrics` capture. Any reboot since freeze
+  voids the pre-reboot readiness receipts and evidence; stop and repeat
+  re-verification.
 - [ ] Connect and verify the approved charger/cable: external AC, 140 W negotiated, `ac_high_power`, low-power mode off.
 - [ ] Finish or pause background maintenance and cloud transfers.
 - [ ] Confirm nominal thermal state and passwordless `powermetrics`.
@@ -228,12 +287,21 @@ Science payload: 10 decode absolute repeats plus 10 null-ABBA blocks/40 members 
   output to echo the frozen-plan SHA-256; require the reservation to emit
   `calibration_pre_reserve_authorized` and finish with `status: reserved`.
   `needs_pin_commit: true` ends the night — no override exists at night.
+- [ ] Only now run the frozen D-134 `arm` command. Require the derived
+  `CUSTODY_ROOT/PACK_ID/arm_readiness.receipts/arm-NNNN.json` and sidecar to
+  verify as the exact, unexpired, unsuperseded `status: PASS`,
+  `arm_disposition: GO` receipt for this HEAD, pack, bracket session, roots,
+  backups, waivers, and reservation. No automated word authorizes Ed.
+- [ ] Run the frozen D-134 `consume` command against that exact arm-receipt
+  path. Require its no-clobber consumption receipt. Consumption licenses one
+  physical launch; it never performs the launch. A used capability is never
+  reused.
 - [ ] Do not hand-count another idle or settle here. The completed
   `prewindow_check.sh --wait` already fulfilled §5's ≥10-minute untouched
   idle and covered the post-`sudo` interval; after launch the chain performs
   its own 180-second settle before the pre-calibration.
 - [ ] Tell everyone nearby not to touch the machine or power path.
-- [ ] Launch exactly once:
+- [ ] After successful consumption, physically launch exactly once:
 
   ```sh
   WINDOW_PLAN_ROOT="[PLACEHOLDER: PLAN ROOT]"
@@ -293,7 +361,20 @@ Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks
 
 - [ ] Both preceding floor windows have passed their verdict, backup, extraction, and custody gates.
 - [ ] Exact 1.5B and 7B floor artifact IDs, hashes, stack identities, and ledger-head pins are frozen into the contrast plan.
-- [ ] Readiness record passes with no exception.
+- [ ] Authenticate the pack-pinned freeze receipt for this night. Require the
+  pinned path and SHA-256, `status: PASS`, and
+  `arm_disposition: NOT_APPLICABLE`; this receipt cannot authorize launch.
+- [ ] Authenticate the reviewed-head dry-run receipt for this night. Require
+  `status: PASS`, `arm_disposition: NOT_APPLICABLE`, and the exact final
+  reviewed HEAD and committed-pack digest; this receipt cannot authorize
+  launch.
+- [ ] At T-0, after live readiness and ledger reservation pass, authenticate
+  the external pack-binding arm receipt for this night. Require the exact,
+  unexpired, unsuperseded `status: PASS`, `arm_disposition: GO` receipt; no
+  automated word authorizes Ed.
+- [ ] Immediately before Ed's physical launch, atomically consume that exact
+  arm receipt. Require its no-clobber consumption receipt; consumption
+  licenses one launch but never performs it.
 - [ ] Reviewed commit, policy, acceptance artifact, ledger head, plan tree, chain, and exact evidence-root mappings are recorded.
 - [ ] Contrast membership is frozen: 10 complete A/B/B/A blocks; no optional member, top-up, block deletion, or outcome-driven replacement.
 - [ ] Stage split is frozen:
@@ -307,6 +388,16 @@ Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks
 
 ## Arm sequence — ED PRESENT
 
+- [ ] Authenticate the freeze receipt path and SHA-256 pinned by this night's
+  `plan_tree.json`. Require `status: PASS` and
+  `arm_disposition: NOT_APPLICABLE`; it cannot authorize launch.
+- [ ] Authenticate the latest D-134 `dry-run-NNNN.json` receipt under this
+  pack's window-custody directory. Require `status: PASS`,
+  `arm_disposition: NOT_APPLICABLE`, and the exact final reviewed HEAD and
+  committed-pack digest. It exercised the real reservation and both ledger
+  writers, but no live MLX or `powermetrics` capture. Any reboot since freeze
+  voids the pre-reboot readiness receipts and evidence; stop and repeat
+  re-verification.
 - [ ] Verify approved power supply/cable, external AC, 140 W negotiation, high-power policy, and low-power mode off.
 - [ ] Finish or pause maintenance, updates, indexing, backups, downloads, and cloud uploads.
 - [ ] Confirm nominal thermal state and passwordless `powermetrics`.
@@ -325,12 +416,21 @@ Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks
   output to echo the frozen-plan SHA-256; require the reservation to emit
   `calibration_pre_reserve_authorized` and finish with `status: reserved`.
   `needs_pin_commit: true` ends the night — no override exists at night.
+- [ ] Only now run the frozen D-134 `arm` command. Require the derived
+  `CUSTODY_ROOT/PACK_ID/arm_readiness.receipts/arm-NNNN.json` and sidecar to
+  verify as the exact, unexpired, unsuperseded `status: PASS`,
+  `arm_disposition: GO` receipt for this HEAD, pack, bracket session, roots,
+  backups, waivers, and reservation. No automated word authorizes Ed.
+- [ ] Run the frozen D-134 `consume` command against that exact arm-receipt
+  path. Require its no-clobber consumption receipt. Consumption licenses one
+  physical launch; it never performs the launch. A used capability is never
+  reused.
 - [ ] Do not hand-count another idle or settle here. The completed
   `prewindow_check.sh --wait` already fulfilled §5's ≥10-minute untouched
   idle and covered the post-`sudo` interval; after launch the chain performs
   its own 180-second settle before the pre-calibration.
 - [ ] Tell everyone nearby not to touch the Mac or its power path.
-- [ ] Launch exactly once:
+- [ ] After successful consumption, physically launch exactly once:
 
   ```sh
   WINDOW_PLAN_ROOT="[PLACEHOLDER: PLAN ROOT]"

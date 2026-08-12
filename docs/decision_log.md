@@ -158,6 +158,7 @@ be re-derived by a future agent gets an entry here.
 | D-133 | FCM-01 DISPOSITION — HYBRID + ALT-D120 (cold gate revised sitting, 2026-08-11): round-6 delta REJECT (FCM6-01, forged registration admitted by validators) adjudicated by fresh Fable + Opus refuter. Fallback respec/d124-withdrawn merges after its own gates (freeze lane unblocks there, decoupled from FCM); FCM-01 continues unmerged under ALT-D120 — DELETE serialized registration vocabulary so forgeries die as closed-profile unknown-key refusals (D-120 precedent); false round-6 provenance claim corrected + sixth sha rotation; FULL fresh delta owed on moved arithmetic (any exact understatement = permanent drop, no further revival); re-spec back to tighter estimator only if ALT-D120 + full delta + new mint-estimator WO all land pre-freeze-wave. Bench-verified: mint has zero estimator vocabulary (tighter floor unmintable this cycle regardless); forged field inert (no consumer); production authenticate binds expected_sha256. Ed schedule call flagged: gamma-arm-in-main-paper would make mint work critical path and hold the wave | adopted (cold gate; magistrate, no dissent) |
 | D-134 | §5C ARM-READINESS RECORD CONTRACT (adopt-as-proposed consult, 2026-08-11): two-stage append-only receipts — pack-pinned non-authorizing FREEZE receipt + external pack-binding ARM receipt (hash cycle broken: frozen bytes declare the arm-receipt schema/namespace, never its future sha); d117_row_registry_v1.json sole row authority for ALPHA/BETA/GAMMA (Markdown = checked views); UNKNOWN prohibited (REFUSE or registered NOT_APPLICABLE); derive-never-enter throughout; dry-run never authorizes; impossible pre-launch single-foreground-launch row replaced by atomically consumable single-launch capability; enumerated doctrine amendments + full test obligations bind before any D-117 arm. Trace: process_traces/2026-08-11-5c-readiness-contract/ | adopted (consult adopt-as-proposed; magistrate) |
 | D-135 | SITE BUDGETS ADVISORY (Ed, in-thread 2026-08-12): conservative capsule/page/shard byte budgets and pagination margins WARN, never fail builds/tests/PR gates; the ONLY failing site-size condition is the physical Lakebed 1,048,576-byte cap under the real validator (deploys physically fail past it); content is never trimmed/split/archived to satisfy an advisory budget; SITE-CAPSULE-BUDGET-01 superseded | adopted (Ed, in-thread; transcribed) |
+| D-136 | ARM-READINESS V1 BOOT-SESSION AMENDMENT (magistrate-ratified, 2026-08-12): every v1 arm or generic evidence receipt carrying `valid_until_monotonic_ns` also carries a derived, never-operator-entered `boot_session_id`; verification and atomic consumption refuse a boot-session mismatch as `readiness_record_expired`; composes with D-120/D-134 and deliberately supersedes the preserved D-134 consult's literal key lists before any production receipt issuance | adopted (magistrate-ratified v1 schema amendment) |
 
 ---
 
@@ -8441,3 +8442,104 @@ are never to be trimmed, split, or archived to satisfy an advisory
 budget. SITE-CAPSULE-BUDGET-01 is SUPERSEDED by this ruling (archival
 remains available as an option if the PHYSICAL cap ever approaches, but
 nothing gates on the conservative margin).
+
+### D-117 amendment — 2026-08-12: frozen readiness slots do not hash future arm bytes
+
+D-134 amends D-117's plan-freeze attachment rule without changing the
+scientific plans or their historical custody. The frozen `plan_tree.json`
+declares an `arm_attachments.arm_readiness` slot containing the D-134
+contract/schema ID, the authoritative row-registry path/digest/profile, the
+pack-contained freeze-receipt path and digest, the deterministic external
+arm-receipt namespace, and the committed-pack digest algorithm. The frozen
+plan never contains a future arm receipt's path or SHA-256. That receipt does
+not exist until T-0 facts have been observed, so hashing it into frozen bytes
+would create a plan/receipt hash cycle and would falsely make future evidence
+look freeze-known.
+
+The pack-pinned freeze receipt is non-authorizing. After all pack bytes are
+committed, the external arm receipt binds the completed pack digest and live
+evidence under `CUSTODY_ROOT/PACK_ID/arm_readiness.receipts/`. This is a slot
+declaration, not a deferred mutation of the pack. Historical D-117 freeze
+traces and the external T4 custody record remain immutable evidence; this
+decision supersedes their old lifecycle prose rather than editing them.
+D-120's existing assurance qualifier survives intact: readiness establishes
+single-authority, hash-bound, fail-closed consistency and never proves
+operator independence or independent attestation.
+
+### D-078 registry amendment — 2026-08-12: closed D-134 readiness refusals
+
+The readiness layer owns the following closed 46-code vocabulary. The type
+labels are `STRUCTURE`, `CUSTODY`, `GIT`, `LIFECYCLE`, `POLICY`, `IDENTITY`,
+and `ENVIRONMENT`; upstream evidence receipts retain their own closed detail
+codes.
+
+- **STRUCTURE (8):** `readiness_schema_invalid`,
+  `readiness_receipt_kind_invalid`, `readiness_unknown_key`,
+  `readiness_row_registry_mismatch`, `readiness_row_set_incomplete`,
+  `readiness_row_applicability_invalid`,
+  `readiness_evidence_reference_invalid`, `readiness_usage_invalid`.
+- **CUSTODY (9):** `readiness_pack_unreadable`,
+  `readiness_pack_namespace_anomalous`, `readiness_pack_digest_mismatch`,
+  `readiness_pack_not_committed`, `readiness_freeze_receipt_unreadable`,
+  `readiness_freeze_receipt_mismatch`, `readiness_evidence_unreadable`,
+  `readiness_evidence_digest_mismatch`,
+  `readiness_receipt_namespace_anomalous`.
+- **GIT (3):** `readiness_git_tree_dirty`,
+  `readiness_reviewed_main_mismatch`, `readiness_terminal_review_missing`.
+- **LIFECYCLE (9):** `readiness_receipt_superseded`,
+  `readiness_record_expired`, `readiness_record_consumed`,
+  `readiness_output_collision`, `readiness_lock_unavailable`,
+  `readiness_dry_run_missing`, `readiness_dry_run_refused`,
+  `readiness_dry_run_stale`, `readiness_dry_run_used_as_arm_record`.
+  `readiness_lock_unavailable` is defensive forward-compatibility and is
+  currently unreachable on the atomic-consume path, which acquires no lock:
+  every race loser receives `readiness_record_consumed`. A test pins that
+  unreachability so any future emission is a loud contract change rather than
+  a silent one.
+- **POLICY (10):** `readiness_dependency_refused`,
+  `readiness_waiver_source_invalid`, `readiness_waiver_set_nonempty`,
+  `readiness_root_binding_invalid`, `readiness_root_not_fresh`,
+  `readiness_backup_preflight_refused`,
+  `readiness_machine_preflight_refused`,
+  `readiness_clock_preflight_refused`,
+  `readiness_ledger_preflight_refused`,
+  `readiness_launch_capability_unavailable`.
+- **IDENTITY (5):** `readiness_identity_artifact_unreadable`,
+  `readiness_identity_environment_dirty`,
+  `readiness_identity_projection_mint_divergence`,
+  `readiness_identity_pinset_frozen_mismatch`,
+  `readiness_identity_receipt_namespace_anomalous`. This block is imported
+  unchanged from the D-131 identity-pin projection decision.
+- **ENVIRONMENT (2):** `readiness_io_error`,
+  `readiness_internal_error`.
+
+Every one of these 46 spellings only refuses. No readiness code, type label,
+`PASS`, `GO`, `READY`, `clean`, or `ready` licenses ARM, physical launch, or a
+scientific claim. This amendment composes with D-120's unchanged
+single-authority assurance qualifier; it does not add an independent witness.
+
+## D-136: Arm-readiness v1 monotonic expiry is bound to the boot session
+
+**Adopted 2026-08-12 (magistrate-ratified v1 schema amendment).** Every v1
+arm-readiness arm receipt and generic evidence receipt that carries
+`valid_until_monotonic_ns` also carries the required, derived
+`boot_session_id`. The value is machine-derived and is never supplied by an
+operator, API argument, or command-line option. Verification and atomic
+consumption compare the receipt's boot session with the current boot session;
+a mismatch refuses closed as `readiness_record_expired`. The monotonic expiry
+is therefore never interpreted across a reboot.
+
+This amendment composes with the single-authority, hash-bound assurance model
+adopted for postcollection trust in D-120 and with the two-stage arm-readiness
+contract in D-134. The cross-reboot rule was already ratified, a live defect
+was corroborated through two independent review lenses, and no production
+readiness receipts had been issued, so correcting v1 before issuance carries
+no migration cost. Leaving reboot invalidation in operator prose would repeat
+the prose-only failure mode that the arm-readiness machine gate exists to
+eliminate.
+
+This is a deliberate divergence from the literal v1 key lists in the adopted
+D-134 consult under
+`docs/process_traces/2026-08-11-5c-readiness-contract/consult.md`. That consult
+is preserved historical evidence and is not edited; this later decision is
+the authority for the amended v1 schema.
