@@ -25,9 +25,9 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
-    "calibration_plan.json": "951fefb1418a56ae4308afe2f2d5c930fff62aa0f8ad3be83de299d449fd9f38",
-    "plan_tree.json": "655486460d269a55b9715d17c0b0e452d8fffbdaba08f6ea402fca881f122a1f",
-    "analysis_manifest_v3.json": "10defe290284b60c232168bc27c2ed1f39ba9424ea8cd7c4a7df1c374fd67f56",
+    "calibration_plan.json": "bb3ccd602fbd3b4e802645be9fa569ebe07f2bffb611c4ab589fb2031217c68f",
+    "plan_tree.json": "0df277118bed7d00a8d211fb9851c13fcbb0aa872b320e6f5de2a5ce93510fa1",
+    "analysis_manifest_v3.json": "f4f3287445356a09a49884d4f57b4586423683cf21c3ebd84f5c4fe1e14734dd",
     "prefill_prompt_candidate.json": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
     "consumer_family_declaration.json": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
 }
@@ -322,7 +322,7 @@ class D117GammaPlanTest(unittest.TestCase):
             self.assertEqual(workload["output_tokens"], 512)
             self.assertEqual(workload["prompt_text"], text)
 
-    def test_d124_decode_estimator_registration_conditions(self) -> None:
+    def test_withdrawn_d124_estimator_is_not_registered(self) -> None:
         self.assertEqual(
             self.tree["acceptance_policy"]["selection"],
             "issued_d116_artifact_only",
@@ -332,46 +332,14 @@ class D117GammaPlanTest(unittest.TestCase):
             for cell in self.plan["floor_cells"]
             if cell["measurement_arm"] == "decode"
         )
-        registration = decode["floor_estimator_registration"]
-        self.assertEqual(
-            registration["identity"], "d124_two_shared_edge_common_mode.v1"
+        self.assertNotIn("floor_estimator_registration", decode)
+        analysis_decode = next(
+            contrast
+            for contrast in self.analysis["contrasts"]
+            if contrast["measurement_arm"] == "decode"
         )
-        self.assertEqual(
-            registration["identity_status"],
-            "candidate_pending_floor_commonmode_01",
-        )
-        self.assertEqual(
-            registration["stationarity_transfer_assumption"]["identity"],
-            "d124_block_timescale_shared_edges_stationarity_transfer_v1",
-        )
-        self.assertEqual(
-            registration["sibling_assumption_cross_reference"],
-            {
-                "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
-                "shared_gate": "FLOOR-COMMONMODE-01",
-                "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
-            },
-        )
-        self.assertIn(
-            "bounds, not realized member-level boundary errors",
-            registration["stationarity_transfer_assumption"]["evidentiary_limit"],
-        )
-        self.assertTrue(registration["identical_covariance_treatment_required"])
-        self.assertEqual(
-            registration["covariance_treatment"],
-            "two_shared_edges_plus_bundle_specific_adversarial_terms",
-        )
-        self.assertEqual(
-            registration["calibration_treatment"],
-            registration["consuming_decode_contrast_treatment"],
-        )
-        self.assertEqual(registration["allowance"]["embedding_count"], 1)
-        self.assertEqual(
-            registration["allowance"]["rule"],
-            "genesis_lower_bound_plus_lineage_envelope_rule",
-        )
-        self.assertFalse(registration["issued_acceptance_artifact_reopened"])
-        self.assertFalse(registration["raw_calibration_corpus_voided"])
+        self.assertNotIn("floor_estimator_registration", analysis_decode)
+        self.assertNotIn("D-124", self.plan["authorities"])
 
     def test_consumer_family_is_a_declaration_not_a_pinset(self) -> None:
         declaration = read_json(PACK / "consumer_family_declaration.json")

@@ -1143,12 +1143,11 @@ def validate_extraction_spec(spec: object) -> list[str]:
                             f"{where}.estimator_registration: requires explicit "
                             f"estimator {COMMON_MODE_ESTIMATOR_ID!r}"
                         )
-                    if basis_present:
-                        errors.append(
-                            f"{where}.calibration_basis: requires explicit "
-                            f"estimator {COMMON_MODE_ESTIMATOR_ID!r}"
-                        )
-                if basis_present and estimator == COMMON_MODE_ESTIMATOR_ID:
+                    # D-133 fallback state: default-path comparative cells
+                    # legitimately pin their issued calibration acceptance
+                    # via calibration_basis with no registered estimator;
+                    # the basis shape is still validated below.
+                if basis_present:
                     basis = cell.get("calibration_basis")
                     if not isinstance(basis, Mapping):
                         errors.append(

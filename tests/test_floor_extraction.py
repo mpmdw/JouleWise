@@ -555,19 +555,13 @@ class D117MintConsumptionProfileTests(
     def test_pending_spec_registration_is_forbidden_in_admitted_report(
         self,
     ) -> None:
+        # Post-D-133 the shipped specs carry no pending registration to
+        # copy; the pending-candidate form is synthesized so the refusal
+        # property stays exercised.
         report = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
-        spec = json.loads(
-            (
-                Path("configs/floor_mint")
-                / "d117_qwen25_7b_extraction_spec.json"
-            ).read_text(encoding="utf-8")
-        )
-        comparative = next(
-            cell for cell in spec["cells"] if cell["kind"] == "comparative"
-        )
-        report["governance"]["estimator_registration"] = copy.deepcopy(
-            comparative["estimator_registration"]
-        )
+        pending = two_shared_edge_common_mode_registration()
+        pending["status"] = "candidate_pending_floor_commonmode_01"
+        report["governance"]["estimator_registration"] = pending
 
         errors = validate_d117_mint_consumption_report(report)
         self.assertEqual(len(errors), 1, errors)
@@ -4740,10 +4734,13 @@ class FloorMintSpecValidationTests(unittest.TestCase):
                 {"estimator_registration": full_registration},
                 False,
             ),
+            # D-133 fallback state: default-path comparative cells pin
+            # their issued calibration acceptance via calibration_basis
+            # with no registered estimator (the shipped specs' shape).
             (
                 "basis without estimator",
                 {"calibration_basis": basis},
-                False,
+                True,
             ),
             (
                 "registration with default",
@@ -4756,7 +4753,7 @@ class FloorMintSpecValidationTests(unittest.TestCase):
             (
                 "basis with default",
                 {"estimator": METHOD_ID, "calibration_basis": basis},
-                False,
+                True,
             ),
             (
                 "D-124 without registration and basis",

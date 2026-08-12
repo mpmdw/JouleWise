@@ -46,7 +46,7 @@
       "comparative-contrast",
       "measurement-arm=prefill_p256",
       "df-condition=sw-prefill-p256-b-qwen25-7b",
-      "calibration-plan-sha256=951fefb1418a56ae4308afe2f2d5c930fff62aa0f8ad3be83de299d449fd9f38",
+      "calibration-plan-sha256=bb3ccd602fbd3b4e802645be9fa569ebe07f2bffb611c4ab589fb2031217c68f",
       "calibration-abba-block-id=d117-prefill-p256-contrast-b09",
       "calibration-abba-label=B",
       "calibration-abba-sequence-index=3",

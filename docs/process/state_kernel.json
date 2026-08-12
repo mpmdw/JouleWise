@@ -1144,7 +1144,7 @@
       "priority": "p2_next_slice",
       "rank": 47,
       "status": "queued",
-      "status_note": "Minted 2026-07-25. Quantified same day on a5 decode ABBA (10 complete blocks): implemented worst-case-sum half-width gives a 6.46 J comparative floor; a common-mode proxy gives 2.13 J, a 3x improvement — material, but still above that cell's 0.60 J point floor, so it does not by itself restore extraction under the current gate. Value is in tightening the labelled floor, not in avoiding the label. Fiducial share of the composed bound measured at 80-87%.",
+      "status_note": "Minted 2026-07-25. Quantified same day on a5 decode ABBA (10 complete blocks): implemented worst-case-sum half-width gives a 6.46 J comparative floor; a common-mode proxy gives 2.13 J, a 3x improvement — material, but still above that cell's 0.60 J point floor, so it does not by itself restore extraction under the current gate. Value is in tightening the labelled floor, not in avoiding the label. Fiducial share of the composed bound measured at 80-87%. D-133 (2026-08-11): DESK THREAD, NON-FREEZE-GATING — the cold-gate hybrid ruled the fallback (this branch) merges and the freeze proceeds on the worst-case default estimator; FCM-01 work continues unmerged (ALT-D120 vocabulary closure; arithmetic cleared terminally by the O3 full delta — zero exact understatements in 4096 independent rational cases); packs re-spec back to the tighter estimator ONLY if ALT-D120 + full delta + WO-MINT-ESTIMATOR-VOCAB all land pre-freeze-wave.",
       "stop_card": null
     },
     "FLOOR-WORKLOAD-SIZING-01": {

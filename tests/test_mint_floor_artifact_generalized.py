@@ -4947,15 +4947,31 @@ class V2PinsetAndMintTests(unittest.TestCase):
     def test_authentication_session_allows_only_named_governed_spec_vocabulary(
         self,
     ) -> None:
-        spec_path = (
-            REPO_ROOT
-            / "configs"
-            / "floor_mint"
-            / "d117_qwen25_7b_extraction_spec.json"
+        # Post-D-133 the shipped spec carries no estimator_registration;
+        # a synthetic governed spec keeps the vocabulary exemption
+        # exercised against a file that actually contains the key.
+        shipped_spec = json.loads(
+            (
+                REPO_ROOT
+                / "configs"
+                / "floor_mint"
+                / "d117_qwen25_7b_extraction_spec.json"
+            ).read_text(encoding="utf-8")
         )
-        spec_raw = spec_path.read_bytes()
-        self.assertIn(b'"estimator_registration"', spec_raw)
+        comparative = next(
+            cell
+            for cell in shipped_spec["cells"]
+            if cell["kind"] == "comparative"
+        )
+        comparative["estimator_registration"] = {
+            "estimator_id": "d124_two_shared_edge_common_mode.v1",
+            "status": "candidate_pending_floor_commonmode_01",
+        }
         with tempfile.TemporaryDirectory() as tmp:
+            spec_path = Path(tmp) / "governed-extraction-spec.json"
+            spec_raw = json.dumps(shipped_spec, indent=2).encode("utf-8")
+            spec_path.write_bytes(spec_raw)
+            self.assertIn(b'"estimator_registration"', spec_raw)
             report_path = Path(tmp) / "extraction-report.json"
             report_path.write_bytes(
                 b'{"nested":{"estimator_registration":{}}}'
