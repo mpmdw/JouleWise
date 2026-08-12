@@ -29,6 +29,15 @@ ROOT = Path(__file__).resolve().parents[1]
 OTHER_BOOT_SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 
+def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
+    """Stand-in for sys.stdout that survives argparse's 3.14 colorize probe."""
+    return mock.Mock(
+        buffer=buffer,
+        fileno=mock.Mock(side_effect=io.UnsupportedOperation("fileno")),
+        isatty=mock.Mock(return_value=False),
+    )
+
+
 def passing_suites(
     repository: Path, test_ids: list[str] | tuple[str, ...]
 ) -> evidence._SuiteResult:
@@ -483,7 +492,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.assertNotEqual(repository.resolve(), evidence_author_cli.REPO_ROOT)
         output = io.BytesIO()
-        stdout = mock.Mock(buffer=output)
+        stdout = _cli_stdout(output)
 
         with mock.patch.object(evidence_author_cli.sys, "stdout", stdout):
             return_code = evidence_author_cli.main(["--pack-root", str(pack)])
@@ -1025,7 +1034,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         temporary, repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         author_output = io.BytesIO()
-        author_stdout = mock.Mock(buffer=author_output)
+        author_stdout = _cli_stdout(author_output)
         with (
             mock.patch.object(evidence_author_cli, "REPO_ROOT", repository),
             mock.patch.object(evidence_author_cli.sys, "stdout", author_stdout),
@@ -1062,7 +1071,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         git(repository, "commit", "-qm", "authored freeze evidence")
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         output = io.BytesIO()
-        stdout = mock.Mock(buffer=output)
+        stdout = _cli_stdout(output)
         with mock.patch.object(arm_readiness_cli.sys, "stdout", stdout):
             return_code = arm_readiness_cli.main(
                 [
