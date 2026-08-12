@@ -19,8 +19,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.detection_floor import (  # noqa: E402
+    COMMON_MODE_ESTIMATOR_ID,
     CONDITION_FAMILY_DOMAIN,
     canonical_domain_sha256,
+    two_shared_edge_common_mode_registration,
 )
 from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
@@ -663,6 +665,8 @@ def extraction_spec(
             "condition_family_id": definition["condition_family_id"],
             "condition_family_definitions": {"A": family, "B": dict(family)},
             "expected_n": N,
+            "estimator": COMMON_MODE_ESTIMATOR_ID,
+            "estimator_registration": two_shared_edge_common_mode_registration(),
             "order_manifest": root_pin,
             "evidence_root_id": EVIDENCE_ROOT_ID,
             "member_config_sha256": member_hashes(rows),
@@ -1783,7 +1787,7 @@ def build_artifacts() -> dict[Path, bytes]:
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
-        "authorities": ["D-116", "D-117", "D-123"],
+        "authorities": ["D-116", "D-117", "D-123", "D-124"],
         "stack_scope": {
             "hardware_target": "macbook_m3_max",
             "runtime_backend": "mlx",
@@ -1823,6 +1827,7 @@ def build_artifacts() -> dict[Path, bytes]:
                 "metric": "phase_energy_j.decode",
                 "condition_family_id": DECODE_FAMILY_ID,
                 "ordered_blocks": blocks,
+                "estimator": COMMON_MODE_ESTIMATOR_ID,
             },
             {
                 "cell_id": PREFILL_ABSOLUTE_CELL,
@@ -1838,6 +1843,7 @@ def build_artifacts() -> dict[Path, bytes]:
                 "metric": "phase_energy_j.prefill",
                 "condition_family_id": PREFILL_FAMILY_ID,
                 "ordered_blocks": blocks,
+                "estimator": COMMON_MODE_ESTIMATOR_ID,
             },
             {
                 "cell_id": P256_ABSOLUTE_CELL,
@@ -1853,6 +1859,7 @@ def build_artifacts() -> dict[Path, bytes]:
                 "metric": "phase_energy_j.prefill",
                 "condition_family_id": P256_FAMILY_ID,
                 "ordered_blocks": p256_blocks,
+                "estimator": COMMON_MODE_ESTIMATOR_ID,
             },
         ],
         "reported_energy_cells": [

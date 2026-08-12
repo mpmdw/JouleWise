@@ -8,6 +8,7 @@
     "D-117",
     "D-122",
     "D-123",
+    "D-124",
     "D-125"
   ],
   "stack_scope": {
@@ -110,6 +111,34 @@
       ],
       "difference_orientation": "condition_b_minus_condition_a",
       "point_estimator": "abba_block_arm_mean_difference_t_v1",
+      "floor_estimator_registration": {
+        "estimator_id": "d124_two_shared_edge_common_mode.v1",
+        "version": "v1",
+        "parameter_sha256": "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
+        "status": "registered_candidate",
+        "transfer_assumption": {
+          "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+          "statement": "Within one authenticated ABBA calibration bracket, onset and offset fiducial terms are shared edges while bundle-specific residual terms remain adversarial.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+        },
+        "stationarity_transfer_assumption": {
+          "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+          "statement": "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+          "evidentiary_limit": "The historical corpus records bounds, not realized member-level boundary errors."
+        },
+        "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "calibration_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "consuming_contrast_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "identical_covariance_treatment_required": true,
+        "allowance": {
+          "rule": "max(observed_drift_s,bracket_screen_s)",
+          "embedding_count": 1,
+          "embedded_in": "shared_operative_bound_s"
+        },
+        "issued_acceptance_artifact_reopened": false,
+        "raw_calibration_corpus_voided": false
+      },
       "test": "two_sided",
       "scientific_hypothesis_direction": "positive",
       "family_alpha": 0.05,
@@ -493,6 +522,34 @@
       ],
       "difference_orientation": "condition_b_minus_condition_a",
       "point_estimator": "abba_block_arm_mean_difference_t_v1",
+      "floor_estimator_registration": {
+        "estimator_id": "d124_two_shared_edge_common_mode.v1",
+        "version": "v1",
+        "parameter_sha256": "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
+        "status": "registered_candidate",
+        "transfer_assumption": {
+          "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+          "statement": "Within one authenticated ABBA calibration bracket, onset and offset fiducial terms are shared edges while bundle-specific residual terms remain adversarial.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+        },
+        "stationarity_transfer_assumption": {
+          "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+          "statement": "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+          "evidentiary_limit": "The historical corpus records bounds, not realized member-level boundary errors."
+        },
+        "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "calibration_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "consuming_contrast_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "identical_covariance_treatment_required": true,
+        "allowance": {
+          "rule": "max(observed_drift_s,bracket_screen_s)",
+          "embedding_count": 1,
+          "embedded_in": "shared_operative_bound_s"
+        },
+        "issued_acceptance_artifact_reopened": false,
+        "raw_calibration_corpus_voided": false
+      },
       "prompt_candidate": {
         "path": "prefill_prompt_candidate.json",
         "sha256": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",

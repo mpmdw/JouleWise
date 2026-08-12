@@ -4,7 +4,7 @@ This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is
 not armable and makes no data, verdict, receipt, or artifact-byte claim.
 
-Authority order is D-117, D-122, D-123, then D-125. D-122 supersedes
+Authority order is D-117, D-122, D-123, D-124, then D-125. D-122 supersedes
 the older design-memo and plan-factory decode-only text. The plan tree uses
 the shared `joulewise.d117_plan_tree.v1` schema family and every top-level
 artifact declares `draft_status = unfrozen_draft`.
@@ -30,8 +30,8 @@ records 10 physical receipts for
 5 logical operations per finalized pre/post
 bracket session. Actual receipt bytes and the absolute terminal sequence remain
 empty until arm and collection. Identity pins remain EMPTY pending U11. The
-The withdrawn D-124 estimator is not registered. Contrasts use the default
-worst-case floors; the prefill contrast therefore has reduced claim capability.
+Both shared-edge ABBA contrast cells register the canonical D-124 common-mode
+floor estimator treatment required to match their floor-calibration cells.
 
 Regenerate or check:
 
