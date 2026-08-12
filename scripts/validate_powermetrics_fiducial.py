@@ -18,12 +18,19 @@ byte-frozen validation identities.
 
 NEVER run this while another agent session is active on the machine
 ([QUIET-MAC] discipline); the run is refused without --allow-live.
+
+Full lifecycle ownership of a privileged sampler is UNSUPPORTED pending
+WO-SAMPLER-SUPERVISOR: a privileged supervisor, kernel no-fork confinement,
+sudoers migration, and a live admission gate. The post-run process census in
+this module is detect-and-report only; it neither proves ownership nor changes
+run behavior.
 """
 
 from __future__ import annotations
 
 import argparse
 import atexit
+from contextlib import contextmanager
 import hmac
 import hashlib
 import json
@@ -112,6 +119,8 @@ PROTOCOL_V2_PATH = (
 )
 ROLLOVER_GATE_TIMEOUT_REASON = "pulse_calibration_rollover_gate_timeout"
 PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")
+SAMPLER_TERMINATE_TIMEOUT_S = 10.0
+SAMPLER_CENSUS_DIAGNOSTIC = "powermetrics_post_teardown_census"
 TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
     "joulewise.test_writer_crash_authorization.v1"
 )
@@ -377,14 +386,99 @@ def verify_frozen_protocol(path: Path = PROTOCOL_PATH) -> bool:
 
 
 def _terminate_powermetrics(process: subprocess.Popen) -> None:
-    """Best-effort bounded termination for a calibration sampler."""
+    """Best-effort bounded termination and reaping of the direct child."""
 
+    poll = getattr(process, "poll", None)  # small unit-test fakes lack poll
+    if callable(poll) and poll() is not None:
+        process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
+        return
     process.terminate()
     try:
-        process.communicate(timeout=10.0)
+        process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         process.kill()
-        process.communicate()
+        process.communicate(timeout=SAMPLER_TERMINATE_TIMEOUT_S)
+
+
+def _powermetrics_process_census() -> list[dict[str, object]]:
+    """Best-effort snapshot of processes whose command names powermetrics."""
+
+    try:
+        completed = subprocess.run(
+            ["ps", "-axo", "pid=,comm=,args="],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0:
+        return []
+    findings: list[dict[str, object]] = []
+    for line in completed.stdout.splitlines():
+        fields = line.strip().split(maxsplit=2)
+        if len(fields) < 2 or not fields[0].isdigit():
+            continue
+        pid = int(fields[0])
+        command = " ".join(fields[1:])
+        if pid != os.getpid() and "powermetrics" in command.casefold():
+            findings.append({"pid": pid, "command": command})
+    return findings
+
+
+def _report_powermetrics_census(event_reporter=None) -> None:
+    """Loudly report census findings without asserting or changing behavior."""
+
+    try:
+        findings = _powermetrics_process_census()
+    except Exception:  # noqa: BLE001 - census is detect-and-report only
+        return
+    if not findings:
+        return
+    metadata = {
+        "findings": findings,
+        "scope": "detect_and_report_only",
+        "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR",
+    }
+    try:
+        print(
+            json.dumps(
+                {"event": SAMPLER_CENSUS_DIAGNOSTIC, **metadata}, sort_keys=True
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception:  # noqa: BLE001 - census reporting cannot alter run behavior
+        pass
+    if event_reporter is not None:
+        try:
+            event_reporter(SAMPLER_CENSUS_DIAGNOSTIC, metadata)
+        except Exception:  # noqa: BLE001 - census reporting cannot alter run behavior
+            pass
+
+
+@contextmanager
+def _sampler_lifetime(
+    command: list[str],
+    *,
+    event_reporter=None,
+):
+    """Join the direct sampler child on every exit path, then census."""
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        yield process
+    finally:
+        try:
+            _terminate_powermetrics(process)
+        finally:
+            _report_powermetrics_census(event_reporter)
 
 
 def wait_for_preworkload_rollover(
@@ -1140,123 +1234,122 @@ def main(argv: list[str] | None = None) -> int:
         str(capture_path),
     ]
     pre_spawn = clock.stamp()
-    process = subprocess.Popen(
-        command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
-    first_parse = None
-    deadline = time.monotonic() + args.sampler_ready_timeout_s
-    while time.monotonic() < deadline:
-        if capture_path.exists() and capture_path.stat().st_size > 0:
-            first_frame = capture_path.read_bytes().split(b"\0", 1)[0]
-            if first_frame.strip():
-                try:
-                    parse_powermetrics_records(first_frame)
-                except ValueError:
-                    pass
-                else:
-                    first_parse = clock.stamp()
-                    break
-        time.sleep(
-            min(
-                0.05 * args.time_scale_for_test,
-                args.sampler_ready_timeout_s / 4,
+    with _sampler_lifetime(
+        command,
+        event_reporter=emit,
+    ) as process:
+        _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
+        first_parse = None
+        deadline = time.monotonic() + args.sampler_ready_timeout_s
+        while time.monotonic() < deadline:
+            if capture_path.exists() and capture_path.stat().st_size > 0:
+                first_frame = capture_path.read_bytes().split(b"\0", 1)[0]
+                if first_frame.strip():
+                    try:
+                        parse_powermetrics_records(first_frame)
+                    except ValueError:
+                        pass
+                    else:
+                        first_parse = clock.stamp()
+                        break
+            time.sleep(
+                min(
+                    0.05 * args.time_scale_for_test,
+                    args.sampler_ready_timeout_s / 4,
+                )
             )
-        )
-    if first_parse is None:
-        process.terminate()
-        finalize_abandoned("powermetrics_never_ready")
-        return emit_refusal(
-            RefusalCode.SAMPLER_NEVER_READY,
-            stream=sys.stderr,
-        )
-    _writer_stage(WriterStage.AFTER_SAMPLER_READY)
-    # D-078: wait for a native whole-second rollover before any workload.
-    try:
-        wait_for_preworkload_rollover(
-            capture_path,
-            process,
-            timeout_s=args.rollover_timeout_s,
-            poll_s=min(
-                0.05 * args.time_scale_for_test,
-                args.rollover_timeout_s / 4,
-            ),
-        )
-    except RuntimeError as exc:
-        events.close()
-        finalize_abandoned(str(exc))
-        return emit_refusal(
-            RefusalCode.ROLLOVER_GATE_TIMEOUT,
-            stream=sys.stderr,
-        )
-    _writer_stage(WriterStage.AFTER_ROLLOVER_READY)
-    sampling_started = clock.stamp()
-    emit("sampling_started", {})
+        if first_parse is None:
+            finalize_abandoned("powermetrics_never_ready")
+            return emit_refusal(
+                RefusalCode.SAMPLER_NEVER_READY,
+                stream=sys.stderr,
+            )
+        _writer_stage(WriterStage.AFTER_SAMPLER_READY)
+        # D-078: wait for a native whole-second rollover before any workload.
+        try:
+            wait_for_preworkload_rollover(
+                capture_path,
+                process,
+                timeout_s=args.rollover_timeout_s,
+                poll_s=min(
+                    0.05 * args.time_scale_for_test,
+                    args.rollover_timeout_s / 4,
+                ),
+            )
+        except RuntimeError as exc:
+            finalize_abandoned(str(exc))
+            return emit_refusal(
+                RefusalCode.ROLLOVER_GATE_TIMEOUT,
+                stream=sys.stderr,
+            )
+        _writer_stage(WriterStage.AFTER_ROLLOVER_READY)
+        sampling_started = clock.stamp()
+        emit("sampling_started", {})
 
-    time.sleep(BASELINE_S * args.time_scale_for_test)
-    warmups: list[CommandedPulse] = []
-    for warmup_index in range(WARMUP_PULSE_COUNT):
-        on_stamp = clock.stamp()
-        emit(
-            "warmup_command_on",
-            {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
-        )
-        run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
-        off_stamp = clock.stamp()
-        emit(
-            "warmup_command_off",
-            {"warmup_index": warmup_index, "clock_stamp": asdict(off_stamp)},
-        )
-        warmups.append(
-            CommandedPulse(
-                on_s=on_stamp.epoch_s,
-                off_s=off_stamp.epoch_s,
-                on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
-                off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
+        time.sleep(BASELINE_S * args.time_scale_for_test)
+        warmups: list[CommandedPulse] = []
+        for warmup_index in range(WARMUP_PULSE_COUNT):
+            on_stamp = clock.stamp()
+            emit(
+                "warmup_command_on",
+                {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
             )
-        )
-        time.sleep(1.5 * args.time_scale_for_test)
-    time.sleep(BASELINE_S * args.time_scale_for_test)
+            run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
+            off_stamp = clock.stamp()
+            emit(
+                "warmup_command_off",
+                {"warmup_index": warmup_index, "clock_stamp": asdict(off_stamp)},
+            )
+            warmups.append(
+                CommandedPulse(
+                    on_s=on_stamp.epoch_s,
+                    off_s=off_stamp.epoch_s,
+                    on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
+                    off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
+                )
+            )
+            time.sleep(1.5 * args.time_scale_for_test)
+        time.sleep(BASELINE_S * args.time_scale_for_test)
 
-    # Van der Corput spacing is schedule-relative (offsets start at 0 for the
-    # first pulse), so the loop cursor MUST be measured from the pulse-loop
-    # start, not from sampling-start (which precedes it by the baseline +
-    # warmup + baseline preamble). Measuring elapsed against sampling_started
-    # made every gap negative and collapsed the pulses back-to-back.
-    pulse_loop_mono0 = time.monotonic()
-    pulses: list[CommandedPulse] = []
-    for raw_on_offset_s, raw_off_offset_s in pulse_schedule(args.pulse_count):
-        on_offset_s = raw_on_offset_s * args.time_scale_for_test
-        off_offset_s = raw_off_offset_s * args.time_scale_for_test
-        _writer_stage(WriterStage.DURING_CAPTURE)
-        if pulses:
-            elapsed_s = time.monotonic() - pulse_loop_mono0
-            time.sleep(max(0.0, on_offset_s - elapsed_s))
-        on_stamp = clock.stamp()
-        emit(
-            "pulse_command_on",
-            {"clock_stamp": asdict(on_stamp), "planned_on_offset_s": on_offset_s},
-        )
-        run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
-        off_stamp = clock.stamp()
-        emit(
-            "pulse_command_off",
-            {"clock_stamp": asdict(off_stamp), "planned_off_offset_s": off_offset_s},
-        )
-        pulses.append(
-            CommandedPulse(
-                on_s=on_stamp.epoch_s,
-                off_s=off_stamp.epoch_s,
-                on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
-                off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
+        # Van der Corput spacing is schedule-relative (offsets start at 0 for the
+        # first pulse), so the loop cursor MUST be measured from the pulse-loop
+        # start, not from sampling-start (which precedes it by the baseline +
+        # warmup + baseline preamble). Measuring elapsed against sampling_started
+        # made every gap negative and collapsed the pulses back-to-back.
+        pulse_loop_mono0 = time.monotonic()
+        pulses: list[CommandedPulse] = []
+        for raw_on_offset_s, raw_off_offset_s in pulse_schedule(args.pulse_count):
+            on_offset_s = raw_on_offset_s * args.time_scale_for_test
+            off_offset_s = raw_off_offset_s * args.time_scale_for_test
+            _writer_stage(WriterStage.DURING_CAPTURE)
+            if pulses:
+                elapsed_s = time.monotonic() - pulse_loop_mono0
+                time.sleep(max(0.0, on_offset_s - elapsed_s))
+            on_stamp = clock.stamp()
+            emit(
+                "pulse_command_on",
+                {"clock_stamp": asdict(on_stamp), "planned_on_offset_s": on_offset_s},
             )
-        )
-    time.sleep(BASELINE_S * args.time_scale_for_test)
-    sampling_stopped = clock.stamp()
-    emit("sampling_stopped", {})
-    _terminate_powermetrics(process)
-    _writer_stage(WriterStage.AFTER_SAMPLER_TEARDOWN)
-    post_parse = clock.stamp()
+            run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
+            off_stamp = clock.stamp()
+            emit(
+                "pulse_command_off",
+                {"clock_stamp": asdict(off_stamp), "planned_off_offset_s": off_offset_s},
+            )
+            pulses.append(
+                CommandedPulse(
+                    on_s=on_stamp.epoch_s,
+                    off_s=off_stamp.epoch_s,
+                    on_uncertainty_s=clock_stamp_half_width_s(on_stamp),
+                    off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
+                )
+            )
+        time.sleep(BASELINE_S * args.time_scale_for_test)
+        sampling_stopped = clock.stamp()
+        emit("sampling_stopped", {})
+        _terminate_powermetrics(process)
+        _writer_stage(WriterStage.AFTER_SAMPLER_TEARDOWN)
+        post_parse = clock.stamp()
 
     data = capture_path.read_bytes()
     _writer_stage(WriterStage.DURING_RAW_EVENTS_ARTIFACT)
