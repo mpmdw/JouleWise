@@ -1332,7 +1332,28 @@ settled by this run-book. Until Ed rules (§13.2), the standing instruction
 remains abort and repair outside the window, and any retry is a recorded
 deviation rather than a licensed step.
 
-## 11. Back up, then extract in the same custody session
+## 11. Record duration margins, back up, then extract in the same custody session
+
+Immediately after the finalized post-calibration slot and passing whole-window
+verdict, before backup or extraction, record the comparative-cell duration
+margins from the frozen pack and authenticated run bytes:
+
+```sh
+.venv/bin/python scripts/record_window_duration_margins.py \
+  --repository-root "$REPO" \
+  --pack-root "$WINDOW_PLAN_ROOT" \
+  --runs-root "$RUNS_ROOT" \
+  --receipt-root "$CUSTODY_ROOT" \
+  --pack-identity "$WINDOW_ID"
+```
+
+The operator supplies only roots and the frozen pack identity. The recorder
+derives the registered cells, membership, evidence values, status, and
+deterministic output path. `REFUSE` stops close-out without writing a receipt.
+`PASS` means every registered member was uniquely found and every required
+value was derived from authenticated bytes; it does not require a positive
+margin. Preserve the reported receipt path and SHA-256 as their own close-out
+fields.
 
 Back up the claim corpus:
 
@@ -1396,6 +1417,8 @@ Record:
   midpoint value, both family screen results, and both allowances;
 - the whole-window evaluation-basis SHA-256 and member occurrence set;
 - every failed, quarantined, superseded, or waived occurrence;
+- the comparative-cell window-duration-margin receipt path and SHA-256,
+  recorded separately from bound-mint, backup, and extraction outputs;
 - backup destination and exit status;
 - extraction artifact path and result;
 - whether automatic network time was disabled for this window, when it was
