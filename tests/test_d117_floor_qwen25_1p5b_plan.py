@@ -49,14 +49,14 @@ from scripts.extract_detection_floors import main as extract_main  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "63a1bfe4202f849034a887443d711dd8ae4d1a438960eae9802f3f21d2eaad3f"
+EXPECTED_PACK_SHA256 = "b74673f5ea5c24b2ccb61542973bce6d453e1c26bcf2da38e0b75db88754638c"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "67b111fbfe58579617bddffb81728efdb35e14a2155013d7ea6aae593e213d99",
+    "generate_configs.py": "f47cb1220602906b0c835dc6979a6bc448e8bcbe20ffc7031cfb261afbe97bfd",
     "calibration_plan.json": "56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182",
     "calibration_plan.sha256": "7e38e1f7730e56614c37f778a916098eb7a7655ef4409a9e7bd0a5a97cbd5f9f",
     "order_manifest.json": "cc288667de9f38726d80318a08e24e7788c94fd965e9f2cf84c650a26bb11595",
-    "plan_tree.json": "b43dc49f549f9b2bc68d8f10acd0d4b6c41e1445a124294406ec7819761af185",
-    "plan_tree.sha256": "1960ba47d639afca9651d62c6e2b2878fd085c2420a0ec51b83274565a03dd54",
+    "plan_tree.json": "663051ddeae9fff766813becc1910883ac77445729dc080600504ed4999e19b8",
+    "plan_tree.sha256": "5b7c5a060c9195a0b3ff3c4bdeca8068832b588a492adb72f7b95412df1287ca",
     "producer_contract.json": "7067c9c5714e0dc442163ee73268aa570a681511ad9d0ef6622a55635a1b1c70",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"

@@ -29,6 +29,9 @@ from joulewise.identity_pins import (  # noqa: E402
     IDENTITY_PIN_PROJECTION_WORK_ORDER,
     validate_identity_pin_projection,
 )
+from joulewise.arm_readiness import (  # noqa: E402
+    plan_arm_readiness_attachment,
+)
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
 )
@@ -1300,6 +1303,11 @@ def build_tree(
             "retry_commands_present": False,
         },
         "arm_attachments": {
+            "arm_readiness": plan_arm_readiness_attachment(
+                REPO_ROOT / PACK_REL,
+                "GAMMA",
+                REPO_ROOT,
+            ),
             "launch": {
                 "schema_version": "joulewise.stage_launch_bindings.v1",
                 "closed_bindings": {
@@ -1635,8 +1643,21 @@ def check(check_root: Path = REPO_ROOT) -> dict[str, str]:
         temp_root = Path(temporary)
         hashes = generate(temp_root)
         generated = temp_root / PACK_REL
+        pack_root = check_root / PACK_REL
         expected_paths = set(expected_pack_paths())
-        observed_paths = actual_pack_paths(check_root / PACK_REL)
+        generated_tree = json.loads(
+            (generated / "plan_tree.json").read_text(encoding="utf-8")
+        )
+        freeze_reference = generated_tree["arm_attachments"]["arm_readiness"][
+            "freeze_receipt"
+        ]
+        if freeze_reference is not None:
+            freeze_path = Path(freeze_reference["path"])
+            expected_paths |= {
+                freeze_path,
+                freeze_path.with_name(f"{freeze_path.name}.sha256"),
+            }
+        observed_paths = actual_pack_paths(pack_root)
         missing = sorted(expected_paths - observed_paths)
         extras = sorted(observed_paths - expected_paths)
         if missing or extras:

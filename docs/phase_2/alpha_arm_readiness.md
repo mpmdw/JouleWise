@@ -1,95 +1,93 @@
-# Window ALPHA arm readiness — GO / NO-GO
+# Window ALPHA arm readiness — checked human view
 
-**Checkpoint:** T4-late, 2026-08-11 (supersedes the earlier T4, T3 and T1
-lines. Recovery merged — PR #118, 2026-08-09. Mint trust merged — PR #122,
-2026-08-11. D-133 cold-gate disposition — 2026-08-11.)
+**Checkpoint:** T4-late, 2026-08-11 (supersedes the earlier T4, T3, and T1
+lines). **Current verdict: NO-GO. Do not arm Window ALPHA.**
 
-**Current verdict: NO-GO. Do not arm Window ALPHA.** Both merge-event
-blockers have cleared, and D-133 resolved the estimator question for this
-cycle: this fallback branch re-specs all packs to the worst-case default
-estimator and pack freezing is NO LONGER barred by the estimator (freeze-plan
-Q7 resolved by reversal; FCM-01 continues only as a non-freeze-gating desk
-thread per D-133). Remaining NO-GO grounds: the U11 identity-pin projection
-tool is implemented but not yet merged (PR #131 in gates); the Ed-funded Q8
-p256 prefill floor cells are unbuilt; and neither the packs nor the
-generated plan-specific arm-readiness records required by run-book §5C are
-frozen.
+Window ALPHA is the first prospective D-117 night: the Qwen2.5 1.5B decode
+floor with prefill floor cells. The authoritative row set is
+`configs/arm_readiness/d117_row_registry_v1.json`; this page is a checked,
+plain-language view of its ALPHA profile. A row appearing here does not make
+it pass. Only authenticated evidence consumed by the D-134 generator can do
+that.
 
-Window **ALPHA** is the first prospective D-117 night: the 1.5B decode floor
-with prefill floor cells. **Lead** means the project lead. **Merge event**
-means the named change has passed all review, continuous-integration, and
-terminal lead-review gates and has landed on `main`. A **receipt oracle** is
-the frozen expected receipt count and order used to check a calibration
-ledger session.
+Readiness has two stages. Pack freeze writes a non-authorizing freeze receipt
+inside the pack and pins its path and SHA-256 in the final plan tree. At T-0,
+the generator rechecks those rows and the live rows, then writes an external
+arm receipt under window custody. A freeze receipt always says that arming is
+not applicable. Only an unexpired, unsuperseded external arm receipt may carry
+`GO`, and it remains necessary rather than sufficient: the lead's verification
+and Ed's physical foreground action are not delegated.
 
-This page is a decision aid. The collection procedure remains the
-[Quiet-Mac Claim-Window Run-Book](window_runbook.md); this page does not
-replace or amend it.
+The collection procedure remains the
+[Quiet-Mac Claim-Window Run-Book](window_runbook.md). This page does not
+replace it.
 
-This page is **not** the §5C plan-specific arm-readiness record. That record
-is a per-plan artifact generated at pack freeze, named by path and SHA-256 in
-the frozen plan, and carrying a stamped verdict for every applicable row
-below. This page supplies the row set and reasoning; the generated record
-supplies the binding stamps.
+## Preserved checkpoint facts
 
-## Desk gates — all must be green before Ed starts the night
+Recovery merged in PR #118 on 2026-08-09. Mint trust merged in PR #122 at
+`ae6af48` on 2026-08-11 under D-130; its 16-question relocation delta answered
+16/16. PR #125 merged the receipt oracle on 2026-08-10, and the later
+calibration-ledger read-surface change was checked at `c61f840`: 3,172
+canonical bytes with SHA-256
+`088bab77a7843d82e6485df2840d304f2fdf8ecf372006049c60e37367f491c0`,
+byte-identical to the earlier oracle. D-133 resolved the estimator question for
+this cycle by returning the packs to the worst-case default; the common-mode
+thread no longer gates freeze. At this checkpoint the D-131 identity-pin
+projection was implemented but still in PR #131, the Ed-funded Q8 work item's
+256-token prefill floor cells were unbuilt, and the packs and plan-specific
+readiness receipts were not frozen. Those are dated facts, not present-tense
+evidence of a pass.
 
-| Gate | Status (T4, 2026-08-11) | What makes it green | Who acts | Source |
-|---|---|---|---|---|
-| Recovery and calibration-ledger arming path | **GO — merge event complete.** PR #118 merged 2026-08-09. The ruled G2/G4/G6 production fixes, executed probes, scoped delta, lead replay, integration check, CI, and D-121 terminal review all completed. | Preserve the merged behavior and re-run its required checks at the final reviewed measurement head. | Lead | PR #118; recovery cold-gate ruling; D-121. |
-| Manual arming and recovery procedure | **GO for the document; PENDING for its live verification.** The D-117 manual arming procedure landed with PR #118: `window_runbook.md` §5C plus the §5, §6, and §10 D-117 amendments, including the recovery refusal flow. What remains is the §5C lead live verification: the lead personally runs the frozen readiness-validator command and complete under-lease synthetic rehearsal on the reviewed measurement checkout. That is desk work on a landed procedure, not a missing document. | Complete and record the non-delegable §5C lead live verification on the exact reviewed measurement checkout. | Lead | PR #118; `window_runbook.md` §5C and the §5, §6, and §10 D-117 amendments. |
-| Mint trust bar | **GO — merge event complete.** PR #122 merged 2026-08-11 at `ae6af48` under the D-130 decisive-venue ruling; the 16-question relocation delta answered 16/16. Citation discipline per D-130 remains in force until the hosted-green condition closes. | Preserve the merged trust behavior and D-130 citation discipline at the final reviewed head. | Lead | PR #122 (`ae6af48`); `docs/decision_log.md`, D-130. |
-| Writer uses the authenticated acceptance value | **NO-GO.** The copied-scalar removal was queued, not landed. | Land the writer change that reads the authenticated active acceptance artifact instead of a copied constant. | Lead, then merge event | `docs/strategy/2026-08-08-40h-plan.md`, Phase A item A3. |
-| Multi-cell mint and pin vocabulary | **GO at T1 for the merged base, but must survive the final integration head.** The D-117 U3 unit was already merged. | Re-run its focused and integration checks at the final reviewed head; do not arm if the vocabulary or pins drift. | Lead | `RUN_STATE.md`, “STATE IN ONE BREATH” (U1/U3/U4 merged); D-117 clause 7. |
-| Common-mode contrast estimator identity | **NO-GO for pack freeze — Ed-relicensed round 5 is in flight under the D-124 relicense.** Ed licensed one structural zero-threading repair round with a binding pre-committed stopping rule: any exact-arithmetic understatement at an admitted input in the delta re-audit drops the unit to the worst-case default estimator, reverses freeze-plan Q7, and permits no further round. Until that ruled outcome is recorded, every pack remains blocked from freezing. | Complete round 5 and its delta re-audit, then apply the decision log's pre-committed disposition without reopening deliberation. | Lead; Ed's ruling already binds | `docs/decision_log.md`, “D-124 relicense — 2026-08-11” (`ea3f325`); D-124; D-125 clause 1; freeze-plan Q7. |
-| Arm-time identity-pin projection | **NO-GO.** The projection tool was queued after trust. | Merge the projection tool and freeze its receipts into the ALPHA pack. | Lead, then merge event | `RUN_STATE.md` T1 continuation notes; 40-hour plan A5 and Phase B B2. |
-| Receipt-oracle freshness | **GO, conditionally.** PR #125 merged 2026-08-10: `joulewise/receipt_oracle.py` plus replay-derived oracles in all three packs (10 physical receipts / 5 logical operations per finalized bracket session), derived from the authenticated merged head rather than hand-authored literals. **2026-08-11 determination: the conditional FIRED (PR #122 added custody-projection read surface to `joulewise/calibration_ledger.py` after derivation) and was evaluated — NO-REDERIVATION-NEEDED at `c61f840`: main-head replay produced 3,172 canonical bytes, SHA-256 `088bab77a7843d82e6485df2840d304f2fdf8ecf372006049c60e37367f491c0`, byte-identical to the `524a0ed` oracle and all three committed pack oracles; the new read projection does not alter the oracle's selected derivation path (Sol xhigh executed evaluation, T4-late).** | Re-derive if any later merge changes the ledger read or write surface; otherwise preserve the merged oracle in the frozen packs. | Lead | PR #125; `joulewise/receipt_oracle.py`; 40-hour plan B1. |
-| Three-window regression | **NO-GO / UNVERIFIED for the final cadence.** The U4 unit merged (PR #113), and `tests/test_calibration_live_three_window.py` was subsequently touched by the recovery series itself (`4495609`). No separate 40h-B3 amendment commit exists for dispositions 1–6 against the landed cadence, and none has been verified. | Run the amended synthetic ALPHA/BETA/GAMMA ledger regression against merged recovery behavior. | Lead | PR #113; `4495609`; 40-hour plan B3. |
-| Successor-engine cold gate | **NOT AN ALPHA ARM BLOCKER under the newer authority.** It remains frozen at count 3 for a post-window cold gate; the issued D-079 artifact governs these windows. | Keep the frozen work out of the night path; resolve it post-window without changing the issued artifact used by ALPHA. | Lead | `RUN_STATE.md` T1 item 3; D-126; 40-hour plan A6. The packet’s older “U2 before night 1” line is superseded here. |
-| Reason-code plumbing | **GO for the three-night code path.** The code lane is on `main`; the separate specification-governance lane remains open. | Confirm the emitted refusal field is present in the final pack rehearsal. Do not treat the open specification lane as permission to change refusal meanings at night. | Lead | `RUN_STATE.md`, D-121-era reason-code block (PR #116 merged). |
-| ALPHA campaign pack and extraction specification | **NO-GO.** U5 was not generated or hash-frozen at T1. | Generate the D-117 ALPHA pack after recovery lands; include decode and prefill floor cells, reported-energy cells only if the byte-identity check passes, stage-launch recipes, exact roots, failure policy, hashes, and the fresh receipt oracle. | Lead | `RUN_STATE.md` successor queue; D-117 clauses 2, 3, and 7; D-123 clause 1; 40-hour plan B2. |
-| BETA and GAMMA pack family | **NO-GO.** U5–U7 were unfrozen. They are a family because their identities and later floor transport interlock. | Freeze all three packs against the same reviewed head. GAMMA must include the D-122 256-token prefill arm and the D-125 estimator identity. | Lead | `RUN_STATE.md` successor queue; D-122; D-125; 40-hour plan B2. |
-| Frozen readiness validator and record | **NO-GO.** The packet requires it, but Phase B had not been reached at T1. | Generate the record, run the validator with no warning or exception, and rehearse the under-lease gate end to end on a synthetic root. | Lead | Three-night packet, “HARD GATES before night 1”; 40-hour plan B5. |
-| Reviewed measurement checkout | **NO-GO until the blocking merges finish.** T1 recorded clean `main`, but that head does not contain the required recovery and trust merges. | After every blocking merge, create a separate clean measurement checkout at the exact reviewed `main` commit and record its hash. | Lead, then merge event | `RUN_STATE.md`, T1 items 1–2 and Known Workspace State; `window_runbook.md` §1. |
-| Terminal merge review | **NO-GO while any required unit is unmerged.** | For every merge candidate, complete all earlier checks and continuous integration, then have the context-holding lead review the exact final head last. Any later fix repeats the gate. | Lead | D-121. |
+## Freeze-evaluable rows
 
-## Privileged setup and clock gates
+These rows are evaluated at freeze and again at arm. `NOT_APPLICABLE` is legal
+only for the registered successor-acceptance rule.
 
-The D-115 installation capability applies if the reviewed quiet-guard or
-autonomous network-time helper is used. It does not license general root
-access. Manual §5A operation remains Ed’s path unless the later capability is
-separately installed and activated.
+| Stable row ID | Checkpoint status and physical meaning |
+|---|---|
+| `clock.restore_recipe` | Not established by committed evidence. The frozen close-out must restore network time only after measurement completion, verdict, and both backups. |
+| `desk.acceptance_owner` | NO-GO at the checkpoint: the copied-scalar removal was queued, not landed. The writer must read the authenticated active acceptance artifact. |
+| `desk.acceptance_successor` | Not applicable while the issued D-079 artifact remains selected. A successor would require its own authenticated passing receipt before member one. |
+| `desk.arming_procedure` | The document merged in PR #118; its exact final-head hashes and the non-delegable under-lease live verification were not yet established. |
+| `desk.current_pack` | NO-GO at the checkpoint. The ALPHA pack and extraction specification were not yet frozen. Generator checks, validators, sidecars, and the committed pack digest must all agree. |
+| `desk.estimator_identity` | D-133 selected the worst-case default for this cycle. The exact estimator identity still has to be derived from the frozen plan and admitted mint registry. |
+| `desk.identity_pin_projection` | NO-GO at the checkpoint. The D-131 identity-pin projection was in PR #131 and its freeze and arm receipts were not yet available. |
+| `desk.mint_trust` | PR #122 merged; the D-120 profile proof still has to be replayed at the exact final HEAD and pack digest. |
+| `desk.multicell_mint` | The merged base was green at T1; its schemas and pinsets still have to byte-match the final committed sources. |
+| `desk.pack_family` | NO-GO at the checkpoint. ALPHA, BETA, and GAMMA had not been frozen against one reviewed HEAD. |
+| `desk.reason_code_plumbing` | The three-night code path was merged; final registry coverage and rehearsal evidence remained required. |
+| `desk.receipt_oracle` | The oracle replay was byte-identical after PR #122. Any later ledger read/write change requires another derivation. |
+| `desk.recovery_ledger_path` | PR #118 merged the recovery and ledger arming fixes; the focused suite must pass again at the bound final HEAD. |
+| `desk.three_window_regression` | NO-GO / unverified for the final cadence. The earlier three-window regression test was later touched by recovery commit `4495609`; no separate final-cadence verification was recorded. |
 
-| Gate | Status (T4, 2026-08-11) | What makes it green | Who acts | Source |
-|---|---|---|---|---|
-| Fresh administrator authorization | **UNKNOWN.** It can only be observed at installation time. | Run `sudo -k`, then obtain fresh interactive authorization for the one reviewed install command. | Ed | D-115 clause 2(a); D-127 clause 3. |
-| Installed bytes are authenticated | **UNKNOWN.** T1 does not record a completed install. | Match every staged artifact to its pinned reviewed digest before root-owned installation. | Ed verifies; lead supplies reviewed digests | D-115 clause 2(b). |
-| Helper interpreter is isolated | **UNKNOWN.** T1 does not record a completed install. | Verify genuine isolated execution: no site initialization, user site, or environment hooks. | Lead verifies; Ed installs | D-115 clause 2(c). |
-| Installed capability remains inactive until the Ed-visible activation step | **UNKNOWN / NOT REQUIRED for the manual ALPHA route.** | If automation is used, prove the installed state is inactive first, then perform the separately reviewed Ed-visible activation. Otherwise use manual §5A. | Ed and lead | D-115 clause 3; D-127 clauses 3–5. |
-| Clock is correct and the prior network-time state is recorded | **UNKNOWN until T-0.** | Compare against an independent trusted source, correct if needed, and record `systemsetup -getusingnetworktime`. | Ed | `window_runbook.md` §5A. |
-| Automatic network time is off and the machine has settled | **UNKNOWN until T-0.** | Run the reviewed manual or installed fixed command to turn network time off, record the time, then leave the machine untouched for the frozen settle period. | Ed | `window_runbook.md` §5A; D-127 clause 3 if automation is used. |
-| Restore procedure is ready | **UNKNOWN until the final packet freezes.** | The frozen close-out must turn network time on only after `measurement_complete`, the verdict, and both backups, and must verify the restored state. | Lead freezes; Ed executes | `window_runbook.md` §5A; three-night packet, ALPHA close-out. |
+## Arm-only rows
 
-## T-0 quiet-machine gates
+These facts cannot be stamped at freeze. Missing or stale live evidence means
+`REFUSE`, never an operator-entered “unknown” machine value.
 
-All of these are live observations. T1 cannot make them green in advance;
-**UNKNOWN means NO-GO at the machine until Ed records a pass.**
+| Stable row ID | Checkpoint status and physical meaning |
+|---|---|
+| `clock.correct_and_prior_state` | Not established by committed evidence. Ed must compare the clock with an independent source and capture the prior automatic-time state. |
+| `clock.network_time_off` | Not established by committed evidence. A fresh probe must show automatic network time is off; the former wording implying a second hand-counted settle is retired. |
+| `desk.reviewed_checkout` | NO-GO until all blocking merges finish. The measurement checkout must prove HEAD, local main, and origin/main are identical with no tracked or untracked changes. |
+| `desk.terminal_review` | NO-GO while a required unit is unmerged. The context-holding lead reviews the exact final head after every earlier gate. |
+| `desk.under_lease_rehearsal` | NO-GO at the checkpoint. The real validator, real reservation command with `--execute`, and both phase-correct writers must pass against a synthetic root under the actual lease. |
+| `privilege.activation_fence` | Not established by committed evidence; not applicable on the manual route. If the helper is used, evidence must show installation was inactive before a separate Ed-visible activation. |
+| `privilege.fresh_authorization` | Not established by committed evidence; not applicable on the manual route. Helper installation requires the reviewed `sudo -k` and fresh authorization sequence. |
+| `privilege.installed_bytes` | Not established by committed evidence; not applicable on the manual route. Installed bytes must equal the reviewed staged digests. |
+| `privilege.isolated_interpreter` | Not established by committed evidence; not applicable on the manual route. The installed helper must prove genuine isolated interpreter operation. |
+| `t0.background_quiet` | Not established by committed evidence. Time Machine, updates, indexing, downloads, and cloud uploads must be quiet in a fresh census. |
+| `t0.campaign_lock_absent` | Not established by committed evidence. A live owner stops the attempt; an unreadable or stale lock also refuses rather than being deleted blindly. |
+| `t0.display_thermal_idle` | Not established by committed evidence. The reviewed preparation and completed wait must prove display, screensaver, thermal pressure, and idle state. |
+| `t0.fresh_roots_waivers` | Not established by committed evidence. Absolute claim, bound, custody, and quarantine roots must be distinct and fresh, and the actual attempt waiver bytes must decode exactly to `[]`. |
+| `t0.ledger_reservation` | Not established by committed evidence. The live diagnostic and real reservation command must bind the plan SHA and record the pre-reserve authorization event plus `status: reserved`. |
+| `t0.machine_readiness` | Not established by committed evidence. The frozen pre-window command must return `READY` for the same plan and roots; that word alone never arms the night. |
+| `t0.no_stray_keepawake` | The T1 observation was green but expired. A fresh census must show no unrelated keep-awake, agent, browser, monitor, watcher, tail, or campaign process before the one reviewed wrapper starts. |
+| `t0.offline_inputs` | Not established by committed evidence. Model, tokenizer, configurations, scripts, and environment must match frozen local inputs with no network fetch. |
+| `t0.passwordless_powermetrics` | Not established by committed evidence. The exact reviewed passwordless measurement probe must exit zero. |
+| `t0.power_path` | Not established by committed evidence. The 140 W supply and cable, external AC, 140 W negotiation, `ac_high_power`, and low-power-mode-off state must match the frozen policy. |
+| `t0.single_launch_capability` | Not yet armed. The pre-launch record proves an unused, atomically consumable one-shot capability; it does not falsely claim that a foreground launch already happened. |
+| `t0.storage_backup_capacity` | Not established by committed evidence. The checkpoint required at least 20 GB free, and both distinct backup destinations must exist, be writable, and have the frozen required capacity. |
 
-| Gate | Status (T4, 2026-08-11) | What makes it green | Who acts | Source |
-|---|---|---|---|---|
-| No **stray** keep-awake process (`caffeinate` included) — the one reviewed launch is itself `caffeinate` | **GO at the T1 checkpoint, but that observation expires before arm.** T1 says nothing was in flight and the session’s `caffeinate` ended. | At T-0, inspect a new final census and stop every unrelated `caffeinate`, agent, browser, automation, monitor, watcher, tail, campaign, or other poller. Before launch, `pgrep -x caffeinate` must return nothing and exit 1. The reviewed launch (`caffeinate -is /bin/zsh …`, run-book §6) starts afterward, so exactly one `caffeinate` then exists as the chain's parent. The window is **stray-caffeinate-free, wrapped in one reviewed `caffeinate`**; never describe it as “caffeinate-free” in operator-facing text. | Ed | `RUN_STATE.md` T1 opening and prior checkpoint close; `window_runbook.md` §§1, 5, and 6. |
-| Approved power path | **UNKNOWN.** | Confirm the approved 140 W supply and cable, external AC, 140 W negotiation, `ac_high_power`, and low-power mode off; do not change them. | Ed | Three-night packet, ALPHA arm sequence; `window_runbook.md` §5. |
-| Background maintenance is quiet | **UNKNOWN.** | Finish or pause Time Machine, updates, indexing, downloads, and cloud uploads; record the final census. | Ed | Three-night packet, ALPHA arm sequence; `window_runbook.md` §5. |
-| Display, screensaver, thermal state, and idle drain | **UNKNOWN.** | Pass `quiet_mac_prep.sh`; require displays asleep, screensaver disengaged, nominal thermal pressure, then leave the Mac untouched for at least ten minutes. | Ed | `window_runbook.md` §§5 and 7. |
-| Passwordless measurement access | **UNKNOWN.** | Prove `sudo -n /usr/bin/powermetrics ...` succeeds before the final settle. | Ed | `window_runbook.md` §5. |
-| Offline inputs | **UNKNOWN.** | Load the pinned model, tokenizer, configurations, scripts, and virtual environment locally without downloads. | Lead prepares; Ed confirms record | Three-night packet, ALPHA preparation. |
-| Storage and backup capacity | **UNKNOWN.** | Record at least 20 GB free and enough capacity at both separate backup destinations. | Ed | Three-night packet, ALPHA preparation. |
-| Fresh absolute roots and empty waiver list | **UNKNOWN until pack freeze and T-0.** | Use named absolute claim, bound, custody, quarantine, and backup paths; prove claim and bound roots are fresh and `waivers.json` is exactly `[]`. | Lead freezes; Ed verifies | Three-night packet, ALPHA preparation; `window_runbook.md` §4. |
-| No live or stale campaign lock | **UNKNOWN until T-0.** | Prove `campaign.lock` is absent. If present, check its process ID; stop for a live owner and quarantine a proven dead lock. Never delete an unreadable lock blindly. | Ed | Three-night packet hard gates; `window_runbook.md` §10. |
-| **Pre-window machine-readiness command** (not an arming gate) | **NO-GO until every row above is green.** | Run the frozen `bash scripts/prewindow_check.sh --wait --timeout-min <frozen> --window <frozen ALPHA label>` and require `READY`. This covers machine quietness only — contaminating daemons, load, power and clock state, runs roots, disk headroom, and active processes. It is **not** the arming gate and cannot substitute for one. The calibration-ledger gate is separate and mandatory: run-book §5C step 2 requires the §6 diagnostic-readiness command **and** the reservation command with `--execute`. No word emitted by either surface — `READY`, `ready`, or `clean` — licenses arming. | Ed | `window_runbook.md` §5C step 2; `scripts/prewindow_check.sh` header; three-night packet arm sequence. |
-| Single foreground launch | **NOT YET ARMED.** | Launch exactly once from the ordinary foreground shell using the absolute frozen plan root. Do not kill a running verdict, even if it takes more than two minutes. | Ed | Three-night packet hard gates and ALPHA arm sequence; `window_runbook.md` §6. |
-
-**Arm rule:** Ed may arm only when every applicable row above reads **GO**
-and the final readiness command returns `READY`. Any **NO-GO** or **UNKNOWN**
-ends the attempt before launch; preserve evidence and send the exact refusal
-to the lead.
+Any refusal ends the attempt before launch. Preserve the authenticated evidence
+and send the exact closed refusal code to the lead.

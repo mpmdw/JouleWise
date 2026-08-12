@@ -1,0 +1,446 @@
+{
+  "plan_profiles": [
+    {
+      "profile_id": "ALPHA",
+      "required_row_ids": [
+        "clock.correct_and_prior_state",
+        "clock.network_time_off",
+        "clock.restore_recipe",
+        "desk.acceptance_owner",
+        "desk.acceptance_successor",
+        "desk.arming_procedure",
+        "desk.current_pack",
+        "desk.estimator_identity",
+        "desk.identity_pin_projection",
+        "desk.mint_trust",
+        "desk.multicell_mint",
+        "desk.pack_family",
+        "desk.reason_code_plumbing",
+        "desk.receipt_oracle",
+        "desk.recovery_ledger_path",
+        "desk.reviewed_checkout",
+        "desk.terminal_review",
+        "desk.three_window_regression",
+        "desk.under_lease_rehearsal",
+        "privilege.activation_fence",
+        "privilege.fresh_authorization",
+        "privilege.installed_bytes",
+        "privilege.isolated_interpreter",
+        "t0.background_quiet",
+        "t0.campaign_lock_absent",
+        "t0.display_thermal_idle",
+        "t0.fresh_roots_waivers",
+        "t0.ledger_reservation",
+        "t0.machine_readiness",
+        "t0.no_stray_keepawake",
+        "t0.offline_inputs",
+        "t0.passwordless_powermetrics",
+        "t0.power_path",
+        "t0.single_launch_capability",
+        "t0.storage_backup_capacity"
+      ],
+      "window_kind": "ALPHA"
+    },
+    {
+      "profile_id": "BETA",
+      "required_row_ids": [
+        "clock.correct_and_prior_state",
+        "clock.network_time_off",
+        "clock.restore_recipe",
+        "desk.acceptance_owner",
+        "desk.acceptance_successor",
+        "desk.arming_procedure",
+        "desk.current_pack",
+        "desk.estimator_identity",
+        "desk.identity_pin_projection",
+        "desk.mint_trust",
+        "desk.multicell_mint",
+        "desk.pack_family",
+        "desk.reason_code_plumbing",
+        "desk.receipt_oracle",
+        "desk.recovery_ledger_path",
+        "desk.reviewed_checkout",
+        "desk.terminal_review",
+        "desk.three_window_regression",
+        "desk.under_lease_rehearsal",
+        "privilege.activation_fence",
+        "privilege.fresh_authorization",
+        "privilege.installed_bytes",
+        "privilege.isolated_interpreter",
+        "t0.background_quiet",
+        "t0.campaign_lock_absent",
+        "t0.display_thermal_idle",
+        "t0.fresh_roots_waivers",
+        "t0.ledger_reservation",
+        "t0.machine_readiness",
+        "t0.no_stray_keepawake",
+        "t0.offline_inputs",
+        "t0.passwordless_powermetrics",
+        "t0.power_path",
+        "t0.single_launch_capability",
+        "t0.storage_backup_capacity"
+      ],
+      "window_kind": "BETA"
+    },
+    {
+      "profile_id": "GAMMA",
+      "required_row_ids": [
+        "clock.correct_and_prior_state",
+        "clock.network_time_off",
+        "clock.restore_recipe",
+        "desk.acceptance_owner",
+        "desk.acceptance_successor",
+        "desk.arming_procedure",
+        "desk.current_pack",
+        "desk.estimator_identity",
+        "desk.identity_pin_projection",
+        "desk.mint_trust",
+        "desk.multicell_mint",
+        "desk.pack_family",
+        "desk.reason_code_plumbing",
+        "desk.receipt_oracle",
+        "desk.recovery_ledger_path",
+        "desk.reviewed_checkout",
+        "desk.terminal_review",
+        "desk.three_window_regression",
+        "desk.under_lease_rehearsal",
+        "privilege.activation_fence",
+        "privilege.fresh_authorization",
+        "privilege.installed_bytes",
+        "privilege.isolated_interpreter",
+        "t0.background_quiet",
+        "t0.campaign_lock_absent",
+        "t0.display_thermal_idle",
+        "t0.fresh_roots_waivers",
+        "t0.ledger_reservation",
+        "t0.machine_readiness",
+        "t0.no_stray_keepawake",
+        "t0.offline_inputs",
+        "t0.passwordless_powermetrics",
+        "t0.power_path",
+        "t0.single_launch_capability",
+        "t0.storage_backup_capacity"
+      ],
+      "window_kind": "GAMMA"
+    }
+  ],
+  "registry_id": "d117-row-registry-v1",
+  "rows": [
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "clock.correct_and_prior_state.v1",
+      "required_evidence_kinds": [
+        "CLOCK_ATTESTATION"
+      ],
+      "row_id": "clock.correct_and_prior_state"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "clock.network_time_off.v1",
+      "required_evidence_kinds": [
+        "CLOCK_PROBE"
+      ],
+      "row_id": "clock.network_time_off"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "clock.restore_recipe.v1",
+      "required_evidence_kinds": [
+        "DOCTRINE_PIN"
+      ],
+      "row_id": "clock.restore_recipe"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.acceptance_owner.v1",
+      "required_evidence_kinds": [
+        "ACCEPTANCE_OWNER"
+      ],
+      "row_id": "desk.acceptance_owner"
+    },
+    {
+      "applicability_rule": "SUCCESSOR_ACCEPTANCE_ONLY",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.acceptance_successor.v1",
+      "required_evidence_kinds": [
+        "ACCEPTANCE_SUCCESSOR"
+      ],
+      "row_id": "desk.acceptance_successor"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.arming_procedure.v1",
+      "required_evidence_kinds": [
+        "DOCTRINE_PIN"
+      ],
+      "row_id": "desk.arming_procedure"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.current_pack.v1",
+      "required_evidence_kinds": [
+        "PACK_AUTHENTICATION"
+      ],
+      "row_id": "desk.current_pack"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.estimator_identity.v1",
+      "required_evidence_kinds": [
+        "ESTIMATOR_IDENTITY"
+      ],
+      "row_id": "desk.estimator_identity"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.identity_pin_projection.v1",
+      "required_evidence_kinds": [
+        "IDENTITY_PIN_PROJECTION"
+      ],
+      "row_id": "desk.identity_pin_projection"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.mint_trust.v1",
+      "required_evidence_kinds": [
+        "MINT_TRUST"
+      ],
+      "row_id": "desk.mint_trust"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.multicell_mint.v1",
+      "required_evidence_kinds": [
+        "MULTICELL_MINT"
+      ],
+      "row_id": "desk.multicell_mint"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.pack_family.v1",
+      "required_evidence_kinds": [
+        "PACK_FAMILY"
+      ],
+      "row_id": "desk.pack_family"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.reason_code_plumbing.v1",
+      "required_evidence_kinds": [
+        "REASON_CODE_COVERAGE"
+      ],
+      "row_id": "desk.reason_code_plumbing"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.receipt_oracle.v1",
+      "required_evidence_kinds": [
+        "RECEIPT_ORACLE"
+      ],
+      "row_id": "desk.receipt_oracle"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.recovery_ledger_path.v1",
+      "required_evidence_kinds": [
+        "RECOVERY_LEDGER_TEST"
+      ],
+      "row_id": "desk.recovery_ledger_path"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "desk.reviewed_checkout.v1",
+      "required_evidence_kinds": [
+        "GIT_CHECKOUT"
+      ],
+      "row_id": "desk.reviewed_checkout"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "desk.terminal_review.v1",
+      "required_evidence_kinds": [
+        "TERMINAL_REVIEW"
+      ],
+      "row_id": "desk.terminal_review"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.three_window_regression.v1",
+      "required_evidence_kinds": [
+        "THREE_WINDOW_REGRESSION"
+      ],
+      "row_id": "desk.three_window_regression"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "desk.under_lease_rehearsal.v1",
+      "required_evidence_kinds": [
+        "DRY_RUN_REHEARSAL"
+      ],
+      "row_id": "desk.under_lease_rehearsal"
+    },
+    {
+      "applicability_rule": "CLOCK_HELPER_ONLY",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "privilege.activation_fence.v1",
+      "required_evidence_kinds": [
+        "PRIVILEGE_INSTALLATION"
+      ],
+      "row_id": "privilege.activation_fence"
+    },
+    {
+      "applicability_rule": "CLOCK_HELPER_ONLY",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "privilege.fresh_authorization.v1",
+      "required_evidence_kinds": [
+        "PRIVILEGE_INSTALLATION"
+      ],
+      "row_id": "privilege.fresh_authorization"
+    },
+    {
+      "applicability_rule": "CLOCK_HELPER_ONLY",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "privilege.installed_bytes.v1",
+      "required_evidence_kinds": [
+        "PRIVILEGE_INSTALLATION"
+      ],
+      "row_id": "privilege.installed_bytes"
+    },
+    {
+      "applicability_rule": "CLOCK_HELPER_ONLY",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "privilege.isolated_interpreter.v1",
+      "required_evidence_kinds": [
+        "PRIVILEGE_INSTALLATION"
+      ],
+      "row_id": "privilege.isolated_interpreter"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.background_quiet.v1",
+      "required_evidence_kinds": [
+        "MAINTENANCE_CENSUS"
+      ],
+      "row_id": "t0.background_quiet"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.campaign_lock_absent.v1",
+      "required_evidence_kinds": [
+        "ROOT_PREFLIGHT"
+      ],
+      "row_id": "t0.campaign_lock_absent"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.display_thermal_idle.v1",
+      "required_evidence_kinds": [
+        "MACHINE_PREFLIGHT"
+      ],
+      "row_id": "t0.display_thermal_idle"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.fresh_roots_waivers.v1",
+      "required_evidence_kinds": [
+        "ROOT_PREFLIGHT"
+      ],
+      "row_id": "t0.fresh_roots_waivers"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.ledger_reservation.v1",
+      "required_evidence_kinds": [
+        "LEDGER_RESERVATION"
+      ],
+      "row_id": "t0.ledger_reservation"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.machine_readiness.v1",
+      "required_evidence_kinds": [
+        "MACHINE_PREFLIGHT"
+      ],
+      "row_id": "t0.machine_readiness"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.no_stray_keepawake.v1",
+      "required_evidence_kinds": [
+        "PROCESS_CENSUS"
+      ],
+      "row_id": "t0.no_stray_keepawake"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.offline_inputs.v1",
+      "required_evidence_kinds": [
+        "OFFLINE_INPUT_INVENTORY"
+      ],
+      "row_id": "t0.offline_inputs"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.passwordless_powermetrics.v1",
+      "required_evidence_kinds": [
+        "POWERMETRICS_PROBE"
+      ],
+      "row_id": "t0.passwordless_powermetrics"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.power_path.v1",
+      "required_evidence_kinds": [
+        "POWER_PREFLIGHT"
+      ],
+      "row_id": "t0.power_path"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.single_launch_capability.v1",
+      "required_evidence_kinds": [
+        "LAUNCH_RECIPE"
+      ],
+      "row_id": "t0.single_launch_capability"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.storage_backup_capacity.v1",
+      "required_evidence_kinds": [
+        "BACKUP_PREFLIGHT"
+      ],
+      "row_id": "t0.storage_backup_capacity"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_row_registry.v1"
+}

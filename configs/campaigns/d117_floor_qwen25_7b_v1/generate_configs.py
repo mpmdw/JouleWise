@@ -31,6 +31,9 @@ from joulewise.identity_pins import (  # noqa: E402
     IDENTITY_PIN_PROJECTION_WORK_ORDER,
     validate_identity_pin_projection,
 )
+from joulewise.arm_readiness import (  # noqa: E402
+    plan_arm_readiness_attachment,
+)
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
 )
@@ -1261,6 +1264,11 @@ def plan_tree(
             "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing",
         },
         "arm_attachments": {
+            "arm_readiness": plan_arm_readiness_attachment(
+                REPO_ROOT / PACK_REL,
+                "BETA",
+                REPO_ROOT,
+            ),
             "launch": {
                 "schema_version": "joulewise.stage_launch_bindings.v1",
                 "bindings": [
@@ -1778,9 +1786,22 @@ def compare_artifacts(output_root: Path, artifacts: Mapping[Path, bytes]) -> Non
         raise ValueError("generated draft check failed: " + "; ".join(problems))
 
 
-def check_inventory(output_root: Path) -> None:
+def check_inventory(output_root: Path, artifacts: Mapping[Path, bytes]) -> None:
+    pack_root = output_root / PACK_REL
     expected = set(expected_pack_files())
-    observed = actual_pack_paths(output_root / PACK_REL)
+    generated_tree = json.loads(
+        artifacts[PACK_REL / "plan_tree.json"].decode("utf-8")
+    )
+    freeze_reference = generated_tree["arm_attachments"]["arm_readiness"][
+        "freeze_receipt"
+    ]
+    if freeze_reference is not None:
+        freeze_path = Path(freeze_reference["path"])
+        expected |= {
+            freeze_path,
+            freeze_path.with_name(f"{freeze_path.name}.sha256"),
+        }
+    observed = actual_pack_paths(pack_root)
     missing = sorted(expected - observed)
     extras = sorted(observed - expected)
     if missing or extras:
@@ -1805,7 +1826,7 @@ def main() -> int:
     artifacts = build_artifacts()
     if args.check:
         check_root = args.output_root.resolve() if args.output_root else REPO_ROOT
-        check_inventory(check_root)
+        check_inventory(check_root, artifacts)
         compare_artifacts(check_root, artifacts)
         print(
             "draft check passed: 50 science configs, 4 floor cells, "
