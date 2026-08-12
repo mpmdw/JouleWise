@@ -1,9 +1,14 @@
 {
- "_provenance": "Measured 2026-08-03 on the quiet bench; 93 per-module unittest timings rounded to milliseconds from timings-20260803.jsonl. tests.test_calibration_exits uses historical hosted/local observations of 648-2036 seconds, with the conservative upper observation used for exclusive-job planning.",
+ "_provenance": "Measured 2026-08-03 on the quiet bench; 93 per-module unittest timings rounded to milliseconds from timings-20260803.jsonl. tests.test_calibration_exits uses historical hosted/local observations of 648-2036 seconds, with the conservative upper observation used for exclusive-job planning. tests.test_calibration_writer_crash_matrix uses the 2026-08-11 hosted shard observation 5317.216 s (run 31536564643, contention-amplified) as the conservative upper bound and the 2026-08-12 bench standalone 145.911 s as the lower; the shard figure makes fallback placement unsound, hence exclusive.",
  "exclusive_modules": {
   "tests.test_calibration_exits": {
    "seconds": 2036.0,
    "evidence_range_seconds": [648.0, 2036.0],
+   "fallback_rejection_threshold_seconds": 300.0
+  },
+  "tests.test_calibration_writer_crash_matrix": {
+   "seconds": 5317.216,
+   "evidence_range_seconds": [145.911, 5317.216],
    "fallback_rejection_threshold_seconds": 300.0
   }
  },
@@ -41,6 +46,7 @@
   "tests.test_bundle_read": 6.432,
   "tests.test_calibration_bracketing": 0.291,
   "tests.test_calibration_exits": 2036.0,
+  "tests.test_calibration_writer_crash_matrix": 5317.216,
   "tests.test_claims_index_lint": 4.24,
   "tests.test_claims_lint": 4.87,
   "tests.test_claude_bridge_mcp": 6.55,
