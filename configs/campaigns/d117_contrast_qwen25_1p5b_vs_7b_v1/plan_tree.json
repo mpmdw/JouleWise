@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py",
-    "sha256": "787ad8c4f130504c0395d2a49a1add4c3c97f33c75ef3af69db5e8408db4bbb4"
+    "sha256": "0a7e6705d2991774e941f74dbbcecd73e569897b8a54baf5cb9033ebafb949e9"
   },
   "window_identity": {
     "window_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1",
@@ -2807,14 +2807,507 @@
       "todo": "TODO(U2/U8): select authenticated acceptance at arm"
     },
     "identity_pin_projection": {
-      "status": "EMPTY",
-      "runtime_identity_sha256": "",
-      "model_artifact_sha256": {
-        "A": "",
-        "B": ""
-      },
-      "config_set_sha256": "",
-      "todo": "TODO(U11): derive all values and issue projection receipt at arm"
+      "work_order": "D117-U11-IDPIN-PROJECTION",
+      "mode": "derive_never_operator_enter",
+      "state": "unprojected",
+      "required_before_arm": true,
+      "derivation_contract": "joulewise.identity_pin_derivation.v1",
+      "identity_units": [
+        {
+          "identity_unit_id": "A/decode",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+            "path": "../d117_floor_qwen25_1p5b_v1/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "A",
+              "family": "sw-decode-a-qwen25-1p5b",
+              "measurement_arm": "decode"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": null
+            },
+            "workload_profile": {
+              "name": "df_ph_decode",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "prompt_tokens": 128,
+              "output_tokens": 512,
+              "prompt_text": null,
+              "dataset_ref": null
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a1.json",
+              "sha256": "a928fc3da1f0a0227f67244aa34e0be3323e177262fe926ef7deab8bfd4c246c"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a2.json",
+              "sha256": "3bec9c8424f1a1d939f6bde87f2376e8c98c8faf9d27fca13d86daf2f9c180ef"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a1.json",
+              "sha256": "a092660bc014b1793e80b34ffcffa7dc2734b7f788172c9274837455b46b1a6a"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a2.json",
+              "sha256": "ba961c1332128f6d18b546793df2cb06392a179636f93566eb7bb8af738c27fa"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a1.json",
+              "sha256": "9dfcee8fdb816da84dc763157239ccafc77bbc89876e2a9113d8ebff78d32364"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a2.json",
+              "sha256": "656e8616c4afb6d20cbb5e223ecc06f7c774e396763123518855cb0af8e7583d"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a1.json",
+              "sha256": "16e7c5e59d74d9db52179283625dcae1e44d82ced007cf670f38dc0c88448bdf"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a2.json",
+              "sha256": "4694989ee66e40759b3c6e569e2598a0114fd3a2d71aa3725100e24f573e7963"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a1.json",
+              "sha256": "66776aa7d5caa3dec8ae30b21b4c24da92cdc5bacf404506531037cc6f14fba8"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a2.json",
+              "sha256": "52f1c522866b0133719df8153b9db22e4b1202be16fda42e0aeba51a8ae731c4"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a1.json",
+              "sha256": "bb7baba7e4fd0269443693103f0dad4825a5b5374bf39ec4a2298afc18d31c46"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a2.json",
+              "sha256": "2d0e4ea93da7298769d031e90ad4b096ba89b5f510c6fc5a67096ff4f5007433"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a1.json",
+              "sha256": "a3220b386ee11508a4f31c4dbb24bffc794c644e0ed69b76aa85faece63d1584"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a2.json",
+              "sha256": "9b4afefe06f6994363355741f2bfd785822c968850ea24e1c7b367104b5bc8aa"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a1.json",
+              "sha256": "9e728ccff818506c9887b6d2d9468de7e27f37849d3b9de66a71b3819cab8508"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a2.json",
+              "sha256": "bd00cee795edbae17b447baabc22dbf9c9ade7b19b4e3afc2b990d52cddc09f8"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a1.json",
+              "sha256": "dfadb413e381dc97cad5943ce0fd375f38e8af99617188ace6c98bfbc6c966f3"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a2.json",
+              "sha256": "f0aca4d3d213dcb53dff88c18bc4f57c9c3aeecaf030105e4e5219f94e80af0f"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a1.json",
+              "sha256": "434adaa4671af786fffb6bab1c37d7f9430bf766db53fa1aa8d3d6e6a18afbfb"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a2.json",
+              "sha256": "2b7bd3bf2cf856cb92fe26ddf7e11980504c35a0b2423417664069a84810da9f"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        },
+        {
+          "identity_unit_id": "A/prefill_p256",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+            "path": "../d117_floor_qwen25_1p5b_v1/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "A",
+              "family": "sw-prefill-p256-a-qwen25-1p5b",
+              "measurement_arm": "prefill_p256"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": null
+            },
+            "workload_profile": {
+              "name": "df_ph_prefill_p256_candidate",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "output_tokens": 512,
+              "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+              "prompt_tokens": null,
+              "dataset_ref": null
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a1.json",
+              "sha256": "58dc8823fe0cf187c1543bd153160252b873afd5dda50ff8bbefdfc52c8db51c"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a2.json",
+              "sha256": "bb2fe0402dce8b4e90c78a09f50c4e4baf06ad7142c65dd2be5d8904f5ace6c5"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a1.json",
+              "sha256": "54729956a21c82c4eb03d362460e819f84d164dcd53a7ec7d86c0bbda0e078e2"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a2.json",
+              "sha256": "69cc0a88a883dc019be59fd8606a569a2607004f45160254178a648d4e554f11"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a1.json",
+              "sha256": "6d220dbce617b608bf8bf9e1bc048cd4a49f6aeb1f17dc166a7626d919ecdc2b"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a2.json",
+              "sha256": "d8c8bafe21a026e77c34f76b2886a0a315423fce9c0d9d368210d1f5ce88b2f8"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a1.json",
+              "sha256": "6bb392c62e8a14aa782a1c8a48d8333df05351b3a0238601a8337a76d952ed18"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a2.json",
+              "sha256": "c8cc746d5909e9dbb254d7ebff2e8955fb229d6d928a9aa9e3893085980cd210"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a1.json",
+              "sha256": "0e77a6500df7a530012fe4b8e1ec5f6ee9325b0c3847677660416fc700e48ff2"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a2.json",
+              "sha256": "7cb4ac84a83e898c6a834b9d819491975b0db9b4b2037533ed4fb4164aabd9cf"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a1.json",
+              "sha256": "fa0a545726ba9591d2037bd61b7238052b6ba0c5f33b4bee4fab47e6f3c51563"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a2.json",
+              "sha256": "c38d02a83cdacc04bcf8f7e26d54f3f54f65e3630230850572809f2fc4560e92"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a1.json",
+              "sha256": "9615025ffb7006e573bd796227c15e34ce8016a6009cbb28b13f156659cab0a1"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a2.json",
+              "sha256": "2fe9ad3c81442a78db097031b46b747608cc99b42e80e652f7375386e93363ce"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a1.json",
+              "sha256": "7b221c93f4ce0e03fcca23ab066d4805c01e3e28169bd412bac42ae7895fe44c"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a2.json",
+              "sha256": "b0494bc588e45d35fd04cb6e09b01d71450c21f979f77361733786e00d509cd3"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a1.json",
+              "sha256": "db0c801573b5511ec8449cc4ec7ea7ab3024a0b5303aae74508bc8f90bf4986f"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a2.json",
+              "sha256": "be96f146d3232ff31f6c20bc39f1e92f08691948d381eecc8b3c3c6553c509ab"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a1.json",
+              "sha256": "94937df9f0ae794056486ca509bc8753d4fa209adfc7845130c5ef7f3f5346d1"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a2.json",
+              "sha256": "07ec681bb398fff5e9397b60a0a5cd6d7bb3edcf8c2b9ce83381056790961cbb"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        },
+        {
+          "identity_unit_id": "B/decode",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+            "path": "../d117_floor_qwen25_7b_v1/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "B",
+              "family": "sw-decode-b-qwen25-7b",
+              "measurement_arm": "decode"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen2.5-7B-Instruct-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": null
+            },
+            "workload_profile": {
+              "name": "df_ph_decode",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "prompt_tokens": 128,
+              "output_tokens": 512,
+              "prompt_text": null,
+              "dataset_ref": null
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b1.json",
+              "sha256": "fba1c4fbdaab0cda5350a64482bfc1bfb9d2dfbb6bc41e77a66d6d033b060ba0"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b2.json",
+              "sha256": "d84403cc05a33497c742bfd89caf393942179bbea8c3779fd6293a7f0ee1699e"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b1.json",
+              "sha256": "b37ce9cd852212e0f79dad4a2e226c269cc453c903b4c464f4c87ed53cef7561"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b2.json",
+              "sha256": "44f5b2e43046a6b1da08d1bfba44ff024baaa068f47634f83ab89c50455c5953"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b1.json",
+              "sha256": "daf39a259919d0ff3d6331300b68fdab39b0c47d1b2a4b880a5b8c7a32267f52"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b2.json",
+              "sha256": "e4bd9666b6621f9f9b431d43ed68efc4ebd6b8a722c0263b9f2b24960a7d0745"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b1.json",
+              "sha256": "221358dc8afb6fe0265a13be96c1a884f0f5ee738051ff712ea30e1cf959560a"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b2.json",
+              "sha256": "f2df828c5bf933285147286e3bc446f49fc8aed325c17cb09a29c7c3973cb7fb"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b1.json",
+              "sha256": "c67a7e958eb1df4afb91cc9dededa32130b1e8a10f5237fe30270fdf101d4296"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b2.json",
+              "sha256": "009438b162880ff80c6bcd1ba47fb95d81274399352724598ff97b53a92b6807"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b1.json",
+              "sha256": "2470324113d20e7f95ddec06380a10d372dd66521e50d6fdd24805104833b492"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b2.json",
+              "sha256": "40bcb0ba1240e9ddd013046fe5c0b96df39042f8d6e6cca39e6f5f068b0e3f32"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b1.json",
+              "sha256": "d33de6179a2ea5517f8fd01e107fa7cc6121e1329934ecc0fb2164f6412f09e1"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b2.json",
+              "sha256": "4cc8b48df8763f3022ddb9b11a9377aaeacb65c93c6d1ec1e85c979602efde9a"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b1.json",
+              "sha256": "a9a5315e34c41da41cf8e65a8e8f52efdb919ddf2930dc51ac561ad427148692"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b2.json",
+              "sha256": "913915a7d5d85abca5adce116a5b55b5a3e9d3630beab6b2e78a1697d79ca519"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b1.json",
+              "sha256": "dc1568fcf6d58eb9d1a72d496ce7e5a5c8ddc35650eaceb4c5aa2e957279a711"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b2.json",
+              "sha256": "a605a1713e8c94611f3b1e5c29a72c54b626580788d143aa9f46a467f56cd1b4"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b1.json",
+              "sha256": "c1b6f4c6e9fd5822efdb4988d375a17ba76f56d4e85d11d4faacb515744359d9"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b2.json",
+              "sha256": "1ef21e706d655fc799b6aa43386400846afdcc62b1471d7e4001479b456a2564"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        },
+        {
+          "identity_unit_id": "B/prefill_p256",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+            "path": "../d117_floor_qwen25_7b_v1/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "B",
+              "family": "sw-prefill-p256-b-qwen25-7b",
+              "measurement_arm": "prefill_p256"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen2.5-7B-Instruct-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": null
+            },
+            "workload_profile": {
+              "name": "df_ph_prefill_p256_candidate",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "output_tokens": 512,
+              "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+              "prompt_tokens": null,
+              "dataset_ref": null
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b1.json",
+              "sha256": "4782a3cd04b6d3f49b185869f0eb241626d78ccca12d7ef4ef7c3fcd41c586ca"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b2.json",
+              "sha256": "9cf18c84e3c9db39777f655395075d4832f9465622af1db038d230a634abe781"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b1.json",
+              "sha256": "88a23e61e3eedf33a9dd4240050074c43158bfd8184d7434b2283db46d13cd14"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b2.json",
+              "sha256": "6ac6d820c92f0b878fae5a18f9d519ffb3f73bca2ad1f9476cd50f07f5f89f7d"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b1.json",
+              "sha256": "48e0697811bb7cf2ecedcfb58335f2a6f4464326b503675e10aa6b36aa683f86"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b2.json",
+              "sha256": "4b33b2cecb1740cb672ca35f31756755c726a3daed0fcec81c853afcc61a80ca"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b1.json",
+              "sha256": "2f1267b369b76f7617f41b5b082915111d22ee49029ae84d4a6c1b6e2f9b7b03"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b2.json",
+              "sha256": "f7cf1f7be72bf091285b7d0051c6c497153ad38b425e008418081a4127833adf"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b1.json",
+              "sha256": "6c1f19df4d137e7fbf42219aae1817eb2e79a37a3c57ee255a7cffddd10da6de"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b2.json",
+              "sha256": "5f236d90d6f12d8637ced10acf1253c57ef66506cf086d5473a2468009b1a16b"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b1.json",
+              "sha256": "c5af4a622c0375c2d314eeff942e06906e6d94ac92f2ef65353fcaa6d3b34e89"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b2.json",
+              "sha256": "cf6f12172078d01fe2688f232181d7717adfb1d1f4acc567d9e0ae9825c0c6c4"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b1.json",
+              "sha256": "35eacbea05cfce3036930ff349e23664b125a5eedfccdadcbfce0128503e0a44"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b2.json",
+              "sha256": "d8b160530af79367ee63e72192bb54bd351b1594afa05b3f881c72cc9eb45762"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b1.json",
+              "sha256": "d266e0115453d783d77226b55f8b6e25e184c0f57da51b3ff08d29861461c5f5"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b2.json",
+              "sha256": "4e4c2f5bb1c4aeafe0efb32c19a7a4f3168ba0a4cd9ddc0fd37c08fb91f038d5"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b1.json",
+              "sha256": "82c6e33eda9da6827caa91689d4ab9fdb4e6ee8dcffe608152c9b0cc4632b73f"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b2.json",
+              "sha256": "bbc4a67a2d2214f3ece2db236464230e0610af460e0f8dc19feb9f8627f73b8c"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b1.json",
+              "sha256": "1c5ef04c1cb5e5537c83f60153e503ef8face00b66b1835394d4727b9fe50955"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b2.json",
+              "sha256": "09a094c30a5fc94e822707b0c921ef1b066f598584d348203b7630844fa3e506"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        }
+      ],
+      "projection_receipt": null,
+      "supersedes": []
     },
     "aggregate_floor_artifact_sha256": {
       "status": "EMPTY",

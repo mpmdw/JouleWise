@@ -39,13 +39,17 @@ from joulewise.campaign_provenance import (
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
-    STACK_IDENTITY_DOMAIN,
     TRANSPORT_RULE_ID,
     attribution_single_count_discipline,
     canonical_domain_sha256,
     complete_bundle_sha256,
     transport_refusal_reasons,
     validate_floor_artifact,
+)
+from joulewise.identity_pins import (
+    STACK_IDENTITY_DOMAIN,
+    build_stack_identity as floor_stack_identity,
+    scientific_config_identity,
 )
 from joulewise.whole_window import (
     CONSUMPTION_PROVENANCE_PRECHECK_KEY,
@@ -636,110 +640,6 @@ def load_floor_artifact(path: Path) -> tuple[Mapping[str, Any], str]:
     return authenticated.value, authenticated.file_sha256
 
 
-def _path_independent_stack_identifier(value: object) -> str | None:
-    if not isinstance(value, str) or not value:
-        return None
-    if value.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", value):
-        name = PurePosixPath(value.replace("\\", "/")).name
-        return name or None
-    return value
-
-
-def floor_stack_identity(
-    raw_config: Mapping[str, Any] | None,
-    metadata: Mapping[str, Any] | None,
-) -> Mapping[str, Any] | None:
-    """Derive the P2-039/D-058 stack identity from realized bundle evidence."""
-
-    if not isinstance(raw_config, Mapping) or not isinstance(metadata, Mapping):
-        return None
-    hardware = raw_config.get("hardware_target")
-    workload = metadata.get("workload_provenance")
-    adapters = metadata.get("adapters")
-    runtime = adapters.get("runtime") if isinstance(adapters, Mapping) else None
-    telemetry = adapters.get("telemetry") if isinstance(adapters, Mapping) else None
-    prepare = runtime.get("prepare_metadata") if isinstance(runtime, Mapping) else None
-    model = workload.get("model") if isinstance(workload, Mapping) else None
-    artifact = model.get("artifact_identity") if isinstance(model, Mapping) else None
-    tokenizer = workload.get("tokenizer") if isinstance(workload, Mapping) else None
-    sampler = workload.get("sampler") if isinstance(workload, Mapping) else None
-    output_policy = workload.get("output_policy") if isinstance(workload, Mapping) else None
-    device = metadata.get("device")
-    quantization = metadata.get("quantization")
-    if not all(
-        isinstance(value, Mapping)
-        for value in (
-            hardware,
-            workload,
-            runtime,
-            telemetry,
-            prepare,
-            artifact,
-            tokenizer,
-            sampler,
-            output_policy,
-            device,
-            quantization,
-        )
-    ):
-        return None
-    artifact_sha = artifact.get("sha256") or artifact.get("folded_sha256")
-    telemetry_name = telemetry.get("name")
-    if (
-        not isinstance(artifact_sha, str)
-        or re.fullmatch(r"[0-9a-f]{64}", artifact_sha) is None
-        or not isinstance(telemetry_name, str)
-        or not telemetry_name
-    ):
-        return None
-    tokenizer_identifier = _path_independent_stack_identifier(
-        tokenizer.get("identifier")
-    )
-    if tokenizer_identifier is None:
-        return None
-    tokenizer_identity = dict(tokenizer)
-    tokenizer_identity["identifier"] = tokenizer_identifier
-    runtime_version = (
-        prepare.get("version")
-        or prepare.get("mlx_version")
-        or prepare.get("mlx_lm_version")
-    )
-    if not isinstance(runtime_version, str) or not runtime_version:
-        return None
-    return {
-        "hardware_unit": {
-            "config_id": hardware.get("id"),
-            "device": device.get("device"),
-            "machine": metadata.get("machine"),
-        },
-        "os_version": str(metadata.get("platform") or "unknown"),
-        "runtime_version": {
-            "name": runtime.get("name"),
-            "adapter": prepare.get("adapter"),
-            "version": runtime_version,
-        },
-        "kernel_library": str(prepare.get("kernel_library") or "unavailable"),
-        "model_artifact_sha256": artifact_sha,
-        "quantization": dict(quantization),
-        "tokenizer_identity": tokenizer_identity,
-        "sampler_output_policy": {
-            "sampler": dict(sampler),
-            "output_policy": {
-                key: output_policy.get(key)
-                for key in ("name", "requested_tokens", "stop_condition")
-            },
-        },
-        "batching_concurrency_policy": str(
-            prepare.get("batching_concurrency_policy") or "single-request sequential"
-        ),
-        "measurement_boundary_label": {
-            "boundary": device.get("boundary", "unavailable"),
-            "rails": device.get("rail_manifest"),
-        },
-        "telemetry_backend": telemetry_name,
-    }
-
-
 def _source_provenance_admission_problems(
     metadata: Mapping[str, Any] | None,
     summary: Mapping[str, Any] | None,
@@ -872,12 +772,6 @@ _CALIBRATION_PLAN_TAG = "calibration-plan-sha256="
 _CALIBRATION_BLOCK_TAG = "calibration-abba-block-id="
 _CALIBRATION_LABEL_TAG = "calibration-abba-label="
 _CALIBRATION_SEQUENCE_TAG = "calibration-abba-sequence-index="
-_CALIBRATION_COLLECTION_TAG_PREFIXES = (
-    _CALIBRATION_PLAN_TAG,
-    _CALIBRATION_BLOCK_TAG,
-    _CALIBRATION_LABEL_TAG,
-    _CALIBRATION_SEQUENCE_TAG,
-)
 _WINDOWS_ABSOLUTE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 
@@ -2431,28 +2325,6 @@ def _replacement_tags(raw_config: Mapping[str, Any]) -> tuple[list[str], list[st
     targets = [tag.split("=", 1)[1] for tag in tags if tag.startswith("analysis-replacement-of=")]
     reasons = [tag.split("=", 1)[1] for tag in tags if tag.startswith("analysis-replacement-reason=")]
     return targets, reasons
-
-
-def scientific_config_identity(value: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    """Closed-set scientific identity, excluding run/rep collection labels."""
-
-    typed = _typed_config(value)
-    if typed is None:
-        return None
-    result = copy.deepcopy(dict(typed))
-    result.pop("run_id", None)
-    metadata = result.get("run_metadata")
-    if isinstance(metadata, dict) and isinstance(metadata.get("tags"), list):
-        metadata["tags"] = [
-            tag
-            for tag in metadata["tags"]
-            if not tag.startswith("analysis-replacement-of=")
-            and not tag.startswith("analysis-replacement-reason=")
-            and not tag.startswith(_CALIBRATION_COLLECTION_TAG_PREFIXES)
-            and re.fullmatch(r"rep[0-9]+", tag) is None
-        ]
-        result["run_metadata"] = {"tags": metadata["tags"]}
-    return result
 
 
 def replacement_config_identity(value: Mapping[str, Any]) -> Mapping[str, Any] | None:

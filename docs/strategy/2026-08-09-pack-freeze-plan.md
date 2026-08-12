@@ -57,21 +57,21 @@ decision record only.
   claim capability is reduced accordingly, and the arm proceeds under the
   default floors.
 
-## ENGINEERING WORK ORDERS (freeze-blocking; no Ed input needed)
+## ENGINEERING WORK ORDERS (freeze-blocking; no Ed input needed) — items 1–4 ALL CLOSED as of 2026-08-12; the freeze's remaining engineering preconditions live in the addendum items (1)+(3) below, the Q8 cells build, and the D-134 §5C consumer
 
 1. ~~**FLOOR-COMMONMODE-01**~~ — **WITHDRAWN 2026-08-11** under the
    pre-committed stopping rule; packs use the worst-case default.
-2. **D-123 byte-identity proof (Q5)** — strengthen both floor packs'
-   `test_reporting_section_does_not_change_floor_output` to serialize extractor
-   results through the production canonical output path and compare raw
-   bytes+SHA with/without the reporting keys (7B currently proves object
-   equality only; 1.5B proves validation+projection only).
-3. **Receipt-oracle re-derivation (Q6)** — lead-owned arm-materialization from
-   MERGED-MAIN cadence (10 physical receipts / 5 logical ops per session; the
-   3-window production regression is the authoritative oracle). Derive from the
-   authenticated live head; never hand-author receipt literals. Replaces the
-   stale `impl/d117-ledger-recovery` TODO markers (surfaced by the T2
-   post-merge integration review as CS1).
+2. **D-123 byte-identity proof (Q5)** — **DISCHARGED 2026-08-09: PR #124
+   MERGED** (lead-replayed on both interpreters; CI + D-121). The
+   strengthened byte+SHA comparison through the production canonical output
+   path is on main.
+3. **Receipt-oracle re-derivation (Q6)** — **DISCHARGED 2026-08-10: PR #125
+   MERGED** (replay-derived receipt oracles in all three packs, derived from
+   the authenticated merged head; 10 physical receipts / 5 logical ops per
+   finalized bracket session). The 2026-08-11 fired-and-evaluated freshness
+   conditional was NO-REDERIVATION-NEEDED at `c61f840` (byte-identical
+   replay, sha `088bab77…`); re-derive again only if a later merge changes
+   the ledger read/write surface.
 4. **Prefill phase-recording proof (Q9)** — **DISCHARGED 2026-08-09** (`2cd9bc3`,
    `docs/process_traces/2026-08-09-prefill-phase-proof/PROOF.md`): 7B PROVEN,
    1.5B PROVEN-WITH-CAVEATS (sampling-resolution label on 37/50 short windows,

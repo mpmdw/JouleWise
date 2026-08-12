@@ -153,6 +153,7 @@ be re-derived by a future agent gets an entry here.
 | D-128 | STANDING RUN-THE-LOOP MANDATE (Ed, in-thread 2026-08-08): the magistrate runs the project and experiment loop end-to-end — windows, mints, refusal diagnosis, re-arms, desk analysis, paper assembly — UNTIL A DEFENSIBLE PAPER EXISTS (P1 bar: measured numbers whose every claim survives the adjudicated trust model, D-119-conservative wording, the results acceptance contract, and the D-078 floors doctrine). D-127 is RATIFIED (was chartered). What still binds unchanged: zero-agent capture fence; D-118/D-121 on every merge; escalation + cold-gate discipline; the lieutenant-forbidden list; Ed's owed rulings stay his (funding, scope, spec governance); publication/claim release stays Ed-gated. This is authority to keep driving between his taps, not license to relax any gate | ratified (Ed, in-thread; transcribed by the magistrate) |
 | D-129 | ED OPERATING DIRECTIVES BATCH (in-thread 2026-08-09, T3 session; transcribed by the magistrate): (a) STANDING FAN-OUT ORDER — maximal parallel fan-out (multiple Sol lanes in disjoint worktrees + Workflow grader/review fleets + Opus corps) is the DEFAULT whenever it speeds work, incl. H1/H2 prep when H0 lanes are saturated; queue only on real collisions or gate dependencies; no gate or doctrine is relaxed by fan-out. (b) CODEX SERVICE TIER — fast usage cut ~60%: DEFAULT tier is the norm (supersedes the 2026-08-08 fast-standing-default); fast reserved for the single run whose wall-clock gates the session milestone; one consolidated xhigh beats multiple fast highs. (c) FABLE TOKEN ECONOMY — orchestration/direction subagents run as Opus 5 (high); Fable reserves = rulings, security classifications, D-121 terminal reviews, final live verification, escalation calls, Ed comms; COVERAGE UNREDUCED — Fable still full-audits everything important or claim-bearing itself, reading primary artifacts (savings come from ceremony delegation, never from thinning review). (c) amends the operative stream-director framing in docs/orchestration.md (the stamped C-009/C-010 council record stays as a dated record) | adopted (Ed, in-thread; transcribed by the magistrate) |
 | D-130 | DECISIVE-RUN VENUE RULING (cold gate + paired refuter, 2026-08-11; PR #122): decisive designation follows EVIDENTIARY SUBSTANCE, not venue. For PR #122 ONLY, the authoritative decisive run for the D-117 v2 production proof is the custodied lead local execution at e871f5b (hermetic-by-construction: byte-pinned store from the published release; unset-store can only skip or fail; the legacy-locator assertion executed against 190 LIVE machine-local decoy paths), taken together with the CI-proven transport/authentication chain (workflow steps 1-7 hosted-green). The hosted d117-production-proof job is ADVISORY (dispatch-only) pending WO-CI-RESTRUCTURE; its first hosted green is the required second independent execution; contradiction of the local result = automatic stop signal + cold gate. NO general local-decisive lane: any future substitution requires a cold-gate ruling on THAT merge, a digest-pinned fixture with an equivalent store-content lock, a live-decoy hermeticity assertion, a committed one-command replay recipe (scripts/replay_d117_decisive.sh is the template), and a recorded restructure order; the admission EXPIRES at WO-CI-RESTRUCTURE closure. Citation discipline until closure: "lead-verified locally (custodied bundle: docs/evidence/d117-v2-decisive-20260811/) + CI-verified transport/authentication chain", never "CI-proven decisive run". Lesson bound for future proofs: a decisive job whose runtime was never bounded against its venue's hard cap is a design defect | adopted (cold-gate ruling + refuter concurrence; magistrate-applied 2026-08-11) |
+| D-131 | Identity-pin projection contract: ADOPT AS PROPOSED the design consult's U11-01 through U11-04 — exact-key `joulewise.identity_pin_projection_receipt.v1` receipts; canonical ordered per-unit pack shape; shared never-operator-entered model/runtime/config derivation; freeze then read-only arm verification; closed refusal vocabulary; immutable successor reissue; and U8-owned readiness consumption before GO | proposed — adopt-as-proposed consult transcription; the magistrate reviews before push (2026-08-11) |
 | D-132 | STOPPING RULES TARGET DOOM LOOPS, NOT CONVERGING INSTRUMENTS (Ed, in-thread 2026-08-11): meta-process stop rules exist to kill non-converging loops — same defect recurring, no durable progress. They must NEVER terminate work on an instrument or component that is demonstrably converging (each round permanently closing its defect against a rising audit bar) when that work serves the paper: PROGRESS TOWARD A PUBLISHABLE PAPER IS THE HIGHEST-ORDER GOAL and all process rules rank below it (composing with D-119 soundness-above-all: soundness bounds WHAT may be claimed; this principle bounds when work may be STOPPED). Applied same-day: the FCM-01 stopping-rule execution is REVISED — the six-round record shows convergence, not doom-looping (arithmetic proven exact; production path sound from round 2; successive defects 0.25 J → 5e-10 J in ever-more-exotic classes) — and the estimator is REVIVED under the class-closing-by-construction design: the public registered surface is DELETED; the estimator becomes internal to the governed extraction path (the only path that may mint claims per the custody model), so no admitted-input class exists. The re-spec-to-default branch stays unmerged as the ready fallback until the revival round's delta verdict. Rust is affirmed as the H2/H3 next-generation core answer (unforgeable capability tokens), now justified by executed demonstration rather than conjecture | adopted (Ed, in-thread; transcribed by the magistrate) |
 | D-133 | FCM-01 DISPOSITION — HYBRID + ALT-D120 (cold gate revised sitting, 2026-08-11): round-6 delta REJECT (FCM6-01, forged registration admitted by validators) adjudicated by fresh Fable + Opus refuter. Fallback respec/d124-withdrawn merges after its own gates (freeze lane unblocks there, decoupled from FCM); FCM-01 continues unmerged under ALT-D120 — DELETE serialized registration vocabulary so forgeries die as closed-profile unknown-key refusals (D-120 precedent); false round-6 provenance claim corrected + sixth sha rotation; FULL fresh delta owed on moved arithmetic (any exact understatement = permanent drop, no further revival); re-spec back to tighter estimator only if ALT-D120 + full delta + new mint-estimator WO all land pre-freeze-wave. Bench-verified: mint has zero estimator vocabulary (tighter floor unmintable this cycle regardless); forged field inert (no consumer); production authenticate binds expected_sha256. Ed schedule call flagged: gamma-arm-in-main-paper would make mint work critical path and hold the wave | adopted (cold gate; magistrate, no dissent) |
 | D-134 | §5C ARM-READINESS RECORD CONTRACT (adopt-as-proposed consult, 2026-08-11): two-stage append-only receipts — pack-pinned non-authorizing FREEZE receipt + external pack-binding ARM receipt (hash cycle broken: frozen bytes declare the arm-receipt schema/namespace, never its future sha); d117_row_registry_v1.json sole row authority for ALPHA/BETA/GAMMA (Markdown = checked views); UNKNOWN prohibited (REFUSE or registered NOT_APPLICABLE); derive-never-enter throughout; dry-run never authorizes; impossible pre-launch single-foreground-launch row replaced by atomically consumable single-launch capability; enumerated doctrine amendments + full test obligations bind before any D-117 arm. Trace: process_traces/2026-08-11-5c-readiness-contract/ | adopted (consult adopt-as-proposed; magistrate) |
@@ -8334,6 +8335,66 @@ Registered identity is custody-closed and never carried in admitted
 report/artifact vocabulary; provenance is re-derived in the governed
 extraction path. Consumption of the tighter floor still gates on
 WO-MINT-ESTIMATOR-VOCAB (D-133 cl.4).
+
+## D-131: Identity-pin projection contract — adopt as proposed
+
+**Date:** 2026-08-11. **Status:** ADOPTED — adopted as proposed from the
+binding U11 design consult; magistrate transcription + implementation review
+completed and recorded in the PR #131 D-121 terminal-review comment; ratified
+at the #131 merge (2026-08-12).
+
+1. **Receipt and custody.** Identity projection uses the exact-key
+   `joulewise.identity_pin_projection_receipt.v1` schema with no self-hash.
+   Freeze receipts append under the pack's
+   `identity_pin_projection.receipts/` directory and are authenticated by
+   GNU-style SHA-256 sidecars plus the final plan tree. Arm re-verification
+   is pack-read-only and writes its receipt under the bracket session in the
+   window custody root. `projection_input_sha256` binds the closed
+   declaration, config, model-file, and live-probe inventory rather than the
+   final tree.
+2. **Canonical identity units.** Alpha and beta each carry one ordered
+   identity unit. Gamma carries exactly four ordered units: `A/decode`,
+   `A/prefill_p256`, `B/decode`, and `B/prefill_p256`; A references the 1.5B
+   producer and B references the 7B producer. Every unit carries the same
+   model/runtime/config triple used by the shared floor mint. The former
+   gamma A/B model map and pack-wide runtime/config pins are invalid.
+3. **Derive; never enter.** No operator, CLI option, launch recipe, or public
+   verifier callable may supply or override an identity pin. Model
+   enumeration, scientific-config identity, the governed eleven-field stack
+   identity, and triple derivation have one shared implementation consumed by
+   runtime collection, both mint paths, analysis, detection-floor
+   validation, freeze, and arm verification. Any pack-versus-config or
+   frozen-versus-live mismatch fails closed.
+4. **Lifecycle and successor.** Active packs are `unprojected` or `frozen`;
+   `superseded` is inactive. Null pins and a null receipt are legal only
+   before projection. Freeze is the sole `unprojected` to `frozen`
+   transition and is byte-idempotent on the identical frozen projection;
+   verify cannot mutate the pack. Reissue creates a new pack/custody root and
+   appends a new receipt whose `supersedes` record binds the old pack,
+   receipt, and readiness hashes; old receipts are never edited or deleted,
+   and an opened session or attempt ID is never reused.
+5. **Readiness boundary.** U11 exposes `verify_frozen_projection()` and its
+   CLI receipt only. U8 owns the readiness-record
+   `identity_pin_projection` section binding frozen and arm receipt
+   path/SHA pairs, derivation contract, ordered unit IDs, and PASS status.
+   Every U11 reason makes readiness REFUSE. No D-117 pack may arm before that
+   U8 consumer lands and passes.
+
+### D-078 registry amendment — 2026-08-11: identity-pin readiness refusals
+
+The closed readiness-refusal vocabulary gains
+`readiness_identity_artifact_unreadable`,
+`readiness_identity_environment_dirty`,
+`readiness_identity_projection_mint_divergence`,
+`readiness_identity_pinset_frozen_mismatch`, and
+`readiness_identity_receipt_namespace_anomalous` (fix round 4: a committed
+entry in the governed identity_pin_projection.receipts namespace that does
+not conform to the freeze grammar — projection-<4+ digits>.json plus its
+.sha256 sidecar — refuses verification fail-closed rather than being
+silently skipped, so an authenticated successor can never be hidden behind
+a non-conforming filename). These spellings belong to the
+U8 readiness registry, not transport or member-verdict vocabularies. They
+only refuse; none can license a run or claim.
 
 ## D-132: Stopping rules target doom loops, not converging instruments
 

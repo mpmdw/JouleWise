@@ -24,7 +24,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from joulewise.analysis_engine.inputs import scientific_config_identity  # noqa: E402
 from joulewise.authentication_io import (  # noqa: E402
     V2AuthenticationInputError,
     read_authentication_input,
@@ -32,7 +31,6 @@ from joulewise.authentication_io import (  # noqa: E402
 )
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
-    STACK_IDENTITY_DOMAIN,
     absolute_false_effect_floor,
     abba_delta,
     attribution_single_count_discipline,
@@ -45,6 +43,12 @@ from joulewise.detection_floor import (  # noqa: E402
     complete_bundle_sha256,
     comparative_false_effect_floor,
     validate_floor_artifact,
+)
+from joulewise.identity_pins import (  # noqa: E402
+    build_stack_identity,
+    canonical_json_sha256,
+    scientific_config_identity,
+    stack_identity_sha256,
 )
 from joulewise.floor_extraction import (  # noqa: E402
     EXTRACTION_SCHEMA_VERSION,
@@ -290,118 +294,6 @@ def _sha256_file(path: Path, label: str) -> str:
         raise MintError(str(exc)) from exc
     except OSError as exc:
         raise MintError(f"{label} cannot be read: {exc}") from exc
-
-
-def _path_independent_identifier(value: object, label: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise MintError(f"{label} must be a nonempty string")
-    if value.startswith("/") or _WINDOWS_ABSOLUTE_RE.match(value):
-        name = PurePosixPath(value.replace("\\", "/")).name
-        if not name:
-            raise MintError(f"{label} cannot be reduced to a path-independent id")
-        return name
-    return value
-
-
-def _derive_stack_identity(
-    raw_config: Mapping[str, Any],
-    metadata: Mapping[str, Any],
-) -> Mapping[str, Any]:
-    """Derive the governed stack identity from current bundle evidence."""
-
-    hardware = raw_config.get("hardware_target")
-    workload = metadata.get("workload_provenance")
-    adapters = metadata.get("adapters")
-    runtime = adapters.get("runtime") if isinstance(adapters, Mapping) else None
-    telemetry = (
-        adapters.get("telemetry") if isinstance(adapters, Mapping) else None
-    )
-    prepare = (
-        runtime.get("prepare_metadata") if isinstance(runtime, Mapping) else None
-    )
-    model = workload.get("model") if isinstance(workload, Mapping) else None
-    artifact = (
-        model.get("artifact_identity") if isinstance(model, Mapping) else None
-    )
-    tokenizer = (
-        workload.get("tokenizer") if isinstance(workload, Mapping) else None
-    )
-    sampler = workload.get("sampler") if isinstance(workload, Mapping) else None
-    output_policy = (
-        workload.get("output_policy") if isinstance(workload, Mapping) else None
-    )
-    device = metadata.get("device")
-    quantization = metadata.get("quantization")
-    required_mappings = (
-        hardware,
-        workload,
-        runtime,
-        telemetry,
-        prepare,
-        artifact,
-        tokenizer,
-        sampler,
-        output_policy,
-        device,
-        quantization,
-    )
-    if not all(isinstance(value, Mapping) for value in required_mappings):
-        raise MintError("source stack identity fields are unavailable")
-    artifact_sha256 = artifact.get("sha256") or artifact.get("folded_sha256")
-    telemetry_name = telemetry.get("name")
-    if (
-        not isinstance(artifact_sha256, str)
-        or re.fullmatch(r"[0-9a-f]{64}", artifact_sha256) is None
-        or not isinstance(telemetry_name, str)
-        or not telemetry_name
-    ):
-        raise MintError("source stack artifact/telemetry identity is unavailable")
-    tokenizer_identity = dict(tokenizer)
-    tokenizer_identity["identifier"] = _path_independent_identifier(
-        tokenizer.get("identifier"), "tokenizer identifier"
-    )
-    runtime_version = (
-        prepare.get("version")
-        or prepare.get("mlx_version")
-        or prepare.get("mlx_lm_version")
-    )
-    if not isinstance(runtime_version, str) or not runtime_version:
-        raise MintError("source runtime version is unavailable")
-    return {
-        "hardware_unit": {
-            "config_id": hardware.get("id"),
-            "device": device.get("device"),
-            "machine": metadata.get("machine"),
-        },
-        "os_version": str(metadata.get("platform") or "unknown"),
-        "runtime_version": {
-            "name": runtime.get("name"),
-            "adapter": prepare.get("adapter"),
-            "version": runtime_version,
-        },
-        "kernel_library": str(
-            prepare.get("kernel_library") or "unavailable"
-        ),
-        "model_artifact_sha256": artifact_sha256,
-        "quantization": dict(quantization),
-        "tokenizer_identity": tokenizer_identity,
-        "sampler_output_policy": {
-            "sampler": dict(sampler),
-            "output_policy": {
-                key: output_policy.get(key)
-                for key in ("name", "requested_tokens", "stop_condition")
-            },
-        },
-        "batching_concurrency_policy": str(
-            prepare.get("batching_concurrency_policy")
-            or "single-request sequential"
-        ),
-        "measurement_boundary_label": {
-            "boundary": device.get("boundary", "unavailable"),
-            "rails": device.get("rail_manifest"),
-        },
-        "telemetry_backend": telemetry_name,
-    }
 
 
 def _source_admissible_half_width(
@@ -857,23 +749,16 @@ def _source_regime(
     scientific_hashes: set[str] = set()
     backends: set[str] = set()
     for member in members:
-        stack = _derive_stack_identity(member.raw_config, member.metadata)
+        stack = build_stack_identity(member.raw_config, member.metadata)
+        if stack is None:
+            raise MintError("source stack identity fields are unavailable")
         stack_identities.append(stack)
         scientific = scientific_config_identity(member.raw_config)
         if not isinstance(scientific, Mapping):
             raise MintError(
                 f"{member.bundle_id}: scientific config identity is unavailable"
             )
-        scientific_hashes.add(
-            _sha256(
-                json.dumps(
-                    scientific,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    allow_nan=False,
-                ).encode("utf-8")
-            )
-        )
+        scientific_hashes.add(canonical_json_sha256(scientific))
         hardware = member.raw_config.get("hardware_target")
         backend = (
             hardware.get("telemetry_backend")
@@ -883,10 +768,7 @@ def _source_regime(
         if not isinstance(backend, str) or not backend:
             raise MintError(f"{member.bundle_id}: telemetry backend is unavailable")
         backends.add(backend)
-    stack_hashes = {
-        canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack)
-        for stack in stack_identities
-    }
+    stack_hashes = {stack_identity_sha256(stack) for stack in stack_identities}
     if len(stack_hashes) != 1:
         raise MintError("component members do not share one stack identity")
     if len(scientific_hashes) != 1:
@@ -1887,12 +1769,10 @@ def bind_floor_artifact_evidence(
                         str(row.get("bundle_id"))
                     ),
                 )
-                stack = _derive_stack_identity(
-                    member.raw_config, member.metadata
-                )
-                stack_hashes.add(
-                    canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack)
-                )
+                stack = build_stack_identity(member.raw_config, member.metadata)
+                if stack is None:
+                    raise MintError("source stack identity fields are unavailable")
+                stack_hashes.add(stack_identity_sha256(stack))
                 rebound.append(member.bundle_sha256)
                 if member.admissible_half_width_j is None:
                     raise MintError(

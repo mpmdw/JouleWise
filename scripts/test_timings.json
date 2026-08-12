@@ -1,5 +1,12 @@
 {
- "_provenance": "Measured 2026-08-03 on the quiet bench; 93 per-module unittest timings rounded to milliseconds from timings-20260803.jsonl.",
+ "_provenance": "Measured 2026-08-03 on the quiet bench; 93 per-module unittest timings rounded to milliseconds from timings-20260803.jsonl. tests.test_calibration_exits uses historical hosted/local observations of 648-2036 seconds, with the conservative upper observation used for exclusive-job planning.",
+ "exclusive_modules": {
+  "tests.test_calibration_exits": {
+   "seconds": 2036.0,
+   "evidence_range_seconds": [648.0, 2036.0],
+   "fallback_rejection_threshold_seconds": 300.0
+  }
+ },
  "seconds_by_module": {
   "tests.test_2k_amplification": 0.859,
   "tests.test_adapters_powermetrics": 1.877,
@@ -33,6 +40,7 @@
   "tests.test_bundle": 5.493,
   "tests.test_bundle_read": 6.432,
   "tests.test_calibration_bracketing": 0.291,
+  "tests.test_calibration_exits": 2036.0,
   "tests.test_claims_index_lint": 4.24,
   "tests.test_claims_lint": 4.87,
   "tests.test_claude_bridge_mcp": 6.55,

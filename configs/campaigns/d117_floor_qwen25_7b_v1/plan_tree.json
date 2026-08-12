@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen25_7b_v1/generate_configs.py",
-    "sha256": "66c953215ae2894bd0dcf81f7da7a31b70926502fe98c7975fcc6da0917e9e3e"
+    "sha256": "e92a6fbc33f60954c025835c53e3a1e79bbd3dfac3ead660d15b606470e60342"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
@@ -2127,14 +2127,261 @@
     "identity_pin_projection": {
       "work_order": "D117-U11-IDPIN-PROJECTION",
       "mode": "derive_never_operator_enter",
+      "state": "unprojected",
       "required_before_arm": true,
-      "expected_config_set_sha256": "eef64176510d402de7f21d3ea39af8cb206aa6970bce8a213f737e659b6568cb",
-      "projected_pins": {
-        "model_artifact_sha256": null,
-        "runtime_identity_sha256": null,
-        "config_set_sha256": null
-      },
-      "projection_receipt": null
+      "derivation_contract": "joulewise.identity_pin_derivation.v1",
+      "identity_units": [
+        {
+          "identity_unit_id": "beta",
+          "producer_plan_reference": {
+            "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+            "path": "configs/campaigns/d117_floor_qwen25_7b_v1/calibration_plan.json"
+          },
+          "consumer_bindings": [
+            {
+              "arm": "B",
+              "family": "sw-decode-b-qwen25-7b",
+              "measurement_arm": "decode"
+            },
+            {
+              "arm": "B",
+              "family": "df-ph-prefill-p128-qwen25-7b",
+              "measurement_arm": "prefill_p128"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "model_name": "Qwen2.5-7B-Instruct-4bit",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+            "quantization": {
+              "name": "int4",
+              "bits": 4,
+              "group_size": null
+            },
+            "workload_profile": {
+              "name": "df_ph_decode",
+              "repetitions": 1,
+              "warmup_runs": 1,
+              "prompt_tokens": 128,
+              "output_tokens": 512,
+              "prompt_text": null,
+              "dataset_ref": null
+            }
+          },
+          "config_inventory": [
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r01.json",
+              "sha256": "5e316e7fff2d13a8109c7ef50085de61f776fa2e125944550e593a5f09d40edd"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r02.json",
+              "sha256": "6361327afcee794412e1a8009bd2407bc531f443e4f8c70fe8ebfd574daf65f9"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r03.json",
+              "sha256": "30c5b190818b31628876c82b46c82e01051a18622e6b39b6afcd62907eb84ef4"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r04.json",
+              "sha256": "422e340efdb4d3e18a2a3decb51f3e5862cc6432f309cf4b760206f5c66c8c21"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r05.json",
+              "sha256": "91cc212d17cd35f6fdee9626c743371aa5515140e72bea6494635511662f7754"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r06.json",
+              "sha256": "5e0cd0c7a48a499af13a03b9ea67afbeb6ed4e84cca04b17be99e5f0be9b7734"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r07.json",
+              "sha256": "07555bfade86544f3b063f2acd63c93e039ee3ddfaaf77be0e1df31eea5cb42a"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r08.json",
+              "sha256": "59224d4752e3ca4e3a0329766f60847f690165c04758da014241c35f3b264f07"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r09.json",
+              "sha256": "83bc74a8077a8fb4f5e5a05f652bb8aa1376924a80040425d7e0d6a7821f01a2"
+            },
+            {
+              "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r10.json",
+              "sha256": "1235dfc32abc863e562ff95d8c54deb47d939a60f00ba88db8915469916a3a57"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-a1.json",
+              "sha256": "47f4f5d8e7cdc12cc107eceff89ded8d1882b30f8b5b5a50b81e75319b85b808"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-a2.json",
+              "sha256": "8d60652f2e3bbb64dbce9b9204af75080a41d265d0252665614b9318707f73f0"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-b1.json",
+              "sha256": "d21a596ba7f9600284aa18807e3ec2ece365892df3233b5b51841c17c242a709"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-b2.json",
+              "sha256": "e66b43d2522679cf178702d9c8d97d393d991d7b4376f2016f8e2098b82aed34"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-a1.json",
+              "sha256": "e74c585cdf262384fadfdf2e5eaebd52d1a5bcd499629d37f26d379eac0f29cd"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-a2.json",
+              "sha256": "5d4553e39af39361e46b90c38d7452259bb58e28ee63d5b6cf9c3dbd511521be"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-b1.json",
+              "sha256": "d2170f51498b49b9fe2840b805e6bfd8cf560be23c6bd966978bffc42d9bd20e"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-b2.json",
+              "sha256": "2880bddf194bd7d67b095aa139db24df9be5c31fdf3f052906519ea2cce8f25d"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-a1.json",
+              "sha256": "742a1fb55f49069ff2f76f62bfcb99f6c53bd3290f4fb00d47601b74ab65ae3d"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-a2.json",
+              "sha256": "1abcafbce3bed0423bf463ac8cf132d885f7fda8f6875a8b5d24e664bdcd77f1"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-b1.json",
+              "sha256": "d10666cbaddd7d578b14a4312713360a0a341c51d965c2b0b52e9daf97a76ccb"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-b2.json",
+              "sha256": "9150eca7e8ff40cf339527e0ea9a4356b91a27208ac15f6288934281a8242b84"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-a1.json",
+              "sha256": "ad1f652f587b57d8b2d18c63137b34c5709faaccf088b246c87ccf6764167a27"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-a2.json",
+              "sha256": "c52152b5e0805dd9556bb4df0ef2485a3016091318d389ab3b94851d6770f321"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-b1.json",
+              "sha256": "f610a7abd84925e59514401c749a7e49f9f3ff886a970fc1858151509a05b877"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-b2.json",
+              "sha256": "496e5f5410d5dd3b102fb62e4e22c31a55818a5c784efc5c25240bdb8b6662a6"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-a1.json",
+              "sha256": "57614f4916e598d0553167bc8789e34b66a8aebd2784e059116682228111cdc1"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-a2.json",
+              "sha256": "bda7bd5704095991eec423c690363f158ea2e126e0daf0f7a2b9246b56a766b4"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-b1.json",
+              "sha256": "0a654eb81904c73c9efe2a7feafc748d7853319d8369bf14168de39a10406616"
+            },
+            {
+              "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-b2.json",
+              "sha256": "fe3035421d8cf05e381608a03427adc33a0cd19d10af89f2d9ff5561d54d0a77"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-a1.json",
+              "sha256": "c7e3e52e51ea25d992d4bab5b7c5b8476d4bab3b8c1bdab6e11fe0bb51deaee4"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-a2.json",
+              "sha256": "71539c74a7e9a772c64af0bf7ee4bf69164098a9c3e1448704317c681bb3880c"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-b1.json",
+              "sha256": "4fc1edbbe59af969a19d77e525e0f582fcdd524067b08de251d1238bd33feffd"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-b2.json",
+              "sha256": "5270bb961a3c4b8da5d17b90c764998bdf3ba349a7c421ad529f1b7677259082"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-a1.json",
+              "sha256": "6c9390935be011b1283699c3a113aae8c38f9322ebad97ad6437c2608a8bff1e"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-a2.json",
+              "sha256": "eed973a7b4e14aacefa6cbbf5bf044fcc8c9343c27abd091d29653936e3e0a85"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-b1.json",
+              "sha256": "7e6c03520b3611497b593dbe95599e42b9d2eb2f4fc173e11d4b2b22202f7ce7"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-b2.json",
+              "sha256": "451522d5e3f2bf3ad840ff17aee99ad770affdc943a1d1c1272941bf4a2df8b7"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-a1.json",
+              "sha256": "fb6ef4ab6ce58cf0b8ea4edfa4090346658067c1bf4325f2b3d34500fd0b5c3f"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-a2.json",
+              "sha256": "5df202006bc92b4c39fbc2cc62514d0c78b319df0e1c805b08e2fe7c6714be28"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-b1.json",
+              "sha256": "d1fa261c02b1902258cc44f876e289bdb422fa4a29905a4d0744f9a7632a5b5e"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-b2.json",
+              "sha256": "24da0854573b7ee38665b159e8d53ae27b31615ad4b957ba83213a531fccb405"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-a1.json",
+              "sha256": "f7134e5f36529f67da90acaaff092165b19a76fc179fdf55988b18db46b85c26"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-a2.json",
+              "sha256": "02ff8e1fa0ab2f8182b3324c497f02ff841793e70205d671bea7871ea944883e"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-b1.json",
+              "sha256": "97ec33e2b92ceea23036f631b68b7d18466407493cb5f59b1d01c9aba2f7a008"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-b2.json",
+              "sha256": "f39f5ae69e25f619c1f4a76a16e26c180ddf0909d208ab36f6faa3c649f342da"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-a1.json",
+              "sha256": "2f0094103d2c8f8a77dcc0133ef55a894116e6ff10da4894bfc3d1e84cf3ae8d"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-a2.json",
+              "sha256": "6fb0ff1d27c47f84b7571ba557489888a31177d6ec9f755aecd078d03e981323"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-b1.json",
+              "sha256": "95112a1dafee9e8dceb7149ac906a3d5d60f3cf972360633245f974b68a14ac1"
+            },
+            {
+              "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-b2.json",
+              "sha256": "71daa4813b72cd97c662e6345b5e4651adbbb545981d0621f207f140bab92192"
+            }
+          ],
+          "model_runtime_config": {
+            "model_artifact_sha256": null,
+            "runtime_identity_sha256": null,
+            "config_set_sha256": null
+          }
+        }
+      ],
+      "projection_receipt": null,
+      "supersedes": []
     },
     "receipt_oracle": {
       "schema_version": "joulewise.bracket_session_receipt_oracle.v1",
@@ -2265,7 +2512,7 @@
     },
     "producer_contract": {
       "path": "configs/campaigns/d117_floor_qwen25_7b_v1/producer_contract.json",
-      "sha256": "3dc26cdeb0eb49c5dc8f56f33d5cc4654a8f92515a15044b7dc7065688944eac"
+      "sha256": "03039d410950d6160af941aa65fe97082ba9826b53204acf82c9cdbd8a71d1fa"
     },
     "prefill_phase_presence": "required_for_all_50_physical_bundles",
     "missing_registered_phase": "refuse"

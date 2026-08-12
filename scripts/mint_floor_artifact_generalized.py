@@ -53,6 +53,7 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_d117_mint_consumption_report,
 )
 from joulewise import floor_mint_estimator as mint_estimator  # noqa: E402
+from joulewise.identity_pins import derive_model_runtime_config  # noqa: E402
 
 
 PINSET_SCHEMA_VERSION = "joulewise.floor_mint_pinset.v1"
@@ -2253,18 +2254,27 @@ def _v2_gate_producer_inventory(
         or not unique_members.issubset(governed_spec_members)
     ):
         raise MintError(f"producer {plan_id!r}: extraction member inventory mismatch")
+    observed_runtime_configs: list[Mapping[str, str]] = []
+    for component in components:
+        try:
+            observed_runtime_configs.append(
+                derive_model_runtime_config(
+                    component.source_regime.get("stack_identity", {}),
+                    component.scientific_config_identity_sha256,
+                )
+            )
+        except ValueError as exc:
+            raise MintError(
+                f"producer {plan_id!r}: shared model/runtime/config derivation failed: {exc}"
+            ) from exc
     model_hashes = {
-        component.source_regime.get("stack_identity", {}).get(
-            "model_artifact_sha256"
-        )
-        for component in components
+        observed["model_artifact_sha256"] for observed in observed_runtime_configs
     }
     runtime_hashes = {
-        component.source_regime.get("stack_identity_sha256")
-        for component in components
+        observed["runtime_identity_sha256"] for observed in observed_runtime_configs
     }
     config_hashes = {
-        component.scientific_config_identity_sha256 for component in components
+        observed["config_set_sha256"] for observed in observed_runtime_configs
     }
     runtime_pins = producer["model_runtime_config"]
     if model_hashes != {runtime_pins["model_artifact_sha256"]}:

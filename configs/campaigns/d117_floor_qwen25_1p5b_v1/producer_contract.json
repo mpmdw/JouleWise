@@ -485,14 +485,261 @@
   "identity_pin_projection": {
     "work_order": "D117-U11-IDPIN-PROJECTION",
     "mode": "derive_never_operator_enter",
+    "state": "unprojected",
     "required_before_arm": true,
-    "expected_config_set_sha256": "cce9cc5b79af97af352193524b7fee9bf41ae2564b33b22476e63d9b5d79d8f8",
-    "projected_pins": {
-      "model_artifact_sha256": null,
-      "runtime_identity_sha256": null,
-      "config_set_sha256": null
-    },
-    "projection_receipt": null
+    "derivation_contract": "joulewise.identity_pin_derivation.v1",
+    "identity_units": [
+      {
+        "identity_unit_id": "alpha",
+        "producer_plan_reference": {
+          "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+          "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json"
+        },
+        "consumer_bindings": [
+          {
+            "arm": "A",
+            "family": "sw-decode-a-qwen25-1p5b",
+            "measurement_arm": "decode"
+          },
+          {
+            "arm": "A",
+            "family": "df-ph-prefill-p128-qwen25-1p5b",
+            "measurement_arm": "prefill_p128"
+          }
+        ],
+        "declared_identity": {
+          "hardware_target": "macbook_m3_max",
+          "runtime_backend": "mlx",
+          "telemetry_backend": "powermetrics",
+          "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+          "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+          "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+          "quantization": {
+            "name": "int4",
+            "bits": 4,
+            "group_size": null
+          },
+          "workload_profile": {
+            "name": "df_ph_decode",
+            "repetitions": 1,
+            "warmup_runs": 1,
+            "prompt_tokens": 128,
+            "output_tokens": 512,
+            "prompt_text": null,
+            "dataset_ref": null
+          }
+        },
+        "config_inventory": [
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json",
+            "sha256": "36429815606dbffb193cf77dde12dc48672ab5eaa62af80bd12faa8c5be82b4d"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r02.json",
+            "sha256": "8357da00278d42abf64a6fa5fdbf1b9d0c7fb6dc28b35766ab33fc938e46c426"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r03.json",
+            "sha256": "c75a5b217894436a02243cf60ef88427c61aedcdbab458799b401e4c40dc3d18"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r04.json",
+            "sha256": "e6b9802773ddc88b1b138a99edaee660e45de547e11e7e03ef8fd9b9e54f5aa5"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r05.json",
+            "sha256": "ef3ffec93e9a085f2a4136f7e68bc5fc43e317e185f4b202d79952f9bc0c6f7a"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r06.json",
+            "sha256": "62b6b1c6dcccd8dfb4f91702405650c2cd1ef089d75bc3fd4bd422380cfd2700"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r07.json",
+            "sha256": "f1692e88f7d31c405168996dda2dd23115dd14d740454f3dd66043788cafd2d5"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r08.json",
+            "sha256": "1c98aa4d3bb42d88b771da6357216fe4a51ff561161aa5013fd775f0cc7c79d9"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r09.json",
+            "sha256": "e560b0f70fd97ac828c238acd023193b217aed4076646ae5716d4df8b644e15e"
+          },
+          {
+            "path": "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r10.json",
+            "sha256": "6a1fcc3bf960e3a1fd350d89f43b45bb8fb0c9fa789d95df11e1f31a21599092"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b01-a1.json",
+            "sha256": "2882f759096b1d30aab65962ca20288b7472b4041280e099956a4e64e4c6b81a"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b01-a2.json",
+            "sha256": "49da88dd3a06f570b590c54f6be017fa8039f59da677a7ceb814b0ab468b7a3a"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b01-b1.json",
+            "sha256": "f5e467025071207bcdfeb1d1653e3503eb51cfc72661a3a6ef5a3c4eb20990fd"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b01-b2.json",
+            "sha256": "20e6c077151b5aa7b2a1562647f2289d404203605170af6166d66dfc7a910a1a"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b02-a1.json",
+            "sha256": "33090a4755a92cc5bef6ff49073496602e23badbb875d6c821e31517eb36d4cc"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b02-a2.json",
+            "sha256": "4964dffa05bfce2ff049608e1c9cba52f005703f689dec2f67bfde2f15065fa2"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b02-b1.json",
+            "sha256": "a198fca03fc5575aab1eb7c1117357bdb89950fb7f905ef834d211b0e784f4e1"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b02-b2.json",
+            "sha256": "33d6b6337ec7b3d8ca891ab899d5bab2ae6ffc8498f41f7e44add822b911a253"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b03-a1.json",
+            "sha256": "f1334454add737327d8631c7e32ac113f72f38a55a6e842ac4812ddf51cd2ad2"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b03-a2.json",
+            "sha256": "2171ced3c5bbd40cf0348ff3db13b89ffa724acf36b46e2a2dda2990356bf5b2"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b03-b1.json",
+            "sha256": "dd4a83e67fcaf3fa1923ccc274a5bbe59aacd9e0ad3334ff293f4c981f0312f7"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b03-b2.json",
+            "sha256": "8aa3599ffbdee442e41cdcc0a452913da785955703a5e495433c650b58f63b63"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b04-a1.json",
+            "sha256": "8fafe90b3067bc586e846c68cb7895ee8baca4e6d87fc51748f7f0c102ed680f"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b04-a2.json",
+            "sha256": "b37dd18844b243e06c6703ef581727712914753b22b86e8bace8bf5b6d5df648"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b04-b1.json",
+            "sha256": "3e2b000aa118999126c9273c051828796bfb9e43d2f630d26e85840141e377db"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b04-b2.json",
+            "sha256": "f85a65f18e94ac24b3bfd2a5fd84c578050827e7765095afb91f8330ac951054"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b05-a1.json",
+            "sha256": "cfc5243d1d4e8356b9e75fbcb918e347031f62578502ea71bde158e0ede6fa3f"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b05-a2.json",
+            "sha256": "9fc98e5c91f90ab0e3fad102363c6addb881abaaa3124cc657312fd6ff90434b"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b05-b1.json",
+            "sha256": "c559d35e6a91481754f7ed574da8a215d9933ef842ad9b352acbc4173dfccba4"
+          },
+          {
+            "path": "02_phase_decode_abba_blocks_01_05/d117f15-df-cmp-abba-ph-decode-b05-b2.json",
+            "sha256": "b0022755f93e8251980af0fa021ac98c775b3319fe7b15b16cfa2f27c3b12074"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b06-a1.json",
+            "sha256": "f48156da71e62712098bd3a6f5b740c169f9a6e936d2cbb7425311ffb0f9874d"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b06-a2.json",
+            "sha256": "cb7bb58d86a9fbbbd7af155a4e390c7c395ffc9ccbb66efacbc74b7bc70e0edd"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b06-b1.json",
+            "sha256": "12f900e3d6f27652092c11209be36280c77a2bdb17a39f17cb1ffb365414a800"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b06-b2.json",
+            "sha256": "e7cdf29c5bb6fd4feb0ed434b0f73b88d75a690d0f9d260be61453ac6017d29f"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b07-a1.json",
+            "sha256": "b2f3016d1a09863d89ff19203734bbe71b2727f88f207ffd10dcfbe80886e26b"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b07-a2.json",
+            "sha256": "8af64a9b31ca9d2e27f7f6b790d42191df1d4f180b62f5eb1a74be252afbe890"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b07-b1.json",
+            "sha256": "13f23aa73ef629ea497889ab516616faef7a55eb8277efdf523a76de5e26deca"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b07-b2.json",
+            "sha256": "7e2796c80a911abbac7a354ff77288e81f43d25c7ba4517d07cbacb7b716d4ec"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b08-a1.json",
+            "sha256": "ffce86dafa4240a001d078f82e35d4abac19a6faf25885423698cd16168bed6d"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b08-a2.json",
+            "sha256": "8daee07e9228104a6719c0b1a83b46b286ae9b388ea38cdff3da77b5761feaaf"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b08-b1.json",
+            "sha256": "400f82a08587db64017804f38ffab933be569db3063e0eebc815b9da2e8308e9"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b08-b2.json",
+            "sha256": "60d3f0813dad42254f7b781bd4fcd5cfec4af45aac11a49af86b6ca789480e15"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b09-a1.json",
+            "sha256": "75b3502c8817e42c234b25d55db833b634b54aa17303a758a30cc204a93b97a3"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b09-a2.json",
+            "sha256": "8fbab1106d3dc4b6f78da8c739c1512978bdc043b7a1e74ce03c09ba0d0fbf25"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b09-b1.json",
+            "sha256": "8814366f8d4dd7bd057ab4a27c8cc0042f81fb5bbf9b6e8231ebec983bc36577"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b09-b2.json",
+            "sha256": "2b7ec1c1a2d90b94af8d03f86994188c23451d5766c7f50ede4d07157a92568d"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b10-a1.json",
+            "sha256": "64e1da50177281c9f67034f030e3f00af76cf742b093c09d63c24d88ec7a8dd9"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b10-a2.json",
+            "sha256": "9e3b58495108e3b5ba37feba900877c6faa27452d1ee3adbebf053f23175543e"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b10-b1.json",
+            "sha256": "30a08f57c166364f90a01a165c7b61e91f6bba9ecb91ea2e2b219b3861446a3f"
+          },
+          {
+            "path": "03_phase_decode_abba_blocks_06_10/d117f15-df-cmp-abba-ph-decode-b10-b2.json",
+            "sha256": "8fe7c8affb928fa5c06c24f4a86c1eff636018cd0a50a387fee4c6dddba0ccbd"
+          }
+        ],
+        "model_runtime_config": {
+          "model_artifact_sha256": null,
+          "runtime_identity_sha256": null,
+          "config_set_sha256": null
+        }
+      }
+    ],
+    "projection_receipt": null,
+    "supersedes": []
   },
   "postcollection": {
     "status": "unresolved"
