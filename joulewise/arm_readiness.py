@@ -2581,8 +2581,19 @@ def _content_matches(value: object, required: object) -> bool:
     return value == required
 
 
-def _predicate_passes(receipt: Mapping[str, Any], predicate_id: str) -> bool:
-    """Apply the D-134 row's content and source derivation predicate."""
+def _predicate_passes(
+    receipt: Mapping[str, Any],
+    predicate_id: str,
+    *,
+    expected_plan_sha256: str | None = None,
+) -> bool:
+    """Apply the D-134 row's content and source derivation predicate.
+
+    ``expected_plan_sha256`` is the plan SHA-256 derived from *this* pack's
+    committed plan bytes.  Rows whose contract predicate requires an
+    evidence receipt to BIND the pack plan SHA fail closed when it is not
+    supplied: a well-formed digest is not a bound digest.
+    """
 
     if receipt.get("status") != "PASS":
         return False
@@ -2622,6 +2633,26 @@ def _predicate_passes(receipt: Mapping[str, Any], predicate_id: str) -> bool:
                 "fresh_maintenance_census"
             ) is not True:
                 continue
+        if predicate_id == "t0.ledger_reservation.v1":
+            # The contract requires the reservation receipt to BIND the pack
+            # plan SHA, not merely to carry a well-formed digest.  A receipt
+            # reserved against a different plan must refuse, and an unknown
+            # expected value fails closed.
+            if (
+                expected_plan_sha256 is None
+                or value.get("plan_sha256") != expected_plan_sha256
+            ):
+                continue
+        if (
+            predicate_id == "t0.single_launch_capability.v1"
+            and fact["source_kind"] == "PACK"
+        ):
+            # Frozen pack bytes may attest only that the launch command is
+            # frozen.  "Session/attempt IDs are unused" and "an atomic
+            # single-use capability is available" are live T-0 conditions
+            # that committed bytes cannot establish, so PACK-sourced
+            # evidence can never satisfy this row on its own.
+            continue
         return True
     return False
 
@@ -2654,6 +2685,7 @@ def _evaluate_rows(
     successor_acceptance: bool,
     internal_passes: Iterable[str] = (),
     forced_reason_codes: Mapping[str, Sequence[str]] | None = None,
+    expected_plan_sha256: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     internal = set(internal_passes)
     forced = forced_reason_codes or {}
@@ -2686,7 +2718,11 @@ def _evaluate_rows(
         passing = [
             evidence_id
             for evidence_id in matching
-            if _predicate_passes(receipts[evidence_id], definition["predicate_id"])
+            if _predicate_passes(
+                receipts[evidence_id],
+                definition["predicate_id"],
+                expected_plan_sha256=expected_plan_sha256,
+            )
         ]
         forced_codes = sorted(set(forced.get(row_id, ())))
         verdict = (
@@ -3637,6 +3673,7 @@ def generate_arm_receipt(
         successor_acceptance=not _issued_d079(tree),
         internal_passes=internal_passes,
         forced_reason_codes=forced,
+        expected_plan_sha256=_pack_identity(root, tree)["plan_sha256"],
     )
     refusals = list(evidence_refusals) + list(root_refusals) + row_refusals
     if freeze_receipt["status"] != "PASS":
@@ -3831,6 +3868,7 @@ def _derive_arm_semantics_for_verification(
         successor_acceptance=not _issued_d079(tree),
         internal_passes=internal_passes,
         forced_reason_codes=forced,
+        expected_plan_sha256=_pack_identity(root, tree)["plan_sha256"],
     )
     refusals = list(evidence_refusals) + list(root_refusals) + row_refusals
     if freeze_receipt["status"] != "PASS":

@@ -39,10 +39,20 @@ ZERO_SHA = "0" * 64
 TEST_BOOT_SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 
-def predicate_content(predicate_id: str) -> dict[str, Any]:
+def predicate_content(
+    predicate_id: str, *, plan_sha256: str | None = None
+) -> dict[str, Any]:
+    """Build genuine predicate content.
+
+    ``plan_sha256`` is the pack plan SHA that a reservation receipt must
+    BIND.  Callers building evidence for a real pack must pass the pack's
+    actual value; the ZERO_SHA default exists only for unit fixtures that
+    never reach a real pack.
+    """
+
     content = copy.deepcopy(readiness._PREDICATE_CONTENT_REQUIREMENTS[predicate_id])
     if predicate_id == "t0.ledger_reservation.v1":
-        content["plan_sha256"] = ZERO_SHA
+        content["plan_sha256"] = plan_sha256 or ZERO_SHA
     elif predicate_id == "t0.background_quiet.v1":
         content["closed_operator_observation"] = True
         content["fresh_maintenance_census"] = True
@@ -591,7 +601,11 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             else:
                 receipt = self._generic_predicate_receipt(row)
             with self.subTest(row=row["row_id"], case="genuine"):
-                self.assertTrue(readiness._predicate_passes(receipt, predicate_id))
+                self.assertTrue(
+                    readiness._predicate_passes(
+                        receipt, predicate_id, expected_plan_sha256=ZERO_SHA
+                    )
+                )
 
             missing_content = copy.deepcopy(receipt)
             missing_fact = next(
@@ -604,7 +618,9 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             )
             with self.subTest(row=row["row_id"], case="missing-content"):
                 self.assertFalse(
-                    readiness._predicate_passes(missing_content, predicate_id)
+                    readiness._predicate_passes(
+                        missing_content, predicate_id, expected_plan_sha256=ZERO_SHA
+                    )
                 )
 
             mutated = copy.deepcopy(receipt)
@@ -614,7 +630,11 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             fact["value_type"] = "BOOLEAN"
             fact["value"] = True
             with self.subTest(row=row["row_id"], case="bare-boolean"):
-                self.assertFalse(readiness._predicate_passes(mutated, predicate_id))
+                self.assertFalse(
+                    readiness._predicate_passes(
+                        mutated, predicate_id, expected_plan_sha256=ZERO_SHA
+                    )
+                )
 
             if kind not in {"IDENTITY_PIN_PROJECTION", "DRY_RUN_REHEARSAL"}:
                 operator = self._generic_predicate_receipt(
@@ -622,13 +642,131 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                 )
                 with self.subTest(row=row["row_id"], case="operator-source"):
                     self.assertEqual(
-                        readiness._predicate_passes(operator, predicate_id),
+                        readiness._predicate_passes(
+                            operator, predicate_id, expected_plan_sha256=ZERO_SHA
+                        ),
                         row["row_id"]
                         in {
                             "clock.correct_and_prior_state",
                             "t0.background_quiet",
                         },
                     )
+
+    def test_ledger_reservation_requires_binding_not_wellformedness(self) -> None:
+        """D-134 delta re-audit F1: the receipt must BIND this pack's plan SHA.
+
+        A well-formed digest is not a bound digest: a reservation receipt
+        issued against a DIFFERENT plan must refuse.
+        """
+
+        registry, _raw = load_registry(ROOT)
+        row = next(
+            row for row in registry["rows"] if row["row_id"] == "t0.ledger_reservation"
+        )
+        bound = "a" * 64
+        other = "b" * 64
+        evidence = sample_evidence()
+        evidence["kind"] = "LEDGER_RESERVATION"
+        evidence["facts"][0].update(
+            {
+                "fact_id": "t0.ledger_reservation.v1",
+                "source_kind": "PROBE",
+                "value_type": "OBJECT",
+                "value": {
+                    "diagnostic_status": "PASS",
+                    "events": ["calibration_pre_reserve_authorized"],
+                    "execute_mode": True,
+                    "plan_sha256": other,
+                    "status": "reserved",
+                },
+            }
+        )
+        validated = validate_evidence_receipt(evidence)
+
+        # Cross-plan reservation refuses even though every field is well formed.
+        self.assertFalse(
+            readiness._predicate_passes(
+                validated, "t0.ledger_reservation.v1", expected_plan_sha256=bound
+            )
+        )
+        # An unknown expected value fails closed rather than accepting any SHA.
+        self.assertFalse(
+            readiness._predicate_passes(
+                validated, "t0.ledger_reservation.v1", expected_plan_sha256=None
+            )
+        )
+        rows, _refusals = readiness._evaluate_rows(
+            [row],
+            {validated["evidence_id"]: validated},
+            clock_route="MANUAL",
+            successor_acceptance=False,
+            expected_plan_sha256=bound,
+        )
+        self.assertEqual(rows[0]["verdict"], "REFUSE")
+
+        # The correctly bound receipt still passes.
+        evidence["facts"][0]["value"]["plan_sha256"] = bound
+        rebound = validate_evidence_receipt(evidence)
+        self.assertTrue(
+            readiness._predicate_passes(
+                rebound, "t0.ledger_reservation.v1", expected_plan_sha256=bound
+            )
+        )
+
+    def test_single_launch_capability_refuses_frozen_bytes_asserting_live_facts(
+        self,
+    ) -> None:
+        """D-134 delta re-audit F2: PACK bytes cannot establish live T-0 facts.
+
+        "IDs unused" and "capability available" are conditions of the world at
+        T-0; only "the launch command is frozen" is a property of committed
+        bytes.  PACK-sourced evidence therefore cannot satisfy this row.
+        """
+
+        registry, _raw = load_registry(ROOT)
+        row = next(
+            row
+            for row in registry["rows"]
+            if row["row_id"] == "t0.single_launch_capability"
+        )
+        value = {
+            "atomic_single_use_capability_available": True,
+            "attempt_ids_unused": True,
+            "exact_launch_command_frozen": True,
+            "session_id_unused": True,
+        }
+        evidence = sample_evidence()
+        evidence["kind"] = "LAUNCH_RECIPE"
+        evidence["facts"][0].update(
+            {
+                "fact_id": "t0.single_launch_capability.v1",
+                "source_kind": "PACK",
+                "value_type": "OBJECT",
+                "value": value,
+            }
+        )
+        pack_sourced = validate_evidence_receipt(evidence)
+        self.assertFalse(
+            readiness._predicate_passes(
+                pack_sourced, "t0.single_launch_capability.v1"
+            )
+        )
+        rows, _refusals = readiness._evaluate_rows(
+            [row],
+            {pack_sourced["evidence_id"]: pack_sourced},
+            clock_route="MANUAL",
+            successor_acceptance=False,
+        )
+        self.assertEqual(rows[0]["verdict"], "REFUSE")
+
+        # A live probe of the same claims still passes.
+        evidence["facts"][0]["source_kind"] = "PROBE"
+        probe_sourced = validate_evidence_receipt(evidence)
+        self.assertTrue(
+            readiness._predicate_passes(
+                probe_sourced, "t0.single_launch_capability.v1"
+            )
+        )
 
     def test_ledger_boolean_forgery_refuses_with_closed_code(self) -> None:
         registry, _raw = load_registry(ROOT)

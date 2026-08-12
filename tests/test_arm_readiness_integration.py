@@ -86,6 +86,10 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
     registry, _raw = load_registry(pack.parents[2])
     pack_sha = committed_pack_tree_sha256(pack)
     head = reviewed_main(pack)["head_commit"]
+    # Derive the bound plan SHA with the same production helper the row
+    # evaluator uses, so a divergence fails the test rather than hiding.
+    _tree, _tree_raw = readiness._plan_tree(pack)
+    bound_plan_sha = readiness._pack_identity(pack, _tree)["plan_sha256"]
     rows_by_kind: dict[str, list[dict]] = {}
     for row in registry["rows"]:
         if row["row_id"] in {
@@ -116,7 +120,9 @@ def install_passing_evidence(pack: Path, custody: Path) -> None:
         }
         for row in rows:
             source_relative = f"sources/{row['row_id']}.json"
-            content = predicate_content(row["predicate_id"])
+            content = predicate_content(
+                row["predicate_id"], plan_sha256=bound_plan_sha
+            )
             source_raw = render_json(
                 {"predicate_id": row["predicate_id"], "value": content}
             )
