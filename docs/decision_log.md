@@ -8699,3 +8699,27 @@ flagged all three as ED-OWED):
    sampler) and the §5A taps tonight; the freeze lane drives to ARMED
    today. R2 perishable-resource discipline applies for the rest of the
    session.
+
+### Item-(1) mechanism ruling — 2026-08-12 (magistrate, consult-adopted): WO-COLLECTION-MARGIN-01
+
+The freeze-plan addendum's LIVE item (1) — record each registered comparative
+cell's minimum window-duration margin at collection — lost its named
+mechanism when FCM-01 withdrew (D-133). Pre-decision Sol xhigh consult
+(1 round, rule-2 default) REJECTED the magistrate's candidate (a §5C
+readiness-registry collection-time row) on a verified structural blocker:
+the D-134 registry carries exactly two evaluation phases (FREEZE_AND_ARM,
+ARM_ONLY), both pre-launch, and the ARM receipt is atomically consumed — a
+collection-time row would either refuse every arm, gate nothing, or break
+the two-stage append-only authorization contract. Drop REJECTED as
+indefensible (WO-4/Q9 37/50 not_resolvable evidence; item (3) forbids the
+"p256 windows are expected longer" inference). ADOPTED: a dedicated
+append-only collection-margin receipt (WO-COLLECTION-MARGIN-01, registered
+in TASK_QUEUE with the full ratified design). Gate split: PACK FREEZE gates
+on the mechanism existing (schema + registered-cell inventory + deterministic
+namespace); COLLECTION CLOSE-OUT gates on the resulting receipt. Receipt
+PASS asserts derivation completeness from authenticated bytes, never margin
+positivity — D-133 ruled no new acceptance threshold. Residual risk recorded:
+the receipt exposes inadequate temporal support; it cannot repair it —
+an inadequate p256 result still requires recollection, claim demotion, or a
+separately ruled disposition. Sol's design win logged to the codex-delegation
+field-note scorecard.

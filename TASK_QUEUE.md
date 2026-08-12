@@ -603,3 +603,27 @@ NONE — no global work-selection gate is active.
 | Q7 | T3-CHAR-PAIR-01 | P1 Phase Gate | SHELVED | App-up vs app-down idle-capture characterization pair (NON-CLAIM): decide whether t3 resident processes (server, helpers, cloudflared) pollute the quiet-mac measurement floor; unlocks the app-adjacent window-operation question. Runnable next quiet night; blocked by nothing. | A matched app-up vs app-down idle-capture pair with custody and roots fully separate from any claim chain yields a recorded NON-CLAIM verdict on whether t3 resident processes pollute the measurement floor. Evidence: App-down idle capture collected on a quiet night under standard idle-capture conditions; App-up idle capture collected under matched conditions with the t3 resident processes (server, helpers, cloudflared) running; Recorded comparison verdict, labelled NON-CLAIM, deciding the app-adjacent window-operation question; Custody and roots separate from any claim chain; shares no baselines, calibration, or NEG-8 evidence. Authority: [Ed directive 2026-08-03 ~23:55 (t3-drive chain is the critical path; non-in-flight work paused) + t3-doctrine gate synthesis + synthesis-exhibits SX5](docs/process_traces/2026-08-03-t3-doctrine-gate/SYNTHESIS.md). Acceptance: [T3-CHAR-PAIR-01 acceptance](docs/process/state_kernel.json). Fence: NON-CLAIM characterization only: outputs enter no claim custody root and share no baselines, calibration, or NEG-8 evidence with any claim chain (t3-doctrine gate synthesis: characterization pair is custody-separate from any claim chain). Note: 2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). Both arms shelved: the app-UP r03 re-capture and the app-DOWN arm existed to decide app-adjacent window admissibility, which the descope moots. Reopen only on Ed's word. |
 
 <!-- END GENERATED: state-kernel current-queue -->
+
+## WO-COLLECTION-MARGIN-01 (registered 2026-08-12, T6; consult-adopted design; freeze-gates on the MECHANISM, collection close-out gates on the RECEIPT)
+
+Comparative-cell window-margin receipt — the ruled replacement mechanism for
+freeze-plan addendum item (1), whose named implementation (the FCM-01
+committed inventory test) died with FCM-01's withdrawal (D-133). Magistrate
+adjudication 2026-08-12 adopted the Sol xhigh consult design IN FULL after the
+consult rejected the magistrate's own §5C-registry-row candidate on a verified
+structural blocker (the D-134 registry has only FREEZE_AND_ARM/ARM_ONLY
+phases; a collection-time row would refuse every arm or break the consumed-
+receipt contract) and ruled a drop indefensible (WO-4/Q9 37/50
+not_resolvable on 1.5B p128; p256 unmeasured; "expected is not evidence").
+Design: deterministic append-only receipt generated after finalized
+post-calibration, before backup/extraction — `joulewise/window_duration_margins.py`
++ `scripts/record_window_duration_margins.py` (operator-free conclusion path)
++ census/mutation tests; per registered comparative cell: authenticated
+B_operative, min member duration, min_duration_minus_2b_operative_s,
+ratio, min overlap count, sample-count margin, input-stream SHAs; PASS =
+derivation completeness, NOT margin positivity (no new acceptance threshold);
+REFUSE never UNKNOWN; freeze-manifest pointer item analogous to D-8′;
+runbook §12 path+SHA recording. D-134 row registry untouched. Consult record:
+T6 scratchpad `item1-consult-out.md` (custody with T6 session record).
+Implementation in flight at registration (Sol xhigh, branch
+impl/collection-margin-receipt).
