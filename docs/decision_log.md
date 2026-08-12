@@ -8224,9 +8224,10 @@ or capability token, not conventional privacy (see the Rust-rewrite memory
 
 ## D-131: Identity-pin projection contract — adopt as proposed
 
-**Date:** 2026-08-11. **Status:** PROPOSED — adopt as proposed from the
-binding U11 design consult; the magistrate reviews this transcription and
-implementation before push.
+**Date:** 2026-08-11. **Status:** ADOPTED — adopted as proposed from the
+binding U11 design consult; magistrate transcription + implementation review
+completed and recorded in the PR #131 D-121 terminal-review comment; ratified
+at the #131 merge (2026-08-12).
 
 1. **Receipt and custody.** Identity projection uses the exact-key
    `joulewise.identity_pin_projection_receipt.v1` schema with no self-hash.
