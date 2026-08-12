@@ -34,29 +34,32 @@ copied literal) in wtCH1. Opus mechanic finalizing the T5 run report. B3
 three-window regression early-signal GREEN at main (23 OK, 3 skips to examine
 at final head).
 
-**MERGE WAVE (as of ~18:30Z):** #140 MERGED e11b1ad; #135 MERGED 5be5b78
-(CI-trigger root cause: merge conflict suppresses pull_request runs);
-**#141 (§5C) MERGED 696576c** after the 19-file cross-stream integration
-(Sol xhigh resolution + magistrate bench verification + 14/14 CI).
-**OPEN: #144** (D-133 cl.4 tighter-floor re-spec — all six shared-edge
-comparative cells + contrast consuming cells select common-mode; A5 replay
-derives 1.8695016260131627 J; xhigh lens CLEAN; CI running — the last
-freeze-lane content PR), **#142** (CH-1 arming blocker — writer authenticates
-acceptance artifact; gate round added recovery hardening; CI running),
-**#143** (WO-COLLECTION-MARGIN-01, item-(1) mechanism, consult-adopted;
-full C-028 cycle incl. two proven production defects fixed; CI running —
-one calexits-3.11 flake to rerun, registered FLAKE-CALEXITS-311-REDERIVE).
+**MERGE WAVE COMPLETE (~20:30Z): SIX merges today** — #140 mintvocab
+e11b1ad, #135 crash-matrix CI 5be5b78, #141 §5C 696576c, #142 CH-1 5be400e
+(readiness row :58 flipped GO), #143 WO-COLLECTION-MARGIN-01 1092984
+(item-(1) freeze gate DISCHARGED), **#144 tighter-floor re-spec dc162bc —
+the funded p256 arm's floor is now 1.869502 J (A5 replay
+1.8695016260131627 J), not 8.611855 J.** FLAKE-CALEXITS-311-REDERIVE
+root-caused (scheduler-suspension repro; real-time pulse producer under 40x
+test clock) + certified reruns; fix shape registered.
 
-**Lane order to ARMED:** #144 merge → reviewed measurement head + clean
-checkout → freeze-time regeneration byte-check → FREEZE → U11 freeze
-projections → D-134 freeze receipts → freeze-gated literal fills → §5C lead
-live verification (non-delegable) → U11 arm re-verification (EXACTLY ONE run)
-→ arm packet from the corrected skeleton (~/JouleWise-window-custody/
-t4-session-20260810/; D-4/D-5/D-11 applied, 41 fill cells, E-16 reorder at
-finalization). Item-(1) RESOLVED: WO-COLLECTION-MARGIN-01 (#143) is the
-mechanism; freeze gates on it merging. B3 early-green (23 OK; 3 skips all
-the D-126 U2-pending class); authoritative rerun at the final head. Ed
-tonight: sudo/powermetrics checklist + §5A taps.
+**FREEZE GATES REMAINING:** (1) WO-EVIDENCE-AUTHOR-01 in flight (Sol xhigh,
+wtEVAUTH) — the §5C build shipped no PRODUCTION author for the twelve
+FREEZE-row evidence receipts (X-1, freeze-checklist mechanic; only test
+fixtures construct them; freeze would REFUSE) — gauntlet + merge owed;
+(2) magistrate canonical suite at reviewed-head candidate dc162bc (running,
+full logs); (3) authoritative B3 GREEN at dc162bc (23 OK, 3 skips = D-126
+class, dispositioned). Freeze-execution checklist assembled at T6 scratchpad
+freeze-checklist.md (9 doc contradictions to resolve at the freeze commit,
+incl. stale worst-case-default rows vs the ratified tighter floor; X-2:
+generator --check is one-shot pre-freeze; X-3: freeze and T-0 must share
+one boot session — NO REBOOT tonight between freeze and arm).
+
+**THEN:** reviewed-head selection (clean full clone) → regeneration
+byte-check → U11 freeze ×3 → commit → D-134 freeze receipts ×3 (needs
+evidence author) → commit → freeze-manifest fills + D-8′ → §5C lead live
+verification → arm packet finalization. Ed tonight: sudo/powermetrics
+checklist + §5A taps.
 
 ## ▶▶ T5 FINAL CHECKPOINT (2026-08-12, Ed stop order) — superseded by T6 LIVE above; kept as record
 
