@@ -10,7 +10,99 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-12 (~05:15Z) — **T5 SESSION RUNNING; MID-SESSION STATE below; a fresh session starts THERE, then falls back to the T4-LATE checkpoint for anything it doesn't cover.**
+Last updated: 2026-08-12 (~17:45Z, Ed stop order) — **T5 FINAL CHECKPOINT below; /clear-SAFE; A NEW SESSION STARTS THERE.**
+
+## ▶▶ T5 FINAL CHECKPOINT (2026-08-12, Ed stop order) — /clear-SAFE; A NEW SESSION STARTS HERE
+
+**Nothing in flight.** All Sol runs harvested, all monitors/watchers stopped,
+zero live codex/suite processes at checkpoint. Everything load-bearing is
+pushed; two bookkeeping drafts live on local disk (below).
+
+**TEN MERGED this session:** the full T4-late queue 6/6 — #132 (fallback
+respec, freeze lane unblocked), #133 (paper default-floor mainline +
+mechanical tighter-floor swap block), #131 (U11 projection; **D-131
+ADOPTED** 14879e4), #127 (calexits reliability), #134 (FCM-01 + integration
+fix rounds), #129 (CI proof restructure) — then #137 (p2038 clock-phase
+flake root fix), #136 (D-135 advisory site budgets), #139 (calexits
+mutation classifier; killed the 3x hosted flake), **#138 (Q8 p256 floor
+cells — packs now 100 members/pack, Ed budget ratification owed)**.
+**D-136 minted mid-session (Ed): the site/Lakebed lane is RETIRED from all
+automatic processes — zero tokens on it, site workflow manual-dispatch
+only.**
+
+**OPEN PRs, both one step from merge:**
+1. **#140 WO-MINT-ESTIMATOR-VOCAB** — gate COMPLETE: cold-gate conditions
+   F1–F12 all met (custody: docs/process_traces/2026-08-12-mintvocab-coldgate/
+   — packet + 3 rulings; the paired refuter caught a live binding-seam
+   fail-open both earlier condition sets would have certified), independent
+   attestation + focused re-attestation, magistrate canonical suites at
+   a15fe02 green outside the registered WO-CRASHMATRIX class (failing
+   modules byte-identical to main). Was 10 pass / 2 pending at stop.
+   **Successor: confirm CI green → D-121 comment (the F1–F12 conformance
+   table is in the mintvocab director's final reports) → merge. ON MERGE,
+   D-133 cl.4's conditional FIRES ON ITS OWN RULED TERMS: ALT-D120 + the
+   terminal delta + mintvocab all landed pre-freeze-wave → packs re-spec to
+   the tighter 1.869502 J floor (vs 8.611855 J default) via a separate
+   generator run + gate; the funded p256 arm likely publishes instead of
+   not-resolvable; paper swap is mechanical (#133's merged conditional
+   block). Surface to Ed before executing the re-spec.**
+2. **#135 crash-matrix exclusive CI job** — content refuter-fixed (120-min
+   honest ceiling; WO-CRASHMATRIX-RELIABILITY registered in TASK_QUEUE);
+   its CI has repeatedly failed to trigger (three pushes + close/reopen);
+   head 66f6129 force-pushed to retrigger at stop. Low stakes; merge when
+   its CI finally runs green + D-121.
+
+**§5C READINESS STREAM — FULLY VERIFIED, awaiting PR only.**
+`integration/5c-readiness` @ **5a80e39** (pushed): three branches merged
+clean in ruled order (fix/5c-code 4ff4072 → impl/5c-readiness-records
+46eb6a9 → fix/5c-docs fc4095f). Full gauntlet record: 3-lens review at
+3a140bb (lens A found a LIVE derive-never-enter forgery — operator-attested
+conclusion reaching a forged GO — fixed + delta-re-audited; 2/35 WEAKER
+predicate transcriptions bench-repaired; D-132 applied: converging
+instrument, guard armed at count 2 — a THIRD weaker-than-contract row/site
+from here = consult); doctrine run 2-of-2 + E-fix rounds complete (IR-1..4
+ratified wordings, boot-session reboot fence = MACHINE behavior, lead
+live-verified sysctl derivation); **LC-1 applied and verified: the branch's
+D-136 renumbered to D-137** (main's D-136 = site retirement; re-verify the
+next free number after any later mint). Magistrate Q2 suite at 5a80e39:
+**3,031 OK, rc=0, zero failures**. **Successor: rebase onto post-#140 main
+(re-run LC-1 number check) → PR → CI → D-121 → merge.** Carried to freeze:
+BETA/GAMMA capacity minima verified when packs freeze.
+
+**THEN the freeze lane** (all pack content now on main once §5C lands):
+tighter-floor re-spec decision (Ed) → regenerate → FREEZE → U11 freeze
+projections → arm packet per D-134 (custody skeleton corrected D-4/D-5/D-11
+at ~/JouleWise-window-custody/t4-session-20260810/).
+
+**ED-OWED:** (1) the gamma-arm call is now LIVE, premise updated — see #140
+note above; (2) Q8 quiet-window budget ratification (~6.28 h 1.5B / ~6.48 h
+7B per pack, 20% margin — REAL new bundles, not a rider); (3) live
+sudo/powermetrics checklist before relying on #127's production sampler
+commit; (4) §5A taps on the quiet night.
+
+**LOCAL DRAFTS (uncommitted, on disk):**
+docs/run_reports/2026-08-12-t5-window-session.md (DRAFT — needs the
+14 mechanic corrections + tail outcomes folded in before landing);
+scratchpad c057-draft.md (C-057 council entry + T5 skill-usage rows,
+mechanic-verified with [UNVERIFIED-BY-MECHANIC] markers on
+magistrate-self-reported items). Land both + skill-log rows + consistency
+sweep as the successor's first desk block.
+
+**Sol/infra lessons this session (fold at bookkeeping):** subagent-shell
+background jobs are killed at ~60 min (4 timed occurrences; >45-min runs
+launch from the lead shell; .status=RUNNING is not liveness); NEEDS_SCOPE
+early returns are not resumable (fresh run, re-spent time); scope diffs
+anchor to the MERGE-BASE never live origin/main; read-only sandbox makes
+attestations spuriously red (workspace-write + write-scope [] instead);
+never gate on piped suite output (near-missed twice, caught); never assert
+git state without checking it in the same turn; a branch cannot mint a
+globally-unique ID from a stale base — integration-tree union check is
+mandatory. Session scratchpad:
+/private/tmp/claude-501/-Users-edr-code-JouleWise/7c344e29-f3e2-455c-9384-1902c950c106/scratchpad
+(worktrees wtB-d135/wtC-p2038flake/wtE-mintvocab/wtF-crashmx/wt138/
+wtD-5c*/wtG-*/wtH-consult/wtI-calexits — all branches pushed; safe to lose).
+
+## ▶▶ T5 MID-SESSION STATE (2026-08-12 ~05:15Z) — SUPERSEDED by the FINAL checkpoint above; kept for detail
 
 ## ▶▶ T5 MID-SESSION STATE (2026-08-12, Fable magistrate; 12h window, LIVE)
 
