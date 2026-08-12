@@ -8313,36 +8313,26 @@ another round.** The repair contract is the magistrate-adjudicated
 structural-threading draft (custodied with the T4 session record); the
 refuter-authored acceptance oracle may be amended only by its author.
 
-### D-124 amendment — 2026-08-11: round-5 structural registered input
+### D-124 amendment — 2026-08-11: FCM-01 ALT-D120 completion (rounds 5-10)
 
-Round 5 narrows the registered surface to a frozen block-input record produced
-by the module-private registered builder. The builder receives authenticated
-bundle-derived contrast evidence, evaluates the `(0.0, 0.0)` contrast itself
-once, evaluates both enumerated shift grids, and records each positive
-shift-`0.0` position; the registered estimator takes the zero point only from
-those recorded positions and accepts no caller-supplied zero designator. The
-legacy keyword surface remains available for the byte-frozen independent
-oracle, with its admission and arithmetic unchanged, but every result from that
-surface is unregistered and the extraction gate refuses it for a registered
-cell. Both surfaces route through one arithmetic core, so the oracle continues
-to bar the arithmetic used by registered estimates. The registered zero-point
-rule is now
-`zero_point_is_carried_structurally_by_the_registered_builder_as_the_shift_zero_index_never_supplied_or_matched_by_value_and_direct_keyword_inputs_are_unregistered`;
-the resulting parameter hash is
-`973c9bfc5a4d5984b5db6eeba5d054613d86a0bd69ae1f8a56c5fad5d7a453b7`,
-and the outgoing round-4 hash joins the three earlier superseded registrations.
-
-The claims-with-assumptions form remains: **over inputs constructed by the
-registered builder from authenticated bundle evidence, the emitted width
-bounds the exact admissible width outward, up to the disclosed member-envelope
-pad and the disclosed zero-point discrepancy term, under the documented
-single-sourcing assumptions for the bracket bounds in the audit table above.**
-Python privacy is conventional rather than enforced: underscore names and the
-frozen dataclass do not cryptographically prevent deliberate fabrication, so a
-construction-site inventory test pins the intended one-builder/one-production-
-caller discipline. Evidence faithfulness upstream of the builder remains an
-assumption, not a result of this structural repair.
-
+The registered common-mode estimator's soundness campaign ran rounds 5-10
+on 2026-08-11 (full round-by-round notes:
+`docs/process_traces/2026-08-11-fcm-coldgate/fcm-round-notes-5-to-10.md`).
+Round 5 (structural registered-input record) fired the stopping rule below;
+D-132 revived the work and the D-133 cold gate ruled ALT-D120 — DELETE the
+serialized registration vocabulary rather than authenticate it. Rounds 6-10
+executed that: the public registered surface deleted (round 6-7); total
+recursive vocabulary refusal + strict duplicate-key JSON parsing at every
+admitted-byte entry (round 8); strict pre-admission in front of the pinned
+legacy loader with a full loads-census (round 9); and complete finite-number
+policy (overflow-to-inf) plus the last two census-miscovered parsers
+(round 10, ACCEPTED clean by its delta — no findings). The O3 full delta
+cleared the relocated arithmetic TERMINALLY: zero exact understatements in
+4,096 independent rational-arithmetic cases plus a 1,536-case differential.
+Registered identity is custody-closed and never carried in admitted
+report/artifact vocabulary; provenance is re-derived in the governed
+extraction path. Consumption of the tighter floor still gates on
+WO-MINT-ESTIMATOR-VOCAB (D-133 cl.4).
 
 **STOPPING RULE EXECUTED (2026-08-11, same day).** The round-5 delta
 re-audit fired the rule: FCM-R5-01 — records fabricated outside the builder
