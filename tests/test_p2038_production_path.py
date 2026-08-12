@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import math
 import os
 import sys
 import tempfile
@@ -147,7 +148,7 @@ def install_complete_calibration(directory: Path) -> None:
     raw_dir = directory / "raw"
     raw_dir.mkdir(parents=True)
     evidence, raw_bytes, event_bytes = self_consistent_calibration(
-        first_endpoint_s=time.time() - 60.0
+        first_endpoint_s=math.floor(time.time() - 60.0) + 0.05
     )
     (raw_dir / "powermetrics.plist").write_bytes(raw_bytes)
     (directory / "events.jsonl").write_bytes(event_bytes)

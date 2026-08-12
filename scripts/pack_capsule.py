@@ -44,9 +44,8 @@ CAPSULE_PAGE_REDIRECTS = {
 RESERVED_PATHS = {"/", "/index.html"}
 LAKEBED_ARTIFACT_CAP_BYTES = 1_048_576
 # Ed's 2026-07-17 AUD-WO-039 right-sizing ruling separates the real-artifact
-# budget from the conservative estimator. The 1 MiB Lakebed cap is invariant;
-# measured mode may use the in-capsule brief while retaining 48,576 bytes of
-# margin. The older conservative budget remains a fallback-only guard.
+# budget from the conservative estimator. D-135 makes both conservative
+# thresholds advisory; only the measured 1 MiB Lakebed cap is invariant.
 LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES = 1_000_000
 LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES = 943_718
 MARKED_VERSION = "18.0.6"
@@ -110,6 +109,10 @@ STANDALONE_PAGES = [
 
 class CapsulePackError(RuntimeError):
     pass
+
+
+def warn_advisory_budget(message: str) -> None:
+    print(f"ADVISORY BUDGET EXCEEDED (D-135): {message}", file=sys.stderr)
 
 
 @dataclass(frozen=True)
@@ -621,16 +624,18 @@ def page_shards(pages: dict[str, dict[str, object]]) -> list[list[str]]:
             f"{path} ({individual_sizes[path]} bytes)"
             for path in sorted(decision_log_oversized)
         )
-        raise CapsulePackError(
+        # D-135: pagination margins report pressure without gating the pack.
+        warn_advisory_budget(
             "decision-log page exceeds "
             f"{DECISION_LOG_SHARD_BASE64_TARGET_BYTES}-byte pagination target: "
-            f"{details}; adjust entry-boundary pagination"
+            f"{details}"
         )
     oversized = [path for path, size in individual_sizes.items() if size > MAX_SHARD_BASE64_BYTES]
     if oversized:
         details = ", ".join(f"{path} ({individual_sizes[path]} bytes)" for path in sorted(oversized))
-        raise CapsulePackError(
-            f"page exceeds {MAX_SHARD_BASE64_BYTES}-byte runtime shard budget: {details}; split the page"
+        # D-135: per-page and per-shard byte budgets are advisory only.
+        warn_advisory_budget(
+            f"page exceeds {MAX_SHARD_BASE64_BYTES}-byte runtime shard budget: {details}"
         )
 
     shards: list[list[str]] = []
@@ -726,7 +731,8 @@ def estimate_lakebed_artifact_size(content_size: int) -> int:
 def enforce_lakebed_budget(content_size: int) -> int:
     estimate = estimate_lakebed_artifact_size(content_size)
     if estimate > LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES:
-        raise CapsulePackError(
+        # D-135: an estimator cannot stand in for the physical Lakebed cap.
+        warn_advisory_budget(
             "estimated Lakebed artifact "
             f"{estimate} bytes exceeds conservative estimate-only "
             f"{LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES}-byte budget "
@@ -931,7 +937,8 @@ def enforce_lakebed_artifact_postcondition(
         cap_detail = (
             f"{LAKEBED_ARTIFACT_CAP_BYTES - measured} bytes below the 1 MiB cap"
         )
-        raise CapsulePackError(
+        # D-135: measured conservative headroom warns below the physical cap.
+        warn_advisory_budget(
             "measured Lakebed validator artifact "
             f"{measured} bytes exceeds measured-artifact "
             f"{LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES}-byte budget "
@@ -942,7 +949,8 @@ def enforce_lakebed_artifact_postcondition(
 
 def enforce_runtime_decode_budget(stats: dict[str, int]) -> None:
     if stats["first_request_decode"] > MAX_FIRST_REQUEST_DECODE_BYTES:
-        raise CapsulePackError(
+        # D-135: first-request decode pressure is advisory site sizing.
+        warn_advisory_budget(
             "first-request base64 decode requires "
             f"{stats['first_request_decode']} byte-loop iterations, above the "
             f"{MAX_FIRST_REQUEST_DECODE_BYTES}-iteration runtime budget"
