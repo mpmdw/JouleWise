@@ -604,6 +604,17 @@ NONE — no global work-selection gate is active.
 
 <!-- END GENERATED: state-kernel current-queue -->
 
+## FLAKE-CALEXITS-311-REDERIVE (registered 2026-08-12, T6; evidence row, no work yet)
+
+New calexits hosted-flake signature distinct from the #139-killed class:
+`test_parameterized_durable_public_cli_witnesses` FAILED on 3.11 only
+(`AssertionError: 1 != 0 : correction=calibration_output_requires_rederive`,
+run 31622634705 on PR #143 — a PR that does not touch the module) while the
+same exclusive leg passed on #135/#141/#142 the same day. One rerun
+dispatched as the discriminator; a second same-signature failure escalates
+per the standing trigger. Fold into WO-CALEXITS follow-up triage if it
+recurs.
+
 ## WO-COLLECTION-MARGIN-01 (registered 2026-08-12, T6; consult-adopted design; freeze-gates on the MECHANISM, collection close-out gates on the RECEIPT)
 
 Comparative-cell window-margin receipt — the ruled replacement mechanism for
