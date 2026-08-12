@@ -215,10 +215,43 @@ def _reject_duplicate_admission_keys(
     return value
 
 
+def _reject_duplicate_floor_artifact_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    """Build an artifact object while preserving its typed refusal text."""
+
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise AnalysisInputError(
+                f"floor artifact contains duplicate key {key!r}"
+            )
+        value[key] = child
+    return value
+
+
 def _reject_nonfinite_admission_number(value: str) -> None:
     raise AnalysisInputError(
         f"analysis input contains non-finite JSON number {value!r}"
     )
+
+
+def _parse_finite_admission_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
+def _parse_finite_admission_int(value: str) -> int:
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_admission_number(value)
+    return parsed
 
 
 def _registration_vocabulary_paths(value: object, where: str) -> list[str]:
@@ -239,14 +272,23 @@ def _registration_vocabulary_paths(value: object, where: str) -> list[str]:
     return paths
 
 
-def _strict_json_admission_bytes(raw: bytes, label: str) -> Any:
+def _strict_json_admission_bytes(
+    raw: bytes,
+    label: str,
+    *,
+    object_pairs_hook: Callable[
+        [list[tuple[str, Any]]], dict[str, Any]
+    ] = _reject_duplicate_admission_keys,
+) -> Any:
     """Strict-parse one analysis input and refuse deleted vocabulary."""
 
     try:
         value = json.loads(
             raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_admission_keys,
+            object_pairs_hook=object_pairs_hook,
             parse_constant=_reject_nonfinite_admission_number,
+            parse_float=_parse_finite_admission_float,
+            parse_int=_parse_finite_admission_int,
         )
     except AnalysisInputError as exc:
         raise AnalysisInputError(f"{label}: {exc}") from exc
@@ -546,15 +588,11 @@ def authenticate_floor_artifact_bytes(
         raise AnalysisInputError(
             "floor artifact bytes sha256 does not match bound file_sha256"
         )
-    try:
-        value = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_floor_artifact_keys,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise AnalysisInputError(
-            f"floor artifact is not valid UTF-8 JSON: {exc}"
-        ) from exc
+    value = _strict_json_admission_bytes(
+        raw,
+        "floor artifact",
+        object_pairs_hook=_reject_duplicate_floor_artifact_keys,
+    )
     if not isinstance(value, Mapping):
         raise AnalysisInputError("floor artifact top level must be an object")
     errors = validate_floor_artifact(value)
@@ -583,21 +621,6 @@ def authenticate_floor_artifact_bytes(
         file_sha256=digest,
         root_ids=root_ids,
     )
-
-
-def _reject_duplicate_floor_artifact_keys(
-    pairs: list[tuple[str, Any]],
-) -> dict[str, Any]:
-    """Build a JSON object while refusing key shadowing at every depth."""
-
-    value: dict[str, Any] = {}
-    for key, child in pairs:
-        if key in value:
-            raise AnalysisInputError(
-                f"floor artifact contains duplicate key {key!r}"
-            )
-        value[key] = child
-    return value
 
 
 def _load_authenticated_floor_artifact(path: Path) -> AuthenticatedFloorArtifact:

@@ -172,6 +172,24 @@ def _reject_nonfinite_admission_number(value: str) -> None:
     raise ValueError(f"non-finite JSON number {value!r}")
 
 
+def _parse_finite_admission_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
+def _parse_finite_admission_int(value: str) -> int:
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
 def _registration_vocabulary_path(value: object, where: str) -> str | None:
     if isinstance(value, Mapping):
         for key, child in value.items():
@@ -197,6 +215,8 @@ def _strict_json_admission_bytes(raw: bytes, label: str) -> Any:
             raw.decode("utf-8"),
             object_pairs_hook=_reject_duplicate_admission_keys,
             parse_constant=_reject_nonfinite_admission_number,
+            parse_float=_parse_finite_admission_float,
+            parse_int=_parse_finite_admission_int,
         )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise AnalysisManifestError(

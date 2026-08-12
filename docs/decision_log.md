@@ -8459,3 +8459,32 @@ same recursive `estimator_registration` vocabulary refusal.  The existing
 floor-artifact byte route retains its round-8 duplicate hook and recursive
 artifact-profile refusal.  Every censused admission parse is therefore strict
 at the parse site or guarded by an executed exact-byte preparse.
+
+### D-124 amendment — 2026-08-11: round-10 overflow and admission-census closure
+
+Round 10 demonstrated that four helpers described as non-finite-refusing in
+round 9 still admitted a syntactically valid overflowing exponent: `1e999`
+became positive infinity through the default `parse_float`.  The generalized
+mint, floor-extraction, analysis-input, and analysis-registry strict helpers
+now use finite-number parse hooks (including an integer projection check) so
+overflowing numeric tokens raise the same typed refusal used for duplicate
+keys.  Floor-artifact byte authentication routes through the analysis-input
+strict helper rather than a separate duplicate-only parser.
+
+The census also corrects the floor-extraction classification: the parser used
+by `_read_summary` did not itself perform the claimed recursive vocabulary
+refusal.  It now rejects `estimator_registration` through objects and arrays,
+so both an overflowing nested summary value and a nested deleted key return
+the fail-closed `summary_unreadable` result while retaining the exact-byte
+digest.
+
+The independently censused authentication-session JSON/JSONL parser now uses
+the same complete strict admission: duplicate keys, literal and overflowed
+non-finite numbers, non-finite integer projections, and recursively nested
+`estimator_registration` keys all refuse before an input is registered.  The
+generalized layer explicitly authorizes only the exact governed extraction-
+spec paths that declaratively own estimator registration; reports, artifacts,
+campaign evidence, and all other JSON/JSONL remain closed.  Executed direct
+session checks and pinned-core calls under that session refused all three
+round-10 attack classes, while the registration-bearing governed 7B spec and
+the legitimate mint paths remained admitted.  No pinned-core byte changed.

@@ -1688,14 +1688,34 @@ def _reject_nonfinite_admission_number(value: str) -> None:
     )
 
 
+def _parse_finite_admission_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
+def _parse_finite_admission_int(value: str) -> int:
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
 def _strict_admission_json_value(raw: bytes, label: str) -> Any:
-    """Parse exact admission bytes without duplicate or non-finite values."""
+    """Strict-parse exact admitted bytes and refuse deleted vocabulary."""
 
     try:
-        return json.loads(
+        value = json.loads(
             raw.decode("utf-8"),
             object_pairs_hook=_reject_duplicate_admission_keys,
             parse_constant=_reject_nonfinite_admission_number,
+            parse_float=_parse_finite_admission_float,
+            parse_int=_parse_finite_admission_int,
         )
     except FloorExtractionError as exc:
         raise FloorExtractionError(f"{label}: {exc}") from exc
@@ -1703,6 +1723,17 @@ def _strict_admission_json_value(raw: bytes, label: str) -> Any:
         raise FloorExtractionError(
             f"{label} is not valid UTF-8 JSON: {exc}"
         ) from exc
+    forbidden_paths = _forbidden_admitted_vocabulary_paths(
+        value,
+        key="estimator_registration",
+        where=label,
+    )
+    if forbidden_paths:
+        raise FloorExtractionError(
+            f"{label}: forbidden key 'estimator_registration' at "
+            f"{forbidden_paths[0]}"
+        )
+    return value
 
 
 def _strict_admission_json_file(path: Path, label: str) -> Any:

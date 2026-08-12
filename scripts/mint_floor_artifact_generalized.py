@@ -1159,6 +1159,24 @@ def _reject_nonfinite_json(value: str) -> None:
     raise MintError(f"pinset contains non-finite JSON number {value!r}")
 
 
+def _parse_finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_json(value)
+    return parsed
+
+
+def _parse_finite_json_int(value: str) -> int:
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_json(value)
+    return parsed
+
+
 def _strict_json_value(raw: bytes, label: str) -> Any:
     """Parse one v2 input without JSON's duplicate/non-finite extensions."""
 
@@ -1167,6 +1185,8 @@ def _strict_json_value(raw: bytes, label: str) -> Any:
             raw.decode("utf-8"),
             object_pairs_hook=_reject_duplicate_keys,
             parse_constant=_reject_nonfinite_json,
+            parse_float=_parse_finite_json_float,
+            parse_int=_parse_finite_json_int,
         )
     except MintError as exc:
         raise MintError(f"{label}: {exc}") from exc
@@ -1195,6 +1215,15 @@ def _pre_admit_legacy_report(path: Path, label: str) -> None:
     errors = validate_admitted_report_vocabulary(value)
     if errors:
         raise MintError(f"{label} refused admitted vocabulary: {errors[0]}")
+
+
+def _allow_governed_extraction_spec(path: Path) -> None:
+    """Authorize the one profile where registration vocabulary is declared."""
+
+    session = active_v2_authentication_session()
+    if session is None:
+        raise MintError("governed extraction spec requires an authentication session")
+    session.allow_governed_extraction_spec(path)
 
 
 def _strict_json_lines_file(path: Path, label: str) -> bytes:
@@ -1322,14 +1351,7 @@ def load_pinset(path: Path, expected_sha256: str) -> MintPinset | V2Pinset:
         raise MintError(
             f"pinset sha256 mismatch: expected {expected}, observed {actual}"
         )
-    try:
-        value = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_nonfinite_json,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise MintError(f"pinset is not valid UTF-8 JSON: {exc}") from exc
+    value = _strict_json_value(raw, "pinset")
     schema_version = value.get("schema_version") if isinstance(value, Mapping) else None
     if schema_version == PIN_REQUIREMENTS_SCHEMA_VERSION_V2:
         raise MintError("desk-stage pin requirements are non-mintable")
@@ -1685,6 +1707,8 @@ def mint_floor_artifact(
     _pre_admit_legacy_report(
         comparative_inputs.report_path, "comparative extraction report"
     )
+    _allow_governed_extraction_spec(absolute_inputs.spec_path)
+    _allow_governed_extraction_spec(comparative_inputs.spec_path)
     core = _configured_core(
         pinset,
         pinset_path=pinset_path,
@@ -3153,14 +3177,7 @@ def _load_v2_input_manifest(path: Path) -> Mapping[str, Any]:
         raise MintError(
             f"v2 input manifest cannot be read: {exc.strerror or type(exc).__name__}"
         ) from exc
-    try:
-        value = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_nonfinite_json,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise MintError(f"v2 input manifest is not valid UTF-8 JSON: {exc}") from exc
+    value = _strict_json_value(raw, "v2 input manifest")
     root = _object(
         value,
         "v2 input manifest",
@@ -3507,6 +3524,7 @@ def _authenticate_v2_inputs(
                     paths.report_path,
                     f"producer {plan_id}.{role}.{component_name} extraction report",
                 )
+                _allow_governed_extraction_spec(paths.spec_path)
                 try:
                     component = core._authenticate_component(
                         core.ComponentPaths(

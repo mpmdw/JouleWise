@@ -30,6 +30,7 @@ from unittest import mock
 from joulewise.analysis_engine.inputs import (
     AnalysisInputError,
     _strict_jsonl_admission_bytes,
+    authenticate_floor_artifact_bytes,
     campaign_cooldown_evidence,
     load_manifest as load_analysis_manifest,
 )
@@ -590,6 +591,11 @@ class D117MintConsumptionProfileTests(
             ("top", b'{"status":"forged","status":"succeeded"}'),
             ("nested", b'{"floor":{"value":1,"value":2}}'),
             ("nonfinite", b'{"floor":NaN}'),
+            ("overflow", b'{"floor":{"value":1e999}}'),
+            (
+                "registration",
+                b'{"nested":[{"estimator_registration":{}}]}',
+            ),
         ):
             with self.subTest(label=label), self.assertRaises(
                 FloorExtractionError
@@ -601,6 +607,32 @@ class D117MintConsumptionProfileTests(
             bundle = Path(tmp) / "bundle"
             bundle.mkdir()
             raw = b'{"gross_energy_j":999,"gross_energy_j":1}\n'
+            (bundle / "summary_metrics.json").write_bytes(raw)
+
+            value, digest, refusal = _read_summary(bundle)
+
+        self.assertIsNone(value)
+        self.assertEqual(digest, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(refusal, "summary_unreadable")
+
+    def test_overflowed_summary_number_fails_closed_as_unreadable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            bundle.mkdir()
+            raw = b'{"phase_energy_j":{"decode":1e999}}\n'
+            (bundle / "summary_metrics.json").write_bytes(raw)
+
+            value, digest, refusal = _read_summary(bundle)
+
+        self.assertIsNone(value)
+        self.assertEqual(digest, hashlib.sha256(raw).hexdigest())
+        self.assertEqual(refusal, "summary_unreadable")
+
+    def test_nested_registration_summary_fails_closed_as_unreadable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            bundle.mkdir()
+            raw = b'{"nested":[{"estimator_registration":{}}]}\n'
             (bundle / "summary_metrics.json").write_bytes(raw)
 
             value, digest, refusal = _read_summary(bundle)
@@ -625,6 +657,11 @@ class AnalysisAdmissionStrictParsingTests(unittest.TestCase):
                 b'{"nested":[{"estimator_registration":{}}]}\n',
                 "forbidden key 'estimator_registration'",
             ),
+            (
+                "overflow",
+                b'{"nested":{"value":1e999}}\n',
+                "non-finite JSON number '1e999'",
+            ),
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "analysis-manifest.json"
@@ -644,6 +681,11 @@ class AnalysisAdmissionStrictParsingTests(unittest.TestCase):
                 b'{"rows":[{"estimator_registration":{}}]}\n',
                 "forbidden key 'estimator_registration'",
             ),
+            (
+                "overflow",
+                b'{"rows":[{"value":1e999}]}\n',
+                "non-finite JSON number '1e999'",
+            ),
         ):
             with self.subTest(label=label), self.assertRaisesRegex(
                 AnalysisInputError, message
@@ -660,6 +702,11 @@ class AnalysisAdmissionStrictParsingTests(unittest.TestCase):
                 b'{"nested":{"estimator_registration":{}}}\n',
                 "forbidden key 'estimator_registration'",
             ),
+            (
+                "overflow",
+                b'{"nested":{"value":1e999}}\n',
+                "non-finite JSON number '1e999'",
+            ),
         )
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -673,6 +720,17 @@ class AnalysisAdmissionStrictParsingTests(unittest.TestCase):
                         load_and_validate_analysis_manifest_v2(
                             manifest_path, registry_path
                         )
+
+    def test_nested_overflow_in_floor_artifact_bytes_is_refused_prevalidation(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            AnalysisInputError,
+            "non-finite JSON number '1e999'",
+        ):
+            authenticate_floor_artifact_bytes(
+                b'{"nested":{"artifact_number":1e999}}'
+            )
 
 
 class RealCapHitJoinTests(unittest.TestCase):

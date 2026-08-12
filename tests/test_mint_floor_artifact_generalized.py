@@ -23,7 +23,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 from joulewise import detection_floor
-from joulewise.authentication_io import V2AuthenticationReadSession
+from joulewise.authentication_io import (
+    V2AuthenticationInputError,
+    V2AuthenticationReadSession,
+)
 from joulewise.analysis_engine.registry import (
     normalized_json_bytes,
     render_dispatch_receipt,
@@ -4908,6 +4911,75 @@ class PinsetTests(unittest.TestCase):
 
 
 class V2PinsetAndMintTests(unittest.TestCase):
+    def test_authentication_session_report_parser_refuses_strict_attacks(
+        self,
+    ) -> None:
+        attacks = (
+            ("duplicate", b'{"nested":{"x":1,"x":2}}', "duplicate JSON key"),
+            (
+                "overflow",
+                b'{"nested":{"x":1e999}}',
+                "non-finite JSON number '1e999'",
+            ),
+            (
+                "nested-reserved",
+                b'{"nested":[{"estimator_registration":{}}]}',
+                "forbidden key 'estimator_registration'",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for label, raw, message in attacks:
+                with self.subTest(label=label):
+                    path = root / f"report-{label}.json"
+                    path.write_bytes(raw)
+                    with V2AuthenticationReadSession() as session:
+                        with self.assertRaisesRegex(
+                            V2AuthenticationInputError, message
+                        ):
+                            session.read(
+                                path,
+                                grammar="json",
+                                label="extraction report",
+                            )
+                        self.assertEqual(dict(session.records), {})
+
+    def test_authentication_session_allows_only_named_governed_spec_vocabulary(
+        self,
+    ) -> None:
+        spec_path = (
+            REPO_ROOT
+            / "configs"
+            / "floor_mint"
+            / "d117_qwen25_7b_extraction_spec.json"
+        )
+        spec_raw = spec_path.read_bytes()
+        self.assertIn(b'"estimator_registration"', spec_raw)
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "extraction-report.json"
+            report_path.write_bytes(
+                b'{"nested":{"estimator_registration":{}}}'
+            )
+            with V2AuthenticationReadSession() as session:
+                session.allow_governed_extraction_spec(spec_path)
+                self.assertEqual(
+                    session.read(
+                        spec_path,
+                        grammar="json",
+                        label="governed extraction spec",
+                    ),
+                    spec_raw,
+                )
+                with self.assertRaisesRegex(
+                    V2AuthenticationInputError,
+                    "forbidden key 'estimator_registration'",
+                ):
+                    session.read(
+                        report_path,
+                        grammar="json",
+                        label="extraction report",
+                    )
+
     def test_legacy_report_loader_is_preceded_by_strict_byte_admission(
         self,
     ) -> None:
@@ -4916,15 +4988,28 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 '"governance": {',
                 '"governance":{"estimator_registration":{"forged":true}},'
                 '"governance": {',
+                "duplicate JSON key",
             ),
             "shadowed-member-operative-anchor-envelope": (
                 '"operative_anchor_envelope": null',
                 '"operative_anchor_envelope":'
                 '{"estimator_registration":{"forged":true}},'
                 '"operative_anchor_envelope": null',
+                "duplicate JSON key",
+            ),
+            "overflowed-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":{"nested":1e999}',
+                "non-finite JSON number '1e999'",
+            ),
+            "nested-reserved-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":{"nested":'
+                '{"estimator_registration":{}}}',
+                "forbidden key 'estimator_registration'",
             ),
         }
-        for label, (needle, replacement) in attacks.items():
+        for label, (needle, replacement, message) in attacks.items():
             with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 pinset_path, pinset_sha256, manifest_path, load_test_core = (
@@ -4990,7 +5075,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
                         ]
                     )
                 self.assertEqual(exit_code, 2)
-                self.assertIn("duplicate JSON key", stderr.getvalue())
+                self.assertIn(message, stderr.getvalue())
                 self.assertEqual(authenticate_calls, 0)
                 self.assertFalse((root / "floor.json").exists())
 
@@ -5462,6 +5547,11 @@ class V2PinsetAndMintTests(unittest.TestCase):
         for label, raw, message in (
             ("duplicate", b'{"x": 1, "x": 2}', "duplicate JSON key"),
             ("nonfinite", b'{"x": NaN}', "non-finite JSON number"),
+            (
+                "overflow",
+                b'{"nested": {"x": 1e999}}',
+                "non-finite JSON number '1e999'",
+            ),
         ):
             with self.subTest(label=label):
                 with self.assertRaisesRegex(generalized.MintError, message):
