@@ -295,6 +295,25 @@ interpreter mid-correction; a host census must come back empty via the
 supervisor/parent-death watchdog (durable identity-checked registrations,
 bounded SIGTERM->SIGKILL).
 
+## WO-CRASHMATRIX-RELIABILITY (registered 2026-08-12, T5; evidence-driven)
+
+tests/test_calibration_writer_crash_matrix is hosted-runner-pathological:
+bench standalone 145.911 s, hosted shard observation 5,317.216 s (run
+31536564643), a standalone hosted attempt exceeded a 60-minute job ceiling,
+and a loaded-bench refuter run hit three internal 600-second per-case
+ceilings (test_ambient_writer_crash_stage_is_inert_without_capability,
+test_every_exact_stage_pre_and_post_sigkill_reaches_fresh_governed_exit,
+test_torn_and_fsynced_append_boundaries_resume_from_fresh_processes;
+1,848.071 s module total, FAILED errors=3). Same CPU-amplifying-fixture
+class WO-CALEXITS-RELIABILITY fixed for test_calibration_exits — the
+remedy shape is the same lineage: replace CPU-amplifying fake fixtures and
+timing-dependent waits with event-driven synchronization; never identity
+machinery. Interim: PR #135 gives the module an exclusive CI job (120-min
+ceiling) so ordinary shards return fast signal; that PR does NOT shorten
+the module itself. Closure: the module completes under 15 minutes on a
+hosted runner with no internal per-case timeout, and the exclusive-job
+ceiling tightens accordingly. Not on the paper critical path.
+
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
 - **SOL-FAST-TIER (updated 2026-08-09, Ed — supersedes the 2026-08-08 fast
