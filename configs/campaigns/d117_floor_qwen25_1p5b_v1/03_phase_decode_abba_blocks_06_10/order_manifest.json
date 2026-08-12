@@ -3,7 +3,7 @@
   "draft_status": "unfrozen_draft",
   "manifest_id": "d117-floor-qwen25-1p5b-v1-03-phase-decode-abba-blocks-06-10-order-v1",
   "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
-  "calibration_plan_sha256": "56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182",
+  "calibration_plan_sha256": "7fe65f3192e721289bafb1353354af282f54e1039233e7cf68a7efbf7b419dc7",
   "ordering_note": "Fixed contiguous null A/B/B/A decode blocks 6-10.",
   "planned_n_bundles": 20,
   "executed_order": [
