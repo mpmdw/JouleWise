@@ -1,14 +1,13 @@
-# Site observatory — a SEPARATE failure domain from project ci (Ed
-# directive 2026-08-03, D-101 addendum II). The site relies on this
-# project but never gates it: this workflow owns ALL site-lane tests and
-# the publication chain, and its failures are site facts, never project
-# CI failures. Project ci contains zero site machinery.
+# Site observatory — RETIRED from all automatic processes (Ed directive
+# 2026-08-12, D-136; extends D-101 addendum II and D-135). The site lane
+# consumed session tokens chasing capsule-size failures for a repetitive
+# status doc; it now runs ONLY on manual dispatch, never on push or
+# pull_request, and its results never gate anything or prompt any
+# session work. Project ci contains zero site machinery.
 name: site
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   site-chain:

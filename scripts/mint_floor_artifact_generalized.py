@@ -49,6 +49,7 @@ from joulewise.calibration_bracketing import (  # noqa: E402
     validate_calibration_bracket_binding,
 )
 from joulewise.floor_extraction import (  # noqa: E402
+    validate_admitted_report_vocabulary,
     validate_d117_mint_consumption_report,
 )
 from joulewise.identity_pins import derive_model_runtime_config  # noqa: E402
@@ -1159,6 +1160,24 @@ def _reject_nonfinite_json(value: str) -> None:
     raise MintError(f"pinset contains non-finite JSON number {value!r}")
 
 
+def _parse_finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_json(value)
+    return parsed
+
+
+def _parse_finite_json_int(value: str) -> int:
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_json(value)
+    return parsed
+
+
 def _strict_json_value(raw: bytes, label: str) -> Any:
     """Parse one v2 input without JSON's duplicate/non-finite extensions."""
 
@@ -1167,6 +1186,8 @@ def _strict_json_value(raw: bytes, label: str) -> Any:
             raw.decode("utf-8"),
             object_pairs_hook=_reject_duplicate_keys,
             parse_constant=_reject_nonfinite_json,
+            parse_float=_parse_finite_json_float,
+            parse_int=_parse_finite_json_int,
         )
     except MintError as exc:
         raise MintError(f"{label}: {exc}") from exc
@@ -1184,6 +1205,26 @@ def _strict_json_file(path: Path, label: str) -> tuple[Any, bytes]:
             f"{label} cannot be read: {exc.strerror or type(exc).__name__}"
         ) from exc
     return _strict_json_value(raw, label), raw
+
+
+def _pre_admit_legacy_report(path: Path, label: str) -> None:
+    """Guard exact report bytes before the pinned core's permissive loader."""
+
+    value, _raw = _strict_json_file(path, label)
+    if not isinstance(value, Mapping):
+        raise MintError(f"{label} must contain a JSON object")
+    errors = validate_admitted_report_vocabulary(value)
+    if errors:
+        raise MintError(f"{label} refused admitted vocabulary: {errors[0]}")
+
+
+def _allow_governed_extraction_spec(path: Path) -> None:
+    """Authorize the one profile where registration vocabulary is declared."""
+
+    session = active_v2_authentication_session()
+    if session is None:
+        raise MintError("governed extraction spec requires an authentication session")
+    session.allow_governed_extraction_spec(path)
 
 
 def _strict_json_lines_file(path: Path, label: str) -> bytes:
@@ -1311,14 +1352,7 @@ def load_pinset(path: Path, expected_sha256: str) -> MintPinset | V2Pinset:
         raise MintError(
             f"pinset sha256 mismatch: expected {expected}, observed {actual}"
         )
-    try:
-        value = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_nonfinite_json,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise MintError(f"pinset is not valid UTF-8 JSON: {exc}") from exc
+    value = _strict_json_value(raw, "pinset")
     schema_version = value.get("schema_version") if isinstance(value, Mapping) else None
     if schema_version == PIN_REQUIREMENTS_SCHEMA_VERSION_V2:
         raise MintError("desk-stage pin requirements are non-mintable")
@@ -1646,7 +1680,36 @@ def mint_floor_artifact(
 ) -> Mapping[str, Any]:
     """Authenticate, gate, construct, bind, validate, and write one artifact."""
 
+    if active_v2_authentication_session() is None:
+        try:
+            with V2AuthenticationReadSession():
+                return mint_floor_artifact(
+                    pinset_path=pinset_path,
+                    pinset_sha256=pinset_sha256,
+                    artifact_id=artifact_id,
+                    floor_path=floor_path,
+                    statement_path=statement_path,
+                    calibration_plan_path=calibration_plan_path,
+                    calibration_plan_relative_path=calibration_plan_relative_path,
+                    absolute_inputs=absolute_inputs,
+                    comparative_inputs=comparative_inputs,
+                    project_commit=project_commit,
+                    project_tree_state=project_tree_state,
+                    strict_validator=strict_validator,
+                    consumption_semantics_id=consumption_semantics_id,
+                )
+        except V2AuthenticationInputError as exc:
+            raise MintError(str(exc)) from exc
+
     pinset = _load_v1_pinset(pinset_path, pinset_sha256)
+    _pre_admit_legacy_report(
+        absolute_inputs.report_path, "absolute extraction report"
+    )
+    _pre_admit_legacy_report(
+        comparative_inputs.report_path, "comparative extraction report"
+    )
+    _allow_governed_extraction_spec(absolute_inputs.spec_path)
+    _allow_governed_extraction_spec(comparative_inputs.spec_path)
     core = _configured_core(
         pinset,
         pinset_path=pinset_path,
@@ -3124,14 +3187,7 @@ def _load_v2_input_manifest(path: Path) -> Mapping[str, Any]:
         raise MintError(
             f"v2 input manifest cannot be read: {exc.strerror or type(exc).__name__}"
         ) from exc
-    try:
-        value = json.loads(
-            raw.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_nonfinite_json,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise MintError(f"v2 input manifest is not valid UTF-8 JSON: {exc}") from exc
+    value = _strict_json_value(raw, "v2 input manifest")
     root = _object(
         value,
         "v2 input manifest",
@@ -3213,6 +3269,22 @@ def _authenticate_v2_inputs(
     Mapping[str, Path],
     Any,
 ]:
+    if active_v2_authentication_session() is None:
+        try:
+            with V2AuthenticationReadSession():
+                return _authenticate_v2_inputs(
+                    pinset=pinset,
+                    pinset_path=pinset_path,
+                    pinset_sha256=pinset_sha256,
+                    input_manifest_path=input_manifest_path,
+                    strict_validator=strict_validator,
+                    consumption_semantics_id=consumption_semantics_id,
+                    input_manifest=input_manifest,
+                    calibration_custody_store=calibration_custody_store,
+                )
+        except V2AuthenticationInputError as exc:
+            raise MintError(str(exc)) from exc
+
     manifest = (
         input_manifest
         if input_manifest is not None
@@ -3458,6 +3530,11 @@ def _authenticate_v2_inputs(
             ):
                 paths = component_paths[(role, component_name)]
                 root_id = cell_pins[component_name]["evidence_root_id"]
+                _pre_admit_legacy_report(
+                    paths.report_path,
+                    f"producer {plan_id}.{role}.{component_name} extraction report",
+                )
+                _allow_governed_extraction_spec(paths.spec_path)
                 try:
                     component = core._authenticate_component(
                         core.ComponentPaths(

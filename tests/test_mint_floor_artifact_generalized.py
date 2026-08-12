@@ -23,7 +23,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 from joulewise import detection_floor
-from joulewise.authentication_io import V2AuthenticationReadSession
+from joulewise.authentication_io import (
+    V2AuthenticationInputError,
+    V2AuthenticationReadSession,
+)
 from joulewise.analysis_engine.registry import (
     normalized_json_bytes,
     render_dispatch_receipt,
@@ -2694,6 +2697,60 @@ D117_PRODUCTION_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "d117_v2_production
 D117_PRODUCTION_CALIBRATION_CONTENT_ID = (
     "029a412be038ce88428ff1e8d302d90f2020e5cb0179ef4a750613fffc51f8ee"
 )
+D117_PRODUCTION_PROOF_CORE_LEGS = (
+    "core-authentic-success",
+    "core-bidirectional-equality-audit",
+)
+D117_PRODUCTION_PROOF_ATTACK_LEGS = (
+    "coordinated-step8",
+    "coordinated-step9",
+    "coordinated-step10",
+    "coordinated-step10-floor",
+    "coordinated-allowance",
+    "domain-acceptance",
+    "domain-ledger",
+    "domain-head",
+    "domain-binding",
+    "domain-verdict",
+    "domain-campaign",
+    "domain-analysis_manifest",
+    "domain-attempt_ledger",
+    "domain-attempt_receipt",
+    "domain-attempt_strict",
+    "domain-attempt_selected_metadata",
+    "domain-attempt_unselected_metadata",
+    "domain-primary",
+    "domain-report",
+    "domain-custody",
+)
+D117_PRODUCTION_PROOF_LEGS = (
+    *D117_PRODUCTION_PROOF_CORE_LEGS,
+    *D117_PRODUCTION_PROOF_ATTACK_LEGS,
+)
+# Each hosted partition deliberately contains one decisive leg.  Paying the
+# shared fixture-build cost per leg is expensive, but it gives every runner a
+# documented sub-cap estimate and makes a dropped leg mechanically visible to
+# the certification test below.
+D117_PRODUCTION_PROOF_PARTITIONS = {
+    leg: (leg,) for leg in D117_PRODUCTION_PROOF_LEGS
+}
+D117_PRODUCTION_PROOF_HOSTED_ESTIMATE_MINUTES = 235
+
+
+def d117_production_proof_matrix() -> dict[str, list[dict[str, object]]]:
+    """Return the Actions matrix directly from the proof registry."""
+
+    return {
+        "include": [
+            {
+                "partition": partition,
+                "estimated_minutes": (
+                    D117_PRODUCTION_PROOF_HOSTED_ESTIMATE_MINUTES
+                ),
+            }
+            for partition in D117_PRODUCTION_PROOF_PARTITIONS
+        ]
+    }
 
 
 def _d117_production_custody_store() -> Path:
@@ -4908,6 +4965,377 @@ class PinsetTests(unittest.TestCase):
 
 
 class V2PinsetAndMintTests(unittest.TestCase):
+    def test_authentication_session_report_parser_refuses_strict_attacks(
+        self,
+    ) -> None:
+        attacks = (
+            ("duplicate", b'{"nested":{"x":1,"x":2}}', "duplicate JSON key"),
+            (
+                "overflow",
+                b'{"nested":{"x":1e999}}',
+                "non-finite JSON number '1e999'",
+            ),
+            (
+                "nested-reserved",
+                b'{"nested":[{"estimator_registration":{}}]}',
+                "forbidden key 'estimator_registration'",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for label, raw, message in attacks:
+                with self.subTest(label=label):
+                    path = root / f"report-{label}.json"
+                    path.write_bytes(raw)
+                    with V2AuthenticationReadSession() as session:
+                        with self.assertRaisesRegex(
+                            V2AuthenticationInputError, message
+                        ):
+                            session.read(
+                                path,
+                                grammar="json",
+                                label="extraction report",
+                            )
+                        self.assertEqual(dict(session.records), {})
+
+    def test_authentication_session_allows_only_named_governed_spec_vocabulary(
+        self,
+    ) -> None:
+        # Post-D-133 the shipped spec carries no estimator_registration;
+        # a synthetic governed spec keeps the vocabulary exemption
+        # exercised against a file that actually contains the key.
+        shipped_spec = json.loads(
+            (
+                REPO_ROOT
+                / "configs"
+                / "floor_mint"
+                / "d117_qwen25_7b_extraction_spec.json"
+            ).read_text(encoding="utf-8")
+        )
+        comparative = next(
+            cell
+            for cell in shipped_spec["cells"]
+            if cell["kind"] == "comparative"
+        )
+        comparative["estimator_registration"] = {
+            "estimator_id": "d124_two_shared_edge_common_mode.v1",
+            "status": "candidate_pending_floor_commonmode_01",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            spec_path = Path(tmp) / "governed-extraction-spec.json"
+            spec_raw = json.dumps(shipped_spec, indent=2).encode("utf-8")
+            spec_path.write_bytes(spec_raw)
+            self.assertIn(b'"estimator_registration"', spec_raw)
+            report_path = Path(tmp) / "extraction-report.json"
+            report_path.write_bytes(
+                b'{"nested":{"estimator_registration":{}}}'
+            )
+            with V2AuthenticationReadSession() as session:
+                session.allow_governed_extraction_spec(spec_path)
+                self.assertEqual(
+                    session.read(
+                        spec_path,
+                        grammar="json",
+                        label="governed extraction spec",
+                    ),
+                    spec_raw,
+                )
+                with self.assertRaisesRegex(
+                    V2AuthenticationInputError,
+                    "forbidden key 'estimator_registration'",
+                ):
+                    session.read(
+                        report_path,
+                        grammar="json",
+                        label="extraction report",
+                    )
+
+    def test_legacy_report_loader_is_preceded_by_strict_byte_admission(
+        self,
+    ) -> None:
+        attacks = {
+            "shadowed-governance": (
+                '"governance": {',
+                '"governance":{"estimator_registration":{"forged":true}},'
+                '"governance": {',
+                "duplicate JSON key",
+            ),
+            "shadowed-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":'
+                '{"estimator_registration":{"forged":true}},'
+                '"operative_anchor_envelope": null',
+                "duplicate JSON key",
+            ),
+            "overflowed-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":{"nested":1e999}',
+                "non-finite JSON number '1e999'",
+            ),
+            "nested-reserved-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":{"nested":'
+                '{"estimator_registration":{}}}',
+                "forbidden key 'estimator_registration'",
+            ),
+        }
+        for label, (needle, replacement, message) in attacks.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                    install_v2_cli_fixture(root)
+                )
+                manifest = load_json(manifest_path)
+                report_path = Path(
+                    manifest["producer_plans"][0]["cells"][0]["absolute"][
+                        "report"
+                    ]
+                )
+                source = report_path.read_text(encoding="utf-8")
+                self.assertIn(needle, source)
+                report_path.write_text(
+                    source.replace(needle, replacement, 1),
+                    encoding="utf-8",
+                )
+                authenticate_calls = 0
+
+                def counting_core():
+                    nonlocal authenticate_calls
+                    core = load_test_core()
+                    authenticate = core._authenticate_component
+
+                    def counted(*args, **kwargs):
+                        nonlocal authenticate_calls
+                        authenticate_calls += 1
+                        return authenticate(*args, **kwargs)
+
+                    core._authenticate_component = counted
+                    return core
+
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(
+                        generalized,
+                        "_actual_v2_git_state",
+                        return_value=("0" * 40, True),
+                    ),
+                    mock.patch.object(
+                        generalized,
+                        "_fresh_original_core",
+                        side_effect=counting_core,
+                    ),
+                    mock.patch("sys.stderr", stderr),
+                ):
+                    exit_code = generalized.main(
+                        [
+                            "--pinset",
+                            str(pinset_path),
+                            "--pinset-sha256",
+                            pinset_sha256,
+                            "--v2-input-manifest",
+                            str(manifest_path),
+                            "--out",
+                            str(root / "floor.json"),
+                            "--single-count-out",
+                            str(root / "single-count.txt"),
+                            "--project-commit",
+                            "0" * 40,
+                            "--project-tree-state",
+                            "clean",
+                        ]
+                    )
+                self.assertEqual(exit_code, 2)
+                self.assertIn(message, stderr.getvalue())
+                self.assertEqual(authenticate_calls, 0)
+                self.assertFalse((root / "floor.json").exists())
+
+    def test_legitimate_report_reaches_legacy_authentication_after_preparse(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                install_v2_cli_fixture(root)
+            )
+            calls = 0
+
+            def counting_core():
+                nonlocal calls
+                core = load_test_core()
+                authenticate = core._authenticate_component
+
+                def counted(*args, **kwargs):
+                    nonlocal calls
+                    calls += 1
+                    return authenticate(*args, **kwargs)
+
+                core._authenticate_component = counted
+                return core
+
+            def validate_binding(binding, snapshot, **_kwargs):
+                return tuple(
+                    next(
+                        observation
+                        for observation in snapshot.observations
+                        if observation.receipt_digest
+                        == binding["endpoints"][role]["receipt_digest"]
+                    )
+                    for role in ("pre", "post")
+                )
+
+            with (
+                mock.patch.object(
+                    generalized,
+                    "_actual_v2_git_state",
+                    return_value=("0" * 40, True),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_head_pin_commit_containment_in_origin_main",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "validate_calibration_bracket_binding",
+                    side_effect=validate_binding,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_fresh_original_core",
+                    side_effect=counting_core,
+                ),
+            ):
+                exit_code = generalized.main(
+                    [
+                        "--pinset",
+                        str(pinset_path),
+                        "--pinset-sha256",
+                        pinset_sha256,
+                        "--v2-input-manifest",
+                        str(manifest_path),
+                        "--out",
+                        str(root / "floor.json"),
+                        "--single-count-out",
+                        str(root / "single-count.txt"),
+                        "--project-commit",
+                        "0" * 40,
+                        "--project-tree-state",
+                        "clean",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(calls, 8)
+            self.assertTrue((root / "floor.json").is_file())
+
+    def test_d117_production_proof_registry_partition_is_exhaustive_and_disjoint(
+        self,
+    ) -> None:
+        flattened = tuple(
+            leg
+            for partition in D117_PRODUCTION_PROOF_PARTITIONS.values()
+            for leg in partition
+        )
+        self.assertTupleEqual(
+            tuple(D117_PRODUCTION_PROOF_PARTITIONS),
+            D117_PRODUCTION_PROOF_LEGS,
+        )
+        for partition_name, partition in (
+            D117_PRODUCTION_PROOF_PARTITIONS.items()
+        ):
+            self.assertTupleEqual(partition, (partition_name,))
+        self.assertTupleEqual(flattened, D117_PRODUCTION_PROOF_LEGS)
+        self.assertEqual(len(flattened), len(set(flattened)))
+        # The expected core set is pinned LITERALLY here, never derived from
+        # the registry, so a deleted or phantom core leg fails certification
+        # (refuter F1: a self-referential certificate certifies any registry).
+        self.assertTupleEqual(
+            D117_PRODUCTION_PROOF_CORE_LEGS,
+            ("core-authentic-success", "core-bidirectional-equality-audit"),
+        )
+        for core_leg in D117_PRODUCTION_PROOF_CORE_LEGS:
+            self.assertEqual(flattened.count(core_leg), 1)
+        self.assertEqual(
+            set(D117_PRODUCTION_PROOF_ATTACK_LEGS),
+            {
+                "coordinated-step8",
+                "coordinated-step9",
+                "coordinated-step10",
+                "coordinated-step10-floor",
+                "coordinated-allowance",
+                "domain-acceptance",
+                "domain-ledger",
+                "domain-head",
+                "domain-binding",
+                "domain-verdict",
+                "domain-campaign",
+                "domain-analysis_manifest",
+                "domain-attempt_ledger",
+                "domain-attempt_receipt",
+                "domain-attempt_strict",
+                "domain-attempt_selected_metadata",
+                "domain-attempt_unselected_metadata",
+                "domain-primary",
+                "domain-report",
+                "domain-custody",
+            },
+        )
+        self.assertEqual(
+            d117_production_proof_matrix(),
+            {
+                "include": [
+                    {
+                        "partition": leg,
+                        "estimated_minutes": 235,
+                    }
+                    for leg in D117_PRODUCTION_PROOF_LEGS
+                ]
+            },
+        )
+        self.assertLessEqual(
+            D117_PRODUCTION_PROOF_HOSTED_ESTIMATE_MINUTES,
+            240,
+        )
+        for partition_name, expected_legs in (
+            D117_PRODUCTION_PROOF_PARTITIONS.items()
+        ):
+            selected: list[tuple[str, ...]] = []
+
+            def capture_selection() -> None:
+                selected.append(self._d117_selected_proof_legs)
+
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {"JOULEWISE_D117_PROOF_PARTITION": partition_name},
+                ),
+                mock.patch.object(
+                    self,
+                    "test_coordinated_report_and_pin_change_refuses_against_floor_evidence",
+                    side_effect=capture_selection,
+                ),
+            ):
+                self.test_d117_production_proof_split_partition()
+            self.assertEqual(selected, [expected_legs])
+            self.assertFalse(hasattr(self, "_d117_selected_proof_legs"))
+
+    def test_d117_production_proof_split_partition(self) -> None:
+        partition = os.environ.get("JOULEWISE_D117_PROOF_PARTITION")
+        if partition not in D117_PRODUCTION_PROOF_PARTITIONS:
+            message = (
+                "split production proof requires a registered "
+                "JOULEWISE_D117_PROOF_PARTITION"
+            )
+            if os.environ.get("JOULEWISE_REQUIRE_D117_FULL_FIXTURE") == "1":
+                self.fail(message)
+            self.skipTest(message)
+        self._d117_selected_proof_legs = (
+            D117_PRODUCTION_PROOF_PARTITIONS[partition]
+        )
+        try:
+            self.test_coordinated_report_and_pin_change_refuses_against_floor_evidence()
+        finally:
+            del self._d117_selected_proof_legs
+
     def test_configured_core_rederives_the_pinned_phase_metric(self) -> None:
         summary = {
             "phase_energy_j": {"decode": 2.0, "prefill": 3.0},
@@ -5308,6 +5736,11 @@ class V2PinsetAndMintTests(unittest.TestCase):
         for label, raw, message in (
             ("duplicate", b'{"x": 1, "x": 2}', "duplicate JSON key"),
             ("nonfinite", b'{"x": NaN}', "non-finite JSON number"),
+            (
+                "overflow",
+                b'{"nested": {"x": 1e999}}',
+                "non-finite JSON number '1e999'",
+            ),
         ):
             with self.subTest(label=label):
                 with self.assertRaisesRegex(generalized.MintError, message):
@@ -5533,6 +5966,20 @@ class V2PinsetAndMintTests(unittest.TestCase):
     def test_coordinated_report_and_pin_change_refuses_against_floor_evidence(
         self,
     ) -> None:
+        selected_legs = tuple(
+            getattr(
+                self,
+                "_d117_selected_proof_legs",
+                D117_PRODUCTION_PROOF_LEGS,
+            )
+        )
+        unknown_legs = set(selected_legs) - set(D117_PRODUCTION_PROOF_LEGS)
+        if unknown_legs:
+            self.fail(f"unknown D117 production-proof legs: {sorted(unknown_legs)}")
+        if not selected_legs:
+            self.fail("D117 production proof selected no legs")
+        proof_started = time.perf_counter()
+        executed_legs: list[str] = []
         custody_store = _d117_production_custody_store()
         required_member = (
             custody_store
@@ -5546,7 +5993,13 @@ class V2PinsetAndMintTests(unittest.TestCase):
             self.skipTest(message)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            build_started = time.perf_counter()
             fixture = build_d117_production_fixture(root)
+            print(
+                "D117_PROOF_TIMING "
+                f"stage=fixture-build seconds={time.perf_counter() - build_started:.3f}",
+                flush=True,
+            )
             source_pinset = load_json(fixture.pinset_path)
             input_manifest = load_json(fixture.input_manifest_path)
             report_path = fixture.report_path
@@ -5601,6 +6054,13 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 input_manifest_path: Path | None = None,
                 project_commit: str | None = None,
             ) -> str:
+                if label not in D117_PRODUCTION_PROOF_ATTACK_LEGS:
+                    raise AssertionError(
+                        f"unregistered D117 production-proof attack leg: {label}"
+                    )
+                if label not in selected_legs:
+                    return ""
+                leg_started = time.perf_counter()
                 command, floor, statement = cli_command(
                     label,
                     pinset_path,
@@ -5614,20 +6074,37 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 self.assertIn(message, result.stderr)
                 self.assertFalse(floor.exists())
                 self.assertFalse(statement.exists())
+                executed_legs.append(label)
+                print(
+                    "D117_PROOF_TIMING "
+                    f"stage={label} seconds={time.perf_counter() - leg_started:.3f}",
+                    flush=True,
+                )
                 return result.stderr
 
-            authentic_command, authentic_floor, authentic_statement = (
-                cli_command("authentic")
-            )
-            _run_fixture_command(authentic_command, cwd=fixture.repository)
-            self.assertEqual(len(load_json(authentic_floor)["cells"]), 4)
-            self.assertTrue(authentic_statement.is_file())
-            self.assertEqual(
-                _run_fixture_command(
-                    ["git", "status", "--porcelain"], cwd=fixture.repository
-                ).stdout,
-                "",
-            )
+            authentic_leg = D117_PRODUCTION_PROOF_CORE_LEGS[0]
+            if authentic_leg in selected_legs:
+                authentic_started = time.perf_counter()
+                authentic_command, authentic_floor, authentic_statement = (
+                    cli_command("authentic")
+                )
+                _run_fixture_command(authentic_command, cwd=fixture.repository)
+                self.assertEqual(len(load_json(authentic_floor)["cells"]), 4)
+                self.assertTrue(authentic_statement.is_file())
+                self.assertEqual(
+                    _run_fixture_command(
+                        ["git", "status", "--porcelain"],
+                        cwd=fixture.repository,
+                    ).stdout,
+                    "",
+                )
+                executed_legs.append(authentic_leg)
+                print(
+                    "D117_PROOF_TIMING "
+                    f"stage={authentic_leg} "
+                    f"seconds={time.perf_counter() - authentic_started:.3f}",
+                    flush=True,
+                )
 
             audit_floor = fixture.inputs_root / "audit-floor.json"
             audit_statement = fixture.inputs_root / "audit-single-count.txt"
@@ -5703,33 +6180,43 @@ registered = {
 }
 print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(registered)}))
 '''
-            audit_result = _run_fixture_command(
-                [
-                    sys.executable,
-                    "-c",
-                    audit_code,
-                    str(fixture.repository),
-                    str(fixture.evidence_root),
-                    str(fixture.second_evidence_root),
-                    str(fixture.custody_store),
-                    str(fixture.inputs_root),
-                    str(fixture.pinset_path),
-                    fixture.pinset_sha256,
-                    str(fixture.input_manifest_path),
-                    str(fixture.custody_store),
-                    str(audit_floor),
-                    str(audit_statement),
-                    fixture.project_commit,
-                ],
-                cwd=fixture.repository,
-            )
-            audit_line = next(
-                line
-                for line in audit_result.stdout.splitlines()
-                if line.startswith("AUDIT=")
-            )
-            audit = json.loads(audit_line.removeprefix("AUDIT="))
-            self.assertEqual(audit["observed"], audit["registered"])
+            equality_audit_leg = D117_PRODUCTION_PROOF_CORE_LEGS[1]
+            if equality_audit_leg in selected_legs:
+                audit_started = time.perf_counter()
+                audit_result = _run_fixture_command(
+                    [
+                        sys.executable,
+                        "-c",
+                        audit_code,
+                        str(fixture.repository),
+                        str(fixture.evidence_root),
+                        str(fixture.second_evidence_root),
+                        str(fixture.custody_store),
+                        str(fixture.inputs_root),
+                        str(fixture.pinset_path),
+                        fixture.pinset_sha256,
+                        str(fixture.input_manifest_path),
+                        str(fixture.custody_store),
+                        str(audit_floor),
+                        str(audit_statement),
+                        fixture.project_commit,
+                    ],
+                    cwd=fixture.repository,
+                )
+                audit_line = next(
+                    line
+                    for line in audit_result.stdout.splitlines()
+                    if line.startswith("AUDIT=")
+                )
+                audit = json.loads(audit_line.removeprefix("AUDIT="))
+                self.assertEqual(audit["observed"], audit["registered"])
+                executed_legs.append(equality_audit_leg)
+                print(
+                    "D117_PROOF_TIMING "
+                    f"stage={equality_audit_leg} "
+                    f"seconds={time.perf_counter() - audit_started:.3f}",
+                    flush=True,
+                )
 
             genuine_paths = [
                 fixture.acceptance_path,
@@ -6143,6 +6630,17 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                     cwd=fixture.repository,
                 ).stdout,
                 "",
+            )
+            self.assertTupleEqual(tuple(executed_legs), selected_legs)
+            print(
+                "D117_PROOF_SELECTION "
+                f"executed={json.dumps(executed_legs, separators=(',', ':'))}",
+                flush=True,
+            )
+            print(
+                "D117_PROOF_TIMING "
+                f"stage=total seconds={time.perf_counter() - proof_started:.3f}",
+                flush=True,
             )
 
     def test_verdict_bracket_refuses_repin_to_earlier_authentic_session(
