@@ -153,6 +153,9 @@ be re-derived by a future agent gets an entry here.
 | D-128 | STANDING RUN-THE-LOOP MANDATE (Ed, in-thread 2026-08-08): the magistrate runs the project and experiment loop end-to-end — windows, mints, refusal diagnosis, re-arms, desk analysis, paper assembly — UNTIL A DEFENSIBLE PAPER EXISTS (P1 bar: measured numbers whose every claim survives the adjudicated trust model, D-119-conservative wording, the results acceptance contract, and the D-078 floors doctrine). D-127 is RATIFIED (was chartered). What still binds unchanged: zero-agent capture fence; D-118/D-121 on every merge; escalation + cold-gate discipline; the lieutenant-forbidden list; Ed's owed rulings stay his (funding, scope, spec governance); publication/claim release stays Ed-gated. This is authority to keep driving between his taps, not license to relax any gate | ratified (Ed, in-thread; transcribed by the magistrate) |
 | D-129 | ED OPERATING DIRECTIVES BATCH (in-thread 2026-08-09, T3 session; transcribed by the magistrate): (a) STANDING FAN-OUT ORDER — maximal parallel fan-out (multiple Sol lanes in disjoint worktrees + Workflow grader/review fleets + Opus corps) is the DEFAULT whenever it speeds work, incl. H1/H2 prep when H0 lanes are saturated; queue only on real collisions or gate dependencies; no gate or doctrine is relaxed by fan-out. (b) CODEX SERVICE TIER — fast usage cut ~60%: DEFAULT tier is the norm (supersedes the 2026-08-08 fast-standing-default); fast reserved for the single run whose wall-clock gates the session milestone; one consolidated xhigh beats multiple fast highs. (c) FABLE TOKEN ECONOMY — orchestration/direction subagents run as Opus 5 (high); Fable reserves = rulings, security classifications, D-121 terminal reviews, final live verification, escalation calls, Ed comms; COVERAGE UNREDUCED — Fable still full-audits everything important or claim-bearing itself, reading primary artifacts (savings come from ceremony delegation, never from thinning review). (c) amends the operative stream-director framing in docs/orchestration.md (the stamped C-009/C-010 council record stays as a dated record) | adopted (Ed, in-thread; transcribed by the magistrate) |
 | D-130 | DECISIVE-RUN VENUE RULING (cold gate + paired refuter, 2026-08-11; PR #122): decisive designation follows EVIDENTIARY SUBSTANCE, not venue. For PR #122 ONLY, the authoritative decisive run for the D-117 v2 production proof is the custodied lead local execution at e871f5b (hermetic-by-construction: byte-pinned store from the published release; unset-store can only skip or fail; the legacy-locator assertion executed against 190 LIVE machine-local decoy paths), taken together with the CI-proven transport/authentication chain (workflow steps 1-7 hosted-green). The hosted d117-production-proof job is ADVISORY (dispatch-only) pending WO-CI-RESTRUCTURE; its first hosted green is the required second independent execution; contradiction of the local result = automatic stop signal + cold gate. NO general local-decisive lane: any future substitution requires a cold-gate ruling on THAT merge, a digest-pinned fixture with an equivalent store-content lock, a live-decoy hermeticity assertion, a committed one-command replay recipe (scripts/replay_d117_decisive.sh is the template), and a recorded restructure order; the admission EXPIRES at WO-CI-RESTRUCTURE closure. Citation discipline until closure: "lead-verified locally (custodied bundle: docs/evidence/d117-v2-decisive-20260811/) + CI-verified transport/authentication chain", never "CI-proven decisive run". Lesson bound for future proofs: a decisive job whose runtime was never bounded against its venue's hard cap is a design defect | adopted (cold-gate ruling + refuter concurrence; magistrate-applied 2026-08-11) |
+| D-132 | STOPPING RULES TARGET DOOM LOOPS, NOT CONVERGING INSTRUMENTS (Ed, in-thread 2026-08-11): meta-process stop rules exist to kill non-converging loops — same defect recurring, no durable progress. They must NEVER terminate work on an instrument or component that is demonstrably converging (each round permanently closing its defect against a rising audit bar) when that work serves the paper: PROGRESS TOWARD A PUBLISHABLE PAPER IS THE HIGHEST-ORDER GOAL and all process rules rank below it (composing with D-119 soundness-above-all: soundness bounds WHAT may be claimed; this principle bounds when work may be STOPPED). Applied same-day: the FCM-01 stopping-rule execution is REVISED — the six-round record shows convergence, not doom-looping (arithmetic proven exact; production path sound from round 2; successive defects 0.25 J → 5e-10 J in ever-more-exotic classes) — and the estimator is REVIVED under the class-closing-by-construction design: the public registered surface is DELETED; the estimator becomes internal to the governed extraction path (the only path that may mint claims per the custody model), so no admitted-input class exists. The re-spec-to-default branch stays unmerged as the ready fallback until the revival round's delta verdict. Rust is affirmed as the H2/H3 next-generation core answer (unforgeable capability tokens), now justified by executed demonstration rather than conjecture | adopted (Ed, in-thread; transcribed by the magistrate) |
+| D-133 | FCM-01 DISPOSITION — HYBRID + ALT-D120 (cold gate revised sitting, 2026-08-11): round-6 delta REJECT (FCM6-01, forged registration admitted by validators) adjudicated by fresh Fable + Opus refuter. Fallback respec/d124-withdrawn merges after its own gates (freeze lane unblocks there, decoupled from FCM); FCM-01 continues unmerged under ALT-D120 — DELETE serialized registration vocabulary so forgeries die as closed-profile unknown-key refusals (D-120 precedent); false round-6 provenance claim corrected + sixth sha rotation; FULL fresh delta owed on moved arithmetic (any exact understatement = permanent drop, no further revival); re-spec back to tighter estimator only if ALT-D120 + full delta + new mint-estimator WO all land pre-freeze-wave. Bench-verified: mint has zero estimator vocabulary (tighter floor unmintable this cycle regardless); forged field inert (no consumer); production authenticate binds expected_sha256. Ed schedule call flagged: gamma-arm-in-main-paper would make mint work critical path and hold the wave | adopted (cold gate; magistrate, no dissent) |
+| D-134 | §5C ARM-READINESS RECORD CONTRACT (adopt-as-proposed consult, 2026-08-11): two-stage append-only receipts — pack-pinned non-authorizing FREEZE receipt + external pack-binding ARM receipt (hash cycle broken: frozen bytes declare the arm-receipt schema/namespace, never its future sha); d117_row_registry_v1.json sole row authority for ALPHA/BETA/GAMMA (Markdown = checked views); UNKNOWN prohibited (REFUSE or registered NOT_APPLICABLE); derive-never-enter throughout; dry-run never authorizes; impossible pre-launch single-foreground-launch row replaced by atomically consumable single-launch capability; enumerated doctrine amendments + full test obligations bind before any D-117 arm. Trace: process_traces/2026-08-11-5c-readiness-contract/ | adopted (consult adopt-as-proposed; magistrate) |
 
 ---
 
@@ -8340,6 +8343,28 @@ construction-site inventory test pins the intended one-builder/one-production-
 caller discipline. Evidence faithfulness upstream of the builder remains an
 assumption, not a result of this structural repair.
 
+
+**STOPPING RULE EXECUTED (2026-08-11, same day).** The round-5 delta
+re-audit fired the rule: FCM-R5-01 — records fabricated outside the builder
+(direct construction, dataclasses.replace, object.__new__ + __setattr__,
+copy, pickle; the frozen dataclass's generated constructor plus a
+type()-only admission check) are admitted, stamped registered, pass
+registration validation, and understate by 4.999917146975008e-10 J in exact
+arithmetic — the residual risk the relicense contract disclosed in advance,
+realized. Per the rule, executed without deliberation: the D-124
+two-shared-edge candidate is WITHDRAWN under D-124's own fallback clause;
+freeze-plan Q7 REVERSED; both floor packs' comparative cells re-specced to
+the worst-case default estimator; no round 6 under any authority but a new
+explicit Ed decision. The six-round record (five understatement mechanisms
++ the provenance class; three cold-gate sittings; five delta audits; the
+adversary-authored oracle; exact-arithmetic proofs of the enumeration) is
+custodied on impl/floor-commonmode-01 at 0b5fce8 (STOPPED-FCM01.md) as
+permanent gauntlet evidence and paper material. Terminal lesson banked: a
+sound registered arithmetic surface in Python requires a process boundary
+or capability token, not conventional privacy (see the Rust-rewrite memory
+— now with an executed demonstration).
+
+
 ### D-124 amendment — 2026-08-11: round-6 D-132 revival by surface deletion
 
 D-132 revives FLOOR-COMMONMODE-01 because the six-round record is a
@@ -8488,3 +8513,149 @@ campaign evidence, and all other JSON/JSONL remain closed.  Executed direct
 session checks and pinned-core calls under that session refused all three
 round-10 attack classes, while the registration-bearing governed 7B spec and
 the legitimate mint paths remained admitted.  No pinned-core byte changed.
+
+
+## D-132: Stopping rules target doom loops, not converging instruments
+
+**Date:** 2026-08-11 (Ed, in-thread; transcribed by the magistrate).
+**Trigger:** the same-day execution of the D-124 relicense stopping rule,
+which terminated FLOOR-COMMONMODE-01 after its round-5 delta audit.
+
+**The principle (Ed's words, in substance):** a process limit like "stop
+after N rounds of arbitration" exists to stop doom looping — it is never to
+prevent continuous work on material that keeps getting better. Never stop
+work on an instrument or component making progress because of a meta
+process rule. Progress toward a publishable paper is the highest-order
+goal; all other prerogatives fall below it. (This composes with D-119
+rather than conflicting: soundness governs what may be CLAIMED; D-132
+governs when work may be STOPPED.)
+
+**Application to FCM-01:** the six-round record is convergence, not
+looping — the extremum enumeration proven exact in rational arithmetic
+three ways, the production path sound from round 2 onward, each round's
+defect permanently closed, successive findings shrinking from 0.25 J to
+5e-10 J while the audit bar rose (adversary-authored oracle, exact
+arithmetic, fabrication attacks). The terminal insight: every post-round-2
+kill was against the PUBLIC contract — a promise the custody model's own
+rules say no claim path consumes (claim-bearing floors must come from the
+governed extraction path). REVIVAL DESIGN (round 6): delete the public
+registered surface entirely; the estimator becomes internal to the
+governed extraction pipeline and a registered result exists only as an
+artifact of that path — the admitted-input class closes by construction.
+All banked assets carry over (oracle, real b01/b02 fixtures, enclosure,
+proofs). The re-spec-to-default branch remains unmerged as the immediate
+fallback should the revival round's fresh delta find any exact
+understatement on the extraction path.
+
+**Rust disposition (Ed's question answered):** a Rust core would hold the
+unforgeable-token property Python cannot (executed demonstration:
+FCM-R5-01's five construction escape hatches) but adds nothing to
+measurement capability and does not close language-independent classes
+(test authorship, repo trust). It is affirmed as the H2/H3 answer for the
+next-generation instrument core, not a P1 dependency.
+
+## D-133: FCM-01 disposition — hybrid + ALT-D120 (cold gate, revised sitting)
+
+**Ruled 2026-08-11 by the mandated cold gate** (fresh Fable adjudicator +
+paired Opus contract-lens refuter; revised sitting after the refuter's
+brief; magistrate adopted the revised ruling without dissent). Trigger:
+the round-6 fresh delta REJECTED on FCM6-01 (registration dictionary
+injectable into admitted JSON; validators and the unbound authenticator
+accept it), landing outside both branches of the pre-committed decision
+rule, and a round 7 would have been the next round on the
+fabricated-record-admission class.
+
+**Bench-verified facts that shaped the ruling** (magistrate-executed):
+the pinned mint scripts contain ZERO estimator vocabulary — the tighter
+two-shared-edge floor cannot reach a minted artifact this cycle under any
+disposition without new D-118-gated mint work; no consumer of
+`estimator_registration` exists outside its two owning modules (the
+forged field is inert); the production claim path binds
+`expected_sha256` + `expected_artifact_id`, which the delta's V3
+reproduction omitted. The adjudicator's first ruling (round-7
+custody-closure) was withdrawn on these facts with concessions on the
+record, including that `exact_understatement_found=false` was a
+non-finding (lenses unexecuted).
+
+**The disposition:**
+(1) Fallback `respec/d124-withdrawn` (681ab49) merges after its own gate
+shape (fresh delta audit + re-verified generator/--check/dual-interpreter
+evidence + D-121); the pack-freeze lane unblocks at that merge and FCM-01
+may not gate it thereafter.
+(2) FCM-01 continues as an unmerged desk thread under ALT-D120: DELETE
+the serialized registration vocabulary (CellReport.as_row stops emitting
+it; removed from _D117_MINT_FLOOR_OPTIONAL_KEYS and _CMP_OPTIONAL_KEYS;
+self-equality branch deleted) so both demonstrated forgeries become
+closed-profile unknown-key REFUSALS — the D-120 precedent (delete
+vocabulary, don't authenticate it). The false round-6 provenance claim
+("registered results exist only as governed extraction artifacts") is
+corrected to what the design enforces, with a sixth parameter-sha
+rotation.
+(3) A FULL fresh delta is owed on the branch head (the +497 lines of
+moved arithmetic are unaudited; the round-6 delta was interrupted before
+its arithmetic lenses). Any exact understatement found there drops the
+estimator to the fallback PERMANENTLY under the original pre-committed
+rule — no further revival.
+(4) Packs re-spec back to the tighter estimator only if ALT-D120 + the
+full delta + the mint-estimator vocabulary workstream (new, D-118-gated,
+registered in TASK_QUEUE) all land before the freeze wave.
+(5) Debts surfaced, not discharged: the FLOOR-COMMONMODE-01 BANKED
+UNGATED 425f75f audit debt and the fallback's previously-unstated gate
+status enter the ledger.
+
+**Flagged to Ed (schedule call, not ruled):** if the gamma-arm claim
+capability must ship in the MAIN paper this cycle, the mint-estimator
+workstream becomes critical path and the freeze wave waits by direction —
+reversal condition 5 of the ruling. Default absent Ed's direction: the
+freeze does not wait; the tighter number banks for the ICPE version.
+
+D-132 is satisfied, not overridden: work continues; consumption is
+deferred. The same-signature escalation trigger is satisfied by
+resolution through this consult with a structurally different remedy
+(deletion, not a third validator).
+
+## D-134: §5C arm-readiness record contract — two-stage append-only receipts (adopt-as-proposed)
+
+**Adopted 2026-08-11 (T4-late)** from the binding design consult (Sol
+xhigh; trace: docs/process_traces/2026-08-11-5c-readiness-contract/),
+which resolved the four NEEDS_RULING gaps an implementation attempt
+correctly refused to guess through (same trace, needs-ruling-report.md):
+the §5C record's lifecycle/hash-cycle (the runbook had the plan pinning a
+record that binds the plan's sha), the freeze-time vs arm-time row split,
+the absent closed schema, and undefined dry-run semantics.
+
+**The contract (ten clauses, adopt-as-proposed):**
+1. Readiness splits into a pack-pinned, non-authorizing FREEZE RECEIPT
+   and an external, pack-binding ARM RECEIPT.
+2. Frozen bytes declare the future arm-receipt schema and governed
+   namespace — never its future path/sha value (the hash cycle is broken
+   by declaring slots, not hashing future bytes).
+3. `d117_row_registry_v1.json` is the SOLE row authority for ALPHA, BETA,
+   and GAMMA; Markdown matrices are checked views.
+4. UNKNOWN is prohibited in receipts; missing live evidence is REFUSE;
+   NOT_APPLICABLE only by registered predicates.
+5. Exact-key, no-self-hash receipts; committed-pack verification;
+   semantic supersession; D-120's single-authority assurance qualifier.
+6. Derive-never-enter: every row verdict, applicability, digest, identity
+   pin, and evidence binding is derived; operators supply paths and
+   irreducible attestations, never conclusions.
+7. Dry-run PASS is same-head rehearsal evidence only; it bypasses no
+   freeze refusal and can never occupy the arm slot.
+8. A live ledger-reservation row is added, and the impossible pre-launch
+   "single foreground launch" row is replaced by an atomically consumable
+   single-launch capability (exactly one consumer succeeds; replay and
+   stale predecessors refuse).
+9. The enumerated live doctrine is amended (runbook §5C/§5A, D-117
+   attachment-slot clarification, refusal-registry amendment, operator
+   packet ARM sequence, 40h-plan B2/B5, state-kernel fence wording);
+   historical process traces are preserved and superseded by decision,
+   never edited in place.
+10. The full mutation/lifecycle/namespace/replay/U11-integration/
+    three-profile test obligations bind before any D-117 arm.
+
+Critical path per the consult: D-131/U11 landing → registry + doctrine
+amendment → three pack profiles → freeze receipts + final pack bytes →
+reviewed-main proof → same-head dry-run receipt → Ed's §5A and T-0 domain
+receipts → live ledger reservation → final arm GO receipt → atomic
+launch consumption. Implementation launches after PR #131 merges.
+

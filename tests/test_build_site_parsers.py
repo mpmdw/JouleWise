@@ -502,6 +502,159 @@ Text.
         for number in range(1, 7):
             self.assertEqual(combined.count(f'id="d-{number:03d}"'), 1)
 
+    def test_oversized_decision_entry_splits_at_subsections_with_one_anchor(self):
+        generator = random.Random(20260811)
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        subsections = []
+        for number in range(1, 6):
+            payload = "".join(generator.choice(alphabet) for _ in range(5_000))
+            subsections.append(
+                f"### Amendment {number}\n\nmarker-{number} {payload}\n\n"
+            )
+        markdown = (
+            "# Decision Log\n\n"
+            "## Index\n\n"
+            "| ID | Title | Status |\n"
+            "|---|---|---|\n"
+            "| D-001 | Giant | accepted |\n\n"
+            "---\n\n"
+            "## D-001: Giant\n\nOpening text.\n\n"
+            + "".join(subsections)
+        )
+
+        parts = build_site.split_decision_log_markdown(markdown)
+
+        self.assertGreater(len(parts), 2)
+        combined = "".join(part.markdown for part in parts)
+        self.assertEqual(combined.count("## D-001: Giant"), 1)
+        self.assertGreaterEqual(combined.count("## (D-001 continued)"), 1)
+        self.assertEqual(
+            sum("D-001" in part.decision_ids for part in parts),
+            1,
+        )
+        self.assertEqual(
+            sum("D-001" in build_site.decision_anchor_slugs(part.markdown) for part in parts),
+            1,
+        )
+        for number in range(1, 6):
+            self.assertEqual(combined.count(f"marker-{number}"), 1)
+        for part in parts:
+            self.assertLessEqual(
+                len(part.markdown.encode("utf-8")),
+                build_site.DECISION_LOG_PART_MARKDOWN_BYTES,
+            )
+
+        stamp = build_site.SourceStamp(build_site.DECISION_LOG_SOURCE, "abc1234")
+        with (
+            mock.patch.object(build_site, "MARKED_UNAVAILABLE", True),
+            mock.patch.object(build_site, "MARKED_FALLBACK_WARNED", True),
+        ):
+            rendered = build_site.render_decision_log_pages(markdown, False, stamp)
+        rendered_combined = "".join(rendered.values())
+        self.assertEqual(rendered_combined.count('id="d-001"'), 1)
+        for out_name, page in rendered.items():
+            path = f"/{out_name}"
+            packed_page = {
+                path: {
+                    "html": build_site.compact_generated_html(page),
+                    "sources": [{"source": stamp.source, "commit": stamp.commit}],
+                    "aliases": [],
+                }
+            }
+            self.assertLessEqual(
+                pack_capsule.encode_page_shard(packed_page, [path])[1]["base64"],
+                pack_capsule.DECISION_LOG_SHARD_BASE64_TARGET_BYTES,
+            )
+
+    def test_oversized_decision_index_splits_at_rows_and_repeats_header(self):
+        generator = random.Random(20260812)
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        rows = []
+        for number in range(1, 13):
+            payload = "".join(generator.choice(alphabet) for _ in range(180))
+            rows.append(
+                f"| D-{number:03d} | row-marker-{number} {payload} | accepted |\n"
+            )
+        header = "| ID | Title | Status |\n|---|---|---|\n"
+        markdown = (
+            "# Decision Log\n\nGuide.\n\n"
+            "## Index\n\n"
+            + header
+            + "".join(rows)
+            + "\n---\n\n"
+            + "## D-012: Latest\n\nBody.\n"
+        )
+
+        parts = build_site.split_decision_log_markdown(
+            markdown,
+            max_part_markdown_bytes=1_000,
+        )
+        index_parts = [
+            part
+            for part in parts
+            if "## Index" in part.markdown or "## (index continued)" in part.markdown
+        ]
+
+        self.assertGreater(len(index_parts), 1)
+        self.assertEqual(index_parts[0].markdown.count("## Index"), 1)
+        for part in index_parts[1:]:
+            self.assertIn("## (index continued)", part.markdown)
+        for part in index_parts:
+            self.assertEqual(part.markdown.count(header), 1)
+            self.assertLessEqual(len(part.markdown.encode("utf-8")), 1_000)
+        combined = "".join(part.markdown for part in index_parts)
+        for number in range(1, 13):
+            self.assertEqual(combined.count(f"row-marker-{number} "), 1)
+
+    def test_real_d078_entry_splits_at_subsections_under_packer_target(self):
+        source = build_site.read_source(build_site.DECISION_LOG_SOURCE)
+        matches = list(build_site.DECISION_LOG_ENTRY_RE.finditer(source))
+        d078_index = next(
+            index
+            for index, match in enumerate(matches)
+            if match.group("decision_id") == "D-078"
+        )
+        entry = source[
+            matches[d078_index].start():matches[d078_index + 1].start()
+        ]
+        markdown = (
+            "# Decision Log\n\n"
+            "## Index\n\n"
+            "| ID | Title | Status |\n"
+            "|---|---|---|\n"
+            "| D-078 | Soundness gate | accepted |\n\n"
+            "---\n\n"
+            + entry
+        )
+        self.assertGreater(
+            len(entry.encode("utf-8")),
+            build_site.DECISION_LOG_PART_MARKDOWN_BYTES,
+        )
+
+        stamp = build_site.SourceStamp(build_site.DECISION_LOG_SOURCE, "abc1234")
+        with (
+            mock.patch.object(build_site, "MARKED_UNAVAILABLE", True),
+            mock.patch.object(build_site, "MARKED_FALLBACK_WARNED", True),
+        ):
+            rendered = build_site.render_decision_log_pages(markdown, False, stamp)
+
+        combined = "".join(rendered.values())
+        self.assertEqual(combined.count('id="d-078"'), 1)
+        self.assertIn("(D-078 continued)", combined)
+        for out_name, page in rendered.items():
+            path = f"/{out_name}"
+            packed_page = {
+                path: {
+                    "html": build_site.compact_generated_html(page),
+                    "sources": [{"source": stamp.source, "commit": stamp.commit}],
+                    "aliases": [],
+                }
+            }
+            self.assertLessEqual(
+                pack_capsule.encode_page_shard(packed_page, [path])[1]["base64"],
+                pack_capsule.DECISION_LOG_SHARD_BASE64_TARGET_BYTES,
+            )
+
     def _assert_production_build_output_packs_below_lakebed_budget(
         self, *, force_offline_renderer: bool
     ):

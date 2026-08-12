@@ -5,20 +5,25 @@ the `[PLAN-ID]`/`[BUDGET]` cells bind only when the campaign packs freeze
 (work orders U5-U7). Magistrate-supplied values from the ratified design
 memo (`docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md`):
 
-| Night | Plan (frozen identifier scheme) | Occupancy incl. 20% margin |
+| Night | Plan (frozen identifier scheme) | Occupancy incl. 20% margin — **DESIGN ESTIMATE, not an arm value** |
 |---|---|---|
 | 1 | plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1 | **3.14 h** |
 | 2 | plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1 | **3.24 h** |
 | 3 | plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1 | **2.80 h** |
 | (4) | Window C characterization — ED RULING #1 pending | ~3 h class |
 
+These occupancy figures are design estimates from the ratified design memo.
+The **arm value** is produced by the frozen timing ledger at pack freeze and
+recorded in the plan (freeze manifest A-04 / B-04 / G-06). Never copy a
+header figure into a "do-not-return-before" cell.
+
 **HARD GATES before night 1 (none are optional):** U1/U1b two-slot ledger
-bracket session + writer integration; U2 successor engine (cold-gated);
-U3 pinset v2 / multi-cell mint; U4 three-window regression green; U5-U7
+bracket session + writer integration; U3 pinset v2 / multi-cell mint; U4
+three-window regression green; U5-U7
 packs frozen + readiness validator green; reason-code plumbing (register
 item, Ed ruling #3); absolute runs-dir paths in every launch command
 (night-strander R6 mitigation); campaign.lock absent at arm; NEVER kill a
-running verdict (R7 — it can exceed 2 minutes by design).<br> **2026-08-08 SUPERSESSION NOTE (D-126):** The U2 successor-engine prerequisite above is superseded for this three-night window: keep U2 frozen for its post-window work, and govern ALPHA, BETA, and GAMMA with the issued D-079 calibration-acceptance artifact.
+running verdict (R7 — it can exceed 2 minutes by design).<br> **2026-08-08 SUPERSESSION NOTE (D-126):** The U2 successor-engine prerequisite above is superseded for this three-night window: keep U2 frozen for its post-window work, and govern ALPHA, BETA, and GAMMA with the issued D-079 calibration-acceptance artifact. **The U2 item has been struck from the enumeration above; this note records why.**
 
 Ed presence: bookends only (~15-20 min each end, §5A sequence in the
 night pages). Everything between the bookends is unattended.
@@ -100,7 +105,15 @@ Science payload: the proven decode-floor shape—10 absolute repeats plus 10 nul
     --window [PLACEHOLDER: PREWINDOW LABEL]
   ```
 
-- [ ] Leave the Mac untouched for at least 10 minutes. This also exceeds the required 180-second post-sudo settle.
+- [ ] Run the frozen calibration-ledger readiness and reservation commands
+  exactly as written in the frozen plan (run-book §6). Require the readiness
+  output to echo the frozen-plan SHA-256; require the reservation to emit
+  `calibration_pre_reserve_authorized` and finish with `status: reserved`.
+  `needs_pin_commit: true` ends the night — no override exists at night.
+- [ ] Do not hand-count another idle or settle here. The completed
+  `prewindow_check.sh --wait` already fulfilled §5's ≥10-minute untouched
+  idle and covered the post-`sudo` interval; after launch the chain performs
+  its own 180-second settle before the pre-calibration.
 - [ ] Tell everyone nearby: do not touch the Mac, lid, display, charger, or cable.
 - [ ] Launch exactly once from the ordinary foreground shell:
 
@@ -210,7 +223,15 @@ Science payload: 10 decode absolute repeats plus 10 null-ABBA blocks/40 members 
 - [ ] Run `bash scripts/quiet_mac_prep.sh`; resolve every failure.
 - [ ] Quit all agents, t3, browsers, automation, monitors, watchers, and tails; require a clean census.
 - [ ] Run the frozen `prewindow_check.sh --wait` command and require `READY`.
-- [ ] Leave the Mac untouched for at least 10 minutes.
+- [ ] Run the frozen calibration-ledger readiness and reservation commands
+  exactly as written in the frozen plan (run-book §6). Require the readiness
+  output to echo the frozen-plan SHA-256; require the reservation to emit
+  `calibration_pre_reserve_authorized` and finish with `status: reserved`.
+  `needs_pin_commit: true` ends the night — no override exists at night.
+- [ ] Do not hand-count another idle or settle here. The completed
+  `prewindow_check.sh --wait` already fulfilled §5's ≥10-minute untouched
+  idle and covered the post-`sudo` interval; after launch the chain performs
+  its own 180-second settle before the pre-calibration.
 - [ ] Tell everyone nearby not to touch the machine or power path.
 - [ ] Launch exactly once:
 
@@ -299,7 +320,15 @@ Science payload: decode only—10 fixed A/B/B/A blocks, 40 members total. Blocks
 - [ ] Run `bash scripts/quiet_mac_prep.sh`; resolve every failure.
 - [ ] Quit every agent, t3, browser, automation session, monitor, watcher, and tail. Require a zero-survivor census.
 - [ ] Run the frozen `prewindow_check.sh --wait` command and require `READY`.
-- [ ] Leave the Mac untouched for at least 10 minutes.
+- [ ] Run the frozen calibration-ledger readiness and reservation commands
+  exactly as written in the frozen plan (run-book §6). Require the readiness
+  output to echo the frozen-plan SHA-256; require the reservation to emit
+  `calibration_pre_reserve_authorized` and finish with `status: reserved`.
+  `needs_pin_commit: true` ends the night — no override exists at night.
+- [ ] Do not hand-count another idle or settle here. The completed
+  `prewindow_check.sh --wait` already fulfilled §5's ≥10-minute untouched
+  idle and covered the post-`sudo` interval; after launch the chain performs
+  its own 180-second settle before the pre-calibration.
 - [ ] Tell everyone nearby not to touch the Mac or its power path.
 - [ ] Launch exactly once:
 

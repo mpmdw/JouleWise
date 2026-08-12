@@ -198,6 +198,43 @@ owed under D-130 (refuter C3): one Python 3.11 local decisive replay via
 carry: bound every decisive job's runtime against its venue's hard cap at
 design time.
 
+## WO-MINT-ESTIMATOR-VOCAB (D-133 condition; registered 2026-08-11)
+
+Priority: P2 (rises to P0 critical-path ONLY if Ed rules the gamma-arm
+claim capability must ship in the main paper this cycle — D-133 flagged
+schedule call). The pinned mint scripts (mint_floor_artifact.py,
+mint_floor_artifact_generalized.py) carry ZERO estimator vocabulary: the
+v2 mint recomputes comparative floors with the default core under an
+exact-equality check, so a common-mode-estimator cell CANNOT be minted
+today. Scope: add governed estimator vocabulary to the mint so a
+spec-declared registered estimator's floor passes recomputation +
+equality, with provenance re-derived from authenticated members (never
+read from admitted JSON, per D-133/ALT-D120). Full D-118 gauntlet
+mandatory. Prerequisites: FCM-01 ALT-D120 round + full fresh delta land
+clean. Consumption: packs re-spec back to the tighter estimator only if
+this WO + both FCM items land before the freeze wave (D-133 cl.4).
+
+DESIGN ADOPTED (2026-08-11 Sol xhigh consult, magistrate-adjudicated):
+one spec-authoritative per-cell estimator dispatch (new shared
+joulewise/floor_mint_estimator.py) consumed at ALL THREE mint sites —
+postcollection equality, artifact construction, final evidence binding —
+because patching steps 8-9 alone leaves a second default-core
+recomputation and a default-only binder (the consult's named likely
+failure mode). Pinned core, v2 pinset schema, report/artifact schemas,
+and production specs all UNCHANGED this WO. Cost estimate 360-540
+production LOC + 550-850 test LOC; three audit waves + D-121. Full
+consult: session scratchpad mintvocab-consult-out.md (T4-late).
+Implementation stacks on impl/floor-commonmode-01 after round 9 lands.
+
+## D-133 O5 debts (surfaced, not discharged; registered 2026-08-11)
+
+- FLOOR-COMMONMODE-01 BANKED UNGATED 425f75f: full magistrate audit +
+  D-118 gauntlet still OWED on that banked lineage (predates the round-6
+  chain; not cured by any D-133 disposition).
+- Fallback gate history: respec/d124-withdrawn had NO gate record before
+  D-133 O1 ordered its fresh delta + D-121; its audit is in flight —
+  the merge may not cite "green x3" alone as its gate evidence.
+
 ## Deferred-with-record — trust PR #122 ledger residuals (registered 2026-08-11, T4)
 
 Non-blocking residuals carried out of the #122 merge gate, per the T3
