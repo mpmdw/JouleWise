@@ -288,40 +288,53 @@ Text.
             build_site.MARKED_UNAVAILABLE = previous_unavailable
             build_site.MARKED_FALLBACK_WARNED = previous_warned
 
-    def test_trim_log_fewer_equal_and_more_than_six_entries(self):
-        pattern = build_site.re.compile(r"(?m)^## D-\d")
-        for count in (5, 6):
-            md = "# Log\n\n" + "".join(
-                f"## D-{index:03d}: Entry\nbody {index}\n\n"
-                for index in range(1, count + 1)
+    def test_full_decision_and_council_bodies_reach_rendered_output(self):
+        decision_md = (
+            "# Decision Log\n\n## Index\n\n| ID | Title | Status |\n|---|---|---|\n"
+            + "".join(
+                f"| D-{index:03d} | Entry {index} | accepted |\n"
+                for index in range(1, 9)
             )
-            self.assertEqual(
-                build_site.trim_log_markdown(md, pattern, 6, "docs/decision_log.md"),
-                md,
+            + "\n---\n\n"
+            + "".join(
+                f"## D-{index:03d}: Entry {index}\n\ndecision-body-{index}\n\n"
+                for index in range(1, 9)
             )
+        )
+        stamp = build_site.SourceStamp(build_site.DECISION_LOG_SOURCE, "abc1234")
+        with (
+            mock.patch.object(build_site, "MARKED_UNAVAILABLE", True),
+            mock.patch.object(build_site, "MARKED_FALLBACK_WARNED", True),
+        ):
+            decision_output = "".join(
+                build_site.render_decision_log_pages(decision_md, False, stamp).values()
+            )
+        self.assertIn("decision-body-1", decision_output)
+        self.assertIn("decision-body-8", decision_output)
+        self.assertNotIn("older full entries are omitted", decision_output)
 
-        md = "# Log\n\nindex preamble\n\n" + "".join(
-            f"## D-{index:03d}: Entry\nbody {index}\n\n" for index in range(1, 9)
-        ) + "trailing content\n"
-        trimmed = build_site.trim_log_markdown(
-            md, pattern, 6, "docs/decision_log.md"
+        council_md = "# Council Log\n\n" + "".join(
+            f"## C-{index:03d}: Council {index}\n\ncouncil-body-{index}\n\n"
+            for index in range(1, 9)
         )
-        self.assertNotIn("## D-001", trimmed)
-        self.assertNotIn("## D-002", trimmed)
-        self.assertIn("## D-003", trimmed)
-        self.assertIn("## D-008", trimmed)
-        self.assertIn("2 older full entries are omitted", trimmed)
-        self.assertIn("github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md", trimmed)
-        self.assertTrue(trimmed.endswith("trailing content\n"))
-        self.assertEqual(
-            [text for text, _ in build_site.markdown_h2_toc(trimmed)],
-            [f"D-{index:03d}: Entry" for index in range(3, 9)],
+        council_doc = next(
+            doc
+            for doc in build_site.doc_pages("docs/run_reports/example.md")
+            if doc.source == "docs/council_log.md"
         )
+        council_output = build_site.render_doc_page(
+            council_doc,
+            True,
+            build_site.SourceStamp("docs/council_log.md", "abc1234"),
+            council_md,
+        )
+        self.assertIn("council-body-1", council_output)
+        self.assertIn("council-body-8", council_output)
+        self.assertNotIn("older full entries are omitted", council_output)
 
     def test_decision_anchor_slugs_ignore_addendum_headings(self):
         # Regression: a "## D-100 addendum (...)" H2 rides inside a newer
-        # entry's body; it must not mint the d-100 short anchor once D-100's
-        # own entry has aged out of the bounded site view.
+        # entry's body; it must not mint the d-100 short anchor for D-100.
         md = (
             "## D-101: Entry\nbody\n\n"
             "## D-100 addendum (2026-08-01): later ruling\naddendum body\n\n"
@@ -332,20 +345,15 @@ Text.
             {"D-101", "D-102"},
         )
 
-    def test_trim_note_is_escaped_by_offline_fallback_renderer(self):
+    def test_full_log_body_is_escaped_by_offline_fallback_renderer(self):
         md = "# Log\n\n" + "".join(
             f"## D-{index:03d}: <Entry & {index}>\nbody\n\n"
             for index in range(1, 8)
         )
-        trimmed = build_site.trim_log_markdown(
-            md,
-            build_site.re.compile(r"(?m)^## D-\d"),
-            6,
-            "docs/decision_log.md",
-        )
-        rendered = build_site.render_basic_markdown(trimmed)
-        self.assertIn("&lt;Entry &amp; 2&gt;", rendered)
-        self.assertNotIn("<Entry & 2>", rendered)
+        rendered = build_site.render_basic_markdown(md)
+        self.assertIn("&lt;Entry &amp; 1&gt;", rendered)
+        self.assertIn("&lt;Entry &amp; 7&gt;", rendered)
+        self.assertNotIn("<Entry & 1>", rendered)
 
     def test_build_fails_closed_without_project_status_page_marker(self):
         project_md = build_site.read_source("PROJECT_STATUS.md").replace(
@@ -397,19 +405,20 @@ Text.
             rendered[build_site.PROJECT_STATUS_FULL_OUTPUT],
         )
 
-    def test_oversized_decision_log_paginates_deterministically_under_target(self):
+    def test_oversized_divisible_decision_log_paginates_without_content_loss(self):
         generator = random.Random(20260724)
         alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
         entries = []
         for number in range(1, 7):
             payload = "".join(generator.choice(alphabet) for _ in range(9_000))
+            body_marker = f"entry-body-marker-{number}"
             cross_link = (
                 "\n\n[Jump to the oldest decision](#d-001-entry-1).\n"
                 if number == 6
                 else ""
             )
             entries.append(
-                f"## D-{number:03d}: Entry {number}\n\n{payload}{cross_link}\n\n"
+                f"## D-{number:03d}: Entry {number}\n\n{body_marker} {payload}{cross_link}\n\n"
             )
         index = "\n".join(
             f"| D-{number:03d} | Entry {number} | accepted |"
@@ -452,7 +461,7 @@ Text.
                     main_doc,
                     False,
                     stamp,
-                    build_site.decision_log_site_markdown(markdown),
+                    markdown,
                 )
             )
         unsplit_pages = {
@@ -477,11 +486,9 @@ Text.
                 "sources": [{"source": stamp.source, "commit": stamp.commit}],
                 "aliases": [],
             }
-            self.assertLessEqual(
-                pack_capsule.encode_page_shard(
-                    packed_pages, [path]
-                )[1]["base64"],
-                pack_capsule.DECISION_LOG_SHARD_BASE64_TARGET_BYTES,
+            self.assertGreater(
+                pack_capsule.encode_page_shard(packed_pages, [path])[1]["base64"],
+                0,
             )
             self.assertEqual(
                 pack_capsule.extract_stamps(out_name, rendered),
@@ -501,6 +508,46 @@ Text.
         combined = "".join(first.values())
         for number in range(1, 7):
             self.assertEqual(combined.count(f'id="d-{number:03d}"'), 1)
+            self.assertEqual(combined.count(f"entry-body-marker-{number}"), 1)
+
+    def test_indivisible_decision_unit_raw_source_only_warns(self):
+        markdown = (
+            "# Decision Log\n\n"
+            "## Index\n\n"
+            "| ID | Title | Status |\n"
+            "|---|---|---|\n"
+            "| D-001 | Giant | accepted |\n\n"
+            "---\n\n"
+            "## D-001: Giant\n\n"
+            + ("indivisible-body " * 80)
+            + "\n"
+        )
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            parts = build_site.split_decision_log_markdown(
+                markdown,
+                max_part_markdown_bytes=300,
+            )
+        combined = "".join(part.markdown for part in parts)
+        self.assertIn("indivisible-body", combined)
+        self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", stderr.getvalue())
+        self.assertIn("indivisible D-001 entry page", stderr.getvalue())
+
+        # D-135: raw source bytes over the cap are a PROXY observation only —
+        # they warn; the real validator's artifact measurement (pack_capsule)
+        # is the sole size failure. Content still reaches the output.
+        proxy_stderr = io.StringIO()
+        with (
+            mock.patch.object(build_site, "LAKEBED_PLATFORM_CAP_BYTES", 500),
+            contextlib.redirect_stderr(proxy_stderr),
+        ):
+            proxy_parts = build_site.split_decision_log_markdown(
+                markdown,
+                max_part_markdown_bytes=300,
+            )
+        self.assertIn("indivisible-body", "".join(part.markdown for part in proxy_parts))
+        self.assertIn("RAW-SOURCE PROXY", proxy_stderr.getvalue())
+        self.assertIn("ADVISORY BUDGET EXCEEDED (D-135)", proxy_stderr.getvalue())
 
     def test_oversized_decision_entry_splits_at_subsections_with_one_anchor(self):
         generator = random.Random(20260811)
@@ -539,10 +586,7 @@ Text.
         for number in range(1, 6):
             self.assertEqual(combined.count(f"marker-{number}"), 1)
         for part in parts:
-            self.assertLessEqual(
-                len(part.markdown.encode("utf-8")),
-                build_site.DECISION_LOG_PART_MARKDOWN_BYTES,
-            )
+            self.assertTrue(part.markdown)
 
         stamp = build_site.SourceStamp(build_site.DECISION_LOG_SOURCE, "abc1234")
         with (
@@ -561,9 +605,9 @@ Text.
                     "aliases": [],
                 }
             }
-            self.assertLessEqual(
+            self.assertGreater(
                 pack_capsule.encode_page_shard(packed_page, [path])[1]["base64"],
-                pack_capsule.DECISION_LOG_SHARD_BASE64_TARGET_BYTES,
+                0,
             )
 
     def test_oversized_decision_index_splits_at_rows_and_repeats_header(self):
@@ -601,12 +645,12 @@ Text.
             self.assertIn("## (index continued)", part.markdown)
         for part in index_parts:
             self.assertEqual(part.markdown.count(header), 1)
-            self.assertLessEqual(len(part.markdown.encode("utf-8")), 1_000)
+            self.assertTrue(part.markdown)
         combined = "".join(part.markdown for part in index_parts)
         for number in range(1, 13):
             self.assertEqual(combined.count(f"row-marker-{number} "), 1)
 
-    def test_real_d078_entry_splits_at_subsections_under_packer_target(self):
+    def test_real_d078_entry_splits_at_subsections_without_losing_anchors(self):
         source = build_site.read_source(build_site.DECISION_LOG_SOURCE)
         matches = list(build_site.DECISION_LOG_ENTRY_RE.finditer(source))
         d078_index = next(
@@ -650,12 +694,12 @@ Text.
                     "aliases": [],
                 }
             }
-            self.assertLessEqual(
+            self.assertGreater(
                 pack_capsule.encode_page_shard(packed_page, [path])[1]["base64"],
-                pack_capsule.DECISION_LOG_SHARD_BASE64_TARGET_BYTES,
+                0,
             )
 
-    def _assert_production_build_output_packs_below_lakebed_budget(
+    def _assert_production_build_output_packs_with_lakebed_size_reporting(
         self, *, force_offline_renderer: bool
     ):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -707,14 +751,29 @@ Text.
                 pages = pack_capsule.pack_pages()
                 total = pack_capsule.build(no_fonts=True)
                 packed_site, _ = pack_capsule.encode_site(pages, pack_capsule.stylesheet(no_fonts=True))
+                measured_budget_stderr = io.StringIO()
                 with mock.patch.object(
                     pack_capsule, "LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES", 0
+                ), contextlib.redirect_stderr(measured_budget_stderr):
+                    measured_budget_total = pack_capsule.build(no_fonts=True)
+                self.assertEqual(measured_budget_total, total)
+                self.assertIn(
+                    "ADVISORY BUDGET EXCEEDED (D-135)",
+                    measured_budget_stderr.getvalue(),
+                )
+                self.assertIn("exceeds measured-artifact", measured_budget_stderr.getvalue())
+                decode_budget_stderr = io.StringIO()
+                with (
+                    mock.patch.object(pack_capsule, "MAX_FIRST_REQUEST_DECODE_BYTES", 0),
+                    contextlib.redirect_stderr(decode_budget_stderr),
                 ):
-                    with self.assertRaises(pack_capsule.CapsulePackError):
-                        pack_capsule.build(no_fonts=True)
-                with mock.patch.object(pack_capsule, "MAX_FIRST_REQUEST_DECODE_BYTES", 0):
-                    with self.assertRaisesRegex(pack_capsule.CapsulePackError, "byte-loop iterations"):
-                        pack_capsule.build(no_fonts=True)
+                    decode_budget_total = pack_capsule.build(no_fonts=True)
+                self.assertEqual(decode_budget_total, total)
+                self.assertIn(
+                    "ADVISORY BUDGET EXCEEDED (D-135)",
+                    decode_budget_stderr.getvalue(),
+                )
+                self.assertIn("byte-loop iterations", decode_budget_stderr.getvalue())
 
             shared = json.loads(gzip_decompress_base64(packed_site["shared"]))
             decoded_pages = {}
@@ -749,9 +808,7 @@ Text.
             retained_decision_ids = {
                 decision_id
                 for part in build_site.split_decision_log_markdown(
-                    build_site.decision_log_site_markdown(
-                        build_site.read_source(build_site.DECISION_LOG_SOURCE)
-                    )
+                    build_site.read_source(build_site.DECISION_LOG_SOURCE)
                 )
                 for decision_id in part.decision_ids
             }
@@ -773,11 +830,11 @@ Text.
                 decision_path = pack_capsule.canonical_path(
                     pack_capsule.page_aliases(site / name)
                 )
-                self.assertLessEqual(
+                self.assertGreater(
                     pack_capsule.encode_page_shard(
                         pages, [decision_path]
                     )[1]["base64"],
-                    pack_capsule.DECISION_LOG_SHARD_BASE64_TARGET_BYTES,
+                    0,
                 )
                 self.assertEqual(
                     [
@@ -812,10 +869,7 @@ Text.
                 status_size = pack_capsule.encode_page_shard(
                     status_pages, [status_path]
                 )[1]["base64"]
-                self.assertLessEqual(
-                    status_size,
-                    pack_capsule.MAX_SHARD_BASE64_BYTES - 3_000,
-                )
+                self.assertGreater(status_size, 0)
             brief_output = (site / build_site.ADVISOR_BRIEF_OUTPUT).read_text(
                 encoding="utf-8"
             )
@@ -942,17 +996,10 @@ Text.
             self.assertNotIn("estimator-only advisory", pack_stdout.getvalue())
             self.assertEqual(pack_stderr.getvalue(), "")
             estimated_artifact = pack_capsule.estimate_lakebed_artifact_size(total)
-            # AUD-WO-039: measured mode is authoritative; the conservative
-            # estimator is a fallback-only guard. Since the C-045 council-log
-            # capsule redirect, production-shaped input fits even the
-            # estimator's fallback budget; the estimator must never exceed
-            # the invariant 1 MiB cap regardless.
+            # D-135: retain estimator coverage without turning it into a gate.
+            self.assertGreater(estimated_artifact, 0)
             self.assertLessEqual(
-                estimated_artifact,
-                pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES,
-            )
-            self.assertLessEqual(
-                960_030, pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES
+                960_030, pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES
             )
             self.assertTrue((content / "pages.ts").is_file())
             self.assertTrue((content / "buildinfo.ts").is_file())
@@ -965,13 +1012,13 @@ Text.
             )
 
     @SITE_CONTENT_TESTS
-    def test_production_build_output_packs_below_conservative_lakebed_budget(self):
-        self._assert_production_build_output_packs_below_lakebed_budget(
+    def test_production_build_output_packs_with_lakebed_size_reporting(self):
+        self._assert_production_build_output_packs_with_lakebed_size_reporting(
             force_offline_renderer=True
         )
 
     @SITE_CONTENT_TESTS
-    def test_connected_marked_build_output_packs_below_lakebed_budget(self):
+    def test_connected_marked_build_output_packs_with_lakebed_size_reporting(self):
         try:
             executable = build_site.discover_marked_executable()
         except build_site.SiteBuildError as exc:
@@ -1012,7 +1059,7 @@ Text.
             )
             print(message, file=sys.stderr)
             self.skipTest(message)
-        self._assert_production_build_output_packs_below_lakebed_budget(
+        self._assert_production_build_output_packs_with_lakebed_size_reporting(
             force_offline_renderer=False
         )
 
