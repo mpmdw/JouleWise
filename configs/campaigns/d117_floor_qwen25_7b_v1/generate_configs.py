@@ -51,6 +51,7 @@ FAMILY_SCHEMA = "joulewise.condition_family_definition.v1"
 MODEL_TAG = "qwen25-7b-mlx"
 DECODE_FAMILY_ID = "df-ph-decode-qwen25-7b"
 PREFILL_FAMILY_ID = "df-ph-prefill-p128-qwen25-7b"
+P256_FAMILY_ID = "df-ph-prefill-p256-qwen25-7b"
 CAMPAIGN_TAG = "d117-floor-qwen25-7b-v1"
 DRAFT_STATUS = "unfrozen_draft"
 SUCCESSOR_REGENERATION_RULE = (
@@ -73,6 +74,19 @@ DECODE_COMPARATIVE_CELL = "d117-df-cmp-abba-ph-decode-qwen25-7b"
 PREFILL_ABSOLUTE_CELL = "d117-df-ph-prefill-p128-qwen25-7b-absolute"
 PREFILL_COMPARATIVE_CELL = (
     "d117-df-cmp-abba-ph-prefill-p128-qwen25-7b"
+)
+P256_ABSOLUTE_CELL = "d117-df-ph-prefill-p256-qwen25-7b-absolute"
+P256_COMPARATIVE_CELL = "d117-df-cmp-abba-ph-prefill-p256-qwen25-7b"
+P256_WORKLOAD_NAME = "df_ph_prefill_p256_candidate"
+P256_PROMPT_UTF8_SHA256 = (
+    "f149dddcb4b9d27b3d68b0455c5f774e56e37bfc04430b53e139a4c08f044faf"
+)
+P256_SHARED_TOKENIZER_JSON_SHA256 = (
+    "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf"
+)
+P256_RULED_TOKEN_ID_SHA256_PREFIX = "83099a66"
+LEGACY_DECODE_PLAN_SHA256 = (
+    "c20ef596f64a4a8d5367a963614c4db0f2c34a7077441e204bcf22e2b1033f40"
 )
 
 MODEL = {
@@ -129,6 +143,25 @@ STAGES = (
             "Fixed contiguous same-condition A/B/B/A decode blocks 6-10."
         ),
     },
+    {
+        "subcampaign_id": "04_phase_prefill_p256_absolute",
+        "role": "absolute_phase_prefill_p256",
+        "ordering_note": "Ten fixed absolute p256 prefill repeats in repetition order.",
+    },
+    {
+        "subcampaign_id": "05_phase_prefill_p256_abba_blocks_01_05",
+        "role": "comparative_phase_prefill_p256_first_half",
+        "ordering_note": (
+            "Fixed contiguous same-condition A/B/B/A p256 prefill blocks 1-5."
+        ),
+    },
+    {
+        "subcampaign_id": "06_phase_prefill_p256_abba_blocks_06_10",
+        "role": "comparative_phase_prefill_p256_second_half",
+        "ordering_note": (
+            "Fixed contiguous same-condition A/B/B/A p256 prefill blocks 6-10."
+        ),
+    },
 )
 
 POLICY_REL = Path("configs/campaign_policies/quiet_mac_p2_production.json")
@@ -151,6 +184,10 @@ DECODE_TEMPLATE_REL = Path(
     "configs/campaigns/qwen25_7b_decode_floor_v1/condition_families/"
     "condition_family_df_ph_decode_qwen25_7b.json"
 )
+P256_PROMPT_REL = Path(
+    "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/"
+    "prefill_prompt_candidate.json"
+)
 
 EXPECTED_EXTERNAL_SHA256 = {
     POLICY_REL.as_posix(): "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
@@ -162,6 +199,7 @@ EXPECTED_EXTERNAL_SHA256 = {
     MID_MANIFEST_REL.as_posix(): "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21",
     END_MANIFEST_REL.as_posix(): "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67",
     DECODE_TEMPLATE_REL.as_posix(): "d90b8fec2ccc74f1e982e573789a32116cda78d625ce84e72f2717926edc0cdb",
+    P256_PROMPT_REL.as_posix(): "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
 }
 
 EXPECTED_DECODE_DOMAIN_SHA256 = (
@@ -172,6 +210,12 @@ EXPECTED_PREFILL_FILE_SHA256 = (
 )
 EXPECTED_PREFILL_DOMAIN_SHA256 = (
     "b95688675b5518ab6675b8688ce4475b0d756653ecfb10ec80fa913ee49d69f1"
+)
+EXPECTED_P256_FILE_SHA256 = (
+    "d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252"
+)
+EXPECTED_P256_DOMAIN_SHA256 = (
+    "023a513fc4020c67d5866e8176dbb872bb3884109c63e3d57637fa6195ba9538"
 )
 
 
@@ -211,7 +255,29 @@ def verify_external_inputs() -> None:
             )
 
 
-def condition_families() -> tuple[dict[str, Any], dict[str, Any], str, str]:
+def load_p256_prompt_text() -> str:
+    prompt_raw = (REPO_ROOT / P256_PROMPT_REL).read_bytes()
+    prompt = json.loads(prompt_raw)
+    text = prompt.get("prompt_text") if isinstance(prompt, dict) else None
+    if not isinstance(text, str) or not text:
+        raise ValueError("p256 prompt artifact has no prompt_text")
+    if sha256_bytes(text.encode("utf-8")) != P256_PROMPT_UTF8_SHA256:
+        raise ValueError("p256 prompt UTF-8 hash differs from the Q1 pin")
+    if prompt.get("prompt_text_utf8_sha256") != P256_PROMPT_UTF8_SHA256:
+        raise ValueError("p256 prompt artifact declares the wrong UTF-8 hash")
+    if prompt.get("planned_token_count") != 256:
+        raise ValueError("p256 prompt artifact does not declare 256 planned tokens")
+    token_basis = prompt.get("token_count_basis")
+    if not isinstance(token_basis, Mapping) or token_basis.get(
+        "shared_tokenizer_json_sha256"
+    ) != P256_SHARED_TOKENIZER_JSON_SHA256:
+        raise ValueError("p256 prompt shared-tokenizer pin drifted")
+    return text
+
+
+def condition_families() -> tuple[
+    dict[str, Any], dict[str, Any], dict[str, Any], str, str, str
+]:
     decode_raw = (REPO_ROOT / DECODE_TEMPLATE_REL).read_bytes()
     decode = json.loads(decode_raw)
     prefill = {
@@ -231,22 +297,50 @@ def condition_families() -> tuple[dict[str, Any], dict[str, Any], str, str]:
         "comparison_policy": "same_condition_repeat_and_null_abba_alias",
         "abba_alias_relation": "A_equals_B",
     }
-    for name, value in (("decode", decode), ("prefill", prefill)):
+    p256 = {
+        "schema_version": FAMILY_SCHEMA,
+        "condition_family_id": P256_FAMILY_ID,
+        "workload_profile": {
+            "name": P256_WORKLOAD_NAME,
+            "prompt_tokens": 256,
+            "output_tokens": 512,
+            "repetitions": 1,
+            "warmup_runs": 1,
+        },
+        "measurement_target": {
+            "metric": "phase_energy_j.prefill",
+            "window_class": "phase",
+        },
+        "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+        "abba_alias_relation": "A_equals_B",
+    }
+    for name, value in (("decode", decode), ("prefill", prefill), ("p256", p256)):
         errors = validate_condition_family_definition(value)
         if errors:
             raise ValueError(f"{name} family invalid: {'; '.join(errors)}")
     decode_domain = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, decode)
     prefill_domain = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, prefill)
+    p256_domain = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, p256)
     if decode_domain != EXPECTED_DECODE_DOMAIN_SHA256:
         raise ValueError("D-085 decode condition-family domain changed")
     if sha256_bytes(render_json(prefill)) != EXPECTED_PREFILL_FILE_SHA256:
         raise ValueError("prefill-rider bytes changed")
     if prefill_domain != EXPECTED_PREFILL_DOMAIN_SHA256:
         raise ValueError("prefill-rider condition-family domain changed")
-    return decode, prefill, decode_domain, prefill_domain
+    if sha256_bytes(render_json(p256)) != EXPECTED_P256_FILE_SHA256:
+        raise ValueError("p256 condition-family bytes changed")
+    if p256_domain != EXPECTED_P256_DOMAIN_SHA256:
+        raise ValueError("p256 condition-family domain changed")
+    return decode, prefill, p256, decode_domain, prefill_domain, p256_domain
 
 
-def build_science() -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any]]]:
+def build_science() -> tuple[
+    list[dict[str, Any]],
+    list[str],
+    list[dict[str, Any]],
+    list[str],
+    list[dict[str, Any]],
+]:
     stages = [{**stage, "runs": []} for stage in STAGES]
     absolute_ids: list[str] = []
     for rep in range(1, N + 1):
@@ -257,6 +351,7 @@ def build_science() -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any
                 "filename": f"{run_id}.json",
                 "rep": rep,
                 "role": "absolute_repeat",
+                "block_id": None,
                 "block_index": rep,
                 "position_in_block": 1,
                 "position": None,
@@ -283,6 +378,7 @@ def build_science() -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any
                 "filename": f"{run_id}.json",
                 "rep": block,
                 "role": "comparative_abba_member",
+                "block_id": block_id,
                 "block_index": block,
                 "position_in_block": sequence_index,
                 "position": position,
@@ -310,17 +406,97 @@ def build_science() -> tuple[list[dict[str, Any]], list[str], list[dict[str, Any
                 "members": members,
             }
         )
-    return stages, absolute_ids, blocks
+    p256_absolute_ids: list[str] = []
+    for rep in range(1, N + 1):
+        run_id = f"d117f7-df-ph-prefill-p256-abs-r{rep:02d}"
+        stages[3]["runs"].append(
+            {
+                "run_id": run_id,
+                "filename": f"{run_id}.json",
+                "rep": rep,
+                "role": "absolute_repeat",
+                "block_id": None,
+                "block_index": rep,
+                "position_in_block": 1,
+                "position": None,
+                "label": None,
+                "condition_family_id": P256_FAMILY_ID,
+                "collection_tags": [f"rep{rep}"],
+            }
+        )
+        p256_absolute_ids.append(run_id)
+
+    p256_blocks: list[dict[str, Any]] = []
+    for block in range(1, N + 1):
+        block_id = f"d117-df-cmp-abba-ph-prefill-p256-qwen25-7b-b{block:02d}"
+        members: list[dict[str, Any]] = []
+        for sequence_index, (label, position) in enumerate(
+            (("A", "A1"), ("B", "B1"), ("B", "B2"), ("A", "A2")),
+            start=1,
+        ):
+            run_id = (
+                f"d117f7-df-cmp-abba-ph-prefill-p256-b{block:02d}-"
+                f"{position.lower()}"
+            )
+            run = {
+                "run_id": run_id,
+                "filename": f"{run_id}.json",
+                "rep": block,
+                "role": "comparative_abba_member",
+                "block_id": block_id,
+                "block_index": block,
+                "position_in_block": sequence_index,
+                "position": position,
+                "label": label,
+                "condition_family_id": P256_FAMILY_ID,
+                "collection_tags": [
+                    f"rep{block}",
+                    f"calibration-abba-block-id={block_id}",
+                    f"calibration-abba-label={label}",
+                    f"calibration-abba-sequence-index={sequence_index}",
+                ],
+            }
+            stages[4 if block <= 5 else 5]["runs"].append(run)
+            members.append(
+                {
+                    "position": position,
+                    "plan_label": label,
+                    "plan_sequence_index": sequence_index,
+                    "bundle_id": run_id,
+                }
+            )
+        p256_blocks.append(
+            {
+                "block_id": block_id,
+                "executed_labels": ["A", "B", "B", "A"],
+                "members": members,
+            }
+        )
+    return stages, absolute_ids, blocks, p256_absolute_ids, p256_blocks
 
 
-def config_for(run: Mapping[str, Any], plan_sha256: str) -> dict[str, Any]:
+def config_for(
+    run: Mapping[str, Any], plan_sha256: str, p256_prompt_text: str
+) -> dict[str, Any]:
+    family_id = run.get("condition_family_id", DECODE_FAMILY_ID)
+    workload = (
+        {
+            "name": P256_WORKLOAD_NAME,
+            "repetitions": 1,
+            "warmup_runs": 1,
+            "output_tokens": 512,
+            "prompt_text": p256_prompt_text,
+        }
+        if family_id == P256_FAMILY_ID
+        else WORKLOAD
+    )
     return {
         "schema_version": "0.1",
         "run_id": run["run_id"],
         "model": MODEL,
         "quantization": QUANTIZATION,
         "hardware_target": HARDWARE,
-        "workload_profile": WORKLOAD,
+        "workload_profile": workload,
         "interconnect": {"name": "local"},
         "sampling": SAMPLING,
         "run_metadata": {
@@ -331,7 +507,7 @@ def config_for(run: Mapping[str, Any], plan_sha256: str) -> dict[str, Any]:
                 CAMPAIGN_TAG,
                 "production-window",
                 "floor-calibration",
-                f"df-condition={DECODE_FAMILY_ID}",
+                f"df-condition={family_id}",
                 f"calibration-plan-sha256={plan_sha256}",
                 *run["collection_tags"],
             ],
@@ -342,11 +518,7 @@ def config_for(run: Mapping[str, Any], plan_sha256: str) -> dict[str, Any]:
 def manifest_entry(
     run: Mapping[str, Any], index: int, config_path: str, config_sha256: str
 ) -> dict[str, Any]:
-    block_id = (
-        f"d117-df-cmp-abba-ph-decode-qwen25-7b-b{run['block_index']:02d}"
-        if run["role"] == "comparative_abba_member"
-        else None
-    )
+    block_id = run.get("block_id")
     return {
         "index": index,
         "config": config_path,
@@ -354,7 +526,7 @@ def manifest_entry(
         "run_id": run["run_id"],
         "model_tag": MODEL_TAG,
         "rep": run["rep"],
-        "workload": DECODE_FAMILY_ID,
+        "workload": run.get("condition_family_id", DECODE_FAMILY_ID),
         "role": run["role"],
         "block_id": block_id,
         "block_index": run["block_index"],
@@ -397,10 +569,14 @@ def extraction_spec(
     *,
     decode: Mapping[str, Any],
     prefill: Mapping[str, Any],
+    p256: Mapping[str, Any],
     decode_domain: str,
     prefill_domain: str,
+    p256_domain: str,
     absolute_rows: Sequence[Mapping[str, Any]],
     comparative_rows: Sequence[Mapping[str, Any]],
+    p256_absolute_rows: Sequence[Mapping[str, Any]],
+    p256_comparative_rows: Sequence[Mapping[str, Any]],
     root_manifest_id: str,
     root_manifest_sha256: str,
 ) -> dict[str, Any]:
@@ -418,24 +594,26 @@ def extraction_spec(
             for row in rows
         ]
 
-    comparative_blocks: list[dict[str, Any]] = []
-    for block in range(1, N + 1):
-        selected = [row for row in comparative_rows if row["block_index"] == block]
-        comparative_blocks.append(
-            {
-                "block_id": (
-                    f"d117-df-cmp-abba-ph-decode-qwen25-7b-b{block:02d}"
-                ),
-                "members": {
-                    position: next(
-                        row["run_id"]
-                        for row in selected
-                        if row["position"] == position
-                    )
-                    for position in ("A1", "B1", "B2", "A2")
-                },
-            }
-        )
+    def comparative_blocks(
+        rows: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        for block in range(1, N + 1):
+            selected = [row for row in rows if row["block_index"] == block]
+            result.append(
+                {
+                    "block_id": selected[0]["block_id"],
+                    "members": {
+                        position: next(
+                            row["run_id"]
+                            for row in selected
+                            if row["position"] == position
+                        )
+                        for position in ("A1", "B1", "B2", "A2")
+                    },
+                }
+            )
+        return result
 
     def absolute_cell(
         cell_id: str,
@@ -443,6 +621,7 @@ def extraction_spec(
         precheck: list[str],
         definition: Mapping[str, Any],
         domain_sha: str,
+        rows: Sequence[Mapping[str, Any]] = absolute_rows,
     ) -> dict[str, Any]:
         return {
             "cell_id": cell_id,
@@ -458,11 +637,11 @@ def extraction_spec(
             "estimator": "d054_false_effect_guard.v1",
             "order_manifest": root_pin,
             "evidence_root_id": EVIDENCE_ROOT_ID,
-            "member_config_sha256": member_hashes(absolute_rows),
+            "member_config_sha256": member_hashes(rows),
             "calibration_basis": calibration_basis(),
             "members": [
                 {"slot": row["run_id"], "bundle_id": row["run_id"]}
-                for row in absolute_rows
+                for row in rows
             ],
         }
 
@@ -472,6 +651,7 @@ def extraction_spec(
         precheck: list[str],
         definition: Mapping[str, Any],
         domain_sha: str,
+        rows: Sequence[Mapping[str, Any]] = comparative_rows,
     ) -> dict[str, Any]:
         family = family_binding(definition, domain_sha)
         return {
@@ -485,9 +665,9 @@ def extraction_spec(
             "expected_n": N,
             "order_manifest": root_pin,
             "evidence_root_id": EVIDENCE_ROOT_ID,
-            "member_config_sha256": member_hashes(comparative_rows),
+            "member_config_sha256": member_hashes(rows),
             "calibration_basis": calibration_basis(),
-            "blocks": comparative_blocks,
+            "blocks": comparative_blocks(rows),
         }
 
     cells = [
@@ -519,16 +699,37 @@ def extraction_spec(
             prefill,
             prefill_domain,
         ),
+        absolute_cell(
+            P256_ABSOLUTE_CELL,
+            "phase_energy_j.prefill",
+            ["phase", "prefill"],
+            p256,
+            p256_domain,
+            p256_absolute_rows,
+        ),
+        comparative_cell(
+            P256_COMPARATIVE_CELL,
+            "phase_energy_j.prefill",
+            ["phase", "prefill"],
+            p256,
+            p256_domain,
+            p256_comparative_rows,
+        ),
     ]
     all_rows = [*absolute_rows, *comparative_rows]
-    reported_members = [
-        {
-            "ordinal": index,
-            "bundle_id": row["run_id"],
-            "config_sha256": row["config_sha256"],
-        }
-        for index, row in enumerate(all_rows, start=1)
-    ]
+    p256_rows = [*p256_absolute_rows, *p256_comparative_rows]
+
+    def reported_members(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            {
+                "ordinal": index,
+                "bundle_id": row["run_id"],
+                "config_sha256": row["config_sha256"],
+            }
+            for index, row in enumerate(rows, start=1)
+        ]
+
+    decode_reported_members = reported_members(all_rows)
     reported_cells = [
         {
             "cell_id": "d117-reported-mean-ph-decode-qwen25-7b",
@@ -538,7 +739,7 @@ def extraction_spec(
             "measurand": "gross_phase_energy_j",
             "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
             "expected_n": 50,
-            "members": reported_members,
+            "members": decode_reported_members,
             "missing_or_invalid_member": "refuse_reported_mean",
             "numeric_value": None,
         },
@@ -550,7 +751,19 @@ def extraction_spec(
             "measurand": "gross_phase_energy_j",
             "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
             "expected_n": 50,
-            "members": reported_members,
+            "members": decode_reported_members,
+            "missing_or_invalid_member": "refuse_reported_mean",
+            "numeric_value": None,
+        },
+        {
+            "cell_id": "d117-reported-mean-ph-prefill-p256-qwen25-7b",
+            "metric": "phase_energy_j.prefill",
+            "window_class": "phase",
+            "target_precheck_path": ["phase", "prefill"],
+            "measurand": "gross_phase_energy_j",
+            "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+            "expected_n": 50,
+            "members": reported_members(p256_rows),
             "missing_or_invalid_member": "refuse_reported_mean",
             "numeric_value": None,
         },
@@ -575,11 +788,11 @@ def extraction_spec(
             ),
         },
         "reference_counts": {
-            "floor_cell_references": 100,
-            "reported_energy_references": 100,
-            "total_registered_references": 200,
-            "unique_physical_bundles": 50,
-            "unique_config_paths": 50,
+            "floor_cell_references": 150,
+            "reported_energy_references": 150,
+            "total_registered_references": 300,
+            "unique_physical_bundles": 100,
+            "unique_config_paths": 100,
         },
         "phase_presence_contract": {
             "required_metrics": ["phase_energy_j.decode", "phase_energy_j.prefill"],
@@ -608,14 +821,23 @@ def producer_contract(
     config_set_sha256: str,
     decode_domain: str,
     prefill_domain: str,
+    p256_domain: str,
     absolute_rows: Sequence[Mapping[str, Any]],
     comparative_rows: Sequence[Mapping[str, Any]],
-    identity_config_inventory: list[dict[str, str]],
+    p256_absolute_rows: Sequence[Mapping[str, Any]],
+    p256_comparative_rows: Sequence[Mapping[str, Any]],
+    decode_identity_config_inventory: list[dict[str, str]],
+    p256_identity_config_inventory: list[dict[str, str]],
+    p256_prompt_text: str,
 ) -> dict[str, Any]:
+    decode_rows = [*absolute_rows, *comparative_rows]
+    p256_rows = [*p256_absolute_rows, *p256_comparative_rows]
     config_rows = [
         {"bundle_id": row["run_id"], "config_sha256": row["config_sha256"]}
-        for row in [*absolute_rows, *comparative_rows]
+        for row in [*decode_rows, *p256_rows]
     ]
+    decode_config_rows = config_rows[:50]
+    p256_config_rows = config_rows[50:]
     expected_config_set_sha256 = canonical_sha256(config_rows)
     if config_set_sha256 != expected_config_set_sha256:
         raise ValueError("config-set SHA does not match the ordered member projection")
@@ -645,6 +867,16 @@ def producer_contract(
             "model_revision": MODEL["revision"],
             "quantization": "int4",
             "workload_profile": WORKLOAD,
+            "workload_profiles": {
+                "decode_and_prefill_p128": WORKLOAD,
+                "prefill_p256": {
+                    "name": P256_WORKLOAD_NAME,
+                    "repetitions": 1,
+                    "warmup_runs": 1,
+                    "output_tokens": 512,
+                    "prompt_text_utf8_sha256": P256_PROMPT_UTF8_SHA256,
+                },
+            },
         },
         "order_manifest": {
             "path": f"{PACK_REL.as_posix()}/order_manifest.json",
@@ -654,10 +886,10 @@ def producer_contract(
         "extraction_spec": {
             "path": SPEC_REL.as_posix(),
             "sha256": spec_sha256,
-            "member_count": 50,
-            "floor_cell_count": 4,
-            "floor_cell_member_references": 100,
-            "reported_energy_cell_count": 2,
+            "member_count": 100,
+            "floor_cell_count": 6,
+            "floor_cell_member_references": 150,
+            "reported_energy_cell_count": 3,
         },
         "config_set_sha256": config_set_sha256,
         "roles": [
@@ -671,7 +903,7 @@ def producer_contract(
                 "absolute_calibration_cell_id": DECODE_ABSOLUTE_CELL,
                 "comparative_calibration_cell_id": DECODE_COMPARATIVE_CELL,
                 "allowed_consumer_families": ["sw-decode-b-qwen25-7b"],
-                "members": config_rows,
+                "members": decode_config_rows,
             },
             {
                 "role": "prefill",
@@ -683,7 +915,19 @@ def producer_contract(
                 "absolute_calibration_cell_id": PREFILL_ABSOLUTE_CELL,
                 "comparative_calibration_cell_id": PREFILL_COMPARATIVE_CELL,
                 "allowed_consumer_families": [PREFILL_FAMILY_ID],
-                "members": config_rows,
+                "members": decode_config_rows,
+            },
+            {
+                "role": "prefill_p256",
+                "artifact_cell_id": "d117-qwen25-7b-prefill-p256-floor-v1",
+                "transport_group_id": "tg-d117-qwen25-7b-prefill-p256-v1",
+                "metric": "phase_energy_j.prefill",
+                "target_precheck_path": ["phase", "prefill"],
+                "condition_family_id": P256_FAMILY_ID,
+                "absolute_calibration_cell_id": P256_ABSOLUTE_CELL,
+                "comparative_calibration_cell_id": P256_COMPARATIVE_CELL,
+                "allowed_consumer_families": ["sw-prefill-p256-b-qwen25-7b"],
+                "members": p256_config_rows,
             },
         ],
         "identity_pin_projection": validate_identity_pin_projection({
@@ -725,13 +969,51 @@ def producer_contract(
                             "dataset_ref": None,
                         },
                     },
-                    "config_inventory": identity_config_inventory,
+                    "config_inventory": decode_identity_config_inventory,
                     "model_runtime_config": {
                         "model_artifact_sha256": None,
                         "runtime_identity_sha256": None,
                         "config_set_sha256": None,
                     },
-                }
+                },
+                {
+                    "identity_unit_id": "beta/prefill_p256",
+                    "producer_plan_reference": {
+                        "plan_id": PLAN_ID,
+                        "path": f"{PACK_REL.as_posix()}/calibration_plan.json",
+                    },
+                    "consumer_bindings": [
+                        {
+                            "arm": "B",
+                            "family": "sw-prefill-p256-b-qwen25-7b",
+                            "measurement_arm": "prefill_p256",
+                        }
+                    ],
+                    "declared_identity": {
+                        "hardware_target": HARDWARE["id"],
+                        "runtime_backend": HARDWARE["runtime_backend"],
+                        "telemetry_backend": HARDWARE["telemetry_backend"],
+                        "model_name": MODEL["name"],
+                        "model_source": MODEL["source"],
+                        "model_revision": MODEL["revision"],
+                        "quantization": {**QUANTIZATION, "group_size": None},
+                        "workload_profile": {
+                            "name": P256_WORKLOAD_NAME,
+                            "repetitions": 1,
+                            "warmup_runs": 1,
+                            "prompt_tokens": None,
+                            "output_tokens": 512,
+                            "prompt_text": p256_prompt_text,
+                            "dataset_ref": None,
+                        },
+                    },
+                    "config_inventory": p256_identity_config_inventory,
+                    "model_runtime_config": {
+                        "model_artifact_sha256": None,
+                        "runtime_identity_sha256": None,
+                        "config_set_sha256": None,
+                    },
+                },
             ],
             "projection_receipt": None,
             "supersedes": [],
@@ -917,6 +1199,16 @@ def stage_graph(
             ),
         ),
         (
+            "beta-science-abba-06-10",
+            20,
+            f"{PACK_REL.as_posix()}/03_phase_decode_abba_blocks_06_10",
+            "claim_runs_root",
+            (
+                f"{PACK_REL.as_posix()}/03_phase_decode_abba_blocks_06_10/"
+                "order_manifest.json"
+            ),
+        ),
+        (
             "beta-reference-midpoint",
             1,
             "configs/campaigns/window_references/midpoint",
@@ -924,12 +1216,29 @@ def stage_graph(
             MID_MANIFEST_REL.as_posix(),
         ),
         (
-            "beta-science-abba-06-10",
+            "beta-science-prefill-p256-absolute",
+            10,
+            f"{PACK_REL.as_posix()}/04_phase_prefill_p256_absolute",
+            "claim_runs_root",
+            f"{PACK_REL.as_posix()}/04_phase_prefill_p256_absolute/order_manifest.json",
+        ),
+        (
+            "beta-science-prefill-p256-abba-01-05",
             20,
-            f"{PACK_REL.as_posix()}/03_phase_decode_abba_blocks_06_10",
+            f"{PACK_REL.as_posix()}/05_phase_prefill_p256_abba_blocks_01_05",
             "claim_runs_root",
             (
-                f"{PACK_REL.as_posix()}/03_phase_decode_abba_blocks_06_10/"
+                f"{PACK_REL.as_posix()}/05_phase_prefill_p256_abba_blocks_01_05/"
+                "order_manifest.json"
+            ),
+        ),
+        (
+            "beta-science-prefill-p256-abba-06-10",
+            20,
+            f"{PACK_REL.as_posix()}/06_phase_prefill_p256_abba_blocks_06_10",
+            "claim_runs_root",
+            (
+                f"{PACK_REL.as_posix()}/06_phase_prefill_p256_abba_blocks_06_10/"
                 "order_manifest.json"
             ),
         ),
@@ -1252,7 +1561,11 @@ def plan_tree(
                     "sha256": EXPECTED_EXTERNAL_SHA256[
                         NEG8_CORPUS_REL.as_posix()
                     ],
-                }
+                },
+                {
+                    "path": P256_PROMPT_REL.as_posix(),
+                    "sha256": EXPECTED_EXTERNAL_SHA256[P256_PROMPT_REL.as_posix()],
+                },
             ],
         },
         "attempt_policy": {
@@ -1341,15 +1654,15 @@ def plan_tree(
                 "path": f"{PACK_REL.as_posix()}/producer_contract.json",
                 "sha256": producer_sha256,
             },
-            "prefill_phase_presence": "required_for_all_50_physical_bundles",
+            "prefill_phase_presence": "required_for_all_100_physical_bundles",
             "missing_registered_phase": "refuse",
         },
         "runtime_budget": {
-            "planning_estimate_minutes_with_margin": 194.4,
-            "planning_estimate_hours_with_margin": 3.24,
+            "planning_estimate_minutes_with_margin": 388.8,
+            "planning_estimate_hours_with_margin": 6.48,
             "margin_percent": 20,
             "margin_authority": "time_headroom_only_never_member_replacement",
-            "science_count": 50,
+            "science_count": 100,
             "bound_count": 12,
             "reference_count": 7,
             "calibration_observation_count": 2,
@@ -1363,9 +1676,12 @@ def readme() -> bytes:
         "# D-117 Qwen2.5-7B phase-floor campaign — unfrozen draft\n\n"
         "This pack pre-registers the beta window's 10 absolute decode members, "
         "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
-        "rider over the same 50 physical bundles. It retains the D-085 7B stack "
-        "and condition-family identity and registers the two D-123 reported "
-        "phase-energy means without adding collection.\n\n"
+        "rider over the same 50 physical bundles. It also carries a dedicated "
+        "Q8 p256 prefill domain with 10 absolute members and ten null A/B/B/A "
+        "blocks (50 additional members), while retaining the D-085 7B stack "
+        "identity and registering three D-123 reported phase-energy means. The "
+        "p256 workload name remains `df_ph_prefill_p256_candidate` for byte "
+        "identity with the gamma consumer even though Q1 has frozen its prompt.\n\n"
         "The pack is not armable. Its receipt oracle is replay-derived from "
         f"`{oracle['source']['module']}`: {oracle['receipt_count']} physical "
         f"receipts for {oracle['logical_operation_count']} logical operations per "
@@ -1398,6 +1714,10 @@ def expected_pack_files() -> list[Path]:
             "condition_families/"
             "condition_family_df_ph_prefill_p128_qwen25_7b.json"
         ),
+        Path(
+            "condition_families/"
+            "condition_family_df_ph_prefill_p256_qwen25_7b.json"
+        ),
     ]
     paths.append(Path("01_phase_decode_absolute/order_manifest.json"))
     paths.extend(
@@ -1420,13 +1740,42 @@ def expected_pack_files() -> list[Path]:
                         f"b{block:02d}-{position}.json"
                     )
                 )
+    paths.append(Path("04_phase_prefill_p256_absolute/order_manifest.json"))
+    paths.extend(
+        Path(
+            f"04_phase_prefill_p256_absolute/"
+            f"d117f7-df-ph-prefill-p256-abs-r{rep:02d}.json"
+        )
+        for rep in range(1, 11)
+    )
+    for stage, first, last in (
+        ("05_phase_prefill_p256_abba_blocks_01_05", 1, 5),
+        ("06_phase_prefill_p256_abba_blocks_06_10", 6, 10),
+    ):
+        paths.append(Path(f"{stage}/order_manifest.json"))
+        for block in range(first, last + 1):
+            for position in ("a1", "b1", "b2", "a2"):
+                paths.append(
+                    Path(
+                        f"{stage}/d117f7-df-cmp-abba-ph-prefill-p256-"
+                        f"b{block:02d}-{position}.json"
+                    )
+                )
     return paths
 
 
 def build_artifacts() -> dict[Path, bytes]:
     verify_external_inputs()
-    decode, prefill, decode_domain, prefill_domain = condition_families()
-    stages, absolute_ids, blocks = build_science()
+    (
+        decode,
+        prefill,
+        p256,
+        decode_domain,
+        prefill_domain,
+        p256_domain,
+    ) = condition_families()
+    p256_prompt_text = load_p256_prompt_text()
+    stages, absolute_ids, blocks, p256_absolute_ids, p256_blocks = build_science()
 
     plan = {
         "schema_version": PLAN_SCHEMA,
@@ -1448,6 +1797,8 @@ def build_artifacts() -> dict[Path, bytes]:
             "decode_condition_family_sha256": decode_domain,
             "prefill_condition_family_id": PREFILL_FAMILY_ID,
             "prefill_condition_family_sha256": prefill_domain,
+            "prefill_p256_condition_family_id": P256_FAMILY_ID,
+            "prefill_p256_condition_family_sha256": p256_domain,
         },
         "replacement_rule": {
             "policy": "abort_window_on_any_required_member_failure",
@@ -1488,6 +1839,21 @@ def build_artifacts() -> dict[Path, bytes]:
                 "condition_family_id": PREFILL_FAMILY_ID,
                 "ordered_blocks": blocks,
             },
+            {
+                "cell_id": P256_ABSOLUTE_CELL,
+                "kind": "absolute",
+                "metric": "phase_energy_j.prefill",
+                "condition_family_id": P256_FAMILY_ID,
+                "ordered_bundle_ids": p256_absolute_ids,
+                "estimator": "d054_false_effect_guard.v1",
+            },
+            {
+                "cell_id": P256_COMPARATIVE_CELL,
+                "kind": "comparative_abba",
+                "metric": "phase_energy_j.prefill",
+                "condition_family_id": P256_FAMILY_ID,
+                "ordered_blocks": p256_blocks,
+            },
         ],
         "reported_energy_cells": [
             {
@@ -1518,12 +1884,26 @@ def build_artifacts() -> dict[Path, bytes]:
                     ],
                 ],
             },
+            {
+                "cell_id": "d117-reported-mean-ph-prefill-p256-qwen25-7b",
+                "metric": "phase_energy_j.prefill",
+                "measurand": "gross_phase_energy_j",
+                "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+                "ordered_bundle_ids": [
+                    *p256_absolute_ids,
+                    *[
+                        member["bundle_id"]
+                        for block in p256_blocks
+                        for member in block["members"]
+                    ],
+                ],
+            },
         ],
         "execution_mode": {
             "ordered_science_stage_ids": [
                 stage["subcampaign_id"] for stage in stages
             ],
-            "planned_science_bundles": 50,
+            "planned_science_bundles": 100,
             "planned_bound_bundles": 12,
             "planned_reference_bundles": 7,
             "planned_calibration_observations": 2,
@@ -1558,6 +1938,10 @@ def build_artifacts() -> dict[Path, bytes]:
         / "condition_families/condition_family_df_ph_prefill_p128_qwen25_7b.json": render_json(
             prefill
         ),
+        PACK_REL
+        / "condition_families/condition_family_df_ph_prefill_p256_qwen25_7b.json": render_json(
+            p256
+        ),
     }
 
     root_rows: list[dict[str, Any]] = []
@@ -1568,7 +1952,12 @@ def build_artifacts() -> dict[Path, bytes]:
         stage_id = stage["subcampaign_id"]
         local_rows: list[dict[str, Any]] = []
         for local_index, run in enumerate(stage["runs"], start=1):
-            config = config_for(run, plan_sha)
+            config_plan_sha = (
+                plan_sha
+                if run.get("condition_family_id") == P256_FAMILY_ID
+                else LEGACY_DECODE_PLAN_SHA256
+            )
+            config = config_for(run, config_plan_sha, p256_prompt_text)
             config_bytes = render_json(config)
             config_sha = sha256_bytes(config_bytes)
             config_rel = Path(stage_id) / run["filename"]
@@ -1587,12 +1976,7 @@ def build_artifacts() -> dict[Path, bytes]:
                     "config_sha256": config_sha,
                     "run_id": run["run_id"],
                     "role": run["role"],
-                    "block_id": (
-                        f"d117-df-cmp-abba-ph-decode-qwen25-7b-"
-                        f"b{run['block_index']:02d}"
-                        if run["role"] == "comparative_abba_member"
-                        else None
-                    ),
+                    "block_id": run.get("block_id"),
                     "block_index": run["block_index"],
                     "position": run["position"],
                     "arm": run["label"],
@@ -1654,14 +2038,20 @@ def build_artifacts() -> dict[Path, bytes]:
     artifacts[PACK_REL / "order_manifest.json"] = root_bytes
 
     absolute_rows = root_science[:10]
-    comparative_rows = root_science[10:]
+    comparative_rows = root_science[10:50]
+    p256_absolute_rows = root_science[50:60]
+    p256_comparative_rows = root_science[60:100]
     spec = extraction_spec(
         decode=decode,
         prefill=prefill,
+        p256=p256,
         decode_domain=decode_domain,
         prefill_domain=prefill_domain,
+        p256_domain=p256_domain,
         absolute_rows=absolute_rows,
         comparative_rows=comparative_rows,
+        p256_absolute_rows=p256_absolute_rows,
+        p256_comparative_rows=p256_comparative_rows,
         root_manifest_id=root_manifest_id,
         root_manifest_sha256=root_sha,
     )
@@ -1683,9 +2073,12 @@ def build_artifacts() -> dict[Path, bytes]:
         config_set_sha256=config_set_sha,
         decode_domain=decode_domain,
         prefill_domain=prefill_domain,
+        p256_domain=p256_domain,
         absolute_rows=absolute_rows,
         comparative_rows=comparative_rows,
-        identity_config_inventory=sorted(
+        p256_absolute_rows=p256_absolute_rows,
+        p256_comparative_rows=p256_comparative_rows,
+        decode_identity_config_inventory=sorted(
             [
                 {
                     "path": Path(row["config_path"])
@@ -1693,10 +2086,23 @@ def build_artifacts() -> dict[Path, bytes]:
                     .as_posix(),
                     "sha256": row["config_sha256"],
                 }
-                for row in root_science
+                for row in root_science[:50]
             ],
             key=lambda row: row["path"],
         ),
+        p256_identity_config_inventory=sorted(
+            [
+                {
+                    "path": Path(row["config_path"])
+                    .relative_to(PACK_REL)
+                    .as_posix(),
+                    "sha256": row["config_sha256"],
+                }
+                for row in root_science[50:]
+            ],
+            key=lambda row: row["path"],
+        ),
+        p256_prompt_text=p256_prompt_text,
     )
     producer_bytes = render_json(producer)
     producer_sha = sha256_bytes(producer_bytes)
@@ -1722,6 +2128,28 @@ def build_artifacts() -> dict[Path, bytes]:
             "byte_sha256": sha256_bytes(render_json(prefill)),
             "condition_family_id": PREFILL_FAMILY_ID,
             "domain_sha256": prefill_domain,
+        },
+        {
+            "path": (
+                f"{PACK_REL.as_posix()}/condition_families/"
+                "condition_family_df_ph_prefill_p256_qwen25_7b.json"
+            ),
+            "byte_sha256": sha256_bytes(render_json(p256)),
+            "condition_family_id": P256_FAMILY_ID,
+            "domain_sha256": p256_domain,
+            "prompt_artifact_path": P256_PROMPT_REL.as_posix(),
+            "prompt_artifact_sha256": EXPECTED_EXTERNAL_SHA256[
+                P256_PROMPT_REL.as_posix()
+            ],
+            "prompt_text_utf8_sha256": P256_PROMPT_UTF8_SHA256,
+            "shared_tokenizer_json_sha256": P256_SHARED_TOKENIZER_JSON_SHA256,
+            "ruled_token_id_sha256_prefix": P256_RULED_TOKEN_ID_SHA256_PREFIX,
+            "prompt_identity_ruling": (
+                "Q1, docs/strategy/2026-08-09-pack-freeze-plan.md"
+            ),
+            "token_id_sha256_pin_status": (
+                "prefix_only; no full-hex token-ID pin exists in-tree"
+            ),
         },
     ]
     stage_manifest_refs = {
@@ -1829,8 +2257,8 @@ def main() -> int:
         check_inventory(check_root, artifacts)
         compare_artifacts(check_root, artifacts)
         print(
-            "draft check passed: 50 science configs, 4 floor cells, "
-            "2 reporting cells"
+            "draft check passed: 100 science configs, 6 floor cells, "
+            "3 reporting cells"
         )
         return 0
     output_root = args.output_root.resolve() if args.output_root else REPO_ROOT
@@ -1838,7 +2266,7 @@ def main() -> int:
     pack_count = sum(1 for path in artifacts if PACK_REL in path.parents)
     print(
         f"generated {pack_count} pack files and {SPEC_REL.as_posix()}; "
-        "science_configs=50"
+        "science_configs=100"
     )
     return 0
 

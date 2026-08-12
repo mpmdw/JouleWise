@@ -28,6 +28,9 @@ SPEC_PATH = ROOT / SPEC_REL
 GENERATOR = PACK_ROOT / "generate_configs.py"
 PLAN_ID = "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1"
 EVIDENCE_ROOT_ID = "evidence-d117-floor-qwen25-1p5b-v1"
+CONTRAST_PACK = ROOT / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"
+P256_FAMILY_ID = "df-ph-prefill-p256-qwen25-1p5b"
+LEGACY_DECODE_PLAN_SHA256 = "56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -49,27 +52,33 @@ from scripts.extract_detection_floors import main as extract_main  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "b74673f5ea5c24b2ccb61542973bce6d453e1c26bcf2da38e0b75db88754638c"
+EXPECTED_PACK_SHA256 = "4faa4d9a0101495ff4c9d9c3943ccd733ce6474647af3d61c02f82f00846ea2c"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "f47cb1220602906b0c835dc6979a6bc448e8bcbe20ffc7031cfb261afbe97bfd",
-    "calibration_plan.json": "56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182",
-    "calibration_plan.sha256": "7e38e1f7730e56614c37f778a916098eb7a7655ef4409a9e7bd0a5a97cbd5f9f",
-    "order_manifest.json": "cc288667de9f38726d80318a08e24e7788c94fd965e9f2cf84c650a26bb11595",
-    "plan_tree.json": "663051ddeae9fff766813becc1910883ac77445729dc080600504ed4999e19b8",
-    "plan_tree.sha256": "5b7c5a060c9195a0b3ff3c4bdeca8068832b588a492adb72f7b95412df1287ca",
-    "producer_contract.json": "7067c9c5714e0dc442163ee73268aa570a681511ad9d0ef6622a55635a1b1c70",
+    "generate_configs.py": "bd9636908687700cb622af50f190276a0814e2336163a8e9fc80bf7bb7183f8c",
+    "calibration_plan.json": "7fe65f3192e721289bafb1353354af282f54e1039233e7cf68a7efbf7b419dc7",
+    "calibration_plan.sha256": "26151e8b6653e26518ae2aeac34dca4a1b4e1bc04af8999bd0097d1a0aa97579",
+    "order_manifest.json": "d8b6efe989a20f7569ee62290cd8b9a16726a0eb8ac0f528f3c5b0f5c0ab4d5f",
+    "plan_tree.json": "3289fc2bf422c38024e2c779fe899b0f1faa24adf6cbbbe73dc8fbb77467f1e9",
+    "plan_tree.sha256": "1889dfff7296b246ca0fbf00c101233c5739eb073a763aadc6a268eb72fcb5be",
+    "producer_contract.json": "2ffe9d44b81e36a5e0af2d89049d9d6e09e43065f45694ef7fde140515ace6c5",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"
     ),
     "condition_families/condition_family_df_ph_prefill_p128_qwen25_1p5b.json": (
         "985a4e5370724698b601303b2ba99027d298060eedc95a65d20112df413043ad"
     ),
+    "condition_families/condition_family_df_ph_prefill_p256_qwen25_1p5b.json": (
+        "c7d2b28276791ab8c5c10b27460bbccba6cb7aad75470e9d74ba4b64ed4ef9f2"
+    ),
 }
-EXPECTED_SPEC_SHA256 = "1b2ac6db94ff3eed369d3a6c702270b16c905ea810a90a6090aaf083b14da883"
+EXPECTED_SPEC_SHA256 = "e665727a9ff168b937a6d2967856f3af0feb7862f203caecf9d78270fd6849e2"
 EXPECTED_FAMILY_DOMAIN_SHA256 = {
     "df-ph-decode": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
     "df-ph-prefill-p128-qwen25-1p5b": (
         "974014e096806423b866a167510787482397cb4f68bb9e6f9f0ba7fd34f93f36"
+    ),
+    "df-ph-prefill-p256-qwen25-1p5b": (
+        "93c9ee9b32c8c2b25675cff263e2c98882fe5f0c7f81f3ad6899f55f6f9d3c39"
     ),
 }
 EXPECTED_EXTERNAL_SHA256 = {
@@ -87,6 +96,9 @@ EXPECTED_EXTERNAL_SHA256 = {
     ),
     "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json": (
         "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
+    ),
+    "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/prefill_prompt_candidate.json": (
+        "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456"
     ),
 }
 
@@ -129,9 +141,13 @@ def expected_pack_paths() -> set[str]:
         "producer_contract.json",
         "condition_families/condition_family_df_ph_decode.json",
         "condition_families/condition_family_df_ph_prefill_p128_qwen25_1p5b.json",
+        "condition_families/condition_family_df_ph_prefill_p256_qwen25_1p5b.json",
         "01_phase_decode_absolute/order_manifest.json",
         "02_phase_decode_abba_blocks_01_05/order_manifest.json",
         "03_phase_decode_abba_blocks_06_10/order_manifest.json",
+        "04_phase_prefill_p256_absolute/order_manifest.json",
+        "05_phase_prefill_p256_abba_blocks_01_05/order_manifest.json",
+        "06_phase_prefill_p256_abba_blocks_06_10/order_manifest.json",
     }
     paths.update(
         f"01_phase_decode_absolute/d117f15-df-ph-decode-abs-r{rep:02d}.json"
@@ -145,6 +161,20 @@ def expected_pack_paths() -> set[str]:
         )
         paths.update(
             f"{stage}/d117f15-df-cmp-abba-ph-decode-b{block:02d}-{position}.json"
+            for position in ("a1", "b1", "b2", "a2")
+        )
+    paths.update(
+        f"04_phase_prefill_p256_absolute/d117f15-df-ph-prefill-p256-abs-r{rep:02d}.json"
+        for rep in range(1, 11)
+    )
+    for block in range(1, 11):
+        stage = (
+            "05_phase_prefill_p256_abba_blocks_01_05"
+            if block <= 5
+            else "06_phase_prefill_p256_abba_blocks_06_10"
+        )
+        paths.update(
+            f"{stage}/d117f15-df-cmp-abba-ph-prefill-p256-b{block:02d}-{position}.json"
             for position in ("a1", "b1", "b2", "a2")
         )
     return paths
@@ -185,7 +215,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             if path.is_file()
         }
         self.assertEqual(actual, expected_pack_paths())
-        self.assertEqual(len(actual), 63)
+        self.assertEqual(len(actual), 117)
         self.assertEqual(pack_digest(PACK_ROOT), EXPECTED_PACK_SHA256)
         for relative, expected in EXPECTED_FILE_SHA256.items():
             with self.subTest(relative=relative):
@@ -201,7 +231,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(checked.returncode, 0, checked.stderr)
-        self.assertIn("verified unfrozen draft: 50 science configs", checked.stdout)
+        self.assertIn("verified unfrozen draft: 100 science configs", checked.stdout)
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             for output_root in (first, second):
                 generated = subprocess.run(
@@ -314,12 +344,12 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
 
     def test_exact_schedule_and_midpoint_split(self) -> None:
         rows = self.root_manifest["executed_order"]
-        self.assertEqual(len(rows), 50)
-        self.assertEqual([row["index"] for row in rows], list(range(1, 51)))
-        self.assertEqual(len({row["run_id"] for row in rows}), 50)
+        self.assertEqual(len(rows), 100)
+        self.assertEqual([row["index"] for row in rows], list(range(1, 101)))
+        self.assertEqual(len({row["run_id"] for row in rows}), 100)
         self.assertEqual(
             [stage["planned_n_bundles"] for stage in self.root_manifest["subcampaign_order"]],
-            [10, 20, 20],
+            [10, 20, 20, 10, 20, 20],
         )
         self.assertEqual(
             [row["run_id"] for row in rows[:10]],
@@ -330,16 +360,35 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         self.assertEqual(sorted({row["block_index"] for row in first_half}), list(range(1, 6)))
         self.assertEqual(sorted({row["block_index"] for row in second_half}), list(range(6, 11)))
         for block in range(1, 11):
-            block_rows = [row for row in rows if row["role"] == "comparative_abba_member" and row["block_index"] == block]
+            block_rows = [row for row in rows[:50] if row["role"] == "comparative_abba_member" and row["block_index"] == block]
             self.assertEqual([row["position"] for row in block_rows], ["A1", "B1", "B2", "A2"])
             self.assertEqual([row["arm"] for row in block_rows], ["A", "B", "B", "A"])
             self.assertEqual([row["position_in_block"] for row in block_rows], [1, 2, 3, 4])
+        self.assertEqual(
+            [row["run_id"] for row in rows[50:60]],
+            [f"d117f15-df-ph-prefill-p256-abs-r{rep:02d}" for rep in range(1, 11)],
+        )
+        for block in range(1, 11):
+            block_rows = [
+                row
+                for row in rows[60:]
+                if row["role"] == "comparative_abba_member"
+                and row["block_index"] == block
+            ]
+            self.assertEqual([row["position"] for row in block_rows], ["A1", "B1", "B2", "A2"])
+            self.assertEqual([row["arm"] for row in block_rows], ["A", "B", "B", "A"])
         graph_ids = [stage["stage_id"] for stage in self.tree["stage_graph"]]
-        self.assertLess(graph_ids.index("alpha-science-abba-01-05"), graph_ids.index("alpha-reference-midpoint"))
-        self.assertLess(graph_ids.index("alpha-reference-midpoint"), graph_ids.index("alpha-science-abba-06-10"))
+        self.assertLess(graph_ids.index("alpha-science-abba-06-10"), graph_ids.index("alpha-reference-midpoint"))
+        self.assertLess(graph_ids.index("alpha-reference-midpoint"), graph_ids.index("alpha-science-prefill-p256-absolute"))
         entries, warning = load_order_entries(PACK_ROOT)
         self.assertIsNone(warning)
         self.assertEqual([entry.run_id for entry in entries], [row["run_id"] for row in rows])
+        self.assertEqual(self.plan["execution_mode"]["planned_reference_bundles"], 7)
+        self.assertEqual(
+            self.tree["runtime_budget"]["planning_estimate_minutes_with_margin"],
+            376.8,
+        )
+        self.assertEqual(self.tree["runtime_budget"]["planning_estimate_hours_with_margin"], 6.28)
 
     def test_calibration_plan_shape_and_abba_members_are_family_canonical(self) -> None:
         sibling_plans = [
@@ -379,20 +428,46 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             self.assertEqual(config["model"]["name"], "Qwen2.5-1.5B-Instruct-4bit")
             self.assertEqual(config["model"]["revision"], "8b403126fc14f14cfc99bb4cfa72ecbc129ea677")
             self.assertEqual(config["quantization"], {"name": "int4", "bits": 4})
-            self.assertEqual(config["workload_profile"]["prompt_tokens"], 128)
+            is_p256 = "prefill-p256" in row["run_id"]
+            if is_p256:
+                self.assertNotIn("prompt_tokens", config["workload_profile"])
+                self.assertIn("prompt_text", config["workload_profile"])
+            else:
+                self.assertEqual(config["workload_profile"]["prompt_tokens"], 128)
             self.assertEqual(config["workload_profile"]["output_tokens"], 512)
             self.assertEqual(config["sampling"], {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0})
             tags = config["run_metadata"]["tags"]
             self.assertIn("d117-floor-qwen25-1p5b-v1", tags)
             self.assertIn("production-window", tags)
             self.assertIn("floor-calibration", tags)
-            self.assertIn("df-condition=df-ph-decode", tags)
-            self.assertIn(f"calibration-plan-sha256={plan_sha}", tags)
+            expected_family = P256_FAMILY_ID if is_p256 else "df-ph-decode"
+            self.assertIn(f"df-condition={expected_family}", tags)
+            expected_plan_sha = plan_sha if is_p256 else LEGACY_DECODE_PLAN_SHA256
+            self.assertIn(f"calibration-plan-sha256={expected_plan_sha}", tags)
 
-    def test_condition_families_and_zero_member_prefill_rider(self) -> None:
+    def test_p256_workload_is_byte_identical_to_consumer_arm(self) -> None:
+        floor_row = next(
+            row
+            for row in self.root_manifest["executed_order"]
+            if row["run_id"].startswith("d117f15-df-ph-prefill-p256-abs-")
+        )
+        contrast_manifest = load_json(CONTRAST_PACK / "order_manifest.json")
+        contrast_row = next(
+            row
+            for row in contrast_manifest["executed_order"]
+            if row["measurement_arm"] == "prefill_p256" and row["arm"] == "A"
+        )
+        floor_workload = load_json(PACK_ROOT / floor_row["config"])["workload_profile"]
+        contrast_workload = load_json(CONTRAST_PACK / contrast_row["config"])["workload_profile"]
+        self.assertEqual(floor_workload, contrast_workload)
+        self.assertIn("prompt_text", floor_workload)
+        self.assertNotIn("prompt_tokens", floor_workload)
+
+    def test_condition_families_and_dedicated_p256_domain(self) -> None:
         family_paths = {
             "df-ph-decode": PACK_ROOT / "condition_families/condition_family_df_ph_decode.json",
             "df-ph-prefill-p128-qwen25-1p5b": PACK_ROOT / "condition_families/condition_family_df_ph_prefill_p128_qwen25_1p5b.json",
+            P256_FAMILY_ID: PACK_ROOT / "condition_families/condition_family_df_ph_prefill_p256_qwen25_1p5b.json",
         }
         for family_id, path in family_paths.items():
             definition = load_json(path)
@@ -409,11 +484,21 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         self.assertEqual(decode_definition["workload_profile"], prefill_definition["workload_profile"])
         self.assertEqual(decode_definition["measurement_target"]["metric"], "phase_energy_j.decode")
         self.assertEqual(prefill_definition["measurement_target"]["metric"], "phase_energy_j.prefill")
-        self.assertEqual(self.plan["execution_mode"]["planned_science_bundles"], 50)
+        p256_definition = load_json(family_paths[P256_FAMILY_ID])
+        self.assertEqual(p256_definition["workload_profile"]["prompt_tokens"], 256)
+        self.assertEqual(p256_definition["workload_profile"]["name"], "df_ph_prefill_p256_candidate")
+        p256_binding = next(
+            row for row in self.tree["condition_families"]
+            if row["condition_family_id"] == P256_FAMILY_ID
+        )
+        self.assertEqual(p256_binding["prompt_text_utf8_sha256"], "f149dddcb4b9d27b3d68b0455c5f774e56e37bfc04430b53e139a4c08f044faf")
+        self.assertEqual(p256_binding["ruled_token_id_sha256_prefix"], "83099a66")
+        self.assertIn("no full-hex", p256_binding["token_id_sha256_pin_status"])
+        self.assertEqual(self.plan["execution_mode"]["planned_science_bundles"], 100)
         self.assertEqual(self.spec["phase_presence_contract"]["required_metrics"], ["phase_energy_j.decode", "phase_energy_j.prefill"])
         self.assertEqual(self.spec["phase_presence_contract"]["missing_registered_phase"], "refuse_before_floor_or_reported_mean_emission")
 
-    def test_four_floor_cells_and_reported_means_share_pack_members(self) -> None:
+    def test_six_floor_cells_and_reported_means_keep_disjoint_domains(self) -> None:
         self.assertEqual(validate_extraction_spec(self.spec), [])
         cells = self.spec["cells"]
         self.assertEqual(
@@ -423,32 +508,36 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 "d117-df-cmp-abba-ph-decode-qwen25-1p5b",
                 "d117-df-ph-prefill-p128-qwen25-1p5b-absolute",
                 "d117-df-cmp-abba-ph-prefill-p128-qwen25-1p5b",
+                "d117-df-ph-prefill-p256-qwen25-1p5b-absolute",
+                "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b",
             ],
         )
         references = [floor_reference_ids(cell) for cell in cells]
-        self.assertEqual([len(ids) for ids in references], [10, 40, 10, 40])
+        self.assertEqual([len(ids) for ids in references], [10, 40, 10, 40, 10, 40])
         self.assertEqual(references[0], references[2])
         self.assertEqual(references[1], references[3])
         all_floor_references = [bundle_id for ids in references for bundle_id in ids]
-        self.assertEqual(len(all_floor_references), 100)
-        self.assertEqual(len(set(all_floor_references)), 50)
+        self.assertEqual(len(all_floor_references), 150)
+        self.assertEqual(len(set(all_floor_references)), 100)
+        self.assertTrue(set(references[0] + references[1]).isdisjoint(references[4] + references[5]))
         self.assertEqual(
             self.spec["reference_counts"],
             {
-                "floor_cell_references": 100,
-                "reported_energy_references": 100,
-                "total_registered_references": 200,
-                "unique_physical_bundles": 50,
-                "unique_config_paths": 50,
+                "floor_cell_references": 150,
+                "reported_energy_references": 150,
+                "total_registered_references": 300,
+                "unique_physical_bundles": 100,
+                "unique_config_paths": 100,
             },
         )
         physical_order = [row["run_id"] for row in self.root_manifest["executed_order"]]
         reported = self.spec["reported_energy_cells"]
-        self.assertEqual(len(reported), 2)
-        for cell in reported:
+        self.assertEqual(len(reported), 3)
+        for index, cell in enumerate(reported):
             self.assertEqual(cell["reducer"], "arithmetic_mean_over_fixed_member_universe.v1")
             self.assertEqual(cell["expected_n"], 50)
-            self.assertEqual([member["bundle_id"] for member in cell["members"]], physical_order)
+            expected_order = physical_order[:50] if index < 2 else physical_order[50:]
+            self.assertEqual([member["bundle_id"] for member in cell["members"]], expected_order)
             self.assertIsNone(cell["numeric_value"])
 
         floor_only = deepcopy(self.spec)
@@ -588,21 +677,21 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             self.assertEqual(basis["allowance_rule"], "max(observed_drift_s,0.010818)")
             self.assertEqual(basis["allowance_embedding_count"], 1)
             self.assertEqual(basis["component_composition"], "componentwise_max_never_sum.v1")
-        for cell in (self.spec["cells"][0], self.spec["cells"][2]):
+        for cell in (self.spec["cells"][0], self.spec["cells"][2], self.spec["cells"][4]):
             self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
-        for cell in (self.spec["cells"][1], self.spec["cells"][3]):
+        for cell in (self.spec["cells"][1], self.spec["cells"][3], self.spec["cells"][5]):
             self.assertNotIn("estimator", cell)
             self.assertNotIn("estimator_registration", cell)
-        for cell in (self.plan["floor_cells"][0], self.plan["floor_cells"][2]):
+        for cell in (self.plan["floor_cells"][0], self.plan["floor_cells"][2], self.plan["floor_cells"][4]):
             self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
-        for cell in (self.plan["floor_cells"][1], self.plan["floor_cells"][3]):
+        for cell in (self.plan["floor_cells"][1], self.plan["floor_cells"][3], self.plan["floor_cells"][5]):
             self.assertNotIn("estimator", cell)
             self.assertNotIn("estimator_registration", cell)
 
     def test_typed_launch_recipes_are_complete_and_portable(self) -> None:
         graph = self.tree["stage_graph"]
-        self.assertEqual([stage["ordinal"] for stage in graph], list(range(1, 14)))
-        self.assertEqual(sum(len(stage["launch"]["commands"]) for stage in graph), 14)
+        self.assertEqual([stage["ordinal"] for stage in graph], list(range(1, 17)))
+        self.assertEqual(sum(len(stage["launch"]["commands"]) for stage in graph), 17)
         allowed_argument_keys = {
             "literal": {"kind", "value"},
             "repo_path": {"kind", "value"},
@@ -702,7 +791,11 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         self.assertEqual(projection["state"], "unprojected")
         self.assertEqual(projection["derivation_contract"], IDENTITY_PIN_DERIVATION_CONTRACT)
         self.assertEqual(projection["supersedes"], [])
-        self.assertEqual(len(projection["identity_units"]), 1)
+        self.assertEqual(len(projection["identity_units"]), 2)
+        self.assertEqual(
+            [unit["identity_unit_id"] for unit in projection["identity_units"]],
+            ["alpha", "alpha/prefill_p256"],
+        )
         unit = projection["identity_units"][0]
         self.assertEqual(unit["identity_unit_id"], "alpha")
         self.assertEqual(set(unit["model_runtime_config"].values()), {None})
@@ -713,6 +806,13 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         self.assertEqual(len(computed_config_hashes), 1)
         for row in unit["config_inventory"]:
             self.assertEqual(row["sha256"], sha256_file(PACK_ROOT / row["path"]))
+        p256_unit = projection["identity_units"][1]
+        p256_config_hashes = {
+            scientific_config_identity_sha256(load_json(PACK_ROOT / row["path"]))
+            for row in p256_unit["config_inventory"]
+        }
+        self.assertEqual(len(p256_config_hashes), 1)
+        self.assertEqual(len(p256_unit["config_inventory"]), 50)
         self.assertIsNone(projection["projection_receipt"])
         self.assertEqual(
             self.tree["arm_attachments"]["identity_pin_projection"], projection

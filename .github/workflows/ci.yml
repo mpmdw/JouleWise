@@ -27,7 +27,40 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q joulewise tests
       - name: Unit tests (stdlib core only, per D-009/D-017)
-        run: python scripts/shard_tests.py --shards 4 --index ${{ matrix.shard }}
+        # test_calibration_exits is intentionally absent here. Historical
+        # 648-2036 s evidence makes fallback-weight shard placement unsound;
+        # it runs once in each exclusive job below, while the remaining four
+        # shards retain deterministic LPT balance from the ordinary timing map.
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, "scripts")
+          import shard_tests
+
+          overlay = json.loads(Path("scripts/test_timings.json").read_text())
+          declarations = overlay["exclusive_modules"]
+          exclusive = frozenset(declarations)
+          discovered = shard_tests.discover_test_modules()
+          assert exclusive <= set(discovered), (exclusive, discovered)
+          timings = shard_tests.load_timing_map()
+          for module, declaration in declarations.items():
+              seconds = float(declaration["seconds"])
+              threshold = float(declaration["fallback_rejection_threshold_seconds"])
+              assert seconds >= threshold, (module, seconds, threshold)
+              timings[module] = seconds
+          ordinary = tuple(module for module in discovered if module not in exclusive)
+          partitions = shard_tests.partition_modules(ordinary, timings, 4)
+          totals = shard_tests.partition_totals(partitions, timings)
+          print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
+          index = int(os.environ["SHARD_INDEX"])
+          raise SystemExit(shard_tests.run_shard(partitions[index - 1], 4, index))
+          PY
       - name: CLI smoke - validate example configs
         run: |
           python -m joulewise validate-config configs/examples/mock_local.json
@@ -42,6 +75,40 @@ jobs:
           python -m joulewise validate-bundle --strict "$bundle"
           python -m joulewise reduce "$bundle"
           python -m joulewise validate-bundle --strict "$bundle"
+
+  calibration-exits-exclusive:
+    # Exclusive by design: this module already runs sequentially internally;
+    # colocating it with an ordinary shard only adds scheduler starvation.
+    # The module watchdog ceiling is 10 minutes per child and this hosted job
+    # retains the consult-dictated 30-minute absolute ceiling.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Validate exclusive timing declaration
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("scripts/test_timings.json").read_text())
+          row = payload["exclusive_modules"]["tests.test_calibration_exits"]
+          assert row["evidence_range_seconds"] == [648.0, 2036.0]
+          assert row["seconds"] == 2036.0
+          assert payload["seconds_by_module"]["tests.test_calibration_exits"] == row["seconds"]
+          assert row["seconds"] >= row["fallback_rejection_threshold_seconds"]
+          PY
+      - name: Compile calibration-exit sources
+        run: python -m compileall -q joulewise tests scripts/validate_powermetrics_fiducial.py
+      - name: Exclusive calibration-exit module
+        run: python -m unittest -v tests.test_calibration_exits
 
   build:
     runs-on: ubuntu-latest

@@ -38,13 +38,16 @@ PLAN_ID = "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1"
 EVIDENCE_ROOT_ID = "evidence-d117-floor-qwen25-7b-v1"
 DECODE_FAMILY_ID = "df-ph-decode-qwen25-7b"
 PREFILL_FAMILY_ID = "df-ph-prefill-p128-qwen25-7b"
+P256_FAMILY_ID = "df-ph-prefill-p256-qwen25-7b"
+CONTRAST_PACK = REPO_ROOT / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"
+LEGACY_DECODE_PLAN_SHA256 = "c20ef596f64a4a8d5367a963614c4db0f2c34a7077441e204bcf22e2b1033f40"
 
 EXPECTED_SHA256 = {
     "calibration_plan.json": (
-        "c20ef596f64a4a8d5367a963614c4db0f2c34a7077441e204bcf22e2b1033f40"
+        "28b1c6201fa23009635ee2773f58a7ff895e8ff2e51f79eb756f11e3fdfc60da"
     ),
     "calibration_plan.sha256": (
-        "d281cd0ff762d4b3bbe1498d6eee9df2850f97ac390f212ca6eed81bfde959c7"
+        "b45386966b48abff588f30dff827e4057f623fbd38108555081e776de1578e33"
     ),
     "condition_families/condition_family_df_ph_decode_qwen25_7b.json": (
         "d90b8fec2ccc74f1e982e573789a32116cda78d625ce84e72f2717926edc0cdb"
@@ -53,33 +56,46 @@ EXPECTED_SHA256 = {
         "condition_families/"
         "condition_family_df_ph_prefill_p128_qwen25_7b.json"
     ): "e896aeae5eff911dbe14d09de9ebddcafe37b20c67ba059b2a6b7f6d3a6cee25",
+    (
+        "condition_families/"
+        "condition_family_df_ph_prefill_p256_qwen25_7b.json"
+    ): "d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252",
     "generate_configs.py": (
-        "fefbf6c86f64514fc5bc2e931834c533fc9671a5d3d5b401d32ab32d465b6d59"
+        "f19d58dda779f6680bf91422a572108ee6d6d91855693a2e135586f646c73d23"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
-        "35126f0c6e6b268ec849f1115768579578b169d06d33cf77d907fe52bc51bc04"
+        "7ec01725aab7ddbf82d9da743f57bda155278766a61bc5c1ebe66f468552637c"
     ),
     "02_phase_decode_abba_blocks_01_05/order_manifest.json": (
-        "3d72b022e1e5e772e721810707f981fa4d4aa25ffb9167933ce66acd1c2994c1"
+        "999b3cd03ae3bdb6c11308f60170dcaf03c3e70e7f90677324add2dc923b6aa3"
     ),
     "03_phase_decode_abba_blocks_06_10/order_manifest.json": (
-        "8752dae5da470d63a24ce78d48a3b041d1ebddef64fe511fc16a02536858dcc6"
+        "d94d7e1905271738866c46443c88e0d5440ac950a7399d4765fd9360373860de"
+    ),
+    "04_phase_prefill_p256_absolute/order_manifest.json": (
+        "275fb5992fe6f3384924b322efbf19cfc155187d74316c46cfc0c3e3cd1f75ba"
+    ),
+    "05_phase_prefill_p256_abba_blocks_01_05/order_manifest.json": (
+        "4efd8fa3445044e346e9c188b591904a62ca65590a09a8989d9ae121f62d0800"
+    ),
+    "06_phase_prefill_p256_abba_blocks_06_10/order_manifest.json": (
+        "7609811f0b24d0a4ebcf8cce715edff4857fe0733333f95aede2c998a403292c"
     ),
     "order_manifest.json": (
-        "d6f65f92964aa748bf71eb3ca871eea291825a9e839320330bb1a629713c6a9c"
+        "03f10c10efa03c3d7fe3463da4da7893622bf15e914956af35d67d744c81a4ea"
     ),
     "plan_tree.json": (
-        "c47b8c6033cf7a2f37636d09201d82c9ee94a360f368cb85fbc9c33bca881c85"
+        "00e3a89dc0bfa9e3ce512001a0040f9e25aa96b481e79da30d05def91e770fa4"
     ),
     "plan_tree.sha256": (
-        "dd119f93a76ef497fc75f6ee14fcc1c435b2e2494479f7b8cb823168366a408c"
+        "22a3a55ee61085765a2ddf03d5690e68dd3eef1f14e902362542c69c82526cda"
     ),
     "producer_contract.json": (
-        "03039d410950d6160af941aa65fe97082ba9826b53204acf82c9cdbd8a71d1fa"
+        "5829349c5a0fd64a7c7b50861243e6fc2e9e6ccfe8424ca93df99cc3ece5cb63"
     ),
 }
 EXPECTED_SPEC_SHA256 = (
-    "2690aac678b602868a42e2c1483eb548a28ea06ad5c6ffa8fb570b2b6a8b8f1f"
+    "501d77e9cdc8e30251a8e11b218aab2447452a7ddb801294b94cb5c46058ce2f"
 )
 
 
@@ -120,9 +136,16 @@ def expected_pack_paths() -> set[str]:
             "condition_families/"
             "condition_family_df_ph_prefill_p128_qwen25_7b.json"
         ),
+        (
+            "condition_families/"
+            "condition_family_df_ph_prefill_p256_qwen25_7b.json"
+        ),
         "01_phase_decode_absolute/order_manifest.json",
         "02_phase_decode_abba_blocks_01_05/order_manifest.json",
         "03_phase_decode_abba_blocks_06_10/order_manifest.json",
+        "04_phase_prefill_p256_absolute/order_manifest.json",
+        "05_phase_prefill_p256_abba_blocks_01_05/order_manifest.json",
+        "06_phase_prefill_p256_abba_blocks_06_10/order_manifest.json",
     }
     paths.update(
         f"01_phase_decode_absolute/d117f7-df-ph-decode-abs-r{rep:02d}.json"
@@ -135,6 +158,22 @@ def expected_pack_paths() -> set[str]:
         paths.update(
             (
                 f"{directory}/d117f7-df-cmp-abba-ph-decode-"
+                f"b{block:02d}-{position}.json"
+            )
+            for block in range(first, last + 1)
+            for position in ("a1", "b1", "b2", "a2")
+        )
+    paths.update(
+        f"04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r{rep:02d}.json"
+        for rep in range(1, 11)
+    )
+    for directory, first, last in (
+        ("05_phase_prefill_p256_abba_blocks_01_05", 1, 5),
+        ("06_phase_prefill_p256_abba_blocks_06_10", 6, 10),
+    ):
+        paths.update(
+            (
+                f"{directory}/d117f7-df-cmp-abba-ph-prefill-p256-"
                 f"b{block:02d}-{position}.json"
             )
             for block in range(first, last + 1)
@@ -170,7 +209,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             if path.is_file()
         }
         self.assertEqual(actual, expected_pack_paths())
-        self.assertEqual(len(actual), 63)
+        self.assertEqual(len(actual), 117)
         for relative, expected in EXPECTED_SHA256.items():
             self.assertEqual(file_sha256(PACK / relative), expected, relative)
         self.assertEqual(file_sha256(SPEC), EXPECTED_SPEC_SHA256)
@@ -257,9 +296,9 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
     def test_manifest_order_and_midpoint_split(self) -> None:
         root = load_json(PACK / "order_manifest.json")
         rows = root["executed_order"]
-        self.assertEqual(len(rows), 50)
-        self.assertEqual([row["index"] for row in rows], list(range(1, 51)))
-        self.assertEqual(len({row["run_id"] for row in rows}), 50)
+        self.assertEqual(len(rows), 100)
+        self.assertEqual([row["index"] for row in rows], list(range(1, 101)))
+        self.assertEqual(len({row["run_id"] for row in rows}), 100)
 
         entries, warning = load_order_entries(PACK)
         self.assertIsNone(warning)
@@ -269,7 +308,10 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             self.assertEqual(file_sha256(PACK / row["config"]), row["config_sha256"])
 
         stages = root["subcampaign_order"]
-        self.assertEqual([stage["planned_n_bundles"] for stage in stages], [10, 20, 20])
+        self.assertEqual(
+            [stage["planned_n_bundles"] for stage in stages],
+            [10, 20, 20, 10, 20, 20],
+        )
         for stage in stages:
             path = REPO_ROOT / stage["manifest_path"]
             manifest = load_json(path)
@@ -280,7 +322,12 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 list(range(1, stage["planned_n_bundles"] + 1)),
             )
 
-        for stage_index, expected_blocks in ((1, range(1, 6)), (2, range(6, 11))):
+        for stage_index, expected_blocks in (
+            (1, range(1, 6)),
+            (2, range(6, 11)),
+            (4, range(1, 6)),
+            (5, range(6, 11)),
+        ):
             stage_path = REPO_ROOT / stages[stage_index]["manifest_path"]
             stage_rows = load_json(stage_path)["executed_order"]
             expected_order = [
@@ -297,13 +344,18 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             for stage in load_json(PACK / "plan_tree.json")["stage_graph"]
         ]
         self.assertLess(
-            graph_ids.index("beta-science-abba-01-05"),
+            graph_ids.index("beta-science-abba-06-10"),
             graph_ids.index("beta-reference-midpoint"),
         )
         self.assertLess(
             graph_ids.index("beta-reference-midpoint"),
-            graph_ids.index("beta-science-abba-06-10"),
+            graph_ids.index("beta-science-prefill-p256-absolute"),
         )
+        plan = load_json(PACK / "calibration_plan.json")
+        tree = load_json(PACK / "plan_tree.json")
+        self.assertEqual(plan["execution_mode"]["planned_reference_bundles"], 7)
+        self.assertEqual(tree["runtime_budget"]["planning_estimate_minutes_with_margin"], 388.8)
+        self.assertEqual(tree["runtime_budget"]["planning_estimate_hours_with_margin"], 6.48)
 
     def test_manifest_order_assertion_rejects_cross_block_mutation(self) -> None:
         source = PACK / "02_phase_decode_abba_blocks_01_05/order_manifest.json"
@@ -359,8 +411,34 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         self.assertEqual(first["workload_profile"]["prompt_tokens"], 128)
         self.assertEqual(first["workload_profile"]["output_tokens"], 512)
         for row in root["executed_order"]:
-            tags = load_json(PACK / row["config"])["run_metadata"]["tags"]
+            config = load_json(PACK / row["config"])
+            tags = config["run_metadata"]["tags"]
             self.assertNotIn("splitwise-decode-floor-v1", tags)
+            is_p256 = "prefill-p256" in row["run_id"]
+            expected_plan_sha = file_sha256(PACK / "calibration_plan.json") if is_p256 else LEGACY_DECODE_PLAN_SHA256
+            self.assertIn(f"calibration-plan-sha256={expected_plan_sha}", tags)
+            if is_p256:
+                self.assertNotIn("prompt_tokens", config["workload_profile"])
+                self.assertIn("prompt_text", config["workload_profile"])
+
+    def test_p256_workload_is_byte_identical_to_consumer_arm(self) -> None:
+        root = load_json(PACK / "order_manifest.json")
+        floor_row = next(
+            row
+            for row in root["executed_order"]
+            if row["run_id"].startswith("d117f7-df-ph-prefill-p256-abs-")
+        )
+        contrast_manifest = load_json(CONTRAST_PACK / "order_manifest.json")
+        contrast_row = next(
+            row
+            for row in contrast_manifest["executed_order"]
+            if row["measurement_arm"] == "prefill_p256" and row["arm"] == "B"
+        )
+        floor_workload = load_json(PACK / floor_row["config"])["workload_profile"]
+        contrast_workload = load_json(CONTRAST_PACK / contrast_row["config"])["workload_profile"]
+        self.assertEqual(floor_workload, contrast_workload)
+        self.assertIn("prompt_text", floor_workload)
+        self.assertNotIn("prompt_tokens", floor_workload)
 
     def test_calibration_plan_shape_and_abba_members_are_family_canonical(self) -> None:
         plan = load_json(PACK / "calibration_plan.json")
@@ -392,7 +470,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                         )
                     )
 
-    def test_rider_families_and_four_floor_cells(self) -> None:
+    def test_rider_families_and_dedicated_p256_floor_cells(self) -> None:
         decode_path = (
             PACK
             / "condition_families/condition_family_df_ph_decode_qwen25_7b.json"
@@ -404,6 +482,12 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         )
         decode = load_json(decode_path)
         prefill = load_json(prefill_path)
+        p256_path = (
+            PACK
+            / "condition_families/"
+            "condition_family_df_ph_prefill_p256_qwen25_7b.json"
+        )
+        p256 = load_json(p256_path)
         self.assertEqual(decode["condition_family_id"], DECODE_FAMILY_ID)
         self.assertEqual(prefill["condition_family_id"], PREFILL_FAMILY_ID)
         self.assertEqual(decode["workload_profile"], prefill["workload_profile"])
@@ -419,11 +503,24 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, prefill),
             "b95688675b5518ab6675b8688ce4475b0d756653ecfb10ec80fa913ee49d69f1",
         )
+        self.assertEqual(p256["condition_family_id"], P256_FAMILY_ID)
+        self.assertEqual(p256["workload_profile"]["prompt_tokens"], 256)
+        self.assertEqual(
+            canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, p256),
+            "023a513fc4020c67d5866e8176dbb872bb3884109c63e3d57637fa6195ba9538",
+        )
+        tree = load_json(PACK / "plan_tree.json")
+        p256_binding = next(
+            row for row in tree["condition_families"]
+            if row["condition_family_id"] == P256_FAMILY_ID
+        )
+        self.assertEqual(p256_binding["ruled_token_id_sha256_prefix"], "83099a66")
+        self.assertIn("no full-hex", p256_binding["token_id_sha256_pin_status"])
 
         spec = load_json(SPEC)
         self.assertEqual(validate_extraction_spec(spec), [])
         cells = spec["cells"]
-        self.assertEqual(len(cells), 4)
+        self.assertEqual(len(cells), 6)
         self.assertEqual(
             [(cell["metric"], cell["kind"]) for cell in cells],
             [
@@ -431,14 +528,17 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 ("phase_energy_j.decode", "comparative"),
                 ("phase_energy_j.prefill", "absolute"),
                 ("phase_energy_j.prefill", "comparative"),
+                ("phase_energy_j.prefill", "absolute"),
+                ("phase_energy_j.prefill", "comparative"),
             ],
         )
         member_lists = [cell_member_ids(cell) for cell in cells]
-        self.assertEqual([len(members) for members in member_lists], [10, 40, 10, 40])
-        self.assertEqual(sum(map(len, member_lists)), 100)
-        self.assertEqual(len(set().union(*map(set, member_lists))), 50)
+        self.assertEqual([len(members) for members in member_lists], [10, 40, 10, 40, 10, 40])
+        self.assertEqual(sum(map(len, member_lists)), 150)
+        self.assertEqual(len(set().union(*map(set, member_lists))), 100)
         self.assertEqual(member_lists[0], member_lists[2])
         self.assertEqual(member_lists[1], member_lists[3])
+        self.assertTrue(set(member_lists[0] + member_lists[1]).isdisjoint(member_lists[4] + member_lists[5]))
         self.assertEqual(
             [cell["target_precheck_path"] for cell in cells],
             [
@@ -446,20 +546,22 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 ["phase", "decode"],
                 ["phase", "prefill"],
                 ["phase", "prefill"],
+                ["phase", "prefill"],
+                ["phase", "prefill"],
             ],
         )
-        for cell in (cells[0], cells[2]):
+        for cell in (cells[0], cells[2], cells[4]):
             self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
-        for cell in (cells[1], cells[3]):
+        for cell in (cells[1], cells[3], cells[5]):
             self.assertNotIn("estimator", cell)
             self.assertNotIn("estimator_registration", cell)
             self.assertEqual(
                 cell["calibration_basis"]["allowance_embedding_count"], 1
             )
         plan = load_json(PACK / "calibration_plan.json")
-        for cell in (plan["floor_cells"][0], plan["floor_cells"][2]):
+        for cell in (plan["floor_cells"][0], plan["floor_cells"][2], plan["floor_cells"][4]):
             self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
-        for cell in (plan["floor_cells"][1], plan["floor_cells"][3]):
+        for cell in (plan["floor_cells"][1], plan["floor_cells"][3], plan["floor_cells"][5]):
             self.assertNotIn("estimator", cell)
             self.assertNotIn("estimator_registration", cell)
 
@@ -499,21 +601,32 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 "bundle_id": row["run_id"],
                 "config_sha256": row["config_sha256"],
             }
-            for index, row in enumerate(root_rows, start=1)
+            for index, row in enumerate(root_rows[:50], start=1)
+        ]
+        expected_p256_members = [
+            {
+                "ordinal": index,
+                "bundle_id": row["run_id"],
+                "config_sha256": row["config_sha256"],
+            }
+            for index, row in enumerate(root_rows[50:], start=1)
         ]
         reported = spec["reported_energy_cells"]
-        self.assertEqual(len(reported), 2)
+        self.assertEqual(len(reported), 3)
         self.assertEqual(
             [cell["measurand"] for cell in reported],
-            ["gross_phase_energy_j", "gross_phase_energy_j"],
+            ["gross_phase_energy_j", "gross_phase_energy_j", "gross_phase_energy_j"],
         )
-        for cell in reported:
+        for index, cell in enumerate(reported):
             self.assertEqual(cell["expected_n"], 50)
             self.assertEqual(
                 cell["reducer"],
                 "arithmetic_mean_over_fixed_member_universe.v1",
             )
-            self.assertEqual(cell["members"], expected_members)
+            self.assertEqual(
+                cell["members"],
+                expected_members if index < 2 else expected_p256_members,
+            )
             self.assertIsNone(cell["numeric_value"])
 
     def test_reporting_section_does_not_change_floor_output(self) -> None:
@@ -626,7 +739,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
     def test_typed_stage_launch_recipes(self) -> None:
         tree = load_json(PACK / "plan_tree.json")
         stages = tree["stage_graph"]
-        self.assertEqual([stage["ordinal"] for stage in stages], list(range(1, 14)))
+        self.assertEqual([stage["ordinal"] for stage in stages], list(range(1, 17)))
         self.assertEqual(
             [stage["predecessor"] for stage in stages],
             [None, *[stage["stage_id"] for stage in stages[:-1]]],
@@ -636,8 +749,8 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             [*[stage["stage_id"] for stage in stages[1:]], None],
         )
         commands = [command for stage in stages for command in stage["launch"]["commands"]]
-        self.assertEqual(len(commands), 14)
-        self.assertEqual(len({command["command_id"] for command in commands}), 14)
+        self.assertEqual(len(commands), 17)
+        self.assertEqual(len({command["command_id"] for command in commands}), 17)
         allowed_token_keys = {
             "literal": {"kind", "value"},
             "repo_path": {"kind", "value"},
@@ -709,12 +822,15 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             producer["component_artifact_id"],
             "d117-qwen25-7b-phase-floor-component-v1",
         )
-        self.assertEqual([cell["role"] for cell in producer["roles"]], ["decode", "prefill"])
+        self.assertEqual(
+            [cell["role"] for cell in producer["roles"]],
+            ["decode", "prefill", "prefill_p256"],
+        )
         self.assertEqual(
             [cell["condition_family_id"] for cell in producer["roles"]],
-            [DECODE_FAMILY_ID, PREFILL_FAMILY_ID],
+            [DECODE_FAMILY_ID, PREFILL_FAMILY_ID, P256_FAMILY_ID],
         )
-        self.assertEqual(producer["extraction_spec"]["member_count"], 50)
+        self.assertEqual(producer["extraction_spec"]["member_count"], 100)
         self.assertEqual(producer["extraction_spec"]["sha256"], file_sha256(SPEC))
         projection = producer["identity_pin_projection"]
         self.assertEqual(projection["work_order"], "D117-U11-IDPIN-PROJECTION")
@@ -722,7 +838,11 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         self.assertEqual(projection["state"], "unprojected")
         self.assertEqual(projection["derivation_contract"], IDENTITY_PIN_DERIVATION_CONTRACT)
         self.assertEqual(projection["supersedes"], [])
-        self.assertEqual(len(projection["identity_units"]), 1)
+        self.assertEqual(len(projection["identity_units"]), 2)
+        self.assertEqual(
+            [unit["identity_unit_id"] for unit in projection["identity_units"]],
+            ["beta", "beta/prefill_p256"],
+        )
         unit = projection["identity_units"][0]
         self.assertEqual(unit["identity_unit_id"], "beta")
         self.assertEqual(set(unit["model_runtime_config"].values()), {None})
@@ -733,6 +853,13 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         self.assertEqual(len(computed_config_hashes), 1)
         for row in unit["config_inventory"]:
             self.assertEqual(row["sha256"], file_sha256(PACK / row["path"]))
+        p256_unit = projection["identity_units"][1]
+        p256_hashes = {
+            scientific_config_identity_sha256(load_json(PACK / row["path"]))
+            for row in p256_unit["config_inventory"]
+        }
+        self.assertEqual(len(p256_hashes), 1)
+        self.assertEqual(len(p256_unit["config_inventory"]), 50)
         self.assertIsNone(projection["projection_receipt"])
         self.assertEqual(
             load_json(PACK / "plan_tree.json")["arm_attachments"][

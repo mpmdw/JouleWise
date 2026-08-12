@@ -72,10 +72,13 @@ from joulewise.analysis_engine.inputs import (
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
+    COMMON_MODE_ESTIMATOR_ID,
+    CommonModeEstimatorRefusal,
     CONDITION_FAMILY_DOMAIN,
     FLOOR_METRIC_CATALOG,
     FloorEstimate,
     MAX_EXACT_ADMISSIBLE_CORNER_N,
+    METHOD_ID,
     abba_delta,
     absolute_false_effect_floor,
     admissible_set_uncertainty_dominates_point_floor,
@@ -83,6 +86,9 @@ from joulewise.detection_floor import (
     canonical_domain_sha256,
     comparative_false_effect_floor,
     complete_bundle_sha256,
+    registered_common_mode_operative_bound,
+    two_shared_edge_common_mode_registration,
+    validate_common_mode_estimator_registration,
     validate_floor_metric_window_class,
 )
 from joulewise.whole_window import (
@@ -96,7 +102,11 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.calibration_ledger import CalibrationLedgerSnapshot
-from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
+from joulewise.reduce import (
+    _corner_composed_anchor_shift_envelope,
+    _integrate,
+)
 from joulewise.environment_admission import (
     current_environment_refusals,
     environment_admission_refusals,
@@ -184,6 +194,12 @@ CELL_REFUSAL_CODES = (
     "calibration_bracket_exceeds_minted_bound",
     "admissible_set_uncertainty_dominates_point_floor",
     "whole_window_drift_allowance_unrecorded",
+    "common_mode_registration_invalid",
+    "common_mode_authenticated_bracket_required",
+    "common_mode_allowance_application_invalid",
+    "common_mode_nonseparable_window_domain",
+    "common_mode_precondition_failed",
+    "common_mode_zero_point_divergence_out_of_domain",
     MOCK_TELEMETRY_CLAIM_REFUSAL,
 )
 CELL_LABELLED_CONDITION_CODES = (
@@ -192,10 +208,449 @@ CELL_LABELLED_CONDITION_CODES = (
 
 _IDLE_SUBTRACTED_METRICS = {"energy_request_j", "idle_subtracted_energy_j"}
 _ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
+_PENDING_COMMON_MODE_ESTIMATOR_STATUS = (
+    "candidate_pending_floor_commonmode_01"
+)
 
 
 class FloorExtractionError(ValueError):
     """Invalid extraction process input: no report row is produced."""
+
+
+@dataclass(frozen=True)
+class _CommonModeBlockInputs:
+    """Extraction-owned arithmetic inputs derived from one evidence block."""
+
+    onset_values_j: tuple[float, ...]
+    offset_values_j: tuple[float, ...]
+    zero_point_contrast_j: float
+    bundle_residual_half_widths_j: tuple[float, ...]
+    member_window_bounds_s: tuple[tuple[float, float], ...]
+    member_envelope_integral_sum_j: float
+
+
+def _common_mode_refuse(reason: str, detail: str) -> None:
+    raise CommonModeEstimatorRefusal(reason, detail)
+
+
+def _common_mode_finite(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) else None
+
+
+def _common_mode_clean_values(
+    values: object,
+    *,
+    label: str,
+) -> tuple[float, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"{label} must be a sequence",
+        )
+    normalized: list[float] = []
+    for raw in values:
+        value = _common_mode_finite(raw)
+        if value is None:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"{label} must contain only finite numeric values",
+            )
+        normalized.append(value)
+    if not normalized:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"{label} must not be empty",
+        )
+    return tuple(normalized)
+
+
+def _common_mode_shift_grid(
+    values: object,
+    *,
+    label: str,
+) -> tuple[float, ...]:
+    normalized = _common_mode_clean_values(values, label=f"{label} shift grid")
+    if list(normalized) != sorted(normalized):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"the {label} shift grid must be sorted ascending",
+        )
+    zero_values = [
+        value
+        for value in normalized
+        if value == 0.0 and math.copysign(1.0, value) == 1.0
+    ]
+    if len(zero_values) != 1 or sum(value == 0.0 for value in normalized) != 1:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            f"the {label} shift grid must contain exactly one +0.0",
+        )
+    return normalized
+
+
+def _common_mode_block_input_from_contrast(
+    *,
+    contrast: Callable[[float, float], float],
+    onset_shifts_s: Sequence[float],
+    offset_shifts_s: Sequence[float],
+    bundle_residual_half_widths_j: Sequence[float],
+    member_window_bounds_s: Sequence[tuple[float, float]],
+    member_envelope_integral_sum_j: float,
+) -> _CommonModeBlockInputs:
+    """Evaluate one block internally, including its true shift-zero value."""
+
+    onset_shifts = _common_mode_shift_grid(onset_shifts_s, label="onset")
+    offset_shifts = _common_mode_shift_grid(offset_shifts_s, label="offset")
+    if not callable(contrast):
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "the extraction block builder requires a contrast callable",
+        )
+    try:
+        zero_point = contrast(0.0, 0.0)
+        onset_values = [
+            zero_point if shift_s == 0.0 else contrast(shift_s, 0.0)
+            for shift_s in onset_shifts
+        ]
+        offset_values = [
+            zero_point if shift_s == 0.0 else contrast(0.0, shift_s)
+            for shift_s in offset_shifts
+        ]
+        clean_onset = _common_mode_clean_values(
+            onset_values,
+            label="extracted onset sweep",
+        )
+        clean_offset = _common_mode_clean_values(
+            offset_values,
+            label="extracted offset sweep",
+        )
+        clean_zero = _common_mode_finite(zero_point)
+        residuals = tuple(bundle_residual_half_widths_j)
+        windows = tuple(tuple(window) for window in member_window_bounds_s)
+    except CommonModeEstimatorRefusal:
+        raise
+    except Exception as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    if clean_zero is None:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "the extracted shift-zero contrast must be finite",
+        )
+    return _CommonModeBlockInputs(
+        onset_values_j=clean_onset,
+        offset_values_j=clean_offset,
+        zero_point_contrast_j=clean_zero,
+        bundle_residual_half_widths_j=residuals,
+        member_window_bounds_s=windows,
+        member_envelope_integral_sum_j=member_envelope_integral_sum_j,
+    )
+
+
+def _common_mode_window_is_strictly_noncollapsed(
+    start_s: object,
+    end_s: object,
+    shared_edge_bound_s: object,
+) -> bool:
+    start = _common_mode_finite(start_s)
+    end = _common_mode_finite(end_s)
+    bound = _common_mode_finite(shared_edge_bound_s)
+    if start is None or end is None or bound is None or bound <= 0.0:
+        return False
+    return math.nextafter(start + bound, math.inf) < math.nextafter(
+        end - bound,
+        -math.inf,
+    )
+
+
+def _common_mode_member_windows(
+    member_window_bounds_s: object,
+    *,
+    expected_n: int,
+    bound: float,
+) -> tuple[tuple[tuple[float, float], ...], ...]:
+    if (
+        isinstance(member_window_bounds_s, (str, bytes))
+        or not isinstance(member_window_bounds_s, Sequence)
+        or len(member_window_bounds_s) != expected_n
+    ):
+        _common_mode_refuse(
+            "common_mode_nonseparable_window_domain",
+            "every block needs aligned A1/B1/B2/A2 member-window bounds",
+        )
+    normalized: list[tuple[tuple[float, float], ...]] = []
+    for block_index, raw_block_windows in enumerate(member_window_bounds_s):
+        if (
+            isinstance(raw_block_windows, (str, bytes))
+            or not isinstance(raw_block_windows, Sequence)
+            or len(raw_block_windows) != 4
+        ):
+            _common_mode_refuse(
+                "common_mode_nonseparable_window_domain",
+                f"block {block_index} must have aligned A1/B1/B2/A2 windows",
+            )
+        block_windows: list[tuple[float, float]] = []
+        for position, raw_window in zip(
+            _ABBA_POSITIONS,
+            raw_block_windows,
+            strict=True,
+        ):
+            if (
+                isinstance(raw_window, (str, bytes))
+                or not isinstance(raw_window, Sequence)
+                or len(raw_window) != 2
+            ):
+                _common_mode_refuse(
+                    "common_mode_nonseparable_window_domain",
+                    f"block {block_index} {position} window must be "
+                    "(start_s, end_s)",
+                )
+            start = _common_mode_finite(raw_window[0])
+            end = _common_mode_finite(raw_window[1])
+            if (
+                start is None
+                or end is None
+                or not _common_mode_window_is_strictly_noncollapsed(
+                    start,
+                    end,
+                    bound,
+                )
+            ):
+                _common_mode_refuse(
+                    "common_mode_nonseparable_window_domain",
+                    f"block {block_index} {position} window is outside the "
+                    "strict noncollapse domain",
+                )
+            block_windows.append((start, end))
+        normalized.append(tuple(block_windows))
+    return tuple(normalized)
+
+
+def _common_mode_outward(value: float, direction: float) -> float:
+    for _ in range(4):
+        value = math.nextafter(value, direction)
+    return value
+
+
+def _common_mode_block_half_width(
+    delta: float,
+    onset: Sequence[float],
+    offset: Sequence[float],
+    zero_point: float,
+    member_envelope_sum: float,
+    residuals: Sequence[float],
+) -> float:
+    """Registered excursion composition, private to governed extraction."""
+
+    member_envelope_sum = max(
+        member_envelope_sum,
+        1.0,
+        abs(delta),
+        abs(zero_point),
+        *(abs(value) for value in onset),
+        *(abs(value) for value in offset),
+    )
+    extrema_pad = 64.0 * (math.ulp(1.0) / 2.0) * member_envelope_sum
+    excursion_lower = math.fsum(
+        (min(onset), -zero_point, min(offset), -zero_point)
+    )
+    excursion_upper = math.fsum(
+        (max(onset), -zero_point, max(offset), -zero_point)
+    )
+    lower = _common_mode_outward(
+        math.fsum((excursion_lower, -extrema_pad)),
+        -math.inf,
+    )
+    upper = _common_mode_outward(
+        math.fsum((excursion_upper, extrema_pad)),
+        math.inf,
+    )
+    zero_centred_width = _common_mode_outward(
+        max(abs(lower), abs(upper)),
+        math.inf,
+    )
+    shared_width = _common_mode_outward(
+        math.fsum((zero_centred_width, abs(zero_point - delta))),
+        math.inf,
+    )
+    local_width = math.fsum(residuals) / 2.0
+    return _common_mode_outward(
+        math.fsum((shared_width, local_width)),
+        math.inf,
+    )
+
+
+def _common_mode_floor_from_extracted_inputs(
+    block_deltas_j: Sequence[float],
+    *,
+    onset_sweeps_j: Sequence[Sequence[float]],
+    offset_sweeps_j: Sequence[Sequence[float]],
+    zero_point_contrasts_j: Sequence[float],
+    bundle_residual_half_widths_j: Sequence[Sequence[float]],
+    member_window_bounds_s: object,
+    member_envelope_integral_sums_j: Sequence[float],
+    calibration_bracket: object,
+    shared_edge_bound_s: float,
+) -> FloorEstimate:
+    """Internal registered arithmetic seam fed by authenticated extraction."""
+
+    try:
+        deltas = _common_mode_clean_values(
+            block_deltas_j,
+            label="block deltas",
+        )
+        zero_points = _common_mode_clean_values(
+            zero_point_contrasts_j,
+            label="zero-point contrasts",
+        )
+        input_lengths_match = (
+            len(onset_sweeps_j)
+            == len(offset_sweeps_j)
+            == len(zero_points)
+            == len(bundle_residual_half_widths_j)
+            == len(member_envelope_integral_sums_j)
+            == len(deltas)
+        )
+    except (TypeError, ValueError) as exc:
+        _common_mode_refuse("common_mode_precondition_failed", str(exc))
+    if not input_lengths_match:
+        _common_mode_refuse(
+            "common_mode_precondition_failed",
+            "every extracted block needs onset, offset, a zero point, four "
+            "residuals, and a member envelope integral sum",
+        )
+
+    bound = _common_mode_finite(shared_edge_bound_s)
+    operative = registered_common_mode_operative_bound(calibration_bracket)
+    if (
+        bound is None
+        or bound <= 0.0
+        or not math.isclose(bound, operative, rel_tol=0.0, abs_tol=1e-12)
+    ):
+        _common_mode_refuse(
+            "common_mode_allowance_application_invalid",
+            "the sweep bound must equal the once-widened authenticated bound",
+        )
+    _common_mode_member_windows(
+        member_window_bounds_s,
+        expected_n=len(deltas),
+        bound=bound,
+    )
+
+    block_widths: list[float] = []
+    for index, (
+        raw_onset,
+        raw_offset,
+        zero_point,
+        raw_residuals,
+        raw_envelope_sum,
+    ) in enumerate(
+        zip(
+            onset_sweeps_j,
+            offset_sweeps_j,
+            zero_points,
+            bundle_residual_half_widths_j,
+            member_envelope_integral_sums_j,
+            strict=True,
+        )
+    ):
+        onset = _common_mode_clean_values(
+            raw_onset,
+            label=f"block {index} onset sweep",
+        )
+        offset = _common_mode_clean_values(
+            raw_offset,
+            label=f"block {index} offset sweep",
+        )
+        if zero_point not in onset or zero_point not in offset:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} sweeps must include the extracted zero point "
+                "by exact equality",
+            )
+        try:
+            residual_count = len(raw_residuals)
+        except TypeError:
+            residual_count = -1
+        if residual_count != 4:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} must have exactly four bundle residuals",
+            )
+        residuals: list[float] = []
+        for raw in raw_residuals:
+            residual = _common_mode_finite(raw)
+            if residual is None or residual < 0.0:
+                _common_mode_refuse(
+                    "common_mode_precondition_failed",
+                    f"block {index} residuals must be finite and nonnegative",
+                )
+            residuals.append(residual)
+        if not math.isclose(
+            zero_point,
+            deltas[index],
+            rel_tol=1e-9,
+            abs_tol=1e-12,
+        ):
+            _common_mode_refuse(
+                "common_mode_zero_point_divergence_out_of_domain",
+                f"block {index} zero point diverges from its block delta "
+                "outside the registered provenance band",
+            )
+        envelope_sum = _common_mode_finite(raw_envelope_sum)
+        if envelope_sum is None or envelope_sum < 0.0:
+            _common_mode_refuse(
+                "common_mode_precondition_failed",
+                f"block {index} member envelope integral sum must be finite "
+                "and nonnegative",
+            )
+        block_widths.append(
+            _common_mode_block_half_width(
+                deltas[index],
+                onset,
+                offset,
+                zero_point,
+                envelope_sum,
+                residuals,
+            )
+        )
+
+    return comparative_false_effect_floor(
+        deltas,
+        admissible_half_widths_j=block_widths,
+    )
+
+
+def _common_mode_floor_from_block_inputs(
+    block_deltas_j: Sequence[float],
+    block_inputs: Sequence[_CommonModeBlockInputs],
+    *,
+    calibration_bracket: object,
+    shared_edge_bound_s: float,
+) -> FloorEstimate:
+    """Adapt extraction-owned block records to the internal arithmetic seam."""
+
+    return _common_mode_floor_from_extracted_inputs(
+        block_deltas_j,
+        onset_sweeps_j=[item.onset_values_j for item in block_inputs],
+        offset_sweeps_j=[item.offset_values_j for item in block_inputs],
+        zero_point_contrasts_j=[
+            item.zero_point_contrast_j for item in block_inputs
+        ],
+        bundle_residual_half_widths_j=[
+            item.bundle_residual_half_widths_j for item in block_inputs
+        ],
+        member_window_bounds_s=[
+            item.member_window_bounds_s for item in block_inputs
+        ],
+        member_envelope_integral_sums_j=[
+            item.member_envelope_integral_sum_j for item in block_inputs
+        ],
+        calibration_bracket=calibration_bracket,
+        shared_edge_bound_s=shared_edge_bound_s,
+    )
 
 
 def _ingested_consumption_semantics_id(
@@ -635,6 +1090,86 @@ def validate_extraction_spec(spec: object) -> list[str]:
                     errors.append(
                         f"{where}.blocks: bundle_ids must be unique"
                     )
+            if any(
+                key in cell
+                for key in (
+                    "estimator",
+                    "estimator_registration",
+                    "calibration_basis",
+                )
+            ):
+                estimator_present = "estimator" in cell
+                estimator = cell.get("estimator")
+                if estimator_present and estimator not in (
+                    METHOD_ID,
+                    COMMON_MODE_ESTIMATOR_ID,
+                ):
+                    errors.append(
+                        f"{where}.estimator: must equal "
+                        f"{METHOD_ID!r} or {COMMON_MODE_ESTIMATOR_ID!r}"
+                    )
+                registration = cell.get("estimator_registration")
+                registration_present = "estimator_registration" in cell
+                full_registration = (
+                    registration_present
+                    and validate_common_mode_estimator_registration(
+                        registration
+                    )
+                )
+                pending_registration = (
+                    registration_present
+                    and isinstance(registration, Mapping)
+                    and registration.get("estimator_id")
+                    == COMMON_MODE_ESTIMATOR_ID
+                    and registration.get("status")
+                    == _PENDING_COMMON_MODE_ESTIMATOR_STATUS
+                )
+                basis_present = "calibration_basis" in cell
+                if estimator == COMMON_MODE_ESTIMATOR_ID:
+                    if not (full_registration or pending_registration):
+                        errors.append(
+                            f"{where}.estimator_registration: must be a complete "
+                            f"{COMMON_MODE_ESTIMATOR_ID!r} registration or its "
+                            "pending candidate"
+                        )
+                    if not basis_present:
+                        errors.append(
+                            f"{where}.calibration_basis: is required with "
+                            f"estimator {COMMON_MODE_ESTIMATOR_ID!r}"
+                        )
+                else:
+                    if registration_present:
+                        errors.append(
+                            f"{where}.estimator_registration: requires explicit "
+                            f"estimator {COMMON_MODE_ESTIMATOR_ID!r}"
+                        )
+                    # D-133 fallback state: default-path comparative cells
+                    # legitimately pin their issued calibration acceptance
+                    # via calibration_basis with no registered estimator;
+                    # the basis shape is still validated below.
+                if basis_present:
+                    basis = cell.get("calibration_basis")
+                    if not isinstance(basis, Mapping):
+                        errors.append(
+                            f"{where}.calibration_basis: must be an object"
+                        )
+                    else:
+                        if (
+                            basis.get("acceptance_selection")
+                            != "issued_d116_artifact_only"
+                        ):
+                            errors.append(
+                                f"{where}.calibration_basis."
+                                "acceptance_selection: must equal "
+                                "'issued_d116_artifact_only'"
+                            )
+                        if not isinstance(
+                            basis.get("issued_acceptance"), Mapping
+                        ):
+                            errors.append(
+                                f"{where}.calibration_basis."
+                                "issued_acceptance: must be an object"
+                            )
         else:
             errors.append(
                 f"{where}.kind: must be 'absolute' or 'comparative'"
@@ -746,6 +1281,12 @@ class CellReport:
     def extractable(self) -> bool:
         return not self.terminal_refusal_reasons and self.floor is not None
 
+    @property
+    def estimator_registration(self) -> Mapping[str, object] | None:
+        """Registration exists only on extraction-owned report instances."""
+
+        return None
+
     def as_row(self) -> dict[str, Any]:
         floor_row: dict[str, Any] | None = None
         if self.floor is not None:
@@ -854,6 +1395,17 @@ class CellReport:
         return row
 
 
+@dataclass(frozen=True, kw_only=True)
+class _RegisteredCellReport(CellReport):
+    """Private report form emitted only after governed registration gates."""
+
+    _registration: Mapping[str, object]
+
+    @property
+    def estimator_registration(self) -> Mapping[str, object]:
+        return self._registration
+
+
 # D117-POSTCOLLECTION-TRUST-01: this is the closed subset of the extraction
 # wire consumed by the generalized v2 mint.  It deliberately describes the
 # report the governed extractor already emits; it does not add a mint-owned
@@ -958,9 +1510,52 @@ def _d117_closed_keys(
     return errors
 
 
+def _forbidden_admitted_vocabulary_paths(
+    value: object,
+    *,
+    key: str,
+    where: str,
+) -> list[str]:
+    """Return every recursively nested occurrence of a forbidden JSON key."""
+
+    paths: list[str] = []
+
+    def walk(node: object, path: str) -> None:
+        if isinstance(node, Mapping):
+            for child_key, child in node.items():
+                child_path = f"{path}.{child_key}"
+                if child_key == key:
+                    paths.append(child_path)
+                walk(child, child_path)
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}[{index}]")
+
+    walk(value, where)
+    return paths
+
+
+def validate_admitted_report_vocabulary(value: object) -> list[str]:
+    """Refuse vocabulary that no admitted extraction report may represent."""
+
+    forbidden_paths = _forbidden_admitted_vocabulary_paths(
+        value,
+        key="estimator_registration",
+        where="extraction report",
+    )
+    return [
+        "extraction report: forbidden key 'estimator_registration' at "
+        f"{path}"
+        for path in forbidden_paths
+    ]
+
+
 def validate_d117_mint_consumption_report(value: object) -> list[str]:
     """Validate the recursively closed report profile used only by v2 minting."""
 
+    vocabulary_errors = validate_admitted_report_vocabulary(value)
+    if vocabulary_errors:
+        return vocabulary_errors
     errors = _d117_closed_keys(
         value,
         _D117_MINT_REPORT_KEYS,
@@ -1058,8 +1653,8 @@ def _read_summary(
     try:
         # Strict UTF-8 only: json.loads on bytes auto-detects BOM/UTF-16/32,
         # which would admit encodings the committed reader refused.
-        parsed = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        parsed = _strict_admission_json_value(raw, "summary_metrics.json")
+    except FloorExtractionError:
         return None, digest, "summary_unreadable"
     if not isinstance(parsed, Mapping):
         return None, digest, "summary_unreadable"
@@ -1071,6 +1666,81 @@ def _finite(value: object) -> float | None:
         return None
     converted = float(value)
     return converted if math.isfinite(converted) else None
+
+
+def _reject_duplicate_admission_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise FloorExtractionError(
+                f"admission JSON contains duplicate key {key!r}"
+            )
+        value[key] = child
+    return value
+
+
+def _reject_nonfinite_admission_number(value: str) -> None:
+    raise FloorExtractionError(
+        f"admission JSON contains non-finite number {value!r}"
+    )
+
+
+def _parse_finite_admission_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
+def _parse_finite_admission_int(value: str) -> int:
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
+def _strict_admission_json_value(raw: bytes, label: str) -> Any:
+    """Strict-parse exact admitted bytes and refuse deleted vocabulary."""
+
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_admission_keys,
+            parse_constant=_reject_nonfinite_admission_number,
+            parse_float=_parse_finite_admission_float,
+            parse_int=_parse_finite_admission_int,
+        )
+    except FloorExtractionError as exc:
+        raise FloorExtractionError(f"{label}: {exc}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise FloorExtractionError(
+            f"{label} is not valid UTF-8 JSON: {exc}"
+        ) from exc
+    forbidden_paths = _forbidden_admitted_vocabulary_paths(
+        value,
+        key="estimator_registration",
+        where=label,
+    )
+    if forbidden_paths:
+        raise FloorExtractionError(
+            f"{label}: forbidden key 'estimator_registration' at "
+            f"{forbidden_paths[0]}"
+        )
+    return value
+
+
+def _strict_admission_json_file(path: Path, label: str) -> Any:
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise FloorExtractionError(f"{label} cannot be read: {exc}") from exc
+    return _strict_admission_json_value(raw, label)
 
 
 def _member_metric_value(summary: Mapping[str, Any], metric: str) -> float | None:
@@ -1086,8 +1756,10 @@ def _cpu_admission_bundle_reasons(
     path: Path, summary: Mapping[str, Any]
 ) -> tuple[str, ...]:
     try:
-        metadata = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        metadata = _strict_admission_json_file(
+            path / "metadata.json", "metadata.json"
+        )
+    except FloorExtractionError:
         metadata = None
     telemetry_identity = custody_telemetry_identity(
         path,
@@ -1155,15 +1827,15 @@ def _evaluate_member(
     else:
         assert summary is not None
         try:
-            parsed_metadata = json.loads(
-                (path / "metadata.json").read_text(encoding="utf-8")
+            parsed_metadata = _strict_admission_json_file(
+                path / "metadata.json", "metadata.json"
             )
             metadata = (
                 parsed_metadata
                 if isinstance(parsed_metadata, Mapping)
                 else None
             )
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        except FloorExtractionError:
             metadata = None
         telemetry_identity = custody_telemetry_identity(
             path,
@@ -1560,6 +2232,201 @@ def extract_absolute_cell(
     )
 
 
+def _common_mode_block_inputs_from_evidence(
+    members: Sequence[MemberReport],
+    *,
+    runs_root: Path,
+    metric: str,
+    shared_edge_bound_s: float,
+) -> _CommonModeBlockInputs:
+    """Derive one D-124 arithmetic block from authenticated bundle evidence."""
+
+    prefix = "phase_energy_j."
+    if not metric.startswith(prefix) or not metric[len(prefix) :]:
+        raise CommonModeEstimatorRefusal(
+            "common_mode_precondition_failed",
+            "the registered estimator requires a phase_energy_j contrast",
+        )
+    phase = metric[len(prefix) :]
+    by_position: dict[str, tuple[list[TracePoint], Window]] = {}
+    clock_evidence: dict[str, tuple[object, object, str]] = {}
+    if (
+        isinstance(shared_edge_bound_s, bool)
+        or not isinstance(shared_edge_bound_s, (int, float))
+        or not math.isfinite(float(shared_edge_bound_s))
+        or float(shared_edge_bound_s) <= 0.0
+    ):
+        raise CommonModeEstimatorRefusal(
+            "common_mode_nonseparable_window_domain",
+            "the strict noncollapse domain requires a finite positive "
+            "shared bound",
+        )
+    bound = float(shared_edge_bound_s)
+    for position in _ABBA_POSITIONS:
+        member = next(
+            (candidate for candidate in members if candidate.position == position),
+            None,
+        )
+        if member is None:
+            raise CommonModeEstimatorRefusal(
+                "common_mode_precondition_failed",
+                "a registered block must contain A1/B1/B2/A2",
+            )
+        try:
+            reader = BundleReader(runs_root / member.bundle_id)
+            curve = reader.summed_curve()
+            windows = reader.phase_windows().get(phase)
+            metadata = reader.metadata()
+        except (BundleReadError, OSError, TypeError, ValueError) as exc:
+            raise CommonModeEstimatorRefusal(
+                "common_mode_precondition_failed",
+                f"{member.bundle_id}: common-mode evidence is unreadable: {exc}",
+            ) from exc
+        if (
+            not curve
+            or not isinstance(windows, list)
+            or len(windows) != 1
+            or any(
+                point.support_start_s is None
+                or point.support_end_s is None
+                or not math.isfinite(point.power_w)
+                or point.power_w < 0.0
+                for point in curve
+            )
+        ):
+            raise CommonModeEstimatorRefusal(
+                "common_mode_precondition_failed",
+                f"{member.bundle_id}: one nonnegative interval-support phase window is required",
+            )
+        origin_s = curve[0].t
+        relative_curve = [
+            TracePoint(
+                t=point.t - origin_s,
+                power_w=point.power_w,
+                support_start_s=point.support_start_s - origin_s,
+                support_end_s=point.support_end_s - origin_s,
+            )
+            for point in curve
+        ]
+        window = Window(
+            start_s=windows[0].start_s - origin_s,
+            end_s=windows[0].end_s - origin_s,
+        )
+        start = float(window.start_s)
+        end = float(window.end_s)
+        latest_start = math.nextafter(start + bound, math.inf)
+        earliest_end = math.nextafter(end - bound, -math.inf)
+        if (
+            not math.isfinite(start)
+            or not math.isfinite(end)
+            or not latest_start < earliest_end
+        ):
+            raise CommonModeEstimatorRefusal(
+                "common_mode_nonseparable_window_domain",
+                f"{member.bundle_id}: {position} phase window is outside "
+                "the strict noncollapse domain",
+            )
+        uncertainty = metadata.get("uncertainty_evidence")
+        clock_anchor = (
+            uncertainty.get("clock_anchor")
+            if isinstance(uncertainty, Mapping)
+            else None
+        )
+        bundle_bound = (
+            clock_anchor.get("effective_clock_anchor_bound_s")
+            if isinstance(clock_anchor, Mapping)
+            else None
+        )
+        wall_span = (
+            clock_anchor.get("wall_minus_monotonic_span_s")
+            if isinstance(clock_anchor, Mapping)
+            else None
+        )
+        by_position[position] = (relative_curve, window)
+        clock_evidence[position] = (bundle_bound, wall_span, member.bundle_id)
+
+    residuals: list[float] = []
+    for position in _ABBA_POSITIONS:
+        relative_curve, window = by_position[position]
+        bundle_bound, wall_span, bundle_id = clock_evidence[position]
+        residual = _corner_composed_anchor_shift_envelope(
+            [(relative_curve, [window])],
+            bundle_bound,
+            0.0,
+            wall_span,
+        )
+        if residual is None:
+            raise CommonModeEstimatorRefusal(
+                "common_mode_precondition_failed",
+                f"{bundle_id}: bundle-local adversarial bound is unavailable",
+            )
+        residuals.append(float(residual["max_abs_delta_j"]))
+
+    onset_candidates = {-shared_edge_bound_s, 0.0, shared_edge_bound_s}
+    offset_candidates = {-shared_edge_bound_s, 0.0, shared_edge_bound_s}
+    for curve, window in by_position.values():
+        for point in curve:
+            assert point.support_start_s is not None
+            assert point.support_end_s is not None
+            for support_edge_s in (
+                point.support_start_s,
+                point.support_end_s,
+            ):
+                onset_delta = support_edge_s - window.start_s
+                if -shared_edge_bound_s <= onset_delta <= shared_edge_bound_s:
+                    onset_candidates.add(onset_delta)
+                offset_delta = support_edge_s - window.end_s
+                if -shared_edge_bound_s <= offset_delta <= shared_edge_bound_s:
+                    offset_candidates.add(offset_delta)
+
+    coefficients = {"A1": -0.5, "B1": 0.5, "B2": 0.5, "A2": -0.5}
+
+    member_envelope_integral_sum = math.fsum(
+        abs(coefficients[position])
+        * _integrate(
+            by_position[position][0],
+            by_position[position][1].start_s - bound,
+            by_position[position][1].end_s + bound,
+        )
+        for position in _ABBA_POSITIONS
+    )
+    if (
+        not math.isfinite(member_envelope_integral_sum)
+        or member_envelope_integral_sum < 0.0
+    ):
+        raise CommonModeEstimatorRefusal(
+            "common_mode_precondition_failed",
+            "the coefficient-weighted member envelope integral sum must be "
+            "finite and nonnegative",
+        )
+
+    def contrast(onset_s: float, offset_s: float) -> float:
+        return math.fsum(
+            coefficients[position]
+            * _integrate(
+                by_position[position][0],
+                by_position[position][1].start_s + onset_s,
+                by_position[position][1].end_s + offset_s,
+            )
+            for position in _ABBA_POSITIONS
+        )
+
+    return _common_mode_block_input_from_contrast(
+        contrast=contrast,
+        onset_shifts_s=sorted(onset_candidates),
+        offset_shifts_s=sorted(offset_candidates),
+        bundle_residual_half_widths_j=residuals,
+        member_window_bounds_s=[
+            (
+                by_position[position][1].start_s,
+                by_position[position][1].end_s,
+            )
+            for position in _ABBA_POSITIONS
+        ],
+        member_envelope_integral_sum_j=member_envelope_integral_sum,
+    )
+
+
 def extract_comparative_cell(
     *,
     cell_id: str,
@@ -1572,6 +2439,9 @@ def extract_comparative_cell(
     hash_bundles: bool = False,
     strict_validator: StrictValidator | None = None,
     consumption_session: AuthenticatedConsumptionSession | None = None,
+    estimator: object = None,
+    estimator_registration: object = None,
+    calibration_basis: object = None,
 ) -> CellReport:
     """Extract one comparative (ABBA) D-054 cell under the audit gates.
 
@@ -1602,10 +2472,62 @@ def extract_comparative_cell(
     _unique_bundle_ids(all_bundle_ids)
 
     refusals: list[str] = []
+    use_common_mode = (
+        estimator not in (None, METHOD_ID)
+        or estimator_registration is not None
+    )
+    common_mode_bound_s: float | None = None
+    if use_common_mode:
+        if (
+            estimator != COMMON_MODE_ESTIMATOR_ID
+            or not validate_common_mode_estimator_registration(
+                estimator_registration
+            )
+            or not isinstance(calibration_basis, Mapping)
+            or calibration_basis.get("allowance_embedding_count") != 1
+            or calibration_basis.get("acceptance_selection")
+            != "issued_d116_artifact_only"
+            or not isinstance(
+                calibration_basis.get("issued_acceptance"), Mapping
+            )
+        ):
+            refusals.append("common_mode_registration_invalid")
+        elif (
+            consumption_session is None
+            or not consumption_session.ready
+            or not isinstance(consumption_session.calibration_bracket, Mapping)
+        ):
+            refusals.append("common_mode_authenticated_bracket_required")
+        else:
+            try:
+                common_mode_bound_s = registered_common_mode_operative_bound(
+                    consumption_session.calibration_bracket
+                )
+            except CommonModeEstimatorRefusal as exc:
+                refusals.append(exc.reason)
+            else:
+                session_bound = getattr(
+                    consumption_session, "operative_fiducial_bound_s", None
+                )
+                if (
+                    isinstance(session_bound, bool)
+                    or not isinstance(session_bound, (int, float))
+                    or not math.isfinite(float(session_bound))
+                    or not math.isclose(
+                        float(session_bound),
+                        common_mode_bound_s,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                ):
+                    refusals.append(
+                        "common_mode_allowance_application_invalid"
+                    )
     excluded_slots: list[str] = []
     final_reports: list[MemberReport] = []
     block_deltas: list[float] = []
     block_half_widths: list[float] = []
+    admitted_blocks: list[list[MemberReport]] = []
     admitted_members: list[MemberReport] = []
     fallback_exclusion_diagnostics: list[str] = []
     for block, block_id in zip(blocks, block_ids):
@@ -1658,15 +2580,17 @@ def extract_comparative_cell(
         block_deltas.append(
             abba_delta(values["A1"], values["B1"], values["B2"], values["A2"])
         )
-        # Worst-case ABBA delta excursion over the four independent member
-        # admissible sets: (w_A1 + w_B1 + w_B2 + w_A2) / 2.
-        block_half_widths.append(
-            math.fsum(
-                member.anchor_shift_bound_j  # type: ignore[arg-type]
-                for member in evaluated
+        if not use_common_mode:
+            # Worst-case ABBA delta excursion over the four independent member
+            # admissible sets: (w_A1 + w_B1 + w_B2 + w_A2) / 2.
+            block_half_widths.append(
+                math.fsum(
+                    member.anchor_shift_bound_j  # type: ignore[arg-type]
+                    for member in evaluated
+                )
+                / 2.0
             )
-            / 2.0
-        )
+        admitted_blocks.append(evaluated)
         admitted_members.extend(evaluated)
 
     floor: FloorEstimate | None = None
@@ -1685,11 +2609,38 @@ def extract_comparative_cell(
             anchor_max = max(anchor_values) if anchor_values else None
             if (
                 len(block_deltas) > MAX_EXACT_ADMISSIBLE_CORNER_N
-                and any(width > 0.0 for width in block_half_widths)
+                and (
+                    use_common_mode
+                    or any(width > 0.0 for width in block_half_widths)
+                )
             ):
                 refusals.append(
                     CELL_LABELLED_CONDITION_CODES[0]
                 )
+            elif use_common_mode:
+                assert common_mode_bound_s is not None
+                assert consumption_session is not None
+                extracted_inputs: list[_CommonModeBlockInputs] = []
+                try:
+                    for evaluated in admitted_blocks:
+                        extracted_inputs.append(
+                            _common_mode_block_inputs_from_evidence(
+                                evaluated,
+                                runs_root=runs_root,
+                                metric=metric,
+                                shared_edge_bound_s=common_mode_bound_s,
+                            )
+                        )
+                    floor = _common_mode_floor_from_block_inputs(
+                        block_deltas,
+                        extracted_inputs,
+                        calibration_bracket=(
+                            consumption_session.calibration_bracket
+                        ),
+                        shared_edge_bound_s=common_mode_bound_s,
+                    )
+                except CommonModeEstimatorRefusal as exc:
+                    refusals.append(exc.reason)
             else:
                 floor = comparative_false_effect_floor(
                     block_deltas,
@@ -1704,7 +2655,7 @@ def extract_comparative_cell(
                 )
 
     attribution_limited = _sole_attribution_limit(refusals, floor)
-    return CellReport(
+    report_fields = dict(
         cell_id=cell_id,
         kind="comparative",
         metric=metric,
@@ -1727,6 +2678,12 @@ def extract_comparative_cell(
         anchor_shift_bound_max_j=anchor_max,
         point_floor_diagnostic=point_floor if attribution_limited else None,
     )
+    if floor is not None and use_common_mode:
+        return _RegisteredCellReport(
+            **report_fields,
+            _registration=two_shared_edge_common_mode_registration(),
+        )
+    return CellReport(**report_fields)
 
 
 def extract_cells(
@@ -1835,6 +2792,11 @@ def extract_cells(
                     hash_bundles=hash_bundles,
                     strict_validator=validator,
                     consumption_session=member_consumption_session,
+                    estimator=cell.get("estimator"),
+                    estimator_registration=cell.get(
+                        "estimator_registration"
+                    ),
+                    calibration_basis=cell.get("calibration_basis"),
                 )
             )
         else:

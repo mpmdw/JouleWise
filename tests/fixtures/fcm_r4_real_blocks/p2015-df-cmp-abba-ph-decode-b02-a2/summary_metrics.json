@@ -1,0 +1,2 @@
+{"energy_anchor_shift_envelopes":{"/phase_energy_j/decode":{"anchor_bound_s":0.03206582900646329,"independent_edge_shift_bound_j":1.1188090805484023,"lower_j":49.14204484200127,"max_abs_delta_j":1.1514499668466343,"method":"common_trace_shift_plus_independent_edge_corners_v3","point_j":50.2934948088479,"upper_j":51.44494477569454,"wall_minus_monotonic_independent_edge_span_s":0.000522613525390625}},"phase_energy_j":{"decode":50.2934948088479}}
+

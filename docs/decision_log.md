@@ -158,6 +158,7 @@ be re-derived by a future agent gets an entry here.
 | D-133 | FCM-01 DISPOSITION — HYBRID + ALT-D120 (cold gate revised sitting, 2026-08-11): round-6 delta REJECT (FCM6-01, forged registration admitted by validators) adjudicated by fresh Fable + Opus refuter. Fallback respec/d124-withdrawn merges after its own gates (freeze lane unblocks there, decoupled from FCM); FCM-01 continues unmerged under ALT-D120 — DELETE serialized registration vocabulary so forgeries die as closed-profile unknown-key refusals (D-120 precedent); false round-6 provenance claim corrected + sixth sha rotation; FULL fresh delta owed on moved arithmetic (any exact understatement = permanent drop, no further revival); re-spec back to tighter estimator only if ALT-D120 + full delta + new mint-estimator WO all land pre-freeze-wave. Bench-verified: mint has zero estimator vocabulary (tighter floor unmintable this cycle regardless); forged field inert (no consumer); production authenticate binds expected_sha256. Ed schedule call flagged: gamma-arm-in-main-paper would make mint work critical path and hold the wave | adopted (cold gate; magistrate, no dissent) |
 | D-134 | §5C ARM-READINESS RECORD CONTRACT (adopt-as-proposed consult, 2026-08-11): two-stage append-only receipts — pack-pinned non-authorizing FREEZE receipt + external pack-binding ARM receipt (hash cycle broken: frozen bytes declare the arm-receipt schema/namespace, never its future sha); d117_row_registry_v1.json sole row authority for ALPHA/BETA/GAMMA (Markdown = checked views); UNKNOWN prohibited (REFUSE or registered NOT_APPLICABLE); derive-never-enter throughout; dry-run never authorizes; impossible pre-launch single-foreground-launch row replaced by atomically consumable single-launch capability; enumerated doctrine amendments + full test obligations bind before any D-117 arm. Trace: process_traces/2026-08-11-5c-readiness-contract/ | adopted (consult adopt-as-proposed; magistrate) |
 | D-135 | SITE BUDGETS ADVISORY (Ed, in-thread 2026-08-12): conservative capsule/page/shard byte budgets and pagination margins WARN, never fail builds/tests/PR gates; the ONLY failing site-size condition is the physical Lakebed 1,048,576-byte cap under the real validator (deploys physically fail past it); content is never trimmed/split/archived to satisfy an advisory budget; SITE-CAPSULE-BUDGET-01 superseded | adopted (Ed, in-thread; transcribed) |
+| D-136 | SITE LANE RETIRED FROM PROCESSES (Ed, in-thread 2026-08-12): no session spends tokens on Lakebed/capsule size, packing, deploy failures, or site-chain diagnosis — the site is a status doc, not a workstream; the site workflow runs on manual dispatch only (never push/pull_request) and its results never gate anything or prompt session work; extends D-135 and D-101 addendum II | adopted (Ed, in-thread; transcribed) |
 | D-137 | ARM-READINESS V1 BOOT-SESSION AMENDMENT (magistrate-ratified, 2026-08-12): every v1 arm or generic evidence receipt carrying `valid_until_monotonic_ns` also carries a derived, never-operator-entered `boot_session_id`; verification and atomic consumption refuse a boot-session mismatch as `readiness_record_expired`; composes with D-120/D-134 and deliberately supersedes the preserved D-134 consult's literal key lists before any production receipt issuance | adopted (magistrate-ratified v1 schema amendment) |
 
 ---
@@ -4180,6 +4181,13 @@ claim/refusal spelling never becomes a pass.
   `whole_window_neg8_verdict_failed`,
   `adapter_continuity_evidence_missing`, `adapter_continuity_failed`,
   `cpu_admission_core_missing`, and `cpu_admission_core_failed`.
+- Registered common-mode estimator refusals (D-124 implementing unit,
+  additive 2026-08-10): `common_mode_registration_invalid`,
+  `common_mode_authenticated_bracket_required`,
+  `common_mode_allowance_application_invalid`,
+  `common_mode_precondition_failed`,
+  `common_mode_nonseparable_window_domain`, and
+  `common_mode_zero_point_divergence_out_of_domain`.
 - Idle-admission/campaign conditions: `cpu_baseline_telemetry_missing`,
   `cpu_baseline_telemetry_malformed`,
   `cpu_baseline_sample_count_insufficient`, `cpu_busy_ratio_p95_exceeded`,
@@ -7963,6 +7971,112 @@ merges (shared floor_extraction/estimator surface) and BEFORE pack
 freeze (the packs name the estimator identity). FLOOR-COMMONMODE-01's
 kernel row sharpens to this form.
 
+### D-124 amendment — 2026-08-10: strict-noncollapse domain (magistrate, post-escalation consult; flagged for Ed's review)
+
+The implementing unit's D-118 gauntlet found the two-shared-edge sweep
+UNDERSTATING the floor in two successive formulations (missing per-edge
+breakpoints; then separable composition failing when a joint edge shift can
+collapse a member window shorter than twice the shared bound). Per the
+standing escalation trigger the second recurrence went to a design consult,
+whose terminating design is ADOPTED: the estimator is **exact on a registered
+strict-noncollapse domain and refuses outside it**. Every admitted A1/B1/B2/A2
+member window must prove, with outward float rounding
+(`nextafter(start+B) < nextafter(end-B)`), that no joint shift within the
+authenticated bound B can collapse it; geometry outside the domain refuses
+with the typed reason `common_mode_nonseparable_window_domain` and is never
+estimated (no silent fallback — a cell not registered for this estimator uses
+the worst-case composition and says so). Composed extrema carry an outward
+numerical enclosure so float summation direction cannot reopen an
+understatement route; the reportable floor value is unchanged at 1.869502 J
+while its trailing ulps move upward. The registered parameter dict now pins
+`shared_extrema_rule =
+separable_onset_offset_exact_sweep_on_strict_noncollapse_domain`, the domain
+precondition, and the refusal reason, so `COMMON_MODE_PARAMETER_SHA256`
+CHANGES and the previous registration object fails validation (permitted: the
+registration was still a pending candidate; packs are unfrozen). Current
+claim-path geometries sit safely inside the domain (decode windows
+seconds-scale; measured 1.5B p128 prefill windows 0.121-0.147 s vs the
+0.0736 s collapse threshold); Q8 p256 evidence will be checked at collection,
+not inferred. The paper's limitations carry the applicability limit. Consult
+record: the FCM-01 escalation consult (T4 session, custodied with the run
+artifacts); refuter evidence: executed 0.25 J (breakpoints) and 1.06 J
+(collapse geometry) understatements on synthetic corpora.
+
+**Erratum (2026-08-10, cold-gate ruling + paired refuter):** the sentences
+"exact on the registered strict-noncollapse domain" and the
+enclosure-prevents-understatement claim were incorrect as written —
+falsified by the round-2 audit (emitted width below the exact admissible
+width by up to 2.3e-13 J at ~1000 J member scale; structural component of
+the shortfall proven EXACTLY ZERO by rational-arithmetic probes on both
+adjudication sides). Corrected statement, as further qualified by the FCM-R4
+input-surface tolerance audit below: over inputs constructed by the registered
+builder from authenticated bundle evidence, the emitted width bounds the exact
+admissible width outward, up to the disclosed member-envelope pad and the
+disclosed zero-point discrepancy term, under the documented single-sourcing
+assumptions for the bracket bounds. Under those assumptions, the total
+overstatement against the exact about-zero bar is capped by the member-envelope
+pad, the zero-point discrepancy term, and directed-rounding slack. As first
+implemented (bbf7bdd) the enclosure was scaled to the contrast magnitude
+and did not dominate member-scale float error; it is now scaled to the
+member-integrand envelope and registered in the parameter dict (sha
+rotates once). The earlier "current claim-path geometries sit safely inside
+the domain" sentence overstated the evidence: only the a5 decode root has
+collected evidence (committed inventory records its margin); the remaining
+referenced roots including Q8 p256 have none yet and are asserted
+absent-by-name in the committed inventory; margins are a freeze-gate
+checklist item at collection.
+
+### D-124 amendment — 2026-08-10: FCM-R4 explicit zero point, third erratum, and input-surface tolerance audit (cold-gate FINAL)
+
+FCM-R3-01 falsified the prior errata's unconditional upper-bound sentences:
+an input admitted by every coded precondition emitted
+`0.09999999950000743 J` against an exact required
+`0.10000000050000024 J`, an understatement of approximately
+`9.9999e-10 J`. The defect had been present since the original implementation:
+the sweeps' structural zero-shift contrast was recovered by `isclose` against
+the separately reduced ABBA delta, conflating tolerance with identity. Those
+unconditional sentences are superseded.
+
+Round 4 makes the zero-shift contrast `z` an explicit registered input. It must
+be present by exact equality in both onset and offset sweeps. Extrema are
+composed as signed excursions about `z`; the emitted shared half-width adds
+`|z - delta|` outward exactly once, separately from the unchanged
+`64u * S_env` member-envelope pad, whose floored scale set now includes
+`|z|`. A mismatch outside the existing `isclose(rel_tol=1e-9,
+abs_tol=1e-12)` band refuses with
+`common_mode_zero_point_divergence_out_of_domain`; this is a pure provenance
+guard and is not load-bearing for soundness. The intuitive round-3 arithmetic
+plus `|z-delta|` candidate was tried and refuted: it fails the independent
+about-zero exact bar on FCM-R3-01 and remains a named negative regression.
+Real trimmed recompute fixtures for a5 decode blocks b02 (nonzero measured
+divergence) and b01 (zero divergence) are committed under
+`tests/fixtures/fcm_r4_real_blocks/` within the 256 KB cap.
+
+The registered parameter hash is
+`4d1c544fe3a52148c7d379f4c50ade4ac3b64211d817cd1438a2365973291981`.
+All superseded hashes (`ea4aa669...`, `9d964cfb...`, and `977189cd...`) are
+rejected by regression.
+
+**FCM-R4 input-surface tolerance audit.** These are the complete tolerance
+acceptances on the registered arithmetic path. The production caller
+single-sourcing statements are assumptions of the upper-bound claim; direct
+callers must preserve them.
+
+| Accepted comparison | Coded tolerance | Production single source / caller assumption | Disposition |
+|---|---:|---|---|
+| Sweep bound vs authenticated operative bracket bound | `rel=0`, `abs=1e-12 s` | `extract_comparative_cell` obtains `common_mode_bound_s` once from `registered_common_mode_operative_bound` and passes that exact float unchanged to the sweep builder and estimator; the authenticated session alias is checked against the same value. | No discrepancy term: production is exactly single-sourced. Direct callers assume the same identity. |
+| `b_fiducial_s` vs optional `operative_b_fiducial_s` alias | `rel=0`, `abs=1e-12 s` | When both exist, arithmetic selects `b_fiducial_s`; the optional alias is redundant provenance and never supplies sweep arithmetic. | No discrepancy term: the tolerated alias is non-operative. |
+| Recorded allowance string vs passed `calibration_drift_allowance_s` | `rel=0`, `abs=1e-12 s` | Production bracket construction computes one Decimal allowance, then emits its exact decimal string and binary64 projection together; arithmetic uses the binary64 field. | No discrepancy term under the single-producing-value assumption. |
+| Operative bound vs endpoint plus allowance | `rel=0`, `abs=1e-12 s` | Production bracket construction computes `operative_bound = endpoint_max_decimal + allowance` once in Decimal and emits its binary64 projection as `b_fiducial_s`; the separate endpoint/allowance fields are audit projections of the same derivation. | No discrepancy term under the production-constructor assumption; externally assembled brackets assume the same derivation. |
+
+Claims-with-assumptions correction: **over inputs constructed by the registered
+builder from authenticated bundle evidence, the emitted width bounds the exact
+admissible width outward, up to the disclosed member-envelope pad and the
+disclosed zero-point discrepancy term, under the documented single-sourcing
+assumptions for the bracket bounds in the audit table above.**
+No published replay number changes; the six-decimal value remains
+`1.869502 J`.
+
 
 ## D-125: Ed's morning ratification batch — D-124 signed off, lineage envelopes ratified, D-117 cl.1 amended for successors, the 40-hour window
 
@@ -8203,31 +8317,33 @@ another round.** The repair contract is the magistrate-adjudicated
 structural-threading draft (custodied with the T4 session record); the
 refuter-authored acceptance oracle may be amended only by its author.
 
-**STOPPING RULE EXECUTED (2026-08-11, same day).** The round-5 delta
-re-audit fired the rule: FCM-R5-01 — records fabricated outside the builder
-(direct construction, dataclasses.replace, object.__new__ + __setattr__,
-copy, pickle; the frozen dataclass's generated constructor plus a
-type()-only admission check) are admitted, stamped registered, pass
-registration validation, and understate by 4.999917146975008e-10 J in exact
-arithmetic — the residual risk the relicense contract disclosed in advance,
-realized. Per the rule, executed without deliberation: the D-124
-two-shared-edge candidate is WITHDRAWN under D-124's own fallback clause;
-freeze-plan Q7 REVERSED; both floor packs' comparative cells re-specced to
-the worst-case default estimator; no round 6 under any authority but a new
-explicit Ed decision. The six-round record (five understatement mechanisms
-+ the provenance class; three cold-gate sittings; five delta audits; the
-adversary-authored oracle; exact-arithmetic proofs of the enumeration) is
-custodied on impl/floor-commonmode-01 at 0b5fce8 (STOPPED-FCM01.md) as
-permanent gauntlet evidence and paper material. Terminal lesson banked: a
-sound registered arithmetic surface in Python requires a process boundary
-or capability token, not conventional privacy (see the Rust-rewrite memory
-— now with an executed demonstration).
+### D-124 amendment — 2026-08-11: FCM-01 ALT-D120 completion (rounds 5-10)
+
+The registered common-mode estimator's soundness campaign ran rounds 5-10
+on 2026-08-11 (full round-by-round notes:
+`docs/process_traces/2026-08-11-fcm-coldgate/fcm-round-notes-5-to-10.md`).
+Round 5 (structural registered-input record) fired the stopping rule below;
+D-132 revived the work and the D-133 cold gate ruled ALT-D120 — DELETE the
+serialized registration vocabulary rather than authenticate it. Rounds 6-10
+executed that: the public registered surface deleted (round 6-7); total
+recursive vocabulary refusal + strict duplicate-key JSON parsing at every
+admitted-byte entry (round 8); strict pre-admission in front of the pinned
+legacy loader with a full loads-census (round 9); and complete finite-number
+policy (overflow-to-inf) plus the last two census-miscovered parsers
+(round 10, ACCEPTED clean by its delta — no findings). The O3 full delta
+cleared the relocated arithmetic TERMINALLY: zero exact understatements in
+4,096 independent rational-arithmetic cases plus a 1,536-case differential.
+Registered identity is custody-closed and never carried in admitted
+report/artifact vocabulary; provenance is re-derived in the governed
+extraction path. Consumption of the tighter floor still gates on
+WO-MINT-ESTIMATOR-VOCAB (D-133 cl.4).
 
 ## D-131: Identity-pin projection contract — adopt as proposed
 
-**Date:** 2026-08-11. **Status:** PROPOSED — adopt as proposed from the
-binding U11 design consult; the magistrate reviews this transcription and
-implementation before push.
+**Date:** 2026-08-11. **Status:** ADOPTED — adopted as proposed from the
+binding U11 design consult; magistrate transcription + implementation review
+completed and recorded in the PR #131 D-121 terminal-review comment; ratified
+at the #131 merge (2026-08-12).
 
 1. **Receipt and custody.** Identity projection uses the exact-key
    `joulewise.identity_pin_projection_receipt.v1` schema with no self-hash.
@@ -8381,6 +8497,99 @@ deferred. The same-signature escalation trigger is satisfied by
 resolution through this consult with a structurally different remedy
 (deletion, not a third validator).
 
+### D-124/D-133 implementation note — 2026-08-11: spec-authoritative mint dispatch
+
+WO-MINT-ESTIMATOR-VOCAB added per-cell v2 mint dispatch at postcollection
+equality, frozen artifact construction, and final evidence binding. The sole
+authority is the authenticated comparative extraction-spec cell; estimator
+and registration identity remain absent from reports, artifacts, pinsets, and
+provenance. Regressions cover spec swaps, report-vocabulary and opposite-width
+mismatches, a negative control at each dispatch site, equality/U10 repair,
+one-ULP common-mode understatement, mixed-selector ordering, default-byte
+preservation, registered refusal without fallback, and no-output refusal. The
+focused matrices passed 334 tests on both `python3` and `python3.11` (one
+skip); the canonical suites passed 3,067 tests on both interpreters (96
+skips).
+
+**F1-F12 fix-round addendum (2026-08-12, uncommitted final-gate worktree).**
+The cold-gate final ruling replaces every earlier condition set. At prepared
+integration head `a798f2bc2a33187ee8f0b7f9d5ad7836a7faca02`, the pinned core
+`scripts/mint_floor_artifact.py` has SHA-256
+`79229aa2757f70a277c870fc50d0672d70952035f982da26ba5211eb7df8ba16`.
+It is byte-identical to the prepared post-#131 upstream parent
+`60d9e42a8204c3a117a577ddb4680fcb30814a26` and to the current
+`origin/main` copy. AST/source comparison re-verified
+`_verify_report_widths`, `_report_members`, `_target_report_cell`, and
+`_authenticate_component` unchanged; the binder still iterates exactly
+`("absolute", "comparative")`. The fix deletes the common-mode
+`except core.MintError` swallow and the provenance-derived binding-result
+fallback. The pinned binder now runs to completion over an isolated deep copy
+whose only substituted artifact field is the comparative
+`admissible_half_widths_j`, populated from authenticated
+`comparative_component.widths_j`; the exact registered-width comparison still
+targets the real artifact, which is the object passed to the final writer.
+
+**F6 refusal-identity ledger.** A mechanical pre-WO-to-fix audit plus the
+default-path differential/refusal matrices found the following complete set of
+identity effects:
+
+- Existing default-path v2 refusal fixtures retain their messages. Default
+  output bytes retain the independent golden component hashes, default
+  authentication refusals match the pinned core exactly, and default binding
+  still uses the pinned `rel_tol=1e-12, abs_tol=1e-12` width check.
+- The former test assertion
+  `"absolute_evaluation_basis_sha256 mismatch"` is not silently relaxed.
+  Component/pin gating now fires earlier, before estimator dispatch, with the
+  exact refusal `producer[0].decode.absolute: evaluation basis sha256
+  mismatch`; the regression pins that complete prefix. The older downstream
+  U10 projection message was
+  `postcollection_evidence_mismatch:
+  absolute_evaluation_basis_sha256 mismatch against domain-owned verification
+  projection`. The identity change is justified by F1/F5's required ordering:
+  the authenticated component pin owns this mismatch and must refuse before
+  any estimator executes.
+- At the postcollection `except ValueError` site, a spec-selected estimator
+  selection/recomputation refusal is deliberately normalized to
+  `postcollection_evidence_mismatch: comparative estimator recomputation
+  refused: <original cause>`. This new gate applies to the newly registered
+  path after component and producer authentication; it does not relabel a
+  successfully selected default path or any existing default fixture.
+- At the final binding call site, estimator-module `ValueError` is deliberately
+  normalized to the public generalized `MintError` while preserving
+  `str(exc)` byte-for-byte. Pinned-core `MintError` refusals, including every
+  default-path binder refusal, retain both their message and the pre-existing
+  generalized-boundary normalization. The gate is the final estimator-aware
+  evidence binder; it refuses before output writing.
+
+No other existing refusal assertion was widened. New common-mode refusals are
+additive and fail closed: exact report-width/type mismatch, frozen-object
+construction mismatch, and exact artifact-width/type mismatch.
+
+**F11 scope and inventory.** The authoritative WRITE_SCOPE is amended to
+include `tests/test_detection_floor.py`. Its edit existed in the working tree
+before any scope grant was on the record; this ruling ratifies the content
+prospectively, and does **not** ratify that sequencing. Against the prepared
+integrated upstream parent (`a798f2b^2`, `60d9e42`), the mechanical diff
+inventory is exactly:
+
+1. `docs/decision_log.md`
+2. `joulewise/floor_mint_estimator.py`
+3. `scripts/mint_floor_artifact_generalized.py`
+4. `tests/test_detection_floor.py`
+5. `tests/test_floor_mint_estimator.py`
+6. `tests/test_mint_floor_artifact_generalized.py`
+
+During this fix session `origin/main` advanced independently to `c3b2c79`; the
+literal final-gate command `git diff origin/main --name-only` therefore also
+reports four upstream-only differences (`.github/workflows/d117-production-proof.yml`,
+`.github/workflows/site.yml`, `RUN_STATE.md`, and
+`docs/process_traces/2026-08-12-calexits-mutation-consult/consult.md`). They
+are not WO edits and remain outside WRITE_SCOPE. F11(c) must be re-executed by
+the lead after integrating the authorized six-path diff onto the then-current
+upstream head; no worker-side merge, rebase, or out-of-scope repair is
+authorized here. D-133 clause 3's full fresh FCM delta likewise remains an
+open, lead-owned merge gate and is not discharged by this work order.
+
 ## D-134: §5C arm-readiness record contract — two-stage append-only receipts (adopt-as-proposed)
 
 **Adopted 2026-08-11 (T4-late)** from the binding design consult (Sol
@@ -8442,6 +8651,30 @@ are never to be trimmed, split, or archived to satisfy an advisory
 budget. SITE-CAPSULE-BUDGET-01 is SUPERSEDED by this ruling (archival
 remains available as an option if the PHYSICAL cap ever approaches, but
 nothing gates on the conservative margin).
+
+## D-136: The site lane is retired from all automatic processes
+
+**Ed, in-thread 2026-08-12 (transcribed by the magistrate; verbatim intent:
+"stop bothering with the capsule size … i don't wanna see any lakebed stuff
+touched anymore i'm tired of it costing tokens. take it out of the processes
+entirely it pollutes context for a repetitive status doc").**
+Extends D-135 and D-101 addendum II. Clauses:
+
+1. No session spends tokens on Lakebed/capsule size, packing, deploy
+   failures, or site-chain diagnosis. A red site-chain result is not a
+   finding, not a follow-up, and never appears in a merge gate, run report
+   priority list, or RUN_STATE watch item.
+2. The `site` workflow triggers on `workflow_dispatch` only — never on
+   push or pull_request. Site publication happens if and when a human
+   chooses to run it.
+3. The site's content remains whatever the repo's docs already say; no
+   engineering effort is owed to fitting it into any platform constraint.
+   The 2026-08-12 physical-cap overrun on PR #136's branch is explicitly
+   NOT to be diagnosed or fixed (the in-flight diagnosis was killed on
+   this ruling).
+4. Open SITE-* queue items and the D-135 advisory-budget machinery stay
+   as they are (merged or in-flight work is not reverted), but no new
+   site work is minted.
 
 ### D-117 amendment — 2026-08-12: frozen readiness slots do not hash future arm bytes
 

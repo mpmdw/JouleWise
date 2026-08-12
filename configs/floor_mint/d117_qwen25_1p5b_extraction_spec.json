@@ -41,7 +41,7 @@
       "order_manifest": {
         "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/order_manifest.json",
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
-        "sha256": "cc288667de9f38726d80318a08e24e7788c94fd965e9f2cf84c650a26bb11595"
+        "sha256": "d8b6efe989a20f7569ee62290cd8b9a16726a0eb8ac0f528f3c5b0f5c0ab4d5f"
       },
       "evidence_root_id": "evidence-d117-floor-qwen25-1p5b-v1",
       "member_config_sha256": [
@@ -201,7 +201,7 @@
       "order_manifest": {
         "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/order_manifest.json",
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
-        "sha256": "cc288667de9f38726d80318a08e24e7788c94fd965e9f2cf84c650a26bb11595"
+        "sha256": "d8b6efe989a20f7569ee62290cd8b9a16726a0eb8ac0f528f3c5b0f5c0ab4d5f"
       },
       "evidence_root_id": "evidence-d117-floor-qwen25-1p5b-v1",
       "member_config_sha256": [
@@ -511,7 +511,7 @@
       "order_manifest": {
         "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/order_manifest.json",
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
-        "sha256": "cc288667de9f38726d80318a08e24e7788c94fd965e9f2cf84c650a26bb11595"
+        "sha256": "d8b6efe989a20f7569ee62290cd8b9a16726a0eb8ac0f528f3c5b0f5c0ab4d5f"
       },
       "evidence_root_id": "evidence-d117-floor-qwen25-1p5b-v1",
       "member_config_sha256": [
@@ -671,7 +671,7 @@
       "order_manifest": {
         "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/order_manifest.json",
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
-        "sha256": "cc288667de9f38726d80318a08e24e7788c94fd965e9f2cf84c650a26bb11595"
+        "sha256": "d8b6efe989a20f7569ee62290cd8b9a16726a0eb8ac0f528f3c5b0f5c0ab4d5f"
       },
       "evidence_root_id": "evidence-d117-floor-qwen25-1p5b-v1",
       "member_config_sha256": [
@@ -939,6 +939,476 @@
             "B1": "d117f15-df-cmp-abba-ph-decode-b10-b1",
             "B2": "d117f15-df-cmp-abba-ph-decode-b10-b2",
             "A2": "d117f15-df-cmp-abba-ph-decode-b10-a2"
+          }
+        }
+      ]
+    },
+    {
+      "cell_id": "d117-df-ph-prefill-p256-qwen25-1p5b-absolute",
+      "kind": "absolute",
+      "metric": "phase_energy_j.prefill",
+      "window_class": "phase",
+      "target_precheck_path": [
+        "phase",
+        "prefill"
+      ],
+      "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+      "condition_family_definitions": {
+        "all": {
+          "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+          "condition_family_definition": {
+            "schema_version": "joulewise.condition_family_definition.v1",
+            "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+            "workload_profile": {
+              "name": "df_ph_prefill_p256_candidate",
+              "prompt_tokens": 256,
+              "output_tokens": 512,
+              "repetitions": 1,
+              "warmup_runs": 1
+            },
+            "measurement_target": {
+              "metric": "phase_energy_j.prefill",
+              "window_class": "phase"
+            },
+            "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+            "abba_alias_relation": "A_equals_B"
+          },
+          "condition_family_sha256": "93c9ee9b32c8c2b25675cff263e2c98882fe5f0c7f81f3ad6899f55f6f9d3c39"
+        }
+      },
+      "expected_n": 10,
+      "estimator": "d054_false_effect_guard.v1",
+      "order_manifest": {
+        "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/order_manifest.json",
+        "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
+        "sha256": "d8b6efe989a20f7569ee62290cd8b9a16726a0eb8ac0f528f3c5b0f5c0ab4d5f"
+      },
+      "evidence_root_id": "evidence-d117-floor-qwen25-1p5b-v1",
+      "member_config_sha256": [
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r01",
+          "config_sha256": "3e54ac23b1e2b5529fc012ab59caa809aab57e792fd36b5c4c721b803901863d"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r02",
+          "config_sha256": "e13ad2c1aa20c2c87d6332ea9934045be5edab60a0a08e918787a2c791d36373"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r03",
+          "config_sha256": "919272bfede271ac4cb162b970274a123ae272fbec0cec71c1a446ea4e097b29"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r04",
+          "config_sha256": "1f3353473b4a695aee0ad4c8fbf84b5ff22517a4e3e9bcc0ef5427eff6acae0f"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r05",
+          "config_sha256": "6a43e11783210f7d284f95c712a30e537b5ed6be3bc291cc680bb4972026d301"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r06",
+          "config_sha256": "462ea26656626bcd6a1e5daced9cc5090b464f54bb3ab528f0f9711c06bece16"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r07",
+          "config_sha256": "2dbfa924fdc987f67b2a7c8b052dc3cd836db19ddec5ab86c9a19216c065c41f"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r08",
+          "config_sha256": "c7e4f46f877c0d85efee004831ad417d680829aa56041347e11ed30fee8d699f"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r09",
+          "config_sha256": "06d0041b30296a069d8cac0969772c18fb1511f0e5cc3669819570b30e524d44"
+        },
+        {
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r10",
+          "config_sha256": "a4511bb222225ba6d112948097640b4d1bd2ea5afc6c5c8108bb464605b0660c"
+        }
+      ],
+      "calibration_basis": {
+        "calibration_scope": "production_window",
+        "acceptance_selection": "issued_d116_artifact_only",
+        "issued_acceptance": {
+          "acceptance_id": "d079_calibration_acceptance_v2_n19",
+          "path": "configs/calibration/calibration_acceptance_d079_v2.json",
+          "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+          "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+          "schema_version": "joulewise.calibration_acceptance_bound.v2"
+        },
+        "allowance_rule": "max(observed_drift_s,0.010818)",
+        "allowance_embedding_count": 1,
+        "component_composition": "componentwise_max_never_sum.v1"
+      },
+      "members": [
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r01",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r01"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r02",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r02"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r03",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r03"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r04",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r04"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r05",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r05"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r06",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r06"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r07",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r07"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r08",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r08"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r09",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r09"
+        },
+        {
+          "slot": "d117f15-df-ph-prefill-p256-abs-r10",
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r10"
+        }
+      ]
+    },
+    {
+      "cell_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b",
+      "kind": "comparative",
+      "metric": "phase_energy_j.prefill",
+      "window_class": "phase",
+      "target_precheck_path": [
+        "phase",
+        "prefill"
+      ],
+      "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+      "condition_family_definitions": {
+        "A": {
+          "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+          "condition_family_definition": {
+            "schema_version": "joulewise.condition_family_definition.v1",
+            "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+            "workload_profile": {
+              "name": "df_ph_prefill_p256_candidate",
+              "prompt_tokens": 256,
+              "output_tokens": 512,
+              "repetitions": 1,
+              "warmup_runs": 1
+            },
+            "measurement_target": {
+              "metric": "phase_energy_j.prefill",
+              "window_class": "phase"
+            },
+            "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+            "abba_alias_relation": "A_equals_B"
+          },
+          "condition_family_sha256": "93c9ee9b32c8c2b25675cff263e2c98882fe5f0c7f81f3ad6899f55f6f9d3c39"
+        },
+        "B": {
+          "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+          "condition_family_definition": {
+            "schema_version": "joulewise.condition_family_definition.v1",
+            "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+            "workload_profile": {
+              "name": "df_ph_prefill_p256_candidate",
+              "prompt_tokens": 256,
+              "output_tokens": 512,
+              "repetitions": 1,
+              "warmup_runs": 1
+            },
+            "measurement_target": {
+              "metric": "phase_energy_j.prefill",
+              "window_class": "phase"
+            },
+            "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+            "abba_alias_relation": "A_equals_B"
+          },
+          "condition_family_sha256": "93c9ee9b32c8c2b25675cff263e2c98882fe5f0c7f81f3ad6899f55f6f9d3c39"
+        }
+      },
+      "expected_n": 10,
+      "order_manifest": {
+        "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/order_manifest.json",
+        "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
+        "sha256": "d8b6efe989a20f7569ee62290cd8b9a16726a0eb8ac0f528f3c5b0f5c0ab4d5f"
+      },
+      "evidence_root_id": "evidence-d117-floor-qwen25-1p5b-v1",
+      "member_config_sha256": [
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-a1",
+          "config_sha256": "46d8c9e017c5c012f9299c5bd305845223560da0e36ed5912db5ac251645cd6b"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-b1",
+          "config_sha256": "f404af5d917fdaa1de90e7b275c923889cdcb31d1013bd51a0b642b0e3872d26"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-b2",
+          "config_sha256": "1e1e883f8d19bca38ad68b4e4c2e409bcf207140f287c5a3f2add7a6080700f0"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-a2",
+          "config_sha256": "59704cd1a3534a62addbbb8592a166feb3da6bd5daebb8b2ca296e1fce7f657f"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-a1",
+          "config_sha256": "5fb2503c5c512d2d4a6c1707b45a017483ef7e65fcfc430320430a9bba760ad0"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-b1",
+          "config_sha256": "e7194c97bcdc151cd9171dbaeec5eb68c4b1882b0f7be9e5303aaed9530e00cd"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-b2",
+          "config_sha256": "c809a70cab03526011e19553c58df21d6fae3aa58634ce6660c50e0d70dc581a"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-a2",
+          "config_sha256": "32804c149d57188788f207d3623ce27a6290193a3317a47861d1020efa58b919"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-a1",
+          "config_sha256": "b29f37835558f0b87e6bfa274522a81ba4c7dc3daa9c09198075d96c50f02efe"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-b1",
+          "config_sha256": "f63a1d2872892584c6c00597ed297b195b7804f024994078b40a025f904ca8da"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-b2",
+          "config_sha256": "bef00b1ca79eb62ddca04913596cb978ddd311d3968a62d8aa9ce35a5f18ce88"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-a2",
+          "config_sha256": "ad6b5c3993d8c646a2ac02cbb38e9f9d5c49dfb2353b7e7665123aebbda00a2a"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-a1",
+          "config_sha256": "228d7193963da3a9d2226788c2a2715a3edfc111a4c33747716e6c2060bc5cb9"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-b1",
+          "config_sha256": "5968d812610f8016fd15c1c4c754ad94477cc8e555773afaff98811f30419ad6"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-b2",
+          "config_sha256": "ba5eb698d3de31b168eeaf1d9ca95fa11a14458e1cb3bd0398433298d9f53295"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-a2",
+          "config_sha256": "5478d1f3245dc49f44beac38d89f1e5dcd830ec039a42bd04f5a48ee29120c6f"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-a1",
+          "config_sha256": "131591c36abf935b3a9ec7c84f0a548811c731196eb3b994d165602524ade2ea"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-b1",
+          "config_sha256": "f16b67c4e4a91b82195a5606807407c71ef165f6955d5bd3b959374f47ff142b"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-b2",
+          "config_sha256": "22d878f03f5f2c99b85ac5be7492795eff0f12336034b1c1638ed324c2e21870"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-a2",
+          "config_sha256": "506011332c856e6ca37cb65dfa3698cac73e7260a6362a0c99cba47172b1fd0a"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-a1",
+          "config_sha256": "6d83f1017b489a13ac904b0abc661327a18d6f807cbb4422e37f0537902d3281"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-b1",
+          "config_sha256": "1000b8a6b8aecee3d847ceb94622722f5993c3507986c92583f7b9076c58728d"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-b2",
+          "config_sha256": "8b0f681c46cad234cc8b47743eb60fb19856ab64fb7addc05f1f4dd1ac7da78d"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-a2",
+          "config_sha256": "6ff6b876c1fee2ab603097b2b6b150111cfcbdfe44da408500c8f5e5376ec006"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-a1",
+          "config_sha256": "87fda26171275acd883ffb7ae0e1c7e303e93f3b45ae30c0b636d988b0e56abb"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-b1",
+          "config_sha256": "ddc25a1c73db326d67f83c29700448f9ecc78017e25c839bc6704761f40d0ddc"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-b2",
+          "config_sha256": "67986c425199d3b4f378c60e8b6a2198c09756fc8f2c7d0ab871c6fed9999e69"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-a2",
+          "config_sha256": "a1fcc355af1bd6697490a13cd2b4b1d4487bf7b39b588fd3f92ff6bec231d10a"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-a1",
+          "config_sha256": "f8583452cff467657df1bdb647c66a9c3d5f2998581b81746239a88399130682"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-b1",
+          "config_sha256": "71ed34a031e29f0456a9ff7026d16bf9310371b7de59bbf77fe863c0fbfd10ca"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-b2",
+          "config_sha256": "f2be33d86b3cbf5052b323bb38a3a93e6f2be5c8dfc6f948ac8ffe6023b6606c"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-a2",
+          "config_sha256": "3debaa28e384df6fc8b1a88d3a9595ca74675d251b5abcd5e63f36303d09ad1a"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-a1",
+          "config_sha256": "5fc5cd1fd07d450ef4b9c6fa1c6d192420333d14d49f65edcdec43199da009f4"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-b1",
+          "config_sha256": "98e639c3b45ba16f24012491234aad240f8ab03727a30d25fa406a160e0112c5"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-b2",
+          "config_sha256": "b45f7e165a02d45c430d2cd1a27d26852cccb9a38cbb14ea831617d5b817c9a4"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-a2",
+          "config_sha256": "27b7a436b3605eb810bf9132ead7de5e4fd987b279303eeda85aa058ac43e5cc"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-a1",
+          "config_sha256": "bdaf37789ecf17d3622e55e3d0b38e107ccd1b272d8a09b9b46274f248c81cfb"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-b1",
+          "config_sha256": "b5493131360275cc99ab0612b7e067b3b7f0aa4dc7932f052301c753945d3e79"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-b2",
+          "config_sha256": "ac5ac97484c497b34a6c560c256e63dd7b8f20e1d4975be33f53afc0a586534e"
+        },
+        {
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-a2",
+          "config_sha256": "157b0cfda2b195b65d38003db7df9a44f4abc36a0a9f57ec296d8ff093abe53d"
+        }
+      ],
+      "calibration_basis": {
+        "calibration_scope": "production_window",
+        "acceptance_selection": "issued_d116_artifact_only",
+        "issued_acceptance": {
+          "acceptance_id": "d079_calibration_acceptance_v2_n19",
+          "path": "configs/calibration/calibration_acceptance_d079_v2.json",
+          "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+          "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+          "schema_version": "joulewise.calibration_acceptance_bound.v2"
+        },
+        "allowance_rule": "max(observed_drift_s,0.010818)",
+        "allowance_embedding_count": 1,
+        "component_composition": "componentwise_max_never_sum.v1"
+      },
+      "blocks": [
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b01",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b01-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b01-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b01-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b01-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b02",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b02-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b02-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b02-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b02-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b03",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b03-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b03-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b03-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b03-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b04",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b04-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b04-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b04-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b04-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b05",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b05-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b05-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b05-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b05-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b06",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b06-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b06-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b06-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b06-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b07",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b07-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b07-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b07-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b07-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b08",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b08-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b08-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b08-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b08-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b09",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b09-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b09-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b09-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b09-a2"
+          }
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b10",
+          "members": {
+            "A1": "d117f15-df-cmp-abba-ph-prefill-p256-b10-a1",
+            "B1": "d117f15-df-cmp-abba-ph-prefill-p256-b10-b1",
+            "B2": "d117f15-df-cmp-abba-ph-prefill-p256-b10-b2",
+            "A2": "d117f15-df-cmp-abba-ph-prefill-p256-b10-a2"
           }
         }
       ]
@@ -1476,21 +1946,287 @@
       ],
       "missing_or_invalid_member": "refuse_reported_mean",
       "numeric_value": null
+    },
+    {
+      "cell_id": "d117-reported-mean-ph-prefill-p256-qwen25-1p5b",
+      "metric": "phase_energy_j.prefill",
+      "window_class": "phase",
+      "target_precheck_path": [
+        "phase",
+        "prefill"
+      ],
+      "measurand": "gross_phase_energy_j",
+      "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+      "expected_n": 50,
+      "members": [
+        {
+          "ordinal": 1,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r01",
+          "config_sha256": "3e54ac23b1e2b5529fc012ab59caa809aab57e792fd36b5c4c721b803901863d"
+        },
+        {
+          "ordinal": 2,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r02",
+          "config_sha256": "e13ad2c1aa20c2c87d6332ea9934045be5edab60a0a08e918787a2c791d36373"
+        },
+        {
+          "ordinal": 3,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r03",
+          "config_sha256": "919272bfede271ac4cb162b970274a123ae272fbec0cec71c1a446ea4e097b29"
+        },
+        {
+          "ordinal": 4,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r04",
+          "config_sha256": "1f3353473b4a695aee0ad4c8fbf84b5ff22517a4e3e9bcc0ef5427eff6acae0f"
+        },
+        {
+          "ordinal": 5,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r05",
+          "config_sha256": "6a43e11783210f7d284f95c712a30e537b5ed6be3bc291cc680bb4972026d301"
+        },
+        {
+          "ordinal": 6,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r06",
+          "config_sha256": "462ea26656626bcd6a1e5daced9cc5090b464f54bb3ab528f0f9711c06bece16"
+        },
+        {
+          "ordinal": 7,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r07",
+          "config_sha256": "2dbfa924fdc987f67b2a7c8b052dc3cd836db19ddec5ab86c9a19216c065c41f"
+        },
+        {
+          "ordinal": 8,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r08",
+          "config_sha256": "c7e4f46f877c0d85efee004831ad417d680829aa56041347e11ed30fee8d699f"
+        },
+        {
+          "ordinal": 9,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r09",
+          "config_sha256": "06d0041b30296a069d8cac0969772c18fb1511f0e5cc3669819570b30e524d44"
+        },
+        {
+          "ordinal": 10,
+          "bundle_id": "d117f15-df-ph-prefill-p256-abs-r10",
+          "config_sha256": "a4511bb222225ba6d112948097640b4d1bd2ea5afc6c5c8108bb464605b0660c"
+        },
+        {
+          "ordinal": 11,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-a1",
+          "config_sha256": "46d8c9e017c5c012f9299c5bd305845223560da0e36ed5912db5ac251645cd6b"
+        },
+        {
+          "ordinal": 12,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-b1",
+          "config_sha256": "f404af5d917fdaa1de90e7b275c923889cdcb31d1013bd51a0b642b0e3872d26"
+        },
+        {
+          "ordinal": 13,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-b2",
+          "config_sha256": "1e1e883f8d19bca38ad68b4e4c2e409bcf207140f287c5a3f2add7a6080700f0"
+        },
+        {
+          "ordinal": 14,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-a2",
+          "config_sha256": "59704cd1a3534a62addbbb8592a166feb3da6bd5daebb8b2ca296e1fce7f657f"
+        },
+        {
+          "ordinal": 15,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-a1",
+          "config_sha256": "5fb2503c5c512d2d4a6c1707b45a017483ef7e65fcfc430320430a9bba760ad0"
+        },
+        {
+          "ordinal": 16,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-b1",
+          "config_sha256": "e7194c97bcdc151cd9171dbaeec5eb68c4b1882b0f7be9e5303aaed9530e00cd"
+        },
+        {
+          "ordinal": 17,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-b2",
+          "config_sha256": "c809a70cab03526011e19553c58df21d6fae3aa58634ce6660c50e0d70dc581a"
+        },
+        {
+          "ordinal": 18,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-a2",
+          "config_sha256": "32804c149d57188788f207d3623ce27a6290193a3317a47861d1020efa58b919"
+        },
+        {
+          "ordinal": 19,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-a1",
+          "config_sha256": "b29f37835558f0b87e6bfa274522a81ba4c7dc3daa9c09198075d96c50f02efe"
+        },
+        {
+          "ordinal": 20,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-b1",
+          "config_sha256": "f63a1d2872892584c6c00597ed297b195b7804f024994078b40a025f904ca8da"
+        },
+        {
+          "ordinal": 21,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-b2",
+          "config_sha256": "bef00b1ca79eb62ddca04913596cb978ddd311d3968a62d8aa9ce35a5f18ce88"
+        },
+        {
+          "ordinal": 22,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-a2",
+          "config_sha256": "ad6b5c3993d8c646a2ac02cbb38e9f9d5c49dfb2353b7e7665123aebbda00a2a"
+        },
+        {
+          "ordinal": 23,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-a1",
+          "config_sha256": "228d7193963da3a9d2226788c2a2715a3edfc111a4c33747716e6c2060bc5cb9"
+        },
+        {
+          "ordinal": 24,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-b1",
+          "config_sha256": "5968d812610f8016fd15c1c4c754ad94477cc8e555773afaff98811f30419ad6"
+        },
+        {
+          "ordinal": 25,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-b2",
+          "config_sha256": "ba5eb698d3de31b168eeaf1d9ca95fa11a14458e1cb3bd0398433298d9f53295"
+        },
+        {
+          "ordinal": 26,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-a2",
+          "config_sha256": "5478d1f3245dc49f44beac38d89f1e5dcd830ec039a42bd04f5a48ee29120c6f"
+        },
+        {
+          "ordinal": 27,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-a1",
+          "config_sha256": "131591c36abf935b3a9ec7c84f0a548811c731196eb3b994d165602524ade2ea"
+        },
+        {
+          "ordinal": 28,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-b1",
+          "config_sha256": "f16b67c4e4a91b82195a5606807407c71ef165f6955d5bd3b959374f47ff142b"
+        },
+        {
+          "ordinal": 29,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-b2",
+          "config_sha256": "22d878f03f5f2c99b85ac5be7492795eff0f12336034b1c1638ed324c2e21870"
+        },
+        {
+          "ordinal": 30,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-a2",
+          "config_sha256": "506011332c856e6ca37cb65dfa3698cac73e7260a6362a0c99cba47172b1fd0a"
+        },
+        {
+          "ordinal": 31,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-a1",
+          "config_sha256": "6d83f1017b489a13ac904b0abc661327a18d6f807cbb4422e37f0537902d3281"
+        },
+        {
+          "ordinal": 32,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-b1",
+          "config_sha256": "1000b8a6b8aecee3d847ceb94622722f5993c3507986c92583f7b9076c58728d"
+        },
+        {
+          "ordinal": 33,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-b2",
+          "config_sha256": "8b0f681c46cad234cc8b47743eb60fb19856ab64fb7addc05f1f4dd1ac7da78d"
+        },
+        {
+          "ordinal": 34,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-a2",
+          "config_sha256": "6ff6b876c1fee2ab603097b2b6b150111cfcbdfe44da408500c8f5e5376ec006"
+        },
+        {
+          "ordinal": 35,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-a1",
+          "config_sha256": "87fda26171275acd883ffb7ae0e1c7e303e93f3b45ae30c0b636d988b0e56abb"
+        },
+        {
+          "ordinal": 36,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-b1",
+          "config_sha256": "ddc25a1c73db326d67f83c29700448f9ecc78017e25c839bc6704761f40d0ddc"
+        },
+        {
+          "ordinal": 37,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-b2",
+          "config_sha256": "67986c425199d3b4f378c60e8b6a2198c09756fc8f2c7d0ab871c6fed9999e69"
+        },
+        {
+          "ordinal": 38,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-a2",
+          "config_sha256": "a1fcc355af1bd6697490a13cd2b4b1d4487bf7b39b588fd3f92ff6bec231d10a"
+        },
+        {
+          "ordinal": 39,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-a1",
+          "config_sha256": "f8583452cff467657df1bdb647c66a9c3d5f2998581b81746239a88399130682"
+        },
+        {
+          "ordinal": 40,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-b1",
+          "config_sha256": "71ed34a031e29f0456a9ff7026d16bf9310371b7de59bbf77fe863c0fbfd10ca"
+        },
+        {
+          "ordinal": 41,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-b2",
+          "config_sha256": "f2be33d86b3cbf5052b323bb38a3a93e6f2be5c8dfc6f948ac8ffe6023b6606c"
+        },
+        {
+          "ordinal": 42,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-a2",
+          "config_sha256": "3debaa28e384df6fc8b1a88d3a9595ca74675d251b5abcd5e63f36303d09ad1a"
+        },
+        {
+          "ordinal": 43,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-a1",
+          "config_sha256": "5fc5cd1fd07d450ef4b9c6fa1c6d192420333d14d49f65edcdec43199da009f4"
+        },
+        {
+          "ordinal": 44,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-b1",
+          "config_sha256": "98e639c3b45ba16f24012491234aad240f8ab03727a30d25fa406a160e0112c5"
+        },
+        {
+          "ordinal": 45,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-b2",
+          "config_sha256": "b45f7e165a02d45c430d2cd1a27d26852cccb9a38cbb14ea831617d5b817c9a4"
+        },
+        {
+          "ordinal": 46,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-a2",
+          "config_sha256": "27b7a436b3605eb810bf9132ead7de5e4fd987b279303eeda85aa058ac43e5cc"
+        },
+        {
+          "ordinal": 47,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-a1",
+          "config_sha256": "bdaf37789ecf17d3622e55e3d0b38e107ccd1b272d8a09b9b46274f248c81cfb"
+        },
+        {
+          "ordinal": 48,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-b1",
+          "config_sha256": "b5493131360275cc99ab0612b7e067b3b7f0aa4dc7932f052301c753945d3e79"
+        },
+        {
+          "ordinal": 49,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-b2",
+          "config_sha256": "ac5ac97484c497b34a6c560c256e63dd7b8f20e1d4975be33f53afc0a586534e"
+        },
+        {
+          "ordinal": 50,
+          "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-a2",
+          "config_sha256": "157b0cfda2b195b65d38003db7df9a44f4abc36a0a9f57ec296d8ff093abe53d"
+        }
+      ],
+      "missing_or_invalid_member": "refuse_reported_mean",
+      "numeric_value": null
     }
   ],
   "reported_energy_registration": {
     "authority": "D-123",
     "procedure_only": true,
     "postcollection_numeric_values": "structurally_absent_until_governed_reduction",
-    "floor_projection_sha256": "797b029a092615ff3f3fb00cd27002045e3d686d464fde203cbfacc74ea05b5b",
+    "floor_projection_sha256": "f52a205484d3e5b8067b2cf160b6b6026c505d1282d8dac3a18a7c5c36fc8deb",
     "no_semantics_change_rule": "Floor extraction consumes only cells; reported_energy_cells is a disjoint registered projection over the same physical bundle universe."
   },
   "reference_counts": {
-    "floor_cell_references": 100,
-    "reported_energy_references": 100,
-    "total_registered_references": 200,
-    "unique_physical_bundles": 50,
-    "unique_config_paths": 50
+    "floor_cell_references": 150,
+    "reported_energy_references": 150,
+    "total_registered_references": 300,
+    "unique_physical_bundles": 100,
+    "unique_config_paths": 100
   },
   "phase_presence_contract": {
     "required_metrics": [

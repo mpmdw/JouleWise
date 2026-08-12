@@ -1,9 +1,10 @@
 name: d117-production-proof
 
-# ADVISORY pending WO-CI-RESTRUCTURE (cold-gate ruling 2026-08-11, PR #122):
-# the decisive step cannot finish under the 360-min hosted-runner cap; manual
-# dispatch only until the matrix-split restructure lands. First hosted green
-# of the restructured job = the required second independent decisive execution.
+# ADVISORY pending D-130 closure (cold-gate ruling 2026-08-11, PR #122):
+# manual dispatch only for the first matrix-split proof. Its first hosted green
+# is the required second independent decisive execution; D-130 closure then
+# flips this workflow back to automatic push/pull_request triggering.
+# Any leg contradiction is an automatic stop signal and requires a cold gate.
 on:
   workflow_dispatch:
 
@@ -11,11 +12,67 @@ permissions:
   contents: read
 
 jobs:
+  d117-production-proof-plan:
+    name: d117-production-proof-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # This cheap certification is the proof that the registry partition is
+      # exhaustive and disjoint. The Actions matrix is then emitted from that
+      # same registry, so workflow YAML cannot silently drop a decisive leg.
+      - name: Certify and emit decisive-leg matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest -v \
+            tests.test_mint_floor_artifact_generalized.V2PinsetAndMintTests.test_d117_production_proof_registry_partition_is_exhaustive_and_disjoint
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from tests.test_mint_floor_artifact_generalized import (
+              d117_production_proof_matrix,
+          )
+
+          print(
+              "matrix="
+              + json.dumps(
+                  d117_production_proof_matrix(),
+                  sort_keys=True,
+                  separators=(",", ":"),
+              )
+          )
+          PY
+
   d117-production-proof:
-    name: d117-production-proof
+    name: >-
+      d117-production-proof (${{ matrix.partition }},
+      est ${{ matrix.estimated_minutes }}m)
+    needs: d117-production-proof-plan
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.d117-production-proof-plan.outputs.matrix) }}
     steps:
+      # Per-job budget (all 22 registry rows): 235 min estimated, leaving
+      # 125 min against the 360-min cap. Basis: the representative local split
+      # measured BUILD=35.53 min; the prior monolith reached its attack matrix
+      # at 105.22 min. Static stage analysis shows that the two non-attack
+      # stages each make one full mint pass over the same fixture, giving
+      # (105.22 - 35.53) / 2 = 34.85 min per pass. One build + one full leg is
+      # therefore estimated at 70.38 local min; applying the stated worst scale
+      # 11 h / 3 h 35 m = 3.07 gives 216.1 min, with 18.9 min added for
+      # checkout/cache/hydration and rounding. No job combines two full passes.
       # 1. Source-only checkout; the content directories are release payload.
       - name: 1 - Check out source
         uses: actions/checkout@v5
@@ -158,17 +215,21 @@ jobs:
           print("issued_ledger=76 receipts; observations=38; custody_census=190/190")
           PY
 
-      # 8. One no-mock regression executes the authentic CLI success, the
-      # bidirectional open/registry equality audit, coordinated attack and
-      # masking-removal legs, domain mutation matrix, and no-output/stage checks.
+      # 8. Every matrix job builds the same no-mock fixture, then executes one
+      # registry-selected decisive leg. core-authentic-success runs the authentic
+      # CLI success exactly once; core-bidirectional-equality-audit runs the
+      # bidirectional open/registry equality audit exactly once; each remaining
+      # job runs one attack and its no-output/stage checks. The monolithic local
+      # entry point remains available and enumerates the complete registry.
       # 9. REQUIRE_D117 turns an unavailable fixture or attempted skip into a
       # hard assertion failure rather than portable-proof evidence.
-      - name: 8-9 - Run unpatched full-fixture production proof without skips
+      - name: 8-9 - Run selected full-fixture proof leg without skips
         shell: bash
         env:
           JOULEWISE_D117_CUSTODY_STORE: ${{ runner.temp }}/d117-v2-custody-store
           JOULEWISE_REQUIRE_D117_FULL_FIXTURE: "1"
+          JOULEWISE_D117_PROOF_PARTITION: ${{ matrix.partition }}
         run: |
           set -euo pipefail
           python -m unittest -v \
-            tests.test_mint_floor_artifact_generalized.V2PinsetAndMintTests.test_coordinated_report_and_pin_change_refuses_against_floor_evidence
+            tests.test_mint_floor_artifact_generalized.V2PinsetAndMintTests.test_d117_production_proof_split_partition

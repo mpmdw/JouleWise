@@ -206,6 +206,122 @@ class AnalysisInputError(ValueError):
     """Invalid process input: CLI exits 2 and writes no artifact."""
 
 
+def _reject_duplicate_admission_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise AnalysisInputError(
+                f"analysis input contains duplicate JSON key {key!r}"
+            )
+        value[key] = child
+    return value
+
+
+def _reject_duplicate_floor_artifact_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    """Build an artifact object while preserving its typed refusal text."""
+
+    value: dict[str, Any] = {}
+    for key, child in pairs:
+        if key in value:
+            raise AnalysisInputError(
+                f"floor artifact contains duplicate key {key!r}"
+            )
+        value[key] = child
+    return value
+
+
+def _reject_nonfinite_admission_number(value: str) -> None:
+    raise AnalysisInputError(
+        f"analysis input contains non-finite JSON number {value!r}"
+    )
+
+
+def _parse_finite_admission_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
+def _parse_finite_admission_int(value: str) -> int:
+    parsed = int(value)
+    try:
+        finite_projection = math.isfinite(float(parsed))
+    except OverflowError:
+        finite_projection = False
+    if not finite_projection:
+        _reject_nonfinite_admission_number(value)
+    return parsed
+
+
+def _registration_vocabulary_paths(value: object, where: str) -> list[str]:
+    paths: list[str] = []
+
+    def walk(node: object, path: str) -> None:
+        if isinstance(node, Mapping):
+            for key, child in node.items():
+                child_path = f"{path}.{key}"
+                if key == "estimator_registration":
+                    paths.append(child_path)
+                walk(child, child_path)
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}[{index}]")
+
+    walk(value, where)
+    return paths
+
+
+def _strict_json_admission_bytes(
+    raw: bytes,
+    label: str,
+    *,
+    object_pairs_hook: Callable[
+        [list[tuple[str, Any]]], dict[str, Any]
+    ] = _reject_duplicate_admission_keys,
+) -> Any:
+    """Strict-parse one analysis input and refuse deleted vocabulary."""
+
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=object_pairs_hook,
+            parse_constant=_reject_nonfinite_admission_number,
+            parse_float=_parse_finite_admission_float,
+            parse_int=_parse_finite_admission_int,
+        )
+    except AnalysisInputError as exc:
+        raise AnalysisInputError(f"{label}: {exc}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AnalysisInputError(
+            f"{label} is not valid UTF-8 JSON: {exc}"
+        ) from exc
+    forbidden = _registration_vocabulary_paths(value, label)
+    if forbidden:
+        raise AnalysisInputError(
+            f"{label}: forbidden key 'estimator_registration' at {forbidden[0]}"
+        )
+    return value
+
+
+def _strict_jsonl_admission_bytes(raw: bytes, label: str) -> list[Any]:
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise AnalysisInputError(
+            f"{label} is not valid UTF-8 JSONL: {exc}"
+        ) from exc
+    return [
+        _strict_json_admission_bytes(line.encode("utf-8"), f"{label} line {index}")
+        for index, line in enumerate(lines, start=1)
+        if line.strip()
+    ]
+
+
 @dataclass(frozen=True)
 class AuthenticatedFloorArtifact:
     """Validated floor bytes plus the only authorized root-set projection."""
@@ -429,10 +545,7 @@ def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]
         raw = path.read_bytes()
     except OSError as exc:
         raise AnalysisInputError(f"cannot read {label} {path}: {exc}") from exc
-    try:
-        value = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise AnalysisInputError(f"{label} is not valid UTF-8 JSON: {exc}") from exc
+    value = _strict_json_admission_bytes(raw, label)
     if not isinstance(value, Mapping):
         raise AnalysisInputError(f"{label} top level must be an object")
     return value, raw
@@ -479,12 +592,11 @@ def authenticate_floor_artifact_bytes(
         raise AnalysisInputError(
             "floor artifact bytes sha256 does not match bound file_sha256"
         )
-    try:
-        value = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise AnalysisInputError(
-            f"floor artifact is not valid UTF-8 JSON: {exc}"
-        ) from exc
+    value = _strict_json_admission_bytes(
+        raw,
+        "floor artifact",
+        object_pairs_hook=_reject_duplicate_floor_artifact_keys,
+    )
     if not isinstance(value, Mapping):
         raise AnalysisInputError("floor artifact top level must be an object")
     errors = validate_floor_artifact(value)
@@ -983,8 +1095,10 @@ def _campaign_order_binding_problems(
                 if hashlib.sha256(plan_raw).hexdigest() != plan_pin.get("sha256"):
                     problems.append("calibration_plan_bytes_hash_mismatch")
                 try:
-                    plan = json.loads(plan_raw.decode("utf-8"))
-                except (UnicodeDecodeError, json.JSONDecodeError):
+                    plan = _strict_json_admission_bytes(
+                        plan_raw, "calibration plan bytes"
+                    )
+                except AnalysisInputError:
                     problems.append("calibration_plan_bytes_invalid")
                 else:
                     if (
@@ -1067,14 +1181,14 @@ def _campaign_order_binding_problems(
                     continue
                 try:
                     if is_log:
-                        parsed: object = [
-                            json.loads(line)
-                            for line in raw.decode("utf-8").splitlines()
-                            if line.strip()
-                        ]
+                        parsed: object = _strict_jsonl_admission_bytes(
+                            raw, f"{where}.{label}"
+                        )
                     else:
-                        parsed = json.loads(raw.decode("utf-8"))
-                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                        parsed = _strict_json_admission_bytes(
+                            raw, f"{where}.{label}"
+                        )
+                except AnalysisInputError as exc:
                     problems.append(
                         f"component_evidence_root_disagreement: {where}.{label} "
                         f"is not valid UTF-8 JSON evidence: {exc}"
@@ -1586,8 +1700,8 @@ def _verified_cooldown_raw_artifact(
     if hashlib.sha256(payload).hexdigest() != expected_sha:
         return None
     try:
-        rows = [json.loads(line) for line in payload.decode("utf-8").splitlines()]
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        rows = _strict_jsonl_admission_bytes(payload, "campaign cooldown raw evidence")
+    except AnalysisInputError:
         return None
     if len(rows) != expected_records or not all(isinstance(row, Mapping) for row in rows):
         return None
@@ -2437,8 +2551,11 @@ def _scan_replacements_and_topups(
         if resolved_path in registered_paths or not (path / "config.json").is_file():
             continue
         try:
-            raw = json.loads((path / "config.json").read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            config_raw = (path / "config.json").read_bytes()
+            raw = _strict_json_admission_bytes(
+                config_raw, f"replacement bundle {path.name} config"
+            )
+        except (OSError, AnalysisInputError):
             continue
         if not isinstance(raw, Mapping):
             continue
