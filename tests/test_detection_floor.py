@@ -1062,7 +1062,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
         )
         self.assertNotIn("estimator_registration", record)
 
-    def test_registered_arithmetic_is_extraction_only_in_production_inventory(self):
+    def test_registered_arithmetic_has_only_governed_production_callers(self):
         repository_root = Path(__file__).resolve().parents[1]
         calls = {
             "two_shared_edge_common_mode_floor": [],
@@ -1074,7 +1074,7 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
             "_build_registered_common_mode_block_input",
         }
         for root_name in ("joulewise", "scripts"):
-            for path in (repository_root / root_name).rglob("*.py"):
+            for path in sorted((repository_root / root_name).rglob("*.py")):
                 source = path.read_text(encoding="utf-8")
                 self.assertTrue(deleted_names.isdisjoint(source.split()))
                 tree = ast.parse(source)
@@ -1100,10 +1100,18 @@ class TestTwoSharedEdgeCommonModeFloor(unittest.TestCase):
                                     owner.name,
                                 )
                             )
+        for owners in calls.values():
+            owners.sort()
         self.assertEqual(calls["two_shared_edge_common_mode_floor"], [])
         self.assertEqual(
             calls["_common_mode_floor_from_block_inputs"],
-            [("joulewise/floor_extraction.py", "extract_comparative_cell")],
+            [
+                ("joulewise/floor_extraction.py", "extract_comparative_cell"),
+                (
+                    "joulewise/floor_mint_estimator.py",
+                    "recompute_comparative_estimate",
+                ),
+            ],
         )
         self.assertEqual(
             calls["_common_mode_floor_from_extracted_inputs"],

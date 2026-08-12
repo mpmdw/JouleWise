@@ -8496,6 +8496,99 @@ deferred. The same-signature escalation trigger is satisfied by
 resolution through this consult with a structurally different remedy
 (deletion, not a third validator).
 
+### D-124/D-133 implementation note — 2026-08-11: spec-authoritative mint dispatch
+
+WO-MINT-ESTIMATOR-VOCAB added per-cell v2 mint dispatch at postcollection
+equality, frozen artifact construction, and final evidence binding. The sole
+authority is the authenticated comparative extraction-spec cell; estimator
+and registration identity remain absent from reports, artifacts, pinsets, and
+provenance. Regressions cover spec swaps, report-vocabulary and opposite-width
+mismatches, a negative control at each dispatch site, equality/U10 repair,
+one-ULP common-mode understatement, mixed-selector ordering, default-byte
+preservation, registered refusal without fallback, and no-output refusal. The
+focused matrices passed 334 tests on both `python3` and `python3.11` (one
+skip); the canonical suites passed 3,067 tests on both interpreters (96
+skips).
+
+**F1-F12 fix-round addendum (2026-08-12, uncommitted final-gate worktree).**
+The cold-gate final ruling replaces every earlier condition set. At prepared
+integration head `a798f2bc2a33187ee8f0b7f9d5ad7836a7faca02`, the pinned core
+`scripts/mint_floor_artifact.py` has SHA-256
+`79229aa2757f70a277c870fc50d0672d70952035f982da26ba5211eb7df8ba16`.
+It is byte-identical to the prepared post-#131 upstream parent
+`60d9e42a8204c3a117a577ddb4680fcb30814a26` and to the current
+`origin/main` copy. AST/source comparison re-verified
+`_verify_report_widths`, `_report_members`, `_target_report_cell`, and
+`_authenticate_component` unchanged; the binder still iterates exactly
+`("absolute", "comparative")`. The fix deletes the common-mode
+`except core.MintError` swallow and the provenance-derived binding-result
+fallback. The pinned binder now runs to completion over an isolated deep copy
+whose only substituted artifact field is the comparative
+`admissible_half_widths_j`, populated from authenticated
+`comparative_component.widths_j`; the exact registered-width comparison still
+targets the real artifact, which is the object passed to the final writer.
+
+**F6 refusal-identity ledger.** A mechanical pre-WO-to-fix audit plus the
+default-path differential/refusal matrices found the following complete set of
+identity effects:
+
+- Existing default-path v2 refusal fixtures retain their messages. Default
+  output bytes retain the independent golden component hashes, default
+  authentication refusals match the pinned core exactly, and default binding
+  still uses the pinned `rel_tol=1e-12, abs_tol=1e-12` width check.
+- The former test assertion
+  `"absolute_evaluation_basis_sha256 mismatch"` is not silently relaxed.
+  Component/pin gating now fires earlier, before estimator dispatch, with the
+  exact refusal `producer[0].decode.absolute: evaluation basis sha256
+  mismatch`; the regression pins that complete prefix. The older downstream
+  U10 projection message was
+  `postcollection_evidence_mismatch:
+  absolute_evaluation_basis_sha256 mismatch against domain-owned verification
+  projection`. The identity change is justified by F1/F5's required ordering:
+  the authenticated component pin owns this mismatch and must refuse before
+  any estimator executes.
+- At the postcollection `except ValueError` site, a spec-selected estimator
+  selection/recomputation refusal is deliberately normalized to
+  `postcollection_evidence_mismatch: comparative estimator recomputation
+  refused: <original cause>`. This new gate applies to the newly registered
+  path after component and producer authentication; it does not relabel a
+  successfully selected default path or any existing default fixture.
+- At the final binding call site, estimator-module `ValueError` is deliberately
+  normalized to the public generalized `MintError` while preserving
+  `str(exc)` byte-for-byte. Pinned-core `MintError` refusals, including every
+  default-path binder refusal, retain both their message and the pre-existing
+  generalized-boundary normalization. The gate is the final estimator-aware
+  evidence binder; it refuses before output writing.
+
+No other existing refusal assertion was widened. New common-mode refusals are
+additive and fail closed: exact report-width/type mismatch, frozen-object
+construction mismatch, and exact artifact-width/type mismatch.
+
+**F11 scope and inventory.** The authoritative WRITE_SCOPE is amended to
+include `tests/test_detection_floor.py`. Its edit existed in the working tree
+before any scope grant was on the record; this ruling ratifies the content
+prospectively, and does **not** ratify that sequencing. Against the prepared
+integrated upstream parent (`a798f2b^2`, `60d9e42`), the mechanical diff
+inventory is exactly:
+
+1. `docs/decision_log.md`
+2. `joulewise/floor_mint_estimator.py`
+3. `scripts/mint_floor_artifact_generalized.py`
+4. `tests/test_detection_floor.py`
+5. `tests/test_floor_mint_estimator.py`
+6. `tests/test_mint_floor_artifact_generalized.py`
+
+During this fix session `origin/main` advanced independently to `c3b2c79`; the
+literal final-gate command `git diff origin/main --name-only` therefore also
+reports four upstream-only differences (`.github/workflows/d117-production-proof.yml`,
+`.github/workflows/site.yml`, `RUN_STATE.md`, and
+`docs/process_traces/2026-08-12-calexits-mutation-consult/consult.md`). They
+are not WO edits and remain outside WRITE_SCOPE. F11(c) must be re-executed by
+the lead after integrating the authorized six-path diff onto the then-current
+upstream head; no worker-side merge, rebase, or out-of-scope repair is
+authorized here. D-133 clause 3's full fresh FCM delta likewise remains an
+open, lead-owned merge gate and is not discharged by this work order.
+
 ## D-134: §5C arm-readiness record contract — two-stage append-only receipts (adopt-as-proposed)
 
 **Adopted 2026-08-11 (T4-late)** from the binding design consult (Sol

@@ -6,6 +6,7 @@ import hashlib
 import io
 import inspect
 import json
+import math
 import os
 import plistlib
 import re
@@ -15,9 +16,10 @@ import sys
 import tempfile
 import time
 import unittest
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from dataclasses import replace
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -697,11 +699,15 @@ def _v2_component_pin(component: mint1.AuthenticatedComponent) -> dict:
 
 def _production_report_cell(
     component: mint1.AuthenticatedComponent,
+    *,
+    estimate: object | None = None,
 ) -> dict:
     """Emit the exact governed CellReport wire used by extract_cells."""
 
     core = generalized._fresh_original_core()
-    if component.kind == "absolute":
+    if estimate is not None:
+        pass
+    elif component.kind == "absolute":
         estimate = core.absolute_false_effect_floor(
             [member_row.metric_value_j for member_row in component.members],
             admissible_half_widths_j=component.widths_j,
@@ -779,8 +785,20 @@ def _v2_postcollection(
     bracket_binding_sha256: str,
     extraction_report_sha256: str,
 ) -> dict:
-    absolute_full = "6.294380135190098"
-    comparative_full = "13.998036715259254"
+    absolute_decimal = Decimal(
+        str(absolute.cell["floor"]["drift_widened_guarded_floor_j"])
+    )
+    comparative_decimal = Decimal(
+        str(comparative.cell["floor"]["drift_widened_guarded_floor_j"])
+    )
+    operative_decimal = max(absolute_decimal, comparative_decimal)
+
+    def six(value: Decimal) -> str:
+        return format(
+            value.quantize(Decimal("0.000001"), rounding=ROUND_HALF_EVEN),
+            ".6f",
+        )
+
     return {
         "absolute_evaluation_basis_sha256": (
             absolute.whole_window_evaluation_basis_sha256
@@ -816,12 +834,12 @@ def _v2_postcollection(
         "applied_allowance_s": generalized.V2_BRACKET_SCREEN_S,
         "allowance_embedding_count": 1,
         "extraction_report_sha256": extraction_report_sha256,
-        "absolute_floor_full_precision": absolute_full,
-        "comparative_floor_full_precision": comparative_full,
-        "operative_floor_full_precision": comparative_full,
-        "absolute_floor_six_decimal": "6.294380",
-        "comparative_floor_six_decimal": "13.998037",
-        "operative_floor_six_decimal": "13.998037",
+        "absolute_floor_full_precision": str(absolute_decimal),
+        "comparative_floor_full_precision": str(comparative_decimal),
+        "operative_floor_full_precision": str(operative_decimal),
+        "absolute_floor_six_decimal": six(absolute_decimal),
+        "comparative_floor_six_decimal": six(comparative_decimal),
+        "operative_floor_six_decimal": six(operative_decimal),
     }
 
 
@@ -1308,6 +1326,505 @@ def freeze_synthetic_v2_pinset(
     )
     path, digest = write_pinset(root, pinset)
     return path, digest, inputs, ledger_snapshot
+
+
+def _mixed_calibration_basis(
+    inputs: generalized.V2ProducerInputs,
+) -> dict:
+    acceptance = inputs.calibration_acceptance
+    return {
+        "calibration_scope": "production_window",
+        "acceptance_selection": "issued_d116_artifact_only",
+        "issued_acceptance": {
+            "acceptance_id": acceptance["acceptance_id"],
+            "path": "authenticated-issued-acceptance.json",
+            "artifact_sha256": inputs.calibration_acceptance_sha256,
+            "derivation_sha256": acceptance["derivation_sha256"],
+            "schema_version": acceptance["schema_version"],
+        },
+        "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+        "allowance_embedding_count": 1,
+        "component_composition": "componentwise_max_never_sum.v1",
+    }
+
+
+def _mixed_common_mode_session() -> SimpleNamespace:
+    bracket = {
+        "status": "passed",
+        "endpoint_max_b_fiducial_s": 0.021,
+        "calibration_drift_allowance_s": 0.010818,
+        "b_fiducial_s": 0.031818,
+        "operative_b_fiducial_s": 0.031818,
+        "acceptance": {
+            "allowance": {
+                "rule": "max(observed_drift_s,bracket_screen_s)",
+                "value_s": "0.010818",
+                "embedding_count": 1,
+                "embedded_in": "b_fiducial_s",
+            }
+        },
+    }
+    return SimpleNamespace(
+        ready=True,
+        refusal_reasons=(),
+        calibration_bracket=bracket,
+        operative_fiducial_bound_s=0.031818,
+    )
+
+
+@contextmanager
+def _mixed_common_mode_seams(
+    producer_inputs: dict[str, generalized.V2ProducerInputs],
+):
+    """Supply deterministic authenticated raw inputs to the real FCM core."""
+
+    delta_by_members: dict[tuple[str, ...], float] = {}
+    for inputs in producer_inputs.values():
+        for cell in inputs.cells.values():
+            component = cell.comparative
+            if component.spec_cell.get("estimator") != (
+                detection_floor.COMMON_MODE_ESTIMATOR_ID
+            ):
+                continue
+            blocks, deltas = mint1._comparative_blocks(component)
+            for block, delta in zip(blocks, deltas, strict=True):
+                key = tuple(row["bundle_id"] for row in block["members"])
+                previous = delta_by_members.setdefault(key, delta)
+                if previous != delta:
+                    raise AssertionError("mixed fixture reused a block with a new delta")
+
+    def block_input(members, **_kwargs):
+        key = tuple(member.bundle_id for member in members)
+        delta = delta_by_members[key]
+        return generalized.mint_estimator.floor_extraction._CommonModeBlockInputs(
+            onset_values_j=(delta - 0.02, delta, delta + 0.03),
+            offset_values_j=(delta - 0.01, delta, delta + 0.015),
+            zero_point_contrast_j=delta,
+            bundle_residual_half_widths_j=(0.001, 0.001, 0.001, 0.001),
+            member_window_bounds_s=((-1.0, 1.0),) * 4,
+            member_envelope_integral_sum_j=max(1.0, abs(delta) + 0.03),
+        )
+
+    with (
+        mock.patch.object(
+            generalized.mint_estimator,
+            "_assert_common_mode_contract",
+            return_value=None,
+        ),
+        mock.patch.object(
+            generalized.mint_estimator,
+            "_authenticated_common_mode_session",
+            return_value=_mixed_common_mode_session(),
+        ),
+        mock.patch.object(
+            generalized.mint_estimator.floor_extraction,
+            "_common_mode_block_inputs_from_evidence",
+            side_effect=block_input,
+        ),
+    ):
+        yield
+
+
+def freeze_mixed_estimator_v2_pinset(
+    root: Path,
+    *,
+    install_binding_evidence: bool = False,
+) -> tuple[
+    Path,
+    str,
+    dict[str, generalized.V2ProducerInputs],
+    SimpleNamespace,
+]:
+    """Freeze two default and two registered cells under shared reports."""
+
+    pinset, source_inputs, ledger_snapshot = synthetic_v2_fixture()
+    mixed_inputs: dict[str, generalized.V2ProducerInputs] = {}
+    for producer in pinset["producer_plans"]:
+        plan_id = producer["plan"]["plan_id"]
+        source = source_inputs[plan_id]
+        preliminary_cells = dict(source.cells)
+        decode = preliminary_cells["decode"]
+        registered_spec_cell = copy.deepcopy(decode.comparative.spec_cell)
+        registered_spec_cell.update(
+            {
+                "estimator": detection_floor.COMMON_MODE_ESTIMATOR_ID,
+                "estimator_registration": (
+                    detection_floor.two_shared_edge_common_mode_registration()
+                ),
+                "calibration_basis": _mixed_calibration_basis(source),
+            }
+        )
+        preliminary_cells["decode"] = replace(
+            decode,
+            comparative=replace(
+                decode.comparative,
+                spec_cell=registered_spec_cell,
+            ),
+        )
+        full_spec = {
+            "schema_version": mint1.EXTRACTION_SPEC_SCHEMA_VERSION,
+            "cells": [
+                copy.deepcopy(component.spec_cell)
+                for role in ("decode", "prefill")
+                for component in (
+                    preliminary_cells[role].absolute,
+                    preliminary_cells[role].comparative,
+                )
+            ],
+        }
+        shared_spec_sha256 = producer["extraction_spec"]["sha256"]
+        preliminary_cells = {
+            role: replace(
+                cell,
+                absolute=replace(
+                    cell.absolute,
+                    spec=full_spec,
+                    spec_sha256=shared_spec_sha256,
+                ),
+                comparative=replace(
+                    cell.comparative,
+                    spec=full_spec,
+                    spec_sha256=shared_spec_sha256,
+                ),
+            )
+            for role, cell in preliminary_cells.items()
+        }
+        preliminary_inputs = replace(source, cells=preliminary_cells)
+        mixed_inputs[plan_id] = preliminary_inputs
+
+    common_estimates: dict[tuple[str, str], object] = {}
+    with _mixed_common_mode_seams(mixed_inputs):
+        for producer in pinset["producer_plans"]:
+            plan_id = producer["plan"]["plan_id"]
+            inputs = mixed_inputs[plan_id]
+            component = inputs.cells["decode"].comparative
+            result = generalized.mint_estimator.recompute_comparative_estimate(
+                core=generalized._fresh_original_core(),
+                comparative_component=component,
+                runs_root=inputs.evidence_root,
+                calibration_acceptance=inputs.calibration_acceptance,
+                calibration_acceptance_sha256=(
+                    inputs.calibration_acceptance_sha256
+                ),
+                calibration_allowance_projection=(
+                    inputs.calibration_allowance_projection or {}
+                ),
+                declared_calibration_scope="production_window",
+                calibration_ledger_snapshot=ledger_snapshot,
+                calibration_bracket_binding=inputs.bracket_binding,
+            )
+            common_estimates[(plan_id, "decode")] = result.estimate
+
+    for producer in pinset["producer_plans"]:
+        plan_id = producer["plan"]["plan_id"]
+        inputs = mixed_inputs[plan_id]
+        report_cells = []
+        for role in ("decode", "prefill"):
+            cell = inputs.cells[role]
+            report_cells.append(_production_report_cell(cell.absolute))
+            report_cells.append(
+                _production_report_cell(
+                    cell.comparative,
+                    estimate=common_estimates.get((plan_id, role)),
+                )
+            )
+        report = copy.deepcopy(inputs.cells["decode"].absolute.report)
+        report["cells"] = report_cells
+        self_profile_errors = validate_d117_mint_consumption_report(report)
+        if self_profile_errors:
+            raise AssertionError(self_profile_errors)
+        report_sha256 = _fixture_artifact_sha256(report)
+        report_cell_by_id = {row["cell_id"]: row for row in report_cells}
+        final_cells = {}
+        for role in ("decode", "prefill"):
+            cell = inputs.cells[role]
+            absolute = replace(
+                cell.absolute,
+                report=report,
+                report_sha256=report_sha256,
+                cell=report_cell_by_id[cell.absolute.calibration_cell_id],
+            )
+            comparative = replace(
+                cell.comparative,
+                report=report,
+                report_sha256=report_sha256,
+                cell=report_cell_by_id[cell.comparative.calibration_cell_id],
+            )
+            final_cells[role] = replace(
+                cell,
+                absolute=absolute,
+                comparative=comparative,
+            )
+            cell_pin = next(
+                row for row in producer["cells"] if row["role"] == role
+            )
+            cell_pin["absolute"] = _v2_component_pin(absolute)
+            cell_pin["comparative"] = _v2_component_pin(comparative)
+            cell_pin["postcollection"] = _v2_postcollection(
+                absolute,
+                comparative,
+                bracket_binding=inputs.bracket_binding,
+                bracket_binding_sha256=inputs.bracket_binding_sha256,
+                extraction_report_sha256=report_sha256,
+            )
+            cell_pin["postcollection"]["terminal_ledger_head_sha256"] = (
+                ledger_snapshot.head_digest
+            )
+        mixed_inputs[plan_id] = replace(inputs, cells=final_cells)
+        producer["extraction_spec"]["member_count"] = len(
+            {
+                member.bundle_id
+                for cell in final_cells.values()
+                for component in (cell.absolute, cell.comparative)
+                for member in component.members
+            }
+        )
+
+    if install_binding_evidence:
+        for producer in pinset["producer_plans"]:
+            plan_id = producer["plan"]["plan_id"]
+            inputs = mixed_inputs[plan_id]
+            plan_path = root / producer["plan"]["relative_path"]
+            plan_path.parent.mkdir(exist_ok=True)
+            plan_path.write_text(
+                json.dumps(inputs.plan, sort_keys=True), encoding="utf-8"
+            )
+            plan_sha256 = file_sha256(plan_path)
+            producer["plan"]["sha256"] = plan_sha256
+            producer["plan"]["declared_sha256"] = plan_sha256
+            evidence_root = root / producer["evidence_root_id"]
+            evidence_root.mkdir()
+            campaign_path = evidence_root / "campaign_log.jsonl"
+            campaign_path.write_text(
+                json.dumps({"synthetic": True}) + "\n", encoding="utf-8"
+            )
+            campaign_sha256 = file_sha256(campaign_path)
+
+            member_inputs = {}
+            for cell in inputs.cells.values():
+                for component in (cell.absolute, cell.comparative):
+                    divisor = 1 if component.kind == "absolute" else 4
+                    for index, member in enumerate(component.members):
+                        width_index = index // divisor
+                        half_width = component.widths_j[width_index]
+                        if component.kind == "comparative":
+                            half_width /= 2.0
+                        observed = (member.metric_value_j, half_width)
+                        previous = member_inputs.setdefault(member.bundle_id, observed)
+                        if previous != observed:
+                            raise AssertionError(
+                                "mixed binding fixture reused inconsistent member bytes"
+                            )
+            installed = {}
+            for bundle_id, (metric_value, half_width) in member_inputs.items():
+                bundle_sha256, config_sha256 = _write_bundle(
+                    evidence_root,
+                    bundle_id=bundle_id,
+                    metric_value_j=metric_value,
+                    half_width_j=half_width,
+                    plan_sha256=producer["plan"]["sha256"],
+                )
+                summary_path = evidence_root / bundle_id / "summary_metrics.json"
+                summary = load_json(summary_path)
+                summary["phase_energy_j"]["prefill"] = metric_value
+                summary["energy_anchor_shift_envelopes"][
+                    "/phase_energy_j/prefill"
+                ] = copy.deepcopy(
+                    summary["energy_anchor_shift_envelopes"][
+                        "/phase_energy_j/decode"
+                    ]
+                )
+                summary_path.write_text(
+                    json.dumps(summary, sort_keys=True), encoding="utf-8"
+                )
+                installed[bundle_id] = (
+                    complete_bundle_sha256(evidence_root / bundle_id),
+                    config_sha256,
+                )
+
+            repaired_cells = {}
+            for role, cell in inputs.cells.items():
+                repaired_components = {}
+                for component_name in ("absolute", "comparative"):
+                    component = getattr(cell, component_name)
+                    members = tuple(
+                        replace(
+                            member,
+                            bundle_sha256=installed[member.bundle_id][0],
+                            config_sha256=installed[member.bundle_id][1],
+                        )
+                        for member in component.members
+                    )
+                    report_cell = copy.deepcopy(component.cell)
+                    for row in report_cell["members"]:
+                        row["bundle_sha256"], row["config_sha256"] = installed[
+                            row["bundle_id"]
+                        ]
+                    bracket = copy.deepcopy(component.whole_window_calibration_bracket)
+                    for endpoint in bracket.values():
+                        endpoint["bracket_runs_root"] = str(evidence_root.resolve())
+                        endpoint["bracket_plan_sha256"] = plan_sha256
+                    order_manifest = copy.deepcopy(component.order_manifest)
+                    order_manifest["calibration_plan_sha256"] = plan_sha256
+                    repaired_components[component_name] = replace(
+                        component,
+                        campaign_log_sha256=campaign_sha256,
+                        cell=report_cell,
+                        members=members,
+                        order_manifest=order_manifest,
+                        order_manifest_sha256=_fixture_artifact_sha256(
+                            order_manifest
+                        ),
+                        whole_window_calibration_bracket=bracket,
+                    )
+                repaired_cells[role] = replace(cell, **repaired_components)
+
+            report = copy.deepcopy(inputs.cells["decode"].absolute.report)
+            report["runs_root"] = str(evidence_root)
+            report["cells"] = [
+                copy.deepcopy(getattr(repaired_cells[role], component_name).cell)
+                for role in ("decode", "prefill")
+                for component_name in ("absolute", "comparative")
+            ]
+            report_sha256 = _fixture_artifact_sha256(report)
+            repaired_cells = {
+                role: replace(
+                    cell,
+                    absolute=replace(
+                        cell.absolute,
+                        report=report,
+                        report_sha256=report_sha256,
+                    ),
+                    comparative=replace(
+                        cell.comparative,
+                        report=report,
+                        report_sha256=report_sha256,
+                    ),
+                )
+                for role, cell in repaired_cells.items()
+            }
+            binding = copy.deepcopy(inputs.bracket_binding)
+            binding["runs_root"] = str(evidence_root.resolve())
+            binding["plan_sha256"] = plan_sha256
+            binding["binding_digest"] = _fixture_canonical_sha256(
+                {key: value for key, value in binding.items() if key != "binding_digest"}
+            )
+            binding_sha256 = _fixture_artifact_sha256(binding)
+            observations = []
+            for observation in (
+                inputs.authenticated_pre_observation,
+                inputs.authenticated_post_observation,
+            ):
+                values = vars(observation).copy()
+                values["bracket_runs_root"] = str(evidence_root.resolve())
+                values["bracket_plan_sha256"] = plan_sha256
+                observations.append(SimpleNamespace(**values))
+            mixed_inputs[plan_id] = replace(
+                inputs,
+                cells=repaired_cells,
+                evidence_root=evidence_root,
+                plan_sha256=plan_sha256,
+                plan_declared_sha256=plan_sha256,
+                bracket_binding=binding,
+                bracket_binding_sha256=binding_sha256,
+                authenticated_pre_observation=observations[0],
+                authenticated_post_observation=observations[1],
+            )
+            for cell_pin in producer["cells"]:
+                role = cell_pin["role"]
+                cell = repaired_cells[role]
+                cell_pin["absolute"] = _v2_component_pin(cell.absolute)
+                cell_pin["comparative"] = _v2_component_pin(cell.comparative)
+                terminal_head = cell_pin["postcollection"][
+                    "terminal_ledger_head_sha256"
+                ]
+                cell_pin["postcollection"] = _v2_postcollection(
+                    cell.absolute,
+                    cell.comparative,
+                    bracket_binding=binding,
+                    bracket_binding_sha256=binding_sha256,
+                    extraction_report_sha256=report_sha256,
+                )
+                cell_pin["postcollection"][
+                    "terminal_ledger_head_sha256"
+                ] = terminal_head
+    _repair_v2_pinset_self_hashes(pinset)
+    provisional_path, provisional_digest = write_pinset(root, pinset)
+    loaded = generalized.load_pinset(provisional_path, provisional_digest)
+    assert isinstance(loaded, generalized.V2Pinset)
+    with _mixed_common_mode_seams(mixed_inputs):
+        _artifact, components = generalized._build_v2_artifacts(
+            pinset=loaded,
+            pinset_path=provisional_path,
+            pinset_sha256=provisional_digest,
+            producer_inputs=mixed_inputs,
+            calibration_ledger_snapshot=ledger_snapshot,
+            project_commit="0" * 40,
+            project_tree_state="clean",
+        )
+    for producer, aggregate, component in zip(
+        pinset["producer_plans"],
+        pinset["aggregate"]["component_artifacts"],
+        components,
+    ):
+        component_sha256 = generalized._artifact_sha256(component)
+        producer["component_artifact"]["sha256"] = component_sha256
+        aggregate["sha256"] = component_sha256
+    _repair_v2_pinset_self_hashes(pinset)
+    final_path, final_digest = write_pinset(root, pinset)
+    return final_path, final_digest, mixed_inputs, ledger_snapshot
+
+
+def _reattach_producer_report(
+    pinset: dict,
+    producer_inputs: dict[str, generalized.V2ProducerInputs],
+    producer_index: int,
+    report: dict,
+) -> None:
+    """Repair report/U10 caches without changing authenticated members."""
+
+    producer = pinset["producer_plans"][producer_index]
+    plan_id = producer["plan"]["plan_id"]
+    inputs = producer_inputs[plan_id]
+    report_sha256 = _fixture_artifact_sha256(report)
+    report_cells = {row["cell_id"]: row for row in report["cells"]}
+    repaired_cells = {}
+    for role, cell in inputs.cells.items():
+        absolute = replace(
+            cell.absolute,
+            report=report,
+            report_sha256=report_sha256,
+            cell=report_cells[cell.absolute.calibration_cell_id],
+        )
+        comparative = replace(
+            cell.comparative,
+            report=report,
+            report_sha256=report_sha256,
+            cell=report_cells[cell.comparative.calibration_cell_id],
+        )
+        repaired_cells[role] = replace(
+            cell,
+            absolute=absolute,
+            comparative=comparative,
+        )
+        cell_pin = next(
+            row for row in producer["cells"] if row["role"] == role
+        )
+        terminal_head_sha256 = cell_pin["postcollection"][
+            "terminal_ledger_head_sha256"
+        ]
+        cell_pin["postcollection"] = _v2_postcollection(
+            absolute,
+            comparative,
+            bracket_binding=inputs.bracket_binding,
+            bracket_binding_sha256=inputs.bracket_binding_sha256,
+            extraction_report_sha256=report_sha256,
+        )
+        cell_pin["postcollection"]["terminal_ledger_head_sha256"] = (
+            terminal_head_sha256
+        )
+    producer_inputs[plan_id] = replace(inputs, cells=repaired_cells)
+    _repair_v2_pinset_self_hashes(pinset)
 
 
 def freeze_production_extracted_v2_pinset(
@@ -5575,6 +6092,1512 @@ class V2PinsetAndMintTests(unittest.TestCase):
             )
         )
 
+    def test_default_only_v2_output_remains_byte_identical_to_golden_oracle(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest, inputs, ledger_snapshot = freeze_synthetic_v2_pinset(
+                Path(tmp)
+            )
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            _artifact, components = generalized._build_v2_artifacts(
+                pinset=loaded,
+                pinset_path=path,
+                pinset_sha256=digest,
+                producer_inputs=inputs,
+                calibration_ledger_snapshot=ledger_snapshot,
+                project_commit="0" * 40,
+                project_tree_state="clean",
+            )
+        self.assertEqual(
+            tuple(generalized._artifact_sha256(row) for row in components),
+            SYNTHETIC_COMPONENT_SHA256S,
+        )
+
+    def test_default_authentication_seam_is_byte_identical_to_pinned_core(
+        self,
+    ) -> None:
+        core = generalized._fresh_original_core()
+        cell = {
+            "kind": "comparative",
+            "floor": {"admissible_half_widths_j": [0.125, 0.25]},
+        }
+        paths = SimpleNamespace(cell=cell, widths=(0.125, 0.25))
+
+        def authenticate(candidate, **_kwargs):
+            core._verify_report_widths(candidate.cell, candidate.widths)
+            return SimpleNamespace(
+                kind="comparative",
+                spec_cell={},
+                cell=candidate.cell,
+                widths_j=candidate.widths,
+                payload=normalized_json_bytes(candidate.cell),
+            )
+
+        core._authenticate_component = authenticate
+        pinned_bytes = core._authenticate_component(paths)
+        seam_bytes = generalized._authenticate_v2_component(core, paths)
+        self.assertEqual(seam_bytes, pinned_bytes)
+        self.assertEqual(
+            inspect.getsource(core._verify_report_widths),
+            inspect.getsource(
+                generalized._fresh_original_core()._verify_report_widths
+            ),
+        )
+
+    def test_default_authentication_seam_refusal_matrix_is_closed_and_identical(
+        self,
+    ) -> None:
+        """Only _verify_report_widths at one core call site is substituted.
+
+        Invalid spec, member/order identity, and semantics failures are
+        downstream in the unchanged pinned authenticator.  Shape, finite, and
+        exact default-width refusals exercise the sole substituted call.
+        """
+        from tests.test_mint_floor_artifact import (
+            AuthenticationTests as CoreAuthenticationTests,
+            stack_identity as pinned_stack_identity,
+        )
+
+        def attack(paths: object, case: str) -> None:
+            spec = load_json(paths.spec_path)
+            report = load_json(paths.report_path)
+            target = report["cells"][0]
+            if case == "invalid_spec":
+                spec["cells"][0]["metric"] = "forged.metric"
+            elif case == "member_order":
+                target["members"][0], target["members"][1] = (
+                    target["members"][1],
+                    target["members"][0],
+                )
+            elif case == "shape":
+                target["floor"]["admissible_half_widths_j"].pop()
+            elif case == "nonfinite":
+                target["floor"]["admissible_half_widths_j"][0] = float("inf")
+            elif case == "semantics":
+                report["consumption_semantics_id"] = "forged.semantics"
+            elif case == "one_ulp":
+                widths = target["floor"]["admissible_half_widths_j"]
+                widths[0] = math.nextafter(widths[0], math.inf)
+            else:  # pragma: no cover - the closed matrix above owns cases.
+                raise AssertionError(case)
+            paths.spec_path.write_text(json.dumps(spec), encoding="utf-8")
+            paths.report_path.write_text(json.dumps(report), encoding="utf-8")
+
+        def observed(via_seam: bool, case: str) -> tuple[type[Exception], str]:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                helper = CoreAuthenticationTests("runTest")
+                paths = helper._window_c_tree(tmp)
+                attack(paths, case)
+                core = generalized._fresh_original_core()
+                kwargs = {
+                    "expected_cell_id": core.WINDOW_C_CELL_ID,
+                    "expected_basis_sha256": core.WINDOW_C_EVALUATION_BASIS_SHA256,
+                    "strict_validator": lambda _path, _strict: (),
+                    "consumption_authenticator": helper._synthetic_consumption,
+                    "allowance_deriver": helper._synthetic_allowance_derivation,
+                }
+                with (
+                    mock.patch.object(
+                        core,
+                        "build_stack_identity",
+                        return_value=pinned_stack_identity(),
+                    ),
+                    mock.patch.object(
+                        core,
+                        "scientific_config_identity",
+                        return_value={"synthetic": "same"},
+                    ),
+                ):
+                    try:
+                        if via_seam:
+                            generalized._authenticate_v2_component(
+                                core, paths, **kwargs
+                            )
+                        else:
+                            core._authenticate_component(paths, **kwargs)
+                    except core.MintError as exc:
+                        self.assertFalse((root / "floor.json").exists())
+                        self.assertFalse((root / "single-count.txt").exists())
+                        return type(exc), str(exc)
+                self.fail(f"{case} unexpectedly authenticated")
+
+        for case in (
+            "invalid_spec",
+            "member_order",
+            "shape",
+            "nonfinite",
+            "semantics",
+            "one_ulp",
+        ):
+            with self.subTest(case=case):
+                direct_type, direct_message = observed(False, case)
+                seam_type, seam_message = observed(True, case)
+                self.assertTrue(issubclass(direct_type, ValueError))
+                self.assertTrue(issubclass(seam_type, ValueError))
+                self.assertEqual(seam_message, direct_message)
+
+    def test_authentication_seam_restores_fresh_core_on_return_and_raise(
+        self,
+    ) -> None:
+        for should_raise in (False, True):
+            with self.subTest(should_raise=should_raise):
+                core = generalized._fresh_original_core()
+                pinned_verifier = core._verify_report_widths
+                cell = {
+                    "kind": "comparative",
+                    "floor": {"admissible_half_widths_j": [0.125]},
+                }
+                paths = SimpleNamespace(cell=cell, widths=(0.125,))
+
+                def authenticate(candidate, **_kwargs):
+                    core._verify_report_widths(candidate.cell, candidate.widths)
+                    if should_raise:
+                        raise core.MintError("fixture downstream refusal")
+                    return SimpleNamespace(
+                        kind="comparative",
+                        spec_cell={},
+                        cell=candidate.cell,
+                        widths_j=candidate.widths,
+                    )
+
+                core._authenticate_component = authenticate
+                before = dict(core.__dict__)
+                if should_raise:
+                    with self.assertRaisesRegex(
+                        core.MintError, "downstream refusal"
+                    ):
+                        generalized._authenticate_v2_component(core, paths)
+                else:
+                    generalized._authenticate_v2_component(core, paths)
+                self.assertIs(core._verify_report_widths, pinned_verifier)
+                self.assertEqual(core.__dict__, before)
+                self.assertEqual(
+                    inspect.getsource(core._verify_report_widths),
+                    inspect.getsource(
+                        generalized._fresh_original_core()._verify_report_widths
+                    ),
+                )
+
+    def test_absolute_authentication_uses_unmodified_pinned_width_verifier(
+        self,
+    ) -> None:
+        def refusal(via_seam: bool) -> str:
+            core = generalized._fresh_original_core()
+            cell = {
+                "kind": "absolute",
+                "floor": {"admissible_half_widths_j": [0.25]},
+            }
+            paths = SimpleNamespace(cell=cell, widths=(0.125,))
+
+            def authenticate(candidate, **_kwargs):
+                core._verify_report_widths(candidate.cell, candidate.widths)
+
+            core._authenticate_component = authenticate
+            try:
+                if via_seam:
+                    generalized._authenticate_v2_component(core, paths)
+                else:
+                    core._authenticate_component(paths)
+            except core.MintError as exc:
+                return str(exc)
+            self.fail("absolute mismatch unexpectedly authenticated")
+
+        self.assertEqual(refusal(True), refusal(False))
+
+    def test_mixed_four_cell_full_mint_is_cell_local_and_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "baseline").mkdir()
+            (root / "mixed").mkdir()
+            baseline_path, baseline_digest, baseline_inputs, baseline_snapshot = (
+                freeze_synthetic_v2_pinset(root / "baseline")
+            )
+            baseline = generalized.mint_multi_cell_authenticated_artifact(
+                pinset_path=baseline_path,
+                pinset_sha256=baseline_digest,
+                producer_inputs=baseline_inputs,
+                calibration_ledger_snapshot=baseline_snapshot,
+                project_commit="0" * 40,
+                project_tree_state="clean",
+            )
+            path, digest, inputs, ledger_snapshot = (
+                freeze_mixed_estimator_v2_pinset(root / "mixed")
+            )
+            with _mixed_common_mode_seams(inputs):
+                artifact = generalized.mint_multi_cell_authenticated_artifact(
+                    pinset_path=path,
+                    pinset_sha256=digest,
+                    producer_inputs=inputs,
+                    calibration_ledger_snapshot=ledger_snapshot,
+                    project_commit="0" * 40,
+                    project_tree_state="clean",
+                )
+
+            baseline_cells = {row["cell_id"]: row for row in baseline["cells"]}
+            mixed_cells = {row["cell_id"]: row for row in artifact["cells"]}
+            for cell_id, cell in mixed_cells.items():
+                if cell_id.endswith("prefill"):
+                    for field in (
+                        "absolute",
+                        "comparative",
+                        "floor_abs_j",
+                        "floor_cmp_j",
+                        "floor_gate_j",
+                    ):
+                        self.assertEqual(
+                            normalized_json_bytes(cell[field]),
+                            normalized_json_bytes(baseline_cells[cell_id][field]),
+                        )
+                else:
+                    producer_index = int(cell_id.split("-")[1])
+                    source = inputs[
+                        f"synthetic-d117-floor-plan-{producer_index}"
+                    ].cells["decode"].comparative
+                    self.assertEqual(
+                        cell["comparative"]["admissible_half_widths_j"],
+                        source.cell["floor"]["admissible_half_widths_j"],
+                    )
+                    self.assertEqual(
+                        cell["floor_cmp_j"],
+                        source.cell["floor"][
+                            "drift_widened_guarded_floor_j"
+                        ],
+                    )
+                    self.assertNotEqual(
+                        cell["comparative"]["admissible_half_widths_j"],
+                        source.widths_j,
+                    )
+
+            serialized = normalized_json_bytes(artifact)
+            self.assertNotIn(b'"estimator"', serialized)
+            self.assertNotIn(b'"estimator_registration"', serialized)
+
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            reversed_paths = []
+            with _mixed_common_mode_seams(inputs):
+                for producer in loaded.value["producer_plans"]:
+                    producer_input = inputs[producer["plan"]["plan_id"]]
+                    generalized._v2_gate_producer_inventory(
+                        producer, producer_input
+                    )
+                    for pins in reversed(producer["cells"]):
+                        role = pins["role"]
+                        result = generalized._v2_gate_postcollection(
+                            producer=producer,
+                            cell_pins=pins,
+                            cell_inputs=producer_input.cells[role],
+                            producer_inputs=producer_input,
+                            ledger_snapshot=ledger_snapshot,
+                        )
+                        reversed_paths.append((role, result.estimator_path))
+            self.assertEqual(
+                reversed_paths,
+                [
+                    ("prefill", "default"),
+                    ("decode", "common_mode"),
+                    ("prefill", "default"),
+                    ("decode", "common_mode"),
+                ],
+            )
+
+            bind_count = 0
+            cell_by_id = {row["cell_id"]: row for row in artifact["cells"]}
+            group_by_id = {
+                row["transport_group_id"]: row
+                for row in artifact["transport_groups"]
+            }
+            with _mixed_common_mode_seams(inputs):
+                for producer in loaded.value["producer_plans"]:
+                    producer_input = inputs[producer["plan"]["plan_id"]]
+                    for pins in producer["cells"]:
+                        role = pins["role"]
+                        component = copy.deepcopy(dict(artifact))
+                        component["cells"] = [
+                            copy.deepcopy(cell_by_id[pins["cell_id"]])
+                        ]
+                        component["transport_groups"] = [
+                            copy.deepcopy(
+                                group_by_id[pins["transport_group_id"]]
+                            )
+                        ]
+                        core = generalized._configured_core(
+                            generalized._v2_mint_pinset(producer, pins),
+                            pinset_path=path,
+                            expected_pinset_sha256=digest,
+                        )
+                        source_widths = producer_input.cells[
+                            role
+                        ].comparative.widths_j
+
+                        def pinned_bind(candidate, *_args, **_kwargs):
+                            if role == "decode":
+                                self.assertEqual(
+                                    candidate["cells"][0]["comparative"][
+                                        "admissible_half_widths_j"
+                                    ],
+                                    list(source_widths),
+                                )
+                            return {
+                                "absolute": ("verified-a",),
+                                "comparative": ("verified-b",),
+                            }
+
+                        core.bind_floor_artifact_evidence = mock.Mock(
+                            side_effect=pinned_bind
+                        )
+                        generalized.mint_estimator.bind_v2_floor_artifact_evidence(
+                            core=core,
+                            artifact=component,
+                            floor_path=root / "bound.json",
+                            evidence_roots={
+                                producer["evidence_root_id"]: (
+                                    producer_input.evidence_root
+                                )
+                            },
+                            strict_validator=lambda _path, _strict: [],
+                            comparative_component=producer_input.cells[
+                                role
+                            ].comparative,
+                            runs_root=producer_input.evidence_root,
+                            calibration_acceptance=(
+                                producer_input.calibration_acceptance
+                            ),
+                            calibration_acceptance_sha256=(
+                                producer_input.calibration_acceptance_sha256
+                            ),
+                            calibration_allowance_projection=(
+                                producer_input.calibration_allowance_projection
+                                or {}
+                            ),
+                            declared_calibration_scope="production_window",
+                            calibration_ledger_snapshot=ledger_snapshot,
+                            calibration_bracket_binding=(
+                                producer_input.bracket_binding
+                            ),
+                        )
+                        bind_count += 1
+            self.assertEqual(bind_count, 4)
+
+    def test_common_mode_full_cli_path_writes_bound_exact_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root,
+                install_binding_evidence=True,
+            )
+            manifest_path = root / "manifest.json"
+            head_path = root / "ledger.head.json"
+            head_path.write_text("{}\n", encoding="utf-8")
+            manifest = {"calibration_ledger_head_pin": str(head_path)}
+            floor_path = root / "floor.json"
+            statement_path = root / "single-count.txt"
+            original_core_loader = generalized._fresh_original_core
+            pinned_binds = []
+            events = []
+
+            def load_core():
+                core = original_core_loader()
+                original_strict_bundle = core._strict_bundle
+                original_bind = core.bind_floor_artifact_evidence
+                original_write = core.write_outputs_exclusive
+                strict_hashes = []
+
+                def authenticated_summaries(
+                    runs_root,
+                    referenced_bundle_ids,
+                    _evaluation_basis_sha256,
+                    *,
+                    consumption_semantics_id=None,
+                    **_kwargs,
+                ):
+                    return (
+                        {
+                            bundle_id: load_json(
+                                runs_root / bundle_id / "summary_metrics.json"
+                            )
+                            for bundle_id in referenced_bundle_ids
+                        },
+                        consumption_semantics_id,
+                    )
+
+                def track_strict_bundle(*args, **kwargs):
+                    member = original_strict_bundle(*args, **kwargs)
+                    strict_hashes.append(member.bundle_sha256)
+                    return member
+
+                def track_pinned_bind(*args, **kwargs):
+                    strict_hashes.clear()
+                    cell = args[0]["cells"][0]
+                    core.build_stack_identity = lambda _config, _metadata: (
+                        cell["source_regime"]["stack_identity"]
+                    )
+                    result = original_bind(*args, **kwargs)
+                    absolute_n = len(core._record_rows("absolute", cell))
+                    expected = {
+                        "absolute": tuple(strict_hashes[:absolute_n]),
+                        "comparative": tuple(strict_hashes[absolute_n:]),
+                    }
+                    pinned_binds.append((cell["cell_id"], result, expected))
+                    events.append("bind")
+                    return result
+
+                def ordered_write(*args, **kwargs):
+                    events.append("write")
+                    return original_write(*args, **kwargs)
+
+                core._authenticated_consumption_summaries = (
+                    authenticated_summaries
+                )
+                core._strict_bundle = track_strict_bundle
+                core.bind_floor_artifact_evidence = track_pinned_bind
+                core.write_outputs_exclusive = ordered_write
+                return core
+
+            evidence_roots = {
+                producer["evidence_root_id"]: inputs[
+                    producer["plan"]["plan_id"]
+                ].evidence_root
+                for producer in load_json(path)["producer_plans"]
+            }
+            shared_binder = (
+                generalized.mint_estimator.bind_v2_floor_artifact_evidence
+            )
+            with (
+                _mixed_common_mode_seams(inputs),
+                mock.patch.object(
+                    generalized,
+                    "_actual_v2_git_state",
+                    return_value=("0" * 40, True),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_load_v2_input_manifest",
+                    return_value=manifest,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_authenticate_v2_inputs",
+                    return_value=(inputs, evidence_roots, snapshot),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_head_pin_commit_containment_in_origin_main",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_fresh_original_core",
+                    side_effect=load_core,
+                ),
+                mock.patch.object(
+                    generalized.mint_estimator,
+                    "bind_v2_floor_artifact_evidence",
+                    wraps=shared_binder,
+                ) as bind_site,
+            ):
+                artifact = generalized.mint_multi_cell_floor_artifact(
+                    pinset_path=path,
+                    pinset_sha256=digest,
+                    input_manifest_path=manifest_path,
+                    floor_path=floor_path,
+                    statement_path=statement_path,
+                    project_commit="0" * 40,
+                    project_tree_state="clean",
+                    strict_validator=lambda _path, _strict: [],
+                )
+            self.assertEqual(bind_site.call_count, 4)
+            self.assertEqual(len(pinned_binds), 4)
+            self.assertEqual(events, ["bind", "bind", "bind", "bind", "write"])
+            self.assertTrue(floor_path.is_file())
+            self.assertTrue(statement_path.is_file())
+            written = load_json(floor_path)
+            self.assertEqual(written, artifact)
+            written_cells = {cell["cell_id"]: cell for cell in written["cells"]}
+            for cell_id, verified, strict in pinned_binds:
+                self.assertEqual(verified, strict)
+                cell = written_cells[cell_id]
+                for component_name in ("absolute", "comparative"):
+                    self.assertEqual(
+                        tuple(
+                            cell["provenance"][component_name][
+                                "bundle_sha256s"
+                            ]
+                        ),
+                        verified[component_name],
+                    )
+            for cell in written["cells"]:
+                if not cell["cell_id"].endswith("decode"):
+                    continue
+                producer_index = int(cell["cell_id"].split("-")[1])
+                comparative = inputs[
+                    f"synthetic-d117-floor-plan-{producer_index}"
+                ].cells["decode"].comparative
+                registered = comparative.cell["floor"]
+                self.assertEqual(
+                    cell["floor_cmp_j"],
+                    registered["drift_widened_guarded_floor_j"],
+                )
+                self.assertEqual(
+                    cell["comparative"]["admissible_half_widths_j"],
+                    registered["admissible_half_widths_j"],
+                )
+                self.assertNotEqual(
+                    cell["comparative"]["admissible_half_widths_j"],
+                    list(comparative.widths_j),
+                )
+
+    def test_spec_swap_refuses_before_any_estimator_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, _digest, inputs, snapshot = (
+                freeze_mixed_estimator_v2_pinset(root)
+            )
+            pinset = load_json(path)
+            plan_id = pinset["producer_plans"][0]["plan"]["plan_id"]
+            producer_input = inputs[plan_id]
+            cell = producer_input.cells["decode"]
+            default_spec_cell = copy.deepcopy(cell.comparative.spec_cell)
+            for key in ("estimator", "estimator_registration"):
+                default_spec_cell.pop(key, None)
+            attacked = replace(
+                cell.comparative,
+                spec_cell=default_spec_cell,
+                spec_sha256="f" * 64,
+            )
+            inputs[plan_id] = replace(
+                producer_input,
+                cells={
+                    **producer_input.cells,
+                    "decode": replace(cell, comparative=attacked),
+                },
+            )
+            out = root / "out"
+            out.mkdir()
+            with mock.patch.object(
+                generalized.mint_estimator,
+                "recompute_comparative_estimate",
+                side_effect=AssertionError("estimator executed before spec pin"),
+            ) as dispatch:
+                with self.assertRaisesRegex(
+                    generalized.MintError, "extraction spec sha256 mismatch"
+                ):
+                    generalized.mint_multi_cell_authenticated_artifact(
+                        pinset_path=path,
+                        pinset_sha256=file_sha256(path),
+                        producer_inputs=inputs,
+                        calibration_ledger_snapshot=snapshot,
+                        project_commit="0" * 40,
+                        project_tree_state="clean",
+                    )
+            dispatch.assert_not_called()
+            self.assertEqual(list(out.iterdir()), [])
+
+            pinset["producer_plans"][0]["cells"][0]["comparative"][
+                "extraction_spec_sha256"
+            ] = "f" * 64
+            repaired_report = copy.deepcopy(attacked.report)
+            repaired_default_row = _production_report_cell(attacked)
+            repaired_report["cells"] = [
+                repaired_default_row
+                if row["cell_id"] == attacked.calibration_cell_id
+                else row
+                for row in repaired_report["cells"]
+            ]
+            _reattach_producer_report(pinset, inputs, 0, repaired_report)
+            _repair_v2_pinset_self_hashes(pinset)
+            repaired_path, repaired_digest = write_pinset(root, pinset)
+            with mock.patch.object(
+                generalized.mint_estimator,
+                "recompute_comparative_estimate",
+                side_effect=AssertionError("estimator executed before inventory"),
+            ) as dispatch:
+                with self.assertRaisesRegex(
+                    generalized.MintError, "extraction-spec inventory"
+                ):
+                    generalized.mint_multi_cell_authenticated_artifact(
+                        pinset_path=repaired_path,
+                        pinset_sha256=repaired_digest,
+                        producer_inputs=inputs,
+                        calibration_ledger_snapshot=snapshot,
+                        project_commit="0" * 40,
+                        project_tree_state="clean",
+                    )
+            dispatch.assert_not_called()
+            self.assertEqual(list(out.iterdir()), [])
+
+    def test_report_estimator_vocabulary_injection_refuses_closed_profile(
+        self,
+    ) -> None:
+        for injected_key in ("estimator", "estimator_registration"):
+            with self.subTest(key=injected_key), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                path, _digest, inputs, snapshot = (
+                    freeze_mixed_estimator_v2_pinset(root)
+                )
+                pinset = load_json(path)
+                plan_id = pinset["producer_plans"][0]["plan"]["plan_id"]
+                report = copy.deepcopy(
+                    inputs[plan_id].cells["decode"].comparative.report
+                )
+                if injected_key == "estimator":
+                    report[injected_key] = (
+                        detection_floor.COMMON_MODE_ESTIMATOR_ID
+                    )
+                else:
+                    report["governance"][injected_key] = (
+                        detection_floor.two_shared_edge_common_mode_registration()
+                    )
+                _reattach_producer_report(pinset, inputs, 0, report)
+                attacked_path, attacked_digest = write_pinset(root, pinset)
+                out = root / "out"
+                out.mkdir()
+                with mock.patch.object(
+                    generalized.mint_estimator,
+                    "recompute_comparative_estimate",
+                    side_effect=AssertionError(
+                        "estimator executed after report vocabulary injection"
+                    ),
+                ) as dispatch:
+                    with self.assertRaisesRegex(
+                        generalized.MintError,
+                        "closed D-117 extraction report profile refused",
+                    ):
+                        generalized.mint_multi_cell_authenticated_artifact(
+                            pinset_path=attacked_path,
+                            pinset_sha256=attacked_digest,
+                            producer_inputs=inputs,
+                            calibration_ledger_snapshot=snapshot,
+                            project_commit="0" * 40,
+                            project_tree_state="clean",
+                        )
+                dispatch.assert_not_called()
+                self.assertEqual(list(out.iterdir()), [])
+
+    def test_opposite_estimator_widths_refuse_in_both_directions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, _digest, inputs, snapshot = (
+                freeze_mixed_estimator_v2_pinset(root)
+            )
+            pinset = load_json(path)
+            plan_id = pinset["producer_plans"][0]["plan"]["plan_id"]
+            common_component = inputs[plan_id].cells["decode"].comparative
+            report = copy.deepcopy(common_component.report)
+            default_row = _production_report_cell(common_component)
+            report["cells"] = [
+                default_row
+                if row["cell_id"] == common_component.calibration_cell_id
+                else row
+                for row in report["cells"]
+            ]
+            _reattach_producer_report(pinset, inputs, 0, report)
+            attacked_path, attacked_digest = write_pinset(root, pinset)
+            out = root / "common-spec-default-widths"
+            out.mkdir()
+            loaded = generalized.load_pinset(attacked_path, attacked_digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            attacked_producer = loaded.value["producer_plans"][0]
+            attacked_input = inputs[plan_id]
+            decode_pins = next(
+                row for row in attacked_producer["cells"] if row["role"] == "decode"
+            )
+            attacked_component = attacked_input.cells["decode"].comparative
+            default_core = generalized._fresh_original_core()
+            default_blocks, default_deltas = default_core._comparative_blocks(
+                attacked_component
+            )
+            default_estimate = default_core.comparative_false_effect_floor(
+                default_deltas,
+                admissible_half_widths_j=attacked_component.widths_j,
+            )
+            default_result = SimpleNamespace(
+                estimator_path="default",
+                comparative_blocks=tuple(default_blocks),
+                estimate=default_estimate,
+                exact_widths_j=tuple(default_estimate.admissible_half_widths_j),
+                comparative_record=default_core.build_comparative_record(
+                    default_estimate,
+                    default_blocks,
+                    consumption_semantics_id=(
+                        attacked_component.consumption_semantics_id
+                    ),
+                    whole_window_drift_allowance=(
+                        attacked_component.whole_window_drift_allowance
+                    ),
+                ),
+            )
+            with mock.patch.object(
+                generalized.mint_estimator,
+                "recompute_comparative_estimate",
+                return_value=default_result,
+            ):
+                site_limited = generalized._v2_gate_postcollection(
+                    producer=attacked_producer,
+                    cell_pins=decode_pins,
+                    cell_inputs=attacked_input.cells["decode"],
+                    producer_inputs=attacked_input,
+                    ledger_snapshot=snapshot,
+                )
+            self.assertEqual(site_limited.estimator_path, "default")
+            with _mixed_common_mode_seams(inputs):
+                with self.assertRaisesRegex(
+                    generalized.MintError,
+                    "widths differ exactly.*spec-selected estimator",
+                ):
+                    generalized.mint_multi_cell_authenticated_artifact(
+                        pinset_path=attacked_path,
+                        pinset_sha256=attacked_digest,
+                        producer_inputs=inputs,
+                        calibration_ledger_snapshot=snapshot,
+                        project_commit="0" * 40,
+                        project_tree_state="clean",
+                    )
+            self.assertEqual(list(out.iterdir()), [])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            pinset = load_json(path)
+            plan_id = pinset["producer_plans"][0]["plan"]["plan_id"]
+            producer_input = inputs[plan_id]
+            decode = producer_input.cells["decode"]
+            default_spec_cell = copy.deepcopy(decode.comparative.spec_cell)
+            for key in ("estimator", "estimator_registration"):
+                default_spec_cell.pop(key, None)
+            default_spec = copy.deepcopy(decode.comparative.spec)
+            target = next(
+                index
+                for index, row in enumerate(default_spec["cells"])
+                if row["cell_id"] == default_spec_cell["cell_id"]
+            )
+            default_spec["cells"][target] = default_spec_cell
+            changed_cells = {}
+            for role, cell in producer_input.cells.items():
+                comparative = cell.comparative
+                if role == "decode":
+                    comparative = replace(
+                        comparative, spec_cell=default_spec_cell
+                    )
+                changed_cells[role] = replace(
+                    cell,
+                    absolute=replace(cell.absolute, spec=default_spec),
+                    comparative=replace(comparative, spec=default_spec),
+                )
+            inputs[plan_id] = replace(
+                producer_input,
+                cells=changed_cells,
+            )
+            out = root / "default-spec-common-widths"
+            out.mkdir()
+            with self.assertRaisesRegex(
+                generalized.MintError,
+                "widths differ exactly.*spec-selected estimator",
+            ):
+                generalized.mint_multi_cell_authenticated_artifact(
+                    pinset_path=path,
+                    pinset_sha256=digest,
+                    producer_inputs=inputs,
+                    calibration_ledger_snapshot=snapshot,
+                    project_commit="0" * 40,
+                    project_tree_state="clean",
+                )
+            self.assertEqual(list(out.iterdir()), [])
+
+    def test_report_and_u10_repair_cannot_bypass_raw_evidence_equality(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, original_digest, inputs, snapshot = (
+                freeze_synthetic_v2_pinset(root)
+            )
+            pinset = load_json(path)
+            plan_id = pinset["producer_plans"][0]["plan"]["plan_id"]
+            component = inputs[plan_id].cells["decode"].comparative
+            report = copy.deepcopy(component.report)
+            target = next(
+                row
+                for row in report["cells"]
+                if row["cell_id"] == component.calibration_cell_id
+            )
+            forged = target["floor"]["drift_widened_guarded_floor_j"] + 1.0
+            target["floor"]["drift_widened_guarded_floor_j"] = forged
+            target["operative_floor_j"] = forged
+            _reattach_producer_report(pinset, inputs, 0, report)
+            producer = pinset["producer_plans"][0]
+            producer["component_artifact"]["sha256"] = "e" * 64
+            pinset["aggregate"]["component_artifacts"][0]["sha256"] = "e" * 64
+            _repair_v2_pinset_self_hashes(pinset)
+            attacked_path, attacked_digest = write_pinset(root, pinset)
+            self.assertNotEqual(attacked_digest, original_digest)
+            out = root / "out"
+            out.mkdir()
+            with mock.patch.object(
+                generalized, "_mint_v2_cell_artifact", wraps=(
+                    generalized._mint_v2_cell_artifact
+                )
+            ) as construction:
+                with self.assertRaisesRegex(
+                    generalized.MintError,
+                    "report cell floor differs from authenticated comparative",
+                ):
+                    generalized.mint_multi_cell_authenticated_artifact(
+                        pinset_path=attacked_path,
+                        pinset_sha256=attacked_digest,
+                        producer_inputs=inputs,
+                        calibration_ledger_snapshot=snapshot,
+                        project_commit="0" * 40,
+                        project_tree_state="clean",
+                    )
+            construction.assert_not_called()
+            self.assertEqual(list(out.iterdir()), [])
+
+    def test_postcollection_common_mode_width_type_and_one_ulp_gates(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            producer = loaded.value["producer_plans"][0]
+            producer_input = inputs[producer["plan"]["plan_id"]]
+            pins = next(row for row in producer["cells"] if row["role"] == "decode")
+            decode = producer_input.cells["decode"]
+            original_width = decode.comparative.cell["floor"][
+                "admissible_half_widths_j"
+            ][0]
+            attacks = {
+                "one_ulp_downward": math.nextafter(original_width, -math.inf),
+                "string": str(original_width),
+                "bool": True,
+            }
+            for label, attacked_width in attacks.items():
+                with self.subTest(label=label):
+                    attacked_cell = copy.deepcopy(decode.comparative.cell)
+                    attacked_cell["floor"]["admissible_half_widths_j"][0] = (
+                        attacked_width
+                    )
+                    attacked_inputs = replace(
+                        decode,
+                        comparative=replace(
+                            decode.comparative,
+                            cell=attacked_cell,
+                        ),
+                    )
+                    with (
+                        _mixed_common_mode_seams(inputs),
+                        self.assertRaisesRegex(
+                            generalized.MintError,
+                            "widths differ exactly.*spec-selected estimator",
+                        ),
+                    ):
+                        generalized._v2_gate_postcollection(
+                            producer=producer,
+                            cell_pins=pins,
+                            cell_inputs=attacked_inputs,
+                            producer_inputs=producer_input,
+                            ledger_snapshot=snapshot,
+                        )
+                    self.assertFalse((root / "floor.json").exists())
+                    self.assertFalse((root / "single-count.txt").exists())
+
+    def test_site_limited_postcollection_default_crosswire_is_caught(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+
+            def default_only_recomputation(**kwargs):
+                core = kwargs["core"]
+                component = kwargs["comparative_component"]
+                blocks, deltas = core._comparative_blocks(component)
+                estimate = core.comparative_false_effect_floor(
+                    deltas,
+                    admissible_half_widths_j=component.widths_j,
+                )
+                record = core.build_comparative_record(
+                    estimate,
+                    blocks,
+                    consumption_semantics_id=component.consumption_semantics_id,
+                    whole_window_drift_allowance=(
+                        component.whole_window_drift_allowance
+                    ),
+                )
+                return SimpleNamespace(
+                    estimator_path="default",
+                    comparative_blocks=tuple(blocks),
+                    estimate=estimate,
+                    exact_widths_j=tuple(estimate.admissible_half_widths_j),
+                    comparative_record=record,
+                )
+
+            out = root / "out"
+            out.mkdir()
+            with mock.patch.object(
+                generalized.mint_estimator,
+                "recompute_comparative_estimate",
+                side_effect=default_only_recomputation,
+            ) as crosswired:
+                with self.assertRaisesRegex(
+                    generalized.MintError,
+                    "widths differ exactly.*spec-selected estimator",
+                ):
+                    generalized.mint_multi_cell_authenticated_artifact(
+                        pinset_path=path,
+                        pinset_sha256=digest,
+                        producer_inputs=inputs,
+                        calibration_ledger_snapshot=snapshot,
+                        project_commit="0" * 40,
+                        project_tree_state="clean",
+                    )
+            self.assertGreater(crosswired.call_count, 0)
+            self.assertEqual(list(out.iterdir()), [])
+
+    def test_site_limited_postcollection_common_crosswire_is_caught(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            producer = loaded.value["producer_plans"][0]
+            plan_id = producer["plan"]["plan_id"]
+            producer_input = inputs[plan_id]
+            decode = producer_input.cells["decode"]
+            pins = next(row for row in producer["cells"] if row["role"] == "decode")
+            with _mixed_common_mode_seams(inputs):
+                common_result = generalized.mint_estimator.recompute_comparative_estimate(
+                    core=generalized._fresh_original_core(),
+                    comparative_component=decode.comparative,
+                    runs_root=producer_input.evidence_root,
+                    calibration_acceptance=producer_input.calibration_acceptance,
+                    calibration_acceptance_sha256=(
+                        producer_input.calibration_acceptance_sha256
+                    ),
+                    calibration_allowance_projection=(
+                        producer_input.calibration_allowance_projection or {}
+                    ),
+                    declared_calibration_scope="production_window",
+                    calibration_ledger_snapshot=snapshot,
+                    calibration_bracket_binding=producer_input.bracket_binding,
+                )
+            default_spec_cell = copy.deepcopy(decode.comparative.spec_cell)
+            for key in ("estimator", "estimator_registration"):
+                default_spec_cell.pop(key, None)
+            attacked_decode = replace(
+                decode,
+                comparative=replace(
+                    decode.comparative,
+                    spec_cell=default_spec_cell,
+                ),
+            )
+            with self.assertRaisesRegex(
+                generalized.MintError,
+                "widths differ exactly.*spec-selected estimator",
+            ):
+                generalized._v2_gate_postcollection(
+                    producer=producer,
+                    cell_pins=pins,
+                    cell_inputs=attacked_decode,
+                    producer_inputs=producer_input,
+                    ledger_snapshot=snapshot,
+                )
+
+            # Deliberately limit this site to the common estimator result.
+            # It accepts common-shaped widths under the default selector.
+            with mock.patch.object(
+                generalized.mint_estimator,
+                "recompute_comparative_estimate",
+                return_value=common_result,
+            ):
+                accepted = generalized._v2_gate_postcollection(
+                    producer=producer,
+                    cell_pins=pins,
+                    cell_inputs=attacked_decode,
+                    producer_inputs=producer_input,
+                    ledger_snapshot=snapshot,
+                )
+            self.assertEqual(accepted.estimator_path, "common_mode")
+            self.assertFalse((root / "floor.json").exists())
+            self.assertFalse((root / "single-count.txt").exists())
+
+    def test_site_limited_construction_default_crosswire_is_caught(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            original = generalized._mint_v2_cell_artifact
+            crossed = []
+
+            def construction_crosswire(**kwargs):
+                recomputation = kwargs["recomputation"]
+                if recomputation.estimator_path == "common_mode":
+                    crossed.append(kwargs["cell_pins"]["cell_id"])
+                    core = kwargs["core"]
+                    component = kwargs["comparative"]
+                    blocks, deltas = core._comparative_blocks(component)
+                    estimate = core.comparative_false_effect_floor(
+                        deltas,
+                        admissible_half_widths_j=component.widths_j,
+                    )
+                    recomputation = generalized.V2CellRecomputation(
+                        estimator_path="default",
+                        comparative_blocks=tuple(blocks),
+                        comparative_estimate=estimate,
+                        comparative_widths_j=tuple(
+                            estimate.admissible_half_widths_j
+                        ),
+                        comparative_record=core.build_comparative_record(
+                            estimate,
+                            blocks,
+                            consumption_semantics_id=(
+                                component.consumption_semantics_id
+                            ),
+                            whole_window_drift_allowance=(
+                                component.whole_window_drift_allowance
+                            ),
+                        ),
+                    )
+                return original(**{**kwargs, "recomputation": recomputation})
+
+            out = root / "out"
+            out.mkdir()
+            with (
+                _mixed_common_mode_seams(inputs),
+                mock.patch.object(
+                    generalized,
+                    "_mint_v2_cell_artifact",
+                    side_effect=construction_crosswire,
+                ),
+            ):
+                with self.assertRaises(generalized.MintError):
+                    generalized.mint_multi_cell_authenticated_artifact(
+                        pinset_path=path,
+                        pinset_sha256=digest,
+                        producer_inputs=inputs,
+                        calibration_ledger_snapshot=snapshot,
+                        project_commit="0" * 40,
+                        project_tree_state="clean",
+                    )
+            self.assertEqual(crossed, ["cell-0-decode", "cell-1-decode"])
+            self.assertEqual(list(out.iterdir()), [])
+
+    def test_construction_frozen_guard_catches_both_crosswire_directions(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            producer = loaded.value["producer_plans"][0]
+            producer_input = inputs[producer["plan"]["plan_id"]]
+            pins_by_role = {row["role"]: row for row in producer["cells"]}
+            with _mixed_common_mode_seams(inputs):
+                recomputations = {
+                    role: generalized._v2_gate_postcollection(
+                        producer=producer,
+                        cell_pins=pins_by_role[role],
+                        cell_inputs=producer_input.cells[role],
+                        producer_inputs=producer_input,
+                        ledger_snapshot=snapshot,
+                    )
+                    for role in ("decode", "prefill")
+                }
+            crosswired_widths = {
+                "decode": tuple(
+                    producer_input.cells["decode"].comparative.widths_j
+                ),
+                "prefill": recomputations["decode"].comparative_widths_j,
+            }
+            for role in ("decode", "prefill"):
+                with self.subTest(role=role):
+                    recomputation = recomputations[role]
+                    cell_inputs = producer_input.cells[role]
+                    core = generalized._configured_core(
+                        generalized._v2_mint_pinset(
+                            producer, pins_by_role[role]
+                        ),
+                        pinset_path=path,
+                        expected_pinset_sha256=digest,
+                    )
+                    blocks, deltas = core._comparative_blocks(
+                        cell_inputs.comparative
+                    )
+                    crossed_estimate = core.comparative_false_effect_floor(
+                        deltas,
+                        admissible_half_widths_j=crosswired_widths[role],
+                    )
+                    record = core.build_comparative_record(
+                        crossed_estimate,
+                        blocks,
+                        consumption_semantics_id=(
+                            cell_inputs.comparative.consumption_semantics_id
+                        ),
+                        whole_window_drift_allowance=(
+                            cell_inputs.comparative.whole_window_drift_allowance
+                        ),
+                    )
+                    attacked = replace(
+                        recomputation,
+                        comparative_record=record,
+                    )
+                    call = {
+                        "core": core,
+                        "producer": producer,
+                        "cell_pins": pins_by_role[role],
+                        "plan": producer_input.plan,
+                        "project_commit": "0" * 40,
+                        "project_tree_state": "clean",
+                        "origin_main_contains_head": True,
+                        "head_pin_commit_contained_in_origin_main": True,
+                        "absolute": cell_inputs.absolute,
+                        "comparative": cell_inputs.comparative,
+                        "recomputation": attacked,
+                        "calibration_ledger_snapshot": snapshot,
+                    }
+                    with self.assertRaisesRegex(
+                        generalized.MintError,
+                        "frozen v2 comparative recomputation changed",
+                    ):
+                        generalized._mint_v2_cell_artifact(**call)
+
+                    # Deliberately disable only the frozen-width guard input.
+                    # The crosswired record then constructs, demonstrating
+                    # that the guard is the site-local refusal being tested.
+                    site_limited = replace(
+                        attacked,
+                        comparative_widths_j=tuple(crosswired_widths[role]),
+                    )
+                    constructed = generalized._mint_v2_cell_artifact(
+                        **{**call, "recomputation": site_limited}
+                    )
+                    self.assertIsInstance(constructed, dict)
+            self.assertFalse((root / "floor.json").exists())
+            self.assertFalse((root / "single-count.txt").exists())
+
+    def test_site_limited_final_binder_default_crosswire_is_caught(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            with _mixed_common_mode_seams(inputs):
+                artifact = generalized.mint_multi_cell_authenticated_artifact(
+                    pinset_path=path,
+                    pinset_sha256=digest,
+                    producer_inputs=inputs,
+                    calibration_ledger_snapshot=snapshot,
+                    project_commit="0" * 40,
+                    project_tree_state="clean",
+                )
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            producer = loaded.value["producer_plans"][0]
+            pins = producer["cells"][0]
+            producer_input = inputs[producer["plan"]["plan_id"]]
+            component = copy.deepcopy(dict(artifact))
+            component["cells"] = [copy.deepcopy(artifact["cells"][0])]
+            component["transport_groups"] = [
+                copy.deepcopy(artifact["transport_groups"][0])
+            ]
+            core = generalized._configured_core(
+                generalized._v2_mint_pinset(producer, pins),
+                pinset_path=path,
+                expected_pinset_sha256=digest,
+            )
+            default_widths = list(
+                producer_input.cells["decode"].comparative.widths_j
+            )
+
+            def default_width_binder(candidate, *_args, **_kwargs):
+                observed = candidate["cells"][0]["comparative"][
+                    "admissible_half_widths_j"
+                ]
+                if observed != default_widths:
+                    raise core.MintError(
+                        "fixture: artifact widths differ from authenticated source bytes"
+                    )
+                return {
+                    "absolute": ("verified-a",),
+                    "comparative": ("verified-b",),
+                }
+
+            core.bind_floor_artifact_evidence = mock.Mock(
+                side_effect=default_width_binder
+            )
+            kwargs = {
+                "core": core,
+                "artifact": component,
+                "floor_path": root / "not-written.json",
+                "evidence_roots": {
+                    producer["evidence_root_id"]: producer_input.evidence_root
+                },
+                "strict_validator": lambda _path, _strict: [],
+                "comparative_component": producer_input.cells[
+                    "decode"
+                ].comparative,
+                "runs_root": producer_input.evidence_root,
+                "calibration_acceptance": producer_input.calibration_acceptance,
+                "calibration_acceptance_sha256": (
+                    producer_input.calibration_acceptance_sha256
+                ),
+                "calibration_allowance_projection": (
+                    producer_input.calibration_allowance_projection or {}
+                ),
+                "declared_calibration_scope": "production_window",
+                "calibration_ledger_snapshot": snapshot,
+                "calibration_bracket_binding": producer_input.bracket_binding,
+            }
+            with _mixed_common_mode_seams(inputs):
+                generalized.mint_estimator.bind_v2_floor_artifact_evidence(
+                    **kwargs
+                )
+            with self.assertRaisesRegex(
+                core.MintError, "artifact widths differ"
+            ):
+                core.bind_floor_artifact_evidence(
+                    component,
+                    root / "not-written.json",
+                    kwargs["evidence_roots"],
+                    strict_validator=kwargs["strict_validator"],
+                    calibration_ledger_snapshot=snapshot,
+                    calibration_bracket_binding=producer_input.bracket_binding,
+                )
+            self.assertFalse((root / "not-written.json").exists())
+
+            manifest_path = root / "manifest.json"
+            head_path = root / "ledger.head.json"
+            head_path.write_text("{}\n", encoding="utf-8")
+            manifest = {"calibration_ledger_head_pin": str(head_path)}
+            evidence_roots = {
+                row["evidence_root_id"]: inputs[
+                    row["plan"]["plan_id"]
+                ].evidence_root
+                for row in loaded.value["producer_plans"]
+            }
+            original_core_loader = generalized._fresh_original_core
+            write_calls = 0
+
+            def load_crosswired_core():
+                loaded_core = original_core_loader()
+
+                def default_binder(artifact_value, *_args, **_kwargs):
+                    widths = artifact_value["cells"][0]["comparative"][
+                        "admissible_half_widths_j"
+                    ]
+                    if widths[0] < 1.0:
+                        raise loaded_core.MintError(
+                            "fixture: artifact widths differ from "
+                            "authenticated source bytes"
+                        )
+                    return {}
+
+                def forbidden_write(*_args, **_kwargs):
+                    nonlocal write_calls
+                    write_calls += 1
+
+                loaded_core.bind_floor_artifact_evidence = default_binder
+                loaded_core.write_outputs_exclusive = forbidden_write
+                return loaded_core
+
+            def final_site_default_only(**site_kwargs):
+                return site_kwargs["core"].bind_floor_artifact_evidence(
+                    site_kwargs["artifact"],
+                    site_kwargs["floor_path"],
+                    site_kwargs["evidence_roots"],
+                    strict_validator=site_kwargs["strict_validator"],
+                    calibration_ledger_snapshot=site_kwargs[
+                        "calibration_ledger_snapshot"
+                    ],
+                    calibration_bracket_binding=site_kwargs[
+                        "calibration_bracket_binding"
+                    ],
+                )
+
+            floor_path = root / "crosswired-floor.json"
+            statement_path = root / "crosswired-single-count.txt"
+            with (
+                _mixed_common_mode_seams(inputs),
+                mock.patch.object(
+                    generalized,
+                    "_actual_v2_git_state",
+                    return_value=("0" * 40, True),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_load_v2_input_manifest",
+                    return_value=manifest,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_authenticate_v2_inputs",
+                    return_value=(inputs, evidence_roots, snapshot),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_head_pin_commit_containment_in_origin_main",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_fresh_original_core",
+                    side_effect=load_crosswired_core,
+                ),
+                mock.patch.object(
+                    generalized.mint_estimator,
+                    "bind_v2_floor_artifact_evidence",
+                    side_effect=final_site_default_only,
+                ) as final_site,
+            ):
+                with self.assertRaisesRegex(
+                    generalized.MintError, "artifact widths differ"
+                ):
+                    generalized.mint_multi_cell_floor_artifact(
+                        pinset_path=path,
+                        pinset_sha256=digest,
+                        input_manifest_path=manifest_path,
+                        floor_path=floor_path,
+                        statement_path=statement_path,
+                        project_commit="0" * 40,
+                        project_tree_state="clean",
+                        strict_validator=lambda _path, _strict: [],
+                    )
+            self.assertEqual(final_site.call_count, 1)
+            self.assertEqual(write_calls, 0)
+            self.assertFalse(floor_path.exists())
+            self.assertFalse(statement_path.exists())
+
+    def test_all_three_site_refusals_leave_outputs_absent(self) -> None:
+        """Postcollection, frozen construction, and binding precede writing."""
+
+        for refusal_site in ("postcollection", "construction", "binding"):
+            with self.subTest(refusal_site=refusal_site):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    path, digest, inputs, snapshot = (
+                        freeze_mixed_estimator_v2_pinset(root)
+                    )
+                    manifest_path = root / "manifest.json"
+                    head_path = root / "ledger.head.json"
+                    head_path.write_text("{}\n", encoding="utf-8")
+                    manifest = {"calibration_ledger_head_pin": str(head_path)}
+                    floor_path = root / "floor.json"
+                    statement_path = root / "single-count.txt"
+                    evidence_roots = {
+                        producer["evidence_root_id"]: inputs[
+                            producer["plan"]["plan_id"]
+                        ].evidence_root
+                        for producer in load_json(path)["producer_plans"]
+                    }
+                    original_core_loader = generalized._fresh_original_core
+                    original_construction = generalized._mint_v2_cell_artifact
+                    write_calls = 0
+
+                    def load_core():
+                        core = original_core_loader()
+
+                        def forbidden_write(*_args, **_kwargs):
+                            nonlocal write_calls
+                            write_calls += 1
+
+                        core.write_outputs_exclusive = forbidden_write
+                        return core
+
+                    def frozen_guard_attack(**kwargs):
+                        recomputation = kwargs["recomputation"]
+                        record = copy.deepcopy(dict(recomputation.comparative_record))
+                        widths = record["admissible_half_widths_j"]
+                        widths[0] = math.nextafter(widths[0], math.inf)
+                        return original_construction(
+                            **{
+                                **kwargs,
+                                "recomputation": replace(
+                                    recomputation,
+                                    comparative_record=record,
+                                ),
+                            }
+                        )
+
+                    site_patch = {
+                        "postcollection": mock.patch.object(
+                            generalized,
+                            "_v2_gate_postcollection",
+                            side_effect=generalized.MintError(
+                                "fixture postcollection refusal"
+                            ),
+                        ),
+                        "construction": mock.patch.object(
+                            generalized,
+                            "_mint_v2_cell_artifact",
+                            side_effect=frozen_guard_attack,
+                        ),
+                        "binding": mock.patch.object(
+                            generalized.mint_estimator,
+                            "bind_v2_floor_artifact_evidence",
+                            side_effect=generalized.MintError(
+                                "fixture binding refusal"
+                            ),
+                        ),
+                    }[refusal_site]
+                    with (
+                        _mixed_common_mode_seams(inputs),
+                        mock.patch.object(
+                            generalized,
+                            "_actual_v2_git_state",
+                            return_value=("0" * 40, True),
+                        ),
+                        mock.patch.object(
+                            generalized,
+                            "_load_v2_input_manifest",
+                            return_value=manifest,
+                        ),
+                        mock.patch.object(
+                            generalized,
+                            "_authenticate_v2_inputs",
+                            return_value=(inputs, evidence_roots, snapshot),
+                        ),
+                        mock.patch.object(
+                            generalized,
+                            "_head_pin_commit_containment_in_origin_main",
+                            return_value=True,
+                        ),
+                        mock.patch.object(
+                            generalized,
+                            "_fresh_original_core",
+                            side_effect=load_core,
+                        ),
+                        site_patch,
+                        self.assertRaises(generalized.MintError),
+                    ):
+                        generalized.mint_multi_cell_floor_artifact(
+                            pinset_path=path,
+                            pinset_sha256=digest,
+                            input_manifest_path=manifest_path,
+                            floor_path=floor_path,
+                            statement_path=statement_path,
+                            project_commit="0" * 40,
+                            project_tree_state="clean",
+                            strict_validator=lambda _path, _strict: [],
+                        )
+                    self.assertEqual(write_calls, 0)
+                    self.assertFalse(floor_path.exists())
+                    self.assertFalse(statement_path.exists())
+
     def test_v2_mint_recomputes_rendering_but_never_fills_pins(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path, digest, inputs, ledger_snapshot = (
@@ -5824,7 +7847,10 @@ class V2PinsetAndMintTests(unittest.TestCase):
                         replace(decode, absolute=basis_component)
                     ),
                     ledger_snapshot,
-                    "absolute_evaluation_basis_sha256 mismatch",
+                    (
+                        r"producer\[0\]\.decode\.absolute: "
+                        r"evaluation basis sha256 mismatch"
+                    ),
                 ),
                 (
                     "member-bytes",
@@ -7289,6 +9315,7 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                 MintError=mint1.MintError,
                 ComponentPaths=mint1.ComponentPaths,
                 _authenticate_component=mock.Mock(side_effect=authenticate),
+                _verify_report_widths=mint1._verify_report_widths,
             )
             with (
                 mock.patch.object(
@@ -8080,6 +10107,26 @@ class FullPathTests(unittest.TestCase):
 
 
 class CoreCompatibilityTests(unittest.TestCase):
+    def test_all_three_estimator_seam_dependencies_are_signature_pinned(
+        self,
+    ) -> None:
+        dependencies = {
+            "_verify_report_widths",
+            "_authenticate_component",
+            "bind_floor_artifact_evidence",
+        }
+        self.assertTrue(dependencies.issubset(generalized._CORE_SIGNATURES))
+        core = generalized._fresh_original_core()
+        for symbol in sorted(dependencies):
+            with self.subTest(symbol=symbol):
+                attacked = generalized._fresh_original_core()
+                setattr(attacked, symbol, lambda: None)
+                with self.assertRaisesRegex(
+                    generalized.MintError, rf"{symbol} signature expected"
+                ):
+                    generalized._assert_core_interface(attacked)
+        generalized._assert_core_interface(core)
+
     def test_mint_floor_artifact_signature_is_review_pinned(self) -> None:
         expected = (
             "(*, artifact_id: 'str', floor_path: 'Path', statement_path: 'Path', "
