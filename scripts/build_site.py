@@ -35,8 +35,9 @@ DECISION_LOG_ARCHIVE_PREFIX = "decision_log_archive_"
 # Pagination is based on source bytes rather than zlib output so identical
 # markdown produces identical page assignments across Python/zlib versions.
 # D-135 makes this sizing target advisory; it still guides deterministic page
-# boundaries, while only an indivisible unit above Lakebed's physical cap may
-# make pagination fail.
+# boundaries. Raw source bytes never fail pagination — even over-cap units
+# only WARN as a raw-source proxy; the real Lakebed validator (CI-only, in
+# pack_capsule) is the sole size failure.
 DECISION_LOG_PART_MARKDOWN_BYTES = 12_000
 LAKEBED_PLATFORM_CAP_BYTES = 1_048_576
 DECISION_LOG_ENTRY_RE = re.compile(r"(?m)^## (?P<decision_id>D-\d{3}):")
@@ -413,8 +414,10 @@ def split_decision_log_markdown(
     table rows. The byte target is deliberately source-based, not
     compression-based, so page assignments do not vary with the host zlib
     version. D-135 makes target overruns advisory. A structurally indivisible
-    subsection, entry, or index unit may exceed the target with a warning, but
-    may not exceed Lakebed's physical 1 MiB platform cap.
+    subsection, entry, or index unit exceeds the target — or even the 1 MiB
+    platform cap measured on raw source — with a RAW-SOURCE PROXY warning
+    only; the real Lakebed validator's artifact measurement (CI-side, in
+    pack_capsule) is the sole size failure.
     """
     if max_part_markdown_bytes < 1:
         fail("decision log pagination", DECISION_LOG_SOURCE, "positive byte ceiling")
@@ -472,7 +475,7 @@ def split_decision_log_markdown(
         # so it warns; only the CI-side physical validation may fail.
         warn_advisory_budget(
             f"decision-log page heading exceeds the {page_ceiling}-byte page "
-            "ceiling (raw-source proxy); pagination degrades to one entry "
+            "ceiling as a RAW-SOURCE PROXY; pagination degrades to one entry "
             "per page and the real validator's artifact measurement decides"
         )
         entry_payload_ceiling = 1
