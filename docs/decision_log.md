@@ -158,6 +158,7 @@ be re-derived by a future agent gets an entry here.
 | D-133 | FCM-01 DISPOSITION — HYBRID + ALT-D120 (cold gate revised sitting, 2026-08-11): round-6 delta REJECT (FCM6-01, forged registration admitted by validators) adjudicated by fresh Fable + Opus refuter. Fallback respec/d124-withdrawn merges after its own gates (freeze lane unblocks there, decoupled from FCM); FCM-01 continues unmerged under ALT-D120 — DELETE serialized registration vocabulary so forgeries die as closed-profile unknown-key refusals (D-120 precedent); false round-6 provenance claim corrected + sixth sha rotation; FULL fresh delta owed on moved arithmetic (any exact understatement = permanent drop, no further revival); re-spec back to tighter estimator only if ALT-D120 + full delta + new mint-estimator WO all land pre-freeze-wave. Bench-verified: mint has zero estimator vocabulary (tighter floor unmintable this cycle regardless); forged field inert (no consumer); production authenticate binds expected_sha256. Ed schedule call flagged: gamma-arm-in-main-paper would make mint work critical path and hold the wave | adopted (cold gate; magistrate, no dissent) |
 | D-134 | §5C ARM-READINESS RECORD CONTRACT (adopt-as-proposed consult, 2026-08-11): two-stage append-only receipts — pack-pinned non-authorizing FREEZE receipt + external pack-binding ARM receipt (hash cycle broken: frozen bytes declare the arm-receipt schema/namespace, never its future sha); d117_row_registry_v1.json sole row authority for ALPHA/BETA/GAMMA (Markdown = checked views); UNKNOWN prohibited (REFUSE or registered NOT_APPLICABLE); derive-never-enter throughout; dry-run never authorizes; impossible pre-launch single-foreground-launch row replaced by atomically consumable single-launch capability; enumerated doctrine amendments + full test obligations bind before any D-117 arm. Trace: process_traces/2026-08-11-5c-readiness-contract/ | adopted (consult adopt-as-proposed; magistrate) |
 | D-135 | SITE BUDGETS ADVISORY (Ed, in-thread 2026-08-12): conservative capsule/page/shard byte budgets and pagination margins WARN, never fail builds/tests/PR gates; the ONLY failing site-size condition is the physical Lakebed 1,048,576-byte cap under the real validator (deploys physically fail past it); content is never trimmed/split/archived to satisfy an advisory budget; SITE-CAPSULE-BUDGET-01 superseded | adopted (Ed, in-thread; transcribed) |
+| D-136 | SITE LANE RETIRED FROM PROCESSES (Ed, in-thread 2026-08-12): no session spends tokens on Lakebed/capsule size, packing, deploy failures, or site-chain diagnosis — the site is a status doc, not a workstream; the site workflow runs on manual dispatch only (never push/pull_request) and its results never gate anything or prompt session work; extends D-135 and D-101 addendum II | adopted (Ed, in-thread; transcribed) |
 
 ---
 
@@ -8556,3 +8557,27 @@ are never to be trimmed, split, or archived to satisfy an advisory
 budget. SITE-CAPSULE-BUDGET-01 is SUPERSEDED by this ruling (archival
 remains available as an option if the PHYSICAL cap ever approaches, but
 nothing gates on the conservative margin).
+
+## D-136: The site lane is retired from all automatic processes
+
+**Ed, in-thread 2026-08-12 (transcribed by the magistrate; verbatim intent:
+"stop bothering with the capsule size … i don't wanna see any lakebed stuff
+touched anymore i'm tired of it costing tokens. take it out of the processes
+entirely it pollutes context for a repetitive status doc").**
+Extends D-135 and D-101 addendum II. Clauses:
+
+1. No session spends tokens on Lakebed/capsule size, packing, deploy
+   failures, or site-chain diagnosis. A red site-chain result is not a
+   finding, not a follow-up, and never appears in a merge gate, run report
+   priority list, or RUN_STATE watch item.
+2. The `site` workflow triggers on `workflow_dispatch` only — never on
+   push or pull_request. Site publication happens if and when a human
+   chooses to run it.
+3. The site's content remains whatever the repo's docs already say; no
+   engineering effort is owed to fitting it into any platform constraint.
+   The 2026-08-12 physical-cap overrun on PR #136's branch is explicitly
+   NOT to be diagnosed or fixed (the in-flight diagnosis was killed on
+   this ruling).
+4. Open SITE-* queue items and the D-135 advisory-budget machinery stay
+   as they are (merged or in-flight work is not reverted), but no new
+   site work is minted.

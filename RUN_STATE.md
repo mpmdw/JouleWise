@@ -24,9 +24,10 @@ then #129 (pre-reviewed, merges last).** New PRs this session: **#135**
 on #127, evidence: 5317s hosted shard vs 146s bench standalone; calexits-3.11
 flake rerun queued) and **#136** (D-135 advisory site budgets; refuter
 REJECT round 1 on a raw-source-proxy failure gate — fixed 0bf0a8a, delta
-re-audit in flight; WATCH: conservative estimator projects 1.9MB vs the 1MiB
-physical cap — the PR's site chain gives the real number; if the REAL
-artifact exceeds the cap, archival is the D-135-anticipated remedy).
+re-audit ACCEPT; site-chain red is IRRELEVANT per **D-136** — Ed retired the
+site lane from all automatic processes 2026-08-12: no tokens on Lakebed/
+capsule anything, site workflow manual-dispatch only, site results never
+gate or prompt work).
 
 **Streams in flight:** §5C readiness-record generator (D-134; xhigh Sol run
 ~1h+, director split it into run 1 = registry/CLI/schemas/pack slots +
