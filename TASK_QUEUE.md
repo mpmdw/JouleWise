@@ -226,6 +226,23 @@ production LOC + 550-850 test LOC; three audit waves + D-121. Full
 consult: session scratchpad mintvocab-consult-out.md (T4-late).
 Implementation stacks on impl/floor-commonmode-01 after round 9 lands.
 
+## SITE-CAPSULE-BUDGET-01 (recorded 2026-08-11, T4-late)
+
+The decision log is the dominant site-capsule page and its growth pushes the
+measured Lakebed validator artifact toward the conservative 1,000,000-byte
+budget (real platform cap 1,048,576). It breached once this session (a
+merge re-introduced duplicated FCM round notes; cured by dedup at 479eefc,
+site-chain green). NOT urgent — ~40 KB headroom remains under the real cap —
+but structural: future decisions will re-pressure it. Durable fix when it
+next tightens: archive the BODIES of fully-superseded/closed early decisions
+to a docs/process_traces/ archive, leaving every index row + a one-line stub
+(NEVER touch a live/fenced decision — D-078 attribution-limit is the biggest
+body at ~39 KB and is RATIFIED-LIVE, do not archive it). Gate any archival on
+the REAL pack_capsule.py + Lakebed measurement (the estimator under-reports
+vs the real validator by enough to matter — it passed locally while CI's real
+measurement failed this session); Lakebed is not installed on the dev bench,
+so this verification is CI-only.
+
 ## D-133 O5 debts (surfaced, not discharged; registered 2026-08-11)
 
 - FLOOR-COMMONMODE-01 BANKED UNGATED 425f75f: full magistrate audit +
