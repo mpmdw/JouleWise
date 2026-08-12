@@ -6,6 +6,7 @@ import hashlib
 import io
 import inspect
 import json
+import math
 import os
 import plistlib
 import re
@@ -5793,7 +5794,13 @@ class V2PinsetAndMintTests(unittest.TestCase):
 
         def authenticate(candidate, **_kwargs):
             core._verify_report_widths(candidate.cell, candidate.widths)
-            return normalized_json_bytes(candidate.cell)
+            return SimpleNamespace(
+                kind="comparative",
+                spec_cell={},
+                cell=candidate.cell,
+                widths_j=candidate.widths,
+                payload=normalized_json_bytes(candidate.cell),
+            )
 
         core._authenticate_component = authenticate
         pinned_bytes = core._authenticate_component(paths)
@@ -5805,6 +5812,167 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 generalized._fresh_original_core()._verify_report_widths
             ),
         )
+
+    def test_default_authentication_seam_refusal_matrix_is_closed_and_identical(
+        self,
+    ) -> None:
+        """Only _verify_report_widths at one core call site is substituted.
+
+        Invalid spec, member/order identity, and semantics failures are
+        downstream in the unchanged pinned authenticator.  Shape, finite, and
+        exact default-width refusals exercise the sole substituted call.
+        """
+        from tests.test_mint_floor_artifact import (
+            AuthenticationTests as CoreAuthenticationTests,
+            stack_identity as pinned_stack_identity,
+        )
+
+        def attack(paths: object, case: str) -> None:
+            spec = load_json(paths.spec_path)
+            report = load_json(paths.report_path)
+            target = report["cells"][0]
+            if case == "invalid_spec":
+                spec["cells"][0]["metric"] = "forged.metric"
+            elif case == "member_order":
+                target["members"][0], target["members"][1] = (
+                    target["members"][1],
+                    target["members"][0],
+                )
+            elif case == "shape":
+                target["floor"]["admissible_half_widths_j"].pop()
+            elif case == "nonfinite":
+                target["floor"]["admissible_half_widths_j"][0] = float("inf")
+            elif case == "semantics":
+                report["consumption_semantics_id"] = "forged.semantics"
+            elif case == "one_ulp":
+                widths = target["floor"]["admissible_half_widths_j"]
+                widths[0] = math.nextafter(widths[0], math.inf)
+            else:  # pragma: no cover - the closed matrix above owns cases.
+                raise AssertionError(case)
+            paths.spec_path.write_text(json.dumps(spec), encoding="utf-8")
+            paths.report_path.write_text(json.dumps(report), encoding="utf-8")
+
+        def observed(via_seam: bool, case: str) -> tuple[type[Exception], str]:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                helper = CoreAuthenticationTests("runTest")
+                paths = helper._window_c_tree(tmp)
+                attack(paths, case)
+                core = generalized._fresh_original_core()
+                kwargs = {
+                    "expected_cell_id": core.WINDOW_C_CELL_ID,
+                    "expected_basis_sha256": core.WINDOW_C_EVALUATION_BASIS_SHA256,
+                    "strict_validator": lambda _path, _strict: (),
+                    "consumption_authenticator": helper._synthetic_consumption,
+                    "allowance_deriver": helper._synthetic_allowance_derivation,
+                }
+                with (
+                    mock.patch.object(
+                        core,
+                        "build_stack_identity",
+                        return_value=pinned_stack_identity(),
+                    ),
+                    mock.patch.object(
+                        core,
+                        "scientific_config_identity",
+                        return_value={"synthetic": "same"},
+                    ),
+                ):
+                    try:
+                        if via_seam:
+                            generalized._authenticate_v2_component(
+                                core, paths, **kwargs
+                            )
+                        else:
+                            core._authenticate_component(paths, **kwargs)
+                    except core.MintError as exc:
+                        self.assertFalse((root / "floor.json").exists())
+                        self.assertFalse((root / "single-count.txt").exists())
+                        return type(exc), str(exc)
+                self.fail(f"{case} unexpectedly authenticated")
+
+        for case in (
+            "invalid_spec",
+            "member_order",
+            "shape",
+            "nonfinite",
+            "semantics",
+            "one_ulp",
+        ):
+            with self.subTest(case=case):
+                direct_type, direct_message = observed(False, case)
+                seam_type, seam_message = observed(True, case)
+                self.assertTrue(issubclass(direct_type, ValueError))
+                self.assertTrue(issubclass(seam_type, ValueError))
+                self.assertEqual(seam_message, direct_message)
+
+    def test_authentication_seam_restores_fresh_core_on_return_and_raise(
+        self,
+    ) -> None:
+        for should_raise in (False, True):
+            with self.subTest(should_raise=should_raise):
+                core = generalized._fresh_original_core()
+                pinned_verifier = core._verify_report_widths
+                cell = {
+                    "kind": "comparative",
+                    "floor": {"admissible_half_widths_j": [0.125]},
+                }
+                paths = SimpleNamespace(cell=cell, widths=(0.125,))
+
+                def authenticate(candidate, **_kwargs):
+                    core._verify_report_widths(candidate.cell, candidate.widths)
+                    if should_raise:
+                        raise core.MintError("fixture downstream refusal")
+                    return SimpleNamespace(
+                        kind="comparative",
+                        spec_cell={},
+                        cell=candidate.cell,
+                        widths_j=candidate.widths,
+                    )
+
+                core._authenticate_component = authenticate
+                before = dict(core.__dict__)
+                if should_raise:
+                    with self.assertRaisesRegex(
+                        core.MintError, "downstream refusal"
+                    ):
+                        generalized._authenticate_v2_component(core, paths)
+                else:
+                    generalized._authenticate_v2_component(core, paths)
+                self.assertIs(core._verify_report_widths, pinned_verifier)
+                self.assertEqual(core.__dict__, before)
+                self.assertEqual(
+                    inspect.getsource(core._verify_report_widths),
+                    inspect.getsource(
+                        generalized._fresh_original_core()._verify_report_widths
+                    ),
+                )
+
+    def test_absolute_authentication_uses_unmodified_pinned_width_verifier(
+        self,
+    ) -> None:
+        def refusal(via_seam: bool) -> str:
+            core = generalized._fresh_original_core()
+            cell = {
+                "kind": "absolute",
+                "floor": {"admissible_half_widths_j": [0.25]},
+            }
+            paths = SimpleNamespace(cell=cell, widths=(0.125,))
+
+            def authenticate(candidate, **_kwargs):
+                core._verify_report_widths(candidate.cell, candidate.widths)
+
+            core._authenticate_component = authenticate
+            try:
+                if via_seam:
+                    generalized._authenticate_v2_component(core, paths)
+                else:
+                    core._authenticate_component(paths)
+            except core.MintError as exc:
+                return str(exc)
+            self.fail("absolute mismatch unexpectedly authenticated")
+
+        self.assertEqual(refusal(True), refusal(False))
 
     def test_mixed_four_cell_full_mint_is_cell_local_and_bound(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -5928,17 +6096,25 @@ class V2PinsetAndMintTests(unittest.TestCase):
                             pinset_path=path,
                             expected_pinset_sha256=digest,
                         )
-                        is_common = role == "decode"
-                        core.bind_floor_artifact_evidence = mock.Mock(
-                            side_effect=(
-                                core.MintError(
-                                    "fixture: artifact widths differ from "
-                                    "authenticated source bytes"
+                        source_widths = producer_input.cells[
+                            role
+                        ].comparative.widths_j
+
+                        def pinned_bind(candidate, *_args, **_kwargs):
+                            if role == "decode":
+                                self.assertEqual(
+                                    candidate["cells"][0]["comparative"][
+                                        "admissible_half_widths_j"
+                                    ],
+                                    list(source_widths),
                                 )
-                                if is_common
-                                else None
-                            ),
-                            return_value={},
+                            return {
+                                "absolute": ("verified-a",),
+                                "comparative": ("verified-b",),
+                            }
+
+                        core.bind_floor_artifact_evidence = mock.Mock(
+                            side_effect=pinned_bind
                         )
                         generalized.mint_estimator.bind_v2_floor_artifact_evidence(
                             core=core,
@@ -5987,16 +6163,24 @@ class V2PinsetAndMintTests(unittest.TestCase):
             statement_path = root / "single-count.txt"
             original_core_loader = generalized._fresh_original_core
             pinned_binds = 0
+            events = []
 
             def load_core():
                 core = original_core_loader()
+                original_write = core.write_outputs_exclusive
 
                 def pinned_bind(*_args, **_kwargs):
                     nonlocal pinned_binds
                     pinned_binds += 1
+                    events.append("bind")
                     return {}
 
+                def ordered_write(*args, **kwargs):
+                    events.append("write")
+                    return original_write(*args, **kwargs)
+
                 core.bind_floor_artifact_evidence = pinned_bind
+                core.write_outputs_exclusive = ordered_write
                 return core
 
             evidence_roots = {
@@ -6053,6 +6237,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 )
             self.assertEqual(bind_site.call_count, 4)
             self.assertEqual(pinned_binds, 4)
+            self.assertEqual(events, ["bind", "bind", "bind", "bind", "write"])
             self.assertTrue(floor_path.is_file())
             self.assertTrue(statement_path.is_file())
             self.assertEqual(load_json(floor_path), artifact)
@@ -6218,6 +6403,51 @@ class V2PinsetAndMintTests(unittest.TestCase):
             attacked_path, attacked_digest = write_pinset(root, pinset)
             out = root / "common-spec-default-widths"
             out.mkdir()
+            loaded = generalized.load_pinset(attacked_path, attacked_digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            attacked_producer = loaded.value["producer_plans"][0]
+            attacked_input = inputs[plan_id]
+            decode_pins = next(
+                row for row in attacked_producer["cells"] if row["role"] == "decode"
+            )
+            attacked_component = attacked_input.cells["decode"].comparative
+            default_core = generalized._fresh_original_core()
+            default_blocks, default_deltas = default_core._comparative_blocks(
+                attacked_component
+            )
+            default_estimate = default_core.comparative_false_effect_floor(
+                default_deltas,
+                admissible_half_widths_j=attacked_component.widths_j,
+            )
+            default_result = SimpleNamespace(
+                estimator_path="default",
+                comparative_blocks=tuple(default_blocks),
+                estimate=default_estimate,
+                exact_widths_j=tuple(default_estimate.admissible_half_widths_j),
+                comparative_record=default_core.build_comparative_record(
+                    default_estimate,
+                    default_blocks,
+                    consumption_semantics_id=(
+                        attacked_component.consumption_semantics_id
+                    ),
+                    whole_window_drift_allowance=(
+                        attacked_component.whole_window_drift_allowance
+                    ),
+                ),
+            )
+            with mock.patch.object(
+                generalized.mint_estimator,
+                "recompute_comparative_estimate",
+                return_value=default_result,
+            ):
+                site_limited = generalized._v2_gate_postcollection(
+                    producer=attacked_producer,
+                    cell_pins=decode_pins,
+                    cell_inputs=attacked_input.cells["decode"],
+                    producer_inputs=attacked_input,
+                    ledger_snapshot=snapshot,
+                )
+            self.assertEqual(site_limited.estimator_path, "default")
             with _mixed_common_mode_seams(inputs):
                 with self.assertRaisesRegex(
                     generalized.MintError,
@@ -6333,6 +6563,58 @@ class V2PinsetAndMintTests(unittest.TestCase):
             construction.assert_not_called()
             self.assertEqual(list(out.iterdir()), [])
 
+    def test_postcollection_common_mode_width_type_and_one_ulp_gates(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            producer = loaded.value["producer_plans"][0]
+            producer_input = inputs[producer["plan"]["plan_id"]]
+            pins = next(row for row in producer["cells"] if row["role"] == "decode")
+            decode = producer_input.cells["decode"]
+            original_width = decode.comparative.cell["floor"][
+                "admissible_half_widths_j"
+            ][0]
+            attacks = {
+                "one_ulp_downward": math.nextafter(original_width, -math.inf),
+                "string": str(original_width),
+                "bool": True,
+            }
+            for label, attacked_width in attacks.items():
+                with self.subTest(label=label):
+                    attacked_cell = copy.deepcopy(decode.comparative.cell)
+                    attacked_cell["floor"]["admissible_half_widths_j"][0] = (
+                        attacked_width
+                    )
+                    attacked_inputs = replace(
+                        decode,
+                        comparative=replace(
+                            decode.comparative,
+                            cell=attacked_cell,
+                        ),
+                    )
+                    with (
+                        _mixed_common_mode_seams(inputs),
+                        self.assertRaisesRegex(
+                            generalized.MintError,
+                            "widths differ exactly.*spec-selected estimator",
+                        ),
+                    ):
+                        generalized._v2_gate_postcollection(
+                            producer=producer,
+                            cell_pins=pins,
+                            cell_inputs=attacked_inputs,
+                            producer_inputs=producer_input,
+                            ledger_snapshot=snapshot,
+                        )
+                    self.assertFalse((root / "floor.json").exists())
+                    self.assertFalse((root / "single-count.txt").exists())
+
     def test_site_limited_postcollection_default_crosswire_is_caught(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -6385,6 +6667,75 @@ class V2PinsetAndMintTests(unittest.TestCase):
                     )
             self.assertGreater(crosswired.call_count, 0)
             self.assertEqual(list(out.iterdir()), [])
+
+    def test_site_limited_postcollection_common_crosswire_is_caught(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            producer = loaded.value["producer_plans"][0]
+            plan_id = producer["plan"]["plan_id"]
+            producer_input = inputs[plan_id]
+            decode = producer_input.cells["decode"]
+            pins = next(row for row in producer["cells"] if row["role"] == "decode")
+            with _mixed_common_mode_seams(inputs):
+                common_result = generalized.mint_estimator.recompute_comparative_estimate(
+                    core=generalized._fresh_original_core(),
+                    comparative_component=decode.comparative,
+                    runs_root=producer_input.evidence_root,
+                    calibration_acceptance=producer_input.calibration_acceptance,
+                    calibration_acceptance_sha256=(
+                        producer_input.calibration_acceptance_sha256
+                    ),
+                    calibration_allowance_projection=(
+                        producer_input.calibration_allowance_projection or {}
+                    ),
+                    declared_calibration_scope="production_window",
+                    calibration_ledger_snapshot=snapshot,
+                    calibration_bracket_binding=producer_input.bracket_binding,
+                )
+            default_spec_cell = copy.deepcopy(decode.comparative.spec_cell)
+            for key in ("estimator", "estimator_registration"):
+                default_spec_cell.pop(key, None)
+            attacked_decode = replace(
+                decode,
+                comparative=replace(
+                    decode.comparative,
+                    spec_cell=default_spec_cell,
+                ),
+            )
+            with self.assertRaisesRegex(
+                generalized.MintError,
+                "widths differ exactly.*spec-selected estimator",
+            ):
+                generalized._v2_gate_postcollection(
+                    producer=producer,
+                    cell_pins=pins,
+                    cell_inputs=attacked_decode,
+                    producer_inputs=producer_input,
+                    ledger_snapshot=snapshot,
+                )
+
+            # Deliberately limit this site to the common estimator result.
+            # It accepts common-shaped widths under the default selector.
+            with mock.patch.object(
+                generalized.mint_estimator,
+                "recompute_comparative_estimate",
+                return_value=common_result,
+            ):
+                accepted = generalized._v2_gate_postcollection(
+                    producer=producer,
+                    cell_pins=pins,
+                    cell_inputs=attacked_decode,
+                    producer_inputs=producer_input,
+                    ledger_snapshot=snapshot,
+                )
+            self.assertEqual(accepted.estimator_path, "common_mode")
+            self.assertFalse((root / "floor.json").exists())
+            self.assertFalse((root / "single-count.txt").exists())
 
     def test_site_limited_construction_default_crosswire_is_caught(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -6448,6 +6799,102 @@ class V2PinsetAndMintTests(unittest.TestCase):
             self.assertEqual(crossed, ["cell-0-decode", "cell-1-decode"])
             self.assertEqual(list(out.iterdir()), [])
 
+    def test_construction_frozen_guard_catches_both_crosswire_directions(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path, digest, inputs, snapshot = freeze_mixed_estimator_v2_pinset(
+                root
+            )
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            producer = loaded.value["producer_plans"][0]
+            producer_input = inputs[producer["plan"]["plan_id"]]
+            pins_by_role = {row["role"]: row for row in producer["cells"]}
+            with _mixed_common_mode_seams(inputs):
+                recomputations = {
+                    role: generalized._v2_gate_postcollection(
+                        producer=producer,
+                        cell_pins=pins_by_role[role],
+                        cell_inputs=producer_input.cells[role],
+                        producer_inputs=producer_input,
+                        ledger_snapshot=snapshot,
+                    )
+                    for role in ("decode", "prefill")
+                }
+            crosswired_widths = {
+                "decode": tuple(
+                    producer_input.cells["decode"].comparative.widths_j
+                ),
+                "prefill": recomputations["decode"].comparative_widths_j,
+            }
+            for role in ("decode", "prefill"):
+                with self.subTest(role=role):
+                    recomputation = recomputations[role]
+                    cell_inputs = producer_input.cells[role]
+                    core = generalized._configured_core(
+                        generalized._v2_mint_pinset(
+                            producer, pins_by_role[role]
+                        ),
+                        pinset_path=path,
+                        expected_pinset_sha256=digest,
+                    )
+                    blocks, deltas = core._comparative_blocks(
+                        cell_inputs.comparative
+                    )
+                    crossed_estimate = core.comparative_false_effect_floor(
+                        deltas,
+                        admissible_half_widths_j=crosswired_widths[role],
+                    )
+                    record = core.build_comparative_record(
+                        crossed_estimate,
+                        blocks,
+                        consumption_semantics_id=(
+                            cell_inputs.comparative.consumption_semantics_id
+                        ),
+                        whole_window_drift_allowance=(
+                            cell_inputs.comparative.whole_window_drift_allowance
+                        ),
+                    )
+                    attacked = replace(
+                        recomputation,
+                        comparative_record=record,
+                    )
+                    call = {
+                        "core": core,
+                        "producer": producer,
+                        "cell_pins": pins_by_role[role],
+                        "plan": producer_input.plan,
+                        "project_commit": "0" * 40,
+                        "project_tree_state": "clean",
+                        "origin_main_contains_head": True,
+                        "head_pin_commit_contained_in_origin_main": True,
+                        "absolute": cell_inputs.absolute,
+                        "comparative": cell_inputs.comparative,
+                        "recomputation": attacked,
+                        "calibration_ledger_snapshot": snapshot,
+                    }
+                    with self.assertRaisesRegex(
+                        generalized.MintError,
+                        "frozen v2 comparative recomputation changed",
+                    ):
+                        generalized._mint_v2_cell_artifact(**call)
+
+                    # Deliberately disable only the frozen-width guard input.
+                    # The crosswired record then constructs, demonstrating
+                    # that the guard is the site-local refusal being tested.
+                    site_limited = replace(
+                        attacked,
+                        comparative_widths_j=tuple(crosswired_widths[role]),
+                    )
+                    constructed = generalized._mint_v2_cell_artifact(
+                        **{**call, "recomputation": site_limited}
+                    )
+                    self.assertIsInstance(constructed, dict)
+            self.assertFalse((root / "floor.json").exists())
+            self.assertFalse((root / "single-count.txt").exists())
+
     def test_site_limited_final_binder_default_crosswire_is_caught(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -6478,10 +6925,25 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 pinset_path=path,
                 expected_pinset_sha256=digest,
             )
+            default_widths = list(
+                producer_input.cells["decode"].comparative.widths_j
+            )
+
+            def default_width_binder(candidate, *_args, **_kwargs):
+                observed = candidate["cells"][0]["comparative"][
+                    "admissible_half_widths_j"
+                ]
+                if observed != default_widths:
+                    raise core.MintError(
+                        "fixture: artifact widths differ from authenticated source bytes"
+                    )
+                return {
+                    "absolute": ("verified-a",),
+                    "comparative": ("verified-b",),
+                }
+
             core.bind_floor_artifact_evidence = mock.Mock(
-                side_effect=core.MintError(
-                    "fixture: artifact widths differ from authenticated source bytes"
-                )
+                side_effect=default_width_binder
             )
             kwargs = {
                 "core": core,
@@ -6624,6 +7086,122 @@ class V2PinsetAndMintTests(unittest.TestCase):
             self.assertEqual(write_calls, 0)
             self.assertFalse(floor_path.exists())
             self.assertFalse(statement_path.exists())
+
+    def test_all_three_site_refusals_leave_outputs_absent(self) -> None:
+        """Postcollection, frozen construction, and binding precede writing."""
+
+        for refusal_site in ("postcollection", "construction", "binding"):
+            with self.subTest(refusal_site=refusal_site):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    path, digest, inputs, snapshot = (
+                        freeze_mixed_estimator_v2_pinset(root)
+                    )
+                    manifest_path = root / "manifest.json"
+                    head_path = root / "ledger.head.json"
+                    head_path.write_text("{}\n", encoding="utf-8")
+                    manifest = {"calibration_ledger_head_pin": str(head_path)}
+                    floor_path = root / "floor.json"
+                    statement_path = root / "single-count.txt"
+                    evidence_roots = {
+                        producer["evidence_root_id"]: inputs[
+                            producer["plan"]["plan_id"]
+                        ].evidence_root
+                        for producer in load_json(path)["producer_plans"]
+                    }
+                    original_core_loader = generalized._fresh_original_core
+                    original_construction = generalized._mint_v2_cell_artifact
+                    write_calls = 0
+
+                    def load_core():
+                        core = original_core_loader()
+
+                        def forbidden_write(*_args, **_kwargs):
+                            nonlocal write_calls
+                            write_calls += 1
+
+                        core.write_outputs_exclusive = forbidden_write
+                        return core
+
+                    def frozen_guard_attack(**kwargs):
+                        recomputation = kwargs["recomputation"]
+                        record = copy.deepcopy(dict(recomputation.comparative_record))
+                        widths = record["admissible_half_widths_j"]
+                        widths[0] = math.nextafter(widths[0], math.inf)
+                        return original_construction(
+                            **{
+                                **kwargs,
+                                "recomputation": replace(
+                                    recomputation,
+                                    comparative_record=record,
+                                ),
+                            }
+                        )
+
+                    site_patch = {
+                        "postcollection": mock.patch.object(
+                            generalized,
+                            "_v2_gate_postcollection",
+                            side_effect=generalized.MintError(
+                                "fixture postcollection refusal"
+                            ),
+                        ),
+                        "construction": mock.patch.object(
+                            generalized,
+                            "_mint_v2_cell_artifact",
+                            side_effect=frozen_guard_attack,
+                        ),
+                        "binding": mock.patch.object(
+                            generalized.mint_estimator,
+                            "bind_v2_floor_artifact_evidence",
+                            side_effect=generalized.MintError(
+                                "fixture binding refusal"
+                            ),
+                        ),
+                    }[refusal_site]
+                    with (
+                        _mixed_common_mode_seams(inputs),
+                        mock.patch.object(
+                            generalized,
+                            "_actual_v2_git_state",
+                            return_value=("0" * 40, True),
+                        ),
+                        mock.patch.object(
+                            generalized,
+                            "_load_v2_input_manifest",
+                            return_value=manifest,
+                        ),
+                        mock.patch.object(
+                            generalized,
+                            "_authenticate_v2_inputs",
+                            return_value=(inputs, evidence_roots, snapshot),
+                        ),
+                        mock.patch.object(
+                            generalized,
+                            "_head_pin_commit_containment_in_origin_main",
+                            return_value=True,
+                        ),
+                        mock.patch.object(
+                            generalized,
+                            "_fresh_original_core",
+                            side_effect=load_core,
+                        ),
+                        site_patch,
+                        self.assertRaises(generalized.MintError),
+                    ):
+                        generalized.mint_multi_cell_floor_artifact(
+                            pinset_path=path,
+                            pinset_sha256=digest,
+                            input_manifest_path=manifest_path,
+                            floor_path=floor_path,
+                            statement_path=statement_path,
+                            project_commit="0" * 40,
+                            project_tree_state="clean",
+                            strict_validator=lambda _path, _strict: [],
+                        )
+                    self.assertEqual(write_calls, 0)
+                    self.assertFalse(floor_path.exists())
+                    self.assertFalse(statement_path.exists())
 
     def test_v2_mint_recomputes_rendering_but_never_fills_pins(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -6874,7 +7452,10 @@ class V2PinsetAndMintTests(unittest.TestCase):
                         replace(decode, absolute=basis_component)
                     ),
                     ledger_snapshot,
-                    "evaluation basis sha256 mismatch",
+                    (
+                        r"producer\[0\]\.decode\.absolute: "
+                        r"evaluation basis sha256 mismatch"
+                    ),
                 ),
                 (
                     "member-bytes",
@@ -9066,6 +9647,26 @@ class FullPathTests(unittest.TestCase):
 
 
 class CoreCompatibilityTests(unittest.TestCase):
+    def test_all_three_estimator_seam_dependencies_are_signature_pinned(
+        self,
+    ) -> None:
+        dependencies = {
+            "_verify_report_widths",
+            "_authenticate_component",
+            "bind_floor_artifact_evidence",
+        }
+        self.assertTrue(dependencies.issubset(generalized._CORE_SIGNATURES))
+        core = generalized._fresh_original_core()
+        for symbol in sorted(dependencies):
+            with self.subTest(symbol=symbol):
+                attacked = generalized._fresh_original_core()
+                setattr(attacked, symbol, lambda: None)
+                with self.assertRaisesRegex(
+                    generalized.MintError, rf"{symbol} signature expected"
+                ):
+                    generalized._assert_core_interface(attacked)
+        generalized._assert_core_interface(core)
+
     def test_mint_floor_artifact_signature_is_review_pinned(self) -> None:
         expected = (
             "(*, artifact_id: 'str', floor_path: 'Path', statement_path: 'Path', "

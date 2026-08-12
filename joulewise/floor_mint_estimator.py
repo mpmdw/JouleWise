@@ -7,6 +7,7 @@ extraction report, floor artifact, or artifact provenance record.
 
 from __future__ import annotations
 
+import copy
 import inspect
 import math
 from dataclasses import dataclass
@@ -498,26 +499,6 @@ def _stored_comparative_widths(artifact: Mapping[str, Any]) -> Sequence[object]:
     return widths
 
 
-def _binding_result_from_provenance(
-    artifact: Mapping[str, Any],
-) -> Mapping[str, tuple[str, ...]]:
-    cells = artifact.get("cells")
-    if not isinstance(cells, list) or len(cells) != 1 or not isinstance(
-        cells[0], Mapping
-    ):
-        return {}
-    provenance = cells[0].get("provenance")
-    if not isinstance(provenance, Mapping):
-        return {}
-    result: dict[str, tuple[str, ...]] = {}
-    for component_name in ("absolute", "comparative"):
-        component = provenance.get(component_name)
-        hashes = component.get("bundle_sha256s") if isinstance(component, Mapping) else None
-        if isinstance(hashes, list) and all(isinstance(value, str) for value in hashes):
-            result[component_name] = tuple(hashes)
-    return result
-
-
 def bind_v2_floor_artifact_evidence(
     *,
     core: Any,
@@ -543,9 +524,8 @@ def bind_v2_floor_artifact_evidence(
         calibration_allowance_projection=calibration_allowance_projection,
         declared_calibration_scope=declared_calibration_scope,
     )
-    legacy_result: Mapping[str, tuple[str, ...]] | None = None
-    try:
-        legacy_result = core.bind_floor_artifact_evidence(
+    if path == _DEFAULT_PATH:
+        return core.bind_floor_artifact_evidence(
             artifact,
             floor_path,
             evidence_roots,
@@ -553,19 +533,39 @@ def bind_v2_floor_artifact_evidence(
             calibration_ledger_snapshot=calibration_ledger_snapshot,
             calibration_bracket_binding=calibration_bracket_binding,
         )
-    except core.MintError as exc:
-        if path != _COMMON_MODE_PATH or not str(exc).endswith(
-            "artifact widths differ from authenticated source bytes"
-        ):
-            raise
-        # For one isolated common-mode cell the pinned binder reaches this
-        # exact message only after plan, campaign, bundle, config, stack,
-        # semantics, and member-order checks have all passed.  Its sole
-        # remaining default-only assumption is replaced below.
 
-    if path == _DEFAULT_PATH:
-        assert legacy_result is not None
-        return legacy_result
+    # The pinned binder remains the sole verifier for every evidence-binding
+    # obligation.  Its comparative width input is default-estimator-shaped,
+    # so an isolated copy substitutes only that field with the default-shaped
+    # widths already reconstructed from authenticated member rows.  The real
+    # artifact is neither mutated nor supplied as authority for this copy.
+    binder_artifact = copy.deepcopy(artifact)
+    binder_widths = _stored_comparative_widths(binder_artifact)
+    assert isinstance(binder_widths, list)
+    binder_widths[:] = list(comparative_component.widths_j)
+    pinned_validator = core.validate_floor_artifact
+
+    def validate_real_artifact(candidate: Mapping[str, Any]) -> list[Any]:
+        # The copy is intentionally inconsistent only in the substituted
+        # width field.  Validate the real artifact's complete internal
+        # arithmetic, then let the unchanged binder rebind every evidence
+        # surface against the substituted copy.
+        if candidate is binder_artifact:
+            return pinned_validator(artifact)
+        return pinned_validator(candidate)
+
+    core.validate_floor_artifact = validate_real_artifact
+    try:
+        legacy_result = core.bind_floor_artifact_evidence(
+            binder_artifact,
+            floor_path,
+            evidence_roots,
+            strict_validator=strict_validator,
+            calibration_ledger_snapshot=calibration_ledger_snapshot,
+            calibration_bracket_binding=calibration_bracket_binding,
+        )
+    finally:
+        core.validate_floor_artifact = pinned_validator
 
     recomputation = recompute_comparative_estimate(
         core=core,
@@ -585,7 +585,9 @@ def bind_v2_floor_artifact_evidence(
         )
     try:
         exact = all(
-            _decimal(observed, "artifact common-mode width")
+            not isinstance(observed, bool)
+            and isinstance(observed, int | float)
+            and _decimal(observed, "artifact common-mode width")
             == Decimal(str(expected))
             and _decimal(observed, "artifact common-mode width") >= 0
             for observed, expected in zip(
@@ -600,4 +602,4 @@ def bind_v2_floor_artifact_evidence(
         raise _MintEstimatorError(
             "artifact common-mode widths differ from authenticated source bytes"
         )
-    return legacy_result or _binding_result_from_provenance(artifact)
+    return legacy_result

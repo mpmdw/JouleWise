@@ -52,6 +52,7 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_admitted_report_vocabulary,
     validate_d117_mint_consumption_report,
 )
+from joulewise import detection_floor  # noqa: E402
 from joulewise import floor_mint_estimator as mint_estimator  # noqa: E402
 from joulewise.identity_pins import derive_model_runtime_config  # noqa: E402
 
@@ -155,6 +156,27 @@ _CORE_SIGNATURES = {
         "consumption_semantics_id: 'str | None' = None, "
         "calibration_ledger_snapshot: 'CalibrationLedgerSnapshot | None' = None) "
         "-> 'Mapping[str, Any]'"
+    ),
+    "_verify_report_widths": (
+        "(cell: 'Mapping[str, Any]', widths: 'Sequence[float]') -> 'None'"
+    ),
+    "_authenticate_component": (
+        "(paths: 'ComponentPaths', *, expected_cell_id: 'str', "
+        "expected_basis_sha256: 'str', strict_validator: 'StrictValidator', "
+        "consumption_authenticator: 'ConsumptionAuthenticator' = "
+        "<callable:_authenticated_consumption_summaries>, allowance_deriver: "
+        "'AllowanceDeriver' = <callable:whole_window_drift_allowances>, "
+        "expected_consumption_semantics_id: 'str | None' = None, "
+        "calibration_ledger_snapshot: 'CalibrationLedgerSnapshot | None' = None, "
+        "calibration_bracket_binding: 'Mapping[str, Any] | None' = None) -> "
+        "'AuthenticatedComponent'"
+    ),
+    "bind_floor_artifact_evidence": (
+        "(artifact: 'Mapping[str, Any]', floor_path: 'Path', evidence_roots: "
+        "'Mapping[str, Path]', *, strict_validator: 'StrictValidator', "
+        "calibration_ledger_snapshot: 'CalibrationLedgerSnapshot | None' = None, "
+        "calibration_bracket_binding: 'Mapping[str, Any] | None' = None) -> "
+        "'Mapping[str, tuple[str, ...]]'"
     ),
 }
 # D-109 R1.4 added the immutable ledger-snapshot parameter. Any future
@@ -1380,6 +1402,19 @@ def _load_v1_pinset(path: Path, expected_sha256: str) -> MintPinset:
     return pinset
 
 
+def _render_core_signature(value: Any) -> str:
+    signature = inspect.signature(value)
+    rendered = str(signature)
+    for parameter in signature.parameters.values():
+        default = parameter.default
+        if default is not inspect.Parameter.empty and callable(default):
+            rendered = rendered.replace(
+                repr(default),
+                f"<callable:{getattr(default, '__name__', type(default).__name__)}>",
+            )
+    return rendered
+
+
 def _assert_core_interface(module: ModuleType) -> None:
     missing = sorted(
         (_CORE_CONFIG_GLOBALS | set(_CORE_SIGNATURES) | {"MintError"})
@@ -1399,7 +1434,7 @@ def _assert_core_interface(module: ModuleType) -> None:
         )
     for symbol, expected in _CORE_SIGNATURES.items():
         try:
-            observed = str(inspect.signature(getattr(module, symbol)))
+            observed = _render_core_signature(getattr(module, symbol))
         except (TypeError, ValueError) as exc:
             raise MintError(
                 "review-pinned mint-core interface drift: cannot inspect "
@@ -3349,9 +3384,20 @@ def _authenticate_v2_component(
 
     core._verify_report_widths = defer_comparative_width_equality
     try:
-        return core._authenticate_component(paths, **kwargs)
+        authenticated = core._authenticate_component(paths, **kwargs)
     finally:
         core._verify_report_widths = pinned_width_verifier
+    # Only a positively selected common-mode cell needs the equality deferred
+    # to the spec-selected postcollection recomputation.  Every default,
+    # absent, unknown, or malformed selector retains the pinned verifier's
+    # exact default-path refusal, after the authenticated spec cell is known.
+    if (
+        authenticated.kind == "comparative"
+        and authenticated.spec_cell.get("estimator")
+        != detection_floor.COMMON_MODE_ESTIMATOR_ID
+    ):
+        pinned_width_verifier(authenticated.cell, authenticated.widths_j)
+    return authenticated
 
 
 def _authenticate_v2_inputs(
