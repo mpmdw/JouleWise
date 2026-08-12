@@ -771,7 +771,7 @@ class InputSeamTests(unittest.TestCase):
         mint_metadata = json.loads(
             (fixture / "metadata.json").read_text(encoding="utf-8")
         )
-        stack = mint._derive_stack_identity(raw_config, mint_metadata)
+        stack = mint.build_stack_identity(raw_config, mint_metadata)
         artifact = make_artifact(
             [make_cell(regime=make_regime(stack_identity=stack))]
         )
@@ -883,7 +883,7 @@ class InputSeamTests(unittest.TestCase):
         metadata = json.loads(
             (fixture / "metadata.json").read_text(encoding="utf-8")
         )
-        expected_stack = mint._derive_stack_identity(
+        expected_stack = mint.build_stack_identity(
             json.loads(
                 (fixture / "config.json").read_text(encoding="utf-8")
             ),

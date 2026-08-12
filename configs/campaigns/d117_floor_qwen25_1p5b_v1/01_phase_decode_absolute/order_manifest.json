@@ -3,14 +3,14 @@
   "draft_status": "unfrozen_draft",
   "manifest_id": "d117-floor-qwen25-1p5b-v1-01-phase-decode-absolute-order-v1",
   "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
-  "calibration_plan_sha256": "05bee6fe9b1b22be3d97afe18349658e70e692825ab7cf01988681d2cf67e2bb",
+  "calibration_plan_sha256": "56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182",
   "ordering_note": "Ten fixed absolute decode repeats in repetition order.",
   "planned_n_bundles": 10,
   "executed_order": [
     {
       "index": 1,
       "config": "d117f15-df-ph-decode-abs-r01.json",
-      "config_sha256": "412f3ef582774119eddb8aca280de0128593852b3f30c1ed73cc89ad170edae9",
+      "config_sha256": "36429815606dbffb193cf77dde12dc48672ab5eaa62af80bd12faa8c5be82b4d",
       "run_id": "d117f15-df-ph-decode-abs-r01",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 1,
@@ -25,7 +25,7 @@
     {
       "index": 2,
       "config": "d117f15-df-ph-decode-abs-r02.json",
-      "config_sha256": "00ae98f1a439675d02d2815de2291a5538a72f095e9bbc230cf2801a06df634f",
+      "config_sha256": "8357da00278d42abf64a6fa5fdbf1b9d0c7fb6dc28b35766ab33fc938e46c426",
       "run_id": "d117f15-df-ph-decode-abs-r02",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 2,
@@ -40,7 +40,7 @@
     {
       "index": 3,
       "config": "d117f15-df-ph-decode-abs-r03.json",
-      "config_sha256": "53d20bdc43b84aa8e6ab7cffda5dddafa949adc06d7687aa4c0f26c462efdcf9",
+      "config_sha256": "c75a5b217894436a02243cf60ef88427c61aedcdbab458799b401e4c40dc3d18",
       "run_id": "d117f15-df-ph-decode-abs-r03",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 3,
@@ -55,7 +55,7 @@
     {
       "index": 4,
       "config": "d117f15-df-ph-decode-abs-r04.json",
-      "config_sha256": "a5acdd9f1a5d9327c082e301baddbd68dbe34bc05132ab610ea5bffdf39656e1",
+      "config_sha256": "e6b9802773ddc88b1b138a99edaee660e45de547e11e7e03ef8fd9b9e54f5aa5",
       "run_id": "d117f15-df-ph-decode-abs-r04",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 4,
@@ -70,7 +70,7 @@
     {
       "index": 5,
       "config": "d117f15-df-ph-decode-abs-r05.json",
-      "config_sha256": "f321a2b8b190ba111ebcad7e67555808c25645ee5e08b93c345b42872dad1e7e",
+      "config_sha256": "ef3ffec93e9a085f2a4136f7e68bc5fc43e317e185f4b202d79952f9bc0c6f7a",
       "run_id": "d117f15-df-ph-decode-abs-r05",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 5,
@@ -85,7 +85,7 @@
     {
       "index": 6,
       "config": "d117f15-df-ph-decode-abs-r06.json",
-      "config_sha256": "f025cc90a093693eedf777d6d04222a351a58d6c61fd52733083427909cf4e16",
+      "config_sha256": "62b6b1c6dcccd8dfb4f91702405650c2cd1ef089d75bc3fd4bd422380cfd2700",
       "run_id": "d117f15-df-ph-decode-abs-r06",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 6,
@@ -100,7 +100,7 @@
     {
       "index": 7,
       "config": "d117f15-df-ph-decode-abs-r07.json",
-      "config_sha256": "b86716bb22a508bf3b233697db6d40ca9e38f43014fa8b74ca018e7e5fe66a80",
+      "config_sha256": "f1692e88f7d31c405168996dda2dd23115dd14d740454f3dd66043788cafd2d5",
       "run_id": "d117f15-df-ph-decode-abs-r07",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 7,
@@ -115,7 +115,7 @@
     {
       "index": 8,
       "config": "d117f15-df-ph-decode-abs-r08.json",
-      "config_sha256": "da911ee903636719efe4ea01d22b96791722dc4d4e8e3454c7ff0c9401d9048e",
+      "config_sha256": "1c98aa4d3bb42d88b771da6357216fe4a51ff561161aa5013fd775f0cc7c79d9",
       "run_id": "d117f15-df-ph-decode-abs-r08",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 8,
@@ -130,7 +130,7 @@
     {
       "index": 9,
       "config": "d117f15-df-ph-decode-abs-r09.json",
-      "config_sha256": "0dba2fecbc13e1998729feec1a3c9fb0943f581bf9e1651b45eff2de2e6215f4",
+      "config_sha256": "e560b0f70fd97ac828c238acd023193b217aed4076646ae5716d4df8b644e15e",
       "run_id": "d117f15-df-ph-decode-abs-r09",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 9,
@@ -145,7 +145,7 @@
     {
       "index": 10,
       "config": "d117f15-df-ph-decode-abs-r10.json",
-      "config_sha256": "a73859dc2a819a5ae1412182caed38d922571b5197df25685e11129e56ec3aad",
+      "config_sha256": "6a1fcc3bf960e3a1fd350d89f43b45bb8fb0c9fa789d95df11e1f31a21599092",
       "run_id": "d117f15-df-ph-decode-abs-r10",
       "model_tag": "qwen25-1p5b-mlx",
       "rep": 10,

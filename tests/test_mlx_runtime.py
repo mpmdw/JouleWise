@@ -286,6 +286,32 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertIn("[mac]", result.message)
         self.assertIn("not installed", result.message)
 
+    def test_identity_projection_metadata_uses_loaded_tokenizer_and_sampler_probe(self) -> None:
+        adapter, fake_mlx = self.prepared_adapter(["A"])
+        adapter._model_artifact_identity = {
+            "status": "ok",
+            "kind": "single_file",
+            "algorithm": "sha256",
+            "sha256": "a" * 64,
+            "path": "/models/synthetic.safetensors",
+        }
+        config = make_config(workload_profile={"output_tokens": 7})
+
+        projection = adapter.identity_projection_metadata(config)
+
+        self.assertEqual(projection["tokenizer"]["backend"], "mlx")
+        self.assertEqual(projection["tokenizer"]["class"], "FakeTokenizer")
+        self.assertEqual(projection["sampler"]["pinned"], True)
+        self.assertEqual(fake_mlx.samplers_built, [{"temp": 0.0}])
+        self.assertEqual(
+            projection["output_policy"],
+            {
+                "name": "fixed_budget_exact",
+                "requested_tokens": 7,
+                "stop_condition": "requested_tokens_emitted",
+            },
+        )
+
     def test_prompt_token_workload_synthesizes_deterministic_token_prompt(self) -> None:
         adapter, fake_mlx = self.prepared_adapter(["x", "y"])
         config = make_config(

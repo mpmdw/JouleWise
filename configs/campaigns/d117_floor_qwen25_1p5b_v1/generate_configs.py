@@ -27,6 +27,11 @@ from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
     validate_extraction_spec,
 )
+from joulewise.identity_pins import (  # noqa: E402
+    IDENTITY_PIN_DERIVATION_CONTRACT,
+    IDENTITY_PIN_PROJECTION_WORK_ORDER,
+    validate_identity_pin_projection,
+)
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
 )
@@ -100,18 +105,6 @@ EXTERNAL_MANIFEST_SHAS = {
 NEG8_SETTLED_SHA256 = (
     "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
 )
-D124_ESTIMATOR_ID = "d124_two_shared_edge_common_mode.v1"
-D124_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
-D124_SIBLING_ASSUMPTION_ID = (
-    "d124_block_timescale_shared_edges_stationarity_transfer_v1"
-)
-D124_EVIDENCE_RECORD_PATH = (
-    "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
-)
-D124_COVARIANCE_TREATMENT = (
-    "two_shared_edges_plus_bundle_specific_adversarial_terms"
-)
-IDENTITY_PROJECTION_WORK_ORDER = "D117-U11-IDPIN-PROJECTION"
 SUCCESSOR_REGENERATION_RULE = (
     "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
     "(packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded "
@@ -745,36 +738,6 @@ def calibration_basis() -> dict[str, Any]:
     }
 
 
-def common_mode_registration() -> dict[str, Any]:
-    return {
-        "estimator_id": D124_ESTIMATOR_ID,
-        "status": "candidate_pending_floor_commonmode_01",
-        "transfer_assumption": {
-            "assumption_id": D124_ASSUMPTION_ID,
-            "statement": (
-                "Within an ABBA block governed by one calibration bracket, onset and "
-                "offset fiducial terms are shared edges; bundle-specific residual terms "
-                "remain adversarial."
-            ),
-            "evidence": [
-                D124_EVIDENCE_RECORD_PATH,
-                "docs/decision_log.md#d-124",
-            ],
-            "limitation": (
-                "Historical evidence records uncertainty bounds, not realized "
-                "member-level timing errors."
-            ),
-        },
-        "sibling_assumption_cross_reference": {
-            "assumption_id": D124_SIBLING_ASSUMPTION_ID,
-            "shared_gate": "FLOOR-COMMONMODE-01",
-            "shared_evidence_record_path": D124_EVIDENCE_RECORD_PATH,
-        },
-        "covariance_treatment": D124_COVARIANCE_TREATMENT,
-        "never_zero_allowance_application_count": 1,
-    }
-
-
 def build_extraction_spec(
     decode_definition: dict[str, Any],
     prefill_definition: dict[str, Any],
@@ -849,8 +812,6 @@ def build_extraction_spec(
             "condition_family_id": family_id,
             "condition_family_definitions": {"A": family, "B": dict(family)},
             "expected_n": N,
-            "estimator": D124_ESTIMATOR_ID,
-            "estimator_registration": common_mode_registration(),
             "order_manifest": order_binding,
             "evidence_root_id": EVIDENCE_ROOT_ID,
             "member_config_sha256": member_hashes(comparative_ids),
@@ -970,6 +931,7 @@ def build_producer_contract(
     order_manifest_sha256: str,
     spec_sha256: str,
     config_rows: list[dict[str, str]],
+    identity_config_inventory: list[dict[str, str]],
 ) -> dict[str, Any]:
     config_set_sha256 = canonical_sha256(config_rows)
     roles = [
@@ -1039,23 +1001,61 @@ def build_producer_contract(
         },
         "config_set_sha256": config_set_sha256,
         "roles": roles,
-        "identity_pin_projection": {
-            "work_order": IDENTITY_PROJECTION_WORK_ORDER,
+        "identity_pin_projection": validate_identity_pin_projection({
+            "work_order": IDENTITY_PIN_PROJECTION_WORK_ORDER,
             "mode": "derive_never_operator_enter",
+            "state": "unprojected",
             "required_before_arm": True,
-            "expected_config_set_sha256": config_set_sha256,
-            "projected_pins": {
-                "model_artifact_sha256": None,
-                "runtime_identity_sha256": None,
-                "config_set_sha256": None,
-            },
+            "derivation_contract": IDENTITY_PIN_DERIVATION_CONTRACT,
+            "identity_units": [
+                {
+                    "identity_unit_id": "alpha",
+                    "producer_plan_reference": {
+                        "plan_id": PLAN_ID,
+                        "path": (PACK_REL / "calibration_plan.json").as_posix(),
+                    },
+                    "consumer_bindings": [
+                        {
+                            "arm": "A",
+                            "family": "sw-decode-a-qwen25-1p5b",
+                            "measurement_arm": "decode",
+                        },
+                        {
+                            "arm": "A",
+                            "family": PREFILL_FAMILY_ID,
+                            "measurement_arm": "prefill_p128",
+                        },
+                    ],
+                    "declared_identity": {
+                        "hardware_target": HARDWARE["id"],
+                        "runtime_backend": HARDWARE["runtime_backend"],
+                        "telemetry_backend": HARDWARE["telemetry_backend"],
+                        "model_name": MODEL["name"],
+                        "model_source": MODEL["source"],
+                        "model_revision": MODEL["revision"],
+                        "quantization": {**QUANTIZATION, "group_size": None},
+                        "workload_profile": {
+                            **WORKLOAD,
+                            "prompt_text": None,
+                            "dataset_ref": None,
+                        },
+                    },
+                    "config_inventory": identity_config_inventory,
+                    "model_runtime_config": {
+                        "model_artifact_sha256": None,
+                        "runtime_identity_sha256": None,
+                        "config_set_sha256": None,
+                    },
+                }
+            ],
             "projection_receipt": None,
-        },
+            "supersedes": [],
+        }),
         "postcollection": {"status": "unresolved"},
         "dependencies": [
             "D117-POSTCOLLECTION-TRUST-01 before mint",
             "D117-U2 successor engine before arm",
-            f"{IDENTITY_PROJECTION_WORK_ORDER} before arm",
+            f"{IDENTITY_PIN_PROJECTION_WORK_ORDER} before arm",
             "shared-bundle unique-physical-union mint order repair before mint",
         ],
     }
@@ -1075,7 +1075,6 @@ def readme_bytes() -> bytes:
         "finalized pre/post bracket session. Actual receipt bytes and the absolute "
         "terminal sequence remain arm-time evidence. Arm-time identities require "
         "U11 projection, "
-        "the D-124 estimator identity still requires implementation confirmation, "
         "and lead review must complete before any later release step.\n\n"
         f"{SUCCESSOR_REGENERATION_RULE}\n\n"
         "Generate or verify with:\n\n"
@@ -1134,7 +1133,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
-        "authorities": ["D-116", "D-117", "D-123", "D-124"],
+        "authorities": ["D-116", "D-117", "D-123"],
         "stack_scope": {
             "hardware_target": HARDWARE["id"],
             "runtime_backend": HARDWARE["runtime_backend"],
@@ -1172,7 +1171,6 @@ def generate(output_root: Path) -> tuple[int, str, str]:
                 "metric": "phase_energy_j.decode",
                 "condition_family_id": DECODE_FAMILY_ID,
                 "ordered_blocks": canonical_blocks,
-                "estimator": D124_ESTIMATOR_ID,
             },
             {
                 "cell_id": "d117-df-ph-prefill-p128-qwen25-1p5b-absolute",
@@ -1188,7 +1186,6 @@ def generate(output_root: Path) -> tuple[int, str, str]:
                 "metric": "phase_energy_j.prefill",
                 "condition_family_id": PREFILL_FAMILY_ID,
                 "ordered_blocks": canonical_blocks,
-                "estimator": D124_ESTIMATOR_ID,
             },
         ],
         "reported_energy_cells": reported_cells,
@@ -1320,6 +1317,18 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         root_manifest_sha256,
         spec_sha256,
         config_rows,
+        sorted(
+            [
+                {
+                    "path": Path(row["config_path"])
+                    .relative_to(PACK_REL)
+                    .as_posix(),
+                    "sha256": row["config_sha256"],
+                }
+                for row in science_rows
+            ],
+            key=lambda row: row["path"],
+        ),
     )
     producer_raw = write_json(output_root, PACK_REL / "producer_contract.json", producer)
     producer_sha256 = sha256_bytes(producer_raw)
@@ -1375,8 +1384,10 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "arming_prerequisites": [
                 {"id": "D117-U2", "status": "required_before_arm"},
                 {"id": "D117-POSTCOLLECTION-TRUST-01", "status": "required_before_mint"},
-                {"id": IDENTITY_PROJECTION_WORK_ORDER, "status": "required_before_arm"},
-                {"id": "FLOOR-COMMONMODE-01", "status": "implementation_identity_required_before_release"},
+                {
+                    "id": IDENTITY_PIN_PROJECTION_WORK_ORDER,
+                    "status": "required_before_arm",
+                },
             ],
         },
         "condition_families": [

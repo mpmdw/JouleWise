@@ -31,7 +31,7 @@ from joulewise.interfaces import (
 from joulewise.provenance import (
     PROMPT_TOKEN_IDS_HASH_DOMAIN,
     fixed_budget_outcome_name,
-    folded_model_artifact_sha256,
+    model_artifact_identity,
     normalized_sha256_hex,
     output_policy,
     prompt_provenance,
@@ -161,6 +161,33 @@ class MlxRuntimeAdapter:
             metadata["model_config_eos_token_id"] = self._model_config.get("eos_token_id")
         metadata["memory_snapshots"] = [self._memory_snapshot("prepare_end")]
         return AdapterResult(ok=True, metadata=metadata)
+
+    def identity_projection_metadata(
+        self, config: BenchmarkConfig
+    ) -> dict[str, Any]:
+        """Probe runtime-owned identity fields after a successful prepare."""
+
+        if self._mlx_lm is None or self._model is None or self._tokenizer is None:
+            raise AdapterFailure(
+                FailureReason.RUNTIME_UNAVAILABLE,
+                "runtime backend 'mlx' identity projection called before prepare",
+            )
+        _, sampler = self._sampler_for_generation()
+        return {
+            "model": {
+                "name": config.model.name,
+                "source": config.model.source,
+                "revision": config.model.revision,
+                "artifact_identity": self._model_artifact_identity,
+            },
+            "tokenizer": _tokenizer_identity(self._tokenizer, config),
+            "sampler": sampler,
+            "output_policy": {
+                "name": "fixed_budget_exact",
+                "requested_tokens": config.workload_profile.output_tokens,
+                "stop_condition": "requested_tokens_emitted",
+            },
+        }
 
     def warmup(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -1017,82 +1044,6 @@ def _synthetic_prompt_tokens(tokenizer: Any, target_tokens: int) -> list[int]:
     while len(repeated) < target_tokens:
         repeated.extend(seed)
     return repeated[:target_tokens]
-
-
-def model_artifact_identity(source: str | None) -> dict[str, Any]:
-    if not source:
-        return {"status": "unavailable", "reason": "model source is not configured"}
-    path = Path(source).expanduser()
-    if path.is_file():
-        try:
-            digest = sha256_hex(path.read_bytes())
-        except OSError as exc:
-            return {
-                "status": "unavailable",
-                "reason": f"cannot read model weight file: {exc}",
-                "path": str(path),
-            }
-        return {
-            "status": "ok",
-            "kind": "single_file",
-            "algorithm": "sha256",
-            "sha256": digest,
-            "path": str(path),
-        }
-    if path.is_dir():
-        file_hashes: dict[str, str] = {}
-        try:
-            children = sorted(path.rglob("*"))
-        except OSError as exc:
-            return {
-                "status": "unavailable",
-                "reason": f"cannot enumerate model directory: {exc}",
-                "root": str(path),
-            }
-        for child in children:
-            if child.is_file() and _is_model_weight_file(child):
-                try:
-                    file_hashes[child.relative_to(path).as_posix()] = sha256_hex(
-                        child.read_bytes()
-                    )
-                except OSError as exc:
-                    return {
-                        "status": "unavailable",
-                        "reason": f"cannot read model weight file: {exc}",
-                        "path": str(child),
-                    }
-        if file_hashes:
-            return {
-                "status": "ok",
-                "kind": "file_set",
-                "algorithm": "sha256",
-                "folded_sha256": folded_model_artifact_sha256(file_hashes),
-                "files": file_hashes,
-                "root": str(path),
-            }
-        return {
-            "status": "unavailable",
-            "reason": "no recognized model weight files found",
-            "root": str(path),
-        }
-    return {
-        "status": "unavailable",
-        "reason": "model source is not a local file or directory",
-        "source": source,
-    }
-
-
-def _is_model_weight_file(path: Path) -> bool:
-    return path.name.endswith(
-        (
-            ".safetensors",
-            ".bin",
-            ".pt",
-            ".pth",
-            ".npz",
-            ".gguf",
-        )
-    )
 
 
 def _tokenizer_eos_ids(tokenizer: Any) -> set[int] | None:

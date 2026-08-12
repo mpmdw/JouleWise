@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import datetime
+import errno
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -26,6 +32,7 @@ from joulewise.calibration_exits import (
     WitnessClass,
 )
 import joulewise.calibration_ledger as ledger_module
+from scripts import validate_powermetrics_fiducial as validation_script
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
     GOVERNED_ARTIFACTS,
@@ -35,21 +42,33 @@ from joulewise.calibration_ledger import (
     canonical_json_bytes,
 )
 from tests.owned_process_runner import (
+    AuthenticatedProgress,
     OwnedProcessResult,
     OwnedPublicProcessRunner,
     PublicExecutionEvidence,
+    assert_no_owned_fake_sampler_survivors,
     assert_no_owned_process_group_survivors,
+    assert_no_owned_writer_survivors,
     next_execution_order,
+    owned_process_group_survivors,
+    owned_thread_survivors,
 )
 from tests.receipt_corpus import ReceiptCorpus
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RECOVERY_SCRIPT = REPO_ROOT / "scripts" / "recover_calibration_ledger.py"
+FIXTURE_ROOT = REPO_ROOT / "tests" / "calibration_exits_fixtures"
+GIT_MAINTENANCE_CONTROLS = (
+    ("maintenance.auto", "false"),
+    ("gc.auto", "0"),
+    ("maintenance.autoDetach", "false"),
+    ("gc.autoDetach", "false"),
+)
 
 
 def tearDownModule() -> None:
-    assert_no_owned_process_group_survivors()
+    assert_no_owned_writer_survivors()
 
 
 @dataclass(frozen=True)
@@ -71,11 +90,146 @@ class PreservationEvidence:
     observed_code: str
 
 
-_PRESERVATION_EVIDENCE: dict[RefusalCode, PreservationEvidence] = {}
-_PUBLIC_EXECUTION_EVIDENCE: dict[
-    RefusalCode, list[PublicExecutionEvidence]
-] = {}
-_EXECUTED_DURABLE_WITNESS_CODES: set[RefusalCode] = set()
+@dataclass(frozen=True)
+class WitnessResult:
+    """Immutable evidence cached only after the witness sandbox closes."""
+
+    code: RefusalCode
+    preservation: PreservationEvidence | None
+    public_executions: tuple[PublicExecutionEvidence, ...]
+
+
+_WITNESS_RESULTS: dict[RefusalCode, WitnessResult] = {}
+
+
+@dataclass(frozen=True)
+class CleanupDiagnostic:
+    """One post-quiescence cleanup race, retained even after removal."""
+
+    residual_path: str
+    residual_snapshot: tuple[str, ...]
+    writers: tuple[str, ...]
+
+
+class WitnessSandbox:
+    """Sole owner of one witness root and every writer created in it."""
+
+    _CLEANUP_BACKOFF_S = (0.01, 0.05, 0.25, 1.0)
+
+    def __init__(self) -> None:
+        self.root = Path(tempfile.mkdtemp(prefix="joulewise-exit-witness-")).resolve()
+        self.repo = self.root / "repo"
+        self.runner = OwnedPublicProcessRunner(self.root)
+        self.cleanup_diagnostics: list[CleanupDiagnostic] = []
+        self.closed = False
+
+    def start_owned_writer_thread(
+        self,
+        target: Callable[[threading.Event], None],
+        *,
+        label: str,
+    ) -> threading.Thread:
+        """Start a thread whose stop/join lifecycle precedes root cleanup."""
+
+        return self.runner.start_owned_thread(target, label=label)
+
+    def _residual_snapshot(self) -> tuple[str, ...]:
+        if not self.root.exists():
+            return ()
+        residual: list[str] = []
+        try:
+            for path in self.root.rglob("*"):
+                try:
+                    residual.append(str(path.relative_to(self.root)))
+                except ValueError:
+                    residual.append(str(path))
+                if len(residual) >= 64:
+                    residual.append("<snapshot-truncated>")
+                    break
+        except OSError as exc:
+            residual.append(f"<snapshot-error:{type(exc).__name__}:{exc}>")
+        return tuple(sorted(residual))
+
+    def _residual_writers(self, failed_path: Path) -> tuple[str, ...]:
+        """Best-effort PID/command attribution for a residual path."""
+
+        lsof = shutil.which("lsof")
+        if lsof is None:
+            return ()
+        try:
+            completed = subprocess.run(
+                [lsof, "-F", "pc", "+D", str(failed_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=1.0,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ()
+        writers: list[str] = []
+        pid: str | None = None
+        for line in completed.stdout.splitlines():
+            if line.startswith("p") and line[1:].isdigit():
+                pid = line[1:]
+            elif line.startswith("c") and pid is not None:
+                writers.append(f"pid={pid} command={line[1:] or '<unknown>'}")
+        return tuple(writers)
+
+    def _cleanup_root(self) -> None:
+        first_error: OSError | None = None
+        for attempt in range(len(self._CLEANUP_BACKOFF_S) + 1):
+            try:
+                shutil.rmtree(self.root)
+                break
+            except FileNotFoundError:
+                break
+            except OSError as exc:
+                if exc.errno != errno.ENOTEMPTY or exc.filename is None:
+                    raise
+                reported_path = Path(exc.filename)
+                failed_path = (
+                    reported_path.resolve(strict=False)
+                    if reported_path.is_absolute()
+                    else (self.root / reported_path).resolve(strict=False)
+                )
+                try:
+                    failed_path.relative_to(self.root)
+                except ValueError:
+                    raise exc
+                if first_error is None:
+                    first_error = exc
+                self.cleanup_diagnostics.append(
+                    CleanupDiagnostic(
+                        residual_path=str(failed_path),
+                        residual_snapshot=self._residual_snapshot(),
+                        writers=self._residual_writers(failed_path),
+                    )
+                )
+                if attempt >= len(self._CLEANUP_BACKOFF_S):
+                    break
+                time.sleep(self._CLEANUP_BACKOFF_S[attempt])
+        if self.cleanup_diagnostics:
+            diagnostic = self.cleanup_diagnostics[0]
+            writer = ", ".join(diagnostic.writers) or "undetermined"
+            removed = not self.root.exists()
+            raise AssertionError(
+                "diagnostic-fatal post-quiescence ENOTEMPTY; "
+                f"residual_path={diagnostic.residual_path}; writer={writer}; "
+                f"best_effort_removed={removed}; snapshots="
+                f"{[item.residual_snapshot for item in self.cleanup_diagnostics]!r}"
+            ) from first_error
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        # Complete writer quiescence is proved before the only permitted retry class.
+        self.runner.close()
+        assert_no_owned_fake_sampler_survivors()
+        try:
+            self._cleanup_root()
+        finally:
+            self.closed = not self.root.exists()
 
 
 class PreservationGuard:
@@ -123,7 +277,7 @@ class PreservationGuard:
             f"{self.code.value} changed durable fingerprint inside refusal handler",
         )
         self.witness.assertEqual(evidence.observed_code, self.code.value)
-        _PRESERVATION_EVIDENCE[self.code] = evidence
+        self.witness.preservation_evidence = evidence
 
 
 INTERNAL_UNIT_CODES = frozenset(
@@ -214,8 +368,8 @@ def _fresh_cli_env() -> dict[str, str]:
     }
 
 
-def _install_fake_writer_dependencies(repo: Path) -> Path:
-    """Install process-level external dependencies; production code stays real."""
+def _install_wall_derived_sampler_mutation(repo: Path) -> Path:
+    """Install the rejected elapsed-wall fixture for the P3 mutation check."""
 
     mlx = repo / "mlx"
     mlx.mkdir(exist_ok=True)
@@ -397,7 +551,26 @@ with output.open('wb', buffering=0) as handle:
     return sampler
 
 
+def _install_fake_writer_dependencies(repo: Path) -> Path:
+    """Install bounded process fixtures while keeping the production CLI real."""
+
+    mlx = repo / "mlx"
+    mlx.mkdir(exist_ok=True)
+    (mlx / "__init__.py").write_text("", encoding="utf-8")
+    shutil.copy2(FIXTURE_ROOT / "fake_mlx_core.py", mlx / "core.py")
+    fixture_root = repo / "writer-fixtures"
+    fixture_root.mkdir(exist_ok=True)
+    sampler = fixture_root / "fake_sampler.py"
+    shutil.copy2(FIXTURE_ROOT / "fake_sampler.py", sampler)
+    sampler.chmod(0o755)
+    return sampler
+
+
 class RefusalInventoryTests(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls) -> None:
+        assert_no_owned_fake_sampler_survivors()
+
     def test_generated_contract_projection_and_runbook_anchors_are_fresh(self) -> None:
         contract = (
             REPO_ROOT / "docs" / "contracts" / "calibration_ledger_append.md"
@@ -460,15 +633,10 @@ class RefusalInventoryTests(unittest.TestCase):
                 for record in REFUSAL_INVENTORY
                 if record.witness_class is witness_class
             }
-            already_executed = expected & _EXECUTED_DURABLE_WITNESS_CODES
-            executed = set(already_executed)
-            executed.update(
-                PublicGovernedExitWitnessTests.execute_cases(
-                    code
-                    for code in discovered
-                    if REFUSAL_BY_CODE[code].witness_class is witness_class
-                    and code not in already_executed
-                )
+            executed = PublicGovernedExitWitnessTests.execute_cases(
+                code
+                for code in discovered
+                if REFUSAL_BY_CODE[code].witness_class is witness_class
             )
             with self.subTest(witness_class=witness_class.value):
                 self.assertEqual(expected, executed)
@@ -508,16 +676,16 @@ class RefusalInventoryTests(unittest.TestCase):
             if record.witness_class is not WitnessClass.INTERNAL_INVARIANT
             and record.terminal_result is TerminalResult.NIGHT_STOPPED_PRESERVED
         }
-        already_executed = expected & set(_PRESERVATION_EVIDENCE)
-        executed = set(already_executed)
-        executed.update(
-            PublicGovernedExitWitnessTests.execute_cases(
-                expected - already_executed
-            )
-        )
+        executed = PublicGovernedExitWitnessTests.execute_cases(expected)
         self.assertEqual(executed, expected)
-        self.assertEqual(set(_PRESERVATION_EVIDENCE), expected)
-        for code, evidence in _PRESERVATION_EVIDENCE.items():
+        preserved = {
+            code: result.preservation
+            for code, result in _WITNESS_RESULTS.items()
+            if result.preservation is not None
+        }
+        self.assertEqual(set(preserved), expected)
+        for code, evidence in preserved.items():
+            assert evidence is not None
             with self.subTest(code=code.value):
                 self.assertEqual(evidence.observed_code, code.value)
                 self.assertLess(evidence.before_order, evidence.public_process_start_order)
@@ -537,10 +705,12 @@ class RefusalInventoryTests(unittest.TestCase):
             for record in REFUSAL_INVENTORY
             if record.exit_id == "correct-preflight"
         }
-        _PUBLIC_EXECUTION_EVIDENCE.clear()
         executed = PublicGovernedExitWitnessTests.execute_cases(expected)
         self.assertEqual(executed, expected)
-        self.assertEqual(set(_PUBLIC_EXECUTION_EVIDENCE), expected)
+        public_results = {
+            code: _WITNESS_RESULTS[code].public_executions for code in expected
+        }
+        self.assertEqual(set(public_results), expected)
         rederive_codes = {
             RefusalCode.WRITER_BRACKET_REDERIVE_CONFLICT,
             RefusalCode.FROZEN_PROTOCOL_INVALID,
@@ -553,7 +723,7 @@ class RefusalInventoryTests(unittest.TestCase):
                 record = REFUSAL_BY_CODE[code]
                 self.assertTrue(record.correction_surface)
                 self.assertTrue(record.corrected_success)
-                evidence = _PUBLIC_EXECUTION_EVIDENCE[code]
+                evidence = public_results[code]
                 expected_count = 2 if code in rederive_codes else 1
                 self.assertEqual(
                     len(evidence),
@@ -966,13 +1136,802 @@ class RefusalInventoryTests(unittest.TestCase):
         self.assertEqual(analyze_paths(paths), [])
 
 
+class CalibrationExitReliabilityTests(unittest.TestCase):
+    def _git(self, repo: Path, *args: str, env=None) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+
+    def _configure_fixture_repo(self, sandbox: WitnessSandbox) -> None:
+        sandbox.repo.mkdir()
+        self._git(sandbox.repo, "init", "-q")
+        self._git(sandbox.repo, "config", "user.email", "tests@joulewise.invalid")
+        self._git(sandbox.repo, "config", "user.name", "JouleWise tests")
+        for key, value in GIT_MAINTENANCE_CONTROLS:
+            self._git(sandbox.repo, "config", "--local", key, value)
+
+    def test_minimal_git_create_commit_cleanup_cycles_are_bounded(self) -> None:
+        cycles = int(os.environ.get("JW_CALEXITS_GIT_CYCLES", "4"))
+        self.assertGreater(cycles, 0)
+        retries = 0
+        longest_cleanup_s = 0.0
+        for index in range(cycles):
+            sandbox = WitnessSandbox()
+            try:
+                self._configure_fixture_repo(sandbox)
+                global_config = sandbox.root / "aggressive-global.gitconfig"
+                for key, value in (
+                    ("maintenance.auto", "true"),
+                    ("maintenance.autoDetach", "true"),
+                    ("maintenance.strategy", "incremental"),
+                    ("maintenance.loose-objects.auto", "1"),
+                    ("gc.auto", "1"),
+                    ("gc.autoDetach", "true"),
+                ):
+                    subprocess.run(
+                        ["git", "config", "-f", str(global_config), key, value],
+                        check=True,
+                    )
+                aggressive_env = dict(os.environ) | {
+                    "GIT_CONFIG_GLOBAL": str(global_config)
+                }
+                (sandbox.repo / "payload").write_text(str(index), encoding="utf-8")
+                self._git(sandbox.repo, "add", ".", env=aggressive_env)
+                self._git(
+                    sandbox.repo,
+                    "commit",
+                    "-qm",
+                    f"cycle-{index}",
+                    env=aggressive_env,
+                )
+            finally:
+                started = time.monotonic()
+                sandbox.close()
+                longest_cleanup_s = max(
+                    longest_cleanup_s, time.monotonic() - started
+                )
+                retries += len(sandbox.cleanup_diagnostics)
+        self.assertEqual(retries, 0)
+        self.assertLess(longest_cleanup_s, 2.0)
+        print(
+            f"P1_CYCLES={cycles} RAW_ENOTEMPTY=0 RETRY_EXHAUSTION=0 "
+            f"MAX_CLEANUP_S={longest_cleanup_s:.6f}",
+            flush=True,
+        )
+
+    def test_delayed_object_writers_never_escape_bounded_cleanup(self) -> None:
+        delays_ms = (0, 10, 100, 500)
+        total_retries = 0
+        for delay_ms in delays_ms:
+            with self.subTest(delay_ms=delay_ms):
+                sandbox = WitnessSandbox()
+                objects = sandbox.repo / ".git" / "objects"
+                leaf = objects / "aa"
+                leaf.mkdir(parents=True)
+                stopped = threading.Event()
+                stop_observed = threading.Event()
+
+                def inject_writer(stop_requested: threading.Event) -> None:
+                    # Deliberately finish the already-scheduled write even when
+                    # stop is requested.  The pre-fix sandbox entered rmtree
+                    # here and reproduced the loaded run-1 .git/objects race;
+                    # the ownership registry must join it first.
+                    time.sleep(delay_ms / 1000.0)
+                    deadline = time.monotonic() + 0.05
+                    index = 0
+                    while time.monotonic() < deadline:
+                        if stop_requested.is_set():
+                            stop_observed.set()
+                        try:
+                            leaf.mkdir(exist_ok=True)
+                            (leaf / f"delayed-{index}").write_bytes(b"object")
+                        except OSError:
+                            break
+                        index += 1
+                    stopped.set()
+
+                writer = sandbox.start_owned_writer_thread(
+                    inject_writer,
+                    label=f"delayed-git-object-writer-{delay_ms}ms",
+                )
+                if delay_ms == max(delays_ms):
+                    self.assertIn(
+                        f"delayed-git-object-writer-{delay_ms}ms",
+                        owned_thread_survivors(),
+                    )
+                real_rmtree = shutil.rmtree
+
+                def rmtree_after_quiescence(path):
+                    self.assertFalse(
+                        writer.is_alive(),
+                        "rmtree began before the owned delayed writer joined",
+                    )
+                    return real_rmtree(path)
+
+                started = time.monotonic()
+                with mock.patch.object(
+                    shutil,
+                    "rmtree",
+                    side_effect=rmtree_after_quiescence,
+                ):
+                    sandbox.close()
+                self.assertTrue(stopped.is_set())
+                self.assertTrue(stop_observed.is_set())
+                self.assertFalse(writer.is_alive())
+                self.assertEqual(owned_thread_survivors(), ())
+                self.assertFalse(sandbox.root.exists())
+                self.assertLess(time.monotonic() - started, 2.0)
+                total_retries += len(sandbox.cleanup_diagnostics)
+        print(
+            f"P1_DELAYED_WRITERS={len(delays_ms)} DELAYS_MS=0,10,100,500 "
+            f"BOUNDED_RETRIES={total_retries} THREAD_REGISTRY_EMPTY=1 ESCAPED=0",
+            flush=True,
+        )
+
+    def test_cleanup_retry_is_diagnostic_fatal_after_best_effort_removal(self) -> None:
+        sandbox = WitnessSandbox()
+        sandbox.repo.mkdir()
+        residual = sandbox.repo / ".git" / "objects" / "aa"
+        residual.mkdir(parents=True)
+        (residual / "object").write_bytes(b"race")
+        real_rmtree = shutil.rmtree
+        attempts = 0
+
+        def injected_rmtree(path):
+            nonlocal attempts
+            attempts += 1
+            if attempts <= len(WitnessSandbox._CLEANUP_BACKOFF_S):
+                raise OSError(errno.ENOTEMPTY, "Directory not empty", residual)
+            return real_rmtree(path)
+
+        started = time.monotonic()
+        with (
+            mock.patch.object(shutil, "rmtree", side_effect=injected_rmtree),
+            mock.patch.object(
+                sandbox,
+                "_residual_writers",
+                return_value=("pid=4242 command=git",),
+            ),
+            self.assertRaisesRegex(
+                AssertionError,
+                r"diagnostic-fatal.*residual_path=.*objects/aa; "
+                r"writer=pid=4242 command=git; best_effort_removed=True",
+            ),
+        ):
+            sandbox.close()
+        elapsed = time.monotonic() - started
+        self.assertEqual(attempts, 5)
+        self.assertEqual(len(sandbox.cleanup_diagnostics), 4)
+        self.assertTrue(
+            all(
+                "repo/.git/objects/aa/object" in diagnostic.residual_snapshot
+                for diagnostic in sandbox.cleanup_diagnostics
+            )
+        )
+        self.assertFalse(sandbox.root.exists())
+        self.assertTrue(sandbox.closed)
+        self.assertLess(elapsed, 2.0)
+
+        outside = WitnessSandbox()
+        outside.repo.mkdir()
+        with mock.patch.object(
+            shutil,
+            "rmtree",
+            side_effect=OSError(errno.ENOTEMPTY, "Directory not empty", "/tmp/not-owned"),
+        ) as refused_retry:
+            with self.assertRaises(OSError):
+                outside.close()
+        refused_retry.assert_called_once()
+        real_rmtree(outside.root)
+
+    def test_forced_auto_maintenance_mutation_reproduces_cleanup_race(self) -> None:
+        sandbox = WitnessSandbox()
+        maintenance_pid: int | None = None
+        raw_enotempty: OSError | None = None
+        cleanup_diagnostic: AssertionError | None = None
+        live_object_writer_pid: int | None = None
+        try:
+            self._configure_fixture_repo(sandbox)
+            global_config = sandbox.root / "aggressive-global.gitconfig"
+            for key, value in (
+                ("maintenance.auto", "true"),
+                ("maintenance.autoDetach", "true"),
+                ("maintenance.strategy", "incremental"),
+                ("maintenance.gc.enabled", "false"),
+                ("maintenance.loose-objects.enabled", "true"),
+                ("maintenance.incremental-repack.enabled", "true"),
+                ("maintenance.loose-objects.auto", "1"),
+                ("gc.auto", "1"),
+                ("gc.autoDetach", "true"),
+            ):
+                subprocess.run(
+                    ["git", "config", "-f", str(global_config), key, value],
+                    check=True,
+                )
+            execution_env = dict(os.environ)
+            execution_env["GIT_CONFIG_GLOBAL"] = str(global_config)
+
+            for index in range(1500):
+                (sandbox.repo / f"controlled-{index}").write_text(
+                    str(index), encoding="utf-8"
+                )
+            controlled_trace = sandbox.root / "controlled-trace.jsonl"
+            controlled_env = execution_env | {"GIT_TRACE2_EVENT": str(controlled_trace)}
+            self._git(sandbox.repo, "add", ".", env=controlled_env)
+            self._git(
+                sandbox.repo,
+                "commit",
+                "-qm",
+                "maintenance-controlled",
+                env=controlled_env,
+            )
+            controlled_events = [
+                json.loads(line)
+                for line in controlled_trace.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertFalse(
+                any(
+                    event.get("event") == "child_start"
+                    and "maintenance" in event.get("argv", ())
+                    for event in controlled_events
+                )
+            )
+
+            # Required mutation: remove exactly the local controls.  The same
+            # aggressive global settings must now launch detached maintenance.
+            for key, _value in GIT_MAINTENANCE_CONTROLS:
+                self._git(sandbox.repo, "config", "--local", "--unset-all", key)
+            (sandbox.repo / "mutation").write_text("race", encoding="utf-8")
+            with tempfile.TemporaryDirectory(
+                prefix="joulewise-maintenance-trace-"
+            ) as trace_tmp:
+                mutation_trace = Path(trace_tmp) / "mutation-trace.jsonl"
+                mutation_env = execution_env | {
+                    "GIT_TRACE2_EVENT": str(mutation_trace)
+                }
+                self._git(sandbox.repo, "add", ".", env=mutation_env)
+                self._git(
+                    sandbox.repo,
+                    "commit",
+                    "-qm",
+                    "maintenance-control-removal-mutation",
+                    env=mutation_env,
+                )
+                # The target mutation is the immediate raw teardown attempted
+                # as soon as the commit returns, before trace parsing adds
+                # enough delay for the detached object writer to disappear.
+                cleanup_started_s = time.time()
+                try:
+                    shutil.rmtree(sandbox.root)
+                except OSError as exc:
+                    raw_enotempty = exc
+                cleanup_finished_s = time.time()
+                mutation_events = [
+                    json.loads(line)
+                    for line in mutation_trace.read_text(
+                        encoding="utf-8"
+                    ).splitlines()
+                ]
+            detached_starts = [
+                event
+                for event in mutation_events
+                if event.get("event") == "child_start"
+                and event.get("argv", ())[:2] == ["git", "maintenance"]
+                and "--detach" in event.get("argv", ())
+            ]
+            self.assertTrue(detached_starts, mutation_events[-20:])
+            child_id = detached_starts[-1]["child_id"]
+            exits = [
+                event
+                for event in mutation_events
+                if event.get("event") == "child_exit"
+                and event.get("child_id") == child_id
+                and isinstance(event.get("pid"), int)
+            ]
+            self.assertTrue(exits, mutation_events[-20:])
+            maintenance_pid = exits[-1]["pid"]
+            self.assertGreater(maintenance_pid, 0)
+
+            # A raw ENOTEMPTY is sufficient.  On a faster filesystem, accept
+            # only stronger alternative evidence: the exact pack-objects
+            # writer's traced lifetime overlapped the synchronous rmtree call,
+            # followed by a child_exit PID that is explicitly proved dead.
+            object_writer_starts = [
+                event
+                for event in mutation_events
+                if event.get("event") == "child_start"
+                and event.get("argv", ())[:2] == ["git", "pack-objects"]
+                and any(
+                    ".git/objects/pack/" in str(argument)
+                    for argument in event.get("argv", ())
+                )
+                and cleanup_started_s
+                <= datetime.fromisoformat(
+                    str(event["time"]).replace("Z", "+00:00")
+                ).timestamp()
+                <= cleanup_finished_s
+            ]
+            if object_writer_starts:
+                writer_start = object_writer_starts[-1]
+                writer_exits = [
+                    event
+                    for event in mutation_events
+                    if event.get("event") == "child_exit"
+                    and event.get("sid") == writer_start.get("sid")
+                    and event.get("child_id") == writer_start.get("child_id")
+                    and isinstance(event.get("pid"), int)
+                ]
+                self.assertTrue(writer_exits, mutation_events[-20:])
+                live_object_writer_pid = writer_exits[-1]["pid"]
+                deadline = time.monotonic() + 1.0
+                while True:
+                    try:
+                        os.kill(live_object_writer_pid, 0)
+                    except ProcessLookupError:
+                        break
+                    if time.monotonic() >= deadline:
+                        os.kill(live_object_writer_pid, signal.SIGKILL)
+                        self.fail(
+                            "detached object-store writer required explicit SIGKILL"
+                        )
+                    time.sleep(0.01)
+        finally:
+            if sandbox.root.exists():
+                try:
+                    sandbox.close()
+                except AssertionError as exc:
+                    cleanup_diagnostic = exc
+                    if sandbox.root.exists():
+                        raise
+            else:
+                sandbox.closed = True
+        self.assertTrue(
+            raw_enotempty is not None or live_object_writer_pid is not None,
+            "controls-removal mutation reproduced neither raw ENOTEMPTY nor "
+            "a live detached pack-objects writer overlapping cleanup",
+        )
+        if raw_enotempty is not None:
+            self.assertEqual(raw_enotempty.errno, errno.ENOTEMPTY)
+        self.assertFalse(sandbox.root.exists())
+        print(
+            f"FORCED_MAINTENANCE_DETACHED_PID={maintenance_pid} "
+            f"RAW_ENOTEMPTY={getattr(raw_enotempty, 'errno', 0)} "
+            f"LIVE_OBJECT_WRITER_PID={live_object_writer_pid or 0} "
+            f"FATAL_RETRY_DIAGNOSTIC={int(cleanup_diagnostic is not None)} "
+            "CONTROLS_MUTATION=TARGET_REPRODUCED",
+            flush=True,
+        )
+
+    def test_process_ownership_cycles_reach_esrch_and_empty_registry(self) -> None:
+        cycles = int(os.environ.get("JW_CALEXITS_OWNERSHIP_CYCLES", "4"))
+        self.assertGreater(cycles, 0)
+        timeout_cycles = 0
+        exception_cycles = 0
+        for index in range(cycles):
+            sandbox = WitnessSandbox()
+            sandbox.repo.mkdir()
+            ready = sandbox.root / "ready.json"
+            entry_point = sandbox.repo / "ownership_cycle.py"
+            entry_point.write_text(
+                "\n".join(
+                    (
+                        "import json, os, signal, subprocess, sys, time",
+                        "child = subprocess.Popen([sys.executable, '-c', "
+                        "'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)'])",
+                        f"open({str(ready)!r}, 'w').write(json.dumps({{'parent': os.getpid(), 'child': child.pid}}))",
+                        "print('READY', flush=True)",
+                        "time.sleep(60)",
+                    )
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            if index % 2 == 0:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    sandbox.runner.run(
+                        [sys.executable, entry_point],
+                        cwd=sandbox.repo,
+                        env=_fresh_cli_env(),
+                        timeout=0.05,
+                        readiness_path=ready,
+                        readiness_timeout_s=2.0,
+                    )
+                timeout_cycles += 1
+                identities = json.loads(ready.read_text(encoding="utf-8"))
+                for pid in identities.values():
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(int(pid), 0)
+            else:
+                process = sandbox.runner.start_owned(
+                    [sys.executable, entry_point],
+                    cwd=sandbox.repo,
+                    env=_fresh_cli_env(),
+                    label=f"exception-holder-cycle-{index}",
+                )
+                assert process.stdout is not None
+                self.assertEqual(process.stdout.readline().strip(), "READY")
+                try:
+                    raise RuntimeError("injected owner exception")
+                except RuntimeError:
+                    exception_cycles += 1
+                finally:
+                    sandbox.close()
+                with self.assertRaises(ProcessLookupError):
+                    os.killpg(process.pid, 0)
+            sandbox.close()
+        self.assertEqual(owned_process_group_survivors(), ())
+        print(
+            f"P2_OWNERSHIP_CYCLES={cycles} TIMEOUTS={timeout_cycles} "
+            f"EXCEPTIONS={exception_cycles} ESRCH={cycles} REGISTRY_EMPTY=1"
+        )
+
+    def _run_event_fixture(self, stop_s: float) -> dict:
+        sandbox = WitnessSandbox()
+        try:
+            custody = sandbox.root / "capture"
+            (custody / "raw").mkdir(parents=True)
+            origin = 1700000000.0
+            events = (
+                (origin + 2.0, "sampling_started"),
+                (origin + 3.0, "pulse_command_on"),
+                (origin + 4.0, "pulse_command_off"),
+                (origin + 5.5, "pulse_command_on"),
+                (origin + 6.5, "pulse_command_off"),
+                (origin + 8.0, "sampling_stopped"),
+            )
+            (custody / "events.jsonl").write_text(
+                "".join(
+                    json.dumps(
+                        {
+                            "timestamp_s": timestamp,
+                            "event_type": event_type,
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n"
+                    for timestamp, event_type in events
+                ),
+                encoding="utf-8",
+            )
+            capture = custody / "raw" / "powermetrics.plist"
+            result_path = sandbox.root / "result.json"
+            env = _fresh_cli_env() | {
+                "JW_FAKE_SAMPLER_MODE": "normal",
+                "JW_FAKE_HW_MODEL": "Mac15,9",
+                "JW_FAKE_OS_BUILD": "25F84",
+                "JW_FAKE_TIME_ORIGIN": str(origin),
+                "JW_FAKE_TIME_SCALE": "1",
+                "JW_FAKE_INITIAL_ENDPOINT": str(origin),
+                "JW_FAKE_SAMPLER_RESULT_PATH": str(result_path),
+            }
+            process = sandbox.runner.start_owned(
+                [sys.executable, FIXTURE_ROOT / "fake_sampler.py", "-o", capture],
+                cwd=sandbox.root,
+                env=env,
+                label=f"event-fixture-stop-{stop_s}",
+            )
+            deadline = time.monotonic() + 2.0
+            while not capture.exists():
+                if time.monotonic() >= deadline:
+                    self.fail("event fixture did not become ready")
+                time.sleep(0.001)
+            if stop_s:
+                os.killpg(process.pid, signal.SIGSTOP)
+                time.sleep(stop_s)
+                os.killpg(process.pid, signal.SIGCONT)
+            time.sleep(0.05)
+            os.killpg(process.pid, signal.SIGTERM)
+            process.communicate(timeout=2.0)
+            # The process exited normally; runner close drops its ESRCH entry.
+            sandbox.runner.close()
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            self.assertLessEqual(payload["record_count"], 2 + 96 * 4)
+            self.assertLess(payload["capture_bytes"], 5_000_000)
+            return payload
+        finally:
+            sandbox.close()
+
+    def test_event_fixture_is_sigstop_invariant_and_wall_mutation_fails(self) -> None:
+        durations = tuple(
+            float(value)
+            for value in os.environ.get(
+                "JW_CALEXITS_SIGSTOP_SECONDS", "0,0.01,0.03"
+            ).split(",")
+        )
+        results = [self._run_event_fixture(duration) for duration in durations]
+        identities = {
+            (
+                result["record_count"],
+                result["capture_sha256"],
+                result["capture_bytes"],
+                result["result"],
+            )
+            for result in results
+        }
+        self.assertEqual(len(identities), 1)
+
+        # The rejected wall-derived generator is retained only as a mutation:
+        # suspension changes its horizon, so the identity predicate fails.
+        mutation_payloads = []
+        for suspension in (0.0, 0.05):
+            sandbox = WitnessSandbox()
+            try:
+                sandbox.repo.mkdir()
+                sampler = _install_wall_derived_sampler_mutation(sandbox.repo)
+                custody = sandbox.repo / "mutation" / "attempt"
+                (custody / "raw").mkdir(parents=True)
+                (custody / "events.jsonl").write_text("", encoding="utf-8")
+                capture = custody / "raw" / "powermetrics.plist"
+                env = _fresh_cli_env() | {
+                    "JW_FAKE_SAMPLER_MODE": "normal",
+                    "JW_FAKE_HW_MODEL": "Mac15,9",
+                    "JW_FAKE_OS_BUILD": "25F84",
+                    "JW_FAKE_TIME_ORIGIN": str(1700000000.0),
+                    "JW_FAKE_TIME_SCALE": "0.025",
+                    "JW_FAKE_SAMPLER_ELAPSED_NS": "200000",
+                }
+                process = sandbox.runner.start_owned(
+                    [sampler, "-o", capture],
+                    cwd=sandbox.repo,
+                    env=env,
+                    label="wall-derived-mutation",
+                )
+                deadline = time.monotonic() + 2.0
+                while not capture.exists() or capture.stat().st_size == 0:
+                    if time.monotonic() >= deadline:
+                        self.fail("wall mutation did not become ready")
+                    time.sleep(0.001)
+                if suspension:
+                    os.killpg(process.pid, signal.SIGSTOP)
+                    time.sleep(suspension)
+                    os.killpg(process.pid, signal.SIGCONT)
+                time.sleep(0.02)
+                os.killpg(process.pid, signal.SIGTERM)
+                process.communicate(timeout=5.0)
+                raw = capture.read_bytes()
+                mutation_payloads.append(
+                    (len(raw.split(b"\0")), hashlib.sha256(raw).hexdigest())
+                )
+            finally:
+                sandbox.close()
+        self.assertNotEqual(mutation_payloads[0], mutation_payloads[1])
+        print(
+            f"P3_SIGSTOP_RUNS={len(durations)} IDENTITY=PASS "
+            "WALL_MUTATION=FAILS_IDENTITY",
+            flush=True,
+        )
+
+
+class SamplerLifecycleHardeningTests(unittest.TestCase):
+    def _deterministic_success_capture(self, *, hardened: bool) -> bytes:
+        with tempfile.TemporaryDirectory() as tmp:
+            custody = Path(tmp) / "attempt"
+            (custody / "raw").mkdir(parents=True)
+            origin = 1700000000.0
+            rows = (
+                (origin + 2.0, "sampling_started"),
+                (origin + 3.0, "pulse_command_on"),
+                (origin + 4.0, "pulse_command_off"),
+                (origin + 5.5, "pulse_command_on"),
+                (origin + 6.5, "pulse_command_off"),
+                (origin + 8.0, "sampling_stopped"),
+            )
+            (custody / "events.jsonl").write_text(
+                "".join(
+                    json.dumps({"timestamp_s": stamp, "event_type": event}, sort_keys=True)
+                    + "\n"
+                    for stamp, event in rows
+                ),
+                encoding="utf-8",
+            )
+            capture = custody / "raw" / "powermetrics.plist"
+            command = [sys.executable, str(FIXTURE_ROOT / "fake_sampler.py"), "-o", str(capture)]
+            env = _fresh_cli_env() | {
+                "JW_FAKE_SAMPLER_MODE": "normal",
+                "JW_FAKE_HW_MODEL": "Mac15,9",
+                "JW_FAKE_OS_BUILD": "25F84",
+                "JW_FAKE_TIME_ORIGIN": str(origin),
+                "JW_FAKE_TIME_SCALE": "1",
+                "JW_FAKE_INITIAL_ENDPOINT": str(origin),
+            }
+
+            def wait_for_complete_capture() -> None:
+                deadline = time.monotonic() + 2.0
+                while True:
+                    try:
+                        records = len(capture.read_bytes().split(b"\0"))
+                    except OSError:
+                        records = 0
+                    if records >= 258:
+                        return
+                    if time.monotonic() >= deadline:
+                        self.fail(f"deterministic capture stalled at {records} records")
+                    time.sleep(0.001)
+
+            if hardened:
+                with mock.patch.dict(os.environ, env, clear=True):
+                    with validation_script._sampler_lifetime(command) as process:
+                        wait_for_complete_capture()
+                        validation_script._terminate_powermetrics(process)
+            else:
+                process = subprocess.Popen(
+                    command,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    env=env,
+                )
+                wait_for_complete_capture()
+                process.terminate()
+                process.communicate(timeout=2.0)
+            return capture.read_bytes()
+
+    def test_success_capture_is_byte_identical_to_legacy_termination(self) -> None:
+        legacy = self._deterministic_success_capture(hardened=False)
+        hardened = self._deterministic_success_capture(hardened=True)
+        self.assertEqual(hardened, legacy)
+        print(
+            f"F4_SUCCESS_CAPTURE_BYTES={len(hardened)} "
+            f"SHA256={hashlib.sha256(hardened).hexdigest()} BYTE_IDENTICAL=1",
+            flush=True,
+        )
+
+    def test_stubborn_direct_child_is_killed_and_reaped_on_every_exit_path(self) -> None:
+        exit_paths = ("normal", "return", "exception")
+        for exit_path in exit_paths:
+            with self.subTest(exit_path=exit_path):
+                with tempfile.TemporaryDirectory() as tmp:
+                    ready_path = Path(tmp) / "ready"
+                    command = [
+                        sys.executable,
+                        "-c",
+                        (
+                            "import signal,sys,time; "
+                            "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+                            "open(sys.argv[1],'w').write('ready'); "
+                            "time.sleep(60)"
+                        ),
+                        str(ready_path),
+                    ]
+                    process = None
+                    raised = False
+
+                    def exercise_exit_path() -> subprocess.Popen:
+                        nonlocal process
+                        with validation_script._sampler_lifetime(command) as process:
+                            deadline = time.monotonic() + 2.0
+                            while not ready_path.exists():
+                                if time.monotonic() >= deadline:
+                                    self.fail("stubborn direct child did not start")
+                                time.sleep(0.001)
+                            if exit_path == "return":
+                                return process
+                            if exit_path == "exception":
+                                raise RuntimeError("injected after sampler Popen")
+                        return process
+
+                    try:
+                        with mock.patch.object(
+                            validation_script,
+                            "SAMPLER_TERMINATE_TIMEOUT_S",
+                            0.05,
+                        ):
+                            process = exercise_exit_path()
+                    except RuntimeError as exc:
+                        if str(exc) != "injected after sampler Popen":
+                            raise
+                        raised = True
+                    self.assertEqual(raised, exit_path == "exception")
+                    assert process is not None
+                    self.assertEqual(process.returncode, -signal.SIGKILL)
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(process.pid, 0)
+        print(
+            "F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3",
+            flush=True,
+        )
+
+    def test_detached_grandchild_is_reported_by_post_teardown_census(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sampler_pid_path = root / "sampler.pid"
+            detached_sampler = root / "powermetrics_detached_sampler.py"
+            detached_sampler.write_text(
+                "import signal,time\n"
+                "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+                "time.sleep(60)\n",
+                encoding="utf-8",
+            )
+            command = [
+                sys.executable,
+                "-c",
+                (
+                    "import signal,subprocess,sys,time; "
+                    "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+                    "child=subprocess.Popen([sys.executable,sys.argv[1]],"
+                    "start_new_session=True); "
+                    "open(sys.argv[2],'w').write(str(child.pid)); "
+                    "time.sleep(60)"
+                ),
+                str(detached_sampler),
+                str(sampler_pid_path),
+            ]
+            process = None
+            detached_pid: int | None = None
+            reported_events: list[tuple[str, dict]] = []
+            stderr = io.StringIO()
+            try:
+                with mock.patch.object(
+                    validation_script,
+                    "SAMPLER_TERMINATE_TIMEOUT_S",
+                    0.05,
+                ), mock.patch.object(
+                    validation_script.subprocess,
+                    "run",
+                    side_effect=lambda args, **_kwargs: subprocess.CompletedProcess(
+                        args,
+                        0,
+                        stdout=(
+                            f"{detached_pid} Python {sys.executable} "
+                            f"{detached_sampler}\n"
+                        ),
+                    ),
+                ), mock.patch.object(validation_script.sys, "stderr", stderr):
+                    with validation_script._sampler_lifetime(
+                        command,
+                        event_reporter=lambda event, metadata: reported_events.append(
+                            (event, metadata)
+                        ),
+                    ) as process:
+                        deadline = time.monotonic() + 2.0
+                        while not sampler_pid_path.exists():
+                            if time.monotonic() >= deadline:
+                                self.fail("detached sampler did not start")
+                            time.sleep(0.001)
+                        detached_pid = int(sampler_pid_path.read_text())
+                assert process is not None
+                self.assertEqual(process.returncode, -signal.SIGKILL)
+                self.assertEqual(
+                    [event for event, _metadata in reported_events],
+                    [validation_script.SAMPLER_CENSUS_DIAGNOSTIC],
+                )
+                findings = reported_events[0][1]["findings"]
+                self.assertIn(detached_pid, [finding["pid"] for finding in findings])
+                self.assertIn(
+                    validation_script.SAMPLER_CENSUS_DIAGNOSTIC,
+                    stderr.getvalue(),
+                )
+            finally:
+                if detached_pid is not None:
+                    try:
+                        os.kill(detached_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+        print(
+            "F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 "
+            "DETACHED_GRANDCHILD_CENSUS_REPORTED=1",
+            flush=True,
+        )
+
+
 class PublicGovernedExitWitnessTests(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls) -> None:
+        assert_no_owned_fake_sampler_survivors()
+
     def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.repo = Path(self.tmp.name).resolve() / "repo"
-        self.public_runner = OwnedPublicProcessRunner(Path(self.tmp.name))
-        self._holder_process_groups: dict[subprocess.Popen[str], int] = {}
-        self._reaped_holders: list[subprocess.Popen[str]] = []
+        self.sandbox = WitnessSandbox()
+        self.addCleanup(self.sandbox.close)
+        self.repo = self.sandbox.repo
+        self.public_runner = self.sandbox.runner
+        self.preservation_evidence: PreservationEvidence | None = None
+        self.public_execution_evidence: list[PublicExecutionEvidence] = []
+        self.writer_env_overrides: dict[str, str] = {}
         shutil.copytree(REPO_ROOT / "joulewise", self.repo / "joulewise")
         (self.repo / "scripts").mkdir()
         for name in (
@@ -1024,6 +1983,12 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             cwd=self.repo,
             check=True,
         )
+        for key, value in GIT_MAINTENANCE_CONTROLS:
+            subprocess.run(
+                ["git", "config", "--local", key, value],
+                cwd=self.repo,
+                check=True,
+            )
         subprocess.run(["git", "add", "."], cwd=self.repo, check=True)
         subprocess.run(["git", "commit", "-qm", "fixture"], cwd=self.repo, check=True)
         self.script = self.repo / "scripts" / "recover_calibration_ledger.py"
@@ -1051,41 +2016,39 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
     def execute_cases(cls, codes) -> set[RefusalCode]:
         selected = set(codes)
         cases = [case for case in WITNESS_CASES if case.code in selected]
-        executed: set[RefusalCode] = set()
         for case in cases:
+            if case.code in _WITNESS_RESULTS:
+                print(f"CASE CACHED {case.code.value}", flush=True)
+                continue
+            print(f"CASE START {case.code.value}", flush=True)
             witness = cls(methodName="runTest")
-            witness.setUp()
+            setup_complete = False
             try:
+                witness.setUp()
+                setup_complete = True
                 witness._execute_case(case)
-                executed.add(case.code)
             finally:
-                witness.tearDown()
-        _EXECUTED_DURABLE_WITNESS_CODES.update(executed)
-        return executed
+                if setup_complete:
+                    witness.tearDown()
+                witness.doCleanups()
+            _WITNESS_RESULTS[case.code] = WitnessResult(
+                code=case.code,
+                preservation=witness.preservation_evidence,
+                public_executions=tuple(witness.public_execution_evidence),
+            )
+            print(f"CASE PASS {case.code.value}", flush=True)
+        return selected & set(_WITNESS_RESULTS)
 
     def tearDown(self) -> None:
-        for holder in tuple(self._holder_process_groups):
-            self._terminate_and_reap_holder(holder)
-        self.assertEqual(self._holder_process_groups, {})
-        self.assertTrue(
-            all(holder.poll() is not None for holder in self._reaped_holders)
-        )
-        # Reaping is the defense: keep cleanup strict so a real filesystem leak
-        # remains visible rather than being hidden by ignore_errors or retries.
-        self.tmp.cleanup()
+        self.sandbox.close()
 
     def _start_holder(self, holder_code: str) -> subprocess.Popen[str]:
-        holder = subprocess.Popen(
+        return self.public_runner.start_owned(
             [sys.executable, "-c", holder_code],
             cwd=self.repo,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             env=_fresh_cli_env(),
-            start_new_session=True,
+            label="calibration-writer-holder",
         )
-        self._holder_process_groups[holder] = holder.pid
-        return holder
 
     def _terminate_and_reap_holder(
         self,
@@ -1093,31 +2056,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         *,
         timeout_s: float = 10.0,
     ) -> None:
-        pgid = self._holder_process_groups.get(holder)
-        if pgid is None:
-            self.assertIsNotNone(holder.poll())
-            return
-        try:
-            os.killpg(pgid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        holder.communicate(timeout=timeout_s)
-        deadline = time.monotonic() + timeout_s
-        while True:
-            try:
-                os.killpg(pgid, 0)
-            except ProcessLookupError:
-                break
-            if time.monotonic() >= deadline:
-                self.fail(f"holder process group {pgid} survived SIGKILL")
-            time.sleep(0.01)
+        self.public_runner.terminate_owned(holder, timeout_s=timeout_s)
         self.assertIsNotNone(holder.poll())
-        if holder.stdout is not None:
-            holder.stdout.close()
-        if holder.stderr is not None:
-            holder.stderr.close()
-        self._holder_process_groups.pop(holder)
-        self._reaped_holders.append(holder)
 
     def _run(self, *args: str) -> OwnedProcessResult:
         return self.public_runner.run(
@@ -1144,6 +2084,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         refusal_code: str | None = None,
         registered_surface: str | None = None,
         durable_postcondition=None,
+        progress_probe=None,
+        progress_reporter=None,
     ) -> OwnedProcessResult:
         return self.public_runner.run(
             [sys.executable, str(script), *args],
@@ -1154,6 +2096,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             refusal_code=refusal_code,
             registered_surface=registered_surface,
             durable_postcondition=durable_postcondition,
+            progress_probe=progress_probe,
+            progress_reporter=progress_reporter,
         )
 
     def _run_corrected_script(
@@ -1163,6 +2107,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         *args: str,
         env: dict[str, str] | None = None,
         durable_postcondition=None,
+        progress_probe=None,
+        progress_reporter=None,
     ) -> OwnedProcessResult:
         record = REFUSAL_BY_CODE[code]
         completed = self._run_script(
@@ -1172,12 +2118,67 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             refusal_code=code.value,
             registered_surface=record.correction_surface,
             durable_postcondition=durable_postcondition,
+            progress_probe=progress_probe,
+            progress_reporter=progress_reporter,
         )
         evidence = completed.public_evidence
         self.assertIsNotNone(evidence)
         assert evidence is not None
-        _PUBLIC_EXECUTION_EVIDENCE.setdefault(code, []).append(evidence)
+        self.public_execution_evidence.append(evidence)
         return completed
+
+    def _writer_progress_probe(self, state: dict):
+        custody = Path(state["custody_locator"])
+        known_events = {
+            "sampling_started",
+            "warmup_command_on",
+            "warmup_command_off",
+            "pulse_command_on",
+            "pulse_command_off",
+            "sampling_stopped",
+        }
+
+        def probe() -> AuthenticatedProgress:
+            ordinal = 0
+            stage = "writer-launched"
+            if custody.is_dir():
+                ordinal = 1
+                stage = "custody-created"
+            capture = custody / "raw" / "powermetrics.plist"
+            try:
+                capture_ready = capture.stat().st_size > 0
+            except OSError:
+                capture_ready = False
+            if capture_ready:
+                ordinal = 2
+                stage = "sampler-ready"
+            events_path = custody / "events.jsonl"
+            authenticated_events: list[str] = []
+            try:
+                for line in events_path.read_text(encoding="utf-8").splitlines():
+                    row = json.loads(line)
+                    event_type = row.get("event_type")
+                    if (
+                        event_type in known_events
+                        and row.get("phase") == "instrument_validation"
+                        and row.get("message") == event_type
+                        and isinstance(row.get("timestamp_s"), int | float)
+                    ):
+                        authenticated_events.append(str(event_type))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                pass
+            if authenticated_events:
+                ordinal = 100 + len(authenticated_events)
+                stage = f"event-{authenticated_events[-1]}-{len(authenticated_events)}"
+            if (custody / "instrument_evidence.json").is_file():
+                ordinal = 1000
+                stage = "instrument-evidence-written"
+            if (custody / "manifest.json").is_file():
+                ordinal = 1001
+                stage = "manifest-written"
+            return AuthenticatedProgress(ordinal=ordinal, stage=stage)
+
+        return probe
 
     def _session_status_postcondition(self, state: dict) -> dict[str, object]:
         completed = self._run(
@@ -1226,6 +2227,11 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             *self._writer_capture_args(state),
             env=self._writer_env(state, mode="normal"),
             durable_postcondition=lambda: self._session_status_postcondition(state),
+            progress_probe=self._writer_progress_probe(state),
+            progress_reporter=lambda update: print(
+                f"CASE STAGE {code.value} {update.ordinal} {update.stage}",
+                flush=True,
+            ),
         )
         self.assertEqual(
             completed.returncode,
@@ -1253,13 +2259,23 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
     def _json_payload(
         self, completed: subprocess.CompletedProcess[str] | OwnedProcessResult
     ) -> dict:
-        lines = [
-            line
+        objects = [
+            json.loads(line)
             for line in (completed.stdout + "\n" + completed.stderr).splitlines()
             if line.strip().startswith("{")
         ]
-        self.assertTrue(lines, completed.stdout + completed.stderr)
-        return json.loads(lines[-1])
+        payloads = [
+            value
+            for value in objects
+            if isinstance(value, dict) and ("status" in value or "code" in value)
+        ]
+        self.assertEqual(
+            len(payloads),
+            1,
+            "expected one refusal/authorization payload; "
+            f"found {len(payloads)} in {objects!r}",
+        )
+        return payloads[0]
 
     def _ensure_preservation_lock(self) -> Path:
         lock = ledger_module._ledger_lock_path(self.ledger)
@@ -1333,9 +2349,9 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "JW_FAKE_SAMPLER_MODE": mode,
             "JW_FAKE_HW_MODEL": state["epoch"]["hardware_model"],
             "JW_FAKE_OS_BUILD": state["epoch"]["os_build"],
-            "JW_FAKE_SAMPLER_ELAPSED_NS": "200000",
             "JW_FAKE_TIME_SCALE": "0.025",
             "JW_FAKE_TIME_ORIGIN": str(time.time()),
+            **self.writer_env_overrides,
         }
 
     def _write_valid_rederive_source(self, source: Path) -> None:
@@ -2305,7 +3321,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         )
         return root
 
-    def _execute_case(self, case: WitnessCase) -> None:
+    def _execute_case(self, case: WitnessCase) -> OwnedProcessResult:
         state = getattr(self, case.constructor)()
         holder = state.get("holder")
         record = REFUSAL_BY_CODE[case.code]
@@ -2586,9 +3602,9 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 if case.observer == "writer-display-failure":
                     writer_env = self._writer_env(state, mode="normal")
                 elif case.observer == "writer-sampler-failure":
-                    writer_env = self._writer_env(state, mode="never")
+                    writer_env = self._writer_env(state, mode="never-stubborn")
                 elif case.observer == "writer-rollover-failure":
-                    writer_env = self._writer_env(state, mode="one")
+                    writer_env = self._writer_env(state, mode="one-stubborn")
                 else:
                     writer_env = state.get("env")
                 refused = self._run_script(
@@ -2979,12 +3995,75 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                 restore()
             if holder is not None:
                 self._terminate_and_reap_holder(holder)
+        return refused
 
     def test_parameterized_durable_public_cli_witnesses(self) -> None:
         expected = {case.code for case in WITNESS_CASES}
-        executed = set(_EXECUTED_DURABLE_WITNESS_CODES)
-        executed.update(self.execute_cases(expected - executed))
+        executed = self.execute_cases(expected)
         self.assertEqual(executed, expected)
+        self.assertEqual(set(_WITNESS_RESULTS), expected)
+        self.assertTrue(
+            all(result.code is code for code, result in _WITNESS_RESULTS.items())
+        )
+
+    def test_abort_witness_payload_survives_nonowned_sampler_census_decoy(self) -> None:
+        decoy_capture = self.repo / "powermetrics-decoy.plist"
+        decoy = subprocess.Popen(
+            [sys.executable, str(self.fake_sampler), "-o", str(decoy_capture)],
+            cwd=self.repo,
+            env=_fresh_cli_env() | {"JW_FAKE_SAMPLER_MODE": "never"},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        fake_bin = self.repo / "fake-bin"
+        fake_bin.mkdir()
+        fake_ps = fake_bin / "ps"
+        fake_ps.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os\n"
+            "print(os.environ['JW_FAKE_PS_OUTPUT'])\n",
+            encoding="utf-8",
+        )
+        fake_ps.chmod(0o755)
+        self.writer_env_overrides = {
+            "PATH": os.pathsep.join((str(fake_bin), _fresh_cli_env()["PATH"])),
+            "JW_FAKE_PS_OUTPUT": (
+                f"{decoy.pid} Python {sys.executable} {self.fake_sampler} "
+                f"-o {decoy_capture}"
+            ),
+        }
+        try:
+            case = next(
+                item
+                for item in WITNESS_CASES
+                if item.code is RefusalCode.SAMPLER_NEVER_READY
+            )
+            refused = self._execute_case(case)
+            payload = self._json_payload(refused)
+            self.assertEqual(payload["code"], RefusalCode.SAMPLER_NEVER_READY.value)
+            self.assertTrue(self.public_runner.observed_fake_sampler_pids)
+            self.assertNotIn(decoy.pid, self.public_runner.observed_fake_sampler_pids)
+            assert_no_owned_fake_sampler_survivors()
+            census_events = [
+                json.loads(line)
+                for line in refused.stderr.splitlines()
+                if line.startswith("{")
+                and json.loads(line).get("event")
+                == validation_script.SAMPLER_CENSUS_DIAGNOSTIC
+            ]
+            self.assertEqual(len(census_events), 1, refused.stderr)
+            self.assertIn(
+                decoy.pid,
+                [finding["pid"] for finding in census_events[0]["findings"]],
+            )
+        finally:
+            decoy.terminate()
+            try:
+                decoy.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                decoy.kill()
+                decoy.wait(timeout=2.0)
 
     def test_diagnostic_routes_never_emit_ready_to_arm_under_live_lease(self) -> None:
         holder_code = (
@@ -3046,6 +4125,100 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.assertEqual(json.loads(validated.stdout)["status"], "slot_validated")
         self.assertNotIn("terminal_result", json.loads(validated.stdout))
         self.assertNotIn("ready_to_arm", validated.stdout)
+
+
+def run_valid_writer_load_proof(cycles: int) -> None:
+    """Run representative public writers under CPU and filesystem contention."""
+
+    if cycles < 1:
+        raise ValueError("cycles must be positive")
+    load = WitnessSandbox()
+    load.repo.mkdir()
+    worker_count = (os.cpu_count() or 2) + 1
+    churn_path = load.root / "filesystem-churn"
+    load_code = (
+        "import os,subprocess,sys; from pathlib import Path; "
+        f"workers={worker_count}; root=Path({str(churn_path)!r}); root.mkdir(); "
+        "[subprocess.Popen([sys.executable,'-c','while True: pass']) for _ in range(workers)]; "
+        "print('LOAD_READY',flush=True); i=0; "
+        "exec(\"while True:\\n p=root/f'{i%8}'\\n p.write_text(str(i))\\n i+=1\")"
+    )
+    load_process = load.runner.start_owned(
+        [sys.executable, "-c", load_code],
+        cwd=load.repo,
+        env=_fresh_cli_env(),
+        label="cpu-filesystem-oversubscription",
+    )
+    assert load_process.stdout is not None
+    if load_process.stdout.readline().strip() != "LOAD_READY":
+        raise AssertionError("load injector did not become ready")
+    retries = 0
+    started = time.monotonic()
+    try:
+        for index in range(cycles):
+            witness = PublicGovernedExitWitnessTests(methodName="runTest")
+            setup_complete = False
+            try:
+                witness.setUp()
+                setup_complete = True
+                state = witness._state_real_writer(f"load-proof-{index}")
+                completed = witness._execute_valid_writer(
+                    RefusalCode.QUIET_MAC_AUTH_REQUIRED,
+                    state,
+                )
+                if completed.returncode != 0:
+                    raise AssertionError(completed.stdout + completed.stderr)
+            finally:
+                if setup_complete:
+                    witness.tearDown()
+                    retries += len(witness.sandbox.cleanup_diagnostics)
+                witness.doCleanups()
+    finally:
+        load.runner.terminate_owned(load_process)
+        load.close()
+    elapsed = time.monotonic() - started
+    if owned_process_group_survivors():
+        raise AssertionError(owned_process_group_survivors())
+    print(
+        f"P4_VALID_WRITER_LOOPS={cycles} CPU_WORKERS={worker_count} "
+        f"TIMEOUTS=0 SURVIVORS=0 TEARDOWN_RETRIES={retries} "
+        f"ELAPSED_S={elapsed:.3f}",
+        flush=True,
+    )
+
+
+def run_hung_stage_watchdog_proof() -> None:
+    """Prove a silent authenticated stage is killed within watchdog + 5 s."""
+
+    sandbox = WitnessSandbox()
+    sandbox.repo.mkdir()
+    script = sandbox.repo / "hung_writer_stage.py"
+    script.write_text("import time\ntime.sleep(600)\n", encoding="utf-8")
+    started = time.monotonic()
+    try:
+        try:
+            sandbox.runner.run(
+                [sys.executable, script],
+                cwd=sandbox.repo,
+                env=_fresh_cli_env(),
+                timeout=600.0,
+                progress_probe=lambda: AuthenticatedProgress(0, "injected-hung-stage"),
+                stage_idle_timeout_s=120.0,
+            )
+        except subprocess.TimeoutExpired:
+            pass
+        else:
+            raise AssertionError("hung writer stage unexpectedly completed")
+        elapsed = time.monotonic() - started
+        if elapsed > 125.0:
+            raise AssertionError(f"watchdog exceeded +5 s bound: {elapsed:.3f}")
+    finally:
+        sandbox.close()
+    print(
+        f"P4_HUNG_WATCHDOG_S=120.0 KILLED_S={elapsed:.3f} "
+        "SURVIVORS=0 REGISTRY_EMPTY=1",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

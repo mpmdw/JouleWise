@@ -243,8 +243,10 @@ science stage. Dry-run mode does not write campaign-log entries.
   inside it. macOS starts idle-only work — XProtect's scheduled malware scan
   is the documented instance — in roughly the first 10 minutes after the
   machine goes quiet. Leave the machine untouched and idle for at least 10
-  minutes before launching the chain. This is in addition to the 180-second
-  stage settle, not satisfied by it.
+  minutes **before** the §5C step-2 calibration-ledger pair. The frozen
+  `prewindow_check.sh --wait` invocation fulfills this idle and must have
+  exited with `READY` before the ledger commands begin. This is in addition
+  to the chain-owned 180-second stage settle, not satisfied by it.
 - [ ] Confirm the chain carries the §5B pre-flight calibration screen and
   that the frozen plan records the pre-registered retry bound (D-079
   clause 3).
@@ -383,14 +385,24 @@ nor verify this step. Ed performs it by hand.
   sudo systemsetup -setusingnetworktime off
   ```
 
-- [ ] Settle 150–240 seconds — use 180 — after this administrator action, as
-  after any other operator activity, before launching the chain.
+- [ ] Do **not** hand-count a settle here. §5C removed the separate pre-launch
+  settle step: the final 180-second settle is **chain-owned** (the `settle` at
+  the top of `window-chain.zsh`, §6), and §5's ≥10-minute untouched idle
+  covers this administrator action along with every other operator action
+  before the §5C step-2 ledger pair. Your last action is the launch itself;
+  step away immediately after it.
 - [ ] After the window closes, meaning after `measurement_complete`, the
   whole-window verdict, and the backup, re-enable it:
 
   ```sh
   sudo systemsetup -setusingnetworktime on
   ```
+
+  The restore comes last because re-enabling automatic network time permits
+  the system to slew the wall clock, and the verdict, backup, and close-out
+  steps are still reading clock-anchored evidence and custody metadata. Wake
+  the display, confirm `measurement_complete`, then hand back — the restore
+  is a separate tap after the magistrate's §9 and §11 steps.
 
 - [ ] Record in the close-out that automatic time was disabled, when it was
   disabled, and when it was restored.
@@ -436,6 +448,13 @@ corpus, which was only discovered at the post-calibration and cost the whole
 taken, but a four-minute calibration detects it reliably. That asymmetry is
 the entire point of this step.
 
+**Who performs this.** These four steps are performed **by the chain**, not by
+the operator (`screen_pre_calibration` in `window-chain.zsh`, §6; §5C step 1).
+They are written out here so the screen's logic, threshold derivation, and
+retry rules are auditable — not as a manual procedure. The operator never
+inspects logs mid-run and never reads `b_fiducial_s` by hand. The retry rules
+below are the **lead's** disposition rules for after a chain-emitted failure.
+
 **The screen.** Immediately after the pre-calibration mints, and before any
 member is collected:
 
@@ -451,11 +470,23 @@ member is collected:
    failing pre-calibration is wasted quiet time.
 4. If the value passes, continue the chain unchanged.
 
-The chain in §6 performs steps 1–3 automatically, so the operator still never
-inspects logs mid-run. The threshold is a derived, provenance-bound number,
-not a house style: it is valid only for Mac15,9 / macOS 25F84 /
+The threshold is a derived, provenance-bound number, not a house style: it is
+valid only for Mac15,9 / macOS 25F84 /
 `ac_high_power` / 100 ms cadence / `joint_loss_sublevel_interval_branch_v2`
 bindings, and it is re-derived when any of those change (D-079 clause 3).
+
+**Single source of truth.** This value is *derived from* the issued D-079
+calibration-acceptance artifact (`d079_calibration_acceptance_v2_n19`, sha
+`31611396…`), not independently chosen. Two derived copies exist and must be
+re-derived together whenever a successor acceptance issues (freeze-plan
+ruling Q4 — a successor issuing before arm forces pack regeneration): the
+chain's `PRE_CAL_FIDUCIAL_MAX_S` (§6) and the writer's
+`PREFLIGHT_SYSTEMATIC_SCREEN_S`
+(`scripts/validate_powermetrics_fiducial.py:114`). Blocking unit CH-1 (40h
+A3) removes the writer's copy by reading the artifact directly. The chain
+keeps its frozen literal; the freeze-time checklist requires three-way
+equality with the acceptance-derived value before the chain SHA-256 is
+recorded.
 
 This screen is a **level** check on one calibration, and is entirely separate
 from the **drift** check between the two calibrations in §8. A level failure
@@ -511,6 +542,12 @@ three-night packet is background context and may not substitute for the
 plan-specific record. (BETA and GAMMA plans name their own records; none
 inherits ALPHA's filename.)
 
+The plan-specific record is a **generated per-plan artifact** created at pack
+freeze and SHA-pinned by that plan. The standing readiness matrix
+(`docs/phase_2/alpha_arm_readiness.md` and its BETA/GAMMA siblings) supplies
+the row set and is background context in the same sense as the packet; the
+living matrix is not itself the record and is never SHA-pinned as one.
+
 **Lead live verification — desk evidence, not live-night authority
 (rule 1, non-delegable).**
 On the exact reviewed commit, the lead personally runs the frozen plan's
@@ -533,9 +570,13 @@ toward arming; they do not authorize the live night.
    procedure. §5B is **not** a separate manual step before launch: the
    foreground chain performs it after the pre-slot enforcing gate and
    pre-calibration capture, and before member 1.
-2. After all agents are closed, Ed runs the complete §6
-   diagnostic-readiness command and reservation command exactly as
-   frozen. Require the diagnostic to echo the exact frozen-plan SHA-256.
+2. After all agents are closed, Ed runs, **in this order**: (a) the frozen
+   machine-readiness command (`scripts/prewindow_check.sh --wait` with the
+   frozen timeout and window label), requiring `READY`. Its wait fulfills
+   §5's ≥10-minute untouched idle, precedes the calibration-ledger pair, and
+   must have exited before anything below; then (b) the complete §6
+   diagnostic-readiness command and reservation command exactly as frozen.
+   Require the diagnostic to echo the exact frozen-plan SHA-256.
    Require the reservation to emit `calibration_pre_reserve_authorized`
    and finish with `status: reserved`. Do not look for a visible
    `ready_to_arm` field — the enforcing checks are internal to the
@@ -546,6 +587,8 @@ toward arming; they do not authorize the live night.
    ordinary foreground shell, with the absolute frozen plan root. The
    chain begins with the frozen 180-second settle; Ed steps away
    immediately after launch and does not touch or monitor the machine.
+   This supersedes the pre-D-117 §5A instruction to settle 180 seconds by
+   hand before launching: the settle is inside the chain.
    Inside the chain, the writer's enforcing pre-slot check gates each
    calibration slot, and the automatic §5B screen gates member 1.
    "Exactly once" means once per frozen bracket-session attempt; a
@@ -695,8 +738,10 @@ calibrate_slot() {
 }
 
 # D-079 clause 3: pre-flight calibration screen. Refuses an out-of-family
-# pre-calibration before any member is collected. Threshold is bindings-bound
-# (Mac15,9 / macOS 25F84 / ac_high_power / 100 ms / estimator v2); see §5B.
+# pre-calibration before any member is collected. Derived from the issued
+# acceptance artifact d079_calibration_acceptance_v2_n19 (sha 31611396...).
+# If a successor acceptance issues before arm, regenerate and re-hash this
+# chain with it (freeze-plan Q4); bindings and derivation are in §5B.
 PRE_CAL_FIDUCIAL_MAX_S=0.033558756679900
 
 screen_pre_calibration() {
@@ -803,6 +848,11 @@ After every agent is closed, launch exactly once:
 ```sh
 caffeinate -is /bin/zsh "$WINDOW_PLAN_ROOT/window-chain.zsh" "$WINDOW_PLAN_ROOT"
 ```
+
+This `caffeinate` is the one reviewed keep-awake process for the window. The
+T-0 census in §5 is taken before this command runs and must find no
+`caffeinate` at all; after it runs, exactly one exists and it is the chain's
+parent. Do not start a second one for any reason.
 
 Expected visible behavior: each stage pauses for the 180-second settle, prints
 a 20-second arming countdown, sleeps the display, re-probes the governed

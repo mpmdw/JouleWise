@@ -24,6 +24,11 @@ from joulewise.detection_floor import (  # noqa: E402
 from joulewise.floor_extraction import (  # noqa: E402
     validate_condition_family_definition,
 )
+from joulewise.identity_pins import (  # noqa: E402
+    IDENTITY_PIN_DERIVATION_CONTRACT,
+    IDENTITY_PIN_PROJECTION_WORK_ORDER,
+    validate_identity_pin_projection,
+)
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
 )
@@ -120,65 +125,6 @@ REFERENCE_CADENCE_AUTHORITY = (
     "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md "
     "§6 U7 gamma implementation session"
 )
-D124_PRODUCER_ASSUMPTION_ID = "d124_block_bracket_edges_shared_within_abba.v1"
-D124_CONSUMER_ASSUMPTION_ID = (
-    "d124_block_timescale_shared_edges_stationarity_transfer_v1"
-)
-D124_EVIDENCE_RECORD_PATH = (
-    "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
-)
-
-DECODE_ESTIMATOR_REGISTRATION = {
-    "identity": "d124_two_shared_edge_common_mode.v1",
-    "identity_status": "candidate_pending_floor_commonmode_01",
-    "form": (
-        "shared onset and shared offset parameters across each ABBA block, "
-        "with adversarial per-bundle residuals"
-    ),
-    "stationarity_transfer_assumption": {
-        "identity": D124_CONSUMER_ASSUMPTION_ID,
-        "statement": (
-            "Within one ABBA block governed by one calibration bracket, onset and "
-            "offset boundary errors transfer as block-shared nuisance parameters."
-        ),
-        "evidence": {
-            "authority": "D-124/D-125",
-            "record": D124_EVIDENCE_RECORD_PATH,
-            "onset_offset_spans_required_at_arm": True,
-        },
-        "evidentiary_limit": (
-            "The historical corpus records admissible bounds, not realized "
-            "member-level boundary errors; transfer is an assumption, not an "
-            "observed covariance claim."
-        ),
-    },
-    "sibling_assumption_cross_reference": {
-        "assumption_id": D124_PRODUCER_ASSUMPTION_ID,
-        "shared_gate": "FLOOR-COMMONMODE-01",
-        "shared_evidence_record_path": D124_EVIDENCE_RECORD_PATH,
-    },
-    "covariance_treatment": (
-        "two_shared_edges_plus_bundle_specific_adversarial_terms"
-    ),
-    "calibration_treatment": (
-        "two_shared_edges_plus_bundle_specific_adversarial_terms"
-    ),
-    "consuming_decode_contrast_treatment": (
-        "two_shared_edges_plus_bundle_specific_adversarial_terms"
-    ),
-    "identical_covariance_treatment_required": True,
-    "allowance": {
-        "rule": "genesis_lower_bound_plus_lineage_envelope_rule",
-        "genesis_lower_bound_s": 0.010818,
-        "embedding_count": 1,
-        "location": "inside_shared_operative_bound",
-        "authority": "D-125 amendment to D-117 clause 1",
-    },
-    "issued_acceptance_artifact_reopened": False,
-    "raw_calibration_corpus_voided": False,
-    "registration_authority": "D-124 signed off by D-125",
-}
-
 STAGE_SPECS = (
     {
         "subcampaign_id": "01_decode_contrast_blocks_01_05",
@@ -541,7 +487,7 @@ def build_plan(
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N_BLOCKS,
-        "authorities": ["D-117", "D-122", "D-123", "D-124", "D-125"],
+        "authorities": ["D-117", "D-122", "D-123", "D-125"],
         "stack_scope": {
             "hardware_target": "macbook_m3_max",
             "runtime_backend": "mlx",
@@ -577,7 +523,6 @@ def build_plan(
                 "target_precheck_path": ["phase", "decode"],
                 "difference_orientation": "condition_b_minus_condition_a",
                 "point_estimator": "abba_block_arm_mean_difference_t_v1",
-                "floor_estimator_registration": DECODE_ESTIMATOR_REGISTRATION,
                 "test": "two_sided",
                 "scientific_hypothesis_direction": "positive",
                 "family_alpha": 0.05,
@@ -1125,7 +1070,6 @@ def build_analysis_manifest(
         if measurement_arm == "decode":
             common.update(
                 {
-                    "floor_estimator_registration": DECODE_ESTIMATOR_REGISTRATION,
                     "test": "two_sided",
                     "scientific_hypothesis_direction": "positive",
                     "multiplicity": {
@@ -1217,6 +1161,85 @@ def build_tree(
     analysis_sha: str,
     declaration_sha: str,
 ) -> dict[str, Any]:
+    identity_units = []
+    producer_plans = {
+        "A": {
+            "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+            "path": "../d117_floor_qwen25_1p5b_v1/calibration_plan.json",
+        },
+        "B": {
+            "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+            "path": "../d117_floor_qwen25_7b_v1/calibration_plan.json",
+        },
+    }
+    for arm, measurement_arm in (
+        ("A", "decode"),
+        ("A", "prefill_p256"),
+        ("B", "decode"),
+        ("B", "prefill_p256"),
+    ):
+        family = (
+            DECODE_FAMILIES[arm]["condition_family_id"]
+            if measurement_arm == "decode"
+            else PREFILL_FAMILY_IDS[arm]
+        )
+        identity_units.append(
+            {
+                "identity_unit_id": f"{arm}/{measurement_arm}",
+                "producer_plan_reference": producer_plans[arm],
+                "consumer_bindings": [
+                    {
+                        "arm": arm,
+                        "family": family,
+                        "measurement_arm": measurement_arm,
+                    }
+                ],
+                "declared_identity": {
+                    "hardware_target": HARDWARE["id"],
+                    "runtime_backend": HARDWARE["runtime_backend"],
+                    "telemetry_backend": HARDWARE["telemetry_backend"],
+                    "model_name": MODELS[arm]["name"],
+                    "model_source": MODELS[arm]["source"],
+                    "model_revision": MODELS[arm]["revision"],
+                    "quantization": {**QUANTIZATION, "group_size": None},
+                    "workload_profile": {
+                        **workload_for(measurement_arm),
+                        "prompt_tokens": (
+                            workload_for(measurement_arm).get("prompt_tokens")
+                        ),
+                        "prompt_text": (
+                            workload_for(measurement_arm).get("prompt_text")
+                        ),
+                        "dataset_ref": None,
+                    },
+                },
+                "config_inventory": [
+                    {
+                        "path": Path(row["config_path"]).as_posix(),
+                        "sha256": row["config_sha256"],
+                    }
+                    for row in science_rows
+                    if row["arm"] == arm and row["measurement_arm"] == measurement_arm
+                ],
+                "model_runtime_config": {
+                    "model_artifact_sha256": None,
+                    "runtime_identity_sha256": None,
+                    "config_set_sha256": None,
+                },
+            }
+        )
+    identity_pin_projection = validate_identity_pin_projection(
+        {
+            "work_order": IDENTITY_PIN_PROJECTION_WORK_ORDER,
+            "mode": "derive_never_operator_enter",
+            "state": "unprojected",
+            "required_before_arm": True,
+            "derivation_contract": IDENTITY_PIN_DERIVATION_CONTRACT,
+            "identity_units": identity_units,
+            "projection_receipt": None,
+            "supersedes": [],
+        }
+    )
     return {
         "schema_version": TREE_SCHEMA,
         "draft_status": DRAFT_STATUS,
@@ -1260,7 +1283,6 @@ def build_tree(
                 "impl/d117-postcollection-trust landed and mint bar lifted",
                 "U2 successor registry available",
                 "reason-code unit resolved",
-                "FLOOR-COMMONMODE-01 implementation landed through D-118/D-121",
                 "U11 identity-pin projection receipt available",
                 "U8 readiness validation passed",
                 "U10 aggregate floor artifact available for decode declaration binding",
@@ -1303,13 +1325,7 @@ def build_tree(
             },
             "absolute_roots": empty_slot("TODO(U8): materialize fresh absolute roots at arm"),
             "selected_acceptance": empty_slot("TODO(U2/U8): select authenticated acceptance at arm"),
-            "identity_pin_projection": {
-                "status": EMPTY_STATUS,
-                "runtime_identity_sha256": "",
-                "model_artifact_sha256": {"A": "", "B": ""},
-                "config_set_sha256": "",
-                "todo": "TODO(U11): derive all values and issue projection receipt at arm",
-            },
+            "identity_pin_projection": identity_pin_projection,
             "aggregate_floor_artifact_sha256": empty_slot(
                 "TODO(U10/U8): validate and attach exact aggregate artifact bytes at arm"
             ),
@@ -1378,7 +1394,7 @@ This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is
 not armable and makes no data, verdict, receipt, or artifact-byte claim.
 
-Authority order is D-117, D-122, D-123, D-124, then D-125. D-122 supersedes
+Authority order is D-117, D-122, D-123, then D-125. D-122 supersedes
 the older design-memo and plan-factory decode-only text. The plan tree uses
 the shared `joulewise.d117_plan_tree.v1` schema family and every top-level
 artifact declares `draft_status = unfrozen_draft`.
@@ -1404,9 +1420,8 @@ records {oracle['receipt_count']} physical receipts for
 {oracle['logical_operation_count']} logical operations per finalized pre/post
 bracket session. Actual receipt bytes and the absolute terminal sequence remain
 empty until arm and collection. Identity pins remain EMPTY pending U11. The
-D-124 estimator identity and stationarity-transfer assumption are registered as
-proposed implementation identities; the implementing unit must still land
-through D-118/D-121 before ratification.
+The withdrawn D-124 estimator is not registered. Contrasts use the default
+worst-case floors; the prefill contrast therefore has reduced claim capability.
 
 Regenerate or check:
 

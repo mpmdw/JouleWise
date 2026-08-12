@@ -23,7 +23,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 from joulewise import detection_floor
-from joulewise.authentication_io import V2AuthenticationReadSession
+from joulewise.authentication_io import (
+    V2AuthenticationInputError,
+    V2AuthenticationReadSession,
+)
 from joulewise.analysis_engine.registry import (
     normalized_json_bytes,
     render_dispatch_receipt,
@@ -399,7 +402,7 @@ def _configure_fixture_core(core: object) -> object:
         )
 
     core._authenticate_component = authenticate
-    core._derive_stack_identity = lambda _config, _metadata: stack_identity()
+    core.build_stack_identity = lambda _config, _metadata: stack_identity()
     core.scientific_config_identity = lambda _config: {"synthetic": "same"}
     return core
 
@@ -2350,7 +2353,7 @@ def install_production_extracted_v2_cli_fixture(root: Path):
             )
 
         core._authenticate_component = authenticate
-        core._derive_stack_identity = lambda _config, _metadata: stack_identity()
+        core.build_stack_identity = lambda _config, _metadata: stack_identity()
         core.scientific_config_identity = lambda _config: {"synthetic": "same"}
         core.load_calibration_ledger_snapshot = lambda **kwargs: (
             load_calibration_ledger_snapshot(
@@ -4439,7 +4442,7 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
     producer["extraction_spec"].update(
         {"sha256": spec_sha256, "member_count": len(all_spec_bundle_ids)}
     )
-    seed_stack = mint1._derive_stack_identity(
+    seed_stack = mint1.build_stack_identity(
         load_json(evidence_root / ordered_bundle_ids[0] / "config.json"),
         load_json(evidence_root / ordered_bundle_ids[0] / "metadata.json"),
     )
@@ -4962,6 +4965,268 @@ class PinsetTests(unittest.TestCase):
 
 
 class V2PinsetAndMintTests(unittest.TestCase):
+    def test_authentication_session_report_parser_refuses_strict_attacks(
+        self,
+    ) -> None:
+        attacks = (
+            ("duplicate", b'{"nested":{"x":1,"x":2}}', "duplicate JSON key"),
+            (
+                "overflow",
+                b'{"nested":{"x":1e999}}',
+                "non-finite JSON number '1e999'",
+            ),
+            (
+                "nested-reserved",
+                b'{"nested":[{"estimator_registration":{}}]}',
+                "forbidden key 'estimator_registration'",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for label, raw, message in attacks:
+                with self.subTest(label=label):
+                    path = root / f"report-{label}.json"
+                    path.write_bytes(raw)
+                    with V2AuthenticationReadSession() as session:
+                        with self.assertRaisesRegex(
+                            V2AuthenticationInputError, message
+                        ):
+                            session.read(
+                                path,
+                                grammar="json",
+                                label="extraction report",
+                            )
+                        self.assertEqual(dict(session.records), {})
+
+    def test_authentication_session_allows_only_named_governed_spec_vocabulary(
+        self,
+    ) -> None:
+        # Post-D-133 the shipped spec carries no estimator_registration;
+        # a synthetic governed spec keeps the vocabulary exemption
+        # exercised against a file that actually contains the key.
+        shipped_spec = json.loads(
+            (
+                REPO_ROOT
+                / "configs"
+                / "floor_mint"
+                / "d117_qwen25_7b_extraction_spec.json"
+            ).read_text(encoding="utf-8")
+        )
+        comparative = next(
+            cell
+            for cell in shipped_spec["cells"]
+            if cell["kind"] == "comparative"
+        )
+        comparative["estimator_registration"] = {
+            "estimator_id": "d124_two_shared_edge_common_mode.v1",
+            "status": "candidate_pending_floor_commonmode_01",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            spec_path = Path(tmp) / "governed-extraction-spec.json"
+            spec_raw = json.dumps(shipped_spec, indent=2).encode("utf-8")
+            spec_path.write_bytes(spec_raw)
+            self.assertIn(b'"estimator_registration"', spec_raw)
+            report_path = Path(tmp) / "extraction-report.json"
+            report_path.write_bytes(
+                b'{"nested":{"estimator_registration":{}}}'
+            )
+            with V2AuthenticationReadSession() as session:
+                session.allow_governed_extraction_spec(spec_path)
+                self.assertEqual(
+                    session.read(
+                        spec_path,
+                        grammar="json",
+                        label="governed extraction spec",
+                    ),
+                    spec_raw,
+                )
+                with self.assertRaisesRegex(
+                    V2AuthenticationInputError,
+                    "forbidden key 'estimator_registration'",
+                ):
+                    session.read(
+                        report_path,
+                        grammar="json",
+                        label="extraction report",
+                    )
+
+    def test_legacy_report_loader_is_preceded_by_strict_byte_admission(
+        self,
+    ) -> None:
+        attacks = {
+            "shadowed-governance": (
+                '"governance": {',
+                '"governance":{"estimator_registration":{"forged":true}},'
+                '"governance": {',
+                "duplicate JSON key",
+            ),
+            "shadowed-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":'
+                '{"estimator_registration":{"forged":true}},'
+                '"operative_anchor_envelope": null',
+                "duplicate JSON key",
+            ),
+            "overflowed-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":{"nested":1e999}',
+                "non-finite JSON number '1e999'",
+            ),
+            "nested-reserved-member-operative-anchor-envelope": (
+                '"operative_anchor_envelope": null',
+                '"operative_anchor_envelope":{"nested":'
+                '{"estimator_registration":{}}}',
+                "forbidden key 'estimator_registration'",
+            ),
+        }
+        for label, (needle, replacement, message) in attacks.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                    install_v2_cli_fixture(root)
+                )
+                manifest = load_json(manifest_path)
+                report_path = Path(
+                    manifest["producer_plans"][0]["cells"][0]["absolute"][
+                        "report"
+                    ]
+                )
+                source = report_path.read_text(encoding="utf-8")
+                self.assertIn(needle, source)
+                report_path.write_text(
+                    source.replace(needle, replacement, 1),
+                    encoding="utf-8",
+                )
+                authenticate_calls = 0
+
+                def counting_core():
+                    nonlocal authenticate_calls
+                    core = load_test_core()
+                    authenticate = core._authenticate_component
+
+                    def counted(*args, **kwargs):
+                        nonlocal authenticate_calls
+                        authenticate_calls += 1
+                        return authenticate(*args, **kwargs)
+
+                    core._authenticate_component = counted
+                    return core
+
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(
+                        generalized,
+                        "_actual_v2_git_state",
+                        return_value=("0" * 40, True),
+                    ),
+                    mock.patch.object(
+                        generalized,
+                        "_fresh_original_core",
+                        side_effect=counting_core,
+                    ),
+                    mock.patch("sys.stderr", stderr),
+                ):
+                    exit_code = generalized.main(
+                        [
+                            "--pinset",
+                            str(pinset_path),
+                            "--pinset-sha256",
+                            pinset_sha256,
+                            "--v2-input-manifest",
+                            str(manifest_path),
+                            "--out",
+                            str(root / "floor.json"),
+                            "--single-count-out",
+                            str(root / "single-count.txt"),
+                            "--project-commit",
+                            "0" * 40,
+                            "--project-tree-state",
+                            "clean",
+                        ]
+                    )
+                self.assertEqual(exit_code, 2)
+                self.assertIn(message, stderr.getvalue())
+                self.assertEqual(authenticate_calls, 0)
+                self.assertFalse((root / "floor.json").exists())
+
+    def test_legitimate_report_reaches_legacy_authentication_after_preparse(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pinset_path, pinset_sha256, manifest_path, load_test_core = (
+                install_v2_cli_fixture(root)
+            )
+            calls = 0
+
+            def counting_core():
+                nonlocal calls
+                core = load_test_core()
+                authenticate = core._authenticate_component
+
+                def counted(*args, **kwargs):
+                    nonlocal calls
+                    calls += 1
+                    return authenticate(*args, **kwargs)
+
+                core._authenticate_component = counted
+                return core
+
+            def validate_binding(binding, snapshot, **_kwargs):
+                return tuple(
+                    next(
+                        observation
+                        for observation in snapshot.observations
+                        if observation.receipt_digest
+                        == binding["endpoints"][role]["receipt_digest"]
+                    )
+                    for role in ("pre", "post")
+                )
+
+            with (
+                mock.patch.object(
+                    generalized,
+                    "_actual_v2_git_state",
+                    return_value=("0" * 40, True),
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_head_pin_commit_containment_in_origin_main",
+                    return_value=True,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "validate_calibration_bracket_binding",
+                    side_effect=validate_binding,
+                ),
+                mock.patch.object(
+                    generalized,
+                    "_fresh_original_core",
+                    side_effect=counting_core,
+                ),
+            ):
+                exit_code = generalized.main(
+                    [
+                        "--pinset",
+                        str(pinset_path),
+                        "--pinset-sha256",
+                        pinset_sha256,
+                        "--v2-input-manifest",
+                        str(manifest_path),
+                        "--out",
+                        str(root / "floor.json"),
+                        "--single-count-out",
+                        str(root / "single-count.txt"),
+                        "--project-commit",
+                        "0" * 40,
+                        "--project-tree-state",
+                        "clean",
+                    ]
+                )
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(calls, 8)
+            self.assertTrue((root / "floor.json").is_file())
+
     def test_d117_production_proof_registry_partition_is_exhaustive_and_disjoint(
         self,
     ) -> None:
@@ -5132,6 +5397,20 @@ class V2PinsetAndMintTests(unittest.TestCase):
     def test_producer_inventory_covers_governed_non_mint_spec_members(
         self,
     ) -> None:
+        stack = {
+            "hardware_unit": "synthetic",
+            "os_version": "synthetic",
+            "runtime_version": "synthetic",
+            "kernel_library": "synthetic",
+            "model_artifact_sha256": "a" * 64,
+            "quantization": "int4",
+            "tokenizer_identity": "synthetic",
+            "sampler_output_policy": "greedy",
+            "batching_concurrency_policy": "single-request sequential",
+            "measurement_boundary_label": "synthetic",
+            "telemetry_backend": "synthetic",
+        }
+        runtime_config = generalized.derive_model_runtime_config(stack, "c" * 64)
         component = SimpleNamespace(
             spec_sha256="s" * 64,
             spec={
@@ -5147,8 +5426,8 @@ class V2PinsetAndMintTests(unittest.TestCase):
             },
             members=(SimpleNamespace(bundle_id="mint-member"),),
             source_regime={
-                "stack_identity": {"model_artifact_sha256": "m" * 64},
-                "stack_identity_sha256": "r" * 64,
+                "stack_identity": stack,
+                "stack_identity_sha256": runtime_config["runtime_identity_sha256"],
             },
             scientific_config_identity_sha256="c" * 64,
         )
@@ -5167,11 +5446,7 @@ class V2PinsetAndMintTests(unittest.TestCase):
                 "derivation_rule_id": "rule",
             },
             "extraction_spec": {"sha256": "s" * 64, "member_count": 2},
-            "model_runtime_config": {
-                "model_artifact_sha256": "m" * 64,
-                "runtime_identity_sha256": "r" * 64,
-                "config_set_sha256": "c" * 64,
-            },
+            "model_runtime_config": runtime_config,
         }
         inputs = SimpleNamespace(
             plan_sha256="p" * 64,
@@ -5461,6 +5736,11 @@ class V2PinsetAndMintTests(unittest.TestCase):
         for label, raw, message in (
             ("duplicate", b'{"x": 1, "x": 2}', "duplicate JSON key"),
             ("nonfinite", b'{"x": NaN}', "non-finite JSON number"),
+            (
+                "overflow",
+                b'{"nested": {"x": 1e999}}',
+                "non-finite JSON number '1e999'",
+            ),
         ):
             with self.subTest(label=label):
                 with self.assertRaisesRegex(generalized.MintError, message):
@@ -7551,7 +7831,7 @@ class FullPathTests(unittest.TestCase):
                     side_effect=authenticate,
                 ),
                 mock.patch.object(
-                    mint1, "_derive_stack_identity", return_value=stack_identity()
+                    mint1, "build_stack_identity", return_value=stack_identity()
                 ),
                 mock.patch.object(
                     mint1,

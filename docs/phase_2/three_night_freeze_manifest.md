@@ -156,3 +156,17 @@ sentences as ordinary prose and require zero total matches. Independently
 check that the final GAMMA pack and duration include D-122, that every count
 uses the post-recovery receipt model, and that A-04/B-04/G-06 are reproduced
 from the frozen timing ledger rather than copied from the header estimates.
+
+- [ ] **D-8′ threshold equality:** before recording the chain SHA-256,
+  confirm that the §5B prose value, the chain's
+  `PRE_CAL_FIDUCIAL_MAX_S`, and the writer's
+  `PREFLIGHT_SYSTEMATIC_SCREEN_S` are byte-equal to one another and to the
+  value derived from the calibration-acceptance artifact named in the pack.
+  The chain threshold remains a frozen literal; do not replace it with a
+  quiet-window runtime artifact read.
+- [ ] **L-05 writer-lease TTL:** during the §5C lead live verification,
+  verify and record the writer-lease TTL/expiry semantics across the frozen
+  reservation-to-writer sequence. Any expiry shorter than that sequence is
+  NO-GO and must be repaired before pack freeze; absence of an expiry must be
+  demonstrated from the writer's lease semantics, not inferred from the
+  reservation CLI.

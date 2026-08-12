@@ -11,6 +11,11 @@ from contextlib import redirect_stderr
 from copy import deepcopy
 from io import StringIO
 from pathlib import Path
+
+from joulewise.identity_pins import (
+    IDENTITY_PIN_DERIVATION_CONTRACT,
+    scientific_config_identity_sha256,
+)
 from typing import Any, Iterable
 from unittest import mock
 
@@ -44,15 +49,15 @@ from scripts.extract_detection_floors import main as extract_main  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "e0929b96e16028c63f6da0dc10eb8ba6c0b0465bc125bffb1dfd263f57264d16"
+EXPECTED_PACK_SHA256 = "63a1bfe4202f849034a887443d711dd8ae4d1a438960eae9802f3f21d2eaad3f"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "c7c7c10c61c882329649533d14e7625ccec3d898aaf209ea45a1e44ba5e15e00",
-    "calibration_plan.json": "05bee6fe9b1b22be3d97afe18349658e70e692825ab7cf01988681d2cf67e2bb",
-    "calibration_plan.sha256": "35586fedd9d56b1c1ea69cf58cdc5a69cfd26cea7c58ecb5789ea88da3f891d1",
-    "order_manifest.json": "ce4a4e9a3197a28d1f5bcf218cae29a52a7b12d6fb99d9eb2dcece73d2af08e9",
-    "plan_tree.json": "6da9806660281ccfb88829659a2a6c51a27c1d7d1170886c2aa751f05115fc77",
-    "plan_tree.sha256": "8ce7e3163da44eeb0f684c1c86485ac2cac64fa5e09710841459910581a9f199",
-    "producer_contract.json": "4906106f4dfae0e74b25ce6ca3ff4b5fafc3adb50a75bf8a84b6353ebcf7ee95",
+    "generate_configs.py": "67b111fbfe58579617bddffb81728efdb35e14a2155013d7ea6aae593e213d99",
+    "calibration_plan.json": "56b164904cd0ffd0b9af5710ab60e4794cbd47b866a1053de5a7548475bda182",
+    "calibration_plan.sha256": "7e38e1f7730e56614c37f778a916098eb7a7655ef4409a9e7bd0a5a97cbd5f9f",
+    "order_manifest.json": "cc288667de9f38726d80318a08e24e7788c94fd965e9f2cf84c650a26bb11595",
+    "plan_tree.json": "b43dc49f549f9b2bc68d8f10acd0d4b6c41e1445a124294406ec7819761af185",
+    "plan_tree.sha256": "1960ba47d639afca9651d62c6e2b2878fd085c2420a0ec51b83274565a03dd54",
+    "producer_contract.json": "7067c9c5714e0dc442163ee73268aa570a681511ad9d0ef6622a55635a1b1c70",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"
     ),
@@ -60,7 +65,7 @@ EXPECTED_FILE_SHA256 = {
         "985a4e5370724698b601303b2ba99027d298060eedc95a65d20112df413043ad"
     ),
 }
-EXPECTED_SPEC_SHA256 = "6b01a4919db1971a824f41c74005f7b391cdb76e86c148a49a2e410b6f014d1d"
+EXPECTED_SPEC_SHA256 = "1b2ac6db94ff3eed369d3a6c702270b16c905ea810a90a6090aaf083b14da883"
 EXPECTED_FAMILY_DOMAIN_SHA256 = {
     "df-ph-decode": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
     "df-ph-prefill-p128-qwen25-1p5b": (
@@ -562,7 +567,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 hashlib.sha256(floor_only_bytes).hexdigest(),
             )
 
-    def test_issued_acceptance_and_d124_candidate_are_registered(self) -> None:
+    def test_issued_acceptance_and_default_estimator_path_are_registered(self) -> None:
         self.assertEqual(
             self.tree["acceptance_policy"]["selection"],
             "issued_d116_artifact_only",
@@ -583,20 +588,16 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             self.assertEqual(basis["allowance_rule"], "max(observed_drift_s,0.010818)")
             self.assertEqual(basis["allowance_embedding_count"], 1)
             self.assertEqual(basis["component_composition"], "componentwise_max_never_sum.v1")
+        for cell in (self.spec["cells"][0], self.spec["cells"][2]):
+            self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
         for cell in (self.spec["cells"][1], self.spec["cells"][3]):
-            self.assertEqual(cell["estimator"], "d124_two_shared_edge_common_mode.v1")
-            registration = cell["estimator_registration"]
-            self.assertEqual(registration["status"], "candidate_pending_floor_commonmode_01")
-            self.assertEqual(registration["transfer_assumption"]["assumption_id"], "d124_block_bracket_edges_shared_within_abba.v1")
-            self.assertEqual(
-                registration["sibling_assumption_cross_reference"],
-                {
-                    "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
-                    "shared_gate": "FLOOR-COMMONMODE-01",
-                    "shared_evidence_record_path": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
-                },
-            )
-            self.assertEqual(registration["never_zero_allowance_application_count"], 1)
+            self.assertNotIn("estimator", cell)
+            self.assertNotIn("estimator_registration", cell)
+        for cell in (self.plan["floor_cells"][0], self.plan["floor_cells"][2]):
+            self.assertEqual(cell["estimator"], "d054_false_effect_guard.v1")
+        for cell in (self.plan["floor_cells"][1], self.plan["floor_cells"][3]):
+            self.assertNotIn("estimator", cell)
+            self.assertNotIn("estimator_registration", cell)
 
     def test_typed_launch_recipes_are_complete_and_portable(self) -> None:
         graph = self.tree["stage_graph"]
@@ -698,8 +699,24 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         projection = self.producer["identity_pin_projection"]
         self.assertEqual(projection["work_order"], "D117-U11-IDPIN-PROJECTION")
         self.assertEqual(projection["mode"], "derive_never_operator_enter")
-        self.assertEqual(set(projection["projected_pins"].values()), {None})
+        self.assertEqual(projection["state"], "unprojected")
+        self.assertEqual(projection["derivation_contract"], IDENTITY_PIN_DERIVATION_CONTRACT)
+        self.assertEqual(projection["supersedes"], [])
+        self.assertEqual(len(projection["identity_units"]), 1)
+        unit = projection["identity_units"][0]
+        self.assertEqual(unit["identity_unit_id"], "alpha")
+        self.assertEqual(set(unit["model_runtime_config"].values()), {None})
+        computed_config_hashes = {
+            scientific_config_identity_sha256(load_json(PACK_ROOT / row["path"]))
+            for row in unit["config_inventory"]
+        }
+        self.assertEqual(len(computed_config_hashes), 1)
+        for row in unit["config_inventory"]:
+            self.assertEqual(row["sha256"], sha256_file(PACK_ROOT / row["path"]))
         self.assertIsNone(projection["projection_receipt"])
+        self.assertEqual(
+            self.tree["arm_attachments"]["identity_pin_projection"], projection
+        )
 
     def test_receipt_oracle_is_recomputed_from_the_production_model(self) -> None:
         expected = derive_bracket_session_receipt_oracle()

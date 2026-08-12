@@ -1,0 +1,2 @@
+{"device":{"rail_manifest":["cpu_power","gpu_power","ane_power"]},"uncertainty_evidence":{"clock_anchor":{"effective_clock_anchor_bound_s":0.0033169255981445314,"wall_minus_monotonic_span_s":0.0005204677581787109}}}
+

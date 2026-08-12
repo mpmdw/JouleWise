@@ -38,6 +38,7 @@ DECISION_LOG_ARCHIVE_PREFIX = "decision_log_archive_"
 # resulting HTML and retains 20% headroom below the runtime's 30,000-byte cap.
 DECISION_LOG_PART_MARKDOWN_BYTES = 12_000
 DECISION_LOG_ENTRY_RE = re.compile(r"(?m)^## (?P<decision_id>D-\d{3}):")
+DECISION_LOG_SUBSECTION_RE = re.compile(r"(?m)^### ")
 MARKED_VERSION = "18.0.6"
 MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"
 
@@ -399,13 +400,15 @@ def split_decision_log_markdown(
     md: str,
     max_part_markdown_bytes: int = DECISION_LOG_PART_MARKDOWN_BYTES,
 ) -> list[DecisionLogPart]:
-    """Split the rendered site view newest-first at complete D-NNN entries.
+    """Split the rendered site view at structural Markdown boundaries.
 
-    The byte ceiling is deliberately source-based, not compression-based:
-    page assignments therefore do not vary with the host zlib version. A
-    single entry may exceed the ceiling because entry boundaries are
-    indivisible; the packer remains the fail-closed authority on the emitted
-    shard target.
+    Complete decisions remain the primary boundary. Oversized decisions use
+    ``###`` subsections as secondary boundaries, and an oversized index uses
+    table rows. The byte ceiling is deliberately source-based, not
+    compression-based, so page assignments do not vary with the host zlib
+    version. A single subsection or index row remains indivisible and may
+    exceed this source ceiling; the packer remains the fail-closed authority
+    on emitted shards.
     """
     if max_part_markdown_bytes < 1:
         fail("decision log pagination", DECISION_LOG_SOURCE, "positive byte ceiling")
@@ -432,51 +435,182 @@ def split_decision_log_markdown(
         for index, match in enumerate(matches)
     ]
 
-    newest_first_groups: list[list[tuple[str, str]]] = []
+    if len(md.encode("utf-8")) <= max_part_markdown_bytes:
+        return [
+            DecisionLogPart(
+                out_name=DECISION_LOG_OUTPUT,
+                title="Decision Log",
+                markdown=md,
+                decision_ids=tuple(decision_ids),
+            )
+        ]
+
+    recent_prefix = (
+        "# Decision Log — Recent Entries\n\n"
+        "The guide and complete decision index continue in the archives; "
+        "the navigation on this page links every rendered part.\n\n"
+    )
+    archive_prefix = (
+        "# Decision Log — Continued\n\n"
+        "This page continues the generated decision-log site view.\n\n"
+    )
+    entry_payload_ceiling = max_part_markdown_bytes - max(
+        len(recent_prefix.encode("utf-8")),
+        len(archive_prefix.encode("utf-8")),
+    )
+    if entry_payload_ceiling < 1:
+        fail(
+            "decision log pagination",
+            DECISION_LOG_SOURCE,
+            "byte ceiling large enough for a decision-log page heading",
+        )
+
+    def split_oversized_entry(
+        decision_id: str,
+        entry: str,
+    ) -> list[tuple[tuple[str, ...], str]]:
+        if len(entry.encode("utf-8")) <= entry_payload_ceiling:
+            return [((decision_id,), entry)]
+        subsection_starts = [
+            match.start() for match in DECISION_LOG_SUBSECTION_RE.finditer(entry)
+        ]
+        if not subsection_starts:
+            fail(
+                "decision log pagination",
+                DECISION_LOG_SOURCE,
+                f"a ^### subsection boundary inside oversized {decision_id}",
+            )
+        atoms = [entry[:subsection_starts[0]]] + [
+            entry[
+                start:
+                subsection_starts[index + 1]
+                if index + 1 < len(subsection_starts)
+                else len(entry)
+            ]
+            for index, start in enumerate(subsection_starts)
+        ]
+        continuation = f"## ({decision_id} continued)\n\n"
+        chunks: list[tuple[tuple[str, ...], str]] = []
+        chunk = atoms[0]
+        for atom in atoms[1:]:
+            prefix = "" if not chunks else continuation
+            if len((prefix + chunk + atom).encode("utf-8")) <= entry_payload_ceiling:
+                chunk += atom
+                continue
+            chunk_prefix = "" if not chunks else continuation
+            chunks.append(((decision_id,) if not chunks else (), chunk_prefix + chunk))
+            chunk = atom
+        chunk_prefix = "" if not chunks else continuation
+        chunks.append(((decision_id,) if not chunks else (), chunk_prefix + chunk))
+        return chunks
+
+    entry_pages: list[tuple[tuple[str, ...], str]] = []
     group: list[tuple[str, str]] = []
     group_bytes = 0
-    for entry in reversed(entries):
-        entry_bytes = len(entry[1].encode("utf-8"))
-        if group and group_bytes + entry_bytes > max_part_markdown_bytes:
-            newest_first_groups.append(list(reversed(group)))
+
+    def flush_group() -> None:
+        nonlocal group, group_bytes
+        if group:
+            ordered = list(reversed(group))
+            entry_pages.append(
+                (
+                    tuple(decision_id for decision_id, _ in ordered),
+                    "".join(entry for _, entry in ordered),
+                )
+            )
             group = []
             group_bytes = 0
-        group.append(entry)
-        group_bytes += entry_bytes
-    newest_first_groups.append(list(reversed(group)))
 
+    for decision_id, entry in reversed(entries):
+        fragments = split_oversized_entry(decision_id, entry)
+        if len(fragments) > 1:
+            flush_group()
+            entry_pages.extend(fragments)
+            continue
+        entry_bytes = len(entry.encode("utf-8"))
+        if group and group_bytes + entry_bytes > entry_payload_ceiling:
+            flush_group()
+        group.append((decision_id, entry))
+        group_bytes += entry_bytes
+    flush_group()
+
+    def split_oversized_preamble(value: str) -> list[str]:
+        if len(value.encode("utf-8")) <= max_part_markdown_bytes:
+            return [value]
+        lines = value.splitlines(keepends=True)
+        try:
+            index_heading = next(
+                index for index, line in enumerate(lines) if line.rstrip("\r\n") == "## Index"
+            )
+            table_start = next(
+                index
+                for index in range(index_heading + 1, len(lines))
+                if lines[index].lstrip().startswith("|")
+            )
+        except StopIteration:
+            fail(
+                "decision log pagination",
+                DECISION_LOG_SOURCE,
+                "an index table for oversized preamble pagination",
+            )
+        if table_start + 2 > len(lines):
+            fail(
+                "decision log pagination",
+                DECISION_LOG_SOURCE,
+                "an index table header and delimiter row",
+            )
+        table_end = table_start
+        while table_end < len(lines) and lines[table_end].lstrip().startswith("|"):
+            table_end += 1
+        table_header = "".join(lines[table_start:table_start + 2])
+        rows = lines[table_start + 2:table_end]
+        before_table = "".join(lines[:table_start]) + table_header
+        after_table = "".join(lines[table_end:])
+        continuation_prefix = (
+            "# Decision Log — Index Continued\n\n"
+            "## (index continued)\n\n"
+            + table_header
+        )
+        if not rows or any(not row.lstrip().startswith("|") for row in rows):
+            fail(
+                "decision log pagination",
+                DECISION_LOG_SOURCE,
+                "decision-index data rows",
+            )
+        chunks: list[str] = []
+        prefix = before_table
+        chunk_rows: list[str] = []
+        for row in rows:
+            candidate = prefix + "".join(chunk_rows) + row + after_table
+            if chunk_rows and len(candidate.encode("utf-8")) > max_part_markdown_bytes:
+                chunks.append(prefix + "".join(chunk_rows))
+                prefix = continuation_prefix
+                chunk_rows = []
+            chunk_rows.append(row)
+        chunks.append(prefix + "".join(chunk_rows) + after_table)
+        return chunks
+
+    preamble_pages = split_oversized_preamble(preamble)
+    page_payloads = [*entry_pages, *(((), page) for page in preamble_pages)]
     parts: list[DecisionLogPart] = []
-    for index, entries_in_part in enumerate(newest_first_groups):
-        if index == 0:
-            out_name = DECISION_LOG_OUTPUT
-            title = "Decision Log"
-            prefix = (
-                preamble
-                if len(newest_first_groups) == 1
-                else (
-                    "# Decision Log — Recent Entries\n\n"
-                    "The guide and complete decision index continue on Archive 1; "
-                    "the navigation on this page links every rendered part.\n\n"
-                )
-            )
+    for index, (part_decision_ids, payload) in enumerate(page_payloads):
+        out_name = (
+            DECISION_LOG_OUTPUT
+            if index == 0
+            else f"{DECISION_LOG_ARCHIVE_PREFIX}{index}.html"
+        )
+        title = "Decision Log" if index == 0 else f"Decision Log — Archive {index}"
+        if part_decision_ids:
+            prefix = recent_prefix if index == 0 else archive_prefix
+            markdown = prefix + payload
         else:
-            out_name = f"{DECISION_LOG_ARCHIVE_PREFIX}{index}.html"
-            title = f"Decision Log — Archive {index}"
-            prefix = (
-                preamble
-                if index == 1
-                else (
-                    f"# {title}\n\n"
-                    "This page continues the generated decision-log site view with "
-                    "older complete entries.\n\n"
-                )
-            )
+            markdown = payload
         parts.append(
             DecisionLogPart(
                 out_name=out_name,
                 title=title,
-                markdown=prefix + "".join(entry[1] for entry in entries_in_part),
-                decision_ids=tuple(entry[0] for entry in entries_in_part),
+                markdown=markdown,
+                decision_ids=part_decision_ids,
             )
         )
     return parts

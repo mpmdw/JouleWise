@@ -51,29 +51,27 @@ decision record only.
   artifact, sha `31611396…`); a successor issuing before arm ⇒ pack
   regeneration. D-125's lineage envelope stays available but is not required
   per-pack.
-- **Q7 D-124 estimator — RULED (a gate, not a choice):** packs may NOT freeze
-  while the estimator is `candidate_pending_floor_commonmode_01`; D-125
-  requires implementation first ⇒ **FLOOR-COMMONMODE-01 work order** (below)
-  must land through the full D-118/D-121 gauntlet before pack regeneration.
+- **Q7 D-124 estimator — RESOLVED-BY-REVERSAL (2026-08-11):** the estimator
+  gate is void because the candidate was withdrawn under its pre-committed
+  stopping rule. Contrasts use the worst-case default. The prefill contrast's
+  claim capability is reduced accordingly, and the arm proceeds under the
+  default floors.
 
-## ENGINEERING WORK ORDERS (freeze-blocking; no Ed input needed)
+## ENGINEERING WORK ORDERS (freeze-blocking; no Ed input needed) — items 1–4 ALL CLOSED as of 2026-08-12; the freeze's remaining engineering preconditions live in the addendum items (1)+(3) below, the Q8 cells build, and the D-134 §5C consumer
 
-1. **FLOOR-COMMONMODE-01** — implement the D-124 two-shared-edge common-mode
-   estimator (two shared edges + bundle-specific adversarial terms, once-only
-   allowance, transfer limitation, identical calibration/consumer covariance
-   treatment) → D-118/D-121 gauntlet → pin its implementation identity in all
-   affected packs. **The long pole for freeze.**
-2. **D-123 byte-identity proof (Q5)** — strengthen both floor packs'
-   `test_reporting_section_does_not_change_floor_output` to serialize extractor
-   results through the production canonical output path and compare raw
-   bytes+SHA with/without the reporting keys (7B currently proves object
-   equality only; 1.5B proves validation+projection only).
-3. **Receipt-oracle re-derivation (Q6)** — lead-owned arm-materialization from
-   MERGED-MAIN cadence (10 physical receipts / 5 logical ops per session; the
-   3-window production regression is the authoritative oracle). Derive from the
-   authenticated live head; never hand-author receipt literals. Replaces the
-   stale `impl/d117-ledger-recovery` TODO markers (surfaced by the T2
-   post-merge integration review as CS1).
+1. ~~**FLOOR-COMMONMODE-01**~~ — **WITHDRAWN 2026-08-11** under the
+   pre-committed stopping rule; packs use the worst-case default.
+2. **D-123 byte-identity proof (Q5)** — **DISCHARGED 2026-08-09: PR #124
+   MERGED** (lead-replayed on both interpreters; CI + D-121). The
+   strengthened byte+SHA comparison through the production canonical output
+   path is on main.
+3. **Receipt-oracle re-derivation (Q6)** — **DISCHARGED 2026-08-10: PR #125
+   MERGED** (replay-derived receipt oracles in all three packs, derived from
+   the authenticated merged head; 10 physical receipts / 5 logical ops per
+   finalized bracket session). The 2026-08-11 fired-and-evaluated freshness
+   conditional was NO-REDERIVATION-NEEDED at `c61f840` (byte-identical
+   replay, sha `088bab77…`); re-derive again only if a later merge changes
+   the ledger read/write surface.
 4. **Prefill phase-recording proof (Q9)** — **DISCHARGED 2026-08-09** (`2cd9bc3`,
    `docs/process_traces/2026-08-09-prefill-phase-proof/PROOF.md`): 7B PROVEN,
    1.5B PROVEN-WITH-CAVEATS (sampling-resolution label on 37/50 short windows,
@@ -82,8 +80,8 @@ decision record only.
 
 ## Fastest path to a frozen, armable pack set
 
-Ed taps Q1+Q8 RULED → land FLOOR-COMMONMODE-01 (gauntlet) → the two remaining
-engineering proofs (2–3) → regenerate all three packs from the resulting head
+Ed taps Q1+Q8 RULED → land the two remaining engineering proofs (2–3) →
+regenerate all three packs from the resulting head
 → generator `--check` + focused/canonical suites → issue readiness + identity
 projections → materialize the first arm against the authenticated ledger head.
 (Freeze also assumes the trust mint bar has landed.)
@@ -91,7 +89,24 @@ projections → materialize the first arm against the authenticated ledger head.
 Note: Sol's V3/V4 `--check` "failures" in the packet were a read-only-sandbox
 no-writable-tmpdir artifact (F3), not pack defects; beta regen passed.
 
-## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — lineage-monotone allowance vs short prefill windows [ED-VISIBILITY]
+## ADDENDUM 2026-08-10 (T4, from the FCM-01 cold-gate refuter) — DISPOSITION SPLIT 2026-08-11 (D-133/Q7 reversal)
+
+**Item-level disposition (the earlier blanket SUPERSEDED marker was wrong —
+items (1) and (3) are measurement-regime obligations independent of the
+estimator and remain LIVE):**
+- Item (2) — DEAD with the Q7 reversal: there is no registered estimator
+  selection to re-evaluate; every comparative cell takes the worst-case
+  default this cycle.
+- Item (1) — LIVE, RE-HOMED: the silent estimated-to-refused conversion
+  mechanism specific to the D-124 estimator dies with its withdrawal, but
+  recording each comparative cell's minimum window-duration margin at
+  collection remains a freeze-gate checklist item — short windows against
+  the sampler cadence are a measurement-regime risk regardless of
+  estimator (see the WO-4/Q9 not_resolvable_sample_count record).
+- Item (3) — LIVE: the margin math MUST be run for the Q8 p256 cells when
+  their windows are first measured; WO-4/Q9 recorded 37/50
+  not_resolvable_sample_count on 1.5B p128 windows and the same pressure
+  is expected on 1.5B p256 (expected is not evidence).
 
 Both floor packs' extraction specs select the D-124 common-mode estimator for
 the **prefill p128** comparative cells, not only decode. The estimator's

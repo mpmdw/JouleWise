@@ -10,9 +10,74 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-08 late morning — **THE 40-HOUR WINDOW IS LIVE
-(D-125); T0 SESSION RUNNING — three Phase A Sol streams IN FLIGHT (see
-T0 block below). A NEW SESSION STARTS HERE:**
+Last updated: 2026-08-12 (~05:15Z) — **T5 SESSION RUNNING; MID-SESSION STATE below; a fresh session starts THERE, then falls back to the T4-LATE checkpoint for anything it doesn't cover.**
+
+## ▶▶ T5 MID-SESSION STATE (2026-08-12, Fable magistrate; 12h window, LIVE)
+
+**Merge queue executed so far: #132 MERGED (03:41Z), #133 MERGED (04:04Z),
+#131 MERGED (04:38Z, D-131 RATIFIED→ADOPTED on main), #127 MERGED (~05:00Z).
+Remaining: #134 (one CI check pending at head 0bc4435 — the first fix-round
+push silently LOST its guard hunk in a swap-file verification sequence,
+restored + byte-verified; integration delta re-audit ACCEPT zero findings),
+then #129 (pre-reviewed, merges last).** New PRs this session: **#135**
+(crash-matrix exclusive CI job — cuts CI wall from ~1h35m to ~30min; stacked
+on #127, evidence: 5317s hosted shard vs 146s bench standalone; calexits-3.11
+flake rerun queued) and **#136** (D-135 advisory site budgets; refuter
+REJECT round 1 on a raw-source-proxy failure gate — fixed 0bf0a8a, delta
+re-audit in flight; WATCH: conservative estimator projects 1.9MB vs the 1MiB
+physical cap — the PR's site chain gives the real number; if the REAL
+artifact exceeds the cap, archival is the D-135-anticipated remedy).
+
+**Streams in flight:** §5C readiness-record generator (D-134; xhigh Sol run
+~1h+, director split it into run 1 = registry/CLI/schemas/pack slots +
+Markdown views, run 2 = clause-9 doctrine prose — ratified); Q8 p256 floor
+cells (round 2 after a correct impossible-proof early return; NOTE: p256
+cells are REAL new bundles — 50→100 members/pack, new quiet-window budget
+for Ed to ratify — not a rider like p128); WO-MINT-ESTIMATOR-VOCAB (Sol
+resumed under scope grant; **COLD GATE COMPLETE** — packet + 3 rulings
+custodied at docs/process_traces/2026-08-12-mintvocab-coldgate/: option A
+authorized under self-contained conditions F1–F12; the paired refuter caught
+a REAL binding-seam fail-open both prior condition sets would have certified
+AND proved the first remedy inert — fix round under F1–F12 required before
+merge); p2038 clock-phase flake root-fix (Sol implementing; kills the ~1.6%/
+run CI flake that hit #127/#121).
+
+**Freeze-lane ORDER CORRECTION (freeze-prep director, verified):** the
+T4-late checkpoint's lane ("freeze → U11 projections → arm packet") is
+inverted — D-134's §5C registry + receipts and the Q8 cells are pack
+CONTENT, so the true order is **#134+mintvocab (if in time) → §5C run 1+2 →
+Q8 cells → regenerate → FREEZE → U11 freeze projections → arm packet**.
+Both control docs re-cut accordingly (readiness rows b32220e; freeze-plan
+WOs 1–4 all CLOSED). Arm-packet skeleton rescued to
+~/JouleWise-window-custody/t4-session-20260810/ and its D-4/D-5/D-11
+corrections applied (census literal, idle-before-ledger, two-tap morning).
+
+**ED-OWED (updated):**
+- **Gamma-arm premise SHIFTED (flagged, not decided):** D-133's default
+  (freeze doesn't wait; tighter floor banks for ICPE) was priced on freeze
+  imminence. The freeze actually waits on §5C+Q8 regardless — days, not
+  hours — while FCM (#134) is one CI check from merge and mintvocab is
+  implemented pending its cold-gate fix round. If both land pre-freeze-wave,
+  D-133 cl.4's re-spec-back fires ON ITS OWN RULED TERMS: packs freeze at
+  1.869502 J instead of 8.611855 J and the funded p256 arm likely publishes
+  instead of not-resolvable. No reinterpretation is being made — the session
+  is simply executing fast enough that the ruled conditional may fire. If Ed
+  wants the freeze to WAIT for it explicitly (reversal condition 5), that is
+  Ed's call; PR #133's merged conditional-insert block makes the paper swap
+  mechanical either way.
+- Q8 quiet-window budget ratification (p256 = 50 NEW bundles/pack, hours
+  recomputed by the stream — RATIFICATION-REQUIRED row in its report).
+- Live sudo/powermetrics checklist before relying on #127's production
+  sampler commit at arm time. §5A taps on the quiet night. Extension-axes
+  roadmap review (standing).
+
+**Session records so far:** T4-late addendum landed (b670c8f, 6 record
+anomalies incl. D-131-was-branch-only and the C-056 span boundary);
+control-doc batch b32220e; D-131 ADOPTED flip 14879e4; mintvocab cold-gate
+custody 82b048e/529188a. Scratchpad:
+/private/tmp/claude-501/-Users-edr-code-JouleWise/7c344e29-f3e2-455c-9384-1902c950c106/scratchpad
+(worktrees wt131/wt134=diag134/wtA/wtB-d135/wtB-review/wtC-p2038flake/
+wtD-5c/wtE-mintvocab/wtF-crashmx/wtG-q8; all branches pushed).
 
 **SUPERSEDED by the T1 checkpoint (2026-08-08 night) below.**
 
@@ -47,7 +112,86 @@ reason-code SPEC lane only.
 The MORNING STATE block below records how the overnight ended;
 everything under it is executed history.
 
-## ▶▶ T4 SESSION CHECKPOINT (2026-08-10/11, Ed 24h+ grind order) — /clear-SAFE; A NEW SESSION STARTS HERE
+## ▶▶ T4-LATE FINAL CHECKPOINT (2026-08-12, Ed stop order) — /clear-SAFE; A NEW SESSION STARTS HERE
+
+**One line: six PRs are open, every one has PASSED its independent
+adversarial audit, and all are waiting only on CI wall-clock; merge them
+in order with a D-121 terminal review each, then launch the two staged
+implementations, then the freeze lane.** Everything below is pushed;
+nothing lives only in a dead session's scratchpad.
+
+**THE MERGE QUEUE (order matters; D-072 standing self-merge applies after
+each PR's D-121 terminal review at its final head; CI must be green):**
+1. **PR #132** (fallback `respec/d124-withdrawn`) — MERGES FIRST; the
+   pack-freeze lane unblocks AT THIS MERGE per D-133 O1 and nothing
+   FCM-shaped may gate it. Gate audit ACCEPT (substance) + staleness
+   sweep applied.
+2. **PR #131** (U11 identity-pin projection, D-131) — four-round gauntlet
+   complete, final delta ACCEPT. Its merge unlocks the staged §5C
+   implementation (D-134).
+3. **PR #127** (calexits test-infra) — audit synthesized ACCEPT
+   (FIND-1 routed to WO-SAMPLER-SUPERVISOR). Production commit still held
+   for Ed's live sudo/powermetrics checklist.
+4. **PR #133** (paper train G) — default-floor mainline; carries the
+   CONDITIONAL-INSERT-TIGHTER-FLOOR swap block for Ed's pending call.
+5. **PR #134** (FCM-01, D-133 desk thread COMPLETE: rounds 5-10, O2+O3
+   discharged, round-10 delta ACCEPT no-findings; site-chain green after
+   dedup 479eefc).
+6. **PR #129** (CI restructure) — delta ACCEPT-FOR-MERGE with the
+   head-bound 23-job hosted campaign green at EXACT head 35f1fe5 (run
+   31541829071) = D-130's second independent execution DISCHARGED.
+
+**STAGED IMPLEMENTATIONS (contracts custodied in
+`docs/process_traces/2026-08-11-staged-contracts/`):**
+- **WO-MINT-ESTIMATOR-VOCAB** (launches after #134 merges, stacks on that
+  branch's code now in main): three-site spec-authoritative estimator
+  dispatch — contract `mintvocab-impl-contract.md` (consult verbatim
+  inside; design adopted in TASK_QUEUE). Full D-118 gauntlet.
+- **§5C readiness-record generator** (launches after #131 merges): D-134
+  ten-clause contract (trace
+  `2026-08-11-5c-readiness-contract/consult.md`) — two-stage receipts,
+  row registry, doctrine amendments enumerated in the consult.
+
+**OWED (successor desk work):**
+- **D-135 implementation** (Ed ruling, minted this checkpoint): make ALL
+  conservative site budgets WARN-ONLY in scripts/pack_capsule.py + the
+  site test suites; only the physical Lakebed 1,048,576-byte cap (real
+  validator, CI-only — lakebed is NOT installed on the bench) may fail
+  anything. Content is never trimmed for advisory budgets.
+- Freeze lane after #132+#131: freeze plan (Q1/Q8 ruled, Q7 void, addendum
+  items (1)+(3) LIVE per the item-level disposition on the fallback
+  branch) → FREEZE → U11 freeze projections → arm packet per D-134
+  (discrepancy resolutions ready:
+  ~/JouleWise-window-custody/t4-session-20260810/arm-packet-discrepancy-resolutions.md).
+- Q8 p256 prefill floor cells build (launches on post-#132 main).
+- T4-late run-report addendum for the final block (D-134/D-135, PR queue,
+  the content-filter + timeout + recovery-resume tooling classes — all
+  three are in ~/.claude/skills/skill-usage-log.md).
+
+**ED-OWED (nothing blocks tonight without them):**
+- **Gamma-arm schedule call (D-133 flag)**: tighter-floor-in-main-paper
+  would make WO-MINT-ESTIMATOR-VOCAB critical path and hold the freeze
+  wave; default = freeze proceeds, tighter number banks for ICPE. The
+  quantified stake: default floor 8.611855 J leaves the funded p256 arm
+  ~3 J margin (likely publishes not-resolvable); tighter 1.869502 J
+  leaves substantial margin. Paper PR #133 carries the mechanical swap
+  either way.
+- Live sudo/powermetrics checklist (#127 production commit).
+- Extension-axes roadmap review; §5A taps on the quiet night.
+
+**Key context for a fresh session:** D-131 (U11 contract, lands with
+#131), D-132 (stopping rules target doom loops), D-133 (FCM disposition,
+hybrid+ALT-D120 — EXECUTED, desk thread complete), D-134 (§5C receipts
+contract), D-135 (site budgets advisory) are today's decisions. Cold-gate
+artifacts custodied in `docs/process_traces/2026-08-11-fcm-coldgate/`
+(standing rule: every sitting custodies packet+rulings before execution).
+Council C-056 records the day. Sol launch rules that cost ~10 failed runs
+today (explicit --timeout, workspace-write for suite-executing runs,
+DEFENSIVE framing for adversarial-review prompts to avoid the Codex
+cybersecurity content filter, never trust a recovery-resume envelope) are
+in ~/.claude/skills/skill-usage-log.md — READ THEM BEFORE LAUNCHING SOL.
+
+## ▶▶ T4 SESSION CHECKPOINT (2026-08-10/11, Ed 24h+ grind order) — SUPERSEDED by T4-LATE FINAL above; kept for detail
 
 **THE MINT BAR IS LIFTED.** Trust PR #122 MERGED at `ae6af48`
 (2026-08-11T03:40Z) under the full gate: 16Q delta 16/16 (T3), ci+site green,
