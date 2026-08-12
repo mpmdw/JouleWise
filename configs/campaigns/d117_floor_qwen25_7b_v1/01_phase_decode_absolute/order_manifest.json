@@ -3,7 +3,7 @@
   "draft_status": "unfrozen_draft",
   "manifest_id": "d117-floor-qwen25-7b-v1-01-phase-decode-absolute-order-v1",
   "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
-  "calibration_plan_sha256": "c20ef596f64a4a8d5367a963614c4db0f2c34a7077441e204bcf22e2b1033f40",
+  "calibration_plan_sha256": "28b1c6201fa23009635ee2773f58a7ff895e8ff2e51f79eb756f11e3fdfc60da",
   "ordering_note": "Ten fixed absolute decode repeats in repetition order.",
   "planned_n_bundles": 10,
   "executed_order": [
