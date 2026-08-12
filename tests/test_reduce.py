@@ -102,7 +102,9 @@ def self_consistent_calibration(
     protocol_id = protocol_id or LEGACY_PROTOCOL_ID
     if first_endpoint_s is None:
         first_endpoint_s = 1_784_490_850.05
-    cadence_s = 0.1
+    nanoseconds_per_second = 1_000_000_000
+    cadence_ns = 100_000_000
+    cadence_s = cadence_ns / nanoseconds_per_second
     warmup_edges = [
         (first_endpoint_s + 1.95, first_endpoint_s + 2.95),
         (first_endpoint_s + 4.45, first_endpoint_s + 5.45),
@@ -117,20 +119,35 @@ def self_consistent_calibration(
     capture_end_s = true_edges[-1][1] + 5.0
 
     documents: list[dict] = []
-    endpoint_s = first_endpoint_s
-    while endpoint_s <= capture_end_s + 1e-12:
-        start_s = endpoint_s - cadence_s
+    first_endpoint_ns = round(first_endpoint_s * nanoseconds_per_second)
+    # Keep the established synthetic waveform byte-for-byte stable for its
+    # many reducer callers. Its float phase affects only overlap/power values;
+    # record endpoints and native-second labels come exclusively from the
+    # integer grid below, so it cannot corrupt clock-anchor consistency.
+    signal_endpoint_s = first_endpoint_s
+    record_index = 0
+    while signal_endpoint_s <= capture_end_s + 1e-12:
+        endpoint_ns = first_endpoint_ns + record_index * cadence_ns
+        endpoint_s = endpoint_ns / nanoseconds_per_second
+        whole_second_s = endpoint_ns // nanoseconds_per_second
+        if math.floor(endpoint_s) != whole_second_s:
+            raise AssertionError("integer endpoint lost its whole-second label")
+        start_s = signal_endpoint_s - cadence_s
         overlap = math.fsum(
-            max(0.0, min(endpoint_s, off_s) - max(start_s, on_s)) / cadence_s
+            max(
+                0.0,
+                min(signal_endpoint_s, off_s) - max(start_s, on_s),
+            )
+            / cadence_s
             for on_s, off_s in (*warmup_edges, *true_edges)
         )
         gpu_w = 2.0 + 20.0 * overlap
         documents.append(
             {
                 "timestamp": datetime.fromtimestamp(
-                    math.floor(endpoint_s), tz=timezone.utc
+                    whole_second_s, tz=timezone.utc
                 ),
-                "elapsed_ns": 100_000_000,
+                "elapsed_ns": cadence_ns,
                 "is_delta": True,
                 "hw_model": "Mac15,9",
                 "kern_osversion": "25F84",
@@ -144,7 +161,8 @@ def self_consistent_calibration(
                 },
             }
         )
-        endpoint_s += cadence_s
+        record_index += 1
+        signal_endpoint_s += cadence_s
     raw = b"\0".join(plistlib.dumps(document) for document in documents)
 
     def stamp(epoch_s: float) -> ClockStamp:
@@ -248,6 +266,44 @@ def self_consistent_calibration(
     if use_cache:
         _SELF_CONSISTENT_CALIBRATION = (evidence, raw, events)
     return json.loads(json.dumps(evidence)), raw, events
+
+
+class SelfConsistentCalibrationTests(unittest.TestCase):
+    def test_clock_anchor_resolves_around_every_cadence_boundary(self) -> None:
+        base_ns = 1_790_000_000_000_000_000
+        cadence_ns = 100_000_000
+        offsets_us = (0, -65, 65, -130, 130, -200, 200)
+
+        # Pulse fitting is orthogonal to this regression and expensive. Keep
+        # the real plist serialization, parsing, and clock-anchor derivation
+        # for every phase while replacing only the downstream evidence work.
+        with patch(
+            "joulewise.powermetrics_fiducial.rederive_detection_from_artifacts",
+            return_value={},
+        ), patch(
+            "joulewise.powermetrics_fiducial.instrument_evidence",
+            return_value={"status": "valid", "reasons": []},
+        ):
+            for boundary_index in range(10):
+                for offset_us in offsets_us:
+                    with self.subTest(
+                        boundary_index=boundary_index,
+                        offset_us=offset_us,
+                    ):
+                        first_endpoint_ns = (
+                            base_ns
+                            + boundary_index * cadence_ns
+                            + offset_us * 1_000
+                        )
+                        evidence, _raw, _events = self_consistent_calibration(
+                            first_endpoint_s=(
+                                first_endpoint_ns / 1_000_000_000
+                            )
+                        )
+                        self.assertNotEqual(
+                            evidence["clock_anchor"]["status"], "unknown"
+                        )
+                        self.assertTrue(evidence["clock_anchor_resolved"])
 
 
 def load_config(**overrides) -> BenchmarkConfig:
