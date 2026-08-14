@@ -1,0 +1,36 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "d120_profile_suite",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-mint-trust-v1",
+  "facts": [
+    {
+      "fact_id": "desk.mint_trust.v1",
+      "source_kind": "PROBE",
+      "source_path": "arm_readiness.sources/mint-trust.json",
+      "source_sha256": "93558e017a9efee374cf5350543916f67db6118a15cca86f57444358d4f27812",
+      "value": {
+        "profile_test_status": "PASS",
+        "same_head": true,
+        "same_pack_digest": true
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "6193379490de0733f142d5ff6248389d99d224a9",
+  "issued_at_utc": "2026-08-14T03:00:58.903792Z",
+  "kind": "MINT_TRUST",
+  "pack_sha256": "34f07db7db669838b86f39cf92795718d32a8201b9272687c053d3a9ea014b85",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 1986908495124625
+}

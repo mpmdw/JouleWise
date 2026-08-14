@@ -1,0 +1,35 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "recovery_ledger_focused_suite",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-recovery-ledger-test-v1",
+  "facts": [
+    {
+      "fact_id": "desk.recovery_ledger_path.v1",
+      "source_kind": "PROBE",
+      "source_path": "arm_readiness.sources/recovery-ledger-test.json",
+      "source_sha256": "a18c2dfee8637f6a417f3a85554bee996b7338c1bc5dccfc01f73d7b87af2427",
+      "value": {
+        "bound_head": true,
+        "recovery_ledger_focused_suite_status": "PASS"
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "6193379490de0733f142d5ff6248389d99d224a9",
+  "issued_at_utc": "2026-08-14T03:00:58.903792Z",
+  "kind": "RECOVERY_LEDGER_TEST",
+  "pack_sha256": "34f07db7db669838b86f39cf92795718d32a8201b9272687c053d3a9ea014b85",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 1986908495124625
+}

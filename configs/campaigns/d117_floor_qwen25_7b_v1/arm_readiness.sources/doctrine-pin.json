@@ -1,0 +1,85 @@
+{
+  "checks": [
+    {
+      "check_id": "doctrine_pin_derivation",
+      "evidence": {
+        "d134_sha256": "94dbed8f10786f727715b57c7de2faf00e5e435fd8e1d44934dd0f9ac8bd6aa3",
+        "frozen_launch_recipe_sha256": "305b12406c264a6b55c3956ece003bc5661de55a1e47e18b858ffa64cc62e637",
+        "runbook_section_sha256": {
+          "10": "82204b8fc90fb417319e0fee33795d7cd16959fbab22c22a117fef580bd695d5",
+          "5": "bc3b1eafb2f6c9cd4fe3b95f10af14bb2811a031fdc5a7974df987d685a68169",
+          "5A": "ca7e2340035e2e44ab943e061ff135d0a76707f9c527b5f7a8766247258c6e02",
+          "5B": "3ef656e12e773bf5e778a6e5d8e82e9a4ee68fc30d40413ac18e6dda837f4c2f",
+          "5C": "8a2c8072b25b418284d56dbdd3b8678f04339b94da507fa504cfea06a80153a8",
+          "6": "7f0a3f8ddedd369285bfb276eea3274d4fe82ceb1a033b3db1f20aa7d00d4281"
+        }
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "pack_pin_material": {
+      "d134_sha256": "94dbed8f10786f727715b57c7de2faf00e5e435fd8e1d44934dd0f9ac8bd6aa3",
+      "frozen_launch_recipe_sha256": "305b12406c264a6b55c3956ece003bc5661de55a1e47e18b858ffa64cc62e637",
+      "runbook_section_sha256": {
+        "10": "82204b8fc90fb417319e0fee33795d7cd16959fbab22c22a117fef580bd695d5",
+        "5": "bc3b1eafb2f6c9cd4fe3b95f10af14bb2811a031fdc5a7974df987d685a68169",
+        "5A": "ca7e2340035e2e44ab943e061ff135d0a76707f9c527b5f7a8766247258c6e02",
+        "5B": "3ef656e12e773bf5e778a6e5d8e82e9a4ee68fc30d40413ac18e6dda837f4c2f",
+        "5C": "8a2c8072b25b418284d56dbdd3b8678f04339b94da507fa504cfea06a80153a8",
+        "6": "7f0a3f8ddedd369285bfb276eea3274d4fe82ceb1a033b3db1f20aa7d00d4281"
+      }
+    }
+  },
+  "facts": [
+    {
+      "fact_id": "clock.restore_recipe.v1",
+      "value": {
+        "close_out_recipe_hashes_match_pack": true,
+        "restore_after_both_backups": true,
+        "restore_after_verdict": true
+      }
+    },
+    {
+      "fact_id": "desk.arming_procedure.v1",
+      "value": {
+        "frozen_launch_recipe_hash_matches_pack": true,
+        "runbook_section_hashes_match_pack": true,
+        "runbook_sections": [
+          "5",
+          "5A",
+          "5B",
+          "5C",
+          "6",
+          "10"
+        ]
+      }
+    }
+  ],
+  "head_commit": "6193379490de0733f142d5ff6248389d99d224a9",
+  "kind": "DOCTRINE_PIN",
+  "pack_sha256": "34f07db7db669838b86f39cf92795718d32a8201b9272687c053d3a9ea014b85",
+  "primary_artifacts": [
+    {
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v1/plan_tree.json",
+      "sha256": "5a5a5d7ed2f1aefa8177756bea538fc0f155b2d52a61bb33cb296eedb97fa523"
+    },
+    {
+      "path": "docs/decision_log.md",
+      "sha256": "590bde5070ce999f78dd3ec0ef39476a46cf92cddfc2f43e4308b8d7ff1cd8fd"
+    },
+    {
+      "path": "docs/phase_2/window_runbook.md",
+      "sha256": "e00f5a3023d5e98b87376576349cbab8cbccd3188dc6dbc2b4083e1294c1a5e2"
+    },
+    {
+      "path": "joulewise/arm_readiness_evidence.py",
+      "sha256": "3558bdfa56f9782ebca0148afd97d780fece5793eb302a01d46d339a13d4083e"
+    },
+    {
+      "path": "scripts/author_arm_readiness_evidence.py",
+      "sha256": "466570500b299fc3b4493429cb7a05dfb7cea5523da0fe1b00a7f2804a15427d"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_evidence_source.v1"
+}
