@@ -12,54 +12,41 @@ file instead.
 
 Last updated: 2026-08-12 (T6 session LIVE, Fable magistrate; window night TONIGHT per Ed ruling)
 
-## ▶▶ T6 SESSION (2026-08-12, LIVE) — 72h continuous-operation directive; window TONIGHT
+## ▶▶ T6 SESSION CHECKPOINT (2026-08-13 night) — FREEZE COMPLETE; ARM SLIPS TO 08-14 (Ed ruling)
 
-**Ed rulings at session start (recorded in decision log, pushed 985d67a):**
-D-133 cl.4 EXECUTE (packs re-spec to 1.869502 J tighter floor before FREEZE);
-Q8 budgets RATIFIED (~6.28 h 1.5B / ~6.48 h 7B per pack, 20% margin);
-window night TONIGHT — freeze lane drives to ARMED today, R2 applies.
+**THE MILESTONE: ALL THREE PACKS ARE FROZEN at head 49dcc49** — first freeze
+in the project's record, at the TIGHTER 1.869502 J floor (D-133 cl.4
+executed, Ed-ratified). U11 identity-pin projections frozen ×3 (GAMMA with
+its four ordered units); D-134 freeze receipts PASS ×3 (arm_disposition
+NOT_APPLICABLE); the twelve evidence receipts per pack authored from primary
+bytes by the #145 tool (lead-run, boot session DA90818C…); §5C LEAD LIVE
+VERIFICATION discharged on the frozen checkout (dry-run-0001, four
+hash-bound checks PASS). Execution record + deviations (X-2 revert-reorder,
+condition-8 synthesis amendment, X-8 ruling):
+docs/process_traces/2026-08-13-freeze-execution/freeze-log.md. Measurement
+checkout: /Users/edr/JouleWise-measurement-20260813 (.venv+mlx; DO NOT
+touch; NO REBOOT before T-0 or evidence re-authors — tool exists, ~15 min).
 
-**Done this session:** #140 mintvocab MERGED e11b1ad (terminal D-121 with live
-F1/F11c verification + bench 358×2 focused matrices; conformance table on the
-PR). #135 CI gremlin ROOT-CAUSED (merge conflict suppresses pull_request runs
-— no merge ref) and fixed by rebase (head 455db5d); 12/14 green, crash-matrix
-jobs running. §5C branches found UNPUSHED contra checkpoint — all four pushed.
-C-057 landed + T5 skill rows reconstructed (no rows existed, contra
-checkpoint) + Ed rulings recorded (985d67a).
+**EIGHT PRs MERGED this session:** #140, #135, #141 (§5C), #142 (CH-1),
+#143 (WO-COLLECTION-MARGIN-01), #144 (tighter-floor re-spec), #145
+(WO-EVIDENCE-AUTHOR-01 — through a mandatory rule-11 COLD GATE, custody
+docs/process_traces/2026-08-12-evauth-coldgate/). Plus: item-(1) ruling,
+FLAKE-CALEXITS-311-REDERIVE root-caused (3 certified reruns), C-057 + T5
+run report landed, Ed's rulings recorded.
 
-**In flight:** Sol xhigh resolving the 19-file §5C×(Q8+#140) merge conflict in
-wtD-5c-integ (regeneration rules; full dual-interpreter suite gate). Sol high
-building CH-1 (arming blocker: authenticated acceptance replaces the writer's
-copied literal) in wtCH1. Opus mechanic finalizing the T5 run report. B3
-three-window regression early-signal GREEN at main (23 OK, 3 skips to examine
-at final head).
+**ARM SLIPPED TO 2026-08-14 (Ed ruling, decision log):** the packet
+finalization found the launch-blocking §0.6 gap — 15 ARM_ONLY rows have no
+evidence producer (arm-side mirror of X-1). **WO-ARM-EVIDENCE-AUTHOR-01
+registered (TASK_QUEUE) = tomorrow's day work**, full gauntlet, deadline
+before the 08-14 arm. The operative packet (111 cells filled, 34 AT-T0):
+~/JouleWise-window-custody/t4-session-20260810/arm-packet-alpha-FINAL-20260813.md.
+Ed-owed at arm: M-1 BRACKET_SESSION_ID ratification, M-2 draft_status
+contradiction ruling, sudo/powermetrics checklist, §5A taps.
 
-**MERGE WAVE COMPLETE (~20:30Z): SIX merges today** — #140 mintvocab
-e11b1ad, #135 crash-matrix CI 5be5b78, #141 §5C 696576c, #142 CH-1 5be400e
-(readiness row :58 flipped GO), #143 WO-COLLECTION-MARGIN-01 1092984
-(item-(1) freeze gate DISCHARGED), **#144 tighter-floor re-spec dc162bc —
-the funded p256 arm's floor is now 1.869502 J (A5 replay
-1.8695016260131627 J), not 8.611855 J.** FLAKE-CALEXITS-311-REDERIVE
-root-caused (scheduler-suspension repro; real-time pulse producer under 40x
-test clock) + certified reruns; fix shape registered.
-
-**FREEZE GATES REMAINING:** (1) WO-EVIDENCE-AUTHOR-01 in flight (Sol xhigh,
-wtEVAUTH) — the §5C build shipped no PRODUCTION author for the twelve
-FREEZE-row evidence receipts (X-1, freeze-checklist mechanic; only test
-fixtures construct them; freeze would REFUSE) — gauntlet + merge owed;
-(2) magistrate canonical suite at reviewed-head candidate dc162bc (running,
-full logs); (3) authoritative B3 GREEN at dc162bc (23 OK, 3 skips = D-126
-class, dispositioned). Freeze-execution checklist assembled at T6 scratchpad
-freeze-checklist.md (9 doc contradictions to resolve at the freeze commit,
-incl. stale worst-case-default rows vs the ratified tighter floor; X-2:
-generator --check is one-shot pre-freeze; X-3: freeze and T-0 must share
-one boot session — NO REBOOT tonight between freeze and arm).
-
-**THEN:** reviewed-head selection (clean full clone) → regeneration
-byte-check → U11 freeze ×3 → commit → D-134 freeze receipts ×3 (needs
-evidence author) → commit → freeze-manifest fills + D-8′ → §5C lead live
-verification → arm packet finalization. Ed tonight: sudo/powermetrics
-checklist + §5A taps.
+**Successor (or this session continuing): (1) WO-ARM-EVIDENCE-AUTHOR-01
+(build+gauntlet), (2) T6 run report + council entry + skill rows +
+consistency sweep (the session record is LARGE: eight merges, two cold
+gates, the freeze), (3) arm 08-14 evening.**
 
 ## ▶▶ T5 FINAL CHECKPOINT (2026-08-12, Ed stop order) — superseded by T6 LIVE above; kept as record
 
