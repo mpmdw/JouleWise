@@ -1,0 +1,40 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "three_window_live_ledger_regression",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-three-window-regression-v1",
+  "facts": [
+    {
+      "fact_id": "desk.three_window_regression.v1",
+      "source_kind": "PROBE",
+      "source_path": "arm_readiness.sources/three-window-regression.json",
+      "source_sha256": "8413c2d03e480e482756cebbb19d23efa515584d117915119ee5785461f6e4c5",
+      "value": {
+        "profiles": [
+          "ALPHA",
+          "BETA",
+          "GAMMA"
+        ],
+        "same_head": true,
+        "three_window_live_ledger_regression_status": "PASS"
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "3c8677d982cfdf2651fca6809cae5b8ee0c0d9f1",
+  "issued_at_utc": "2026-08-14T02:59:10.020318Z",
+  "kind": "THREE_WINDOW_REGRESSION",
+  "pack_sha256": "7a41a8788242c18f08d3b87e4ad7c1404ec616569399d525f68303956fc4b16d",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 1986799611717708
+}

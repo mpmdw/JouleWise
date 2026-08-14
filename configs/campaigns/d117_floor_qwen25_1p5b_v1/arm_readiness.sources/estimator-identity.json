@@ -1,0 +1,61 @@
+{
+  "checks": [
+    {
+      "check_id": "estimator_registry_projection",
+      "evidence": {
+        "admitted_ids": [
+          "abba_block_arm_mean_difference_t_v1",
+          "d054_false_effect_guard.v1",
+          "d124_two_shared_edge_common_mode.v1"
+        ],
+        "derived_estimator_ids": [
+          "d054_false_effect_guard.v1",
+          "d124_two_shared_edge_common_mode.v1"
+        ]
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "derived_estimator_ids": [
+      "d054_false_effect_guard.v1",
+      "d124_two_shared_edge_common_mode.v1"
+    ]
+  },
+  "facts": [
+    {
+      "fact_id": "desk.estimator_identity.v1",
+      "value": {
+        "admitted_by_mint_registry": true,
+        "cli_estimator_id_accepted": false,
+        "estimator_id_derived_from_frozen_plan": true
+      }
+    }
+  ],
+  "head_commit": "3c8677d982cfdf2651fca6809cae5b8ee0c0d9f1",
+  "kind": "ESTIMATOR_IDENTITY",
+  "pack_sha256": "7a41a8788242c18f08d3b87e4ad7c1404ec616569399d525f68303956fc4b16d",
+  "primary_artifacts": [
+    {
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json",
+      "sha256": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d"
+    },
+    {
+      "path": "joulewise/analysis_manifest_v3.py",
+      "sha256": "a3140756f5e8c781f295701d215ed37a730cef8775524df878dd5bfdd941dd18"
+    },
+    {
+      "path": "joulewise/detection_floor.py",
+      "sha256": "ad04a88ddb6a7571029c104ce389e317ebd99b2cef5542157daa47d66bc35660"
+    },
+    {
+      "path": "joulewise/floor_mint_estimator.py",
+      "sha256": "12f96c262711a5689041dbd8492ddc6b4a49030214db76fc350e949bd05737d5"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "sha256": "d3dcd39b046b4beba598d40ba184ed84101fac0f21aff7fd3c624fea4e47786a"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_evidence_source.v1"
+}
