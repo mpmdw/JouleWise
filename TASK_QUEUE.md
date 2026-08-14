@@ -655,3 +655,26 @@ runbook §12 path+SHA recording. D-134 row registry untouched. Consult record:
 T6 scratchpad `item1-consult-out.md` (custody with T6 session record).
 Implementation in flight at registration (Sol xhigh, branch
 impl/collection-margin-receipt).
+
+## WO-ARM-EVIDENCE-AUTHOR-01 (registered 2026-08-13, T6; LAUNCH-BLOCKING for any window night)
+
+The arm-side producer gap (packet §0.6, arm-packet-alpha-FINAL-20260813.md):
+generate_arm_readiness.py arm derives only 3 ARM_ONLY rows internally;
+FIFTEEN (clock.restore_recipe, clock.* sibling, desk.terminal_review, and
+twelve t0.*) are evaluated solely from evidence receipts on disk under
+CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/ — no production author exists
+(mirror of the freeze-side X-1 closed by #145). Design mirrors #145
+(derive-never-enter, named refusals, self-binding, same-tree guard) but with
+T-0/LIVE derivation semantics: clock rows derive from the executed §5A
+procedure's artifacts; t0.* rows derive from the live census, ledger
+reservation receipts, and tap-sequence artifacts at arm time — never
+operator-entered conclusions. MUST also fold the packet's chain conflicts:
+F-A/F-E (chain template hardcodes the dev repo; re-point at the measurement
+checkout), F-B (argv superset), F-C/F-D (CUSTODY_ROOT ambiguity +
+quarantine_root readiness_root_not_fresh self-refusal), F-F (margin recorder
+takes PACK_ROOT not WINDOW_PLAN_ROOT), F-G/F-H (prewindow_check window glob
++ frozen --timeout-min 45 flagged), M-2 (frozen packs' draft_status/README
+"unfrozen draft" contradiction), D-7 (plan_tree asserts D117-U2
+required_before_arm vs D-126's post-window ruling — needs a registry-level
+resolution). Full gauntlet: lenses + delta + (if a second round on the same
+defect) cold gate. Deadline: before the 2026-08-14 arm.

@@ -8824,3 +8824,22 @@ the receipt exposes inadequate temporal support; it cannot repair it —
 an inadequate p256 result still requires recollection, claim demotion, or a
 separately ruled disposition. Sol's design win logged to the codex-delegation
 field-note scorecard.
+
+### Window ALPHA slip ruling — 2026-08-13 (Ed, T6 session)
+
+The three-pack freeze COMPLETED at 49dcc49 (tighter 1.869502 J floor; U11
+projections + D-134 freeze receipts + authored evidence all PASS; §5C lead
+live verification discharged on the frozen checkout). At arm-packet
+finalization the mechanic found the launch-blocking §0.6 gap: FIFTEEN
+ARM_ONLY rows (clock.*, desk.terminal_review, twelve t0.*) evaluate only
+from evidence receipts in CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/,
+which nothing in production can author — the arm-side sibling of the
+freeze-side X-1 gap closed the same day by #145. Ed RULED: slip the window
+to 2026-08-14 night; build WO-ARM-EVIDENCE-AUTHOR-01 as day work under the
+full gauntlet rather than arm an untested path at midnight. Also owed to
+Ed from the packet: M-1 (BRACKET_SESSION_ID literal vs the runbook's
+<WINDOW_ID>-calibration convention — ratify the operator binding) and M-2
+(the frozen packs' draft_status/README still say "unfrozen draft" — a
+generator-owned cosmetic contradiction needing a ruled fix, since pack
+bytes are now frozen). Standing constraint: NO REBOOT before T-0 or the
+evidence re-authors (cheap now — the tool exists).
