@@ -72,7 +72,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p256_qwen25_7b.json"
     ): "d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252",
     "generate_configs.py": (
-        "505abaf8449e5392015192fa7df85248961e83cd0f75b5ebf850efaf646edc31"
+        "85fe60951895bb4d963cdd9824f7253acbda647a7292d882641bbb6ad1bfa5a9"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "36a5fae72b37643550ecb4471b4566db30331a4089abc3f4827593632407bba2"
