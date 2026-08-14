@@ -158,12 +158,15 @@ uses the post-recovery receipt model, and that A-04/B-04/G-06 are reproduced
 from the frozen timing ledger rather than copied from the header estimates.
 
 - [ ] **D-8′ threshold equality:** before recording the chain SHA-256,
-  confirm that the §5B prose value, the chain's
-  `PRE_CAL_FIDUCIAL_MAX_S`, and the writer's
-  `PREFLIGHT_SYSTEMATIC_SCREEN_S` are byte-equal to one another and to the
-  value derived from the calibration-acceptance artifact named in the pack.
-  The chain threshold remains a frozen literal; do not replace it with a
-  quiet-window runtime artifact read.
+  perform the ruled two-way stored-value check: the chain's
+  `PRE_CAL_FIDUCIAL_MAX_S` literal must equal the value derived from the
+  authenticated calibration-acceptance artifact named in the pack (and the
+  §5B prose must quote that same chain literal). Then execute the writer's
+  `_derive_preflight_systematic_screen_s()` derivation path and require its
+  runtime result to equal the same acceptance-derived value. The writer has
+  no copied comparator after CH-1 (PR #142, `5be400e`; 2026-08-14
+  decision-log entry). Preserve the chain literal as a frozen value; do not
+  replace it with a quiet-window runtime artifact read.
 - [ ] **D-133 item (1), comparative-cell duration-margin receipt:** confirm
   that `scripts/record_window_duration_margins.py` and the closed
   `joulewise.window_duration_margins_receipt.v1` schema are present, that the

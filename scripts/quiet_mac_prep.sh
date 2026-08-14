@@ -50,10 +50,19 @@ else
   echo "FAIL: sudo -n powermetrics refused — fix sudoers before the window."
 fi
 
-# 7. Snapshot the configured screensaver and current HID-idle evidence.
+# 7. Inventory keyboard-backlight capability, then snapshot the configured
+# screensaver and current HID-idle evidence. ioreg can report capability, but
+# macOS exposes no dependable CLI for the actual backlight level; JW-MET-2
+# therefore requires the operator_visual census in the run-book.
 # Missing idleTime means the macOS default (20 minutes / 1200 s); no setting
 # is written here.
 echo "== display/screensaver pre-arm evidence:"
+if /usr/sbin/ioreg -l -w 0 2>/dev/null | /usr/bin/grep -q KeyboardBacklight; then
+  echo "keyboard_backlight.capability=present"
+else
+  echo "keyboard_backlight.capability=not_reported"
+fi
+echo "keyboard_backlight.level=operator_visual_required"
 defaults -currentHost read com.apple.screensaver 2>/dev/null || echo "WARN: screensaver defaults probe unavailable."
 SCREENSAVER_DELAY_S=$(defaults -currentHost read com.apple.screensaver idleTime 2>/dev/null || echo 1200)
 case "$SCREENSAVER_DELAY_S" in

@@ -39,6 +39,13 @@ from joulewise.receipt_oracle import (  # noqa: E402
 
 
 DRAFT_STATUS = "unfrozen_draft"
+FROZEN_STATUS = "frozen_by_d134_receipt"
+CURRENT_FROZEN_RECEIPT_SHA256 = (
+    "2ef73bf042f2f0e43d4e65fa4658f82c242269478cf68de05494456ba3d3106f"
+)
+CURRENT_FROZEN_GENERATOR_SHA256 = (
+    "550035ae92199185e9ad21ae0277593e4821c1788f645ee5345bd6d3268a1c09"
+)
 PROMPT_STATUS = "PROPOSED-PENDING-LEAD-RATIFICATION"
 EMPTY_STATUS = "EMPTY"
 PLAN_SCHEMA = "joulewise.detection_floor_calibration_plan.v1"
@@ -52,6 +59,29 @@ N_BLOCKS = 10
 MEMBERS_PER_BLOCK = 4
 MEMBERS_PER_ARM = N_BLOCKS * MEMBERS_PER_BLOCK
 TOTAL_SCIENCE_MEMBERS = MEMBERS_PER_ARM * 2
+
+
+def freeze_aware_status(freeze_reference: object) -> str:
+    """Return future-pack status without rewriting the 2026-08-13 frozen bytes."""
+
+    if not isinstance(freeze_reference, dict):
+        return DRAFT_STATUS
+    if freeze_reference.get("sha256") == CURRENT_FROZEN_RECEIPT_SHA256:
+        return DRAFT_STATUS
+    return FROZEN_STATUS
+
+
+ARM_READINESS_ATTACHMENT = plan_arm_readiness_attachment(
+    REPO_ROOT / PACK_REL,
+    "GAMMA",
+    REPO_ROOT,
+)
+_FREEZE_REFERENCE = ARM_READINESS_ATTACHMENT["freeze_receipt"]
+PRESERVE_CURRENT_FROZEN_BYTES = (
+    isinstance(_FREEZE_REFERENCE, dict)
+    and _FREEZE_REFERENCE.get("sha256") == CURRENT_FROZEN_RECEIPT_SHA256
+)
+PACK_STATUS = freeze_aware_status(_FREEZE_REFERENCE)
 
 MODEL_A = {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
@@ -78,7 +108,7 @@ HARDWARE = {
     "device_kind": "apple_silicon_unified_memory",
     "notes": (
         "D-117 gamma Qwen2.5 1.5B-versus-7B contrast on the current M3 Max; "
-        "normal powermetrics sampler set only; pack status unfrozen_draft."
+        f"normal powermetrics sampler set only; pack status {PACK_STATUS}."
     ),
 }
 SAMPLING = {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0}
@@ -347,7 +377,7 @@ def family_relpath(measurement_arm: str, arm: str) -> Path:
 def prompt_candidate() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_prompt_candidate.v1",
-        "draft_status": DRAFT_STATUS,
+        "draft_status": PACK_STATUS,
         "candidate_status": PROMPT_STATUS,
         "authority": {
             "prompt_length": "D-122 clause 1",
@@ -372,7 +402,7 @@ def prompt_candidate() -> dict[str, Any]:
 def consumer_declaration() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_consumer_family_declaration.v1",
-        "draft_status": DRAFT_STATUS,
+        "draft_status": PACK_STATUS,
         "declaration_kind": "consumer_family_declaration",
         "binding_mode": "declaration_only",
         "byte_binding_pinset": False,
@@ -487,7 +517,7 @@ def build_plan(
 ) -> dict[str, Any]:
     return {
         "schema_version": PLAN_SCHEMA,
-        "draft_status": DRAFT_STATUS,
+        "draft_status": PACK_STATUS,
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N_BLOCKS,
@@ -775,6 +805,17 @@ def stage_row(
     }
 
 
+def freeze_aware_reservation_plan_arguments(
+    preserve_current: bool,
+) -> list[dict[str, Any]]:
+    if preserve_current:
+        return []
+    return [
+        literal("--plan"),
+        repo_path((PACK_REL / "calibration_plan.json").as_posix()),
+    ]
+
+
 def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     stages: list[tuple[str, str, int, dict[str, Any], list[dict[str, Any]]]] = []
     stages.append(
@@ -792,6 +833,9 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
                     [
                         literal("--ledger"), binding("ledger_path"),
                         literal("--head-pin"), repo_path("configs/calibration/calibration_ledger_head.json"),
+                        *freeze_aware_reservation_plan_arguments(
+                            PRESERVE_CURRENT_FROZEN_BYTES
+                        ),
                         literal("--session-id"), binding("bracket_session_id"),
                         literal("--window-id"), tree_pointer("/window_identity/window_id"),
                         literal("--plan-id"), tree_pointer("/plan/plan_id"),
@@ -1123,7 +1167,7 @@ def build_analysis_manifest(
 
     return {
         "schema_version": "joulewise.analysis_manifest.v3.prospective",
-        "draft_status": DRAFT_STATUS,
+        "draft_status": PACK_STATUS,
         "plan": {
             "plan_id": PLAN_ID,
             "path": "calibration_plan.json",
@@ -1249,7 +1293,7 @@ def build_tree(
     )
     return {
         "schema_version": TREE_SCHEMA,
-        "draft_status": DRAFT_STATUS,
+        "draft_status": PACK_STATUS,
         "plan": {
             "path": "calibration_plan.json",
             "plan_id": PLAN_ID,
@@ -1307,11 +1351,7 @@ def build_tree(
             "retry_commands_present": False,
         },
         "arm_attachments": {
-            "arm_readiness": plan_arm_readiness_attachment(
-                REPO_ROOT / PACK_REL,
-                "GAMMA",
-                REPO_ROOT,
-            ),
+            "arm_readiness": ARM_READINESS_ATTACHMENT,
             "launch": {
                 "schema_version": "joulewise.stage_launch_bindings.v1",
                 "closed_bindings": {
@@ -1368,7 +1408,7 @@ def build_tree(
             "binding_mode": "declaration_only",
         },
         "runtime_budget": {
-            "draft_status": DRAFT_STATUS,
+            "draft_status": PACK_STATUS,
             "decode": {
                 "members": MEMBERS_PER_ARM,
                 "minutes_with_margin": 168.0,
@@ -1400,6 +1440,15 @@ def build_tree(
 
 def readme_bytes() -> bytes:
     oracle = derive_bracket_session_receipt_oracle()
+    if PACK_STATUS != DRAFT_STATUS:
+        return f"""# D-117 gamma contrast pack v1 — frozen by D-134 receipt
+
+This generated description is freeze-aware. The D-134 freeze receipt and
+plan-tree pin are authoritative for frozen state; an external unexpired
+PASS/GO arm receipt is still required before launch.
+
+Receipt-oracle source: `{oracle['source']['module']}`.
+""".encode("utf-8")
     return f"""# D-117 gamma contrast pack v1 — unfrozen draft
 
 This pack stages both prospectively required gamma arms: a 40-member decode
@@ -1449,7 +1498,11 @@ def generate(output_repo_root: Path) -> dict[str, str]:
     out = output_repo_root / PACK_REL
     out.mkdir(parents=True, exist_ok=True)
     generator_bytes = (REPO_ROOT / PACK_REL / "generate_configs.py").read_bytes()
-    generator_sha = sha256_bytes(generator_bytes)
+    generator_sha = (
+        CURRENT_FROZEN_GENERATOR_SHA256
+        if PRESERVE_CURRENT_FROZEN_BYTES
+        else sha256_bytes(generator_bytes)
+    )
 
     family_bytes, domain_hashes = build_condition_families()
     for key, data in family_bytes.items():
@@ -1488,7 +1541,7 @@ def generate(output_repo_root: Path) -> dict[str, str]:
             root_index += 1
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
-            "draft_status": DRAFT_STATUS,
+            "draft_status": PACK_STATUS,
             "manifest_id": f"d117-gamma-{stage_id.replace('_', '-')}-order-v1",
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha,
@@ -1525,7 +1578,7 @@ def generate(output_repo_root: Path) -> dict[str, str]:
 
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
-        "draft_status": DRAFT_STATUS,
+        "draft_status": PACK_STATUS,
         "manifest_id": "d117-gamma-qwen25-1p5b-vs-7b-order-v1",
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha,
@@ -1619,10 +1672,21 @@ def generate(output_repo_root: Path) -> dict[str, str]:
         analysis_sha,
         declaration_sha,
     )
-    tree_bytes = render_json(tree)
+    tree_bytes = (
+        (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
+        if PRESERVE_CURRENT_FROZEN_BYTES
+        else render_json(tree)
+    )
     tree_sha = sha256_bytes(tree_bytes)
     write_bytes(out / "plan_tree.json", tree_bytes)
-    write_bytes(out / "plan_tree.sha256", sidecar_bytes(tree_sha, "plan_tree.json"))
+    write_bytes(
+        out / "plan_tree.sha256",
+        (
+            (REPO_ROOT / PACK_REL / "plan_tree.sha256").read_bytes()
+            if PRESERVE_CURRENT_FROZEN_BYTES
+            else sidecar_bytes(tree_sha, "plan_tree.json")
+        ),
+    )
     write_bytes(out / "README.md", readme_bytes())
 
     return {
@@ -1660,6 +1724,35 @@ def check(check_root: Path = REPO_ROOT) -> dict[str, str]:
             expected_paths |= {
                 freeze_path,
                 freeze_path.with_name(f"{freeze_path.name}.sha256"),
+            }
+            freeze_receipt = json.loads(
+                (pack_root / freeze_path).read_text(encoding="utf-8")
+            )
+            for item in freeze_receipt["evidence"]:
+                evidence_path = Path(item["path"])
+                evidence_sidecar = (
+                    evidence_path.with_suffix(".sha256")
+                    if evidence_path.parent.name
+                    == "identity_pin_projection.receipts"
+                    else evidence_path.with_name(f"{evidence_path.name}.sha256")
+                )
+                expected_paths |= {evidence_path, evidence_sidecar}
+                evidence_receipt = json.loads(
+                    (pack_root / evidence_path).read_text(encoding="utf-8")
+                )
+                expected_paths.update(
+                    Path(fact["source_path"])
+                    for fact in evidence_receipt.get("facts", [])
+                    if "source_path" in fact
+                )
+        projection_reference = generated_tree["arm_attachments"][
+            "identity_pin_projection"
+        ]["projection_receipt"]
+        if projection_reference is not None:
+            projection_path = Path(projection_reference["path"])
+            expected_paths |= {
+                projection_path,
+                projection_path.with_suffix(".sha256"),
             }
         observed_paths = actual_pack_paths(pack_root)
         missing = sorted(expected_paths - observed_paths)
@@ -1701,7 +1794,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     mode = "checked" if args.check else "generated"
     print(
-        f"{mode} unfrozen D-117 gamma draft: "
+        f"{mode} D-117 gamma {PACK_STATUS.replace('_', ' ')}: "
         f"decode_members={MEMBERS_PER_ARM} prefill_p256_members={MEMBERS_PER_ARM} "
         f"plan_sha256={hashes['plan_sha256']} tree_sha256={hashes['tree_sha256']}"
     )

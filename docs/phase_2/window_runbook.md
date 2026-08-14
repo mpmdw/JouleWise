@@ -25,6 +25,14 @@ calibration.
 
 ## 1. Rules that do not bend
 
+The measurement checkout is named by `MEASUREMENT_REPO`. For the current
+three-pack freeze its declared default is
+`/Users/edr/JouleWise-measurement-20260813`; future freezes use the same
+`/Users/edr/JouleWise-measurement-YYYYMMDD` convention and record the chosen
+absolute path in `window.env`. Every repository-relative launch path and each
+window runs root resolves from that checkout, never from a development
+checkout.
+
 - [ ] Start from reviewed, merged `main` with a clean measurement checkout.
 - [ ] Close Claude, Codex, browser automation, periodic monitors, and every
   process that would wake or poll the machine.
@@ -173,18 +181,25 @@ governed 3+1+3 references itself.
 Example `window.env`:
 
 ```sh
+MEASUREMENT_REPO=/Users/edr/JouleWise-measurement-20260813
 WINDOW_ID=window_a9_YYYYMMDD
 BRACKET_SESSION_ID=window_a9_YYYYMMDD-calibration
 FROZEN_PLAN=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/calibration-reservation.json
+PACK_ROOT=$MEASUREMENT_REPO/configs/campaigns/d117_floor_qwen25_1p5b_v1
+PACK_ID=d117_floor_qwen25_1p5b_v1
 PLAN_ID=window_a9_YYYYMMDD-plan
 EVIDENCE_ROOT_ID=window_a9_YYYYMMDD-evidence
 IDENTITY_EPOCH_JSON=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/identity-epoch.json
 T1_BINDINGS_JSON=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/t1-bindings.json
 PRE_ATTEMPT_ID=window_a9_YYYYMMDD-calibration-pre
 POST_ATTEMPT_ID=window_a9_YYYYMMDD-calibration-post
-RUNS_ROOT=/Users/edr/code/JouleWise/runs_window_a9_YYYYMMDD
-BOUND_RUNS_ROOT=/Users/edr/code/JouleWise/runs_window_a9_YYYYMMDD_bound
-CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD
+RUNS_ROOT=$MEASUREMENT_REPO/runs_d117_floor_qwen25_1p5b_v1
+BOUND_RUNS_ROOT=$MEASUREMENT_REPO/runs_d117_floor_qwen25_1p5b_v1_bound
+CALIBRATION_LEDGER=/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
+LEDGER_HEAD_PIN=$MEASUREMENT_REPO/configs/calibration/calibration_ledger_head.json
+ARM_READINESS_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/readiness
+WINDOW_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/window
+QUARANTINE_ROOT=/Users/edr/JouleWise-window-quarantine/window_a9_YYYYMMDD
 BACKUP_DEST="/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/window_a9_YYYYMMDD"
 POWER_POLICY=ac_high_power
 SETTLE_S=180
@@ -194,6 +209,12 @@ SETTLE_S=180
 `BOUND_RUNS_ROOT` holds only the 12-member settled-reference corpus used to
 mint this window's bound. Keep the roots separate so the corpus members do
 not accidentally enter the claim-window member basis.
+`ARM_READINESS_CUSTODY_ROOT` holds T-0 sources, evidence, arm receipts, and
+consumptions. `WINDOW_CUSTODY_ROOT` is the distinct fresh-empty `custody_root`
+bound into `ARM_CONTEXT_JSON` and later receives operator/close-out artifacts.
+`QUARANTINE_ROOT` is a third, sibling root outside both custody roots; nesting
+it below `WINDOW_CUSTODY_ROOT` would make the arm generator's require-empty
+check refuse itself.
 
 Before quiet time:
 
@@ -207,6 +228,13 @@ Before quiet time:
 - [ ] Resolve every doctor warning; do not add `--ack-config-warnings`
   casually.
 - [ ] Record `git rev-parse HEAD`.
+- [ ] Materialize `RUNS_ROOT`, `BOUND_RUNS_ROOT`, `WINDOW_CUSTODY_ROOT`, and
+  `QUARANTINE_ROOT` as four distinct empty directories. The first two live
+  under `MEASUREMENT_REPO`; quarantine remains outside window custody.
+  `prewindow_check.sh --window` accepts these exact empty roots but refuses
+  any matching occupied or non-directory path. The arm-context gate requires
+  all four directories to exist, resolve distinctly, and remain empty through
+  T-0 authoring and ARM.
 
 ### D-134 readiness freeze, committed-pack digest, and rehearsal
 
@@ -242,6 +270,14 @@ rendering would make the matching pack generator's post-freeze
 `generate_configs.py --check` disagree with the frozen bytes. Do not “tidy”
 that serialization.
 
+For the three packs frozen on 2026-08-13, the committed D-134 freeze receipt
+and its plan-tree pin are authoritative over the legacy `unfrozen_draft`
+wording that remains byte-frozen in `draft_status` and `README.md`. Do not
+repair those committed bytes. The 2026-08-14 M-2 ruling in
+`docs/decision_log.md` requires the generators to emit freeze-aware status and
+README text only for future regenerated packs while preserving current-pack
+`--check` byte identity.
+
 After the freeze changes and every other pack byte are reviewed and
 committed, the final pack digest is
 `joulewise.committed_pack_tree_sha256.v1`. It is the SHA-256 of this exact
@@ -264,7 +300,7 @@ pack is final, which prevents an arm-receipt hash cycle.
 
 Readiness evidence has exactly two governed namespaces. `PACK` means
 `PACK_ROOT/arm_readiness.evidence/`; `WINDOW_CUSTODY` means
-`CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/`. Evidence paths in receipts are
+`ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/`. Evidence paths in receipts are
 relative to one of those roots and may not escape it. Every JSON receipt has
 its matching `.sha256` sidecar; a missing, extra, malformed, stale, or
 unpaired entry refuses rather than being skipped.
@@ -275,7 +311,7 @@ non-authorizing readiness rehearsal receipt with:
 ```sh
 python3 scripts/generate_arm_readiness.py dry-run \
   --pack-root "$PACK_ROOT" \
-  --window-custody-root "$CUSTODY_ROOT" \
+  --window-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
   --rehearsal-id "$REHEARSAL_ID" \
   --synthetic-root "$SYNTHETIC_ROOT"
 ```
@@ -287,7 +323,7 @@ slots, under the real lease implementation. It stops before live MLX or
 `powermetrics` capture because entering capture would breach the quiet-machine
 fence while an agent or desk session is active. Thus the rehearsal is neither
 mock-only nor a live measurement. It writes
-`CUSTODY_ROOT/PACK_ID/arm_readiness.dry_run.receipts/dry-run-NNNN.json`, has
+`ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.dry_run.receipts/dry-run-NNNN.json`, has
 `arm_disposition: NOT_APPLICABLE`, may bypass no freeze refusal, and can never
 serve as an arm receipt. Require its `PASS` receipt to bind the exact final
 reviewed HEAD and final pack digest; any later HEAD or pack-byte change makes
@@ -401,6 +437,26 @@ relaxed, widened, or waived, and a member that trips it is still lost. The
 steps below reduce how often the machine trips it. They do not change what
 trips it.
 
+### JW-MET-2 keyboard-backlight census control
+
+Before the untouched idle begins, open **System Settings → Keyboard** and set
+keyboard brightness to zero, turn **Adjust keyboard brightness in low light**
+off, and set **Turn keyboard backlight off after inactivity** to **Never**.
+Visually verify the zero level: macOS provides no reliable CLI for the actual
+backlight level. Record these four literals exactly:
+
+```text
+keyboard_backlight.level=0
+keyboard_backlight.automatic_adjust=false
+keyboard_backlight.inactivity=never
+keyboard_backlight.verification=operator_visual
+```
+
+`quiet_mac_prep.sh` inventories whether `ioreg` reports
+`KeyboardBacklight`; `prewindow_check.sh` repeats the visual-verification
+census note. Neither substitutes for Ed's System Settings observation. Make
+no further keyboard or backlight adjustment after authoring T-0 evidence.
+
 ### What went wrong, in plain language
 
 Every measured member must be anchored causally in time. The anchor check
@@ -476,7 +532,7 @@ nor verify this step. Ed performs it by hand.
 - [ ] Preserve the independent-clock comparison and the captured prior
   `systemsetup` output as source evidence. Require an authenticated exact-key
   `CLOCK_ATTESTATION` receipt in
-  `CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/`; its irreducible observation
+  `ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/`; its irreducible observation
   is an `OPERATOR_ATTESTATION`, not a hand-entered readiness verdict.
 - [ ] After disabling network time, require a fresh system probe and an
   authenticated exact-key `CLOCK_PROBE` receipt in the same namespace. The
@@ -584,16 +640,15 @@ bindings, and it is re-derived when any of those change (D-079 clause 3).
 
 **Single source of truth.** This value is *derived from* the issued D-079
 calibration-acceptance artifact (`d079_calibration_acceptance_v2_n19`, sha
-`31611396…`), not independently chosen. Two derived copies exist and must be
-re-derived together whenever a successor acceptance issues (freeze-plan
-ruling Q4 — a successor issuing before arm forces pack regeneration): the
-chain's `PRE_CAL_FIDUCIAL_MAX_S` (§6) and the writer's
-`PREFLIGHT_SYSTEMATIC_SCREEN_S`
-(`scripts/validate_powermetrics_fiducial.py:114`). Blocking unit CH-1 (40h
-A3) removes the writer's copy by reading the artifact directly. The chain
-keeps its frozen literal; the freeze-time checklist requires three-way
-equality with the acceptance-derived value before the chain SHA-256 is
-recorded.
+`31611396…`), not independently chosen. The only stored comparison is two-way:
+the chain's frozen `PRE_CAL_FIDUCIAL_MAX_S` literal must equal the
+acceptance-derived value. Then execute the writer's authenticated
+`_derive_preflight_systematic_screen_s()` path and require its runtime result
+to equal that same value. The writer has no copied scalar after CH-1 (PR #142;
+2026-08-14 decision-log entry). A successor acceptance before arm therefore
+requires a newly derived chain literal and a regenerated pack; record the
+two-way check and executed runtime derivation before recording the chain
+SHA-256.
 
 This screen is a **level** check on one calibration, and is entirely separate
 from the **drift** check between the two calibrations in §8. A level failure
@@ -648,7 +703,7 @@ authenticate the two-stage lifecycle:
    This pack-contained receipt is non-authorizing and cannot carry `GO`.
 2. The frozen plan must declare, without populating, the deterministic
    external arm slot
-   `CUSTODY_ROOT/PACK_ID/arm_readiness.receipts/arm-<4+ digits>.json` and the
+   `ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.receipts/arm-<4+ digits>.json` and the
    committed-pack digest algorithm. It must not contain a future arm path or
    digest.
 3. Only after the live steps below pass may the generator create the next
@@ -692,7 +747,7 @@ rehearsal. The rehearsal must execute the real reservation CLI with
 `--execute` and the production ledger-writer lifecycle through both reserved calibration
 slots against a synthetic root. Require the resulting D-134 dry-run receipt
 at
-`CUSTODY_ROOT/PACK_ID/arm_readiness.dry_run.receipts/dry-run-NNNN.json` to
+`ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.dry_run.receipts/dry-run-NNNN.json` to
 have `status: PASS`, `arm_disposition: NOT_APPLICABLE`, and the same reviewed
 HEAD and final committed-pack digest that the arm evaluation will bind.
 Record the receipt path and SHA-256 as well as the complete commands, commit
@@ -713,27 +768,73 @@ arming; they do not authorize the live night.
    procedure. §5B is **not** a separate manual step before launch: the
    foreground chain performs it after the pre-slot enforcing gate and
    pre-calibration capture, and before member 1.
-2. After all agents are closed, Ed runs, **in this order**: (a) the frozen
-   machine-readiness command (`scripts/prewindow_check.sh --wait` with the
-   frozen timeout and window label), requiring `READY`. Its wait fulfills
-   §5's ≥10-minute untouched idle, precedes the calibration-ledger pair, and
-   must have exited before anything below; then (b) the complete §6
-   diagnostic-readiness command and reservation command exactly as frozen.
-   Require the diagnostic to echo the exact frozen-plan SHA-256.
-   Require the reservation to emit `calibration_pre_reserve_authorized`
-   and finish with `status: reserved`. Do not look for a visible
-   `ready_to_arm` field — the enforcing checks are internal to the
-   reservation CLI and the writer, and no diagnostic word (`clean`,
-   `ready`) licenses anything. `needs_pin_commit: true` is desk work and
-   ends the attempt; no override exists at night. Only after both the machine
-   command and live ledger reservation pass, generate the final external arm
-   receipt:
+2. After all agents are closed, Ed executes the frozen E-step sequence with
+   no reordering:
+
+   - **E-4:** compare the clock with the independent trusted source and
+     capture `sudo systemsetup -getusingnetworktime`.
+   - **E-5:** run `sudo systemsetup -setusingnetworktime off` and capture the
+     fresh probe.
+   - **E-7a:** run `bash "$MEASUREMENT_REPO/scripts/quiet_mac_prep.sh"` and
+     preserve its complete output.
+   - **E-7b:** run the ratified current-alpha literal
+     `bash "$MEASUREMENT_REPO/scripts/prewindow_check.sh" --wait
+     --timeout-min 45 --window alpha` and require `READY`. The `45` is the
+     frozen timeout, not a replaceable example. The script maps `alpha` to
+     the measurement-checkout-only
+     `$MEASUREMENT_REPO/runs_d117_floor_qwen25_1p5b_v1*` glob, covering the
+     alpha claim and bound runs roots; use the
+     corresponding frozen `beta` or `gamma` label for those packs. Its wait
+     fulfills §5's ≥10-minute untouched idle and must finish before the
+     ledger pair.
+   - **E-8:** run the complete §6 diagnostic-readiness command and require it
+     to echo the exact frozen-plan SHA-256.
+   - **E-9:** run the §6 reservation with the full governed argv superset:
+     `--ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" --plan
+     "$FROZEN_PLAN"`, plus every frozen identity/root argument. Require
+     `calibration_pre_reserve_authorized` and terminal `status: reserved`.
+
+   Do not look for a visible `ready_to_arm` field: the enforcing checks are
+   internal to reservation and writer, and no diagnostic word (`clean`,
+   `ready`) licenses anything. `needs_pin_commit: true` is desk work and ends
+   the attempt; no override exists at night.
+
+   Immediately after E-9, author the fifteen T-0 source/evidence pairs as an
+   explicit E-step:
+
+   ```sh
+   python3 scripts/author_arm_evidence_t0.py \
+     --pack-root "$PACK_ROOT" \
+     --custody-root "$ARM_READINESS_CUSTODY_ROOT"
+   ```
+
+   Eleven volatile evidence kinds carry a **20-minute monotonic horizon**
+   from authoring. That is the operator's visible clock: do not start any new
+   agent, browser, `caffeinate`, monitor, maintenance, or other polling
+   process after authoring. Run ARM immediately, then verify and consume. The
+   four procedural evidence kinds retain their separate six-hour horizon;
+   they do not extend the volatile evidence.
+
+   A reboot or any HEAD change voids the authored receipts. Before
+   re-authoring, first verify these are the exact two pack-specific T-0
+   namespaces and remove both so no no-clobber collision can masquerade as a
+   retry:
+
+   ```sh
+   /bin/rm -r -- \
+     "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.sources" \
+     "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.evidence"
+   ```
+
+   Then repeat E-4 through E-9 and T-0 authoring; never reuse a pre-reboot or
+   pre-HEAD-change receipt. ARM is the following command and must be the next
+   new process after the author exits:
 
    ```sh
    python3 scripts/generate_arm_readiness.py arm \
      --pack-root "$PACK_ROOT" \
      --arm-context "$ARM_CONTEXT_JSON" \
-     --window-custody-root "$CUSTODY_ROOT"
+     --window-custody-root "$ARM_READINESS_CUSTODY_ROOT"
    ```
 
    `ARM_CONTEXT_JSON` is the exact JSON object itself, not a path. Its keys are
@@ -741,7 +842,10 @@ arming; they do not authorize the live night.
    `clock_route`, `claim_runs_root`, `bound_runs_root`, `custody_root`,
    `quarantine_root`, `claim_backup_destination`,
    `bound_backup_destination`, and `waiver_path`; the generator derives row
-   verdicts, applicability, identities, and digests. Require the
+   verdicts, applicability, identities, and digests. Bind `custody_root` to
+   the fresh-empty `WINDOW_CUSTODY_ROOT` and `quarantine_root` to the distinct
+   sibling `QUARANTINE_ROOT`; neither is the populated
+   `ARM_READINESS_CUSTODY_ROOT`. Require the
    derived `arm-NNNN.json` plus sidecar to pass the implemented verifier:
 
    ```sh
@@ -758,13 +862,13 @@ arming; they do not authorize the live night.
    python3 scripts/generate_arm_readiness.py consume \
      --pack-root "$PACK_ROOT" \
      --arm-receipt "$ARM_RECEIPT" \
-     --window-custody-root "$CUSTODY_ROOT"
+     --window-custody-root "$ARM_READINESS_CUSTODY_ROOT"
    ```
 
    Consumption re-authenticates the unsuperseded `GO` receipt, current
    pack/HEAD, roots, backup destinations, and campaign locks, then atomically
    creates a no-clobber receipt below
-   `CUSTODY_ROOT/PACK_ID/arm_readiness.consumptions/`. **The capability
+   `ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.consumptions/`. **The capability
    licenses exactly one launch; it never performs one.** After successful
    consumption, Ed—not the command—performs the physical foreground launch
    from an ordinary shell using the frozen launch recipe and absolute plan
@@ -817,6 +921,8 @@ closed, create the durable capability exactly once:
 
 ```sh
 . "$WINDOW_PLAN_ROOT/window.env"
+REPO="${MEASUREMENT_REPO:-/Users/edr/JouleWise-measurement-20260813}"
+cd "$REPO"
 PLAN_SHA256="$(/usr/bin/shasum -a 256 "$FROZEN_PLAN" | /usr/bin/awk '{print $1}')"
 
 .venv/bin/python scripts/recover_calibration_ledger.py readiness \
@@ -825,6 +931,8 @@ PLAN_SHA256="$(/usr/bin/shasum -a 256 "$FROZEN_PLAN" | /usr/bin/awk '{print $1}'
   --plan "$FROZEN_PLAN"
 
 .venv/bin/python scripts/reserve_calibration_window_bracket.py \
+  --ledger "$CALIBRATION_LEDGER" \
+  --head-pin "$LEDGER_HEAD_PIN" \
   --session-id "$BRACKET_SESSION_ID" \
   --window-id "$WINDOW_ID" \
   --plan-id "$PLAN_ID" \
@@ -845,6 +953,10 @@ Require the readiness output to echo the exact frozen-plan SHA-256 and the
 reservation output to say `status: reserved`. On restart, do not reserve
 again from remembered shell state: run `session-status` with the exact
 session and frozen plan and dispatch only its durable `next_slot`.
+The reservation argv is deliberately the superset: `--ledger` and
+`--head-pin` select the authenticated production ledger state, while
+`--plan` supplies the exact frozen reservation bytes. Omitting any one of the
+three is a launch-procedure error.
 
 Save the following as `WINDOW_PLAN_ROOT/window-chain.zsh`, review it, and
 record its SHA-256 before closing all agents:
@@ -856,7 +968,7 @@ set -euo pipefail
 WINDOW_PLAN_ROOT="$1"
 source "$WINDOW_PLAN_ROOT/window.env"
 
-REPO=/Users/edr/code/JouleWise
+REPO="${MEASUREMENT_REPO:-/Users/edr/JouleWise-measurement-20260813}"
 PY="$REPO/.venv/bin/python"
 POLICY="$REPO/configs/campaign_policies/quiet_mac_p2_production.json"
 REF_ROOT="$REPO/configs/campaigns/window_references"
@@ -865,12 +977,12 @@ BOUND_MANIFEST="$BOUND_CONFIG_ROOT/derivation/settled_corpus.json"
 CLAIM_LOG="$RUNS_ROOT/campaign_log.jsonl"
 BOUND_LOG="$BOUND_RUNS_ROOT/campaign_log.jsonl"
 NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"
-OPERATOR_LOG_ROOT="$CUSTODY_ROOT/operator_logs"
-QUARANTINE_ROOT="$CUSTODY_ROOT/quarantine"
+OPERATOR_LOG_ROOT="$WINDOW_CUSTODY_ROOT/operator_logs"
 
 mkdir -p \
   "$RUNS_ROOT/instrument_validation" \
   "$BOUND_RUNS_ROOT" \
+  "$WINDOW_CUSTODY_ROOT" \
   "$OPERATOR_LOG_ROOT" \
   "$QUARANTINE_ROOT"
 
@@ -910,6 +1022,8 @@ calibrate_slot() {
     --arm-countdown-s 20 \
     --sleep-display-before-capture \
     --output-root "$RUNS_ROOT/instrument_validation" \
+    --ledger "$CALIBRATION_LEDGER" \
+    --head-pin "$LEDGER_HEAD_PIN" \
     --session-id "$BRACKET_SESSION_ID" \
     --slot "$slot" \
     --attempt-id "$attempt_id" \
@@ -1147,7 +1261,7 @@ lead-verified. It appends one new row; it does not edit a failed row:
   --neg8-drift-bound "$BOUND_RUNS_ROOT/neg8-drift-bound.json" \
   --consumption-semantics-id salvage_dangler_exclusion_v1 \
   --window-membership-binding "$WINDOW_PLAN_ROOT/window-membership-binding.json" \
-  --salvage-closure "$CUSTODY_ROOT/salvage-closure.json"
+  --salvage-closure "$WINDOW_CUSTODY_ROOT/salvage-closure.json"
 ```
 
 The new basis consumes every surviving member under authenticated
@@ -1341,13 +1455,15 @@ margins from the frozen pack and authenticated run bytes:
 ```sh
 .venv/bin/python scripts/record_window_duration_margins.py \
   --repository-root "$REPO" \
-  --pack-root "$WINDOW_PLAN_ROOT" \
+  --pack-root "$PACK_ROOT" \
   --runs-root "$RUNS_ROOT" \
-  --receipt-root "$CUSTODY_ROOT" \
+  --receipt-root "$WINDOW_CUSTODY_ROOT" \
   --pack-identity "$WINDOW_ID"
 ```
 
-The operator supplies only roots and the frozen pack identity. The recorder
+`PACK_ROOT` is the frozen campaign pack containing `plan_tree.json`;
+`WINDOW_PLAN_ROOT` is not a valid substitute. The operator supplies only
+roots and the frozen pack identity. The recorder
 derives the registered cells, membership, evidence values, status, and
 deterministic output path. `REFUSE` stops close-out without writing a receipt.
 `PASS` means every registered member was uniquely found and every required
@@ -1369,7 +1485,7 @@ Then run governed extraction:
 .venv/bin/python scripts/extract_detection_floors.py \
   --runs-root "$RUNS_ROOT" \
   --spec "$WINDOW_PLAN_ROOT/extraction_spec.json" \
-  --out "$CUSTODY_ROOT/detection-floor-extraction.json" \
+  --out "$WINDOW_CUSTODY_ROOT/detection-floor-extraction.json" \
   --evaluation-basis-sha256 "$WHOLE_WINDOW_BASIS_SHA256" \
   --hash-bundles
 ```
