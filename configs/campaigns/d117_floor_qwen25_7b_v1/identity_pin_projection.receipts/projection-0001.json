@@ -1,0 +1,690 @@
+{
+  "checks": [
+    {
+      "check_id": "beta:shared_mint_projection",
+      "expected": {
+        "config_set_sha256": "86503d545dfa3e85909971cc58cf70eeb587a0af022a56795b1bf164fe870c96",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "c720f92e9797545535c2e7614affb2f9ee91ba4dcca6e71f712bf832db323d1f"
+      },
+      "observed": {
+        "config_set_sha256": "86503d545dfa3e85909971cc58cf70eeb587a0af022a56795b1bf164fe870c96",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "c720f92e9797545535c2e7614affb2f9ee91ba4dcca6e71f712bf832db323d1f"
+      },
+      "status": "PASS"
+    },
+    {
+      "check_id": "beta/prefill_p256:shared_mint_projection",
+      "expected": {
+        "config_set_sha256": "453e62d092719492891c2410d61bc3c276a23df9570d8a3bd401b09752bd7db7",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "c720f92e9797545535c2e7614affb2f9ee91ba4dcca6e71f712bf832db323d1f"
+      },
+      "observed": {
+        "config_set_sha256": "453e62d092719492891c2410d61bc3c276a23df9570d8a3bd401b09752bd7db7",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "c720f92e9797545535c2e7614affb2f9ee91ba4dcca6e71f712bf832db323d1f"
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "callables": [
+      "joulewise.provenance.model_artifact_identity",
+      "joulewise.schemas.BenchmarkConfig.from_mapping",
+      "joulewise.identity_pins.scientific_config_identity",
+      "joulewise.identity_pins.build_stack_identity",
+      "joulewise.identity_pins.stack_identity_sha256",
+      "joulewise.identity_pins.derive_model_runtime_config",
+      "joulewise.identity_pins.derive_model_runtime_config_from_metadata",
+      "joulewise.adapters.resolve_runtime",
+      "joulewise.adapters.resolve_telemetry",
+      "joulewise.adapters.powermetrics.PowermetricsTelemetryAdapter.device_metadata",
+      "joulewise.identity_pins._runtime_probe_metadata",
+      "joulewise.adapters.mlx_runtime.MlxRuntimeAdapter.identity_projection_metadata"
+    ],
+    "contract_id": "joulewise.identity_pin_derivation.v1",
+    "git_commit": "5384a5acae71f96935d58fc31cb6f2fb992487e4",
+    "source_file_sha256": {
+      "joulewise/adapters/__init__.py": "ccc3710fba6346c4e61e7610cab91de92de68c74d09d66b590ff51aa7a3a9db5",
+      "joulewise/adapters/mlx_runtime.py": "d587a401ae1301c04c7be790371dfc1185d3dc4cb21565d7c440642dc9453254",
+      "joulewise/adapters/powermetrics.py": "7380eea85fed2c51034acdbf71bdaa474c8dc4053fc2a1b86a84c05b301947ca",
+      "joulewise/identity_pins.py": "bb654e7fa88026e20b40123e33025379414b75adc7c4006c18aabf197b9f85f7",
+      "joulewise/provenance.py": "d9323ee6e902b8aea09db2a04276b5260c3865989b146a09f00d68fc857bc67f",
+      "joulewise/schemas.py": "f4a2830e983e78f1a1aa97f9900377a04e03336b5978a395e7e730a552692b66"
+    }
+  },
+  "identity_units": [
+    {
+      "config_inventory": [
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r01.json",
+          "sha256": "5e316e7fff2d13a8109c7ef50085de61f776fa2e125944550e593a5f09d40edd"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r02.json",
+          "sha256": "6361327afcee794412e1a8009bd2407bc531f443e4f8c70fe8ebfd574daf65f9"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r03.json",
+          "sha256": "30c5b190818b31628876c82b46c82e01051a18622e6b39b6afcd62907eb84ef4"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r04.json",
+          "sha256": "422e340efdb4d3e18a2a3decb51f3e5862cc6432f309cf4b760206f5c66c8c21"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r05.json",
+          "sha256": "91cc212d17cd35f6fdee9626c743371aa5515140e72bea6494635511662f7754"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r06.json",
+          "sha256": "5e0cd0c7a48a499af13a03b9ea67afbeb6ed4e84cca04b17be99e5f0be9b7734"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r07.json",
+          "sha256": "07555bfade86544f3b063f2acd63c93e039ee3ddfaaf77be0e1df31eea5cb42a"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r08.json",
+          "sha256": "59224d4752e3ca4e3a0329766f60847f690165c04758da014241c35f3b264f07"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r09.json",
+          "sha256": "83bc74a8077a8fb4f5e5a05f652bb8aa1376924a80040425d7e0d6a7821f01a2"
+        },
+        {
+          "path": "01_phase_decode_absolute/d117f7-df-ph-decode-abs-r10.json",
+          "sha256": "1235dfc32abc863e562ff95d8c54deb47d939a60f00ba88db8915469916a3a57"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-a1.json",
+          "sha256": "47f4f5d8e7cdc12cc107eceff89ded8d1882b30f8b5b5a50b81e75319b85b808"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-a2.json",
+          "sha256": "8d60652f2e3bbb64dbce9b9204af75080a41d265d0252665614b9318707f73f0"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-b1.json",
+          "sha256": "d21a596ba7f9600284aa18807e3ec2ece365892df3233b5b51841c17c242a709"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b01-b2.json",
+          "sha256": "e66b43d2522679cf178702d9c8d97d393d991d7b4376f2016f8e2098b82aed34"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-a1.json",
+          "sha256": "e74c585cdf262384fadfdf2e5eaebd52d1a5bcd499629d37f26d379eac0f29cd"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-a2.json",
+          "sha256": "5d4553e39af39361e46b90c38d7452259bb58e28ee63d5b6cf9c3dbd511521be"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-b1.json",
+          "sha256": "d2170f51498b49b9fe2840b805e6bfd8cf560be23c6bd966978bffc42d9bd20e"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b02-b2.json",
+          "sha256": "2880bddf194bd7d67b095aa139db24df9be5c31fdf3f052906519ea2cce8f25d"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-a1.json",
+          "sha256": "742a1fb55f49069ff2f76f62bfcb99f6c53bd3290f4fb00d47601b74ab65ae3d"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-a2.json",
+          "sha256": "1abcafbce3bed0423bf463ac8cf132d885f7fda8f6875a8b5d24e664bdcd77f1"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-b1.json",
+          "sha256": "d10666cbaddd7d578b14a4312713360a0a341c51d965c2b0b52e9daf97a76ccb"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b03-b2.json",
+          "sha256": "9150eca7e8ff40cf339527e0ea9a4356b91a27208ac15f6288934281a8242b84"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-a1.json",
+          "sha256": "ad1f652f587b57d8b2d18c63137b34c5709faaccf088b246c87ccf6764167a27"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-a2.json",
+          "sha256": "c52152b5e0805dd9556bb4df0ef2485a3016091318d389ab3b94851d6770f321"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-b1.json",
+          "sha256": "f610a7abd84925e59514401c749a7e49f9f3ff886a970fc1858151509a05b877"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b04-b2.json",
+          "sha256": "496e5f5410d5dd3b102fb62e4e22c31a55818a5c784efc5c25240bdb8b6662a6"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-a1.json",
+          "sha256": "57614f4916e598d0553167bc8789e34b66a8aebd2784e059116682228111cdc1"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-a2.json",
+          "sha256": "bda7bd5704095991eec423c690363f158ea2e126e0daf0f7a2b9246b56a766b4"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-b1.json",
+          "sha256": "0a654eb81904c73c9efe2a7feafc748d7853319d8369bf14168de39a10406616"
+        },
+        {
+          "path": "02_phase_decode_abba_blocks_01_05/d117f7-df-cmp-abba-ph-decode-b05-b2.json",
+          "sha256": "fe3035421d8cf05e381608a03427adc33a0cd19d10af89f2d9ff5561d54d0a77"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-a1.json",
+          "sha256": "c7e3e52e51ea25d992d4bab5b7c5b8476d4bab3b8c1bdab6e11fe0bb51deaee4"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-a2.json",
+          "sha256": "71539c74a7e9a772c64af0bf7ee4bf69164098a9c3e1448704317c681bb3880c"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-b1.json",
+          "sha256": "4fc1edbbe59af969a19d77e525e0f582fcdd524067b08de251d1238bd33feffd"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b06-b2.json",
+          "sha256": "5270bb961a3c4b8da5d17b90c764998bdf3ba349a7c421ad529f1b7677259082"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-a1.json",
+          "sha256": "6c9390935be011b1283699c3a113aae8c38f9322ebad97ad6437c2608a8bff1e"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-a2.json",
+          "sha256": "eed973a7b4e14aacefa6cbbf5bf044fcc8c9343c27abd091d29653936e3e0a85"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-b1.json",
+          "sha256": "7e6c03520b3611497b593dbe95599e42b9d2eb2f4fc173e11d4b2b22202f7ce7"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b07-b2.json",
+          "sha256": "451522d5e3f2bf3ad840ff17aee99ad770affdc943a1d1c1272941bf4a2df8b7"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-a1.json",
+          "sha256": "fb6ef4ab6ce58cf0b8ea4edfa4090346658067c1bf4325f2b3d34500fd0b5c3f"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-a2.json",
+          "sha256": "5df202006bc92b4c39fbc2cc62514d0c78b319df0e1c805b08e2fe7c6714be28"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-b1.json",
+          "sha256": "d1fa261c02b1902258cc44f876e289bdb422fa4a29905a4d0744f9a7632a5b5e"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b08-b2.json",
+          "sha256": "24da0854573b7ee38665b159e8d53ae27b31615ad4b957ba83213a531fccb405"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-a1.json",
+          "sha256": "f7134e5f36529f67da90acaaff092165b19a76fc179fdf55988b18db46b85c26"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-a2.json",
+          "sha256": "02ff8e1fa0ab2f8182b3324c497f02ff841793e70205d671bea7871ea944883e"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-b1.json",
+          "sha256": "97ec33e2b92ceea23036f631b68b7d18466407493cb5f59b1d01c9aba2f7a008"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b09-b2.json",
+          "sha256": "f39f5ae69e25f619c1f4a76a16e26c180ddf0909d208ab36f6faa3c649f342da"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-a1.json",
+          "sha256": "2f0094103d2c8f8a77dcc0133ef55a894116e6ff10da4894bfc3d1e84cf3ae8d"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-a2.json",
+          "sha256": "6fb0ff1d27c47f84b7571ba557489888a31177d6ec9f755aecd078d03e981323"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-b1.json",
+          "sha256": "95112a1dafee9e8dceb7149ac906a3d5d60f3cf972360633245f974b68a14ac1"
+        },
+        {
+          "path": "03_phase_decode_abba_blocks_06_10/d117f7-df-cmp-abba-ph-decode-b10-b2.json",
+          "sha256": "71daa4813b72cd97c662e6345b5e4651adbbb545981d0621f207f140bab92192"
+        }
+      ],
+      "consumer_bindings": [
+        {
+          "arm": "B",
+          "family": "sw-decode-b-qwen25-7b",
+          "measurement_arm": "decode"
+        },
+        {
+          "arm": "B",
+          "family": "df-ph-prefill-p128-qwen25-7b",
+          "measurement_arm": "prefill_p128"
+        }
+      ],
+      "declared_identity": {
+        "hardware_target": "macbook_m3_max",
+        "model_name": "Qwen2.5-7B-Instruct-4bit",
+        "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_backend": "mlx",
+        "telemetry_backend": "powermetrics",
+        "workload_profile": {
+          "dataset_ref": null,
+          "name": "df_ph_decode",
+          "output_tokens": 512,
+          "prompt_text": null,
+          "prompt_tokens": 128,
+          "repetitions": 1,
+          "warmup_runs": 1
+        }
+      },
+      "identity_unit_id": "beta",
+      "model_file_inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit/model.safetensors",
+          "sha256": "86110f368236b53cf4c2336f991a85703b17bcc60bb75f292b4002ec0219f071",
+          "size_bytes": 4284346255,
+          "symlink": false
+        }
+      ],
+      "model_runtime_config": {
+        "config_set_sha256": "86503d545dfa3e85909971cc58cf70eeb587a0af022a56795b1bf164fe870c96",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "c720f92e9797545535c2e7614affb2f9ee91ba4dcca6e71f712bf832db323d1f"
+      },
+      "producer_plan_reference": {
+        "path": "configs/campaigns/d117_floor_qwen25_7b_v1/calibration_plan.json",
+        "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1"
+      },
+      "realized_stack_identity": {
+        "batching_concurrency_policy": "single-request sequential",
+        "hardware_unit": {
+          "config_id": "macbook_m3_max",
+          "device": "macbook_m3_max",
+          "machine": "arm64"
+        },
+        "kernel_library": "unavailable",
+        "measurement_boundary_label": {
+          "boundary": "Apple SoC CPU + GPU + ANE package power",
+          "rails": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ]
+        },
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_version": {
+          "adapter": "mlx_runtime",
+          "name": "mlx",
+          "version": "0.32.0"
+        },
+        "sampler_output_policy": {
+          "output_policy": {
+            "name": "fixed_budget_exact",
+            "requested_tokens": 512,
+            "stop_condition": "requested_tokens_emitted"
+          },
+          "sampler": {
+            "api": "mlx_lm.sample_utils.make_sampler",
+            "kind": "greedy",
+            "parameter": "temp",
+            "pinned": true,
+            "temperature": 0.0
+          }
+        },
+        "telemetry_backend": "powermetrics",
+        "tokenizer_identity": {
+          "backend": "mlx",
+          "class": "TokenizerWrapper",
+          "identifier": "Qwen2.5-7B-Instruct-4bit",
+          "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+          "vocab_size": 151643
+        }
+      }
+    },
+    {
+      "config_inventory": [
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r01.json",
+          "sha256": "1d2c199fc2eb4936167fb26dddfa74aa64288ab21d997377c51d29153f10f45a"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r02.json",
+          "sha256": "7526adebef90237777fb526e53e995e2ac0029e7909647c0f50b6e8013bc7e9d"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r03.json",
+          "sha256": "0579a8902339c4922e9d4a493cb9f7b055c44221f84a643a508450166f676e1f"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r04.json",
+          "sha256": "fc02460e33bf5d48b3be7bb74b6c48c715dce57cf805632c4d103134ed9a426c"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r05.json",
+          "sha256": "74a6d550b18c5b2fa23e418d56533242aef7488ca75803d001b0d260cc4d44a4"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r06.json",
+          "sha256": "4f8f39994cdc7dbd65dced4af0d2bacb13ac8ed43826eeb78660522b12313a4c"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r07.json",
+          "sha256": "d15e9c6d0688a9aa21f4ed441510cc54f84c72f35de46fa06e417127c74eb76e"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r08.json",
+          "sha256": "630159dda436d2a7c46de79bba097fcc3d92f21a460c25898fbfd1d2969b9207"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r09.json",
+          "sha256": "4beb7b1ebc5627b7615f2e5fba8ec61594f1f3de12c5e4bb26fd346858fc27d3"
+        },
+        {
+          "path": "04_phase_prefill_p256_absolute/d117f7-df-ph-prefill-p256-abs-r10.json",
+          "sha256": "a700e8d7a13bfc7ce2dae67e193074d763022bac32f708fc3ab9ba90d3987502"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b01-a1.json",
+          "sha256": "0997c98c40c6d6c7d101f940e04ef0f3ab0fd0e16591d3745dc1616cb4940dcd"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b01-a2.json",
+          "sha256": "2cb3e65010d0d32b81382016930aa35abdda0c378b7945983c96a57d09c8a1d7"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b01-b1.json",
+          "sha256": "e271be342e9a1c06f6af819127f3deb4321f4ba3140d99edd89f47468cd590c5"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b01-b2.json",
+          "sha256": "145f6f181ba1fded7628dfb09912a22ce08a91dead1b25a070e5341494c5bd92"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b02-a1.json",
+          "sha256": "dc916e3f5f192b5cc21bb7b4c4b5aad19478e306cfbc624774f5437de9427730"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b02-a2.json",
+          "sha256": "4a7de9ac64b8eee2e836c7e3421d90cfa48a1fffcbce4a39094695d62fec5caa"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b02-b1.json",
+          "sha256": "4d169d515e7e97aa36b71cdf7cf6e07cf13192cd4a806fac5a407ff8c83256bd"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b02-b2.json",
+          "sha256": "ea36c67dd496b514d2cfb122d75e38e06f75d6043f629155dff782e6668d5e38"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b03-a1.json",
+          "sha256": "8b21ef60bb86526d50eaf9097679a1d58aa8538788804bb6f0ff8816d8da4a0f"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b03-a2.json",
+          "sha256": "69611ac767da5aacdfca530e04f65ad2e3a2f17c942c59f62acd9899b61256c8"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b03-b1.json",
+          "sha256": "44e1ed2ad84660686616efc82d2720305dadb9f53e1651cb385eb54dcc5ae238"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b03-b2.json",
+          "sha256": "e0be981fde4a02c950c075bf91428a99564ba96b1ffca88a741c5db331cfe30c"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b04-a1.json",
+          "sha256": "f88516d2d53b980cd458f6df65119199b9d63f0d36af4b04c983fc37d239e9c5"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b04-a2.json",
+          "sha256": "f34ff800a977903dd8976e07a83785947947bcf2262caf7660523dd5656010a6"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b04-b1.json",
+          "sha256": "fab71e1205f0041c1189d87c2c660d7442351d487ee76535215ed2b5f262b4e7"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b04-b2.json",
+          "sha256": "30f6374aa26694e363da761fd5fbc76b41c342b547672651167bcd2a812f4ec6"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b05-a1.json",
+          "sha256": "f51704fd6fa8c66ac1ae523b0c2603692cd463e343fec381ae464d6fe670699e"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b05-a2.json",
+          "sha256": "ee587275da9d734a3928f6ccd4afa804acbaae0b8d279b78d3301fb03388269d"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b05-b1.json",
+          "sha256": "bea0f4c15bc782e7484942415e05cafd0592c8e506c7a353043c315e0095e960"
+        },
+        {
+          "path": "05_phase_prefill_p256_abba_blocks_01_05/d117f7-df-cmp-abba-ph-prefill-p256-b05-b2.json",
+          "sha256": "49153e8e7e4ee6c0888da301eb20a4fb5c7a58d22b153106daa1c64a294de521"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b06-a1.json",
+          "sha256": "fed465724b8a91b45ce5966a5e824888533925f22ee47d34651c7e93c9e4fd66"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b06-a2.json",
+          "sha256": "bb5c73418f308f5582d8392c6a0d7496c14f9b3af91a730618d0339c87ed80fe"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b06-b1.json",
+          "sha256": "cb556ac1b297d25af2218d288d9e0ef826d4895287f74ddaef8349d151797ca2"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b06-b2.json",
+          "sha256": "407e7bb023a6cf49008aaa7554b262de7b5a269961d3a74631c0a55a6eeb2f1a"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b07-a1.json",
+          "sha256": "a8bd03ebe672b5b127442c82aab58ee2814cd8575e828f366cfce36312b061ac"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b07-a2.json",
+          "sha256": "a08119d26cf06e925b5e00aa4ddaf1e7dd6aafb9d7a2bccee758ade810494703"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b07-b1.json",
+          "sha256": "70b52501ea6d5293a4ec40a188efc7f5fe79e5fee634f70df0d478cc19e91ca3"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b07-b2.json",
+          "sha256": "261ea63e7db58ebb341d2ac87da5c96f4fb64c9542f0278aa0466a149bca4dc8"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b08-a1.json",
+          "sha256": "acdc9d4840bf1726f3abb31c47067d8128f7726e0a936b03060d8cf76b958f87"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b08-a2.json",
+          "sha256": "2ad2763127ce5f7dadac4bfa675db213b27835099d9d708a681e7e7eff8abeff"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b08-b1.json",
+          "sha256": "4c705a83a54c4f4e06ef794942339abc96396cebfb2f0950e560310db57850fb"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b08-b2.json",
+          "sha256": "13b1214e856cdd5780a1b467955c087573f78bdf4b7673f4de8dcc4f0b300d70"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b09-a1.json",
+          "sha256": "47088fdc3756eff7a1e35c06b02514768b5a63d0458b1197b7318708b2382711"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b09-a2.json",
+          "sha256": "55e22778ecdd4f6b1503ff7a71356afeff75e343b934bc9bbbae7c7adb16bf67"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b09-b1.json",
+          "sha256": "323f337eda98998e39841d12de6de2d172b8d2e8ce571eb4625fc7538d92ee1a"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b09-b2.json",
+          "sha256": "a176fdb2eedb3eb71d37b8ed202e09408563de90ffd5cd0bf59d9df5d38601fe"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b10-a1.json",
+          "sha256": "2b17acd45d009f9f19384bdc3cf0c85386e04a5e3af1df12c10e9ee08a18d5f8"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b10-a2.json",
+          "sha256": "97ed5217558c7a25d3704a3dee67e0d1e01a8584a9d9698dac2817b9b46f9918"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b10-b1.json",
+          "sha256": "26f3ddd9d75684fe3d1d300f487274341707ff90a7f009d707781e89464967df"
+        },
+        {
+          "path": "06_phase_prefill_p256_abba_blocks_06_10/d117f7-df-cmp-abba-ph-prefill-p256-b10-b2.json",
+          "sha256": "6872af53655d13352aa8cc0c35dc5b3121ffe2c6bec7609da773df6ece840783"
+        }
+      ],
+      "consumer_bindings": [
+        {
+          "arm": "B",
+          "family": "sw-prefill-p256-b-qwen25-7b",
+          "measurement_arm": "prefill_p256"
+        }
+      ],
+      "declared_identity": {
+        "hardware_target": "macbook_m3_max",
+        "model_name": "Qwen2.5-7B-Instruct-4bit",
+        "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_backend": "mlx",
+        "telemetry_backend": "powermetrics",
+        "workload_profile": {
+          "dataset_ref": null,
+          "name": "df_ph_prefill_p256_candidate",
+          "output_tokens": 512,
+          "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+          "prompt_tokens": null,
+          "repetitions": 1,
+          "warmup_runs": 1
+        }
+      },
+      "identity_unit_id": "beta/prefill_p256",
+      "model_file_inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit/model.safetensors",
+          "sha256": "86110f368236b53cf4c2336f991a85703b17bcc60bb75f292b4002ec0219f071",
+          "size_bytes": 4284346255,
+          "symlink": false
+        }
+      ],
+      "model_runtime_config": {
+        "config_set_sha256": "453e62d092719492891c2410d61bc3c276a23df9570d8a3bd401b09752bd7db7",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "c720f92e9797545535c2e7614affb2f9ee91ba4dcca6e71f712bf832db323d1f"
+      },
+      "producer_plan_reference": {
+        "path": "configs/campaigns/d117_floor_qwen25_7b_v1/calibration_plan.json",
+        "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1"
+      },
+      "realized_stack_identity": {
+        "batching_concurrency_policy": "single-request sequential",
+        "hardware_unit": {
+          "config_id": "macbook_m3_max",
+          "device": "macbook_m3_max",
+          "machine": "arm64"
+        },
+        "kernel_library": "unavailable",
+        "measurement_boundary_label": {
+          "boundary": "Apple SoC CPU + GPU + ANE package power",
+          "rails": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ]
+        },
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_version": {
+          "adapter": "mlx_runtime",
+          "name": "mlx",
+          "version": "0.32.0"
+        },
+        "sampler_output_policy": {
+          "output_policy": {
+            "name": "fixed_budget_exact",
+            "requested_tokens": 512,
+            "stop_condition": "requested_tokens_emitted"
+          },
+          "sampler": {
+            "api": "mlx_lm.sample_utils.make_sampler",
+            "kind": "greedy",
+            "parameter": "temp",
+            "pinned": true,
+            "temperature": 0.0
+          }
+        },
+        "telemetry_backend": "powermetrics",
+        "tokenizer_identity": {
+          "backend": "mlx",
+          "class": "TokenizerWrapper",
+          "identifier": "Qwen2.5-7B-Instruct-4bit",
+          "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+          "vocab_size": 151643
+        }
+      }
+    }
+  ],
+  "observations": {
+    "identity_unit_count": 2,
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O"
+  },
+  "pack": {
+    "pack_id": "d117_floor_qwen25_7b_v1",
+    "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+    "projection_input_sha256": "8a20ea37b15c955bb0bf73fb47a5bc565b0047a39cd254bb71eb1e3f8ff5c7ba",
+    "reviewed_git_commit": "5384a5acae71f96935d58fc31cb6f2fb992487e4",
+    "window_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1"
+  },
+  "reason_codes": [],
+  "receipt_id": "d117_floor_qwen25_7b_v1/projection-0001",
+  "receipt_kind": "freeze_projection",
+  "schema_version": "joulewise.identity_pin_projection_receipt.v1",
+  "status": "PASS",
+  "supersedes": [],
+  "work_order": "D117-U11-IDPIN-PROJECTION"
+}
