@@ -1,0 +1,7 @@
+{
+  "arm_disposition": "NOT_APPLICABLE",
+  "reason_codes": [],
+  "receipt_path": "/Users/edr/JouleWise-window-custody/d117_floor_qwen25_1p5b_v1/arm_readiness.dry_run.receipts/dry-run-0001.json",
+  "receipt_sha256": "94837218d6f240ccbab1d9537523662f0c413c25b6e825e4b9c449c3a809aa58",
+  "status": "PASS"
+}
