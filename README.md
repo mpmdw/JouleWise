@@ -9,6 +9,32 @@
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
+## Current activity (refreshed each work block; last: 2026-08-13 evening)
+
+**Just completed:** all three measurement plans ("packs" — the frozen
+bundles of workload configurations, calibration rules, and acceptance
+criteria for the alpha, beta, and gamma measurement windows) are now
+**frozen** for the first time, at the tighter 1.869502-joule detection
+floor (the smallest energy difference the instrument can responsibly
+claim to resolve). Freezing means the plan bytes are hash-pinned and
+committed; nothing about what will be measured can silently change
+between now and collection. Seven pull requests merged in this block,
+including the tooling that authors the machine-checkable evidence the
+freeze itself requires.
+
+**Working on now:** the last missing piece before a window can be armed —
+the tool that authors the *arm-time* evidence (live machine state, clock
+procedure, and operator-step receipts that the arming gate verifies).
+Built overnight; its independent reviews are running.
+
+**Queued next:** (1) merge that tool after review; (2) a batch of small
+launch-procedure corrections found during packet assembly; (3) the three
+measurement windows themselves — alpha (1.5-billion-parameter model,
+~6.3 hours), then beta (7-billion, ~6.5 hours), then gamma (the direct
+model-size comparison) — run back-to-back as machine time allows, each
+followed by reduction and floor-gated analysis; (4) filling the first
+measured numbers into the paper draft.
+
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
 the frozen workload suite, run rules, and strict validator. The name is a
