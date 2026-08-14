@@ -43,7 +43,7 @@ before the 08-14 arm. The operative packet (111 cells filled, 34 AT-T0):
 Ed-owed at arm: M-1 BRACKET_SESSION_ID ratification, M-2 draft_status
 contradiction ruling, sudo/powermetrics checklist, §5A taps.
 
-**Successor (or this session continuing): (1) WO-ARM-EVIDENCE-AUTHOR-01
+**THE PLAN OF RECORD IS `docs/strategy/2026-08-14-70h-plan.md` — read it in full and execute from the earliest incomplete item.** In brief: (1) WO-ARM-EVIDENCE-AUTHOR-01
 (build+gauntlet), (2) T6 run report + council entry + skill rows +
 consistency sweep (the session record is LARGE: eight merges, two cold
 gates, the freeze), (3) arm 08-14 evening.**
