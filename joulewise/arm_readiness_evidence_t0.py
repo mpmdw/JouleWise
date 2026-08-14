@@ -37,7 +37,10 @@ _LAUNCH_SCHEMA = "joulewise.arm_readiness_t0_launch_manifest.v1"
 _INPUT_DIRECTORY = "arm_readiness.t0.inputs"
 _SOURCE_DIRECTORY = "arm_readiness.t0.sources"
 _EVIDENCE_DIRECTORY = "arm_readiness.evidence"
-_EVIDENCE_VALIDITY_NS = 300 * 1_000_000_000
+# Live machine state can change between authoring and ARM consumption.  Keep
+# that unavoidable TOCTOU window bounded to the expected arm-sequence length.
+_VOLATILE_EVIDENCE_VALIDITY_NS = 20 * 60 * 1_000_000_000
+_NONVOLATILE_EVIDENCE_VALIDITY_NS = 6 * 60 * 60 * 1_000_000_000
 _MIN_IDLE_NS = 600 * 1_000_000_000
 _MAX_T0_SEQUENCE_AGE_NS = 60 * 60 * 1_000_000_000
 _MIN_BACKUP_FREE_BYTES = 20 * 1024**3
@@ -88,6 +91,39 @@ _ROW_KIND = {
     "t0.single_launch_capability": "LAUNCH_RECIPE",
     "t0.storage_backup_capacity": "BACKUP_PREFLIGHT",
 }
+_VOLATILE_EVIDENCE_KINDS = frozenset(
+    {
+        "BACKUP_PREFLIGHT",
+        "CLOCK_PROBE",
+        "LAUNCH_RECIPE",
+        "MAINTENANCE_CENSUS",
+        "MACHINE_PREFLIGHT",
+        "POWERMETRICS_PROBE",
+        "POWER_PREFLIGHT",
+        "PROCESS_CENSUS",
+        "ROOT_PREFLIGHT",
+    }
+)
+_NONVOLATILE_EVIDENCE_KINDS = frozenset(
+    {
+        "CLOCK_ATTESTATION",
+        "LEDGER_RESERVATION",
+        "OFFLINE_INPUT_INVENTORY",
+        "TERMINAL_REVIEW",
+    }
+)
+if (
+    _VOLATILE_EVIDENCE_KINDS & _NONVOLATILE_EVIDENCE_KINDS
+    or _VOLATILE_EVIDENCE_KINDS | _NONVOLATILE_EVIDENCE_KINDS
+    != frozenset(_ROW_KIND.values())
+):
+    raise AssertionError("every governed evidence kind needs one volatility class")
+# The last ordinary receipt sidecar is also the publication-completion marker.
+# Until this authenticated file exists, arm_readiness._discover_evidence sees
+# an unmatched receipt and refuses the namespace as unreadable.
+_PUBLICATION_COMPLETION_MARKER = (
+    "evidence-t0-t0-storage-backup-capacity.json.sha256"
+)
 _CAPTURE_FILES = {
     "clock-prior-state": "clock-prior-state.json",
     "clock-disable": "clock-disable.json",
@@ -1648,6 +1684,53 @@ def _reauthenticate_artifacts(context: _Context, derived: _Sequence[_DerivedRow]
                 raise _refuse(item.kind, "evidence_author_t0_input_changed", f"T-0 input changed: {path}")
 
 
+def _validity_horizon_ns(kind: str) -> int:
+    if kind in _VOLATILE_EVIDENCE_KINDS:
+        return _VOLATILE_EVIDENCE_VALIDITY_NS
+    if kind in _NONVOLATILE_EVIDENCE_KINDS:
+        return _NONVOLATILE_EVIDENCE_VALIDITY_NS
+    raise _refuse(
+        kind,
+        "evidence_author_t0_internal_error",
+        "evidence kind has no volatility classification",
+    )
+
+
+def _publication_complete(source_dir: _Path, evidence_dir: _Path) -> bool:
+    marker = evidence_dir / _PUBLICATION_COMPLETION_MARKER
+    return (
+        source_dir.is_dir()
+        and evidence_dir.is_dir()
+        and marker.is_file()
+        and not marker.is_symlink()
+    )
+
+
+def _publish_staged_namespaces(
+    staged_sources: _Path,
+    staged_evidence: _Path,
+    staged_marker: _Path,
+    source_dir: _Path,
+    evidence_dir: _Path,
+) -> None:
+    """Publish two directories with a last-written authenticated marker.
+
+    APFS cannot atomically rename two sibling destinations as one transaction.
+    Crash matrix: before rename 1 leaves the full pre-state; after rename 1
+    leaves sources only, so required ARM rows are absent; after rename 2 leaves
+    the evidence receipt without its marker/sidecar, so discovery refuses the
+    namespace as unreadable; during rename 3, atomic rename leaves either that
+    detectable marker-absent state or the complete state; after rename 3 the
+    full governed set is visible.  Never roll back a partial publication:
+    process death cannot make rollback reliable, while marker absence is an
+    unambiguous recovery signal.
+    """
+
+    _os.replace(staged_sources, source_dir)
+    _os.replace(staged_evidence, evidence_dir)
+    _os.replace(staged_marker, evidence_dir / _PUBLICATION_COMPLETION_MARKER)
+
+
 def _authenticate_existing(
     context: _Context,
     rows: _Sequence[_Mapping[str, _Any]],
@@ -1798,6 +1881,13 @@ def author_arm_readiness_evidence_t0(
     source_dir = context.custody_pack_root / _SOURCE_DIRECTORY
     evidence_dir = context.custody_pack_root / _EVIDENCE_DIRECTORY
     if source_dir.exists() or evidence_dir.exists():
+        if not _publication_complete(source_dir, evidence_dir):
+            raise _refuse(
+                "AUTHORING_SET",
+                "evidence_author_t0_publication_incomplete",
+                "T-0 publication is incomplete; recovery must preserve and inspect "
+                "the marker-absent namespace",
+            )
         return _authenticate_existing(context, rows)
     derived: list[_DerivedRow] = []
     for row in rows:
@@ -1813,7 +1903,7 @@ def author_arm_readiness_evidence_t0(
         derived.append(item)
     _validate_capture_order(context)
     issued_at = _readiness._utc_now()
-    valid_until = _time.monotonic_ns() + _EVIDENCE_VALIDITY_NS
+    validity_origin = _time.monotonic_ns()
     sources: dict[str, bytes] = {}
     receipts: dict[str, bytes] = {}
     semantic: dict[str, _Mapping[str, _Any]] = {}
@@ -1826,7 +1916,9 @@ def author_arm_readiness_evidence_t0(
             item,
             source_raw,
             issued_at_utc=issued_at,
-            valid_until_monotonic_ns=valid_until,
+            valid_until_monotonic_ns=(
+                validity_origin + _validity_horizon_ns(item.kind)
+            ),
         )
         if not _readiness._predicate_passes(
             receipt,
@@ -1848,7 +1940,6 @@ def author_arm_readiness_evidence_t0(
 
     context.custody_pack_root.mkdir(parents=True, exist_ok=True)
     staging = _Path(_tempfile.mkdtemp(prefix=".arm-readiness-t0-", dir=context.custody_pack_root))
-    installed = False
     try:
         staged_sources = staging / _SOURCE_DIRECTORY
         staged_evidence = staging / _EVIDENCE_DIRECTORY
@@ -1873,32 +1964,31 @@ def author_arm_readiness_evidence_t0(
             _readiness.validate_evidence_receipt(receipt)
         if source_dir.exists() or evidence_dir.exists():
             raise _refuse("AUTHORING_SET", "evidence_author_t0_output_collision", "T-0 output namespace appeared during derivation")
-        _os.replace(staged_sources, source_dir)
+        marker_in_directory = staged_evidence / _PUBLICATION_COMPLETION_MARKER
+        if not marker_in_directory.is_file() or marker_in_directory.is_symlink():
+            raise _refuse(
+                "AUTHORING_SET",
+                "evidence_author_t0_internal_error",
+                "staged publication completion marker is absent",
+            )
+        staged_marker = staging / _PUBLICATION_COMPLETION_MARKER
+        _os.replace(marker_in_directory, staged_marker)
         try:
-            _os.replace(staged_evidence, evidence_dir)
+            _publish_staged_namespaces(
+                staged_sources,
+                staged_evidence,
+                staged_marker,
+                source_dir,
+                evidence_dir,
+            )
         except Exception as exc:
-            try:
-                _shutil.rmtree(source_dir)
-            except OSError as rollback_exc:
-                raise _refuse(
-                    "AUTHORING_SET",
-                    "evidence_author_t0_publication_interrupted",
-                    "T-0 publication was interrupted and rollback could not "
-                    f"restore the pre-publication namespace: {rollback_exc}",
-                ) from exc
             raise _refuse(
                 "AUTHORING_SET",
                 "evidence_author_t0_publication_interrupted",
-                "T-0 publication was interrupted between namespace renames; "
-                "rollback restored the unpublished pre-state",
+                "T-0 publication was interrupted; the completion marker records "
+                "whether recovery sees a partial or complete namespace",
             ) from exc
-        installed = True
         paths = [str(context.custody_pack_root / item["path"]) for item in sorted(items, key=lambda value: value["evidence_id"])]
-    except Exception:
-        if installed:
-            _shutil.rmtree(evidence_dir, ignore_errors=True)
-            _shutil.rmtree(source_dir, ignore_errors=True)
-        raise
     finally:
         _shutil.rmtree(staging, ignore_errors=True)
     return {

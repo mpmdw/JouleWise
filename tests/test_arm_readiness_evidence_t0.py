@@ -29,6 +29,7 @@ from tests.test_arm_readiness_dry_run import install_passing_freeze
 from tests.test_arm_readiness_integration import (
     clear_initial_arm,
     install_passing_dry_run,
+    synthetic_identity_verifier,
 )
 from tests.test_identity_pins import declared_identity, synthetic_config
 from tests.test_arm_readiness_lifecycle import git, make_go_fixture
@@ -628,6 +629,48 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                     Path("unused"), Path("unused"), **{keyword: object()}
                 )
 
+    def test_all_fifteen_rows_have_an_explicit_volatility_class(self) -> None:
+        self.assertEqual(
+            t0._VOLATILE_EVIDENCE_VALIDITY_NS,
+            20 * 60 * 1_000_000_000,
+        )
+        self.assertGreater(
+            t0._NONVOLATILE_EVIDENCE_VALIDITY_NS,
+            t0._VOLATILE_EVIDENCE_VALIDITY_NS,
+        )
+        self.assertFalse(
+            t0._VOLATILE_EVIDENCE_KINDS & t0._NONVOLATILE_EVIDENCE_KINDS
+        )
+        self.assertEqual(
+            t0._VOLATILE_EVIDENCE_KINDS | t0._NONVOLATILE_EVIDENCE_KINDS,
+            set(t0._ROW_KIND.values()),
+        )
+        self.assertEqual(
+            t0._VOLATILE_EVIDENCE_KINDS,
+            {
+                "BACKUP_PREFLIGHT",
+                "CLOCK_PROBE",
+                "LAUNCH_RECIPE",
+                "MAINTENANCE_CENSUS",
+                "MACHINE_PREFLIGHT",
+                "POWERMETRICS_PROBE",
+                "POWER_PREFLIGHT",
+                "PROCESS_CENSUS",
+                "ROOT_PREFLIGHT",
+            },
+        )
+        self.assertEqual(
+            sum(
+                kind in t0._VOLATILE_EVIDENCE_KINDS
+                for kind in t0._ROW_KIND.values()
+            ),
+            11,
+        )
+        self.assertEqual(
+            t0._PUBLICATION_COMPLETION_MARKER,
+            f"{t0._receipt_name('t0.storage_backup_capacity')}.sha256",
+        )
+
     def test_authors_exact_fifteen_valid_rows_and_is_byte_idempotent(self) -> None:
         temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
         self.addCleanup(temporary.cleanup)
@@ -661,6 +704,15 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 self.assertEqual(receipt["boot_session_id"], TEST_BOOT_SESSION_ID)
                 self.assertEqual(receipt["status"], "PASS")
                 self.assertEqual(receipt["reason_codes"], [])
+                horizon = (
+                    t0._VOLATILE_EVIDENCE_VALIDITY_NS
+                    if receipt["kind"] in t0._VOLATILE_EVIDENCE_KINDS
+                    else t0._NONVOLATILE_EVIDENCE_VALIDITY_NS
+                )
+                self.assertEqual(
+                    receipt["valid_until_monotonic_ns"],
+                    1_000_000_000_000 + horizon,
+                )
                 self.assertEqual(len(receipt["facts"]), 1)
                 fact = receipt["facts"][0]
                 row = rows_by_predicate[fact["fact_id"]]
@@ -703,6 +755,88 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             self.assertEqual(
                 before, {path.name: path.read_bytes() for path in evidence.iterdir()}
             )
+
+    def test_arm_consumes_volatile_receipts_within_short_horizon(self) -> None:
+        authored_at = 1_000_000_000_000
+        short_horizon_ns = 20 * 60 * 1_000_000_000
+        temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
+            now_monotonic_ns=authored_at
+        )
+        self.addCleanup(temporary.cleanup)
+        with author_environment(repository, now_monotonic_ns=authored_at):
+            author_arm_readiness_evidence_t0(pack, custody)
+        with (
+            mock.patch.object(
+                readiness,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+            mock.patch.object(
+                readiness,
+                "verify_frozen_projection",
+                side_effect=synthetic_identity_verifier,
+            ),
+            mock.patch.object(
+                readiness.time,
+                "monotonic_ns",
+                return_value=(authored_at + short_horizon_ns - 1),
+            ),
+        ):
+            arm = readiness.generate_arm_receipt(pack, context, custody)
+        self.assertEqual(arm["status"], "PASS", arm)
+        self.assertEqual(arm["arm_disposition"], "GO")
+
+    def test_forbidden_process_started_after_authoring_expires_before_arm(self) -> None:
+        authored_at = 1_000_000_000_000
+        short_horizon_ns = 20 * 60 * 1_000_000_000
+        temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
+            now_monotonic_ns=authored_at
+        )
+        self.addCleanup(temporary.cleanup)
+        with author_environment(repository, now_monotonic_ns=authored_at):
+            author_arm_readiness_evidence_t0(pack, custody)
+
+        process = subprocess.Popen(["/usr/bin/caffeinate", "-t", "60"])
+
+        def stop_forbidden_process() -> None:
+            if process.poll() is None:
+                process.terminate()
+            process.wait(timeout=5)
+
+        self.addCleanup(stop_forbidden_process)
+        self.assertIsNone(
+            process.poll(), "the post-authoring forbidden process must be live"
+        )
+        with (
+            mock.patch.object(
+                readiness,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+            mock.patch.object(
+                readiness,
+                "verify_frozen_projection",
+                side_effect=synthetic_identity_verifier,
+            ),
+            mock.patch.object(
+                readiness.time,
+                "monotonic_ns",
+                return_value=(authored_at + short_horizon_ns + 1),
+            ),
+        ):
+            arm = readiness.generate_arm_receipt(pack, context, custody)
+        self.assertEqual(arm["status"], "REFUSE", arm)
+        self.assertEqual(arm["arm_disposition"], "NO_GO")
+        self.assertIn("readiness_record_expired", arm["reason_codes"])
+        arm_receipt = json.loads(Path(arm["receipt_path"]).read_text(encoding="utf-8"))
+        self.assertTrue(
+            any(
+                refusal["code"] == "readiness_record_expired"
+                and refusal["evidence_id"] == "arm-t0-t0-no-stray-keepawake-v1"
+                for refusal in arm_receipt["refusals"]
+            ),
+            arm_receipt["refusals"],
+        )
 
     def _real_probe_source(self, kind, commands):
         context = t0._Context(
@@ -1007,48 +1141,114 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
         self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
 
-    def test_interrename_failure_rolls_back_to_prestate_and_retry_recovers(self) -> None:
-        temporary, repository, pack, custody, _context, _inputs = make_t0_fixture()
-        self.addCleanup(temporary.cleanup)
-        custody_pack = custody / pack.name
-        source_dir = custody_pack / t0._SOURCE_DIRECTORY
-        evidence_dir = custody_pack / t0._EVIDENCE_DIRECTORY
-        real_replace = t0._os.replace
-        rename_count = 0
+    def test_every_publication_crash_point_is_prestate_or_detectable(self) -> None:
+        class InjectedKill(BaseException):
+            pass
 
-        def fail_after_first_publication_rename(source, destination):
-            nonlocal rename_count
-            if Path(destination) in {source_dir, evidence_dir}:
-                rename_count += 1
-                if rename_count == 2:
-                    raise OSError("injected failure between publication renames")
-            return real_replace(source, destination)
+        for completed_renames in range(4):
+            with self.subTest(completed_renames=completed_renames):
+                temporary, repository, pack, custody, _context, _inputs = (
+                    make_t0_fixture()
+                )
+                try:
+                    custody_pack = custody / pack.name
+                    source_dir = custody_pack / t0._SOURCE_DIRECTORY
+                    evidence_dir = custody_pack / t0._EVIDENCE_DIRECTORY
+                    marker = evidence_dir / t0._PUBLICATION_COMPLETION_MARKER
+                    final_destinations = {
+                        source_dir,
+                        evidence_dir,
+                        marker,
+                    }
+                    real_replace = t0._os.replace
+                    rename_count = 0
 
-        with (
-            author_environment(repository),
-            mock.patch.object(t0._os, "replace", side_effect=fail_after_first_publication_rename),
-            self.assertRaises(T0EvidenceAuthoringError) as caught,
-        ):
-            author_arm_readiness_evidence_t0(pack, custody)
-        self.assertEqual(
-            caught.exception.reason_code,
-            "evidence_author_t0_publication_interrupted",
-        )
-        self.assertEqual(rename_count, 2)
-        self.assertFalse(source_dir.exists(), "recovery must observe the source pre-state")
-        self.assertFalse(evidence_dir.exists(), "recovery must observe the evidence pre-state")
-        self.assertEqual(
-            [path.name for path in custody_pack.iterdir() if path.name.startswith(".arm-readiness-t0-")],
-            [],
-            "recovery must not observe an abandoned staging namespace",
-        )
-        with author_environment(repository):
-            recovered = author_arm_readiness_evidence_t0(pack, custody)
-        self.assertTrue(recovered["mutated"])
-        self.assertTrue(source_dir.is_dir())
-        self.assertTrue(evidence_dir.is_dir())
-        self.assertEqual(len(list(source_dir.iterdir())), 15)
-        self.assertEqual(len(list(evidence_dir.iterdir())), 30)
+                    def kill_after_selected_rename(source, destination):
+                        nonlocal rename_count
+                        destination_path = Path(destination)
+                        if destination_path not in final_destinations:
+                            return real_replace(source, destination)
+                        if completed_renames == 0:
+                            raise InjectedKill("before the first publication rename")
+                        result = real_replace(source, destination)
+                        rename_count += 1
+                        if rename_count == completed_renames:
+                            raise InjectedKill(
+                                f"after publication rename {rename_count}"
+                            )
+                        return result
+
+                    with (
+                        author_environment(repository),
+                        mock.patch.object(
+                            t0._os,
+                            "replace",
+                            side_effect=kill_after_selected_rename,
+                        ),
+                        self.assertRaises(InjectedKill),
+                    ):
+                        author_arm_readiness_evidence_t0(pack, custody)
+
+                    self.assertEqual(
+                        [
+                            path.name
+                            for path in custody_pack.iterdir()
+                            if path.name.startswith(".arm-readiness-t0-")
+                        ],
+                        [],
+                    )
+                    if completed_renames == 0:
+                        self.assertFalse(source_dir.exists())
+                        self.assertFalse(evidence_dir.exists())
+                        with author_environment(repository):
+                            recovered = author_arm_readiness_evidence_t0(
+                                pack, custody
+                            )
+                        self.assertTrue(recovered["mutated"])
+                    elif completed_renames < 3:
+                        self.assertTrue(source_dir.is_dir())
+                        self.assertEqual(evidence_dir.is_dir(), completed_renames == 2)
+                        self.assertFalse(marker.exists())
+                        with (
+                            author_environment(repository),
+                            self.assertRaises(T0EvidenceAuthoringError) as caught,
+                        ):
+                            author_arm_readiness_evidence_t0(pack, custody)
+                        self.assertEqual(
+                            caught.exception.reason_code,
+                            "evidence_author_t0_publication_incomplete",
+                        )
+                        if completed_renames == 2:
+                            _items, _receipts, refusals = (
+                                readiness._discover_evidence(
+                                    pack,
+                                    custody_pack,
+                                    pack_sha256=readiness.committed_pack_tree_sha256(
+                                        pack
+                                    ),
+                                    head_commit=readiness.reviewed_main(pack)[
+                                        "head_commit"
+                                    ],
+                                    boot_session_id=TEST_BOOT_SESSION_ID,
+                                    now_monotonic_ns=1_000_000_000_000,
+                                    include_pack=False,
+                                )
+                            )
+                            self.assertIn(
+                                "readiness_evidence_unreadable",
+                                {item["code"] for item in refusals},
+                            )
+                    else:
+                        self.assertTrue(
+                            t0._publication_complete(source_dir, evidence_dir)
+                        )
+                        with author_environment(repository):
+                            recovered = author_arm_readiness_evidence_t0(
+                                pack, custody
+                            )
+                        self.assertFalse(recovered["mutated"])
+                finally:
+                    temporary.cleanup()
 
     def test_each_absent_runbook_artifact_class_has_one_named_refusal(self) -> None:
         expected = {
