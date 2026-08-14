@@ -27,7 +27,7 @@ docs/process_traces/2026-08-13-freeze-execution/freeze-log.md. Measurement
 checkout: /Users/edr/JouleWise-measurement-20260813 (.venv+mlx; DO NOT
 touch; NO REBOOT before T-0 or evidence re-authors — tool exists, ~15 min).
 
-**EIGHT PRs MERGED this session:** #140, #135, #141 (§5C), #142 (CH-1),
+**SEVEN PRs MERGED this session** (T6-mechanic corrected count — #138 was T5's, merged pre-stop-order and counted in C-057): #140, #135, #141 (§5C), #142 (CH-1),
 #143 (WO-COLLECTION-MARGIN-01), #144 (tighter-floor re-spec), #145
 (WO-EVIDENCE-AUTHOR-01 — through a mandatory rule-11 COLD GATE, custody
 docs/process_traces/2026-08-12-evauth-coldgate/). Plus: item-(1) ruling,
