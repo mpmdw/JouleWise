@@ -8843,3 +8843,19 @@ Ed from the packet: M-1 (BRACKET_SESSION_ID literal vs the runbook's
 generator-owned cosmetic contradiction needing a ruled fix, since pack
 bytes are now frozen). Standing constraint: NO REBOOT before T-0 or the
 evidence re-authors (cheap now — the tool exists).
+
+### Window gating directive — 2026-08-13 late (Ed, T6): council-audited instrument readiness precedes any window
+
+Ed: do not focus on running the windows unless a COUNCIL decides the
+instruments are ready on a COMPREHENSIVE AUDIT; desk work is the default
+program, "do whatever is logical for the progress of the project." This
+supersedes the same-day window-ladder scheduling (and the earlier
+window-tonight ruling's urgency) — the ladder now sits behind a full-tier
+council verdict: a comprehensive instrument-readiness audit spanning the
+frozen packs, writer + calibration bracket + sampler supervision (#127
+production reliance was still Ed-owed), reduce/floors/mint chain, custody,
+and runbook procedure, adjudicated to GO / NO-GO-with-work-orders. Work
+orders out of the audit become the desk program. The 72h machine window
+remains available if the council reaches GO while it lasts; otherwise the
+span is desk work and the windows wait for readiness plus a later tap
+window — soundness above schedule, per the standing prerogative.

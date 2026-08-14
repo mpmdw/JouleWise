@@ -28,12 +28,14 @@ procedure, and operator-step receipts that the arming gate verifies).
 Built overnight; its independent reviews are running.
 
 **Queued next:** (1) merge that tool after review; (2) a batch of small
-launch-procedure corrections found during packet assembly; (3) the three
-measurement windows themselves — alpha (1.5-billion-parameter model,
-~6.3 hours), then beta (7-billion, ~6.5 hours), then gamma (the direct
-model-size comparison) — run back-to-back as machine time allows, each
-followed by reduction and floor-gated analysis; (4) filling the first
-measured numbers into the paper draft.
+launch-procedure corrections found during packet assembly; (3) a
+comprehensive instrument-readiness audit — a multi-reviewer council pass
+over the whole measurement chain (writer, calibration, sampler, analysis,
+custody) that must rule the instrument ready before any measurement
+window is spent; (4) the three measurement windows themselves — alpha
+(1.5-billion-parameter model, ~6.3 hours), beta (7-billion, ~6.5 hours),
+gamma (the direct comparison) — only after that audit says go; (5) the
+paper, filling with measured numbers as they arrive.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
