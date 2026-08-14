@@ -8859,3 +8859,39 @@ orders out of the audit become the desk program. The 72h machine window
 remains available if the council reaches GO while it lasts; otherwise the
 span is desk work and the windows wait for readiness plus a later tap
 window — soundness above schedule, per the standing prerogative.
+
+### Interaction contract — 2026-08-14 morning (Ed): magistrate decides everything except hardware/sudo
+
+Ed: wait on him ONLY for physical-hardware and sudo actions; work the
+70-hour horizon toward the paper; MINIMIZE his required appearances (batch
+all Ed-needs into as few machine sessions as possible). Consequently the
+magistrate now rules directly on items previously queued as Ed-owed unless
+they touch hardware/privilege. Applied immediately:
+
+**M-1 RULED (magistrate):** BRACKET_SESSION_ID for Window ALPHA =
+`window_alpha_YYYYMMDD-calibration` (date bound at arm). The runbook:177
+convention reads `<WINDOW_ID>-calibration` where WINDOW_ID would give the
+plan-id literal; the packet mechanic verified the operator binding passes
+the path-component check and the margin recorder reads the plan-id as
+window ID independently. The window-letter form is adopted for operator
+legibility; the arm packet and §12 record BOTH the literal and the
+plan-id so no consumer ambiguity survives. Rationale custodied with the
+packet.
+
+**M-2 RULED (magistrate):** the frozen packs' `draft_status:
+"unfrozen_draft"` and README "not armable" lines are GENERATOR-OWNED
+DESCRIPTIVE TEXT that predates the freeze machinery; the freeze receipts
+and plan-tree pins are the AUTHORITATIVE state. Remedy: the chain-fix
+batch teaches the generators a freeze-aware status line (mirroring the
+existing freeze-aware D-134 attachment handling) and regenerates the
+sidecar-consistent text via the canonical path; until that lands, the
+freeze receipt's presence governs and the §5C gate's placeholder-text
+NO-GO reading is OVERRIDDEN for exactly this field by this ruling (scoped,
+recorded — the packet cites it).
+
+ED-QUALIFICATION batching: all sudo/hardware rows (sudo powermetrics
+checklist, live sampler supervision check, JW-MET-3 rail probe, §5A tap
+familiarization) are assembled into ONE scripted ~15-minute session,
+prepared before Ed is next pinged; a window arm can chain onto the same
+session when the council is READY, so one appearance can close
+qualification AND start a window.
