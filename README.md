@@ -9,30 +9,25 @@
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
-## Current activity (refreshed each work block; last: 2026-08-14 pre-dawn)
+## Current activity (refreshed each work block; last: 2026-08-14 midday)
 
-**Just completed:** all three measurement plans ("packs" — the frozen
-bundles of workload configurations, calibration rules, and acceptance
-criteria for the alpha, beta, and gamma measurement windows) are now
-**frozen** for the first time, at the tighter 1.869502-joule detection
-floor (the smallest energy difference the instrument can responsibly
-claim to resolve). Freezing means the plan bytes are hash-pinned and
-committed; nothing about what will be measured can silently change
-between now and collection. Seven pull requests merged in this block,
-including the tooling that authors the machine-checkable evidence the
-freeze itself requires.
+**Just completed:** the arm-time evidence tool passed its full review
+cycle (two independent reviews, two fix rounds with demonstrated
+fault-injection tests, and a clean final re-audit) — it now executes live
+machine checks for real, expires volatile evidence after twenty minutes so
+stale machine-state can never authorize an arm, and publishes its records
+crash-safely. Three pull requests are in automated testing: that tool, the
+post-freeze test reconciliation, and a ten-item batch of launch-procedure
+corrections (including the keyboard-backlight control added to the
+quiet-machine checklist, and the scripted ~20-minute hardware session that
+batches everything needing the operator's hands into one visit). The paper's
+measurement-boundary wording was tightened to exactly what the
+implementation measures (the processor package's CPU, GPU, and
+neural-engine rails).
 
-**Working on now:** the arm-time evidence tool (live machine state, clock
-procedure, and operator-step receipts that the arming gate verifies) is
-built, has passed two independent reviews plus a six-item fix round with
-demonstrated fault-injection tests, and is in its final re-audit. The
-charter for the instrument-readiness audit — the comprehensive
-multi-reviewer examination that must rule the whole measurement chain
-ready before any window is spent — has been ratified after a design
-review that strengthened it substantially (independent seam reviewers, a
-disposable end-to-end rehearsal of the entire post-collection analysis
-path, and a rule that an audit lens claiming "no findings" must prove
-its coverage or be treated as unverified).
+**Working on now:** shepherding those three merges, then committing the
+audit baseline — the pinned snapshot of every governing artifact that the
+instrument-readiness audit will examine.
 
 **Queued next:** (1) merge that tool after review; (2) a batch of small
 launch-procedure corrections found during packet assembly; (3) a
