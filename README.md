@@ -9,7 +9,7 @@
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
-## Current activity (refreshed each work block; last: 2026-08-13 evening)
+## Current activity (refreshed each work block; last: 2026-08-14 pre-dawn)
 
 **Just completed:** all three measurement plans ("packs" — the frozen
 bundles of workload configurations, calibration rules, and acceptance
@@ -22,10 +22,17 @@ between now and collection. Seven pull requests merged in this block,
 including the tooling that authors the machine-checkable evidence the
 freeze itself requires.
 
-**Working on now:** the last missing piece before a window can be armed —
-the tool that authors the *arm-time* evidence (live machine state, clock
-procedure, and operator-step receipts that the arming gate verifies).
-Built overnight; its independent reviews are running.
+**Working on now:** the arm-time evidence tool (live machine state, clock
+procedure, and operator-step receipts that the arming gate verifies) is
+built, has passed two independent reviews plus a six-item fix round with
+demonstrated fault-injection tests, and is in its final re-audit. The
+charter for the instrument-readiness audit — the comprehensive
+multi-reviewer examination that must rule the whole measurement chain
+ready before any window is spent — has been ratified after a design
+review that strengthened it substantially (independent seam reviewers, a
+disposable end-to-end rehearsal of the entire post-collection analysis
+path, and a rule that an audit lens claiming "no findings" must prove
+its coverage or be treated as unverified).
 
 **Queued next:** (1) merge that tool after review; (2) a batch of small
 launch-procedure corrections found during packet assembly; (3) a
