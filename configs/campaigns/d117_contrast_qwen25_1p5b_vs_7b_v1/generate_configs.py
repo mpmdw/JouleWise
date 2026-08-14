@@ -377,7 +377,8 @@ def family_relpath(measurement_arm: str, arm: str) -> Path:
 def prompt_candidate() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_prompt_candidate.v1",
-        "draft_status": PACK_STATUS,
+        # Q1 pins the p256 prompt artifact bytes and token-ID identity.
+        "draft_status": DRAFT_STATUS,
         "candidate_status": PROMPT_STATUS,
         "authority": {
             "prompt_length": "D-122 clause 1",
@@ -402,7 +403,8 @@ def prompt_candidate() -> dict[str, Any]:
 def consumer_declaration() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_consumer_family_declaration.v1",
-        "draft_status": PACK_STATUS,
+        # The frozen gamma plan test pins this declaration's exact SHA.
+        "draft_status": DRAFT_STATUS,
         "declaration_kind": "consumer_family_declaration",
         "binding_mode": "declaration_only",
         "byte_binding_pinset": False,
@@ -517,7 +519,8 @@ def build_plan(
 ) -> dict[str, Any]:
     return {
         "schema_version": PLAN_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The D-134 freeze receipt pins calibration_plan.json by SHA.
+        "draft_status": DRAFT_STATUS,
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N_BLOCKS,
@@ -1167,7 +1170,8 @@ def build_analysis_manifest(
 
     return {
         "schema_version": "joulewise.analysis_manifest.v3.prospective",
-        "draft_status": PACK_STATUS,
+        # The frozen gamma plan tree pins this analysis manifest by SHA.
+        "draft_status": DRAFT_STATUS,
         "plan": {
             "plan_id": PLAN_ID,
             "path": "calibration_plan.json",
@@ -1293,7 +1297,8 @@ def build_tree(
     )
     return {
         "schema_version": TREE_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The D-134 plan-tree sidecar pins this artifact by SHA.
+        "draft_status": DRAFT_STATUS,
         "plan": {
             "path": "calibration_plan.json",
             "plan_id": PLAN_ID,
@@ -1408,7 +1413,8 @@ def build_tree(
             "binding_mode": "declaration_only",
         },
         "runtime_budget": {
-            "draft_status": PACK_STATUS,
+            # The D-134 plan-tree sidecar pins this nested field by SHA.
+            "draft_status": DRAFT_STATUS,
             "decode": {
                 "members": MEMBERS_PER_ARM,
                 "minutes_with_margin": 168.0,
@@ -1541,7 +1547,8 @@ def generate(output_repo_root: Path) -> dict[str, str]:
             root_index += 1
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
-            "draft_status": PACK_STATUS,
+            # The frozen plan-tree manifest reference pins these bytes by SHA.
+            "draft_status": DRAFT_STATUS,
             "manifest_id": f"d117-gamma-{stage_id.replace('_', '-')}-order-v1",
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha,
@@ -1578,7 +1585,8 @@ def generate(output_repo_root: Path) -> dict[str, str]:
 
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The frozen gamma analysis manifest pins the root manifest by SHA.
+        "draft_status": DRAFT_STATUS,
         "manifest_id": "d117-gamma-qwen25-1p5b-vs-7b-order-v1",
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha,

@@ -821,7 +821,8 @@ def extraction_spec(
     ]
     spec = {
         "schema_version": "joulewise.detection_floor_extraction_spec.v1",
-        "draft_status": PACK_STATUS,
+        # The frozen plan test pins the extraction-spec artifact SHA.
+        "draft_status": DRAFT_STATUS,
         "successor_acceptance_artifact_policy": SUCCESSOR_REGENERATION_RULE,
         "cells": cells,
         "reported_energy_cells": reported_cells,
@@ -895,7 +896,8 @@ def producer_contract(
 
     return {
         "schema_version": "joulewise.d117_floor_producer_contract.v1",
-        "draft_status": PACK_STATUS,
+        # The frozen plan test pins the producer-contract artifact SHA.
+        "draft_status": DRAFT_STATUS,
         "plan_set_id": PLAN_SET_ID,
         "aggregate_artifact_id": AGGREGATE_ARTIFACT_ID,
         "producer_index": 2,
@@ -1565,7 +1567,8 @@ def plan_tree(
 ) -> dict[str, Any]:
     return {
         "schema_version": PLAN_TREE_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The D-134 plan-tree sidecar pins this artifact by SHA.
+        "draft_status": DRAFT_STATUS,
         "plan": {
             "path": f"{PACK_REL.as_posix()}/calibration_plan.json",
             "plan_id": PLAN_ID,
@@ -1848,7 +1851,8 @@ def build_artifacts() -> dict[Path, bytes]:
 
     plan = {
         "schema_version": PLAN_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The D-134 freeze receipt pins calibration_plan.json by SHA.
+        "draft_status": DRAFT_STATUS,
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
@@ -2060,7 +2064,8 @@ def build_artifacts() -> dict[Path, bytes]:
         )
         leaf_manifest = {
             "schema_version": ORDER_SCHEMA,
-            "draft_status": PACK_STATUS,
+            # The frozen plan-tree manifest reference pins these bytes by SHA.
+            "draft_status": DRAFT_STATUS,
             "manifest_id": manifest_id,
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha,
@@ -2084,7 +2089,8 @@ def build_artifacts() -> dict[Path, bytes]:
     root_manifest_id = "d117-floor-qwen25-7b-v1-order-v1"
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The frozen producer contract pins the root manifest by SHA.
+        "draft_status": DRAFT_STATUS,
         "manifest_id": root_manifest_id,
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha,

@@ -1209,7 +1209,8 @@ def build_extraction_spec(
     ]
     spec = {
         "schema_version": "joulewise.detection_floor_extraction_spec.v1",
-        "draft_status": PACK_STATUS,
+        # The frozen plan test pins the extraction-spec artifact SHA.
+        "draft_status": DRAFT_STATUS,
         "successor_acceptance_artifact_policy": SUCCESSOR_REGENERATION_RULE,
         "cells": cells,
         "reported_energy_cells": reported_cells,
@@ -1295,7 +1296,8 @@ def build_producer_contract(
     ]
     return {
         "schema_version": "joulewise.d117_floor_producer_contract.v1",
-        "draft_status": PACK_STATUS,
+        # The frozen plan test pins the producer-contract artifact SHA.
+        "draft_status": DRAFT_STATUS,
         "plan_set_id": "plan-set-d117-qwen25-1p5b-7b-phase-floor-v1",
         "aggregate_artifact_id": "d117-qwen25-phase-floor-set-v1",
         "producer_index": 1,
@@ -1548,7 +1550,8 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     canonical_blocks = calibration_plan_blocks(blocks)
     plan = {
         "schema_version": PLAN_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The D-134 freeze receipt pins calibration_plan.json by SHA.
+        "draft_status": DRAFT_STATUS,
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
@@ -1705,7 +1708,8 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         manifest_id = f"d117-floor-qwen25-1p5b-v1-{stage_id.replace('_', '-')}-order-v1"
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
-            "draft_status": PACK_STATUS,
+            # The frozen plan-tree manifest reference pins these bytes by SHA.
+            "draft_status": DRAFT_STATUS,
             "manifest_id": manifest_id,
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha256,
@@ -1724,7 +1728,8 @@ def generate(output_root: Path) -> tuple[int, str, str]:
 
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The frozen producer contract pins the root manifest by SHA.
+        "draft_status": DRAFT_STATUS,
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha256,
@@ -1814,7 +1819,8 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     graph = stage_graph(stage_manifest_refs, external_inputs)
     tree = {
         "schema_version": TREE_SCHEMA,
-        "draft_status": PACK_STATUS,
+        # The D-134 plan-tree sidecar pins this artifact by SHA.
+        "draft_status": DRAFT_STATUS,
         "plan": {
             "path": (PACK_REL / "calibration_plan.json").as_posix(),
             "plan_id": PLAN_ID,
