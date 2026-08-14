@@ -22,13 +22,15 @@
 #   scripts/prewindow_check.sh                 # check once, report, exit 0/1
 #   scripts/prewindow_check.sh --wait          # wait until ready (default 45 min cap)
 #   scripts/prewindow_check.sh --wait --timeout-min 90
-#   scripts/prewindow_check.sh --window c      # also verify that window's runs roots are clear
+#   scripts/prewindow_check.sh --window alpha  # verify measurement-checkout runs roots are clear
 
 set -uo pipefail
 
 WAIT=0
 TIMEOUT_MIN=45
 WINDOW=""
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+MEASUREMENT_REPO="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
 CPU_LIMIT="${CPU_LIMIT:-5.0}"        # percent, per contaminating process
 LOAD_LIMIT="${LOAD_LIMIT:-2.0}"      # 1-minute load average
 SETTLE_CHECKS=3                      # consecutive clean checks required
@@ -39,9 +41,17 @@ while [ $# -gt 0 ]; do
     --wait) WAIT=1; shift ;;
     --timeout-min) TIMEOUT_MIN="$2"; shift 2 ;;
     --window) WINDOW="$2"; shift 2 ;;
-    *) echo "usage: $0 [--wait] [--timeout-min N] [--window LETTER]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--wait] [--timeout-min N] [--window alpha|beta|gamma]" >&2; exit 2 ;;
   esac
 done
+
+case "$WINDOW" in
+  "") WINDOW_RUNS_PREFIX="" ;;
+  alpha) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen25_1p5b_v1 ;;
+  beta) WINDOW_RUNS_PREFIX=runs_d117_floor_qwen25_7b_v1 ;;
+  gamma) WINDOW_RUNS_PREFIX=runs_d117_contrast_qwen25_1p5b_vs_7b_v1 ;;
+  *) echo "--window must be alpha, beta, or gamma" >&2; exit 2 ;;
+esac
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '  \033[32mOK\033[0m    %s\n' "$*"; }
@@ -99,22 +109,40 @@ check_once() {
     blocked=1
   fi
 
-  # 5. Target window's runs roots must be absent. An occupied slot makes the
-  #    chain fail late rather than early.
+  # 5. Keyboard-backlight level has no reliable CLI probe. Emit the exact
+  #    operator census literals ratified for JW-MET-2; visual verification is
+  #    required immediately before launch.
+  echo "  NOTE  keyboard-backlight census (System Settings visual check; no CLI exists for level):"
+  echo "        keyboard_backlight.level=0"
+  echo "        keyboard_backlight.automatic_adjust=false"
+  echo "        keyboard_backlight.inactivity=never"
+  echo "        keyboard_backlight.verification=operator_visual"
+
+  # 6. Target window's measurement-checkout runs roots may be absent or
+  #    materialized-but-empty for the arm-context gate. Any occupied or
+  #    non-directory match makes the chain fail late rather than early.
   if [ -n "$WINDOW" ]; then
-    local hits
-    hits="$(ls -d /Users/edr/code/JouleWise/runs_window_${WINDOW}_* 2>/dev/null | tr '\n' ' ')"
+    local hits=""
+    local candidate
+    # The suffix glob covers both the exact claim leaf and its _bound peer,
+    # plus any explicitly frozen attempt suffix, inside this checkout only.
+    for candidate in "$MEASUREMENT_REPO"/"$WINDOW_RUNS_PREFIX"*; do
+      [ -e "$candidate" ] || continue
+      if [ ! -d "$candidate" ] || [ -n "$(/usr/bin/find "$candidate" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+        hits="${hits}${candidate} "
+      fi
+    done
     if [ -n "$hits" ]; then
       bad "runs roots already exist for window ${WINDOW}: $hits"
       blocked=1
     else
-      ok "runs roots clear for window ${WINDOW}"
+      ok "runs roots absent or empty for window ${WINDOW} under measurement checkout ${MEASUREMENT_REPO}"
     fi
   fi
 
-  # 6. Disk headroom. A window writes a few GB; running out mid-campaign loses it.
+  # 7. Disk headroom. A window writes a few GB; running out mid-campaign loses it.
   local avail_gb
-  avail_gb="$(df -g /Users/edr/code/JouleWise | awk 'NR==2 {print $4}')"
+  avail_gb="$(df -g "$MEASUREMENT_REPO" | awk 'NR==2 {print $4}')"
   if [ "${avail_gb:-0}" -lt 20 ]; then
     bad "only ${avail_gb} GB free; a window needs several GB with headroom"
     blocked=1
@@ -122,7 +150,7 @@ check_once() {
     ok "${avail_gb} GB free"
   fi
 
-  # 7. No agent or measurement process already running.
+  # 8. No agent or measurement process already running.
   local procs
   procs="$(ps aux | grep -E "codex exec|codex-run|run_campaign|window-chain" | grep -vc grep)"
   if [ "$procs" -gt 0 ]; then
