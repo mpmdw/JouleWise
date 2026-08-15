@@ -8910,3 +8910,29 @@ familiarization) are assembled into ONE scripted ~15-minute session,
 prepared before Ed is next pinged; a window arm can chain onto the same
 session when the council is READY, so one appearance can close
 qualification AND start a window.
+
+### R3 RULED (magistrate, 2026-08-15; council-verdict Phase 0): P2-006 formally RETIRED from window selection
+
+Authority: the 2026-08-15 council verdict (docs/process_traces/
+2026-08-15-readiness-council/council-verdict.md, Disposition 3 + Phase 0
+R3), executing the DG-refuter finding that D-117 replaced the Window-A
+program's claim path without formally naming or retiring row P2-006 —
+leaving the kernel rendering a superseded campaign READY [QUIET-MAC] with
+zero active gates (fleet blocker L1-B2).
+
+**Ruling:**
+1. P2-006 ("Window A two-model campaign") is RETIRED as a quiet-window
+   selection row, effective immediately. Its outputs do not trace to the
+   current D-117 claim path; no quiet night may be spent on it.
+2. The retirement is SUPERSESSION, not deletion: the row's history and
+   its D-110-era rationale remain in the record. Any future two-model
+   exploratory campaign enters as a NEW row scoped under the then-current
+   claim path and gate table.
+3. WO-KERNEL-RECONCILE (council Phase 1, magistrate-supervised) executes
+   this ruling in the kernel transaction: remove P2-006 from live
+   selection, install the WINDOW-COUNCIL-GATE global gate (scope
+   quiet_mac, allowed_task_ids [], clearance = a READY-candidate council
+   verdict), reconcile the false U11/FCM rows, and regenerate.
+4. Until that transaction lands, any surface rendering P2-006 as READY is
+   OVERRIDDEN by this ruling; the generated regions are known-stale
+   (fleet L1-B2/B3, adjudicated).
