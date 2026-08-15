@@ -12,7 +12,7 @@ docs/process_traces/2026-08-15-readiness-council/:
 4. refuter-outputs/ — all nine C-028 refuter results: sol-refuter-A-execution.md,
    sol-refuter-B-contract.md, sol-refuter-B-execution.md, sol-refuter-ECF-contract.md,
    sol-refuter-ECF-execution.md, refuter-DG-out.md (DG contract), sol-out-refuter-DG.md
-   (DG execution), refuter-L2-out.md (falsely-clean attack), plus refuter-verdicts.md (the
+   (DG execution), refuter-L2-out.md (falsely-clean attack), sol-refuter-singlelens.md (second-lens clearance, added post-recording), plus refuter-verdicts.md (the
    running harvest record incl. the A-contract relay verdict and the relay-failure record).
 5. consistency-sweep-findings.md — the full 23-finding sweep (7 blockers / 10 should-fix /
    6 nits) WITH the magistrate's appended digest-refutation note. Triage state: sweep-B4

@@ -117,3 +117,15 @@ the stricter of the two cold positions).
 
 Recorded by the magistrate at custody commit; packet, seat reports, refuter outputs, sweep
 findings, dispositions, and both cold rulings are in this directory. Index: packet-index.md.
+
+## ADDENDUM (same day, post-recording): SINGLE-LENS labels CLEARED
+
+The ordered second-lens refuter (refuter-outputs/sol-refuter-singlelens.md, Sol xhigh,
+execution lens) confirmed all four single-lens claims: L2-1 (refined: the unbudgeted
+projection tree is finite but intractably large — the operational lease-held blocker stands
+verbatim), L2-COV-1 (251-test universe re-enumerated exactly), L2-EDQ-1 (three 600-s
+loaded-host failures durably recorded; qualification open), and the terminal-review-trailer
+gap (no producer; remedy = a lead-owned terminal-review attestation step whose commit the
+superseding manifest pins, with the measurement checkout and T-0 author operating at the
+attested commit — folds into WO-T0-PRODUCER + the Phase-3 supersession). Their work orders
+now implement without further verification debt. Disposition 5's condition is discharged.
