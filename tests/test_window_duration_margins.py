@@ -17,7 +17,10 @@ from unittest import mock
 
 import joulewise.window_duration_margins as margins
 from joulewise.adapters.powermetrics import samples_from_raw_powermetrics
-from joulewise.authentication_io import read_authentication_input
+from joulewise.authentication_io import (
+    V2AuthenticationReadSession,
+    read_authentication_input,
+)
 from joulewise.bundle_read import BundleReader
 from joulewise.reduce import _in_window_sample_count, _window_gap_stats
 from joulewise.whole_window import MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
@@ -34,6 +37,34 @@ CONFIG_FIXTURE = (
     / "d117c15v7-decode-contrast-b01-a1.json"
 )
 
+FROZEN_FLOOR_PACKS = (
+    {
+        "model": "1p5b",
+        "pack": "d117_floor_qwen25_1p5b_v1",
+        "pack_identity": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+        "registry_sha256": "d98ae4deb787caaf8a80f972b88b2c85ecc2f96a13092e9127c1e1a661640fd2",
+        "cell_ids": (
+            "d117-df-cmp-abba-ph-decode-qwen25-1p5b",
+            "d117-df-cmp-abba-ph-prefill-p128-qwen25-1p5b",
+            "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b",
+        ),
+    },
+    {
+        "model": "7b",
+        "pack": "d117_floor_qwen25_7b_v1",
+        "pack_identity": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+        "registry_sha256": "86809f31d2c6933cda42881e10a32bc521cddec01fa941ac4613cd32b9ef49b8",
+        "cell_ids": (
+            "d117-df-cmp-abba-ph-decode-qwen25-7b",
+            "d117-df-cmp-abba-ph-prefill-p128-qwen25-7b",
+            "d117-df-cmp-abba-ph-prefill-p256-qwen25-7b",
+        ),
+    },
+)
+GAMMA_PACK = "d117_contrast_qwen25_1p5b_vs_7b_v1"
+GAMMA_PACK_ID = "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1"
+GAMMA_REGISTRY_SHA = "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57"
+
 
 def _json_bytes(value: object) -> bytes:
     return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -49,6 +80,324 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows),
         encoding="utf-8",
     )
+
+
+class FrozenPackRecorderAuthorizationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+
+    def _floor_spec_path(self, model: str, *, root: Path = REPO_ROOT) -> Path:
+        return (
+            root
+            / "configs"
+            / "floor_mint"
+            / f"d117_qwen25_{model}_extraction_spec.json"
+        )
+
+    def _pack_path(self, pack: str, *, root: Path = REPO_ROOT) -> Path:
+        return root / "configs" / "campaigns" / pack
+
+    def _copy_floor_pack(self, model: str) -> tuple[Path, Path, Path, dict[str, object]]:
+        repository_root = self.root / f"repository-{model}"
+        case = next(case for case in FROZEN_FLOOR_PACKS if case["model"] == model)
+        source_pack = self._pack_path(str(case["pack"]))
+        pack_root = self._pack_path(str(case["pack"]), root=repository_root)
+        pack_root.mkdir(parents=True)
+        for name in ("plan_tree.json", "plan_tree.sha256"):
+            shutil.copy2(source_pack / name, pack_root / name)
+        spec_path = self._floor_spec_path(model, root=repository_root)
+        spec_path.parent.mkdir(parents=True)
+        shutil.copy2(self._floor_spec_path(model), spec_path)
+        tree = json.loads((pack_root / "plan_tree.json").read_text(encoding="utf-8"))
+        return repository_root, pack_root, spec_path, tree
+
+    def _copy_gamma_pack(self) -> tuple[Path, Path, Path, dict[str, object]]:
+        repository_root = self.root / "repository-gamma"
+        source_pack = self._pack_path(GAMMA_PACK)
+        pack_root = self._pack_path(GAMMA_PACK, root=repository_root)
+        pack_root.mkdir(parents=True)
+        for name in (
+            "plan_tree.json",
+            "plan_tree.sha256",
+            "analysis_manifest_v3.json",
+        ):
+            shutil.copy2(source_pack / name, pack_root / name)
+        manifest_path = pack_root / "analysis_manifest_v3.json"
+        tree = json.loads((pack_root / "plan_tree.json").read_text(encoding="utf-8"))
+        return repository_root, pack_root, manifest_path, tree
+
+    def _rewrite_plan_tree(self, pack_root: Path, tree: dict[str, object]) -> None:
+        tree_raw = _json_bytes(tree)
+        (pack_root / "plan_tree.json").write_bytes(tree_raw)
+        (pack_root / "plan_tree.sha256").write_text(
+            f"{hashlib.sha256(tree_raw).hexdigest()}  plan_tree.json\n",
+            encoding="utf-8",
+        )
+
+    def test_frozen_floor_pack_census_and_governed_grant_are_exact(self) -> None:
+        for case in FROZEN_FLOOR_PACKS:
+            with self.subTest(model=case["model"]):
+                pack_root = self._pack_path(str(case["pack"]))
+                spec_path = self._floor_spec_path(str(case["model"]))
+                with V2AuthenticationReadSession() as authentication:
+                    with mock.patch.object(
+                        authentication,
+                        "allow_governed_extraction_spec",
+                        wraps=authentication.allow_governed_extraction_spec,
+                    ) as grant:
+                        _tree_sha, registry_sha, cells = margins._pack_inventory(
+                            authentication,
+                            REPO_ROOT,
+                            pack_root,
+                            str(case["pack_identity"]),
+                        )
+                grant.assert_called_once_with(spec_path.resolve())
+                self.assertEqual(registry_sha, case["registry_sha256"])
+                self.assertEqual(
+                    tuple(cell.cell_id for cell in cells), case["cell_ids"]
+                )
+                self.assertEqual(
+                    [(cell.metric, len(cell.members)) for cell in cells],
+                    [
+                        ("phase_energy_j.decode", 40),
+                        ("phase_energy_j.prefill", 40),
+                        ("phase_energy_j.prefill", 40),
+                    ],
+                )
+                registry = json.loads(spec_path.read_text(encoding="utf-8"))
+                comparative = [
+                    cell for cell in registry["cells"] if cell.get("kind") == "comparative"
+                ]
+                self.assertEqual(len(comparative), 3)
+                for raw_cell, registered in zip(comparative, cells):
+                    self.assertEqual(len(raw_cell["blocks"]), 10)
+                    self.assertEqual(len(raw_cell["member_config_sha256"]), 40)
+                    self.assertEqual(
+                        raw_cell["estimator_registration"]["estimator_id"],
+                        "d124_two_shared_edge_common_mode.v1",
+                    )
+                    expected_members = tuple(
+                        block["members"][position]
+                        for block in raw_cell["blocks"]
+                        for position in ("A1", "B1", "B2", "A2")
+                    )
+                    self.assertEqual(
+                        tuple(bundle_id for bundle_id, _sha in registered.members),
+                        expected_members,
+                    )
+                    self.assertEqual(len(set(expected_members)), 40)
+
+    def test_selected_floor_grant_does_not_authorize_other_pack_spec(self) -> None:
+        alpha = FROZEN_FLOOR_PACKS[0]
+        beta_path = self._floor_spec_path("7b")
+        real_pack_inventory = margins._pack_inventory
+
+        def attempt_other_pack(
+            authentication: V2AuthenticationReadSession,
+            repository_root: Path,
+            pack_root: Path,
+            pack_identity: str,
+        ) -> object:
+            inventory = real_pack_inventory(
+                authentication,
+                repository_root,
+                pack_root,
+                pack_identity,
+            )
+            margins._json_object(beta_path, label="unselected floor spec")
+            return inventory
+
+        runs_root = self.root / "other-pack-runs"
+        receipt_root = self.root / "other-pack-receipts"
+        runs_root.mkdir()
+        with mock.patch.object(
+            margins, "_pack_inventory", side_effect=attempt_other_pack
+        ):
+            with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                margins.record_window_duration_margins(
+                    repository_root=REPO_ROOT,
+                    pack_root=self._pack_path(str(alpha["pack"])),
+                    runs_root=runs_root,
+                    receipt_root=receipt_root,
+                    pack_identity=str(alpha["pack_identity"]),
+                )
+        self.assertEqual(caught.exception.reason, "authoritative_input_invalid")
+        self.assertIn(
+            "v2_authentication_forbidden_json_key", caught.exception.detail
+        )
+        self.assertIn(
+            "unselected floor spec.cells[1].estimator_registration",
+            caught.exception.detail,
+        )
+        self.assertFalse(receipt_root.exists())
+
+    def test_tampered_selected_spec_refuses_before_census_processing(self) -> None:
+        repository_root, pack_root, spec_path, _tree = self._copy_floor_pack("1p5b")
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        comparative = next(
+            cell for cell in spec["cells"] if cell.get("kind") == "comparative"
+        )
+        comparative["estimator_registration"]["status"] = "tampered"
+        _write_json(spec_path, spec)
+        with V2AuthenticationReadSession() as authentication:
+            with mock.patch.object(
+                margins,
+                "_floor_cells",
+                side_effect=AssertionError("census ran before the spec pin check"),
+            ), mock.patch.object(
+                authentication,
+                "allow_governed_extraction_spec",
+                wraps=authentication.allow_governed_extraction_spec,
+            ) as grant:
+                with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                    margins._pack_inventory(
+                        authentication,
+                        repository_root,
+                        pack_root,
+                        str(FROZEN_FLOOR_PACKS[0]["pack_identity"]),
+                    )
+        self.assertEqual(caught.exception.reason, "pack_pin_invalid")
+        grant.assert_called_once_with(spec_path.resolve())
+
+    def test_wrong_path_grant_attempt_is_normalized_to_refusal(self) -> None:
+        repository_root, pack_root, spec_path, tree = self._copy_floor_pack("1p5b")
+        wrong_path = spec_path.with_suffix(".txt")
+        shutil.copy2(spec_path, wrong_path)
+        extraction = tree["downstream_contract"]["extraction_spec"]
+        extraction["path"] = wrong_path.relative_to(repository_root).as_posix()
+        extraction["sha256"] = hashlib.sha256(wrong_path.read_bytes()).hexdigest()
+        self._rewrite_plan_tree(pack_root, tree)
+        with V2AuthenticationReadSession() as authentication:
+            with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                margins._pack_inventory(
+                    authentication,
+                    repository_root,
+                    pack_root,
+                    str(FROZEN_FLOOR_PACKS[0]["pack_identity"]),
+                )
+        self.assertEqual(caught.exception.reason, "authoritative_input_invalid")
+        self.assertIn("must be a JSON file", caught.exception.detail)
+
+    def test_escaping_floor_spec_path_refuses_before_any_grant(self) -> None:
+        repository_root, pack_root, _spec_path, tree = self._copy_floor_pack("1p5b")
+        tree["downstream_contract"]["extraction_spec"]["path"] = "../outside.json"
+        self._rewrite_plan_tree(pack_root, tree)
+        with V2AuthenticationReadSession() as authentication:
+            with mock.patch.object(
+                authentication,
+                "allow_governed_extraction_spec",
+                side_effect=AssertionError("escaping path reached the grant"),
+            ):
+                with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                    margins._pack_inventory(
+                        authentication,
+                        repository_root,
+                        pack_root,
+                        str(FROZEN_FLOOR_PACKS[0]["pack_identity"]),
+                    )
+        self.assertEqual(caught.exception.reason, "pack_pin_invalid")
+
+    def test_real_gamma_census_uses_no_governed_spec_grant(self) -> None:
+        pack_root = self._pack_path(GAMMA_PACK)
+        with V2AuthenticationReadSession() as authentication:
+            with mock.patch.object(
+                authentication,
+                "allow_governed_extraction_spec",
+                side_effect=AssertionError("GAMMA must not receive a governed grant"),
+            ) as grant:
+                _tree_sha, registry_sha, cells = margins._pack_inventory(
+                    authentication,
+                    REPO_ROOT,
+                    pack_root,
+                    GAMMA_PACK_ID,
+                )
+        grant.assert_not_called()
+        self.assertEqual(registry_sha, GAMMA_REGISTRY_SHA)
+        self.assertEqual(
+            [(cell.cell_id, cell.metric, len(cell.members)) for cell in cells],
+            [
+                ("ctr-d117-decode-qwen25-1p5b-vs-7b", "phase_energy_j.decode", 40),
+                (
+                    "ctr-d117-prefill-p256-qwen25-1p5b-vs-7b",
+                    "phase_energy_j.prefill",
+                    40,
+                ),
+            ],
+        )
+
+    def test_frozen_floor_census_truncation_refuses(self) -> None:
+        case = FROZEN_FLOOR_PACKS[0]
+        real_floor_cells = margins._floor_cells
+
+        def truncate_to_two(registry: object) -> object:
+            return real_floor_cells(registry)[:2]
+
+        with V2AuthenticationReadSession() as authentication:
+            with mock.patch.object(
+                margins, "_floor_cells", side_effect=truncate_to_two
+            ):
+                with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                    margins._pack_inventory(
+                        authentication,
+                        REPO_ROOT,
+                        self._pack_path(str(case["pack"])),
+                        str(case["pack_identity"]),
+                    )
+        self.assertEqual(caught.exception.reason, "registered_cell_inventory_invalid")
+
+    def test_frozen_gamma_census_truncation_refuses(self) -> None:
+        real_gamma_cells = margins._gamma_cells
+
+        def truncate_to_one(manifest: object) -> object:
+            return real_gamma_cells(manifest)[:1]
+
+        with V2AuthenticationReadSession() as authentication:
+            with mock.patch.object(
+                margins, "_gamma_cells", side_effect=truncate_to_one
+            ):
+                with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                    margins._pack_inventory(
+                        authentication,
+                        REPO_ROOT,
+                        self._pack_path(GAMMA_PACK),
+                        GAMMA_PACK_ID,
+                    )
+        self.assertEqual(caught.exception.reason, "registered_cell_inventory_invalid")
+
+    def test_gamma_estimator_registration_refuses_publicly_without_receipt(self) -> None:
+        repository_root, pack_root, manifest_path, tree = self._copy_gamma_pack()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["contrasts"][0]["estimator_registration"] = {"forged": True}
+        manifest_raw = _json_bytes(manifest)
+        manifest_path.write_bytes(manifest_raw)
+        tree["downstream_contract"]["analysis_manifest_sha256"] = hashlib.sha256(
+            manifest_raw
+        ).hexdigest()
+        self._rewrite_plan_tree(pack_root, tree)
+        runs_root = self.root / "gamma-runs"
+        receipt_root = self.root / "gamma-receipts"
+        runs_root.mkdir()
+        with mock.patch.object(
+            V2AuthenticationReadSession,
+            "allow_governed_extraction_spec",
+            side_effect=AssertionError("GAMMA must not receive a governed grant"),
+        ):
+            with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                margins.record_window_duration_margins(
+                    repository_root=repository_root,
+                    pack_root=pack_root,
+                    runs_root=runs_root,
+                    receipt_root=receipt_root,
+                    pack_identity=GAMMA_PACK_ID,
+                )
+        self.assertEqual(caught.exception.reason, "authoritative_input_invalid")
+        self.assertIn("v2_authentication_forbidden_json_key", caught.exception.detail)
+        self.assertIn(
+            "contrasts[0].estimator_registration", caught.exception.detail
+        )
+        self.assertFalse(receipt_root.exists())
 
 
 class WindowDurationMarginsTests(unittest.TestCase):
@@ -217,9 +566,9 @@ class WindowDurationMarginsTests(unittest.TestCase):
             ("cell-prefill-p128", "prefill_p128", "prefill"),
             ("cell-prefill-p256", "prefill_p256", "prefill"),
         ):
-            # Real floor packs interleave an absolute and comparative cell for
-            # each of decode, prefill-p128, and prefill-p256.  The receipt
-            # census must select all three comparative cells and no absolutes.
+            # This four-member fixture exists only to keep receipt arithmetic
+            # and publication tests small. Frozen-pack tests above own every
+            # claim about the production census and governed vocabulary.
             cells.append(
                 {
                     "cell_id": f"{cell_id}-absolute",
@@ -266,51 +615,6 @@ class WindowDurationMarginsTests(unittest.TestCase):
                     "path": "extraction_spec.json",
                     "sha256": hashlib.sha256(registry_raw).hexdigest(),
                 },
-            },
-        }
-        tree_raw = _json_bytes(tree)
-        (self.pack_root / "plan_tree.json").write_bytes(tree_raw)
-        (self.pack_root / "plan_tree.sha256").write_text(
-            f"{hashlib.sha256(tree_raw).hexdigest()}  plan_tree.json\n",
-            encoding="utf-8",
-        )
-
-    def _write_gamma_pack(self) -> None:
-        contrasts = []
-        for cell_id, arm, phase in (
-            ("cell-decode", "decode", "decode"),
-            ("cell-prefill-p128", "prefill_p128", "prefill"),
-            ("cell-prefill-p256", "prefill_p256", "prefill"),
-        ):
-            contrasts.append(
-                {
-                    "contrast_id": cell_id,
-                    "metric": f"phase_energy_j.{phase}",
-                    "members": [
-                        {
-                            "run_id": bundle_id,
-                            "config_sha256": self.config_sha_by_id[bundle_id],
-                        }
-                        for bundle_id in self.bundle_ids[arm]
-                    ],
-                }
-            )
-        manifest = {
-            "schema_version": "joulewise.analysis_manifest.v3.prospective",
-            "plan": {"plan_id": self.PACK_ID, "sha256": "a" * 64},
-            "contrasts": contrasts,
-        }
-        manifest_raw = _json_bytes(manifest)
-        (self.pack_root / "analysis_manifest_v3.json").write_bytes(manifest_raw)
-        tree = {
-            "schema_version": "joulewise.d117_plan_tree.v1",
-            "plan": {"plan_id": self.PACK_ID, "actual_sha256": "a" * 64},
-            "window_identity": {"window_id": self.PACK_ID},
-            "downstream_contract": {
-                "analysis_manifest_path": "analysis_manifest_v3.json",
-                "analysis_manifest_sha256": hashlib.sha256(
-                    manifest_raw
-                ).hexdigest(),
             },
         }
         tree_raw = _json_bytes(tree)
@@ -511,7 +815,7 @@ class WindowDurationMarginsTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason, expected_reason)
         self.assertEqual(self._namespace_inventory(), before)
 
-    def test_census_discovers_all_three_real_floor_pack_cell_shapes(self) -> None:
+    def test_synthetic_arithmetic_fixture_derives_three_cells(self) -> None:
         receipt = self._derive()
         self.assertEqual(receipt["status"], "PASS")
         self.assertEqual(
@@ -541,36 +845,6 @@ class WindowDurationMarginsTests(unittest.TestCase):
             }.issubset(sources)
         )
         margins.validate_window_duration_margins_receipt(receipt)
-
-    def test_registry_census_truncation_refuses_instead_of_two_cell_pass(self) -> None:
-        real_floor_cells = margins._floor_cells
-
-        def truncate_to_two(registry: object) -> object:
-            return real_floor_cells(registry)[:2]
-
-        with mock.patch.object(margins, "_floor_cells", side_effect=truncate_to_two):
-            self._assert_record_refuses("registered_cell_inventory_invalid")
-
-    def test_gamma_census_truncation_refuses_instead_of_two_cell_pass(self) -> None:
-        self._write_gamma_pack()
-        with self._authenticated():
-            recorded = margins.record_window_duration_margins(
-                repository_root=self.repository_root,
-                pack_root=self.pack_root,
-                runs_root=self.runs_root,
-                receipt_root=self.receipt_root,
-                pack_identity=self.PACK_ID,
-            )
-        self.assertEqual(recorded.receipt["status"], "PASS")
-        self.assertEqual(len(recorded.receipt["cells"]), 3)
-
-        real_gamma_cells = margins._gamma_cells
-
-        def truncate_to_two(manifest: object) -> object:
-            return real_gamma_cells(manifest)[:2]
-
-        with mock.patch.object(margins, "_gamma_cells", side_effect=truncate_to_two):
-            self._assert_record_refuses("registered_cell_inventory_invalid")
 
     def test_tampered_events_refuses_without_output(self) -> None:
         bundle = self.runs_root / self.bundle_ids["decode"][0]
