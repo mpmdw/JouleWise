@@ -261,6 +261,31 @@ class FrozenPackRecorderAuthorizationTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason, "pack_pin_invalid")
         grant.assert_called_once_with(spec_path.resolve())
 
+    def test_symlinked_spec_path_refuses_before_any_grant(self) -> None:
+        """ALPHA's selected spec aliased to BETA's real spec: refuse, ZERO grants."""
+        repository_root, pack_root, spec_path, _tree = self._copy_floor_pack("1p5b")
+        beta_spec_path = self._floor_spec_path("7b", root=repository_root)
+        beta_spec_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self._floor_spec_path("7b"), beta_spec_path)
+        spec_path.unlink()
+        spec_path.symlink_to(beta_spec_path)
+        with V2AuthenticationReadSession() as authentication:
+            with mock.patch.object(
+                authentication,
+                "allow_governed_extraction_spec",
+                wraps=authentication.allow_governed_extraction_spec,
+            ) as grant:
+                with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                    margins._pack_inventory(
+                        authentication,
+                        repository_root,
+                        pack_root,
+                        str(FROZEN_FLOOR_PACKS[0]["pack_identity"]),
+                    )
+        self.assertEqual(caught.exception.reason, "authoritative_input_invalid")
+        self.assertIn("resolution-invariant", str(caught.exception))
+        grant.assert_not_called()
+
     def test_wrong_path_grant_attempt_is_normalized_to_refusal(self) -> None:
         repository_root, pack_root, spec_path, tree = self._copy_floor_pack("1p5b")
         wrong_path = spec_path.with_suffix(".txt")

@@ -399,6 +399,23 @@ def _pack_inventory(
         expected_sha = _require_sha256(
             extraction.get("sha256"), label="downstream extraction-spec sha256"
         )
+        # The grant must bind the literal committed file: the selected path
+        # must be resolution-invariant (no symlinked component anywhere from
+        # the repository root down), so an in-repo alias can never retarget
+        # the governed-vocabulary grant to a different pack's spec (adoption
+        # clause 1: never granted the other floor pack's spec).
+        unresolved = repository_root / Path(
+            *PurePosixPath(str(extraction.get("path"))).parts
+        )
+        if unresolved.resolve(strict=False) != registry_path or any(
+            parent.is_symlink()
+            for parent in [unresolved, *unresolved.parents]
+        ):
+            _refuse(
+                "authoritative_input_invalid",
+                "governed extraction-spec path is not resolution-invariant "
+                "(symlinked component)",
+            )
         try:
             authentication.allow_governed_extraction_spec(registry_path)
         except (ValueError, RuntimeError) as exc:
