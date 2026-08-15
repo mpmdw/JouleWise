@@ -10,9 +10,62 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-12 (T6 session LIVE, Fable magistrate; window night TONIGHT per Ed ruling)
+Last updated: 2026-08-15 (T8 session, Fable magistrate; COUNCIL VERDICT RECORDED)
 
-## ▶▶ T7 CHECKPOINT (2026-08-15, Ed pause order) — /clear-SAFE; A NEW SESSION STARTS HERE
+## ▶▶ T8 STATE (2026-08-15) — COUNCIL VERDICT: NOT-READY; REPAIR PROGRAM IS THE DESK PROGRAM
+
+**THE READINESS COUNCIL RAN IN FULL AND RULED: NOT-READY, 0 READY / 11
+NOT-READY.** Full custody (fleet reports, nine refuter verdicts, cold
+pairing rulings, verdict): `docs/process_traces/2026-08-15-readiness-council/`
+(committed bd7f81c; read council-verdict.md FIRST — it is the operative
+instrument). No funded window may be armed. Windows are not scarce (Ed);
+the repair program is the program.
+
+**Arc this session:** eleven-seat fleet (11/11, 46.7 min, 2.41M tokens) →
+9 Sol xhigh C-028 refuters (5 relay agents wedged ~7h, killed, relaunched
+from the lead shell — worktree-per-run; verdicts killed L8-B4 + WO-L2-4 as
+phantoms, felled L2's READY, found the doubled plan-path defect + the
+terminal-review-trailer gap) → rule-11 cold pairing (cold Fable + Opus
+contract refuter; found 4 process blockers in the sitting itself — no
+custody, packet gaps, M-2 not adjudicable as submitted, coverage
+undischarged — ALL CURED before the verdict was recorded).
+
+**THE WORK-ORDER PROGRAM (4 phases, council-verdict.md §"WORK-ORDER
+PROGRAM" is the ONE home — not restated here):** Phase 0 design rulings
+(R1 freeze-evidence lifecycle w/ mandatory Sol consult; R2 FROZEN_PLAN;
+R3 P2-006 retirement; R4 M-2 execution note + the REMANDED M-2 cold gate;
+consults for validator/finalizer + recorder authz) → Phase 1 parallel code
+WOs (kernel-reconcile first) → Phase 2 re-freeze ONCE atomically LAST +
+successor packet → Phase 3 manifest SUPERSESSION + focused re-audit w/
+adversarial coverage re-enumeration → Phase 4 READY-candidate sitting,
+fresh cold pairing. Program NOT certified complete (recorded clause).
+
+**IN FLIGHT at this writing:** second-lens refuter on the four
+SINGLE-LENS claims (ordered by the verdict; sol-refuter-singlelens.md in
+session scratchpad, lands in the council dir on harvest); C-058
+finalization mechanic. **Next desk actions:** harvest both → land C-058 +
+skill rows → Phase 0 rulings/consults → Phase 1 launches (multi-stream).
+
+**ED-OWED: NOTHING until Phase 1 nears close.** Then ONE batched session
+(expanded qualification script): D-127 sudoers install + exercise, dress
+rehearsal E-4→E-9 + author→arm→verify→consume vs scratch custody, sampler
+checklist, rail probe, backlight rows, ED-Q-L9-3 quiet-state baseline
+(EARLY — it gates the census WO; can ride any earlier tap), a9/a10 desk
+replay. NO REBOOT still preferred (moot for arming — evidence re-authors
+regardless under the ruled lifecycle — but boot-session continuity keeps
+the qualification replays cheap).
+
+**Standing cautions minted this session:** refuter relays via subagent
+wrap the codex MCP route and can wedge silently — launch >30-min Sol
+reviews from the LEAD shell with codex-run-v3, worktree per run (lock is
+per-worktree), WRITE_SCOPE line must start a line in the prompt; the
+nested-repo refusal fires from repo root while .claude/worktrees exist —
+use a scratchpad worktree via -C; stray caffeinate pid 32305 noted, kill
+before any window arm; the same-signature trigger (two eaten stop-signal
+misses) is RECORDED — stop-signal questions get cold review BEFORE action
+now, per the verdict's process rulings.
+
+## ▶▶ T7 CHECKPOINT (2026-08-15, Ed pause order) — superseded by T8 above; kept as record
 
 **Nothing in flight.** The eleven-seat readiness fleet was STOPPED cleanly at
 Ed's pause order (all 11 seats started, 0 completed — resume re-runs fresh,

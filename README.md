@@ -9,28 +9,33 @@
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
-## Current activity (refreshed each work block; last: 2026-08-15, paused at a clean checkpoint)
+## Current activity (refreshed each work block; last: 2026-08-15, council verdict recorded)
 
-**Just completed:** the readiness tooling merged as one verified union —
-the arm-authorization chain now runs end-to-end from freshly authored
-evidence through the real arming gate to a GO verdict on this machine's
-live boot session (proven by test, not asserted). The audit baseline is
-pinned (a committed manifest of every governing artifact's hash), and the
-eleven-seat instrument-readiness audit was launched, then paused cleanly
-at a checkpoint (resumable; no results lost).
+**Just completed:** the comprehensive instrument-readiness audit ran in
+full — an eleven-reviewer sweep over the whole measurement chain, every
+serious finding independently double-checked by adversarial reviewers,
+and the result adjudicated by a fresh pair of judges with no stake in the
+work. The verdict: **not ready yet** — the audit found real defects that
+would have wasted a measurement night (most notably: the frozen packs'
+arming evidence has expired, one required night-time tool has no way to
+produce its own inputs, and two "is the machine quiet?" checks can never
+pass on real macOS). Every defect fails safe — nothing could have
+produced wrong data — but several would have stopped a night cold. The
+full record is committed under
+`docs/process_traces/2026-08-15-readiness-council/`.
 
-**Working on now:** paused at a thorough checkpoint by the operator's
-request. The next session resumes the eleven-seat audit.
+**Working on now:** the repair program the council ordered — first the
+design rulings, then the code fixes in parallel (an input-capture tool
+for the arming evidence, a work-selection gate repair, the analysis
+consumption path for the comparison window, census-check corrections),
+then a re-freeze and a focused re-audit.
 
-**Queued next:** (1) merge that tool after review; (2) a batch of small
-launch-procedure corrections found during packet assembly; (3) a
-comprehensive instrument-readiness audit — a multi-reviewer council pass
-over the whole measurement chain (writer, calibration, sampler, analysis,
-custody) that must rule the instrument ready before any measurement
-window is spent; (4) the three measurement windows themselves — alpha
-(1.5-billion-parameter model, ~6.3 hours), beta (7-billion, ~6.5 hours),
-gamma (the direct comparison) — only after that audit says go; (5) the
-paper, filling with measured numbers as they arrive.
+**Queued next:** (1) the repair program above; (2) one batched operator
+session (sudo checks, a dress rehearsal of the arming night, a few
+hardware probes) once the fixes are in; (3) the three measurement windows
+— alpha (1.5-billion-parameter model, ~6.3 hours), beta (7-billion,
+~6.5 hours), gamma (the direct comparison) — only after a re-audit says
+go; (4) the paper, filling with measured numbers as they arrive.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
