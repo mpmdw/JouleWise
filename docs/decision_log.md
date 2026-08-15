@@ -8966,3 +8966,33 @@ prose/parser changes.
 5. Execution rides WO-T0-PRODUCER (council Phase 1) with the ruled
    real-pack regression test; the consult's per-surface fix list is the
    work order's checklist.
+
+### WO-CONSUMPTION-EDGE contract ADOPTED (magistrate, 2026-08-15; council Phase 0; Sol design consult adopted)
+
+Consult custodied: docs/process_traces/2026-08-15-consumption-edge-consult/
+(rule-2 pre-decision consult — the ONE home for schema detail; not
+restated here). Cures fleet blocker L10-B1/L4 (the gamma claim edge).
+
+**Ruling:**
+1. The two-artifact contract is ADOPTED: the pack's frozen prospective
+   manifest is NEVER mutated post-collection and analyze-claims NEVER
+   accepts it directly. An OUTCOME-BLIND finalizer (authenticates
+   completeness, custody, and frozen selectors; never reads an effect)
+   derives an immutable `joulewise.analysis_manifest.v3.finalized`
+   artifact with full lineage (prospective id/sha, collection manifest,
+   whole-window verdict + evaluation basis, bracket binding, ledger
+   terminal head, exact aggregate floor artifact); a finalized-schema
+   validator gates analyze-claims consumption.
+2. The frozen semantic projection covers every estimand/multiplicity-
+   bearing field (per the consult's enumeration); both D-122 contrasts
+   are carried regardless of decision-envelope outcome — refusals are
+   first-class results.
+3. The present placeholder `postcollection_attachments` remain
+   draft-only and are REJECTED by the frozen validator (D-134
+   slot-declaration precedent).
+4. Execution = WO-CONSUMPTION-EDGE (council Phase 1) with a dedicated
+   queue row; the L10 sacrificial rehearsal re-runs the full edge at
+   the same head before any window is spent.
+5. The consult's open rulings (prefill/floor/multiplicity finalization
+   items) are carried on the work order's RULING-REQUIRED list; any that
+   touch claim semantics surface to Ed with the Phase-1 close.
