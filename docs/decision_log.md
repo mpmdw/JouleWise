@@ -9078,6 +9078,8 @@ Consult custodied: docs/process_traces/2026-08-15-recorder-authz-consult/
 4. Execution = WO-MARGIN-RECORDER-AUTHZ (council Phase 1). This
    executes D-133's close-out gate; it amends no scientific semantics.
 
+### M-2 GATE AMENDMENT — separate entry (heading added 2026-08-15; recorder-race gate mechanic caught it misfiled inside the recorder adoption entry)
+
 **M-2 GATE AMENDMENT (magistrate, 2026-08-15, per the remanded cold gate's composed verdict —
 docs/process_traces/2026-08-15-m2-coldgate/composed-verdict.md, the ONE home):** the engineering
 core is UPHELD (receipts govern over descriptive bytes; frozen bytes are never repaired). The
@@ -9121,3 +9123,48 @@ without ceremony not machine-caught; confirmed by both DG lenses).
    the cold review rides the gauntlet.
 5. Execution = WO-LAUNCH-BINDING (council Phase 1); runbook §6/E-step
    deltas + the ceremony-skip regression battery per the consult.
+
+### RECORDER CHECK-TO-GRANT RACE — registered limitation + WO-RECORDER-GRANT-IDENTITY queued (magistrate, 2026-08-15; rule-11 cold gate, composed verdict)
+
+Gate record (the ONE home): docs/process_traces/2026-08-15-recorder-race-coldgate/ —
+packet + non-author assemble.py, both cold rulings, composed-verdict.md. The gate fired on the
+rule-11 mandatory trigger (second fix round on the same defect class) AND the standing escalation
+trigger (F-9: two rounds, same signature — the grant re-resolves the caller's path inside the
+callee at authentication_io.py:352, so no caller-side patch is atomic).
+
+**REGISTERED LIMITATION (L1 shape):** the margin recorder's governed-vocabulary grant
+(window_duration_margins.py) is subject to a check-to-grant TOCTOU: a concurrent local process
+with repository write access can, mid-run, alias the selected floor-spec path so
+allow_governed_extraction_spec registers the OTHER floor pack's identity (executed:
+10/400 and 7/1200 uninstrumented iterations; a swap-and-revert yields a SILENT success with an
+attacker-chosen identity granted). **RECEIPT INTEGRITY IS INTACT:** every post-grant read in the
+recorder is hash-pinned (expected_sha / member_config_sha256), so a stolen exemption cannot alter
+a receipt today — the harm is a contract-boundary violation (clause 1's "never granted the other
+floor pack's spec") and a forensic refusal-code downgrade, not a receipt forgery. **Bounding
+workflow rule:** the recorder runs single-operator with no concurrent repo-writing process during
+a close-out; this is documented in the runbook §11 close-out preamble (propagation owed with the
+WO). **Justification for interim acceptance:** receipt integrity intact + the real cure is an
+authority-plane amendment (below), not a caller-side round three.
+
+**THREAT-MODEL RULING (conservative):** the concurrent unprivileged local writer is NOT ruled out
+of the instrument's threat model. docs/contracts/calibration_ledger.md bounds the model by
+authority, not timing, and is SILENT on races; L2's sibling writer-signature finding was
+confirmed-and-withheld pending a ruling that did not exist; precedent (the arm-author caffeinate
+volatile-census blocker; the A→B→A TOCTOU design kill; the ledger lock's hardlink-fail-closed
+hardening) grades this class blocker-and-fix. Declining to declare it out-of-model to purchase a
+merge. **ED-WEIGHTED (risk appetite, non-blocking):** if Ed's appetite rules the concurrent local
+writer out of model on a single-operator machine, WO-RECORDER-GRANT-IDENTITY drops to this
+registered limitation alone. Surfaced at the batched session with both cold rulings.
+
+**WO-RECORDER-GRANT-IDENTITY (queued, TASK_QUEUE; OWN future rule-11 cold gate — authority plane):**
+the minimal true cure is to stop allow_governed_extraction_spec re-resolving its argument — accept
+a caller-verified identity verbatim, or key the grant on an fd / (st_dev,st_ino) — which edits
+joulewise/authentication_io.py and therefore amends the adoption ruling's clause 2 ("no
+authentication_io.py change"). F-10's post-grant grant-delta verification (with the read-only
+accessor clause 2 currently forbids) folds into this WO. NOT licensed as a caller-side patch.
+
+**LANDS NOW on impl/wo-margin-recorder-authz (independent, both seats):** F-5 — the unnormalized
+V2AuthenticationInputError escaping _pack_inventory on a non-adversarial path (_json_object reads
+outside its try); normalized to WindowDurationMarginsRefusal. The recorder branch then merges on
+receipt-soundness (original blocker L4-B1 cured; round-1 static-invariance guard retained; F-5
+landed) WITH this limitation registered — not as "race closed."
