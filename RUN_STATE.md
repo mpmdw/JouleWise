@@ -12,7 +12,59 @@ file instead.
 
 Last updated: 2026-08-12 (T6 session LIVE, Fable magistrate; window night TONIGHT per Ed ruling)
 
-## ▶▶ T6 SESSION CHECKPOINT (2026-08-13 night) — FREEZE COMPLETE; ARM SLIPS TO 08-14 (Ed ruling)
+## ▶▶ T7 CHECKPOINT (2026-08-15, Ed pause order) — /clear-SAFE; A NEW SESSION STARTS HERE
+
+**Nothing in flight.** The eleven-seat readiness fleet was STOPPED cleanly at
+Ed's pause order (all 11 seats started, 0 completed — resume re-runs fresh,
+which is preferable for audit freshness). Zero live codex processes, zero
+monitors. Everything load-bearing is pushed. The 42 local worktrees (fleet
+isolation + session worktrees) are ALL disposable.
+
+**THE PLAN OF RECORD remains `docs/strategy/2026-08-14-70h-plan.md`** (read
+in full; note its two Ed amendments: windows not scarce; council-gated).
+**The successor's single next action: RESUME THE FLEET —**
+`Workflow({scriptPath: "/Users/edr/.claude/projects/-Users-edr-code-JouleWise/2cc5ce62-9e44-4ab2-a470-a38d9caf2826/workflows/scripts/readiness-audit-fleet-wf_84e26deb-9c1.js", resumeFromRunId: "wf_84e26deb-9c1"})`
+(the script is SELF-CONTAINED — briefs embedded; schema-forced findings) —
+then harvest → C-028 refuters on blockers → the cold-paired sitting per
+charter v2 (`docs/process/instrument-readiness-audit-charter.md`) → council
+verdict → if READY, the single Ed session
+(`docs/phase_2/ed-qualification-session.md`, chained into ALPHA arm).
+
+**STATE IN ONE BREATH:** all three packs FROZEN at 49dcc49 (tighter
+1.869502 J floor; freeze log docs/process_traces/2026-08-13-freeze-execution/);
+measurement checkout /Users/edr/JouleWise-measurement-20260813 (DO NOT dirty;
+reboot voids arm evidence — re-author ~15 min, tools exist and are MERGED);
+readiness tooling COMPLETE on main via #149 ac3fe1d (union of #146/#147/#148
++ five integration catches — incl. the LIVE real-boot-session acid: authored
+evidence through the real arm generator to GO on this machine); audit
+baseline PINNED 694442c (docs/process/audit-baseline-manifest.json — any
+main change voids affected lens results; the successor should verify main
+still equals the baseline head + this checkpoint commit before resuming, and
+re-pin if doc-only commits landed after).
+
+**THIS STRETCH'S MERGES:** #149 (containing #146 registry post-freeze
+reconciliation, #147 arm-time evidence author with 20-min volatile horizons
++ crash-detectable publication + clock hermeticity, #148 ten-item chain-fix
+batch incl. keyboard-backlight census + D-8-prime rewrite + ED-session
+scripts). Rulings this stretch (decision log): interaction contract
+(magistrate rules all non-hardware/sudo; batch Ed sessions), M-1
+BRACKET_SESSION_ID, M-2 draft-status (forward-only generators). Paper:
+boundary wording narrowed at five sites (JW-MET-1). T6 run report LANDED
+(docs/run_reports/2026-08-13-t6-session.md, attestation appended).
+
+**SUCCESSOR DESK DEBT:** C-058 council entry (the record since T6's
+coverage cutoff: the #146-#149 arc, the union's five catches, the fleet);
+consistency sweep over the whole span (owed before the next bookkeeping
+close); FLAKE-CALEXITS-311-REDERIVE fix shape registered not implemented
+(4 occurrences); WO-CRASHMATRIX-RELIABILITY (bench canonical suites carry
+the known 3-test load-pathology trio — disposition recorded each time).
+
+**ED-OWED (single batched session, ping when council READY):** the
+ED-QUALIFICATION script steps 1-5 (~20 min: sudo grant, sampler checklist,
+rail probe, backlight control, tap walkthrough) + chained ALPHA arm if GO.
+NO REBOOT of the Mac preserves the frozen evidence (else cheap re-author).
+
+## ▶▶ T6 SESSION CHECKPOINT (2026-08-13 night) — superseded by T7 above; kept as record
 
 **THE MILESTONE: ALL THREE PACKS ARE FROZEN at head 49dcc49** — first freeze
 in the project's record, at the TIGHTER 1.869502 J floor (D-133 cl.4

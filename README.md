@@ -9,25 +9,18 @@
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
-## Current activity (refreshed each work block; last: 2026-08-14 midday)
+## Current activity (refreshed each work block; last: 2026-08-15, paused at a clean checkpoint)
 
-**Just completed:** the arm-time evidence tool passed its full review
-cycle (two independent reviews, two fix rounds with demonstrated
-fault-injection tests, and a clean final re-audit) — it now executes live
-machine checks for real, expires volatile evidence after twenty minutes so
-stale machine-state can never authorize an arm, and publishes its records
-crash-safely. Three pull requests are in automated testing: that tool, the
-post-freeze test reconciliation, and a ten-item batch of launch-procedure
-corrections (including the keyboard-backlight control added to the
-quiet-machine checklist, and the scripted ~20-minute hardware session that
-batches everything needing the operator's hands into one visit). The paper's
-measurement-boundary wording was tightened to exactly what the
-implementation measures (the processor package's CPU, GPU, and
-neural-engine rails).
+**Just completed:** the readiness tooling merged as one verified union —
+the arm-authorization chain now runs end-to-end from freshly authored
+evidence through the real arming gate to a GO verdict on this machine's
+live boot session (proven by test, not asserted). The audit baseline is
+pinned (a committed manifest of every governing artifact's hash), and the
+eleven-seat instrument-readiness audit was launched, then paused cleanly
+at a checkpoint (resumable; no results lost).
 
-**Working on now:** shepherding those three merges, then committing the
-audit baseline — the pinned snapshot of every governing artifact that the
-instrument-readiness audit will examine.
+**Working on now:** paused at a thorough checkpoint by the operator's
+request. The next session resumes the eleven-seat audit.
 
 **Queued next:** (1) merge that tool after review; (2) a batch of small
 launch-procedure corrections found during packet assembly; (3) a
