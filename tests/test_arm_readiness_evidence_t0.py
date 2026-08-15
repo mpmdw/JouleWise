@@ -270,6 +270,7 @@ def make_t0_fixture(
     (pack / "plan_tree.sha256").write_bytes(
         readiness.gnu_sidecar(hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json")
     )
+    (repository / ".gitignore").write_text("__pycache__/\n*.pyc\n")
     git(repository, "add", ".")
     git(repository, "commit", "-qm", "T-0 author inputs")
     if real_identity:
@@ -281,7 +282,7 @@ def make_t0_fixture(
                 str(pack),
             ],
             cwd=repository,
-            env={**os.environ, "PYTHONPATH": str(repository)},
+            env={**os.environ, "PYTHONPATH": str(repository), "PYTHONDONTWRITEBYTECODE": "1"},
             text=True,
             capture_output=True,
         )
@@ -289,7 +290,18 @@ def make_t0_fixture(
             raise AssertionError(
                 f"real synthetic identity freeze failed: {completed.stdout}{completed.stderr}"
             )
-    install_passing_freeze(repository, pack)
+    if synthetic_boot_session:
+        install_passing_freeze(repository, pack)
+    else:
+        # The real-boot-session variant must build a COHERENT world: the
+        # freeze-side evidence carries the live session too, or the arm's
+        # boot-session fence (X-3) correctly refuses the mix.
+        import tests.test_arm_readiness_dry_run as _dry_mod
+
+        with mock.patch.object(
+            _dry_mod, "TEST_BOOT_SESSION_ID", boot_session_id
+        ):
+            install_passing_freeze(repository, pack)
 
     pack_sha = readiness.committed_pack_tree_sha256(pack)
     tree_oid = __import__("subprocess").run(
@@ -310,7 +322,15 @@ def make_t0_fixture(
     )
     git(repository, "commit", "--allow-empty", "-qm", message)
     git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
-    install_passing_dry_run(pack, custody)
+    if synthetic_boot_session:
+        install_passing_dry_run(pack, custody)
+    else:
+        import tests.test_arm_readiness_dry_run as _dry_mod2
+
+        with mock.patch.object(
+            _dry_mod2, "TEST_BOOT_SESSION_ID", boot_session_id
+        ):
+            install_passing_dry_run(pack, custody)
 
     context = arm_context(Path(temporary.name) / "context")
     input_root = custody / pack.name / t0._INPUT_DIRECTORY
@@ -1404,7 +1424,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             completed = subprocess.run(
                 command,
                 cwd=repository,
-                env={**os.environ, "PYTHONPATH": str(repository)},
+                env={**os.environ, "PYTHONPATH": str(repository), "PYTHONDONTWRITEBYTECODE": "1"},
                 text=True,
                 capture_output=True,
             )
