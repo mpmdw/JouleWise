@@ -231,7 +231,7 @@ class TestKernelValidity(unittest.TestCase):
              lambda k: k["tasks"]["P2-019"].update(flags=[])),
             ("blocked_post_2m without P2-006 dep",
              lambda k: k["tasks"]["P2-022"].update(
-                 flags=["blocked_post_2m"], status="queued")),
+                 flags=["blocked_post_2m"])),
             ("DOC-010 missing G6 dependency",
              lambda k: k["tasks"]["DOC-010"].update(
                  dependencies=[d for d in k["tasks"]["DOC-010"]["dependencies"]

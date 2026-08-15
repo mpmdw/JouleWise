@@ -1967,7 +1967,7 @@
       "dependencies": [
         {
           "evidence": null,
-          "kind": "event",
+          "kind": "task",
           "required": "2K live promotion for live-gated subitems",
           "scope": "live_promotion",
           "state": "pending",
@@ -2238,18 +2238,6 @@
       },
       "dependencies": [
         {
-          "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
-            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
-          },
-          "kind": "event",
-          "required": "Window-A floors measured",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-015"
-        },
-        {
           "evidence": null,
           "kind": "event",
           "required": "2M reductions identify floor/MDE headroom",
@@ -2257,6 +2245,18 @@
           "state": "pending",
           "strength": "hard",
           "target": "POST-2M-REDUCTIONS"
+        },
+        {
+          "evidence": {
+            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
+            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
+          },
+          "kind": "task",
+          "required": "Window-A floors measured",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-015"
         }
       ],
       "fallback": null,
