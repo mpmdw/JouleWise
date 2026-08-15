@@ -9167,7 +9167,9 @@ accessor clause 2 currently forbids) folds into this WO. NOT licensed as a calle
 V2AuthenticationInputError escaping _pack_inventory on a non-adversarial path (_json_object reads
 outside its try); normalized to WindowDurationMarginsRefusal. The recorder branch then merges on
 receipt-soundness (original blocker L4-B1 cured; round-1 static-invariance guard retained; F-5
-landed) WITH this limitation registered — not as "race closed."### D-078 registry amendment — 2026-08-15: WO-T0-PRODUCER acquisition refusals
+landed) WITH this limitation registered — not as "race closed."
+
+### D-078 registry amendment — 2026-08-15: WO-T0-PRODUCER acquisition refusals
 
 The shipped T-0 acquisition wrapper adds this closed twelve-code vocabulary.
 Every spelling is a fail-closed producer refusal and none licenses ARM,
