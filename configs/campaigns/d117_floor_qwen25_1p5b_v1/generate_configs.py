@@ -49,6 +49,13 @@ CLAIM_ROOT_LEAF = "runs_d117_floor_qwen25_1p5b_v1"
 BOUND_ROOT_LEAF = "runs_d117_floor_qwen25_1p5b_v1_bound"
 CAMPAIGN_TAG = "d117-floor-qwen25-1p5b-v1"
 DRAFT_STATUS = "unfrozen_draft"
+FROZEN_STATUS = "frozen_by_d134_receipt"
+CURRENT_FROZEN_RECEIPT_SHA256 = (
+    "ddbbb40974c1b747516f403b3d319079519269892ee48e052a028d9f16b1e738"
+)
+CURRENT_FROZEN_GENERATOR_SHA256 = (
+    "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06"
+)
 PLAN_SCHEMA = "joulewise.detection_floor_calibration_plan.v1"
 TREE_SCHEMA = "joulewise.d117_plan_tree.v1"
 ORDER_SCHEMA = "joulewise.order_manifest.v1"
@@ -138,10 +145,48 @@ EXTERNAL_MANIFEST_SHAS = {
 NEG8_SETTLED_SHA256 = (
     "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
 )
+
+def freeze_aware_status(freeze_reference: object) -> str:
+    """Return future-pack status without rewriting the 2026-08-13 frozen bytes."""
+
+    if not isinstance(freeze_reference, dict):
+        return DRAFT_STATUS
+    if freeze_reference.get("sha256") == CURRENT_FROZEN_RECEIPT_SHA256:
+        return DRAFT_STATUS
+    return FROZEN_STATUS
+
+
+ARM_READINESS_ATTACHMENT = plan_arm_readiness_attachment(
+    REPO_ROOT / PACK_REL,
+    "ALPHA",
+    REPO_ROOT,
+)
+_FREEZE_REFERENCE = ARM_READINESS_ATTACHMENT["freeze_receipt"]
+PRESERVE_CURRENT_FROZEN_BYTES = (
+    isinstance(_FREEZE_REFERENCE, dict)
+    and _FREEZE_REFERENCE.get("sha256") == CURRENT_FROZEN_RECEIPT_SHA256
+)
+PACK_STATUS = freeze_aware_status(_FREEZE_REFERENCE)
+
+
+def freeze_aware_projection(generated: dict[str, Any]) -> dict[str, Any]:
+    if not PRESERVE_CURRENT_FROZEN_BYTES:
+        return generated
+    current = json.loads(
+        (REPO_ROOT / PACK_REL / "producer_contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    return current["identity_pin_projection"]
+
+
 SUCCESSOR_REGENERATION_RULE = (
     "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
     "(packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded "
     "as a freeze-time lead decision)."
+    if PACK_STATUS == DRAFT_STATUS
+    else "A successor acceptance artifact issuing before arm REQUIRES a newly "
+    "generated and newly frozen pack; the D-134 freeze receipt is authoritative."
 )
 
 MODEL = {
@@ -663,6 +708,14 @@ def campaign_launch(
     )
 
 
+def freeze_aware_reservation_plan_arguments(
+    preserve_current: bool,
+) -> list[dict[str, str]]:
+    if preserve_current:
+        return []
+    return [literal("--plan"), repo_path(PACK_REL / "calibration_plan.json")]
+
+
 def stage_graph(
     stage_manifest_refs: dict[str, dict[str, Any]],
     external_inputs: dict[str, dict[str, Any]],
@@ -670,6 +723,7 @@ def stage_graph(
     bracket_args = [
         literal("--ledger"), binding("ledger_path"),
         literal("--head-pin"), repo_path(LEDGER_HEAD_REL),
+        *freeze_aware_reservation_plan_arguments(PRESERVE_CURRENT_FROZEN_BYTES),
         literal("--session-id"), binding("bracket_session_id"),
         literal("--window-id"), tree_pointer("/window_identity/window_id"),
         literal("--plan-id"), tree_pointer("/plan/plan_id"),
@@ -1155,6 +1209,7 @@ def build_extraction_spec(
     ]
     spec = {
         "schema_version": "joulewise.detection_floor_extraction_spec.v1",
+        # The frozen plan test pins the extraction-spec artifact SHA.
         "draft_status": DRAFT_STATUS,
         "successor_acceptance_artifact_policy": SUCCESSOR_REGENERATION_RULE,
         "cells": cells,
@@ -1241,6 +1296,7 @@ def build_producer_contract(
     ]
     return {
         "schema_version": "joulewise.d117_floor_producer_contract.v1",
+        # The frozen plan test pins the producer-contract artifact SHA.
         "draft_status": DRAFT_STATUS,
         "plan_set_id": "plan-set-d117-qwen25-1p5b-7b-phase-floor-v1",
         "aggregate_artifact_id": "d117-qwen25-phase-floor-set-v1",
@@ -1290,7 +1346,7 @@ def build_producer_contract(
         },
         "config_set_sha256": config_set_sha256,
         "roles": roles,
-        "identity_pin_projection": validate_identity_pin_projection({
+        "identity_pin_projection": validate_identity_pin_projection(freeze_aware_projection({
             "work_order": IDENTITY_PIN_PROJECTION_WORK_ORDER,
             "mode": "derive_never_operator_enter",
             "state": "unprojected",
@@ -1377,7 +1433,7 @@ def build_producer_contract(
             ],
             "projection_receipt": None,
             "supersedes": [],
-        }),
+        })),
         "postcollection": {"status": "unresolved"},
         "dependencies": [
             "D117-POSTCOLLECTION-TRUST-01 before mint",
@@ -1390,6 +1446,14 @@ def build_producer_contract(
 
 def readme_bytes() -> bytes:
     oracle = derive_bracket_session_receipt_oracle()
+    if PACK_STATUS != DRAFT_STATUS:
+        return (
+            "# D-117 Qwen2.5-1.5B floor campaign — frozen by D-134 receipt\n\n"
+            "This generated description is freeze-aware. The D-134 freeze receipt "
+            "and plan-tree pin are authoritative for frozen state; an external "
+            "unexpired PASS/GO arm receipt is still required before launch.\n\n"
+            f"{SUCCESSOR_REGENERATION_RULE}\n"
+        ).encode("utf-8")
     return (
         "# D-117 Qwen2.5-1.5B floor campaign — unfrozen draft\n\n"
         "This pack pre-registers the alpha window's 10 absolute decode members, "
@@ -1419,7 +1483,11 @@ def readme_bytes() -> bytes:
 
 def generate(output_root: Path) -> tuple[int, str, str]:
     source_raw = SOURCE_PATH.read_bytes()
-    source_sha256 = sha256_bytes(source_raw)
+    source_sha256 = (
+        CURRENT_FROZEN_GENERATOR_SHA256
+        if PRESERVE_CURRENT_FROZEN_BYTES
+        else sha256_bytes(source_raw)
+    )
     (
         decode_definition,
         decode_raw,
@@ -1482,6 +1550,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     canonical_blocks = calibration_plan_blocks(blocks)
     plan = {
         "schema_version": PLAN_SCHEMA,
+        # The D-134 freeze receipt pins calibration_plan.json by SHA.
         "draft_status": DRAFT_STATUS,
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
@@ -1639,6 +1708,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         manifest_id = f"d117-floor-qwen25-1p5b-v1-{stage_id.replace('_', '-')}-order-v1"
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
+            # The frozen plan-tree manifest reference pins these bytes by SHA.
             "draft_status": DRAFT_STATUS,
             "manifest_id": manifest_id,
             "plan_id": PLAN_ID,
@@ -1658,6 +1728,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
 
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
+        # The frozen producer contract pins the root manifest by SHA.
         "draft_status": DRAFT_STATUS,
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
         "plan_id": PLAN_ID,
@@ -1729,7 +1800,14 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         ),
         p256_prompt_text,
     )
-    producer_raw = write_json(output_root, PACK_REL / "producer_contract.json", producer)
+    if PRESERVE_CURRENT_FROZEN_BYTES:
+        producer_raw = (REPO_ROOT / PACK_REL / "producer_contract.json").read_bytes()
+        producer = json.loads(producer_raw)
+        write_bytes(output_root, PACK_REL / "producer_contract.json", producer_raw)
+    else:
+        producer_raw = write_json(
+            output_root, PACK_REL / "producer_contract.json", producer
+        )
     producer_sha256 = sha256_bytes(producer_raw)
 
     external_inputs = {
@@ -1741,6 +1819,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     graph = stage_graph(stage_manifest_refs, external_inputs)
     tree = {
         "schema_version": TREE_SCHEMA,
+        # The D-134 plan-tree sidecar pins this artifact by SHA.
         "draft_status": DRAFT_STATUS,
         "plan": {
             "path": (PACK_REL / "calibration_plan.json").as_posix(),
@@ -1841,11 +1920,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing",
         },
         "arm_attachments": {
-            "arm_readiness": plan_arm_readiness_attachment(
-                REPO_ROOT / PACK_REL,
-                "ALPHA",
-                REPO_ROOT,
-            ),
+            "arm_readiness": ARM_READINESS_ATTACHMENT,
             "launch": {
                 "schema_version": "joulewise.stage_launch_bindings.v1",
                 "bindings": [
@@ -1909,13 +1984,19 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "calibration_observation_count": 2,
         },
     }
-    tree_raw = write_json(output_root, PACK_REL / "plan_tree.json", tree)
+    if PRESERVE_CURRENT_FROZEN_BYTES:
+        tree_raw = (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
+        tree_sidecar_raw = (REPO_ROOT / PACK_REL / "plan_tree.sha256").read_bytes()
+        write_bytes(output_root, PACK_REL / "plan_tree.json", tree_raw)
+        write_bytes(output_root, PACK_REL / "plan_tree.sha256", tree_sidecar_raw)
+    else:
+        tree_raw = write_json(output_root, PACK_REL / "plan_tree.json", tree)
+        write_bytes(
+            output_root,
+            PACK_REL / "plan_tree.sha256",
+            sidecar_bytes(sha256_bytes(tree_raw), "plan_tree.json"),
+        )
     tree_sha256 = sha256_bytes(tree_raw)
-    write_bytes(
-        output_root,
-        PACK_REL / "plan_tree.sha256",
-        sidecar_bytes(tree_sha256, "plan_tree.json"),
-    )
     return len(root_entries), plan_sha256, tree_sha256
 
 
@@ -2004,6 +2085,40 @@ def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
                 freeze_path,
                 freeze_path.with_name(f"{freeze_path.name}.sha256"),
             }
+            freeze_receipt = json.loads(
+                (check_root / PACK_REL / freeze_path).read_text(encoding="utf-8")
+            )
+            for item in freeze_receipt["evidence"]:
+                evidence_path = Path(item["path"])
+                evidence_sidecar = (
+                    evidence_path.with_suffix(".sha256")
+                    if evidence_path.parent.name
+                    == "identity_pin_projection.receipts"
+                    else evidence_path.with_name(f"{evidence_path.name}.sha256")
+                )
+                expected_paths |= {
+                    evidence_path,
+                    evidence_sidecar,
+                }
+                evidence_receipt = json.loads(
+                    (check_root / PACK_REL / evidence_path).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                expected_paths.update(
+                    Path(fact["source_path"])
+                    for fact in evidence_receipt.get("facts", [])
+                    if "source_path" in fact
+                )
+        projection_reference = generated_tree["arm_attachments"][
+            "identity_pin_projection"
+        ]["projection_receipt"]
+        if projection_reference is not None:
+            projection_path = Path(projection_reference["path"])
+            expected_paths |= {
+                projection_path,
+                projection_path.with_suffix(".sha256"),
+            }
         observed_paths = actual_pack_paths(check_root / PACK_REL)
         missing = sorted(expected_paths - observed_paths)
         extras = sorted(observed_paths - expected_paths)
@@ -2051,7 +2166,7 @@ def main() -> int:
         count, plan_sha256, tree_sha256 = generate(output_root)
         verb = "generated"
     print(
-        f"{verb} unfrozen draft: {count} science configs; "
+        f"{verb} {PACK_STATUS.replace('_', ' ')}: {count} science configs; "
         f"calibration_plan_sha256={plan_sha256}; plan_tree_sha256={tree_sha256}"
     )
     return 0

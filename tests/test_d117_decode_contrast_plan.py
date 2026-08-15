@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from joulewise.schemas import BenchmarkConfig
 from joulewise.detection_floor import two_shared_edge_common_mode_registration
@@ -30,12 +31,14 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
+    "generate_configs.py": "96779261eaf610c447894edfd01dc3cb53ebab69caa5dc405b72b4e82472d730",
     "calibration_plan.json": "4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218",
-    "plan_tree.json": "fa9e46abc0b0fa3e3015498c0b162bb0cb1f8b36d438dcdc546f669fbd2cad91",
+    "plan_tree.json": "8c53a834d78c81145b8f35b25f8d50182d596dc82c171e815f8a160117ab525d",
     "analysis_manifest_v3.json": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
     "prefill_prompt_candidate.json": "9e1d8eecb688a4ae54c76d24d71be618411c011fa5bebffa44ad6a91ef03d456",
     "consumer_family_declaration.json": "5c0950a6180346b53913e28cf12c78dcb9b97dfd1c9878158fe6619aa227d575",
 }
+FROZEN_GENERATOR_SHA256 = "550035ae92199185e9ad21ae0277593e4821c1788f645ee5345bd6d3268a1c09"
 POSITIONS = ["A1", "B1", "B2", "A2"]
 LABELS = ["A", "B", "B", "A"]
 
@@ -63,6 +66,40 @@ def actual_inventory(root: Path) -> set[Path]:
     }
 
 
+def governed_frozen_attachment_paths(pack_root: Path) -> set[Path]:
+    tree = read_json(pack_root / "plan_tree.json")
+    expected: set[Path] = set()
+    freeze_reference = tree["arm_attachments"]["arm_readiness"]["freeze_receipt"]
+    if freeze_reference is not None:
+        freeze_path = Path(freeze_reference["path"])
+        expected |= {
+            freeze_path,
+            freeze_path.with_name(f"{freeze_path.name}.sha256"),
+        }
+        receipt = read_json(pack_root / freeze_path)
+        for item in receipt["evidence"]:
+            evidence_path = Path(item["path"])
+            sidecar = (
+                evidence_path.with_suffix(".sha256")
+                if evidence_path.parent.name == "identity_pin_projection.receipts"
+                else evidence_path.with_name(f"{evidence_path.name}.sha256")
+            )
+            expected |= {evidence_path, sidecar}
+            evidence = read_json(pack_root / evidence_path)
+            expected.update(
+                Path(fact["source_path"])
+                for fact in evidence.get("facts", [])
+                if "source_path" in fact
+            )
+    projection_reference = tree["arm_attachments"]["identity_pin_projection"][
+        "projection_receipt"
+    ]
+    if projection_reference is not None:
+        projection_path = Path(projection_reference["path"])
+        expected |= {projection_path, projection_path.with_suffix(".sha256")}
+    return expected
+
+
 class D117GammaPlanTest(unittest.TestCase):
     maxDiff = None
 
@@ -74,7 +111,8 @@ class D117GammaPlanTest(unittest.TestCase):
 
     def test_exact_inventory_and_exact_primary_hashes(self) -> None:
         expected = set(GENERATOR_MODULE.expected_pack_paths())
-        self.assertEqual(len(expected), 98)
+        expected |= governed_frozen_attachment_paths(PACK)
+        self.assertEqual(len(expected), 135)
         self.assertEqual(actual_inventory(PACK), expected)
         for filename, expected_sha in EXACT_SHAS.items():
             self.assertEqual(sha256(PACK / filename), expected_sha, filename)
@@ -126,7 +164,34 @@ class D117GammaPlanTest(unittest.TestCase):
             text=True,
         )
         self.assertEqual(checked.returncode, 0, checked.stderr)
-        self.assertIn("checked unfrozen D-117 gamma draft", checked.stdout)
+        self.assertIn("checked D-117 gamma unfrozen draft", checked.stdout)
+
+    def test_freeze_aware_successor_contract_is_forward_only(self) -> None:
+        self.assertEqual(GENERATOR_MODULE.freeze_aware_status(None), "unfrozen_draft")
+        self.assertEqual(
+            GENERATOR_MODULE.freeze_aware_status(
+                {"sha256": GENERATOR_MODULE.CURRENT_FROZEN_RECEIPT_SHA256}
+            ),
+            "unfrozen_draft",
+        )
+        self.assertEqual(
+            GENERATOR_MODULE.freeze_aware_status({"sha256": "0" * 64}),
+            "frozen_by_d134_receipt",
+        )
+        self.assertEqual(
+            GENERATOR_MODULE.freeze_aware_reservation_plan_arguments(True), []
+        )
+        future = GENERATOR_MODULE.freeze_aware_reservation_plan_arguments(False)
+        self.assertEqual(
+            [argument["value"] for argument in future],
+            ["--plan", (GENERATOR_MODULE.PACK_REL / "calibration_plan.json").as_posix()],
+        )
+        with mock.patch.object(
+            GENERATOR_MODULE, "PACK_STATUS", GENERATOR_MODULE.FROZEN_STATUS
+        ):
+            future_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
+        self.assertIn("frozen by D-134 receipt", future_readme)
+        self.assertIn("freeze-aware", future_readme)
 
     def test_generator_check_rejects_extra_pack_file(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-gamma-inventory-") as temp:
@@ -280,9 +345,7 @@ class D117GammaPlanTest(unittest.TestCase):
             self.assertEqual(len(local_entries), 20)
 
         self.assertEqual(self.tree["plan"]["actual_sha256"], plan_sha)
-        self.assertEqual(
-            self.tree["generator"]["sha256"], sha256(GENERATOR)
-        )
+        self.assertEqual(self.tree["generator"]["sha256"], FROZEN_GENERATOR_SHA256)
         self.assertEqual(
             self.tree["campaign_policy"]["sha256"],
             sha256(ROOT / self.tree["campaign_policy"]["path"]),
@@ -481,11 +544,18 @@ class D117GammaPlanTest(unittest.TestCase):
 
     def test_identity_projection_has_four_canonical_units(self) -> None:
         projection = self.tree["arm_attachments"]["identity_pin_projection"]
-        self.assertEqual(projection["state"], "unprojected")
+        self.assertEqual(projection["state"], "frozen")
         self.assertEqual(projection["work_order"], "D117-U11-IDPIN-PROJECTION")
         self.assertEqual(projection["mode"], "derive_never_operator_enter")
         self.assertEqual(projection["derivation_contract"], IDENTITY_PIN_DERIVATION_CONTRACT)
-        self.assertIsNone(projection["projection_receipt"])
+        projection_receipt = projection["projection_receipt"]
+        self.assertIsNotNone(projection_receipt)
+        receipt_path = PACK / projection_receipt["path"]
+        self.assertEqual(sha256(receipt_path), projection_receipt["sha256"])
+        self.assertEqual(
+            receipt_path.with_suffix(".sha256").read_text(encoding="utf-8"),
+            f"{projection_receipt['sha256']}  {receipt_path.name}\n",
+        )
         units = projection["identity_units"]
         self.assertEqual(
             [unit["identity_unit_id"] for unit in units],
@@ -500,7 +570,12 @@ class D117GammaPlanTest(unittest.TestCase):
             self.assertEqual(
                 unit["producer_plan_reference"]["plan_id"], producer_by_arm[arm]
             )
-            self.assertEqual(set(unit["model_runtime_config"].values()), {None})
+            self.assertTrue(
+                all(
+                    isinstance(value, str) and len(value) == 64
+                    for value in unit["model_runtime_config"].values()
+                )
+            )
             config_hashes = {
                 scientific_config_identity_sha256(read_json(PACK / row["path"]))
                 for row in unit["config_inventory"]

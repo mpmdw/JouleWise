@@ -34,6 +34,12 @@ PAGES = {
     "BETA": ROOT / "docs/phase_2/beta_arm_readiness.md",
     "GAMMA": ROOT / "docs/phase_2/gamma_arm_readiness.md",
 }
+FROZEN_PACK_DIRECTORIES = (
+    "arm_readiness.evidence",
+    "arm_readiness.freeze.receipts",
+    "arm_readiness.sources",
+    "identity_pin_projection.receipts",
+)
 ROW_ID_RE = re.compile(r"`((?:desk|privilege|clock|t0)\.[a-z0-9_]+)`")
 EXPECTED_ROW_IDS = [
     "clock.correct_and_prior_state",
@@ -133,49 +139,253 @@ class ArmReadinessRegistryTests(unittest.TestCase):
     def test_plan_tree_slots_bind_profiles_and_never_name_future_arm_receipt(self) -> None:
         registry_sha = hashlib.sha256(self.raw).hexdigest()
         for profile, pack_name in PACKS.items():
+            pack_root = ROOT / "configs/campaigns" / pack_name
             tree = json.loads(
-                (ROOT / "configs/campaigns" / pack_name / "plan_tree.json").read_text()
+                (pack_root / "plan_tree.json").read_text()
             )
             slot = tree["arm_attachments"]["arm_readiness"]
             with self.subTest(profile=profile):
+                self.assertEqual(
+                    set(slot),
+                    {
+                        "arm_receipt_namespace",
+                        "contract_id",
+                        "freeze_receipt",
+                        "pack_digest_algorithm",
+                        "required_before_arm",
+                        "row_registry",
+                    },
+                )
                 self.assertEqual(slot["contract_id"], "D-134")
                 self.assertTrue(slot["required_before_arm"])
                 self.assertEqual(slot["row_registry"]["plan_profile"], profile)
                 self.assertEqual(slot["row_registry"]["sha256"], registry_sha)
-                self.assertIsNone(slot["freeze_receipt"])
+                self.assertEqual(
+                    slot["arm_receipt_namespace"],
+                    "arm_readiness.receipts/arm-<4+ digits>.json",
+                )
+                freeze_reference = slot["freeze_receipt"]
+                if freeze_reference is not None:
+                    self.assertEqual(set(freeze_reference), {"path", "sha256"})
+                    self.assertRegex(
+                        freeze_reference["path"],
+                        r"\Aarm_readiness\.freeze\.receipts/freeze-[0-9]{4,}\.json\Z",
+                    )
+                    self.assertRegex(freeze_reference["sha256"], r"\A[0-9a-f]{64}\Z")
+                    receipt_path = pack_root / freeze_reference["path"]
+                    receipt_raw = receipt_path.read_bytes()
+                    receipt_relative = receipt_path.relative_to(ROOT).as_posix()
+                    committed_receipt = subprocess.run(
+                        ["git", "show", f"HEAD:{receipt_relative}"],
+                        cwd=ROOT,
+                        check=True,
+                        capture_output=True,
+                    ).stdout
+                    self.assertEqual(receipt_raw, committed_receipt)
+                    validate_freeze_receipt(json.loads(receipt_raw))
+                    receipt_sha = hashlib.sha256(receipt_raw).hexdigest()
+                    self.assertEqual(freeze_reference["sha256"], receipt_sha)
+                    sidecar_path = receipt_path.with_name(f"{receipt_path.name}.sha256")
+                    sidecar_raw = sidecar_path.read_bytes()
+                    sidecar_relative = sidecar_path.relative_to(ROOT).as_posix()
+                    committed_sidecar = subprocess.run(
+                        ["git", "show", f"HEAD:{sidecar_relative}"],
+                        cwd=ROOT,
+                        check=True,
+                        capture_output=True,
+                    ).stdout
+                    self.assertEqual(sidecar_raw, committed_sidecar)
+                    self.assertEqual(
+                        sidecar_raw,
+                        gnu_sidecar(receipt_sha, receipt_path.name),
+                    )
                 serialized = json.dumps(slot, sort_keys=True)
                 self.assertNotIn("arm_receipt_path", serialized)
                 self.assertNotIn("arm_receipt_sha256", serialized)
 
     def test_generators_check_both_without_and_with_committed_freeze_receipts(self) -> None:
-        for pack_name in PACKS.values():
-            completed = subprocess.run(
-                [sys.executable, str(ROOT / "configs/campaigns" / pack_name / "generate_configs.py"), "--check"],
-                cwd=ROOT,
-                text=True,
-                capture_output=True,
-            )
-            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
-
         with tempfile.TemporaryDirectory() as temporary:
-            clone = Path(temporary) / "repo"
-            subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(clone)], check=True)
+            frozen_clone = Path(temporary) / "frozen-repo"
+            subprocess.run(
+                ["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(frozen_clone)],
+                check=True,
+            )
             overlay = [
                 "joulewise/arm_readiness.py",
                 "configs/arm_readiness/d117_row_registry_v1.json",
             ]
             for pack_name in PACKS.values():
-                overlay.extend(
-                    [
-                        f"configs/campaigns/{pack_name}/generate_configs.py",
-                        f"configs/campaigns/{pack_name}/plan_tree.json",
-                        f"configs/campaigns/{pack_name}/plan_tree.sha256",
-                    ]
+                pack_relative = Path("configs/campaigns") / pack_name
+                shutil.copytree(
+                    ROOT / pack_relative,
+                    frozen_clone / pack_relative,
+                    dirs_exist_ok=True,
                 )
+            for relative in overlay:
+                target = frozen_clone / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, target)
+
+            # Freeze-time directories are authenticated, committed pack additions
+            # rather than draft-generator outputs.
+            for pack_name in PACKS.values():
+                pack_relative = Path("configs/campaigns") / pack_name
+                for directory in FROZEN_PACK_DIRECTORIES:
+                    frozen_directory = frozen_clone / pack_relative / directory
+                    self.assertTrue(frozen_directory.is_dir())
+                    self.assertTrue(any(frozen_directory.iterdir()))
+                    completed = subprocess.run(
+                        ["git", "status", "--porcelain", "--", str(pack_relative / directory)],
+                        cwd=frozen_clone,
+                        text=True,
+                        capture_output=True,
+                        check=True,
+                    )
+                    self.assertEqual(completed.stdout, "")
+
+            generated_root = Path(temporary) / "generated"
+            for pack_name in PACKS.values():
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        str(
+                            frozen_clone
+                            / "configs/campaigns"
+                            / pack_name
+                            / "generate_configs.py"
+                        ),
+                        "--output-root",
+                        str(generated_root),
+                    ],
+                    cwd=frozen_clone,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+            # Compare every generator-owned file. U11 freeze is allowed to replace
+            # only the identity projection, and D-134 is allowed to pin the freeze
+            # receipt; the latter is deliberately not normalized away.
+            for pack_name in PACKS.values():
+                pack_relative = Path("configs/campaigns") / pack_name
+                frozen_pack = frozen_clone / pack_relative
+                generated_pack = generated_root / pack_relative
+                expected_paths = {
+                    path.relative_to(generated_pack)
+                    for path in generated_pack.rglob("*")
+                    if path.is_file()
+                }
+                expected_paths.add(Path("generate_configs.py"))
+                observed_paths = {
+                    path.relative_to(frozen_pack)
+                    for path in frozen_pack.rglob("*")
+                    if path.is_file()
+                    and path.relative_to(frozen_pack).parts[0]
+                    not in FROZEN_PACK_DIRECTORIES
+                }
+                self.assertEqual(observed_paths, expected_paths)
+                for relative in expected_paths:
+                    frozen_path = frozen_pack / relative
+                    generated_path = generated_pack / relative
+                    if relative == Path("generate_configs.py"):
+                        continue
+                    if relative == Path("plan_tree.json"):
+                        frozen_value = json.loads(frozen_path.read_text())
+                        generated_value = json.loads(generated_path.read_text())
+                        freeze_reference = frozen_value["arm_attachments"][
+                            "arm_readiness"
+                        ]["freeze_receipt"]
+                        self.assertIsNotNone(freeze_reference)
+                        receipt_path = frozen_pack / freeze_reference["path"]
+                        receipt_raw = receipt_path.read_bytes()
+                        receipt_sha = hashlib.sha256(receipt_raw).hexdigest()
+                        self.assertEqual(freeze_reference["sha256"], receipt_sha)
+                        self.assertEqual(
+                            receipt_path.with_name(
+                                f"{receipt_path.name}.sha256"
+                            ).read_bytes(),
+                            gnu_sidecar(receipt_sha, receipt_path.name),
+                        )
+                        frozen_value["arm_attachments"]["identity_pin_projection"] = (
+                            generated_value["arm_attachments"]["identity_pin_projection"]
+                        )
+                        generated_downstream = generated_value.get("downstream_contract", {})
+                        if "producer_contract" in generated_downstream:
+                            frozen_value["downstream_contract"]["producer_contract"][
+                                "sha256"
+                            ] = generated_downstream["producer_contract"]["sha256"]
+                        self.assertEqual(frozen_value, generated_value)
+                    elif relative == Path("producer_contract.json"):
+                        frozen_value = json.loads(frozen_path.read_text())
+                        generated_value = json.loads(generated_path.read_text())
+                        frozen_value["identity_pin_projection"] = generated_value[
+                            "identity_pin_projection"
+                        ]
+                        self.assertEqual(frozen_value, generated_value)
+                    elif relative == Path("plan_tree.sha256"):
+                        for pack in (frozen_pack, generated_pack):
+                            plan_raw = (pack / "plan_tree.json").read_bytes()
+                            self.assertEqual(
+                                (pack / "plan_tree.sha256").read_bytes(),
+                                gnu_sidecar(
+                                    hashlib.sha256(plan_raw).hexdigest(),
+                                    "plan_tree.json",
+                                ),
+                            )
+                    else:
+                        self.assertEqual(frozen_path.read_bytes(), generated_path.read_bytes())
+
+            generated_pack_roots = {
+                Path("configs/campaigns") / pack_name for pack_name in PACKS.values()
+            }
+            for generated_path in generated_root.rglob("*"):
+                if not generated_path.is_file():
+                    continue
+                relative = generated_path.relative_to(generated_root)
+                if any(root == relative or root in relative.parents for root in generated_pack_roots):
+                    continue
+                self.assertEqual(
+                    (frozen_clone / relative).read_bytes(),
+                    generated_path.read_bytes(),
+                )
+
+            clone = Path(temporary) / "draft-repo"
+            subprocess.run(
+                ["git", "clone", "-q", "--no-hardlinks", str(ROOT), str(clone)],
+                check=True,
+            )
             for relative in overlay:
                 target = clone / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / relative, target)
+            for pack_name in PACKS.values():
+                pack_root = clone / "configs/campaigns" / pack_name
+                for directory in FROZEN_PACK_DIRECTORIES:
+                    shutil.rmtree(pack_root / directory)
+                generated = subprocess.run(
+                    [sys.executable, str(pack_root / "generate_configs.py")],
+                    cwd=clone,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+                slot = json.loads((pack_root / "plan_tree.json").read_text())[
+                    "arm_attachments"
+                ]["arm_readiness"]
+                self.assertIsNone(slot["freeze_receipt"])
+            for pack_name in PACKS.values():
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        str(clone / "configs/campaigns" / pack_name / "generate_configs.py"),
+                        "--check",
+                    ],
+                    cwd=clone,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
             for profile, pack_name in PACKS.items():
                 pack_root = clone / "configs/campaigns" / pack_name
                 receipt = sample_freeze(profile)

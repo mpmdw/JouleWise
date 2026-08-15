@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -26,6 +27,12 @@ PACK_ROOT = ROOT / PACK_REL
 SPEC_REL = Path("configs/floor_mint/d117_qwen25_1p5b_extraction_spec.json")
 SPEC_PATH = ROOT / SPEC_REL
 GENERATOR = PACK_ROOT / "generate_configs.py"
+GENERATOR_SPEC = importlib.util.spec_from_file_location(
+    "d117_alpha_generator", GENERATOR
+)
+assert GENERATOR_SPEC is not None and GENERATOR_SPEC.loader is not None
+GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
+GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 PLAN_ID = "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1"
 EVIDENCE_ROOT_ID = "evidence-d117-floor-qwen25-1p5b-v1"
 CONTRAST_PACK = ROOT / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"
@@ -57,15 +64,16 @@ from scripts.extract_detection_floors import main as extract_main  # noqa: E402
 from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
-EXPECTED_PACK_SHA256 = "fe66aa19b7dd138bcfb436f25922e8f48d79934117438b9b14cc82204b15d2e8"
+FROZEN_GENERATOR_SHA256 = "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06"
+EXPECTED_PACK_SHA256 = "a0f05bd38fad325b4caa143123c5942b52b6295ec56716c8020b7d02e0a2322e"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06",
+    "generate_configs.py": "2a4d8ef92663014f27c760e0e49badfa68de316246bbc9a793908548e6ab10ba",
     "calibration_plan.json": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d",
     "calibration_plan.sha256": "707712fb1152ed41b6d48432932bacf16e6856c8432dafb699e951b077e09312",
     "order_manifest.json": "5c5bd84579ff6bcfe4c0e3c800550f35bd4a04a5cd0061e105c9c3e4775f9fff",
-    "plan_tree.json": "12c3310ab64b1c7568c13e7e47551eaf71e770bb4a900d8a74b0af4953f27f43",
-    "plan_tree.sha256": "62e026fa31a3b2f9d1c75ae7dd55b3427fdf457759aaaf0812e576bdcef06dc5",
-    "producer_contract.json": "ab22c62caf8c9b49a20c0ce94a7353334a060c108ef5d4a67a3d6b62de0235dc",
+    "plan_tree.json": "3e725c047c9850d507564e4a5131d1b65a739d2e452aab209652db05433bad6c",
+    "plan_tree.sha256": "76c6a6e66618acd4782d8513aa302f1b36288da276620209b02c3689f46ba972",
+    "producer_contract.json": "1a99f77ff436f3a6464d63a42142c55fcb5af6bc6fd1c3b87d8dbec3ccb97a0a",
     "condition_families/condition_family_df_ph_decode.json": (
         "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8"
     ),
@@ -134,6 +142,40 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def governed_frozen_attachment_paths(pack_root: Path) -> set[str]:
+    tree = load_json(pack_root / "plan_tree.json")
+    expected: set[Path] = set()
+    freeze_reference = tree["arm_attachments"]["arm_readiness"]["freeze_receipt"]
+    if freeze_reference is not None:
+        freeze_path = Path(freeze_reference["path"])
+        expected |= {
+            freeze_path,
+            freeze_path.with_name(f"{freeze_path.name}.sha256"),
+        }
+        receipt = load_json(pack_root / freeze_path)
+        for item in receipt["evidence"]:
+            evidence_path = Path(item["path"])
+            sidecar = (
+                evidence_path.with_suffix(".sha256")
+                if evidence_path.parent.name == "identity_pin_projection.receipts"
+                else evidence_path.with_name(f"{evidence_path.name}.sha256")
+            )
+            expected |= {evidence_path, sidecar}
+            evidence = load_json(pack_root / evidence_path)
+            expected.update(
+                Path(fact["source_path"])
+                for fact in evidence.get("facts", [])
+                if "source_path" in fact
+            )
+    projection_reference = tree["arm_attachments"]["identity_pin_projection"][
+        "projection_receipt"
+    ]
+    if projection_reference is not None:
+        projection_path = Path(projection_reference["path"])
+        expected |= {projection_path, projection_path.with_suffix(".sha256")}
+    return {path.as_posix() for path in expected}
+
+
 def expected_pack_paths() -> set[str]:
     paths = {
         "README.md",
@@ -182,7 +224,7 @@ def expected_pack_paths() -> set[str]:
             f"{stage}/d117f15-df-cmp-abba-ph-prefill-p256-b{block:02d}-{position}.json"
             for position in ("a1", "b1", "b2", "a2")
         )
-    return paths
+    return paths | governed_frozen_attachment_paths(PACK_ROOT)
 
 
 def pack_digest(pack_root: Path) -> str:
@@ -220,7 +262,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             if path.is_file()
         }
         self.assertEqual(actual, expected_pack_paths())
-        self.assertEqual(len(actual), 117)
+        self.assertEqual(len(actual), 154)
         self.assertEqual(pack_digest(PACK_ROOT), EXPECTED_PACK_SHA256)
         for relative, expected in EXPECTED_FILE_SHA256.items():
             with self.subTest(relative=relative):
@@ -252,7 +294,10 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                     text=True,
                 )
                 self.assertEqual(generated.returncode, 0, generated.stderr)
-            for relative in sorted(expected_pack_paths()):
+            generated_paths = {
+                path.as_posix() for path in GENERATOR_MODULE.expected_pack_paths()
+            }
+            for relative in sorted(generated_paths):
                 first_bytes = (Path(first) / PACK_REL / relative).read_bytes()
                 second_bytes = (Path(second) / PACK_REL / relative).read_bytes()
                 self.assertEqual(first_bytes, second_bytes, relative)
@@ -262,6 +307,33 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 (Path(second) / SPEC_REL).read_bytes(),
             )
             self.assertEqual((Path(first) / SPEC_REL).read_bytes(), SPEC_PATH.read_bytes())
+
+    def test_freeze_aware_successor_contract_is_forward_only(self) -> None:
+        self.assertEqual(GENERATOR_MODULE.freeze_aware_status(None), "unfrozen_draft")
+        self.assertEqual(
+            GENERATOR_MODULE.freeze_aware_status(
+                {"sha256": GENERATOR_MODULE.CURRENT_FROZEN_RECEIPT_SHA256}
+            ),
+            "unfrozen_draft",
+        )
+        self.assertEqual(
+            GENERATOR_MODULE.freeze_aware_status({"sha256": "0" * 64}),
+            "frozen_by_d134_receipt",
+        )
+        self.assertEqual(
+            GENERATOR_MODULE.freeze_aware_reservation_plan_arguments(True), []
+        )
+        future = GENERATOR_MODULE.freeze_aware_reservation_plan_arguments(False)
+        self.assertEqual(
+            [token["value"] for token in future],
+            ["--plan", (PACK_REL / "calibration_plan.json").as_posix()],
+        )
+        with mock.patch.object(
+            GENERATOR_MODULE, "PACK_STATUS", GENERATOR_MODULE.FROZEN_STATUS
+        ):
+            future_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
+        self.assertIn("frozen by D-134 receipt", future_readme)
+        self.assertIn("freeze-aware", future_readme)
 
     def test_generator_check_rejects_extra_pack_file(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-alpha-inventory-") as temp:
@@ -305,7 +377,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             self.tree["plan"]["sidecar_sha256"],
             sha256_file(PACK_ROOT / "calibration_plan.sha256"),
         )
-        self.assertEqual(self.tree["generator"]["sha256"], sha256_file(GENERATOR))
+        self.assertEqual(self.tree["generator"]["sha256"], FROZEN_GENERATOR_SHA256)
         self.assertEqual(self.root_manifest["calibration_plan_sha256"], plan_sha)
         self.assertEqual(self.producer["plan"]["sha256"], plan_sha)
 
@@ -820,7 +892,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         projection = self.producer["identity_pin_projection"]
         self.assertEqual(projection["work_order"], "D117-U11-IDPIN-PROJECTION")
         self.assertEqual(projection["mode"], "derive_never_operator_enter")
-        self.assertEqual(projection["state"], "unprojected")
+        self.assertEqual(projection["state"], "frozen")
         self.assertEqual(projection["derivation_contract"], IDENTITY_PIN_DERIVATION_CONTRACT)
         self.assertEqual(projection["supersedes"], [])
         self.assertEqual(len(projection["identity_units"]), 2)
@@ -830,7 +902,12 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         )
         unit = projection["identity_units"][0]
         self.assertEqual(unit["identity_unit_id"], "alpha")
-        self.assertEqual(set(unit["model_runtime_config"].values()), {None})
+        self.assertTrue(
+            all(
+                isinstance(value, str) and len(value) == 64
+                for value in unit["model_runtime_config"].values()
+            )
+        )
         computed_config_hashes = {
             scientific_config_identity_sha256(load_json(PACK_ROOT / row["path"]))
             for row in unit["config_inventory"]
@@ -845,7 +922,14 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         }
         self.assertEqual(len(p256_config_hashes), 1)
         self.assertEqual(len(p256_unit["config_inventory"]), 50)
-        self.assertIsNone(projection["projection_receipt"])
+        projection_receipt = projection["projection_receipt"]
+        self.assertIsNotNone(projection_receipt)
+        receipt_path = PACK_ROOT / projection_receipt["path"]
+        self.assertEqual(sha256_file(receipt_path), projection_receipt["sha256"])
+        self.assertEqual(
+            receipt_path.with_suffix(".sha256").read_text(encoding="utf-8"),
+            f"{projection_receipt['sha256']}  {receipt_path.name}\n",
+        )
         self.assertEqual(
             self.tree["arm_attachments"]["identity_pin_projection"], projection
         )
