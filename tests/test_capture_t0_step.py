@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from scripts import capture_t0_step as capture
@@ -71,12 +74,16 @@ class CaptureT0StepTests(unittest.TestCase):
         window_root = custody / "window-plan"
         clock = _Clock(SYNTHETIC_MONOTONIC_NS - 900 * 1_000_000_000)
 
+        def prompt(message: str) -> str:
+            if "trusted-clock" in message:
+                return "2026-08-13T20:30:01Z"
+            if "prior network-time" in message:
+                return "Network Time: On"
+            raise AssertionError(message)
+
         def execute(argv, *, cwd):
             command = tuple(argv)
-            if "-getusingnetworktime" in command:
-                stdout = b"Network Time: On\n"
-                stderr = b""
-            elif "-setusingnetworktime" in command:
+            if "-setusingnetworktime" in command:
                 stdout = stderr = b""
             elif Path(command[1]).name == "quiet_mac_prep.sh":
                 stdout = (
@@ -126,7 +133,7 @@ class CaptureT0StepTests(unittest.TestCase):
                     pack,
                     custody,
                     window_root,
-                    prompt=lambda _message: "2026-08-13T20:30:01Z",
+                    prompt=prompt,
                     execute=execute,
                     monotonic_ns=clock.monotonic_ns,
                     utc_now=lambda: SYNTHETIC_UTC_NOW,
@@ -176,9 +183,8 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertEqual(
             prior["argv"],
             [
-                "/usr/bin/sudo",
-                "/usr/sbin/systemsetup",
-                "-getusingnetworktime",
+                "operator-interactive",
+                "network-time-prior-state",
             ],
         )
         self.assertEqual(
@@ -227,6 +233,247 @@ class CaptureT0StepTests(unittest.TestCase):
             caught.exception.reason_code,
             "evidence_author_t0_capture_sequence_invalid",
         )
+
+    def test_invalid_e8_capture_does_not_unlock_e9_reservation(self) -> None:
+        (
+            _temporary,
+            repository,
+            pack,
+            custody,
+            _context,
+            input_root,
+            _receipt,
+        ) = self._producer_fixture()
+        with (
+            mock.patch.object(capture, "REPO_ROOT", repository),
+            mock.patch.object(
+                capture,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+        ):
+            context = capture._load_context(pack, custody, custody / "window-plan")
+        input_root.mkdir(parents=True)
+        outputs = {
+            "clock-prior-state": ("Network Time: On\n", "", 10, 20),
+            "clock-disable": ("", "", 30, 40),
+            "quiet-mac-prep": (
+                "OK: passwordless powermetrics works.\n"
+                "OK: display verification reports all online displays asleep.\n"
+                "OK: post-arm evidence reports screensaver disengaged.\n",
+                "",
+                50,
+                60,
+            ),
+            "prewindow-check": (
+                "READY after 10 min.\n",
+                "",
+                100,
+                100 + 600 * 1_000_000_000,
+            ),
+        }
+        for prior, (stdout, stderr, started, finished) in outputs.items():
+            value = {
+                "schema_version": capture.COMMAND_CAPTURE_SCHEMA,
+                "step_id": prior,
+                "argv": list(capture._command_for_step(context, prior)),
+                "cwd": str(repository),
+                "exit_code": 0,
+                "stdout": stdout,
+                "stderr": stderr,
+                "started_monotonic_ns": started,
+                "finished_monotonic_ns": finished,
+                "boot_session_id": TEST_BOOT_SESSION_ID,
+            }
+            (input_root / capture.STEP_FILENAMES[prior]).write_bytes(
+                readiness.render_json(value)
+            )
+        invalid_diagnostic = subprocess.CompletedProcess(
+            (), 0, b'{"status":"not-ready"}\n', b""
+        )
+        with (
+            mock.patch.object(capture, "REPO_ROOT", repository),
+            mock.patch.object(
+                capture,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+            self.assertRaises(capture.CaptureT0Error) as invalid,
+        ):
+            capture.capture_step(
+                "ledger-readiness",
+                pack,
+                custody,
+                custody / "window-plan",
+                execute=mock.Mock(return_value=invalid_diagnostic),
+            )
+        self.assertEqual(
+            invalid.exception.reason_code,
+            "evidence_author_t0_capture_result_invalid",
+        )
+
+        reservation_execute = mock.Mock(
+            side_effect=AssertionError("invalid E-8 must gate E-9 execution")
+        )
+        with (
+            mock.patch.object(capture, "REPO_ROOT", repository),
+            mock.patch.object(
+                capture,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+            self.assertRaises(capture.CaptureT0Error) as sequence,
+        ):
+            capture.capture_step(
+                "ledger-reservation",
+                pack,
+                custody,
+                custody / "window-plan",
+                execute=reservation_execute,
+            )
+        self.assertEqual(
+            sequence.exception.reason_code,
+            "evidence_author_t0_capture_sequence_invalid",
+        )
+        reservation_execute.assert_not_called()
+        self.assertFalse(
+            (input_root / capture.STEP_FILENAMES["ledger-readiness"]).exists()
+        )
+
+    def test_sequence_refuses_malformed_predecessor_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / capture.STEP_FILENAMES["clock-prior-state"]).write_text(
+                "invalid", encoding="utf-8"
+            )
+            with self.assertRaises(capture.CaptureT0Error) as caught:
+                capture._require_sequence(
+                    SimpleNamespace(input_root=root), "clock-disable"
+                )
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_capture_sequence_invalid",
+        )
+
+    def test_clock_prior_state_is_interactive_and_never_executes_privileged_get(
+        self,
+    ) -> None:
+        (
+            _temporary,
+            repository,
+            pack,
+            custody,
+            _context,
+            input_root,
+            _receipt,
+        ) = self._producer_fixture()
+
+        def prompt(message: str) -> str:
+            if "trusted-clock" in message:
+                return "2026-08-13T20:30:01Z"
+            if "prior network-time" in message:
+                return "Network Time: On"
+            raise AssertionError(message)
+
+        execute = mock.Mock(side_effect=AssertionError("must not execute E-4 get"))
+        with (
+            mock.patch.object(capture, "REPO_ROOT", repository),
+            mock.patch.object(
+                capture,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+        ):
+            result = capture.capture_step(
+                "clock-prior-state",
+                pack,
+                custody,
+                custody / "window-plan",
+                prompt=prompt,
+                execute=execute,
+                monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS,
+                utc_now=lambda: SYNTHETIC_UTC_NOW,
+            )
+        execute.assert_not_called()
+        self.assertEqual(result["status"], "PASS")
+        prior = json.loads(
+            (input_root / "clock-prior-state.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            prior["argv"],
+            ["operator-interactive", "network-time-prior-state"],
+        )
+        self.assertEqual(prior["stdout"], "Network Time: On\n")
+
+    def test_capture_paths_contain_no_privileged_network_time_get(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for relative in (
+            "scripts/capture_t0_step.py",
+            "scripts/prewindow_check.sh",
+            "joulewise/arm_readiness_evidence_t0.py",
+        ):
+            with self.subTest(path=relative):
+                source = (root / relative).read_text(encoding="utf-8")
+                self.assertNotIn("-getusingnetworktime", source)
+
+    def test_execute_uses_governed_environment_allowlist(self) -> None:
+        completed = subprocess.CompletedProcess((), 0, b"", b"")
+        with (
+            mock.patch.dict(
+                os.environ,
+                {
+                    "CPU_LIMIT": "999",
+                    "LOAD_LIMIT": "999",
+                    "PYTHONPATH": "/operator/injected",
+                },
+            ),
+            mock.patch.object(
+                capture.subprocess, "run", return_value=completed
+            ) as run,
+        ):
+            self.assertIs(capture._execute(("/usr/bin/true",), cwd=Path(".")), completed)
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual(
+            environment,
+            {
+                "LANG": "C",
+                "LC_ALL": "C",
+                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            },
+        )
+
+    def test_inherited_high_cpu_limit_does_not_make_loaded_sample_ready(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            fake_bin = Path(directory)
+            commands = {
+                "ps": "printf '%s\\n' 'edr 123 50.0 0.0 0 0 ?? R 0:00 0:00 /usr/libexec/XProtectRemediator'\n",
+                "uptime": "printf '%s\\n' '12:00  up 1 day, load averages: 0.10 0.20 0.30'\n",
+                "pmset": "printf \"%s\\n\" \"Now drawing from 'AC Power'\"\n",
+                "df": "printf '%s\\n' 'Filesystem blocks Used Available Capacity Mounted' '/dev/disk 1 1 100 1% /'\n",
+            }
+            for name, body in commands.items():
+                path = fake_bin / name
+                path.write_text(f"#!/bin/sh\n{body}", encoding="utf-8")
+                path.chmod(0o755)
+            environment = {
+                **os.environ,
+                "CPU_LIMIT": "999",
+                "LOAD_LIMIT": "999",
+                "PATH": f"{fake_bin}:/usr/bin:/bin:/usr/sbin:/sbin",
+            }
+            completed = subprocess.run(
+                ["/bin/bash", "scripts/prewindow_check.sh"],
+                cwd=root,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
+        self.assertIn("background daemon active", completed.stdout)
+        self.assertNotIn("999", completed.stdout)
+        self.assertIn("NOT READY.", completed.stdout)
 
     def test_refuses_dollar_bearing_window_environment(self) -> None:
         (

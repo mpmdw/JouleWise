@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
+import joulewise.arm_readiness_evidence as generic_evidence
 import joulewise.arm_readiness_evidence_t0 as t0
 import joulewise.calibration_ledger as ledger
 import joulewise.identity_pins as identity_pins
@@ -485,7 +486,7 @@ def make_t0_fixture(
     captures = {
         "clock-prior-state.json": _capture(
             "clock-prior-state",
-            ["/usr/bin/sudo", "/usr/sbin/systemsetup", "-getusingnetworktime"],
+            ["operator-interactive", "network-time-prior-state"],
             repository,
             time_origin + 20,
             time_origin + 30,
@@ -683,6 +684,61 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
 
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     maxDiff = None
+
+    def test_alpha_beta_repo_relative_plan_refuses_both_generic_r2_sites(self) -> None:
+        for profile, pack_name in (
+            ("ALPHA", "d117_floor_qwen25_1p5b_v1"),
+            ("BETA", "d117_floor_qwen25_7b_v1"),
+        ):
+            pack = ROOT / "configs/campaigns" / pack_name
+            tree, _raw = readiness._plan_tree(pack)
+            with self.subTest(profile=profile, site="shared-resolver"):
+                with self.assertRaises(readiness.ArmReadinessError):
+                    readiness.resolve_frozen_plan(pack, tree)
+            context = generic_evidence._DerivationContext(
+                pack_root=pack,
+                repository=ROOT,
+                tree=tree,
+                pack_sha256="0" * 64,
+                head_commit="0" * 40,
+            )
+            for site_name, site in (
+                (
+                    "manifest-validation",
+                    lambda: generic_evidence._validate_manifests(
+                        context, kind="PACK_AUTHENTICATION"
+                    ),
+                ),
+                (
+                    "estimator-derivation",
+                    lambda: generic_evidence._derive_estimator_identity(context),
+                ),
+            ):
+                with self.subTest(profile=profile, site=site_name):
+                    with self.assertRaises(
+                        generic_evidence.EvidenceAuthoringError
+                    ) as caught:
+                        site()
+                    self.assertIn("R2 frozen-plan reference is invalid", str(caught.exception))
+
+    def test_legacy_privileged_prior_state_capture_is_refused(self) -> None:
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        prior_path = inputs / "clock-prior-state.json"
+        prior = json.loads(prior_path.read_text(encoding="utf-8"))
+        prior["argv"] = [
+            "/usr/bin/sudo",
+            "/usr/sbin/systemsetup",
+            "-getusingnetworktime",
+        ]
+        _write_json(prior_path, prior)
+        with (
+            author_environment(repository),
+            self.assertRaises(T0EvidenceAuthoringError) as caught,
+        ):
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.kind, "CLOCK_ATTESTATION")
+        self.assertIn("not Ed's interactive action", str(caught.exception))
 
     def test_public_namespace_and_signature_are_closed(self) -> None:
         self.assertEqual(

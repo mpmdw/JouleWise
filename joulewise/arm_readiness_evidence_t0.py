@@ -138,6 +138,10 @@ _CAPTURE_FILES = {
     "ledger-readiness": "ledger-readiness.json",
     "ledger-reservation": "ledger-reservation.json",
 }
+_INTERACTIVE_PRIOR_STATE_ARGV = [
+    "operator-interactive",
+    "network-time-prior-state",
+]
 _CAPTURE_ORDER = tuple(_CAPTURE_FILES)
 _RUNBOOK_ARTIFACT_REASON_CODES = {
     "arm_context": "evidence_author_t0_arm_context_missing",
@@ -853,8 +857,8 @@ def _derive_clock_attestation(context: _Context) -> _DerivedRow:
     disable, disable_identity = _capture(context, "clock-disable", kind=kind)
     _capture_ok(prior, kind=kind, label="prior clock-state capture")
     _capture_ok(disable, kind=kind, label="network-time disable capture")
-    if not _systemsetup_argv(prior["argv"], ("-getusingnetworktime",)):
-        raise _underivable(kind, "prior clock-state capture used the wrong command")
+    if prior["argv"] != _INTERACTIVE_PRIOR_STATE_ARGV:
+        raise _underivable(kind, "prior clock-state capture was not Ed's interactive action")
     if not _systemsetup_argv(disable["argv"], ("-setusingnetworktime", "off")):
         raise _underivable(kind, "network-time disable capture used the wrong command")
     match = _re.search(r"Network Time:\s*(On|Off)\s*$", prior["stdout"], _re.MULTILINE)

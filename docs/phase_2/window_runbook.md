@@ -870,10 +870,20 @@ arming; they do not authorize the live night.
    cd "$MEASUREMENT_REPO"
    ```
 
-   - **E-4:** at the prompt, enter only the independent trusted-clock UTC
-     literal. The tool derives the system timestamp, monotonic observation,
-     boot ID, attestation ID, context, and manifest, then performs Ed's
-     interactive prior-state read:
+   - **E-4:** Ed first performs the prior-state read directly in the interactive
+     shell (a password prompt is expected; no repository script performs this
+     privileged read) and preserves its exact `Network Time: On` or
+     `Network Time: Off` output:
+
+     ```sh
+     /usr/bin/sudo /usr/sbin/systemsetup -getusingnetworktime
+     ```
+
+     Then run the wrapper. At its prompts, enter the independent trusted-clock
+     UTC literal and paste the exact prior-state output. The tool derives the
+     system timestamp, monotonic observation, boot ID, attestation ID, context,
+     and manifest, and records the manual action without executing a privileged
+     read itself:
 
      ```sh
      python3 scripts/capture_t0_step.py clock-prior-state \

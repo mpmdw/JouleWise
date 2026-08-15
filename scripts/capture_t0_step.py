@@ -33,6 +33,19 @@ INPUT_DIRECTORY = "arm_readiness.t0.inputs"
 REFERENCE_TIME_PROMPT = (
     "Independent trusted-clock UTC literal (for example 2026-08-15T12:34:56Z): "
 )
+PRIOR_STATE_PROMPT = (
+    "Paste Ed's exact interactive prior network-time output "
+    "(Network Time: On or Network Time: Off): "
+)
+INTERACTIVE_PRIOR_STATE_ARGV = (
+    "operator-interactive",
+    "network-time-prior-state",
+)
+GOVERNED_SUBPROCESS_ENVIRONMENT = {
+    "LANG": "C",
+    "LC_ALL": "C",
+    "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+}
 
 STEP_FILENAMES = {
     "clock-prior-state": "clock-prior-state.json",
@@ -43,6 +56,20 @@ STEP_FILENAMES = {
     "ledger-reservation": "ledger-reservation.json",
 }
 STEP_ORDER = tuple(STEP_FILENAMES)
+CAPTURE_KEYS = frozenset(
+    {
+        "schema_version",
+        "step_id",
+        "argv",
+        "cwd",
+        "exit_code",
+        "stdout",
+        "stderr",
+        "started_monotonic_ns",
+        "finished_monotonic_ns",
+        "boot_session_id",
+    }
+)
 
 # D-078's closed capture-producer vocabulary.  Every spelling is registered in
 # docs/decision_log.md and every failure is a refusal, never launch authority.
@@ -567,11 +594,7 @@ def _command_for_step(context: CaptureContext, step_id: str) -> tuple[str, ...]:
     values = context.assignments
     python = str(context.repository / ".venv/bin/python")
     if step_id == "clock-prior-state":
-        return (
-            "/usr/bin/sudo",
-            "/usr/sbin/systemsetup",
-            "-getusingnetworktime",
-        )
+        return INTERACTIVE_PRIOR_STATE_ARGV
     if step_id == "clock-disable":
         return (
             "/usr/bin/sudo",
@@ -654,6 +677,43 @@ def _require_sequence(context: CaptureContext, step_id: str) -> None:
                 "evidence_author_t0_capture_sequence_invalid",
                 f"{step_id} cannot run before {prior}",
             )
+        try:
+            value = readiness.parse_json_bytes(
+                path.read_bytes(), require_canonical=True
+            )
+            if (
+                not isinstance(value, Mapping)
+                or set(value) != CAPTURE_KEYS
+                or value.get("schema_version") != COMMAND_CAPTURE_SCHEMA
+                or value.get("step_id") != prior
+                or value.get("argv") != list(_command_for_step(context, prior))
+                or value.get("cwd") != str(context.repository)
+                or not isinstance(value.get("exit_code"), int)
+                or isinstance(value.get("exit_code"), bool)
+                or value["exit_code"] != 0
+                or not isinstance(value.get("stdout"), str)
+                or not isinstance(value.get("stderr"), str)
+                or not isinstance(value.get("started_monotonic_ns"), int)
+                or isinstance(value.get("started_monotonic_ns"), bool)
+                or not isinstance(value.get("finished_monotonic_ns"), int)
+                or isinstance(value.get("finished_monotonic_ns"), bool)
+                or value["started_monotonic_ns"] < 1
+                or value["finished_monotonic_ns"] < value["started_monotonic_ns"]
+                or value.get("boot_session_id") != context.boot_session_id
+                or (
+                    prior == "prewindow-check"
+                    and value["finished_monotonic_ns"]
+                    - value["started_monotonic_ns"]
+                    < 600 * 1_000_000_000
+                )
+            ):
+                raise ValueError("capture fields differ from the governed result")
+            _validate_result(context, prior, value["stdout"], value["stderr"])
+        except (OSError, ValueError, readiness.ArmReadinessError, CaptureT0Error) as exc:
+            raise _refuse(
+                "evidence_author_t0_capture_sequence_invalid",
+                f"{step_id} predecessor {prior} is not a validated capture",
+            ) from exc
     current = context.input_root / STEP_FILENAMES[step_id]
     if current.exists() or current.is_symlink():
         raise _refuse(
@@ -677,6 +737,7 @@ def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[b
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
+            env=GOVERNED_SUBPROCESS_ENVIRONMENT,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise _refuse(
@@ -687,6 +748,31 @@ def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[b
 
 def _text(value: bytes | str) -> str:
     return value if isinstance(value, str) else value.decode("utf-8", errors="replace")
+
+
+def _interactive_prior_state(
+    *, prompt: Callable[[str], str]
+) -> subprocess.CompletedProcess[bytes]:
+    """Capture Ed's separately executed interactive observation without privilege."""
+
+    try:
+        output = prompt(PRIOR_STATE_PROMPT).strip()
+    except (EOFError, OSError) as exc:
+        raise _refuse(
+            "evidence_author_t0_capture_result_invalid",
+            "E-4 interactive prior network-time output was not provided",
+        ) from exc
+    if re.fullmatch(r"Network Time:\s*(?:On|Off)", output) is None:
+        raise _refuse(
+            "evidence_author_t0_capture_result_invalid",
+            "E-4 interactive prior network-time output is not exact",
+        )
+    return subprocess.CompletedProcess(
+        INTERACTIVE_PRIOR_STATE_ARGV,
+        0,
+        f"{output}\n".encode("utf-8"),
+        b"",
+    )
 
 
 def _validate_result(
@@ -814,7 +900,10 @@ def capture_step(
             "boot session changed before command execution",
         )
     started = monotonic_ns()
-    completed = execute(argv, cwd=context.repository)
+    if step_id == "clock-prior-state":
+        completed = _interactive_prior_state(prompt=prompt)
+    else:
+        completed = execute(argv, cwd=context.repository)
     finished = monotonic_ns()
     ending_boot = _current_boot_session_id()
     if ending_boot != starting_boot:
@@ -836,14 +925,10 @@ def capture_step(
         "finished_monotonic_ns": finished,
         "boot_session_id": starting_boot,
     }
-    capture_path = context.input_root / STEP_FILENAMES[step_id]
-    _write_no_clobber(
-        capture_path, readiness.render_json(capture), accept_identical=False
-    )
     if completed.returncode != 0:
         raise _refuse(
             "evidence_author_t0_capture_command_failed",
-            f"{step_id} exited {completed.returncode}; capture preserved at {capture_path}",
+            f"{step_id} exited {completed.returncode}; no capture was published",
         )
     if (
         step_id == "prewindow-check"
@@ -851,9 +936,13 @@ def capture_step(
     ):
         raise _refuse(
             "evidence_author_t0_capture_result_invalid",
-            "E-7b returned before the required 600-second continuous dwell; capture preserved",
+            "E-7b returned before the required 600-second continuous dwell; no capture was published",
         )
     _validate_result(context, step_id, stdout, stderr)
+    capture_path = context.input_root / STEP_FILENAMES[step_id]
+    _write_no_clobber(
+        capture_path, readiness.render_json(capture), accept_identical=False
+    )
     return {
         "status": "PASS",
         "step_id": step_id,

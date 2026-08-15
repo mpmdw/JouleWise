@@ -31,8 +31,9 @@ TIMEOUT_MIN=45
 WINDOW=""
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 MEASUREMENT_REPO="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
-CPU_LIMIT="${CPU_LIMIT:-5.0}"        # percent, per contaminating process
-LOAD_LIMIT="${LOAD_LIMIT:-2.0}"      # 1-minute load average
+CPU_LIMIT=5.0                         # governed percent per contaminating process
+LOAD_LIMIT=2.0                        # governed 1-minute load average
+readonly CPU_LIMIT LOAD_LIMIT
 MIN_CLEAN_DWELL_S=600                # continuous clean time required by D-134
 INTERVAL_S=30
 
@@ -95,19 +96,10 @@ check_once() {
     blocked=1
   fi
 
-  # 4. Clock pinned. Measurement windows run with automatic network time
-  #    disabled (see scripts/quiet_window_clock.sh); a live adjuster caused two
-  #    window failures on 2026-07-26.
-  local nt
-  nt="$(/usr/bin/sudo -n /usr/sbin/systemsetup -getusingnetworktime 2>/dev/null | sed -n 's/.*Network Time: *//p')"
-  if [ -z "$nt" ]; then
-    warn "cannot read network-time state without admin; confirm the clock is pinned"
-  elif [ "$nt" = "Off" ]; then
-    ok "automatic network time disabled (clock pinned)"
-  else
-    bad "automatic network time is On -- run scripts/quiet_window_clock.sh disable"
-    blocked=1
-  fi
+  # 4. Clock state is deliberately not read here. D-127 grants repository
+  #    automation only the exact off/on writes; Ed records the prior state in
+  #    interactive E-4 and E-5 performs the governed exact off enforcement.
+  echo "  NOTE  network-time state is handled by interactive E-4 plus exact E-5 enforcement"
 
   # 5. Keyboard-backlight level has no reliable CLI probe. Emit the exact
   #    operator census literals ratified for JW-MET-2; visual verification is
