@@ -261,6 +261,24 @@ class FrozenPackRecorderAuthorizationTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason, "pack_pin_invalid")
         grant.assert_called_once_with(spec_path.resolve())
 
+    def test_plan_tree_forbidden_key_normalizes_to_recorder_refusal(self) -> None:
+        """F-5: a forbidden auth key in a read input refuses as a recorder refusal, not a raw auth error."""
+        repository_root, pack_root, _spec_path, _tree = self._copy_floor_pack("1p5b")
+        plan_tree_path = pack_root / "plan_tree.json"
+        tree = json.loads(plan_tree_path.read_text(encoding="utf-8"))
+        tree["estimator_registration"] = {"status": "smuggled"}
+        _write_json(plan_tree_path, tree)
+        with V2AuthenticationReadSession() as authentication:
+            with self.assertRaises(margins.WindowDurationMarginsRefusal) as caught:
+                margins._pack_inventory(
+                    authentication,
+                    repository_root,
+                    pack_root,
+                    str(FROZEN_FLOOR_PACKS[0]["pack_identity"]),
+                )
+        self.assertEqual(caught.exception.reason, "authoritative_input_invalid")
+        self.assertIn("estimator_registration", str(caught.exception))
+
     def test_symlinked_spec_path_refuses_before_any_grant(self) -> None:
         """ALPHA's selected spec aliased to BETA's real spec: refuse, ZERO grants."""
         repository_root, pack_root, spec_path, _tree = self._copy_floor_pack("1p5b")

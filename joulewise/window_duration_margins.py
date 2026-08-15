@@ -179,7 +179,15 @@ def _json_object(
     *,
     label: str,
 ) -> tuple[Mapping[str, Any], bytes]:
-    raw = read_authentication_input(path, grammar="json", label=label)
+    try:
+        raw = read_authentication_input(path, grammar="json", label=label)
+    except V2AuthenticationInputError as exc:
+        # Normalize authentication refusals (e.g. a forbidden estimator_registration
+        # key in a plan tree / report / bundle / GAMMA manifest) into the recorder's
+        # own refusal type; a raw V2AuthenticationInputError must never escape
+        # _pack_inventory (S1 threat-table: grant-construction and read errors are
+        # normalized, not leaked). Reachable with no adversary.
+        _refuse("authoritative_input_invalid", f"{label}: {exc}")
     try:
         value = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
