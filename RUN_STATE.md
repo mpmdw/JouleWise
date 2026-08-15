@@ -22,9 +22,14 @@ isolation + session worktrees) are ALL disposable.
 
 **THE PLAN OF RECORD remains `docs/strategy/2026-08-14-70h-plan.md`** (read
 in full; note its two Ed amendments: windows not scarce; council-gated).
-**The successor's single next action: RESUME THE FLEET —**
-`Workflow({scriptPath: "/Users/edr/.claude/projects/-Users-edr-code-JouleWise/2cc5ce62-9e44-4ab2-a470-a38d9caf2826/workflows/scripts/readiness-audit-fleet-wf_84e26deb-9c1.js", resumeFromRunId: "wf_84e26deb-9c1"})`
-(the script is SELF-CONTAINED — briefs embedded; schema-forced findings) —
+**The successor's single next action: LAUNCH THE FLEET FRESH —**
+`Workflow({scriptPath: "/Users/edr/.claude/projects/-Users-edr-code-JouleWise/2cc5ce62-9e44-4ab2-a470-a38d9caf2826/workflows/scripts/readiness-audit-fleet-wf_84e26deb-9c1.js"})`
+(a NEW run, not a resume — resumeFromRunId is same-session-only and does
+NOT survive /clear; nothing is lost because zero seats completed before the
+pause. The script file is DURABLE (project dir, not scratchpad) and
+SELF-CONTAINED — all eleven briefs embedded, schema-forced findings. If the
+script file is ever missing, the briefs are reconstructable from charter v2
+lens scopes + its anti-ritual packet) —
 then harvest → C-028 refuters on blockers → the cold-paired sitting per
 charter v2 (`docs/process/instrument-readiness-audit-charter.md`) → council
 verdict → if READY, the single Ed session
