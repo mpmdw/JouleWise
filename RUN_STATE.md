@@ -40,11 +40,18 @@ successor packet → Phase 3 manifest SUPERSESSION + focused re-audit w/
 adversarial coverage re-enumeration → Phase 4 READY-candidate sitting,
 fresh cold pairing. Program NOT certified complete (recorded clause).
 
-**IN FLIGHT at this writing:** second-lens refuter on the four
-SINGLE-LENS claims (ordered by the verdict; sol-refuter-singlelens.md in
-session scratchpad, lands in the council dir on harvest); C-058
-finalization mechanic. **Next desk actions:** harvest both → land C-058 +
-skill rows → Phase 0 rulings/consults → Phase 1 launches (multi-stream).
+**PROGRESS SINCE THE VERDICT (same day):** second-lens refuter CLEARED
+all four SINGLE-LENS claims (custodied 15d00d2, verdict addendum); C-058
+LANDED (af7c23b, index row + entry); R4 M-2 execution note ENTERED
+(c0b7068); **R1 CONSULT DELIVERED AND CUSTODIED**
+(docs/process_traces/2026-08-15-r1-freeze-lifecycle-consult/ — Sol
+recommends option C, content-bound durable evidence + freshness-class
+taxonomy + family-level successor tool for semantic changes only; the
+design amends D-131/D-134/D-137/D-078 ⇒ ADOPTION REQUIRES ITS OWN
+RULE-11 COLD GATE, packet = the consult + the A-cluster refuter record).
+**Next desk actions:** R1 adoption cold gate → R2 FROZEN_PLAN ruling →
+R3 P2-006 ruling → remanded M-2 cold-gate packet w/ primaries → Phase 1
+launches (WO-KERNEL-RECONCILE first; multi-stream per the verdict).
 
 **ED-OWED: NOTHING until Phase 1 nears close.** Then ONE batched session
 (expanded qualification script): D-127 sudoers install + exercise, dress
