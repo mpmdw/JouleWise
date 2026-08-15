@@ -9091,3 +9091,33 @@ hashes (ddbbb409…1738, a6dec2c2…7870, 2ef73bf0…106f), retiring per pack �
 for any other pack; (e) the contrast pack's pending-ratification/TODO markers are OUTSIDE M-2 and
 carry their own RULING-REQUIRED row; (f) the #149 --plan argv divergence must reconcile under R2
 before any arm.
+
+### WO-LAUNCH-BINDING contract ADOPTED (magistrate, 2026-08-15; council Phase 0; Sol design consult adopted)
+
+Consult custodied: docs/process_traces/2026-08-15-launcher-binding-consult/
+(the ONE home for the mechanism). Cures fleet blocker L8-B7 (launch
+without ceremony not machine-caught; confirmed by both DG lenses).
+
+**Ruling:**
+1. Every D-117 physical launch is NO-GO until machine-enforced: one
+   reviewed launcher (scripts/launch_window.py), invoked PERSONALLY by
+   Ed after inspecting the ARM verification result, performing: atomic
+   no-clobber consumption-primary claim (the single-use linearization
+   point, fsynced) → verify_consumed_launch replay (arm receipt/PASS/GO/
+   supersession, boot + monotonic validity, reviewed HEAD + committed
+   pack digest, context/roots/backups/reservation/locks, launch-manifest
+   + window.env + chain bytes, exact final argv) → execve on the exact
+   frozen foreground argv. No spawn-and-return, no retry loop.
+2. One-use handoff token via inheritable anonymous FD only (never argv/
+   env/file); consumption record stores its SHA-256. Consumption v2
+   record additions per the consult.
+3. Downstream lineage: collection, reduce, verdict, extraction, and mint
+   consumers authenticate descent from the consumption record; absent
+   lineage = refusal (reason-codes per the consult, registered under
+   D-078's closed vocabulary before issuance).
+4. This is strictly additive fail-closed machinery (no existing guarantee
+   weakens); the D-134 clause additions + implementation take the full
+   C-028 gauntlet with adversarial refuters on the contract delta text —
+   the cold review rides the gauntlet.
+5. Execution = WO-LAUNCH-BINDING (council Phase 1); runbook §6/E-step
+   deltas + the ceremony-skip regression battery per the consult.
