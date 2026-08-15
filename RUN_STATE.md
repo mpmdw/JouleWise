@@ -14,6 +14,19 @@ Last updated: 2026-08-15 (T8 session, Fable magistrate; COUNCIL VERDICT RECORDED
 
 ## ▶▶ T8 STATE (2026-08-15) — COUNCIL VERDICT: NOT-READY; REPAIR PROGRAM IS THE DESK PROGRAM
 
+**PHASE 1 PROGRESS (latest): PR #150 WO-KERNEL-RECONCILE MERGED (47d2645)
+— the WINDOW-COUNCIL-GATE is LIVE on main** (fleet blocker L1-B2 closed:
+no quiet-mac window selectable until a READY-candidate council verdict;
+P2-006 retired per R3). Phase 0 fully ruled/custodied (R1-R4 + M-2 gate +
+6 WO contracts, docs/process_traces/2026-08-15-*/). In flight: PR #151
+recorder-authz (cold-gated race → registered limitation; awaiting CI);
+WO-T0-PRODUCER (built, 5-blocker review → F1/F2/F3/F5 fix round, F4
+capture-provenance → design consult vs the recorder-race precedent).
+NEW queued: WO-RECORDER-GRANT-IDENTITY (own gate). RULING-REQUIRED:
+contrast-pack pending-ratification/TODO markers (Ed-adjacent); the T-0
+capture-provenance disposition (Ed risk-appetite, parallel to the
+recorder-race threat-model call).
+
 **THE READINESS COUNCIL RAN IN FULL AND RULED: NOT-READY, 0 READY / 11
 NOT-READY.** Full custody (fleet reports, nine refuter verdicts, cold
 pairing rulings, verdict): `docs/process_traces/2026-08-15-readiness-council/`
