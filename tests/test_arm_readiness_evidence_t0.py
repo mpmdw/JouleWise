@@ -38,6 +38,8 @@ from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID, arm_context
 
 ROOT = Path(__file__).resolve().parents[1]
 OTHER_BOOT_SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+SYNTHETIC_MONOTONIC_NS = 1_000_000_000_000
+SYNTHETIC_UTC_NOW = "2026-08-13T20:30:00Z"
 
 
 def _copy(repository: Path, relative: str) -> None:
@@ -117,6 +119,7 @@ def _install_synthetic_identity_inputs(
     tree: dict,
     *,
     boot_session_override: str | None,
+    clock_override: tuple[int, str] | None,
 ) -> None:
     shutil.rmtree(pack / "identity_pin_projection.receipts")
     model = pack / "synthetic-model"
@@ -187,11 +190,23 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
 """,
         encoding="utf-8",
     )
-    if boot_session_override is not None:
+    if boot_session_override is not None or clock_override is not None:
+        customization = "from joulewise import arm_readiness\n"
+        if boot_session_override is not None:
+            customization += (
+                "arm_readiness._current_boot_session_id = "
+                f"lambda: {boot_session_override!r}\n"
+            )
+        if clock_override is not None:
+            monotonic_ns, utc_now = clock_override
+            customization += (
+                "arm_readiness.time.monotonic_ns = "
+                f"lambda: {monotonic_ns!r}\n"
+                "arm_readiness._utc_now = "
+                f"lambda: {utc_now!r}\n"
+            )
         (repository / "sitecustomize.py").write_text(
-            "from joulewise import arm_readiness\n"
-            "arm_readiness._current_boot_session_id = "
-            f"lambda: {boot_session_override!r}\n",
+            customization,
             encoding="utf-8",
         )
 
@@ -210,9 +225,10 @@ def _load_synthetic_mlx(repository: Path):
 def make_t0_fixture(
     *,
     boot_session_id: str = TEST_BOOT_SESSION_ID,
-    now_monotonic_ns: int = 1_000_000_000_000,
+    now_monotonic_ns: int = SYNTHETIC_MONOTONIC_NS,
     real_identity: bool = False,
     synthetic_boot_session: bool = True,
+    synthetic_clock: bool = True,
 ):
     temporary, repository, pack, custody, _arm_path = make_go_fixture()
     repository = repository.resolve()
@@ -263,6 +279,11 @@ def make_t0_fixture(
             tree,
             boot_session_override=(
                 boot_session_id if synthetic_boot_session else None
+            ),
+            clock_override=(
+                (now_monotonic_ns, SYNTHETIC_UTC_NOW)
+                if synthetic_clock
+                else None
             ),
         )
     tree_raw = readiness.render_json(tree)
@@ -573,7 +594,8 @@ def author_environment(
     real_offline: bool = False,
     boot_session_id: str = TEST_BOOT_SESSION_ID,
     free=100 * 1024**3,
-    now_monotonic_ns: int = 1_000_000_000_000,
+    now_monotonic_ns: int = SYNTHETIC_MONOTONIC_NS,
+    synthetic_clock: bool = True,
 ):
     if probe is passing_probe and boot_session_id != TEST_BOOT_SESSION_ID:
         def selected_probe(argv, *, cwd):
@@ -619,12 +641,14 @@ def author_environment(
         stack.enter_context(
             mock.patch.object(t0._shutil, "disk_usage", return_value=mock.Mock(free=free))
         )
-        stack.enter_context(
-            mock.patch.object(t0._time, "monotonic_ns", return_value=now_monotonic_ns)
-        )
-        stack.enter_context(
-            mock.patch.object(readiness, "_utc_now", return_value="2026-08-13T20:30:00Z")
-        )
+        if synthetic_clock:
+            clock = t0._DerivationClock(
+                monotonic_ns=lambda: now_monotonic_ns,
+                utc_now=lambda: SYNTHETIC_UTC_NOW,
+            )
+            stack.enter_context(
+                mock.patch.object(t0, "_production_clock", return_value=clock)
+            )
         yield
 
 
@@ -1387,14 +1411,21 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     def _assert_acid_authored_fifteen_then_arm_generator_reaches_go(
-        self, *, boot_session_id: str, synthetic_boot_session: bool
+        self,
+        *,
+        boot_session_id: str,
+        synthetic_boot_session: bool,
+        synthetic_clock: bool,
     ) -> None:
-        now_monotonic_ns = time.monotonic_ns()
+        now_monotonic_ns = (
+            SYNTHETIC_MONOTONIC_NS if synthetic_clock else time.monotonic_ns()
+        )
         temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
             boot_session_id=boot_session_id,
             now_monotonic_ns=now_monotonic_ns,
             real_identity=True,
             synthetic_boot_session=synthetic_boot_session,
+            synthetic_clock=synthetic_clock,
         )
         self.addCleanup(temporary.cleanup)
         with author_environment(
@@ -1402,6 +1433,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             real_offline=True,
             boot_session_id=boot_session_id,
             now_monotonic_ns=now_monotonic_ns,
+            synthetic_clock=synthetic_clock,
         ):
             result = author_arm_readiness_evidence_t0(pack, custody)
             self.assertEqual(len(result["authored_rows"]), 15)
@@ -1479,7 +1511,39 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
             boot_session_id=TEST_BOOT_SESSION_ID,
             synthetic_boot_session=True,
+            synthetic_clock=True,
         )
+
+    def test_synthetic_acid_is_hermetic_to_system_timezone(self) -> None:
+        previous = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "Pacific/Kiritimati"
+            if hasattr(time, "tzset"):
+                time.tzset()
+            self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
+                boot_session_id=TEST_BOOT_SESSION_ID,
+                synthetic_boot_session=True,
+                synthetic_clock=True,
+            )
+        finally:
+            if previous is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = previous
+            if hasattr(time, "tzset"):
+                time.tzset()
+
+    def test_synthetic_acid_ignores_wall_clock_48_hours_in_future(self) -> None:
+        with mock.patch.object(
+            t0._readiness,
+            "_utc_now",
+            return_value="2026-08-15T20:30:00Z",
+        ):
+            self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
+                boot_session_id=TEST_BOOT_SESSION_ID,
+                synthetic_boot_session=True,
+                synthetic_clock=True,
+            )
 
     @unittest.skipUnless(
         sys.platform == "darwin", "requires Darwin's real boot-session sysctl command"
@@ -1494,6 +1558,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
             boot_session_id=boot_session_id,
             synthetic_boot_session=False,
+            synthetic_clock=False,
         )
 
 

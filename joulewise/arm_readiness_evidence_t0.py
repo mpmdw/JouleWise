@@ -23,7 +23,12 @@ import time as _time
 from dataclasses import dataclass as _dataclass, field as _field
 from datetime import UTC as _UTC, datetime as _datetime
 from pathlib import Path as _Path, PurePosixPath as _PurePosixPath
-from typing import Any as _Any, Mapping as _Mapping, Sequence as _Sequence
+from typing import (
+    Any as _Any,
+    Callable as _Callable,
+    Mapping as _Mapping,
+    Sequence as _Sequence,
+)
 
 from joulewise import arm_readiness as _readiness
 from joulewise import calibration_ledger as _ledger
@@ -226,8 +231,27 @@ class _ProbeResult:
         }
 
 
+@_dataclass(frozen=True)
+class _DerivationClock:
+    monotonic_ns: _Callable[[], int]
+    utc_now: _Callable[[], str]
+
+
+def _production_clock() -> _DerivationClock:
+    """Return the ambient clock used by the production author."""
+
+    return _DerivationClock(
+        monotonic_ns=_time.monotonic_ns,
+        utc_now=_readiness._utc_now,
+    )
+
+
+def _default_derivation_clock() -> _DerivationClock:
+    return _production_clock()
+
+
 @_dataclass
-class _Context:
+class _DerivationContext:
     pack_root: _Path
     repository: _Path
     custody_root: _Path
@@ -239,10 +263,16 @@ class _Context:
     head_tree_oid: str
     boot_session_id: str
     boot_probe: _ProbeResult
+    clock: _DerivationClock = _field(default_factory=_default_derivation_clock)
     captures: dict[str, tuple[_Mapping[str, _Any], dict[str, str]]] = _field(
         default_factory=dict
     )
     values: dict[str, _Any] = _field(default_factory=dict)
+
+
+# Compatibility for focused tests and private callers written before the
+# context acquired its explicit clock.
+_Context = _DerivationContext
 
 
 @_dataclass(frozen=True)
@@ -456,7 +486,7 @@ def _capture(
         or value.get("boot_session_id") != context.boot_session_id
     ):
         raise _underivable(kind, f"{step_id} command capture fields are invalid or stale")
-    now = _time.monotonic_ns()
+    now = context.clock.monotonic_ns()
     if (
         value["finished_monotonic_ns"] > now
         or now - value["finished_monotonic_ns"] > _MAX_T0_SEQUENCE_AGE_NS
@@ -490,13 +520,14 @@ def _clock_attestation(
         if not isinstance(value.get(name), str) or not value[name]:
             raise _underivable(kind, f"independent-clock attestation {name} is invalid")
     observed = value.get("observed_monotonic_ns")
+    now = context.clock.monotonic_ns()
     if (
         value.get("boot_session_id") != context.boot_session_id
         or not isinstance(observed, int)
         or isinstance(observed, bool)
         or observed < 1
-        or observed > _time.monotonic_ns()
-        or _time.monotonic_ns() - observed > _MAX_T0_SEQUENCE_AGE_NS
+        or observed > now
+        or now - observed > _MAX_T0_SEQUENCE_AGE_NS
     ):
         raise _underivable(kind, "independent-clock attestation is stale")
     try:
@@ -1761,7 +1792,7 @@ def _authenticate_existing(
         derived[row_id] = item
     _validate_capture_order(context)
     _reauthenticate_artifacts(context, tuple(derived.values()))
-    now = _time.monotonic_ns()
+    now = context.clock.monotonic_ns()
     paths: list[str] = []
     for row in rows:
         row_id = str(row["row_id"])
@@ -1864,7 +1895,7 @@ def author_arm_readiness_evidence_t0(
     except _readiness.ArmReadinessError as exc:
         raise _refuse("AUTHORING_SET", "evidence_author_t0_pack_uncommitted", str(exc)) from exc
     boot_session, boot_probe = _boot_probe(repository)
-    context = _Context(
+    context = _DerivationContext(
         pack_root=root,
         repository=repository,
         custody_root=custody,
@@ -1902,8 +1933,8 @@ def author_arm_readiness_evidence_t0(
             raise _refuse(_ROW_KIND[row_id], "evidence_author_t0_internal_error", "deriver returned the wrong row/kind")
         derived.append(item)
     _validate_capture_order(context)
-    issued_at = _readiness._utc_now()
-    validity_origin = _time.monotonic_ns()
+    issued_at = context.clock.utc_now()
+    validity_origin = context.clock.monotonic_ns()
     sources: dict[str, bytes] = {}
     receipts: dict[str, bytes] = {}
     semantic: dict[str, _Mapping[str, _Any]] = {}
@@ -1955,7 +1986,7 @@ def author_arm_readiness_evidence_t0(
             pack_sha256=pack_sha,
             head_commit=head,
             boot_session_id=boot_session,
-            now_monotonic_ns=_time.monotonic_ns(),
+            now_monotonic_ns=context.clock.monotonic_ns(),
             include_pack=False,
         )
         if refusals or set(discovered) != set(semantic):
