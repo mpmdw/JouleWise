@@ -8996,3 +8996,59 @@ restated here). Cures fleet blocker L10-B1/L4 (the gamma claim edge).
 5. The consult's open rulings (prefill/floor/multiplicity finalization
    items) are carried on the work order's RULING-REQUIRED list; any that
    touch claim semantics surface to Ed with the Phase-1 close.
+
+### R1 RULED (magistrate synthesis of the rule-11 cold gate, 2026-08-15): freeze-evidence lifecycle — content-bound design ADOPTED WITH THE COMPOSED AMENDMENT SET
+
+Gate record (the ONE homes; not restated here):
+docs/process_traces/2026-08-15-r1-freeze-lifecycle-consult/ — consult.md
+(Sol design), coldgate-adjudicator-ruling.md (cold Fable:
+ADOPT-WITH-AMENDMENTS, 7 amendments), coldgate-opus-refuter-findings.md
+(Opus refuter: 3 blockers/3 should-fix/7 notes + the magistrate's rule-1
+verification note correcting B2's premise).
+
+**Ruling (rule-9 synthesis; the stricter seat prevails on every split):**
+1. The content-bound lifecycle design is ADOPTED with the taxonomy
+   SPLIT per Opus B1: RE_DERIVABLE (DOCTRINE_PIN, PACK_FAMILY —
+   re-derived at ARM, no stored validity at all) / EXECUTION_BOUND (the
+   execution-derived kinds — RETAIN boot binding + horizon until Ed's
+   execution-environment-fingerprint ruling lands, then migrate per
+   that ruling; nothing relaxes ahead of its governing decision) /
+   TIME_BOUND / SESSION_STATE_BOUND / TEMPORAL_CAPABILITY per the
+   consult. The cold adjudicator's central-claim finding is superseded
+   on B1's verified code evidence (unscrubbed subprocess env;
+   site-packages-dependent suite runs; live-import comparisons).
+2. Staleness gate = CHANGED-SET ENUMERATION (git diff
+   derivation_commit..HEAD against a governed, registry-pinned
+   irrelevant-path allowlist; complete by construction) as the primary
+   conjunct, dependency manifest as an additional conjunct, PLUS the
+   cold amendment-2 read-path routing obligation (every deriver read
+   routes through recording helpers, test-enforced). Magistrate
+   verification (custodied): TODAY neither head comparison nor manifest
+   replay executes on the evidence path — the design+amendments
+   strengthen an unbounded surface.
+3. TERMINAL_REVIEW binds head_tree_oid unconditionally; DRY_RUN keeps
+   D-134 cl.7 same-head verbatim; any head relaxation is per-policy-ID.
+4. Cold amendments 1,3,4,5,6,7 adopted in full (refusal vocabulary —
+   extended by Opus S3's fuller spelling set, all registered before
+   issuance; plan-tree enumerated-subtraction normalization; content
+   schema key hygiene; environment facts recorded now; grandfathering
+   prohibition into D-131 cl.4 text; validator-before-horizon-removal
+   ordering). Opus S2 adopted (class as code constant, author refuses
+   on registry mismatch). Opus N2 adopted (D-137 delta is labelled an
+   AMENDMENT with its zero-reach consequence stated). N7's
+   temporal-budget clarification adopted (evaluates the T-0 set
+   explicitly).
+5. NO GRANDFATHERING (both seats + contract text): the 33 expired v1
+   receipts are never revalidated; migration is fresh re-authoring
+   within the Phase-2 successor family, one atomic family transaction.
+6. Ed's reserved list = the union of both seats' lists (freshness
+   semantics per row; horizons + arm-to-consume budget; environment-
+   fingerprint comparison semantics; refusal-code spellings/types;
+   successor pack IDs + cross-chain numbering; freeze-receipt v2
+   predecessor bindings + family publication marker; the irreversible
+   successor-family publication and Phase-3 baseline identity — rule-11
+   irreversible triggers, Ed approval mandatory). Surface at the
+   batched session with the Phase-1 close.
+7. Execution: contract-text deltas + implementation ride the Phase-1/2
+   work orders under this ruling; every fix round carries C-028 delta
+   re-audits.
