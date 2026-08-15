@@ -1,0 +1,762 @@
+[
+ {
+  "lens_id": "L6-SEAM-READER-A",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 34,
+   "total": 40
+  },
+  "evidence_universe_count": 40,
+  "n_findings": 8,
+  "n_falsifiers": 5,
+  "work_orders": [
+   "WO-L6-1 (cures B1, part of S4): build scripts/capture_t0_step.py (or equivalent) that wraps each \u00a75C E-step command and writes its joulewise.arm_readiness_t0_command_capture.v1 JSON into arm_readiness.t0.inputs/ with the boot-bound monotonic fields, plus templates/authoring for clock-attestation.json, arm-context.json, launch-manifest.json; amend \u00a75C to name the directory and the nine files as an explicit E-step",
+   "WO-L6-2 (cures B2): add the governed freeze-refresh lane to \u00a74/\u00a75C \u2014 state plainly that PACK evidence is valid same-boot-session and 24 h from authoring, that ARM therefore requires the freeze lane re-run on the window day (re-author \u2192 re-freeze \u2192 commit \u2192 review \u2192 re-dry-run, in that order, before \u00a75A), and reconcile with the charter's final-head invalidation (the refresh commit defines the head the T-0 GO binds)",
+   "WO-L6-3 (cures S4): regenerate the arm packet from the baseline runbook after WO-L6-1/2 land; retire the 'expect a refusal unless \u00a70.6' row",
+   "WO-L6-4 (cures S2): commit stage-1 floor_mint_pin_requirements.v2 artifacts for alpha and beta (and the gamma consumer-pin requirements), or record a ruling that the packs' extraction specs + plan trees subsume stage 1 \u2014 either way make the mint or the close-out check their existence",
+   "WO-L6-5 (cures S3): make backup_runs.sh emit a hashed per-root backup receipt (or amend \u00a712 to match what the tool produces); optionally give the duration-margins receipt (N1) a consumer in the same close-out check"
+  ],
+  "ed_qualification_rows": [
+   "ED-QUAL-L6-1 (stable capability, any tap block): execute the T-0 authoring path live on the measurement Mac \u2014 once the B1 capture helper exists, run the six E-step captures + clock attestation + launch manifest into arm_readiness.t0.inputs/ and author_arm_evidence_t0.py end-to-end under real passwordless-sudo powermetrics (POWERMETRICS_PROBE) and real systemsetup state (CLOCK_PROBE), confirming all 15 receipts author and a same-boot `generate_arm_readiness.py arm` reaches row evaluation. This lens could only prove the refusal side (P3) from the sandbox; the PASS side of the arm-plane producer seam needs Ed's machine and sudo.",
+   "ED-QUAL-L6-2 (stable capability, desk, no sudo but Ed's checkout): one full freeze-refresh rehearsal timed against the 24 h/same-boot coupling of B2 \u2014 re-author pack evidence, re-freeze, commit, dry-run, and measure the wall-clock of the lane so the window-day schedule in the WO2 runbook amendment is grounded in an observed duration, not an estimate."
+  ],
+  "unexecuted_obligations": [
+   "Did not execute generate_arm_readiness.py freeze/dry-run/arm/consume as CLIs end-to-end (freeze mutates pack bytes; arm requires the B1 inputs that do not exist; tree had to stay byte-identical) \u2014 authentication internals were exercised by direct calls instead",
+   "Did not run the collection-plane producers live (run_campaign, validate_powermetrics_fiducial, reserve_calibration_window_bracket) \u2014 no live measurement permitted; their seams verified by contract+code reading only, deep audit owned by seats L2/L3/L4",
+   "Did not execute extraction\u2192mint on a synthetic window (seat L10's sacrificial lifecycle owns this); mint consumption verified by import/code reading only",
+   "Did not deep-trace the claims-index/claims-lint consumption seam beyond identifying producer and consumer files (post-paper plane, thinner risk)",
+   "Did not resolve whether the t0.ledger_reservation predicate's expected_plan_sha256 (pack plan_tree sha) and the reservation's FROZEN_PLAN sha are the same identity \u2014 flagged to seat L2 (calibration acquisition) rather than guessed",
+   "Could not read the FROZEN_PLAN/window.env instance (off-repo by design; none exists yet for the next window)"
+  ],
+  "findings": [
+   {
+    "severity": "blocker",
+    "title": "B1 \u2014 The T-0 evidence author's own inputs have no producer: no tool, no runbook step, no packet step",
+    "failure_scenario": "The funded night reaches \u00a75C's post-E-9 authoring step; author_arm_evidence_t0.py refuses evidence_author_t0_clock_attestation_missing (demonstrated live in probe P3) because nothing has created CUSTODY/PACK_ID/arm_readiness.t0.inputs/ \u2014 the author requires clock-attestation.json, arm-context.json, launch-manifest.json and six command captures (clock-prior-state, clock-disable, quiet-mac-prep, prewindow-check, ledger-readiness, ledger-reservation) as canonical JSON with boot-bound monotonic-ns fields no human can hand-produce; no repo tool writes joulewise.arm_readiness_t0_command_capture.v1 (grep: only the author itself references the schema), the runbook never names arm_readiness.t0.inputs, and the FINAL arm packet predates the author entirely. Night ends NO-GO \u2014 or worse, the operator hand-crafts nine JSON files at 2 a.m., the exact anti-pattern the readiness machinery exists to prevent.",
+    "file_line": "joulewise/arm_readiness_evidence_t0.py:42,132-139,506,556,601; docs/phase_2/window_runbook.md:812-827"
+   },
+   {
+    "severity": "blocker",
+    "title": "B2 \u2014 Committed freeze evidence is already past its 24 h monotonic horizon; every future window requires an undocumented full freeze-refresh lane",
+    "failure_scenario": "Live reading on the freeze boot session: now-monotonic 1,996,764 s > valid_until 1,986,799 s \u2014 all 11 generic PACK evidence receipts frozen 2026-08-13 are expired. generate_arm_receipt folds evidence expirations into the arm receipt's valid_until (min(...)), so any arm receipt issued now is expired at birth; verify/consume then refuse readiness_record_expired (arm_readiness.py:3952-3955). Cure = re-author 11 receipts + new freeze receipt + plan-tree re-pin + commit + review + fresh dry-run, same boot session as ARM and \u226424 h before it \u2014 a cycle no operative document names: \u00a74 presents freeze as 'before quiet time' desk work, \u00a75C's re-author rm covers only the two T-0 namespaces, and the reboot-fence paragraph says only 'generate new receipts'. Fails closed at every probe point, so no consumption unsoundness \u2014 but a required output (a valid GO arm receipt) currently has no producible path under the frozen packs + current runbook alone, and the refresh commits void the audit baseline per charter amendment 12.",
+    "file_line": "joulewise/arm_readiness.py:2943-2975,3712-3719; docs/phase_2/window_runbook.md:726-742,812-830"
+   },
+   {
+    "severity": "should_fix",
+    "title": "S2 \u2014 D-117 two-stage mint freeze: the stage-1 desk pin artifact (floor_mint_pin_requirements.v2) has no committed instance and nothing fails closed on its absence",
+    "failure_scenario": "DESIGN-MEMO \u00a7Two-stage mint freeze requires desk-time pins in a non-mintable pin_requirements.v2 artifact before collection; `git ls-files | grep pin_requirements` returns nothing, and the mint's only reference is a guard refusing it AS a pinset (mint_floor_artifact_generalized.py:1391-1392). A final pinset constructed entirely post hoc after the window would be mechanically indistinguishable from one honoring the two-stage freeze \u2014 the pre-registration value the ruling ordered is silently absent.",
+    "file_line": "scripts/mint_floor_artifact_generalized.py:1391-1392; docs/process_traces/2026-08-07-d117-plan-freeze/DESIGN-MEMO.md:368-403"
+   },
+   {
+    "severity": "should_fix",
+    "title": "S3 \u2014 \u00a712's postcollection backup receipts have no producer: backup_runs.sh emits no receipt and no hash",
+    "failure_scenario": "Close-out requires 'each successful postcollection backup receipt path and SHA-256 \u2026 separately for the claim and bound roots'; backup_runs.sh writes only an unhashed one-line backup.log entry and \u00a711 shows a single claim-root invocation. On the night the operator either cannot complete \u00a712 as written or improvises an unhashed record; nothing downstream gates on backup, so a failed backup surfaces only in the human record.",
+    "file_line": "scripts/backup_runs.sh:38-42,58-67; docs/phase_2/window_runbook.md:1475-1481,1518-1526"
+   },
+   {
+    "severity": "should_fix",
+    "title": "S4 \u2014 The FINAL arm packet (the operator's night document, cited by the audit-baseline manifest) is stale against the baseline runbook",
+    "failure_scenario": "The packet's E-9a jumps from E-9 straight to `generate_arm_readiness.py arm` with no T-0 authoring step, never mentions arm_readiness.t0.inputs, and still says 'Expect a refusal tonight unless \u00a70.6 has been resolved' \u2014 \u00a70.6 is resolved by the T-0 author at this baseline. An operator following the packet verbatim arms without authored T-0 evidence and gets a wall of readiness refusals with no packet row explaining them.",
+    "file_line": "~/JouleWise-window-custody/t4-session-20260810/arm-packet-alpha-FINAL-20260813.md:480 (off-repo custody)"
+   },
+   {
+    "severity": "nit",
+    "title": "N1 \u2014 window_duration_margins_receipt.v1 has no machine consumer; \u00a711 ordering is unenforced",
+    "failure_scenario": "Only scripts/record_window_duration_margins.py (writer) and tests reference the schema; extraction and mint proceed regardless. A tired operator who skips \u00a711 loses the comparative-cell margin record with no mechanical signal \u2014 discovered only if a human audits the close-out record.",
+    "file_line": "joulewise/window_duration_margins.py; scripts/record_window_duration_margins.py:19"
+   },
+   {
+    "severity": "nit",
+    "title": "N2 \u2014 PRIVILEGE_INSTALLATION evidence kind has no producer anywhere in the repo",
+    "failure_scenario": "Harmless while clock_route stays frozen at MANUAL (the four privilege.* rows evaluate NOT_APPLICABLE \u2014 confirmed in the P1 census); any future arm context using the clock-helper route makes four rows applicable with no production path, guaranteeing NO-GO with no tooling recourse. Record so the gap is chosen, not discovered.",
+    "file_line": "configs/arm_readiness/d117_row_registry_v1.json (privilege.* rows); joulewise/arm_readiness.py:2289-2303"
+   },
+   {
+    "severity": "nit",
+    "title": "N3 \u2014 The arm-time freeze-evidence replay skips the monotonic-horizon check; defense is one hop downstream",
+    "failure_scenario": "_freeze_evidence_for_arm authenticates freeze evidence with expected_boot_session_id but no now_monotonic_ns, so FREEZE_AND_ARM rows can show PASS from horizon-expired evidence inside the arm receipt; the expiry is enforced only via the valid_until min-fold plus verify/consume. Any future direct consumer of row verdicts (none today) would read PASS rows from expired evidence.",
+    "file_line": "joulewise/arm_readiness.py:2955-2960 vs 3712-3719,3952-3955"
+   }
+  ]
+ },
+ {
+  "lens_id": "L1-AUTHORITY-PLANE",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 20,
+   "total": 24
+  },
+  "evidence_universe_count": 24,
+  "n_findings": 8,
+  "n_falsifiers": 7,
+  "work_orders": [
+   "WO-L1-1 (blocker B1): ruled disposition for the expired pack freeze evidence \u2014 re-author evidence + reissue freeze receipts + re-pin plan trees + recommit on the production machine, or amend the evidence-validity design by decision (freeze-side evidence bound to boot session only, monotonic expiry reserved for arm-side); then re-pin the audit-baseline manifest per charter amendment 12 and re-discharge the \u00a75C committed-pack verification",
+   "WO-L1-2 (blocker B2): add WINDOW-COUNCIL-GATE to state_kernel.json active_global_gates (scope quiet_mac, allowed_task_ids [], authority = 2026-08-13 window-gating directive, clearance = council READY + T-0 GO); regenerate views; remove only on the council verdict",
+   "WO-L1-3 (blocker B3): kernel truth pass \u2014 bump updated, correct latest_report, reconcile D117-U11-IDPIN-PROJECTION and FLOOR-COMMONMODE-01 to landed/disposed reality, enroll WO-ARM-EVIDENCE-AUTHOR-01 / WO-COLLECTION-MARGIN-01 / WO-MINT-ESTIMATOR-VOCAB as kernel rows with satisfied evidence where landed, and demote the hand-written TASK_QUEUE sections to pointers at their kernel rows",
+   "WO-L1-4 (should-fix S1): build the D-118 PR gate-ledger mechanical lint in CI, or amend D-118 to state enforcement is procedural",
+   "WO-L1-5 (should-fix S3): add a dated supersession banner to FREEZE-FCM01.md citing the D-133 cl.4 execution ratification"
+  ],
+  "ed_qualification_rows": [
+   "ED-QUAL-L1-1 (stable capability, before the sitting): same-boot production replay of the freeze chain \u2014 run scripts/generate_arm_readiness.py verify against each pack's freeze receipt and scripts/project_identity_pins.py verify with the real model bytes on the production Mac (boot session da90818c-9c31-45d0-8813-deae65fba143). The sandbox cannot discharge this: model bytes are absent, so U11 refuses readiness_identity_artifact_unreadable (observed, fail-closed).",
+   "ED-QUAL-L1-2 (stable capability, after the B1 disposition is ruled): re-author the pack-side freeze evidence (scripts/author_arm_readiness_evidence.py), reissue freeze receipts, update plan-tree pins, and recommit on the production machine \u2014 must run there because evidence receipts derive kern.bootsessionuuid and monotonic time from the arming host; any reboot decision is Ed's."
+  ],
+  "unexecuted_obligations": [
+   "joulewise/arm_readiness_evidence.py (freeze-side evidence author, 1,781 lines) not read line-by-line \u2014 its outputs were authenticated via the replay/authentication code and executed suites, not its authoring logic",
+   "scripts/reserve_calibration_window_bracket.py not read \u2014 the ledger-reservation authority chain verified only at its consumption predicate (t0.ledger_reservation.v1 binding plan_sha256)",
+   "joulewise/identity_pins.py internals not line-read \u2014 verified via executed CLI probe and the 42-test suite",
+   "Full freeze-receipt semantic replay (_load_freeze_reference end-to-end) and dry-run receipt generation not executable in this sandbox (model bytes absent; evidence boot/monotonic-bound to the production machine) \u2014 deferred to ED-QUAL-L1-1",
+   "No automated staleness detector for kernel.updated was built; the truth check was manual"
+  ],
+  "findings": [
+   {
+    "severity": "blocker",
+    "title": "Frozen packs cannot arm: all 33 freeze evidence receipts have lapsed their monotonic validity on the un-rebooted arming machine",
+    "file_line": "configs/campaigns/*/arm_readiness.evidence/*.json; joulewise/arm_readiness.py:3710-3717,3948-3955",
+    "failure_scenario": "Ed attempts tonight's slipped Window ALPHA arm: generate_arm_receipt authenticates the pack freeze evidence (boot session matches \u2014 no reboot occurred), but the arm receipt's valid_until is min-inherited from evidence expirations that are already in the past (earliest 1986799611717708 ns vs live ~1997.9e12 ns), so verify_arm_receipt refuses readiness_record_expired and consume_launch_capability can never fire. The direction is correctly fail-closed, but the funded window is unlaunchable under the audited bytes; the recorded standing constraint ('NO REBOOT before T-0 or the evidence re-authors') is insufficient \u2014 no reboot happened and the capability still died of monotonic age from the window slip. Remedy (re-author evidence, reissue freeze receipt, re-pin plan tree, recommit) changes pack bytes, rotates the committed pack digests, and voids the audit-baseline manifest's pack digests under charter amendment 12 \u2014 the council must schedule this re-freeze before or at GO."
+   },
+   {
+    "severity": "blocker",
+    "title": "Authoritative work-selection state fails open for quiet-window selection: no council gate, and a superseded campaign renders READY [QUIET-MAC]",
+    "file_line": "docs/process/state_kernel.json (active_global_gates: []); RUN_STATE.md:3433",
+    "failure_scenario": "A successor session or tired operator obeys RUN_STATE's generated region, which today renders 'READY \u2014 Q2 P2-006: Window A two-model campaign' with zero active global gates \u2014 despite Ed's 2026-08-13 window-gating directive (windows sit behind the council verdict) and despite D-117 having superseded the Window-A program. A quiet night gets spent on a campaign whose outputs do not trace to the current claim path, bypassing the council gate entirely, because the gate exists only in decision-log prose while the kernel's purpose-built gate machinery (proven working by probe) carries no gate row. The actual funded program (three frozen D-117 packs) has no kernel row at all."
+   },
+   {
+    "severity": "blocker",
+    "title": "Work-selection authority is bifurcated: launch-blocking work orders live as hand-written prose outside the generated region while kernel rows assert falsehoods",
+    "file_line": "TASK_QUEUE.md:201,635,659 (outside markers 452-613); docs/process/state_kernel.json /tasks/D117-U11-IDPIN-PROJECTION",
+    "failure_scenario": "WO-MINT-ESTIMATOR-VOCAB, WO-COLLECTION-MARGIN-01, and WO-ARM-EVIDENCE-AUTHOR-01 ('LAUNCH-BLOCKING for any window night') were 'registered in TASK_QUEUE' as hand-written sections outside the marker-fenced generated region \u2014 invisible to gen_state --check and absent from the kernel, violating DOC-008's single-authority contract. Simultaneously the kernel's D117-U11-IDPIN-PROJECTION row still reads 'queued... Checked-in packs remain unprojected' at a head whose packs carry PASS projection and freeze receipts, and FLOOR-COMMONMODE-01 renders 'READY [AGENT]' despite its D-133 desk-thread disposition. A session trusting the declared AUTHORITATIVE_WORK_SELECTION_STATE misses launch-blocking obligations or resumes disposed work; a session trusting the prose contradicts the kernel."
+   },
+   {
+    "severity": "should_fix",
+    "title": "D-118's 'mechanical enforcement' of the merge gate ledger does not exist anywhere in the repo",
+    "file_line": "docs/decision_log.md:7753-7759; .github/workflows/ (no checker)",
+    "failure_scenario": "D-118 states 'every PR description must carry a GATE LEDGER... any item marked NOT-RUN blocks the merge' and frames this as mechanical, but grep finds no gate-ledger checker in CI or scripts \u2014 enforcement is agent discipline, the exact prose-only failure mode D-118's own trigger recorded. A PR merges on green CI with an incomplete ledger and nothing mechanical objects. (Contrast: D-121's terminal review IS machine-bound for windows via exact commit trailers \u2014 arm_readiness_evidence_t0.py:913-943.)"
+   },
+   {
+    "severity": "should_fix",
+    "title": "kernel.updated and latest_report are false, and no invariant forces them to move",
+    "file_line": "docs/process/state_kernel.json (updated: 2026-08-08; latest_report label: T3 2026-08-09)",
+    "failure_scenario": "The kernel says updated 2026-08-08 while its own row notes cite 2026-08-11/12 events, and latest_report describes the T3 2026-08-09 session six sessions ago; the validator checks only date format, so the render carries a false freshness signal that consumers use to weigh trust in the generated views."
+   },
+   {
+    "severity": "should_fix",
+    "title": "FREEZE-FCM01.md's standing prohibition was never amended after D-133 cl.4 executed the re-spec",
+    "file_line": "FREEZE-FCM01.md:1-8 (banner: 'Do not fix, do not consume, do not register in any pack')",
+    "failure_scenario": "The root-level FROZEN banner still bars pack registration of the estimator and says only Ed may relicense, while the frozen packs lawfully register d124_two_shared_edge_common_mode.v1 under Ed's later cl.4 EXECUTE ratification. A successor session reading the banner as binding either stalls the lane or concludes the packs violate a standing freeze order; the repo's own convention (dated supersession notes on consult docs) was not applied here."
+   },
+   {
+    "severity": "nit",
+    "title": "Frozen pack bytes still carry draft_status 'unfrozen_draft' \u2014 the M-2 scoped override remains the operative instrument indefinitely",
+    "file_line": "configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.json:793",
+    "failure_scenario": "No code consumes draft_status (verified by grep), so this is cosmetic, but because the bytes are now frozen the M-2 'until the generator fix lands' override can never be retired for these packs without a reissue; the \u00a75C human gate must permanently rely on the recorded override."
+   },
+   {
+    "severity": "nit",
+    "title": "gen_state invariant 8's D-041 authority binding is a label-substring match",
+    "file_line": "scripts/gen_state.py:372",
+    "failure_scenario": "The post-2M authority check passes if the string 'D-041' merely appears in the authority label; a mislabeled pointer to any document mentioning D-041 satisfies it. Low stakes \u2014 it is a lint over hand-written labels, not a gate."
+   }
+  ]
+ },
+ {
+  "lens_id": "L5-PACK-READINESS-CUSTODY",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 16,
+   "total": 18
+  },
+  "evidence_universe_count": 18,
+  "n_findings": 5,
+  "n_falsifiers": 8,
+  "work_orders": [
+   "WO-L5-1: Port the contrast test's __pycache__ exclusion (tests/test_d117_decode_contrast_plan.py:59-65) to both floor-pack plan tests, add a pack-pollution cleanup note to the runbook pre-arm section, and pull the CI log to determine how the failing modules reported green (if CI was red or skipped, record the process defect in the council log).",
+   "WO-L5-2: Close the preserve-mode --check echo hole: bind plan_tree bytes at freeze (receipt-side digest of plan_tree-minus-attachment, or projection-receipt-side) OR restore genuine regeneration comparison for the frozen packs' plan_tree/producer_contract members; regression-test with the F6 tamper shape.",
+   "WO-L5-3: Register the pre-arm sequence in RUN_STATE ED-OWED and the runbook D-117 amendment: advance the measurement checkout to the final reviewed head (>= ac3fe1d, contains the t0 author), re-execute the \u00a75C under-lease dry-run at that head under the night's custody root, and only then begin E-steps; annotate the freeze log's X-8 line with the staleness caveat."
+  ],
+  "ed_qualification_rows": [
+   "ED-QUAL-L5-1 (stable capability, any tap block): one non-window rehearsal of the t0 clock-attestation input handshake \u2014 Ed captures real `sudo systemsetup -getusingnetworktime` / `-setusingnetworktime off` outputs per runbook E-4/E-5 into a scratch arm_readiness.t0.inputs namespace and the lead validates them against the t0 author's capture validators (joulewise/arm_readiness_evidence_t0.py:838-861 _systemsetup_argv / _derive_clock_attestation). The authored tests use synthetic captures only; the first real sudo-output shape mismatch must not surface at T-0."
+  ],
+  "unexecuted_obligations": [
+   "CI log verification for the floor-pack plan-test shard (no network in the audit sandbox): whether #149's CI genuinely ran and passed tests.test_d117_floor_qwen25_{1p5b,7b}_plan \u2014 finding 1 makes this the highest-value follow-up; a refuter with network should pull the actions log.",
+   "Live execution of the arm-night receipt chain (generate_dry_run_receipt at the final head, author_arm_readiness_evidence_t0, generate_arm_receipt/verify/consume, U11 verify_frozen_projection with real model bytes): these require the measurement checkout at the final head, quiet machine, sudo captures, and custody writes \u2014 covered here only by the 58-test author/dry-run/lifecycle/integration suites and by code reading; they are the runbook's own T-0/lead work.",
+   "Deep line-level read of joulewise/identity_pins.py internals (1,900+ lines): audited via its 25 passing tests, the frozen projection receipts' byte/pin verification, and the plan-tree inventory falsifier (F2 catch layer), not a full read.",
+   "The arm-packet document under ~/JouleWise-window-custody/t4-session-20260810/ was located but not content-audited (seat 6-7 seam territory)."
+  ],
+  "findings": [
+   {
+    "severity": "should_fix",
+    "title": "Floor-pack plan tests self-pollute the frozen packs and fail deterministically from a clean tree; CI-green status unexplained",
+    "file_line": "tests/test_d117_floor_qwen25_1p5b_plan.py:30-35,259-264 (same pattern tests/test_d117_floor_qwen25_7b_plan.py:256)",
+    "failure_scenario": "python3 -m unittest tests.test_d117_floor_qwen25_1p5b_plan from a byte-clean tree: the module-import exec of the pack generator writes __pycache__/generate_configs.*.pyc INTO the frozen pack directory and the inventory test (rglob without a __pycache__ filter) fails \u2014 reproduced on python3.13 and CI's python3.11. Consequences: (a) the pack-integrity literal-pin layer (the main automated catch for committed plan_tree drift, per falsifier F6) is red or red-masked in CI \u2014 how #149 passed CI is unexplained and needs the CI log pulled; (b) any pre-arm plan-test run in the measurement checkout leaves __pycache__ inside the frozen pack, after which every committed_pack_tree_sha256 caller (t0 author, arm, consume) REFUSES 'untracked pack directory' until it is manually removed \u2014 a 3am tripwire (refusal executed live). The contrast test already carries the known fix (tests/test_d117_decode_contrast_plan.py:59-65, commit e286e75)."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Generator --check echo hole in preserve mode: plan_tree.json, plan_tree.sha256, producer_contract.json are compared against themselves",
+    "file_line": "configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py:1803-1813,1987-1998 (7B :2185-2193, contrast :1683-1697)",
+    "failure_scenario": "With PRESERVE_CURRENT_FROZEN_BYTES true (the current state of all three frozen packs), generate() echoes the on-disk plan_tree.json/plan_tree.sha256/producer_contract.json into the 'generated' output, so --check's regeneration-drift comparison is void for exactly the pack-authority root files while still printing 'verified'. Executed: a committed sidecar-consistent plan_tree science-row tamper passes --check AND the freeze-reference replay (F6); the D-134 freeze receipt binds calibration_plan, registry, and evidence but NOT plan_tree bytes. Remaining catches are the plan-test literal (compromised per finding 1), the off-repo baseline manifest, and merge review. Work order: bind a plan_tree digest at freeze (e.g., hash of plan_tree minus the receipt attachment, recorded in the freeze receipt or projection receipt) or restore genuine regeneration comparison for the frozen members of these files."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Pre-arm sequence unregistered: measurement checkout must advance and the \u00a75C dry-run must be re-executed at the final head (dry-run-0001 is stale by binding)",
+    "file_line": "RUN_STATE.md:67-70 (ED-OWED), docs/process_traces/2026-08-13-freeze-execution/freeze-log.md (X-8), joulewise/arm_readiness.py:3402-3425",
+    "failure_scenario": "The measurement checkout sits at 49dcc49, which predates the arm-critical t0 evidence author (#149/ac3fe1d) \u2014 arming there fails immediately (script absent). After updating it, _latest_dry_run_binding requires the dry-run receipt to bind the CURRENT reviewed head + committed pack digest; dry-run-0001 binds 49dcc49/6246b618\u2026 so any arm at the baseline head refuses readiness_dry_run_stale (mechanically fail-closed, verified in code). Neither RUN_STATE's ED-OWED line ('chained ALPHA arm if GO'), the 70h plan, nor the ED-QUALIFICATION script registers the required steps: (1) fetch/advance the measurement checkout to the final reviewed head containing the t0 author, (2) re-execute the \u00a75C under-lease dry-run there under the night's custody root, (3) then E-steps/t0/arm. The freeze log's X-8 wording ('the D-134 freeze + dry-run pair discharges the frozen readiness-validator role') invites an operator to believe the existing dry-run carries over; it does not."
+   },
+   {
+    "severity": "nit",
+    "title": "--check prints 'verified unfrozen draft' on frozen packs",
+    "file_line": "configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py:149-157,2168-2171",
+    "failure_scenario": "freeze_aware_status intentionally returns the byte-frozen legacy DRAFT_STATUS for the current frozen packs (M-2 byte preservation), so a frozen pack's successful check announces itself as an unfrozen draft \u2014 cosmetic operator-confusion risk already acknowledged by M-2 and alpha_arm_readiness.md."
+   },
+   {
+    "severity": "nit",
+    "title": "M-2 decision-log remedy wording diverges from the implemented preserve-bytes behavior",
+    "file_line": "docs/decision_log.md:8881-8891 vs docs/phase_2/alpha_arm_readiness.md:31-35",
+    "failure_scenario": "The decision log's remedy says the chain-fix batch 'regenerates the sidecar-consistent text via the canonical path', which reads as regenerating the frozen packs' text; the landed behavior (correctly) preserves frozen bytes and applies freeze-aware wording only to future packs, as alpha_arm_readiness.md states. A future session acting on the decision-log wording could try to rewrite frozen pack bytes; consistency-sweep material."
+   }
+  ]
+ },
+ {
+  "lens_id": "L2-CALIBRATION-ACQUISITION",
+  "verdict": "READY",
+  "coverage": {
+   "examined": 15,
+   "total": 16
+  },
+  "evidence_universe_count": 16,
+  "n_findings": 4,
+  "n_falsifiers": 4,
+  "work_orders": [
+   "WO-L2-1 (for L2-1): add a rigorous work budget to _accepted_region_projection (cell-count or wall bound); on exhaustion fail closed with a new detection reason (e.g. detection_nonconvergent -> status invalid, never a bound), and/or skip full-resolution projection entirely when clock anchor is unresolved (the artifact is already forced invalid \u2014 full-resolution region evidence buys nothing). Regression: replay the degenerate crash-matrix trace; the crash-matrix module then completes on any host.",
+   "WO-L2-2 (for L2-2): wrap the readiness/session-status/validate-slot dispatch in recover_calibration_ledger.py (and/or resolve_ledger_lease_identity) to convert missing-parent OSError into the registered physical_ledger_unreadable/unsafe_lock_inode refusal envelope so every diagnostic surface fails closed with a SS10 row.",
+   "WO-L2-3 (nit): scope the runbook SS5-amendment needs_pin_commit bullet to pre-reserve/terminal phases (pre-slot's ready state is physical_ahead by design).",
+   "WO-L2-4 (nit): document the reservation CLI's idempotent-resume output shape (status:reserved without a re-printed authorized event) in SS6."
+  ],
+  "ed_qualification_rows": [
+   "EDQ-L2-1 (stable capability): execute tests.test_calibration_writer_crash_matrix to completion on the quiet bench at the audit-baseline head and record pass + wall time. On the audited host it cannot complete (finding L2-1); CI exclusive-job green at the baseline head corroborates but a bench execution closes the row with local evidence.",
+   "EDQ-L2-2 (stable capability; runbook-mandated non-delegable): the SS5C lead live verification on the exact reviewed measurement checkout \u2014 frozen plan's literal readiness-validator command plus the complete under-lease synthetic rehearsal (real reservation CLI --execute + production writer lifecycle through BOTH slots against a synthetic root), requiring the D-134 dry-run receipt PASS/NOT_APPLICABLE with the reviewed HEAD + committed-pack digest. This audit replayed the equivalent in scratch; the runbook requires it on the production checkout with the frozen plan, which no sandboxed seat can perform."
+  ],
+  "unexecuted_obligations": [
+   "Full tests.test_calibration_writer_crash_matrix module on THIS host (16 tests; 6 executed locally, all governed-exit/lease/capability classes PASS): completion is blocked by finding L2-1's degenerate-cost case exceeding the harness's 600 s subprocess ceiling. Corroboration: CI runs it as a dedicated exclusive job (ci.yml:115) and PR #149 \u2014 the baseline head \u2014 merged green.",
+   "Two documented suite skips requiring lead-reviewed D-079 import fixtures at /private/tmp (absent here): test_production_path_authenticates_real_76_receipt_import_prefix, test_d079_issued_artifact_mode_is_deterministic_and_write_explicit.",
+   "calibration_ledger.py historical-import/bootstrap block (~lines 2205-2727) and snapshot/parse internals read behaviorally (their tests green), not line-by-line.",
+   "joulewise/calibration_bracketing.py evaluation half (evaluate_calibration_bracket, calibration_bracket_for_bundles) \u2014 L4 quantitative-pipeline seat's scope; only the acceptance-authentication half audited here.",
+   "Real-time-scale live writer run and sudo powermetrics behavior \u2014 hardware; ED rows / seat L3."
+  ],
+  "findings": [
+   {
+    "severity": "should_fix",
+    "title": "detect_pulses region projection has no work budget \u2014 non-termination on degenerate traces while holding the writer lease",
+    "file_line": "joulewise/powermetrics_fiducial.py:554 (_accepted_region_projection; FIT_HALF_RANGE_S=0.75 at :70, REGION_COVERAGE_RESOLUTION_S=0.0001 at :73); reached from scripts/validate_powermetrics_fiducial.py:1509",
+    "failure_scenario": "Quiet-window pre-calibration hits clock_anchor_unresolved (a recorded real production condition \u2014 runbook SS10/SS13.1) and the capture's loss surface is flat enough that the 1.5 s x 1.5 s rectangle bisected to 0.1 ms cells (~2.25e8 cells/pulse x 59 pulses) never prunes: the writer computes for hours holding the writer lease, the chain has no watchdog, the operator is forbidden to touch the machine (SS5C), and the funded window burns with no governed exit ever emitted; a consumed one-launch arm capability is lost with it. Witnessed 3x >600 s on this host with the repo's own crash-matrix fixture (SIGABRT stack captured inside _pulse_loss_cell_lower_bound) while a near-identical run finished in 10.7 s \u2014 unbounded, data-dependent cost on a refusal path. Consumption soundness is NOT affected (evidence already forced invalid; SIGKILL leaves a fail-closed pending/claimed state \u2014 proven by passing witness tests). Also blocks tests.test_calibration_writer_crash_matrix from completing on this audit host (its 600 s subprocess ceiling aborts)."
+   },
+   {
+    "severity": "should_fix",
+    "title": "readiness/session-status crash with an unregistered raw traceback when the ledger parent directory is missing",
+    "file_line": "joulewise/calibration_ledger.py:2885 (resolve_ledger_lease_identity parent .resolve(strict=True)) via writer_lease_is_live, uncaught in scripts/recover_calibration_ledger.py:412/:321 (only CalibrationLedgerError is caught)",
+    "failure_scenario": "Operator runs the SS5-amendment E-8 readiness command (or session-status) with $CALIBRATION_LEDGER mis-pointed at a path whose parent does not exist (typo, unmounted volume, fresh clone before any ledger exists): FileNotFoundError traceback, exit 1, no registered refusal code, no SS10 row \u2014 an unmapped failure that ends the night by SS5C rule 4 instead of a correctable governed refusal. Executed witness: E-8 before E-9 in a fresh scratch checkout crashes exactly this way, while E-9 then succeeds because the lease mkdirs the parent. Bounded: the frozen plan pins CALIBRATION_LEDGER to /Users/edr/code/JouleWise/runs/... which exists, so the documented night is unaffected; inspect handles the same state cleanly (genesis inspection)."
+   },
+   {
+    "severity": "nit",
+    "title": "Runbook needs_pin_commit bullet is unscoped vs the by-design PHYSICAL_AHEAD pre-slot relation",
+    "file_line": "docs/phase_2/window_runbook.md:421-423 vs joulewise/calibration_ledger.py:4949",
+    "failure_scenario": "SS5 amendment says 'Treat needs_pin_commit: true as desk work that ends a 2 a.m. attempt', but the pre-slot readiness (diagnostic and enforcing) reports needs_pin_commit=true whenever ready, because PHYSICAL_AHEAD is the REQUIRED mid-bracket relation (pin deliberately stays at the pre-reservation head until post finalization). A tired operator reading the bullet mechanically at pre-slot aborts every legitimate resume. The adjacent bullet (phase-appropriate pin relation) is correct; the needs_pin_commit bullet should be scoped to pre-reserve/terminal."
+   },
+   {
+    "severity": "nit",
+    "title": "Idempotent re-reservation returns status:reserved without re-printing calibration_pre_reserve_authorized",
+    "file_line": "scripts/reserve_calibration_window_bracket.py:172-201 (event printed only on ready readiness; fall-through resume path appends idempotently)",
+    "failure_scenario": "SS5C requires both the authorized event and status:reserved; after an accidental double-run of E-9 the second invocation (readiness blocked by the now-open session, session-status found, idempotent completed-op return) prints status:reserved with no authorized event \u2014 an operator matching the runbook's required markers sees a discrepancy on a harmless governed resume. Executed: rerun was byte-identical, exit 0. Runbook already forbids re-reservation on restart; document the resume output shape."
+   }
+  ]
+ },
+ {
+  "lens_id": "L3-CAPTURE-TELEMETRY-xhigh",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 25,
+   "total": 29
+  },
+  "evidence_universe_count": 29,
+  "n_findings": 5,
+  "n_falsifiers": 3,
+  "work_orders": [
+   "WO-L3-1: Add the detect-and-report post-teardown sampler census to the measured-run stop path (adapter stop_sampling_with_evidence/_take_measured_capture or controller finalization), mirroring scripts/validate_powermetrics_fiducial.py's _report_powermetrics_census, and record findings into bundle metadata so a mid-window orphan is at least detectable at reduce time. Keep detect-and-report-only semantics pending WO-SAMPLER-SUPERVISOR.",
+   "WO-L3-2: Fix docs/phase_2/ed-qualification-session.md Step 2 to name scripts/ed_session/sampler-checklist.sh as the checklist home (and either add the /tmp/ed-session staging step to the loop's prep or reference the repo path directly); align the module docstring pointer or restore an item list there.",
+   "WO-L3-3: Add a second short capture at -i 100 (production cadence) to scripts/ed_session/sampler-checklist.sh's cadence-record step, or explicitly annotate the row as supervision-only and move cadence currency to the T0 probes.",
+   "WO-L3-4 (nit-grade): sweep docs/paper/related_work_draft.md:19 boundary wording; rename or probe-derive samplers_available metadata."
+  ],
+  "ed_qualification_rows": [
+   "ED-L3-1 (stable): Live sudo/powermetrics checklist \u2014 run scripts/ed_session/sampler-checklist.sh (sudo -n grant, empty pre-census, supervised 5-sample capture under _sampler_lifetime, empty post-teardown census, cadence record, parse by the pinned parser). This is the long-owed row gating reliance on #127's production sampler commit (RUN_STATE 'ED-OWED' item 3). Close only after WO-L3-2/WO-L3-3 fix the checklist's documented home and add the 100 ms leg.",
+   "ED-L3-2 (stable): Live SIGTERM-relay termination \u2014 confirm on the current OS build that `sudo -n powermetrics` exits within the 10 s grace on SIGTERM to sudo (normal path) ; the executed falsifier F-B shows that if it ever does not, the SIGKILL escalation strands a root orphan no software census on the measured-run path detects. One observation, any tap block.",
+   "ED-L3-3 (stable): JW-MET-3 rail probe \u2014 scripts/ed_session/rail-probe.sh ABBA keyboard-backlight arms with --samplers battery,cpu_power,gpu_power,ane_power,thermal; documentation-grade rail-inclusion differential (the LED-outside-boundary verdict already stands on code evidence).",
+   "ED-L3-4 (stable, largely co-closed by ED-L3-1): Channel-census currency on the arm build \u2014 one live capture parsed by the pinned parser with hw_model/kern_osversion recorded and matched against the runbook's Mac15,9 / macOS 25F84 bindings; REOPENS on any OS update before the window (the parser is pinned to the Slice-2H fixture format; a format/unit change fails closed on rails but silently on units only if Apple kept mW fields parseable \u2014 currency is an empirical row, not a test-provable one)."
+  ],
+  "unexecuted_obligations": [
+   "tests/test_calibration_writer_crash_matrix.py NOT run at this seat (hosted-pathological per WO-CRASHMATRIX-RELIABILITY; a sibling seat was executing it live during my audit \u2014 concurrent duplicate execution would have contended; its writer-crash coverage is L2's scope).",
+   "No live sudo powermetrics execution of any kind (environment: no sudo, no live measurement) \u2014 everything privileged is emitted as ED-QUALIFICATION rows, none silently skipped.",
+   "joulewise/adapters/mock_telemetry.py not audited (not on the funded-window path; pack member verified pinning telemetry_backend=powermetrics).",
+   "scripts/ed_session/rail-probe.sh read for role, not line-audited (JW-MET-3 is documentation-grade).",
+   "quiet_guard.py / quiet_guard_process.py header-ruled out of this seat's scope (agent-session custody guard \u2014 seats 1/9 territory).",
+   "Rich-telemetry consumers (salvage_dangler.py, floors common-mode) and reducer integration internals corroborated only at the seam (reduce.py D-018 policy: only manifest rails summed, non-manifest rows ignored) \u2014 deep audit is L4's scope.",
+   "Long-stream soak of the admission stream cursor (_advance_stream_cursor over hours-scale files) not executed; covered by unit tests incl. the 64KiB-chunk large-stream test only."
+  ],
+  "findings": [
+   {
+    "severity": "should_fix",
+    "title": "Measured-run (adapter/controller) path has no post-teardown sampler census; kill-escalation orphan samples invisibly through the rest of a window",
+    "file_line": "joulewise/adapters/powermetrics.py:1655-1663 (_stop_process); contrast scripts/validate_powermetrics_fiducial.py:562-578 (_sampler_lifetime + census)",
+    "failure_scenario": "During a funded window, powermetrics hangs >10 s past SIGTERM at member k's stop; _stop_process SIGKILLs sudo, which cannot forward it; the root powermetrics survives (executed falsifier F-B), keeps sampling at 100 ms into an unlinked file, and loads the machine through members k+1..N and their idle baselines. Only the fiducial script has the #127 detect-and-report census; the controller path has none, and the arm-time T0 monitor census (arm_readiness_evidence_t0.py:1350) runs only at arm \u2014 nothing between members detects it, so contaminated bundles do NOT fail closed against consumption."
+   },
+   {
+    "severity": "should_fix",
+    "title": "ED-qualification Step 2 points at a checklist home that does not contain the checklist",
+    "file_line": "docs/phase_2/ed-qualification-session.md:18-19 vs scripts/validate_powermetrics_fiducial.py:1-27",
+    "failure_scenario": "The doc says the #127 reliance checklist 'items live in the sampler module docstring'; the current docstring carries only the UNSUPPORTED-scope statement (the round-2 rewrite dropped the round-1 checklist). The executable items actually live in scripts/ed_session/sampler-checklist.sh, and no staging step copying it to the referenced /tmp/ed-session/ path exists in the repo. At the single batched Ed session, the operator or the preparing loop follows the pointer, finds no items, and ED-QUALIFICATION rows get closed against an unenumerated or improvised checklist \u2014 corrupting the exact closure the council READY depends on."
+   },
+   {
+    "severity": "should_fix",
+    "title": "ED sampler checklist qualifies cadence at 1 Hz while every production surface runs 100 ms",
+    "file_line": "scripts/ed_session/sampler-checklist.sh:59,106-110 (-i 1000 -n 5) vs packs power_hz=10.0, powermetrics_fiducial.py:63 (SAMPLING_INTERVAL_MS=100), window_runbook.md:638",
+    "failure_scenario": "Step 2's 'record cadence observations' captures five 1000 ms intervals; the cadence row closes on 1 Hz evidence. The window then runs at 100 ms, where powermetrics' realized-interval behavior on the current OS build was never observed live; a post-update realized-cadence anomaly at 100 ms (elapsed_ns integration stays correct, but rollover-gate timing, drain budgets, and window sample-count planning assume ~100 ms) surfaces only inside the funded window."
+   },
+   {
+    "severity": "nit",
+    "title": "Post-JW-MET-1 residual: retained related-work draft still describes JouleWise with system-on-chip boundary language",
+    "file_line": "docs/paper/related_work_draft.md:19",
+    "failure_scenario": "JW-MET-1 narrowed all five draft-v1.md sites (31ccef5), but the retained draft's 'integrates named system-on-chip power channels' (subject: JouleWise) was not swept; a future paper train copying from the retained draft reintroduces the overbroad boundary claim. (Third-party descriptions of Silicon Showdown's whole-SoC boundary are correct and not affected.)"
+   },
+   {
+    "severity": "nit",
+    "title": "samplers_available metadata echoes the requested list rather than a probed census",
+    "file_line": "joulewise/adapters/powermetrics.py:1175-1179",
+    "failure_scenario": "After any rc-0 one-sample probe, device metadata reports samplers_available=[cpu_power,gpu_power,ane_power,thermal] with method='requested_sampler_probe'. A bundle auditor reads it as a probed census; if the thermal sampler were silently absent (thermal_pressure is optional in the parser), the metadata would still claim it available. The label is honest but the field name invites over-reading."
+   }
+  ]
+ },
+ {
+  "lens_id": "L7-SEAM-READER-B-EXECUTION",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 21,
+   "total": 25
+  },
+  "evidence_universe_count": 25,
+  "n_findings": 3,
+  "n_falsifiers": 7,
+  "work_orders": [
+   "WO-L7-1 (pre-arm, needs magistrate ruling): resolve the PACK-evidence horizon asymmetry \u2014 either pass now_monotonic_ns in _freeze_evidence_for_arm (then schedule the mandatory re-author + re-freeze ceremony before ALPHA arm, since all 33 receipts are lapsed) or document PACK-namespace valid_until as freeze-time-only semantics in the runbook \u00a75C and the receipt schema notes, with an explicit disposition recorded for the lapsed 08-13/14 receipts",
+   "WO-L7-2 (pre-arm, doc + checklist): add the explicit sequence to RUN_STATE/ed-qualification-session/runbook \u00a75C entry gate: (1) advance the measurement checkout to the final reviewed merged main (clean, exact match), (2) verify boot session unchanged (DA90818C...), (3) lead personally re-runs the \u00a75C dry-run at that head and requires a fresh PASS receipt binding the new head + new pack digest, (4) only then the E-steps; correct RUN_STATE's 'NO REBOOT preserves the frozen evidence' to name the dry-run staleness and the #149 pack-byte drift"
+  ],
+  "ed_qualification_rows": [
+   "ED-L7-1: prewindow_check.sh --wait to READY plus quiet_mac_prep.sh on the freed quiet machine (stable capability; my execution proves the gate correctly BLOCKS while any agent fleet runs, so READY can only be demonstrated in an Ed/quiet block)",
+   "ED-L7-2: fresh \u00a75C lead dry-run PASS at the final reviewed head on the measurement checkout \u2014 executes the real reservation CLI --execute and the production ledger-writer lifecycle through both slots under lease (the recorded dry-run-0001 is head-stale after any checkout advance; a new PASS receipt binding the final head/digest is required desk evidence before arm)",
+   "ED-L7-3: live sudo powermetrics fiducial calibration seam (validate_powermetrics_fiducial --allow-live producing instrument_evidence.json consumed by the chain's \u00a75B jq screen) \u2014 unexercisable without sudo + quiet machine; covered by the charter's sampler checklist but named here because it is the one producer->consumer edge in the \u00a76 chain I could not execute or observe in any test"
+  ],
+  "unexecuted_obligations": [
+   "Live capture path: validate_powermetrics_fiducial --allow-live, MLX member collection, --arm-quiet-mode display arming (no sudo / no live measurement in this sandbox) \u2014 ED rows",
+   "tests.test_calibration_exits (2,036 s) and tests.test_calibration_writer_crash_matrix (5,317 s) \u2014 CI-exclusive modules not re-run in this seat's budget; last known green on the #149 merge CI",
+   "The decisive full-fixture mint proof (replay_d117_decisive.sh / test_coordinated_report_and_pin_change_refuses_against_floor_evidence) \u2014 requires a GitHub release download; no network. Skip marker observed and documented in batch B",
+   "Whole-window verdict and extract_detection_floors CLIs against a real collected corpus (runs/ corpora are off-repo); exercised only through their test fixtures",
+   "reserve_calibration_window_bracket.py --execute against the production ledger (exercised only inside the dry-run generator and tests)",
+   "quiet_mac_prep.sh (mutates display state)",
+   "a9/a10 retained characterization basis \u2014 seat 11's scope, excluded from my universe count"
+  ],
+  "findings": [
+   {
+    "severity": "should_fix",
+    "title": "Frozen PACK-namespace evidence is consumed at arm/verify/consume without its declared monotonic horizon being checked \u2014 and all 33 frozen receipts' horizons have ALREADY lapsed",
+    "file_line": "joulewise/arm_readiness.py:2957 (also arm at 3628 and verify/consume at 3801 vs freeze-time enforcement at 3021-3027)",
+    "failure_scenario": "Council declares READY; Ed arms tonight on the un-rebooted machine. _freeze_evidence_for_arm re-authenticates the 33 pack evidence receipts by bytes + boot session only (now_monotonic_ns never passed), so the arm proceeds even though every receipt's valid_until_monotonic_ns lapsed ~2.8h before my probe (verified live: now=1.997e15 ns > valid_until=1.9868e15 ns on the same boot, 33/33 across the three packs). A later reviewer reading the receipt bytes finds attestations consumed past their own declared validity \u2014 the readiness chain is impeachable post-hoc, the exact 'output that neither traces cleanly nor fails closed' the charter hunts. Either the horizon must be enforced on the arm path (which then mandates a pre-arm re-author + re-freeze ceremony, since the current evidence is void) or PACK-namespace valid_until must be authoritatively documented as freeze-time-only semantics before any arm consumes these bytes."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Mandatory pre-arm sequence is undocumented: the runbook's E-step tool does not exist at the frozen measurement-checkout head, and advancing the checkout stales the recorded \u00a75C dry-run receipt",
+    "file_line": "docs/phase_2/window_runbook.md:805-838 (author_arm_evidence_t0.py E-step) vs `git ls-tree 49dcc49 scripts` (tool absent at the frozen head); RUN_STATE.md:31-33",
+    "failure_scenario": "The measurement checkout /Users/edr/JouleWise-measurement-20260813 sits at 49dcc49, where scripts/author_arm_evidence_t0.py (the mandated T-0 E-step, merged in #149) does not exist and the arm generator still carries the launch-blocking 15-row ARM_ONLY gap. Arming there refuses. Arming at the current reviewed head requires advancing the checkout \u2014 which by the runbook's own staleness rule (and test test_dry_run_becomes_stale_after_later_head) voids dry-run-0001 (head-bound to the 49dcc49-era head; pack digests drifted 6246b6...->f4c02c8a... because #149 edited all three packs' generate_configs.py). No standing doc (RUN_STATE T7, ed-qualification-session.md, 70h plan) states the required sequence: advance checkout to final reviewed main -> lead re-runs the \u00a75C dry-run to a fresh PASS receipt -> then E-steps. A tired operator following RUN_STATE's 'NO REBOOT preserves the frozen evidence' hits an unexplained refusal chain at night, or improvises."
+   },
+   {
+    "severity": "nit",
+    "title": "`joulewise reduce` writes its re-reduction artifact into the invoker's CWD by default",
+    "file_line": "joulewise/cli.py:1873-1875",
+    "failure_scenario": "Observed live: reducing a TMPDIR bundle from the repo root dropped example-mock-local.summary_metrics.rereduced.0.5.2.json into the checkout. An operator reducing from the measurement checkout would dirty it \u2014 and a dirty measurement tree is itself an arm refusal. The guard against writing inside the bundle exists; a default outside the current directory (or a required --output) would remove the pollution path."
+   }
+  ]
+ },
+ {
+  "lens_id": "L10-SACRIFICIAL-FULL-LIFECYCLE",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 15,
+   "total": 18
+  },
+  "evidence_universe_count": 18,
+  "n_findings": 5,
+  "n_falsifiers": 13,
+  "work_orders": [
+   "WO-1 (closes blocker F1): implement and land the D-117 analysis-manifest consumption edge before any window is spent \u2014 build_prospective_analysis_manifest_v3 / validate_prospective_analysis_manifest_v3 per the U7 spec (docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md \u00a7'Prospective analysis-manifest repair'), plus the postcollection-attachment finalizer (passed verdict sha, evaluation-basis sha, bracket-binding sha, terminal ledger head, aggregate floor-artifact sha) producing a manifest analyze-claims accepts, generalizing the final-v3 wire beyond its splitwise pins without changing splitwise bytes; add refusal regressions for missing/stale attachments",
+   "WO-2 (closes F2+F3): repair runbook \u00a711 \u2014 add --consumption-semantics-id d078_minted_envelopes_v1 to the extraction command, and replace --pack-identity \"$WINDOW_ID\" with the pack's plan-derived window_id literal (plan-d117-\u2026-v1) per pack, or define WINDOW_ID as that literal for D-134 nights in \u00a74",
+   "WO-3 (closes F4): close FLOOR-BIND-01 before gamma claim consumption, or obtain a prospective magistrate ruling licensing an L1-compatible cross-window floor-consumption procedure (recorded before the plan freeze, not improvised after collection)",
+   "WO-4 (nit F5): make backup_runs.sh exclude campaign_manifests/ from its bundle count or reword the operator-facing line"
+  ],
+  "ed_qualification_rows": [
+   "ED-L10-1 (stable capability, any tap block, no live measurement): one desk replay of the complete post-collection chain against a RETAINED real window corpus (a9/a10 custody, Ed-held off-repo) \u2014 whole-window verdict (expect passed), duration-margins recorder, backup, governed extraction with the matching spec and basis sha \u2014 pasting every command and exit code. This supplies the CLI-level PASSED-basis positive proof that no sandboxed desk rehearsal can produce, because a passing basis requires real calibration-bracket, NEG-8 corpus, and reference-triplet evidence that only a live sudo/powermetrics window can mint."
+  ],
+  "unexecuted_obligations": [
+   "\u00a79 D-100 salvage-dangler verdict dispatch (--consumption-semantics-id salvage_dangler_exclusion_v1 with membership binding + salvage closure) \u2014 not exercised at the CLI (no synthetic salvage closure); covered only by suite evidence",
+   "\u00a710 --record-supersession quarantine/supersession flow \u2014 not exercised at the CLI",
+   "v2 multi-cell aggregate mint route (--v2-input-manifest + schema_v2 pinset), the route the gamma consumption depends on \u2014 not exercised at the CLI; covered by tests/test_mint_floor_artifact_generalized.py (passed)",
+   "Waiver path: --waivers producing a 'flagged' verdict and extraction refusing the flagged basis \u2014 not exercised",
+   "CLI-level PASSED-basis end-to-end (verdict passed \u2192 margins PASS \u2192 extraction admitted \u2192 mint minted) \u2014 impossible from the desk without a real window corpus; see ED-QUALIFICATION row"
+  ],
+  "findings": [
+   {
+    "severity": "blocker",
+    "title": "Frozen packs' claim-consumption edge is unbuilt: analyze-claims refuses the packs' v3.prospective manifests, the U7-designed prospective builder/validator do not exist, and the final-v3 wire is hard-pinned to splitwise",
+    "file_line": "joulewise/analysis_engine/inputs.py:556-568; joulewise/analysis_manifest_v3.py:613,630-663; configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/analysis_manifest_v3.json:2",
+    "failure_scenario": "The funded gamma window collects clean, the verdict passes, alpha/beta floors mint into the aggregate \u2014 and the contrast claim cannot be consumed: analyze-claims refuses 'unsupported analysis manifest schema_version: joulewise.analysis_manifest.v3.prospective' (executed); validate_analysis_manifest_v3 hard-requires design_id splitwise_decode_cross_model_abba_v1, the splitwise generator path/plan sha, exactly two stages and n=10, so no hand-authored final D-117 manifest can validate either; grep finds zero implementations of the U7-specified build_prospective_analysis_manifest_v3 / validate_prospective_analysis_manifest_v3 and no postcollection-attachment finalizer; no TASK_QUEUE row tracks this edge. The window is spent and its REQUIRED OUTPUT cannot trace through a claim consumer without landing new code post-hoc, colliding with L1 same-session custody discipline."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Runbook \u00a711 extraction command as frozen refuses at argparse: --evaluation-basis-sha256 without the co-required --consumption-semantics-id",
+    "file_line": "docs/phase_2/window_runbook.md:1485-1491 vs scripts/extract_detection_floors.py:100-106",
+    "failure_scenario": "At close-out the operator pastes the literal \u00a711 command; it exits 2 with '--evaluation-basis-sha256 and --consumption-semantics-id are required together' (executed). A tired operator must improvise the exact semantics id (d078_minted_envelopes_v1) at 4 a.m. \u2014 precisely the hand-improvisation the runbook forbids elsewhere \u2014 or close-out stalls."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Runbook \u00a711 margins-recorder identity mismatch: --pack-identity \"$WINDOW_ID\" (window_a9_YYYYMMDD convention per \u00a74) can never satisfy the recorder's plan-derived window_id requirement",
+    "file_line": "docs/phase_2/window_runbook.md:1456-1461 (with \u00a74 window.env WINDOW_ID convention at line 186) vs joulewise/window_duration_margins.py:374-379",
+    "failure_scenario": "First \u00a711 command on the night: the recorder REFUSEs {reason: pack_identity_invalid} for any identity other than the pack plan-tree's window_id (executed with both the runbook-style id and the pack dirname; only plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1 advances). REFUSE stops close-out by \u00a711's own rule; the operator must reverse-engineer identity semantics mid-night."
+   },
+   {
+    "severity": "should_fix",
+    "title": "L1 same-custody-session limitation structurally conflicts with the three-window design's cross-session floor consumption; FLOOR-BIND-01 is READY but unclosed",
+    "file_line": "TASK_QUEUE.md:477 (L1 fence); docs/phase_2/window_runbook.md:61-66",
+    "failure_scenario": "Even with the manifest edge built, the gamma analysis must consume alpha/beta floor artifacts extracted and minted in EARLIER custody sessions; L1 ('claim-bearing analysis may consume floor artifacts only from same-custody-session governed extraction') renders that consumption non-claim-bearing until FLOOR-BIND-01 lands or a prospective ruling licenses an L1-compatible cross-window procedure. No such ruling or closure is scheduled before the windows."
+   },
+   {
+    "severity": "nit",
+    "title": "backup_runs.sh counts campaign_manifests/ as a bundle in operator-facing output (reported 5 bundles for a 4-member window)",
+    "file_line": "scripts/backup_runs.sh:25-36",
+    "failure_scenario": "\u00a712 requires member counts by distinct bundle ID; an operator cross-checking the backup line (5) against the member count (4) sees a discrepancy and burns close-out time chasing a phantom bundle. Cosmetic; the copy itself was complete and correct (executed)."
+   }
+  ]
+ },
+ {
+  "lens_id": "L4-quantitative-claim-pipeline",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 24,
+   "total": 27
+  },
+  "evidence_universe_count": 27,
+  "n_findings": 4,
+  "n_falsifiers": 4,
+  "work_orders": [
+   "WO-L4-1 (BLOCKER cure): teach joulewise/window_duration_margins.py to authorize governed-spec vocabulary for exactly the one plan-tree-pinned extraction-spec path before its authenticated read (mirror the mint's _allow_governed_extraction_spec single-path pattern; GAMMA analysis-manifest path must NOT be authorized), plus a committed census regression that reads the REAL frozen spec bytes from configs/floor_mint/ (read-only) so the synthetic-fixture/real-vocabulary seam can never silently diverge again; fix the misleadingly named test_census_discovers_all_three_real_floor_pack_cell_shapes to carry estimator/estimator_registration/calibration_basis fields. Full C-028 gauntlet; re-run the three_night_freeze_manifest 'D-133 item (1)' checklist row against frozen bytes, since its assertion was evidently never executed against them.",
+   "WO-L4-2: register and author the D-117 GAMMA frozen-v3 analysis-manifest production path \u2014 either generalize build_analysis_manifest_v3 over a pack-declared order/grammar or add a D-117-pinned builder \u2014 with the prospective manifest's contrast census (contrast IDs, members, config pins, metric) mechanically bound into the built manifest so pre-registration integrity is enforced by code, not operator discipline; sequence before the GAMMA window or as an explicitly registered post-window dependency with the re-run-decision implication stated.",
+   "WO-L4-3: add one mechanical close-out check to runbook section 11/12: the reported margin receipt's pack_tree_sha256 must equal the frozen pack's committed plan_tree.sha256 sidecar value (and record that comparison in the section-12 close-out fields); optionally have the recorder CLI print the plan-tree sha it bound so the check is a single diff.",
+   "WO-L4-4 (record-only): document that validate_floor_artifact numeric revalidation is defense-in-depth behind byte custody (one-ULP understatements pass _close); any new floor-artifact consumption path must bind file_sha256 like analysis_engine/artifact.py:943 or use the mint's exact-Decimal equality."
+  ],
+  "ed_qualification_rows": [
+   "ED-QUAL-L4-1 (network capability, not hardware/sudo \u2014 emitted so it is not silently skipped): execute scripts/replay_d117_decisive.sh at the audited head in any tap block with network \u2014 anonymous release download, digest gate, governed hydration, census byte-compare, then the single decisive no-skip mint test (~3h35m on the M3 Max). Stable evidence; closes the two skipped decisive tests and the full-fixture leg of the mint's exact-equality proof."
+  ],
+  "unexecuted_obligations": [
+   "Full canonical suite (python3 -m unittest discover -s tests) on BOTH interpreters at the baseline head \u2014 I executed 13 focused in-scope modules on python3.13 and 2 on python3.11; repo CI green at ac3fe1d corroborates the rest but is not my execution.",
+   "The decisive full-fixture production proof (scripts/replay_d117_decisive.sh; test_coordinated_report_and_pin_change_refuses_against_floor_evidence and the split-partition test, the 2 skips in my mint suite run) \u2014 requires network download of the custody-store release asset and ~3h35m; not executable in this no-network sandbox.",
+   "Deep line-audit of joulewise/reduce.py (3983 lines) and joulewise/whole_window.py (5348 lines) beyond interface depth \u2014 covered by their full test modules (123/15/56 OK), by the margin recorder's live reuse of reducer internals, and by the verdict-writer/basis-reader seam check I did execute; the numeric interior was not line-read.",
+   "End-to-end synthetic collected-window rehearsal through reduce -> verdict -> mint -> claim consumption \u2014 seat 10's charter (SACRIFICIAL FULL LIFECYCLE); not duplicated here. Note seat 10 must expect my finding 1 to fire if its rehearsal includes the section-11 margin step on a registration-bearing spec.",
+   "MET-VERDICT-ADJ-01 adjudication status of the whole-window verdict machinery \u2014 historical gate, not re-adjudicated by this seat."
+  ],
+  "findings": [
+   {
+    "severity": "blocker",
+    "title": "Margin recorder cannot read the re-specced frozen floor-pack extraction specs \u2014 ALPHA/BETA close-out halts deterministically at runbook section 11",
+    "file_line": "joulewise/window_duration_margins.py:897 (session) + :394 (spec read); cause joulewise/authentication_io.py:179,214; missing authorization mirror of scripts/mint_floor_artifact_generalized.py:1758-1759,3683",
+    "failure_scenario": "A funded quiet window collects ALPHA cleanly; the operator runs the exact runbook section-11 command; the recorder opens its V2AuthenticationReadSession and reads the pack-pinned spec, which since the D-133 cl.4 re-spec carries estimator_registration in all comparative cells; the session's reserved-vocabulary rule refuses (executed: REFUSE authoritative_input_invalid, exit 2, no receipt); 'REFUSE stops close-out without writing a receipt' \u2014 backup/extraction never run under the mandated order, the window cannot be called claim-bearing, and the standing constraint 'collection close-out gates on the WO-COLLECTION-MARGIN-01 receipt' is unsatisfiable on every attempt. Only the mint authorizes governed-spec vocabulary (allow_governed_extraction_spec); the recorder never does. The committed census tests (tests/test_window_duration_margins.py:213,514) model 'real floor pack cell shapes' WITHOUT the estimator vocabulary, so the suite is green while the real seam is broken \u2014 the charter's producer-gap type specimen."
+   },
+   {
+    "severity": "should_fix",
+    "title": "GAMMA contrast both-gates consumption route is unbuilt: prospective manifest refused by the loader, sole frozen-v3 builder hard-pinned to the splitwise campaign",
+    "file_line": "joulewise/analysis_manifest_v3.py:34,48,441-447 (ROOT_ORDER_SHA256 splitwise pin, swdec-contrast run-id grammar, 40 entries) vs configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1 (80 rows, d117c15v7-* ids); joulewise/analysis_engine/inputs.py:554-569",
+    "failure_scenario": "After a funded GAMMA window, no committed code can produce the frozen v3 analysis manifest the engine requires: load_manifest refuses joulewise.analysis_manifest.v3.prospective (correctly), build_analysis_manifest_v3 refuses the GAMMA order manifest (wrong pinned sha, wrong run-id grammar, 40 vs 80 entries), and zero production code references the d117c15v7 grammar. The funded p256 contrast \u2014 the reason the packs re-specced to the 1.869502 J floor \u2014 cannot mechanically reach evaluate_claim's both-gates logic; the between-window re-run decision for GAMMA cannot be made on claim outcomes inside the span. Fails closed (no wrong consumption possible), but the missing builder must be registered and its pre-registration binding (prospective contrast census mechanically bound into the built manifest) designed before the GAMMA window."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Margin-receipt consumption never mechanically binds to the FROZEN pack: a repinned truncated pack yields a plausible PASS and the receipt validator accepts a truncated sha-repaired receipt",
+    "file_line": "joulewise/window_duration_margins.py:988 (validator proves internal consistency only); docs/phase_2/window_runbook.md:1449-1473,1536 (close-out records path+SHA, no pack-binding cross-check)",
+    "failure_scenario": "Executed F3-B/F3-C: a pack root whose spec, plan_tree, and sidecar are consistently re-pinned after dropping a comparative cell produces a PASS receipt over the truncated census, and a post-hoc truncated receipt with recomputed cell_inventory_sha256 passes validate_window_duration_margins_receipt. Both leave fingerprints (pack_tree_sha256/registry_source_sha256 differ from the frozen pack), but no close-out step compares them to the frozen pack's committed plan_tree.sha256 \u2014 a tired operator pointing --pack-root at a stale draft copy (the registered F-C/F-F CUSTODY_ROOT-ambiguity family makes this realistic) gets a plausible PASS bound to the wrong census, and close-out proceeds."
+   },
+   {
+    "severity": "nit",
+    "title": "validate_floor_artifact's recomputation tolerance accepts a one-ULP-understated floor; tamper-evidence rides on byte custody, not numeric revalidation",
+    "file_line": "joulewise/detection_floor.py:2021 (_close, min(~1e-12 relative, 1e-6)); enforcing layers scripts/mint_floor_artifact_generalized.py:2484-2490 (exact Decimal) and joulewise/analysis_engine/artifact.py:943 (file_sha256 binding)",
+    "failure_scenario": "Executed: a one-ULP downward perturbation of the committed mint1 artifact's comparative floor passes validate_floor_artifact with zero errors. Not exploitable end-to-end today because the mint's postcollection/binding equalities are exact-Decimal (refused all my floor-value ULP attacks) and every claim-side consumption re-authenticates artifact bytes against a bound sha256 \u2014 but nobody should ever cite validate_floor_artifact alone as tamper-proofing, and any future consumption path that skips the sha binding would inherit a ~1.9e-12 J silent understatement window."
+   }
+  ]
+ },
+ {
+  "lens_id": "L9-environmental-controls-census",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 14,
+   "total": 16
+  },
+  "evidence_universe_count": 16,
+  "n_findings": 8,
+  "n_falsifiers": 4,
+  "work_orders": [
+   "WO-L9-1: Re-shape t0.background_quiet's MAINTENANCE_CENSUS from absence-required pgrep to an activity-based census (CPU-threshold like prewindow_check's, or a curated transient-only process list). This weakens a probe, so it needs a magistrate/cold ruling; include a regression fixture built from the real resident-process table (ED-Q-L9-3) so CI can no longer pass on faked-empty pgrep output.",
+   "WO-L9-2: Fix PROCESS_CENSUS browser and monitor patterns (anchor tokens; exclude permanent daemons watchdogd/watchlistd/Safari support agents, or move to activity-based). Keep the keep-awake and agent probes byte-identical \u2014 both verified effective live.",
+   "WO-L9-3: Align prewindow_check.sh check #8 with the T-0 agent census (add claude|codex mcp|t3), so E-7b READY cannot be granted with agents running.",
+   "WO-L9-4: Author the one-home hazard register with per-hazard disposition (controlled / censused / DOCUMENTED-UNCONTROLLED), adding the absent rows: Wi-Fi/Bluetooth radios, notifications/media devices, external peripherals, concurrent users/remote sessions, third-party LaunchAgents, ambient temperature, battery charge state, lid state, and the mid-workload contamination residual; wire that residual into the paper's limitation text."
+  ],
+  "ed_qualification_rows": [
+   "ED-Q-L9-1 (staged): JW-MET-2 System Settings keyboard-backlight census \u2014 level 0, auto-adjust off, inactivity Never, verification=operator_visual (ed-qualification-session.md step 4; no CLI exists for the level, operator visual is the only probe)",
+   "ED-Q-L9-2 (staged): JW-MET-3 keyboard-backlight rail-inclusion differential probe \u2014 sudo powermetrics ABBA max/off arms (ed-qualification-session.md step 3; documentation-grade, boundary verdict already stands on code evidence)",
+   "ED-Q-L9-3 (new, stable capability, no sudo): quiet-state resident-process baseline \u2014 with all fleets/agents closed on the real machine, capture the four PROCESS_CENSUS and one MAINTENANCE_CENSUS pgrep outputs and commit them as the regression fixture that the WO-L9-1/2 pattern fixes must pass against; this is the only way to prove the fixed censuses PASS in the state they will actually run in"
+  ],
+  "unexecuted_obligations": [
+   "quiet_mac_prep.sh full execution (quits user apps and sleeps the display \u2014 not sandbox-safe from an agent session; step-7 probes replicated read-only instead)",
+   "--arm-quiet-mode live re-probe path inside run_campaign (requires display sleep + live campaign; code path read, not run)",
+   "sudo-gated probes: systemsetup -getusingnetworktime read, sudo -n powermetrics (no sudo in sandbox; covered by capture lens + ED rows)",
+   "quiet_guard engine internals (Commit-1 is contractually inactive and non-armable; contract read, engine not audited)",
+   "whole_window.py adapter-wattage-continuity and controller.py enforcement wiring examined at grep/inventory level only",
+   "full audit of tests/test_arm_readiness_evidence_t0.py fixtures beyond confirming the probe executor is faked with empty-pgrep results"
+  ],
+  "findings": [
+   {
+    "severity": "blocker",
+    "title": "t0.background_quiet (MAINTENANCE_CENSUS) is unpassable on the real machine \u2014 arm always refuses",
+    "file_line": "joulewise/arm_readiness_evidence_t0.py:963-980",
+    "failure_scenario": "ALPHA arm night: agents closed, machine genuinely quiet. author_arm_evidence_t0.py runs _maintenance_probe; pgrep -lf matches permanently resident Spotlight.app, mds_stores, XProtect XPC services, mediaanalysisd, photoanalysisd, softwareupdated, backupd-helper (~20 matches observed live); _expect_absent raises underivable \u2192 no T-0 evidence \u2192 no arm receipt \u2192 NO-GO on every attempt. Fail-closed (no false data risk) but the window can never launch. CI never saw this: tests fake the probe executor with exit_code=1 (tests/test_arm_readiness_evidence_t0.py:561)."
+   },
+   {
+    "severity": "blocker",
+    "title": "t0.no_stray_keepawake (PROCESS_CENSUS) is unpassable \u2014 browser/monitor patterns match permanent system daemons",
+    "file_line": "joulewise/arm_readiness_evidence_t0.py:1344-1360",
+    "failure_scenario": "Same arm night: 'Safari|...' matches 9 always-resident Safari LaunchAgents with Safari closed; 'watch' substring in the monitor pattern matches watchdogd (permanent) and watchlistd. _expect_absent refuses \u2192 arm NO-GO forever. The keep-awake (pgrep -x caffeinate) and agent (codex|claude|t3) probes are correct and verified effective live; only the browser and monitor patterns over-match."
+   },
+   {
+    "severity": "should_fix",
+    "title": "prewindow_check.sh agent census misses claude / codex mcp-server / t3 \u2014 printed OK while three agent processes were live",
+    "file_line": "scripts/prewindow_check.sh:155",
+    "failure_scenario": "E-7b: operator runs the frozen prewindow_check --wait believing it certifies the agent-free \u226510-minute idle; pattern 'codex exec|codex-run|run_campaign|window-chain' matches none of the actual agent processes (observed live: OK printed with a claude session, codex mcp-server, and caffeinate running), so READY can be granted on an agent-contaminated machine; the only enforcing catch is PROCESS_CENSUS minutes later at T-0 authoring."
+   },
+   {
+    "severity": "should_fix",
+    "title": "No single-home hazard register; consult-mandated hazards entirely absent: radios, notifications, peripherals, remote sessions, third-party LaunchAgents",
+    "file_line": "docs/phase_2/window_runbook.md:1160 (\u00a77, nearest anchor \u2014 the register is distributed)",
+    "failure_scenario": "Charter amendment 8 (from the consult's minimum list) requires rows for network/Bluetooth radios, notifications/media devices, external peripherals, concurrent users/remote sessions. None exists anywhere: live machine shows 3 login sessions (who), 14 third-party launchd jobs including the periodic us.zoom.updater, and active radios \u2014 a Zoom updater firing mid-member during the workload phase is invisible to every gate (CPU admission is pre-run idle-baseline only) and is bounded only at window scale by NEG-8 references; today that residual is not even documented as uncontrolled."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Mid-workload background contamination has no member-level detector and no documented disposition",
+    "file_line": "joulewise/idle_admission.py:392-467",
+    "failure_scenario": "evaluate_cpu_idle_admission gates the PRE-RUN idle baseline (p95 combined power \u2264 1.0 W); environment re-probes bracket but do not cover the workload phase. A one-shot daemon burst inside a member's measurement phase silently inflates that member's energy; only window-scale drift (NEG-8 triplet/midpoint) can catch a sustained version. This is a legitimate design tradeoff under the D-078 attribution limit \u2014 but it must be a DOCUMENTED-UNCONTROLLED register row and a paper limitation, not silence."
+   },
+   {
+    "severity": "nit",
+    "title": "JW-MET-2's four census literals have no named custody destination in the \u00a712 close-out list",
+    "file_line": "docs/phase_2/window_runbook.md:1509-1544",
+    "failure_scenario": "Operator records keyboard_backlight.level=0 etc. per \u00a75A but \u00a712 never enumerates where they land; a close-out can be 'complete' without them, weakening the JW-MET-2 audit trail."
+   },
+   {
+    "severity": "nit",
+    "title": "Battery charge state is censused but has no gate or disposition",
+    "file_line": "joulewise/arm_readiness_evidence_t0.py:1457-1498",
+    "failure_scenario": "POWER_PREFLIGHT passes with is_charging=true; charging mid-window adds SMC/charger thermal load that differs from the not-charging state a bound corpus may have been minted under \u2014 an uncontrolled, undocumented within-window state change."
+   },
+   {
+    "severity": "nit",
+    "title": "Lid state is operator-discipline only, never probed",
+    "file_line": "docs/phase_2/window_runbook.md:42",
+    "failure_scenario": "A lid change alters the thermal envelope mid-window; only the downstream thermal-pressure gate would notice, and only if pressure leaves Nominal."
+   }
+  ]
+ },
+ {
+  "lens_id": "L8-OPERATOR-RECOVERY-HUMAN-FACTORS",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 21,
+   "total": 24
+  },
+  "evidence_universe_count": 24,
+  "n_findings": 15,
+  "n_falsifiers": 8,
+  "work_orders": [
+   "WO-L8-1: Ship the operator capture wrapper \u2014 a tracked script that runs each E-step command, records the byte-canonical capture JSON (argv/cwd/exit/stdout/stderr/started+finished_monotonic_ns/boot_session_id, exact _COMMAND_SCHEMA) plus clock-attestation.json, arm-context.json and launch-manifest.json into ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.t0.inputs/ \u2014 and rewrite runbook \u00a75C E-4\u2026E-9 to use it; without it the fifteen-row author cannot be honestly satisfied and invites hand-forged monotonic timestamps",
+   "WO-L8-2: Give prewindow_check.sh --wait a minimum-wall-clock floor (refuse READY before 600 s) so the frozen E-7b literal can actually prove the \u226510-minute idle the T-0 author enforces; re-freeze the command literal afterward",
+   "WO-L8-3: Resolve the CLOCK_PROBE privilege route (scoped sudoers read entry or documented sudo -v warm-up) and rehearse it (ED-Q-L8-1)",
+   "WO-L8-4: Re-freeze the ALPHA pack at the final audited head (current freeze-0001.json is pre-#149 schema bound to the 2026-08-13 measurement tree \u2192 every arm refuses readiness_freeze_receipt_mismatch), and obtain the magistrate ruling on the pack's 'unfrozen draft / not armable' self-description (packet M-2/D-13)",
+   "WO-L8-5: Recut the FINAL arm packet at the final head \u2014 its tap script omits T-0 authoring, the 20-minute volatile horizon, the 5-minute arm-receipt fuse and the re-author rule; include paste-ready E-9a/b/c literals (arm-context via $(cat \u2026/arm-context.json)), and a date(1) one-liner for the E-14 do-not-return-before time",
+   "WO-L8-6: Make runbook \u00a74/\u00a76 templates byte-consistent with the T-0 author contract: window.env must carry literal (no-$) values including CUSTODY_ROOT, CLAIM_BACKUP_DEST, BOUND_BACKUP_DEST; FROZEN_PLAN must be the pack's calibration_plan.json; the chain REPO line must be the bare reviewed-checkout literal (the ${MEASUREMENT_REPO:-\u2026} fallback fails the author's exact-binding regex) \u2014 or generate window.env/window-chain.zsh mechanically from the pack",
+   "WO-L8-7: Machine-enforce the launch license: window-chain.zsh preamble (or the first claim consumer) must require the matching arm_readiness.consumptions receipt for this pack/boot before proceeding \u2014 today a launch with zero arm ceremony runs a normal-looking window and nothing downstream reads the consumption namespace",
+   "WO-L8-8: Replace the re-author /bin/rm -r prose with a governed `reauthor-clean` operation that verifies the two T-0 namespace shapes before deleting"
+  ],
+  "ed_qualification_rows": [
+   "ED-Q-L8-1 (sudo): decide and prove the privileged read path for the T-0 CLOCK_PROBE \u2014 either a scoped read-only sudoers entry for `/usr/sbin/systemsetup -getusingnetworktime` or a ratified `sudo -v` warm-up literal immediately before the T-0 author \u2014 and exercise it once in a tap block; D-004's powermetrics-only NOPASSWD plus a >10-min-cold sudo timestamp otherwise guarantees an authoring refusal at night",
+   "ED-Q-L8-2 (sudo + Ed): full arm-sequence dress rehearsal on the recut packet \u2014 E-4\u2192E-9 under the capture wrapper, T-0 authoring, arm\u2192verify\u2192consume against scratch custody/synthetic roots, with a real \u226510-minute prewindow wait \u2014 timed against the 20-minute volatile horizon and 5-minute arm-receipt fuse",
+   "ED-Q-L8-3 (sudo, already chartered as steps 2-3): live sampler-checklist and keyboard-backlight rail-probe executions on a quiet machine (dry-run staging verified in this audit; the live arms and teardown censuses still need sudo)",
+   "ED-Q-L8-4 (sudo): live quiet_mac_prep.sh run to confirm its three OK literals (passwordless powermetrics, displays asleep, screensaver disengaged) match what the T-0 author's _quiet_capture requires verbatim"
+  ],
+  "unexecuted_obligations": [
+   "scripts/quiet_mac_prep.sh live execution (transient display sleep + sudo -n powermetrics probe) \u2014 static review only; live run needs sudo and violates the quiet-machine/agent boundary",
+   "Live sudo paths of rail-probe.sh and sampler-checklist.sh (the actual ABBA captures and supervised 5-sample check) \u2014 no sudo in this sandbox; ED-QUALIFICATION rows",
+   "E-9 reservation behavior against a ledger copy (double-reserve, live-writer refusals) \u2014 code-read and shipped-test evidence only; primary ownership is the L2 seat",
+   "Runbook \u00a710 refusal-row completeness for the 2am operator (packet O-9's missing one-page extract) \u2014 read but not row-by-row audited; flagged to L2/L6/L7",
+   "Morning \u00a79/\u00a711 magistrate procedures beyond ordering review \u2014 L10 sacrificial-lifecycle scope",
+   "The real dry-run receipt and skeleton in ~/JouleWise-window-custody were read but deliberately not touched or re-verified in place"
+  ],
+  "findings": [
+   {
+    "severity": "blocker",
+    "title": "No shipped producer for the T-0 input files the evidence author requires",
+    "file_line": "joulewise/arm_readiness_evidence_t0.py:448-499,595-724 vs docs/phase_2/window_runbook.md:802-838",
+    "failure_scenario": "Ed completes E-4\u2026E-9 exactly as the runbook/packet write them, runs the T-0 author, and gets REFUSE evidence_author_t0_clock_attestation_missing (executed): the author consumes nine byte-canonical JSON inputs (six command captures with monotonic timestamps + clock-attestation + arm-context + launch-manifest) that no tool, no runbook step, and no packet step produces; the only 2am path forward is hand-fabricating canonical JSON with invented monotonic_ns values, which the receipts cannot distinguish from honest capture"
+   },
+   {
+    "severity": "blocker",
+    "title": "The frozen E-7b command cannot prove the \u226510-minute idle the author enforces",
+    "file_line": "scripts/prewindow_check.sh:36-37,177-198 vs joulewise/arm_readiness_evidence_t0.py:49,954-957 vs runbook:366-373,780-789",
+    "failure_scenario": "On a well-prepared (clean) machine, `prewindow_check.sh --wait` exits READY after 3 checks \u00d7 30 s \u2248 61 s (per-check cost measured at 0.156 s); the T-0 author refuses any prewindow capture shorter than 600 s, so the better Ed prepares the machine the more certainly authoring refuses \u2014 and if the author did not enforce it, the window would launch into the XProtect idle-daemon band that cost window a9's first member, now unrecoverable because the one-launch capability makes relaunch a newly frozen session"
+   },
+   {
+    "severity": "blocker",
+    "title": "CLOCK_PROBE needs sudo -n systemsetup, which D-004's powermetrics-only sudoers cannot satisfy",
+    "file_line": "joulewise/arm_readiness_evidence_t0.py:884-905; docs/decision_log.md:316; runbook:509-514",
+    "failure_scenario": "At authoring time (>10 min after E-4/E-5 because E-7b's wait sits between), the interactive sudo timestamp is cold and the sudoers NOPASSWD entry covers only /usr/bin/powermetrics, so the fresh `sudo -n systemsetup -getusingnetworktime` probe exits nonzero \u2192 clock.network_time_off underivable \u2192 author REFUSE \u2192 no GO receipt, with no documented recovery at night"
+   },
+   {
+    "severity": "blocker",
+    "title": "Committed freeze receipt is stale \u2014 the ALPHA pack cannot arm at the audit baseline",
+    "file_line": "configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json (pack_identity.pack_root=/Users/edr/JouleWise-measurement-20260813/\u2026) vs joulewise/arm_readiness.py:3604-3610",
+    "failure_scenario": "Executed: every `generate_arm_readiness.py arm` invocation at the baseline head refuses readiness_freeze_receipt_mismatch before row evaluation, because freeze-0001.json binds the pre-#149 measurement-tree pack identity while the committed digest is now f4c02c8a\u2026; the pack also still self-describes 'unfrozen draft / not armable' (M-2), which \u00a75C's entry gate treats as NO-GO \u2014 a re-freeze plus magistrate ruling must precede any night"
+   },
+   {
+    "severity": "blocker",
+    "title": "The FINAL arm packet's tap script is stale against the baseline runbook and would run the wrong night sequence",
+    "file_line": "~/JouleWise-window-custody/t4-session-20260810/arm-packet-alpha-FINAL-20260813.md \u00a73 (frozen tree 49dcc49a, digest 6246b618) vs runbook:802-838 and manifest head ac3fe1d2/digest f4c02c8a",
+    "failure_scenario": "The packet is expressly 'written to be executed without reading the runbook', yet it contains no T-0 authoring E-step, no 20-minute volatile horizon, no re-author rule, and expects \u00a70.6's 'no shipped authoring route' refusal that no longer matches the shipped tooling; a tired Ed following it verbatim goes E-9 \u2192 E-9a and dead-ends (or worse, improvises) at the exact point the current runbook inserts the author step"
+   },
+   {
+    "severity": "blocker",
+    "title": "Runbook \u00a74 window.env example and \u00a76 chain template fail the T-0 author's own machine contract",
+    "file_line": "runbook:181-206 ($-values, WINDOW_CUSTODY_ROOT/BACKUP_DEST naming, FROZEN_PLAN=custody reservation JSON) and runbook:971 (REPO=${MEASUREMENT_REPO:-\u2026}) vs joulewise/arm_readiness_evidence_t0.py:571-593,652-676,1138-1156",
+    "failure_scenario": "A freeze-step that copies the runbook's own example produces window.env with $-containing values (parser refuses as ambiguous), missing CUSTODY_ROOT/CLAIM_BACKUP_DEST/BOUND_BACKUP_DEST keys, a FROZEN_PLAN that is not the pack's calibration_plan.json (E-8 capture argv then fails the reviewed-literal check), and a chain whose REPO line fails the exact-binding regex \u2014 four independent guaranteed authoring refusals discovered only at night"
+   },
+   {
+    "severity": "blocker",
+    "title": "Launch without arm/consume ceremony is not machine-caught at launch or by any downstream consumer",
+    "file_line": "runbook:964-1148 (window-chain.zsh performs no receipt check); grep: arm_readiness.consumptions referenced only in joulewise/arm_readiness.py and arm_readiness_evidence_t0.py",
+    "failure_scenario": "Ed (or a rushed magistrate) skips E-9a/b/c after the E-9 reservation and runs the launch recipe: the chain settles, calibrates and collects a normal-looking window with no refusal anywhere; the only gate on the missing arm/consumption lineage is human close-out item 5 \u2014 the required launch-license output neither traces through a machine consumer nor fails closed (cross-confirm consumer side with L5/L6/L7/L10)"
+   },
+   {
+    "severity": "should_fix",
+    "title": "Arm CLI demands the ARM_CONTEXT JSON inline while the authenticated arm-context.json already sits in custody",
+    "file_line": "scripts/generate_arm_readiness.py:58-70; runbook:834-848",
+    "failure_scenario": "Inside the 20-minute volatile fuse Ed must supply a ~700-character exact-key JSON object on the command line; any drift from the t0.inputs arm-context breaks cross-binding, and the obvious workaround `--arm-context \"$(cat \u2026)\"` is nowhere documented \u2014 accept the custody path or freeze the cat-substitution literal in the packet"
+   },
+   {
+    "severity": "should_fix",
+    "title": "The 5-minute arm-receipt validity fuse is documented nowhere the operator can see",
+    "file_line": "joulewise/arm_readiness.py:3596 (validity_ns=300_000_000_000), :3952-3955; absent from runbook \u00a75C and the packet",
+    "failure_scenario": "Ed pauses six minutes between E-9a and E-9c to phone the magistrate with the receipt sha; verify/consume refuse readiness_record_expired; nothing tells him a re-arm inside the surviving 20-minute evidence horizon is the licensed recovery, so the night ends on a recoverable refusal"
+   },
+   {
+    "severity": "should_fix",
+    "title": "Re-author cleanup is a raw rm -r on custody paths with no shape verification",
+    "file_line": "runbook:823-827",
+    "failure_scenario": "At 2am after a reboot, a mistyped $PACK_ID that resolves to a sibling pack's custody removes that pack's T-0 namespaces irreversibly with no confirmation and no receipt; the only guard is the prose instruction to 'first verify' (executed: the unset-vars variant is harmless, the wrong-existing-path variant has no catch)"
+   },
+   {
+    "severity": "should_fix",
+    "title": "Morning restore (E-16) before the magistrate finishes has no machine catch",
+    "file_line": "runbook:557-568; packet \u00a73.5",
+    "failure_scenario": "Ed restores network time at tap 2 before the magistrate reports verdict+margin+backups complete; systemsetup succeeds silently, the wall clock may slew under the still-running clock-anchored close-out reads, and only honestly-recorded \u00a712 item-20 timestamps could ever reveal it \u2014 the two-tap gap is purely procedural"
+   },
+   {
+    "severity": "should_fix",
+    "title": "In-horizon TOCTOU: post-authoring process starts are not re-probed at arm/verify/consume",
+    "file_line": "joulewise/arm_readiness_evidence_t0.py:47 (design comment); verify/consume re-check only horizon+boot+roots",
+    "failure_scenario": "Ed starts a browser 'just to check the time' after authoring; all receipts stay valid for the remaining horizon and ARM/consume pass; the bounded 20-minute window is a deliberate design trade but the runbook's prohibition ('do not start any new \u2026 process') has no teeth inside it \u2014 the recut packet must carry the prohibition as an explicit ABORT row"
+   },
+   {
+    "severity": "nit",
+    "title": "prewindow check 8's agent pattern omits claude/t3 and check 4 WARN-only without admin",
+    "file_line": "scripts/prewindow_check.sh:102-110,155",
+    "failure_scenario": "Executed: check 8 printed OK while this live Claude session ran; between E-7b and authoring, only prewindow guards the machine and it cannot see a forgotten claude/t3 process (the T-0 census later catches it)"
+   },
+   {
+    "severity": "nit",
+    "title": "E-14 do-not-return-before time is hand arithmetic at T-0",
+    "file_line": "packet \u00a73.4 E-14; plan 6.28 h = 6 h 16.8 m",
+    "failure_scenario": "A 2am mental addition of 6.28 h invites an early return; the recut packet should carry a `date -v+377M` literal"
+   },
+   {
+    "severity": "nit",
+    "title": "ED-session census pattern is substring-based and false-positive-prone (fails closed)",
+    "file_line": "scripts/ed_session/rail-probe.sh:48, sampler-checklist.sh:44",
+    "failure_scenario": "Executed: any process whose argv merely contains 'powermetrics' (test fixtures, a plist path) refuses the qualification run; harmless for soundness but a qualification session run beside any dev activity will refuse spuriously"
+   }
+  ]
+ },
+ {
+  "lens_id": "L11-retained-characterization-basis",
+  "verdict": "NOT_READY",
+  "coverage": {
+   "examined": 14,
+   "total": 16
+  },
+  "evidence_universe_count": 16,
+  "n_findings": 5,
+  "n_falsifiers": 5,
+  "work_orders": [
+   "WO-1 (draft-v1.md:7,:108,:112,:240): restate the characterization as what the artifacts hold \u2014 composed clock-anchor bounds up to \u00b131 ms (25.6\u201331.1 ms across the 30 a10 phase members), per-member phase mis-attribution envelopes ~0.6\u20131.6 J (about one joule typical), equivalent to effective boundary power steps of tens of watts (e.g. 1.02 J / 31 ms \u2248 33 W for the widest-bound member) \u2014 or keep the triple but pin it explicitly to its defining member and derivation instead of calling it 'the measured corpus figure'.",
+   "WO-2 (draft-v1.md:7,:108,:240): attribute the phase-boundary evidence to a10's 30 phase-absolute members, naming a9 as the reference/bracket-context window of the retained corpus rather than a co-source of the phase characterization.",
+   "WO-3 (custody + repo): make the a9/a10 whole-window PASSED context artifact-backed \u2014 commit the excursion re-derivation (a10 0.5094 J both families vs 0.6523/0.6579 J allowances; a9 0.310/0.305 J vs 0.624/0.609 J) beside the custody close-out, or recover the original verdict artifacts from wherever they were emitted; alternatively strip PASSED context from consuming docs.",
+   "WO-4 (optional bookkeeping): annotate a9 MANIFEST/PRUNED for the backup.log entry and correct the two D-054 prose figures (nits N1/N2)."
+  ],
+  "ed_qualification_rows": [],
+  "unexecuted_obligations": [
+   "Full power-trace re-integration for the remaining 29 a10 phase members (1/30 done exactly; the other 29 envelopes were accepted from sha-bound summaries whose digests I verified against the custody extraction).",
+   "Code audit of the reducer-side envelope method implementation (common_trace_shift_plus_independent_edge_corners_v3) in joulewise/reduce.py \u2014 I re-derived its output numerically for one member but did not read the implementation.",
+   "Deep audit of joulewise/whole_window.py verdict machinery (surveyed for schema/semantics only; the verdict artifact itself is absent \u2014 finding SF3).",
+   "a9 custody operator logs (window-chain/calibration logs) read in detail; a10's were read.",
+   "campaign_log.jsonl deep audit and raw plist parsing for the reference members.",
+   "Byte-parity verification of the iCloud archive mirrors against local dirs (layout and existence checked only; a9 parity rests on the PRUNED.md-documented verification)."
+  ],
+  "findings": [
+   {
+    "severity": "should_fix",
+    "title": "Paper presents the \u00b131 ms / 33 W / ~1 J triple as 'the measured corpus figure'; it is a single-member maximum plus a derived quotient",
+    "file_line": "docs/paper/draft-v1.md:108 (also :7 abstract, :112 caption, :240)",
+    "failure_scenario": "A metrology-literate referee asks which retained artifact records a 33 W power step. None does: composed anchor bounds across the 30 a10 phase members span 25.6\u201331.1 ms (mean 27.3; \u00b131 ms is the single widest member, prefill-abs-r01); operative phase envelopes span 0.57\u20131.57 J; '33 W' is that one member's envelope/bound quotient (1.016 J / 31.07 ms = 32.7 W), while corpus-wide quotients span ~21\u201358 W and r01's trace-measured prefill-vs-decode mean-power step is 18.6 W (45.6 \u2192 27.0 W). The exhibit's conclusion survives, but 'corpus precision' / 'the measured corpus figure' overstates provenance and invites a credibility hit on the paper's central limitation exhibit."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Paper attributes the phase mis-attribution evidence to 'the a9 and a10 windows'; a9 contains zero phase-absolute members",
+    "file_line": "docs/paper/draft-v1.md:7, :108, :240",
+    "failure_scenario": "A reviewer requests the a9 phase members backing the \u00b131 ms boundary characterization and finds only 7 request-level reference bundles (anchor bounds up to \u00b133.5 ms, which would even strain the \u00b131 ms headline if counted) plus a 12-member refcorpus. The phase-boundary basis is a10-only; a9 is the reference/bracket-context window. The corpus framing as written cannot be backed member-for-member."
+   },
+   {
+    "severity": "should_fix",
+    "title": "Whole-window PASSED verdicts for a9/a10 exist only as close-out prose; no verdict artifact is retained anywhere findable",
+    "file_line": "~/JouleWise-window-custody/window_a10_20260725/CLOSE_OUT.md; detection-floor-extraction.json (refuses whole_window_neg8_verdict_missing)",
+    "failure_scenario": "Anyone auditing the publication basis (this seat, a referee, or a future re-derivation) cannot produce the PASSED verdict ('excursions 0.509 J both families; 37-member basis c3a4f4e1...') from any retained artifact \u2014 not in the runs dirs, the bound dirs, the custody dir, the repo, or the iCloud archive mirror; the retained extraction itself refused for the verdict's absence. I re-derived the excursions exactly (0.5094 J both families for a10; 0.310/0.305 J for a9, all under allowances), so the fix is cheap: commit the re-derivation beside the custody close-out so the PASSED context is artifact-backed rather than prose-backed."
+   },
+   {
+    "severity": "nit",
+    "title": "a9 MANIFEST.sha256 lists ./backup.log, which is neither resident nor covered by PRUNED.md's enumeration",
+    "file_line": "/Users/edr/code/JouleWise/runs_window_a9_20260724/MANIFEST.sha256 (last entry) vs PRUNED.md",
+    "failure_scenario": "A strict manifest verification reports 29 missing entries where the prune note authorizes exactly 28 plists; the unexplained backup.log discrepancy costs an auditor time or seeds doubt about the prune's completeness. All 173 resident files re-hash clean."
+   },
+   {
+    "severity": "nit",
+    "title": "Two D-054 decision-log prose details do not reproduce exactly from the retained bundles",
+    "file_line": "docs/decision_log.md:4674-4684 (D-054 attribution-limited amendment)",
+    "failure_scenario": "The 'settled reference pair three hours apart agreed to 0.007 J' matches no unique retained pair (best ~3.7 h candidates agree to 0.0013\u20130.0019 J gross / 0.0080 J idle-sub), and 'fiducial 24.9 ms (80\u201387%)' understates the actual fiducial share range (80\u201397% across the 30 members). Neither figure is paper-cited; risk is only that future prose inherits them as artifact-backed."
+   }
+  ]
+ }
+]
