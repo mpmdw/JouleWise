@@ -9052,3 +9052,28 @@ verification note correcting B2's premise).
 7. Execution: contract-text deltas + implementation ride the Phase-1/2
    work orders under this ruling; every fix round carries C-028 delta
    re-audits.
+
+### WO-MARGIN-RECORDER-AUTHZ contract ADOPTED (magistrate, 2026-08-15; council Phase 0; Sol design consult adopted)
+
+Consult custodied: docs/process_traces/2026-08-15-recorder-authz-consult/
+(the ONE home for the mechanism detail). Cures fleet blocker L4-B1.
+
+**Ruling:**
+1. NO new authentication primitive: the recorder reuses the mint's
+   session-local `allow_governed_extraction_spec`, invoked NARROWER than
+   the mint — exactly once, only in the floor-pack branch, only for the
+   plan-tree-selected extraction-spec path, after pack-identity and
+   exactly-one-source validation, with an immediate hash comparison of
+   the returned bytes against the plan-tree pin BEFORE any census/
+   membership processing. Never granted: the GAMMA manifest, reports,
+   plan tree, bundles, or the other floor pack's spec.
+2. The grant exempts only the recursive lexical estimator_registration
+   ban for that one file; duplicate-key/UTF-8/finite-number/grammar/
+   digest-stability/path-containment checks all survive. No change to
+   joulewise/authentication_io.py or any public API.
+3. The synthetic census tests are REPLACED by frozen-pack regressions
+   modeling the REAL re-specced cell shapes (the green-suite-broken-seam
+   specimen dies in the same commit) — per the consult's attempt/result
+   table.
+4. Execution = WO-MARGIN-RECORDER-AUTHZ (council Phase 1). This
+   executes D-133's close-out gate; it amends no scientific semantics.
