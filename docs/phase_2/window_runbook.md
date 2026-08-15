@@ -178,29 +178,37 @@ configs/campaigns/p2_015_floors/03_request_abba
 Do not put the reference directories in those lists; the chain adds the
 governed 3+1+3 references itself.
 
-Example `window.env`:
+Example ALPHA `window.env`. This file is a frozen literal input to the T-0
+producer: it has exactly the keys below, every path is absolute, and no value
+contains `$` or a shell expansion. `FROZEN_PLAN` is R2's execution-boundary
+literal for the committed pack-relative `calibration_plan.json`; it is not a
+custody reservation plan. Replace the dated path components before review,
+then freeze the resulting bytes:
 
 ```sh
 MEASUREMENT_REPO=/Users/edr/JouleWise-measurement-20260813
-WINDOW_ID=window_a9_YYYYMMDD
-BRACKET_SESSION_ID=window_a9_YYYYMMDD-calibration
-FROZEN_PLAN=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/calibration-reservation.json
-PACK_ROOT=$MEASUREMENT_REPO/configs/campaigns/d117_floor_qwen25_1p5b_v1
+WINDOW_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1
+BRACKET_SESSION_ID=d117-alpha-YYYYMMDD-calibration
+FROZEN_PLAN=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json
+PACK_ROOT=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v1
 PACK_ID=d117_floor_qwen25_1p5b_v1
-PLAN_ID=window_a9_YYYYMMDD-plan
-EVIDENCE_ROOT_ID=window_a9_YYYYMMDD-evidence
-IDENTITY_EPOCH_JSON=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/identity-epoch.json
-T1_BINDINGS_JSON=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/t1-bindings.json
-PRE_ATTEMPT_ID=window_a9_YYYYMMDD-calibration-pre
-POST_ATTEMPT_ID=window_a9_YYYYMMDD-calibration-post
-RUNS_ROOT=$MEASUREMENT_REPO/runs_d117_floor_qwen25_1p5b_v1
-BOUND_RUNS_ROOT=$MEASUREMENT_REPO/runs_d117_floor_qwen25_1p5b_v1_bound
+PLAN_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1
+EVIDENCE_ROOT_ID=evidence-d117-floor-qwen25-1p5b-v1
+IDENTITY_EPOCH_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/identity-epoch.json
+T1_BINDINGS_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/t1-bindings.json
+PRE_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-pre
+POST_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-post
+RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v1
+BOUND_RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v1_bound
 CALIBRATION_LEDGER=/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
-LEDGER_HEAD_PIN=$MEASUREMENT_REPO/configs/calibration/calibration_ledger_head.json
-ARM_READINESS_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/readiness
-WINDOW_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/window_a9_YYYYMMDD/window
-QUARANTINE_ROOT=/Users/edr/JouleWise-window-quarantine/window_a9_YYYYMMDD
-BACKUP_DEST="/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/window_a9_YYYYMMDD"
+LEDGER_HEAD_PIN=/Users/edr/JouleWise-measurement-20260813/configs/calibration/calibration_ledger_head.json
+ARM_READINESS_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness
+CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/window
+WINDOW_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/window
+QUARANTINE_ROOT=/Users/edr/JouleWise-window-quarantine/d117-alpha-YYYYMMDD
+CLAIM_BACKUP_DEST="/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/d117-alpha-YYYYMMDD/claim"
+BOUND_BACKUP_DEST="/Users/edr/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup/d117-alpha-YYYYMMDD/bound"
+WAIVER_PATH=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness/window-plan/waivers.json
 POWER_POLICY=ac_high_power
 SETTLE_S=180
 ```
@@ -215,6 +223,19 @@ bound into `ARM_CONTEXT_JSON` and later receives operator/close-out artifacts.
 `QUARANTINE_ROOT` is a third, sibling root outside both custody roots; nesting
 it below `WINDOW_CUSTODY_ROOT` would make the arm generator's require-empty
 check refuse itself.
+`CUSTODY_ROOT` and `WINDOW_CUSTODY_ROOT` are deliberately the same literal:
+the former is the T-0 producer/author contract key and the latter is retained
+for the foreground chain. `CLAIM_BACKUP_DEST` and `BOUND_BACKUP_DEST` are
+distinct. Place `WINDOW_PLAN_ROOT` at
+`ARM_READINESS_CUSTODY_ROOT/window-plan`; the author requires the plan root
+containing `window.env` and `window-chain.zsh` to remain inside the D-134
+custody root.
+
+The currently frozen ALPHA and BETA `plan_tree.json` bytes still carry the
+superseded repository-relative spelling. The shared R2 resolver refuses those
+packs; do not basename-repair them in an operator file. Their successor
+freeze must emit `plan.path: "calibration_plan.json"` before either profile
+can pass this example. GAMMA already has the ruled storage shape.
 
 Before quiet time:
 
@@ -510,8 +531,39 @@ cleanly with a 0.305 ms span.
 
 macOS gates both the read and the write of this setting behind administrator
 rights (`systemsetup -getusingnetworktime` and
-`systemsetup -setusingnetworktime`), so the chain script can neither perform
-nor verify this step. Ed performs it by hand.
+`systemsetup -setusingnetworktime`). E-4's prior-state read remains an
+interactive Ed action. D-127 authorizes only the exact `off` and `on` writes;
+the capture wrapper and the T-0 author use the `off` vector, and restore uses
+the `on` vector. No wildcard or privileged `get` is authorized.
+
+The tracked D-127 fragment must contain exactly these bytes (final newline
+included; SHA-256
+`7dfe980be89a7912d69c6e72b5582649fc4c50db88bf709bcfbb4a1c34e4406d`):
+
+```sudoers
+# JouleWise D-127: fixed network-time toggle capability for operator edr.
+Cmnd_Alias JOULEWISE_NETWORK_TIME = /usr/sbin/systemsetup -setusingnetworktime off, /usr/sbin/systemsetup -setusingnetworktime on
+Defaults!JOULEWISE_NETWORK_TIME !requiretty
+edr ALL=(root) NOPASSWD: JOULEWISE_NETWORK_TIME
+```
+
+- [ ] **ED-OWED:** after the reviewed tracked fragment
+  `scripts/joulewise-network-time.sudoers` exists, run the authenticated,
+  no-overwrite installer from
+  `docs/process_traces/2026-08-08-d127-autonomous-loop/CONSULT-RESPONSE.md`
+  with that source path and the digest above. Ed alone installs
+  `/etc/sudoers.d/joulewise-network-time`; no repository script runs as root.
+- [ ] **ED-OWED:** exercise both exact vectors from a cold credential state,
+  restoring `on` at the end:
+
+  ```sh
+  /usr/bin/sudo -k
+  /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off
+  /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on
+  ```
+
+  A password prompt, any nonzero exit, or any other permitted
+  `systemsetup` argv leaves D-127 unqualified and blocks T-0.
 
 - [ ] **Confirm the system clock is actually correct first.** Disabling
   automatic time on a wrong clock freezes that error in place for the whole
@@ -520,13 +572,13 @@ nor verify this step. Ed performs it by hand.
 - [ ] Record the current setting so it can be restored:
 
   ```sh
-  sudo systemsetup -getusingnetworktime
+  /usr/bin/sudo /usr/sbin/systemsetup -getusingnetworktime
   ```
 
 - [ ] Disable automatic network time adjustment:
 
   ```sh
-  sudo systemsetup -setusingnetworktime off
+  /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off
   ```
 
 - [ ] Preserve the independent-clock comparison and the captured prior
@@ -534,10 +586,12 @@ nor verify this step. Ed performs it by hand.
   `CLOCK_ATTESTATION` receipt in
   `ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.evidence/`; its irreducible observation
   is an `OPERATOR_ATTESTATION`, not a hand-entered readiness verdict.
-- [ ] After disabling network time, require a fresh system probe and an
+- [ ] After disabling network time, require the T-0 author's fresh,
+  idempotent D-127 enforcement call
+  `/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime off` and an
   authenticated exact-key `CLOCK_PROBE` receipt in the same namespace. The
-  probe, not an operator-entered row value, establishes whether automatic
-  network time is off. For both receipt kinds, “exact-key” means the top-level
+  successful exact write, not an operator-entered row value, establishes the
+  current off postcondition. For both receipt kinds, “exact-key” means the top-level
   object contains exactly `schema_version`, `evidence_id`, `kind`, `status`,
   `issued_at_utc`, `valid_until_monotonic_ns`, `pack_sha256`, `head_commit`,
   `facts`, `checks`, `reason_codes`, and `assurance`; unknown or missing keys
@@ -550,7 +604,8 @@ nor verify this step. Ed performs it by hand.
   before the §5C step-2 ledger pair. Your last action is the launch itself;
   step away immediately after it.
 
-  The readiness row `clock.network_time_off` asks only for that fresh probe.
+  The readiness row `clock.network_time_off` asks only for that fresh exact
+  enforcement result.
   It does not introduce another hand-counted settle. The required quiet waits
   remain §5's completed ≥10-minute untouched idle and the chain-owned
   180-second settle after the operator's launch.
@@ -558,7 +613,7 @@ nor verify this step. Ed performs it by hand.
   whole-window verdict, and the backup, re-enable it:
 
   ```sh
-  sudo systemsetup -setusingnetworktime on
+  /usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on
   ```
 
   The restore comes last because re-enabling automatic network time permits
@@ -739,6 +794,38 @@ machine behavior: the refusal is evidence that the reboot fence worked, not a
 fault to work around. The lead confirmed both the raw `sysctl` read and the
 shipped derivation outside a sandbox on the same boot.
 
+**Lead-owned terminal-review attestation — required producer step.** After
+all repair/freeze review is complete and before the dry run or T-0, the lead
+operates at the reviewed tree, computes the committed pack digest, and creates
+one empty attestation commit. This is not delegated and is not an Ed hardware
+step:
+
+```sh
+cd /Users/edr/JouleWise-measurement-20260813
+. /Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness/window-plan/window.env
+test -z "$(git status --porcelain=v1 --untracked-files=all)"
+TREE_OID="$(git rev-parse HEAD^{tree})"
+PACK_SHA256="$(.venv/bin/python - "$PACK_ROOT" <<'PY'
+import sys
+from joulewise.arm_readiness import committed_pack_tree_sha256
+print(committed_pack_tree_sha256(sys.argv[1]))
+PY
+)"
+git commit --allow-empty --cleanup=verbatim \
+  -m 'JouleWise terminal review attestation' \
+  -m 'JouleWise-Terminal-Review: PASS' \
+  -m "JouleWise-Terminal-Review-Tree-Oid: $TREE_OID" \
+  -m "JouleWise-Terminal-Review-Pack-Sha256: $PACK_SHA256"
+```
+
+The lead then lands that exact commit as reviewed `main`; the measurement
+checkout, local `main`, and `origin/main` must all name it. The tree OID is
+unchanged by the empty commit. Every `capture_t0_step.py` invocation verifies
+that HEAD contains exactly one of each trailer with the current tree and pack
+digest, and the author's existing terminal-review check independently repeats
+the proof. A later tree or pack change requires a new reviewed attestation
+commit; trailers from an ancestor do not transfer.
+
 **Lead live verification — desk evidence, not live-night authority
 (rule 1, non-delegable).**
 On the exact reviewed commit, the lead personally runs the frozen plan's
@@ -771,28 +858,84 @@ arming; they do not authorize the live night.
 2. After all agents are closed, Ed executes the frozen E-step sequence with
    no reordering:
 
-   - **E-4:** compare the clock with the independent trusted source and
-     capture `sudo systemsetup -getusingnetworktime`.
-   - **E-5:** run `sudo systemsetup -setusingnetworktime off` and capture the
-     fresh probe.
-   - **E-7a:** run `bash "$MEASUREMENT_REPO/scripts/quiet_mac_prep.sh"` and
-     preserve its complete output.
-   - **E-7b:** run the ratified current-alpha literal
-     `bash "$MEASUREMENT_REPO/scripts/prewindow_check.sh" --wait
-     --timeout-min 45 --window alpha` and require `READY`. The `45` is the
-     frozen timeout, not a replaceable example. The script maps `alpha` to
-     the measurement-checkout-only
-     `$MEASUREMENT_REPO/runs_d117_floor_qwen25_1p5b_v1*` glob, covering the
-     alpha claim and bound runs roots; use the
-     corresponding frozen `beta` or `gamma` label for those packs. Its wait
-     fulfills §5's ≥10-minute untouched idle and must finish before the
-     ledger pair.
-   - **E-8:** run the complete §6 diagnostic-readiness command and require it
-     to echo the exact frozen-plan SHA-256.
-   - **E-9:** run the §6 reservation with the full governed argv superset:
-     `--ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" --plan
-     "$FROZEN_PLAN"`, plus every frozen identity/root argument. Require
-     `calibration_pre_reserve_authorized` and terminal `status: reserved`.
+   Run these exact wrapper invocations from the reviewed measurement checkout.
+   Each invocation derives its command from frozen `window.env`, brackets the
+   subprocess with boot-bound monotonic timestamps, preserves complete stdout
+   and stderr, and publishes one no-clobber canonical capture. Do not run the
+   wrapped command separately.
+
+   ```sh
+   WINDOW_PLAN_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness/window-plan
+   . "$WINDOW_PLAN_ROOT/window.env"
+   cd "$MEASUREMENT_REPO"
+   ```
+
+   - **E-4:** at the prompt, enter only the independent trusted-clock UTC
+     literal. The tool derives the system timestamp, monotonic observation,
+     boot ID, attestation ID, context, and manifest, then performs Ed's
+     interactive prior-state read:
+
+     ```sh
+     python3 scripts/capture_t0_step.py clock-prior-state \
+       --pack-root "$PACK_ROOT" \
+       --custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+       --window-plan-root "$WINDOW_PLAN_ROOT"
+     ```
+
+   - **E-5:** use D-127's exact noninteractive `off` vector:
+
+     ```sh
+     python3 scripts/capture_t0_step.py clock-disable \
+       --pack-root "$PACK_ROOT" \
+       --custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+       --window-plan-root "$WINDOW_PLAN_ROOT"
+     ```
+
+   - **E-7a:** capture the reviewed quiet-prep literal:
+
+     ```sh
+     python3 scripts/capture_t0_step.py quiet-mac-prep \
+       --pack-root "$PACK_ROOT" \
+       --custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+       --window-plan-root "$WINDOW_PLAN_ROOT"
+     ```
+
+   - **E-7b:** capture the profile-derived `--wait --timeout-min 45` command.
+     The script must prove at least 600 seconds of continuous clean dwell and
+     end in `READY`:
+
+     ```sh
+     python3 scripts/capture_t0_step.py prewindow-check \
+       --pack-root "$PACK_ROOT" \
+       --custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+       --window-plan-root "$WINDOW_PLAN_ROOT"
+     ```
+
+   - **E-8:** capture diagnostic readiness. Require the returned JSON to bind
+     the exact R2 absolute path, pack `plan_id`, and exact-byte SHA-256:
+
+     ```sh
+     python3 scripts/capture_t0_step.py ledger-readiness \
+       --pack-root "$PACK_ROOT" \
+       --custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+       --window-plan-root "$WINDOW_PLAN_ROOT"
+     ```
+
+   - **E-9:** capture the full reservation superset. The tool always derives
+     `--plan` from the same R2 reference used by E-8 and includes `--ledger`,
+     `--head-pin`, every identity/root argument, and `--execute`:
+
+     ```sh
+     python3 scripts/capture_t0_step.py ledger-reservation \
+       --pack-root "$PACK_ROOT" \
+       --custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+       --window-plan-root "$WINDOW_PLAN_ROOT"
+     ```
+
+   Any nonzero command, invalid result identity, boot change, out-of-order
+   call, or existing output path refuses. After E-9, the private input
+   namespace contains exactly the six captures plus `clock-attestation.json`,
+   `arm-context.json`, and `launch-manifest.json`.
 
    Do not look for a visible `ready_to_arm` field: the enforcing checks are
    internal to reservation and writer, and no diagnostic word (`clean`,
@@ -816,14 +959,15 @@ arming; they do not authorize the live night.
    they do not extend the volatile evidence.
 
    A reboot or any HEAD change voids the authored receipts. Before
-   re-authoring, first verify these are the exact two pack-specific T-0
-   namespaces and remove both so no no-clobber collision can masquerade as a
+   re-authoring, first verify these are the exact three pack-specific T-0
+   namespaces and remove all three so no no-clobber collision can masquerade as a
    retry:
 
    ```sh
    /bin/rm -r -- \
      "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.sources" \
-     "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.evidence"
+     "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.evidence" \
+     "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.inputs"
    ```
 
    Then repeat E-4 through E-9 and T-0 authoring; never reuse a pre-reboot or
@@ -914,16 +1058,18 @@ dispatch authority. Shell-local directory discovery and a lexicographically
 custody uses `resume-finalize`; partial custody uses `abort-session`. Both
 commands run in a fresh process and preserve the custody directory.
 
-Before quiet time, freeze `FROZEN_PLAN` as canonical JSON containing at least
-the exact `plan_id`; record its SHA-256 together with `window.env`, the exact
-identity-epoch JSON, and the exact T1-bindings JSON. After every agent is
-closed, create the durable capability exactly once:
+Before quiet time, authenticate R2's `FROZEN_PLAN` tuple: pack ID,
+`calibration_plan.json` as the canonical pack-root-relative path, the plan's
+exact `plan_id`, and SHA-256 of its exact committed bytes. Record that tuple
+together with `window.env`, the exact identity-epoch JSON, and the exact
+T1-bindings JSON. Never create or select a second custody reservation JSON.
+The six §5C wrapper calls are the sole live execution route; the E-8 and E-9
+calls render these exact commands from the one authoritative reference:
 
 ```sh
 . "$WINDOW_PLAN_ROOT/window.env"
-REPO="${MEASUREMENT_REPO:-/Users/edr/JouleWise-measurement-20260813}"
+REPO=/Users/edr/JouleWise-measurement-20260813
 cd "$REPO"
-PLAN_SHA256="$(/usr/bin/shasum -a 256 "$FROZEN_PLAN" | /usr/bin/awk '{print $1}')"
 
 .venv/bin/python scripts/recover_calibration_ledger.py readiness \
   --phase pre-reserve \
@@ -936,7 +1082,7 @@ PLAN_SHA256="$(/usr/bin/shasum -a 256 "$FROZEN_PLAN" | /usr/bin/awk '{print $1}'
   --session-id "$BRACKET_SESSION_ID" \
   --window-id "$WINDOW_ID" \
   --plan-id "$PLAN_ID" \
-  --plan-sha256 "$PLAN_SHA256" \
+  --plan-sha256 "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d" \
   --plan "$FROZEN_PLAN" \
   --evidence-root-id "$EVIDENCE_ROOT_ID" \
   --runs-root "$RUNS_ROOT" \
@@ -949,7 +1095,10 @@ PLAN_SHA256="$(/usr/bin/shasum -a 256 "$FROZEN_PLAN" | /usr/bin/awk '{print $1}'
   --execute
 ```
 
-Require the readiness output to echo the exact frozen-plan SHA-256 and the
+The displayed digest is the current ALPHA example, not an operator-entered
+input: `capture_t0_step.py` derives it from committed bytes and constructs the
+argv. A successor pack uses its derived digest. Require readiness output to
+echo the same absolute path, `plan_id`, and SHA-256, and require the
 reservation output to say `status: reserved`. On restart, do not reserve
 again from remembered shell state: run `session-status` with the exact
 session and frozen plan and dispatch only its durable `next_slot`.
@@ -968,7 +1117,7 @@ set -euo pipefail
 WINDOW_PLAN_ROOT="$1"
 source "$WINDOW_PLAN_ROOT/window.env"
 
-REPO="${MEASUREMENT_REPO:-/Users/edr/JouleWise-measurement-20260813}"
+REPO=/Users/edr/JouleWise-measurement-20260813
 PY="$REPO/.venv/bin/python"
 POLICY="$REPO/configs/campaign_policies/quiet_mac_p2_production.json"
 REF_ROOT="$REPO/configs/campaigns/window_references"

@@ -54,6 +54,7 @@ _RUNNING_REPOSITORY = _Path(__file__).resolve().parents[1]
 _AUTHORING_ARTIFACTS = (
     "joulewise/arm_readiness_evidence_t0.py",
     "scripts/author_arm_evidence_t0.py",
+    "scripts/capture_t0_step.py",
 )
 _INTERNAL_ROWS = frozenset(
     {
@@ -888,11 +889,17 @@ def _derive_clock_probe(context: _Context) -> _DerivedRow:
     probe = _fresh_probe(
         context,
         kind,
-        "network-time state",
-        ("/usr/bin/sudo", "-n", "/usr/sbin/systemsetup", "-getusingnetworktime"),
+        "network-time off enforcement",
+        (
+            "/usr/bin/sudo",
+            "-n",
+            "/usr/sbin/systemsetup",
+            "-setusingnetworktime",
+            "off",
+        ),
     )
-    if probe.exit_code != 0 or _re.search(r"Network Time:\s*Off\s*$", probe.stdout, _re.MULTILINE) is None:
-        raise _underivable(kind, "fresh system probe does not report network time Off")
+    if probe.exit_code != 0:
+        raise _underivable(kind, "fresh D-127 enforcement did not set network time Off")
     return _DerivedRow(
         "clock.network_time_off",
         kind,
@@ -1118,9 +1125,26 @@ def _json_stdout(capture: _Mapping[str, _Any], *, kind: str, label: str) -> _Map
     return value
 
 
+def _frozen_plan(
+    context: _Context, *, kind: str
+) -> tuple[_Path, str, str, bytes]:
+    cached = context.values.get("frozen_plan")
+    if cached is not None:
+        return cached
+    try:
+        result = _readiness.resolve_frozen_plan(context.pack_root, context.tree)
+    except _readiness.ArmReadinessError as exc:
+        raise _underivable(kind, f"R2 frozen-plan reference is invalid: {exc}") from exc
+    context.values["frozen_plan"] = result
+    return result
+
+
 def _derive_ledger(context: _Context) -> _DerivedRow:
     kind = "LEDGER_RESERVATION"
     arm, arm_identity = _arm_context(context, kind=kind)
+    plan_path, _plan_relative, plan_id, plan_raw = _frozen_plan(
+        context, kind=kind
+    )
     diagnostic, diagnostic_identity = _capture(context, "ledger-readiness", kind=kind)
     reservation, reservation_identity = _capture(context, "ledger-reservation", kind=kind)
     _capture_ok(diagnostic, kind=kind, label="ledger diagnostic")
@@ -1130,6 +1154,8 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
         diagnostic_value.get("status") != "ready"
         or diagnostic_value.get("early_warning_only") is not True
         or not isinstance(diagnostic_value.get("frozen_plan"), _Mapping)
+        or diagnostic_value["frozen_plan"].get("path") != str(plan_path)
+        or diagnostic_value["frozen_plan"].get("plan_id") != plan_id
         or diagnostic_value["frozen_plan"].get("sha256") != context.plan_sha256
     ):
         raise _underivable(kind, "ledger diagnostic does not bind the ready frozen plan")
@@ -1146,7 +1172,7 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
         "--session-id",
         str(arm["bracket_session_id"]),
         "--plan",
-        str(context.pack_root / str(context.tree["plan"]["path"])),
+        str(plan_path),
     ]
     if (
         diagnostic["argv"] != expected_diagnostic
@@ -1197,9 +1223,12 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
         "scripts/reserve_calibration_window_bracket.py",
         kind=kind,
     )
-    plan_path = _Path(str(flags["--plan"]))
-    plan_identity, plan_raw = _input_identity(plan_path, kind=kind, label="frozen reservation plan")
-    if _readiness.sha256_bytes(plan_raw) != context.plan_sha256:
+    if flags["--plan"] != str(plan_path):
+        raise _underivable(kind, "reservation --plan is not the R2 execution literal")
+    plan_identity, captured_plan_raw = _input_identity(
+        plan_path, kind=kind, label="frozen reservation plan"
+    )
+    if captured_plan_raw != plan_raw or _readiness.sha256_bytes(plan_raw) != context.plan_sha256:
         raise _underivable(kind, "reservation --plan bytes differ from the pack plan")
     try:
         plan_value = _readiness.parse_json_bytes(plan_raw)
@@ -1207,7 +1236,7 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
         raise _underivable(kind, "reservation --plan is invalid JSON") from exc
     if (
         not isinstance(plan_value, _Mapping)
-        or plan_value.get("plan_id") != context.tree.get("plan", {}).get("plan_id")
+        or plan_value.get("plan_id") != plan_id
     ):
         raise _underivable(kind, "reservation --plan does not name the frozen plan ID")
     extra_inputs: list[dict[str, str]] = [plan_identity]
@@ -1312,6 +1341,9 @@ def _derive_ledger(context: _Context) -> _DerivedRow:
 
 def _derive_machine_readiness(context: _Context) -> _DerivedRow:
     kind = "MACHINE_PREFLIGHT"
+    plan_path, _plan_relative, plan_id, _plan_raw = _frozen_plan(
+        context, kind=kind
+    )
     _quiet, quiet_identity = _quiet_capture(context, kind=kind)
     _prewindow, prewindow_identity, manifest_artifacts = _prewindow_capture(context, kind=kind)
     diagnostic, diagnostic_identity = _capture(context, "ledger-readiness", kind=kind)
@@ -1321,6 +1353,8 @@ def _derive_machine_readiness(context: _Context) -> _DerivedRow:
         diagnostic_value.get("status") != "ready"
         or diagnostic_value.get("early_warning_only") is not True
         or not isinstance(diagnostic_value.get("frozen_plan"), _Mapping)
+        or diagnostic_value["frozen_plan"].get("path") != str(plan_path)
+        or diagnostic_value["frozen_plan"].get("plan_id") != plan_id
         or diagnostic_value["frozen_plan"].get("sha256") != context.plan_sha256
     ):
         raise _underivable(kind, "machine readiness does not bind the pack plan")
@@ -1891,6 +1925,12 @@ def author_arm_readiness_evidence_t0(
         raise _underivable("AUTHORING_SET", "reviewed HEAD/tree identity is unavailable")
     tree, _tree_raw = _readiness._plan_tree(root)
     try:
+        frozen_plan = _readiness.resolve_frozen_plan(root, tree)
+    except _readiness.ArmReadinessError as exc:
+        raise _underivable(
+            "AUTHORING_SET", f"R2 frozen-plan reference is invalid: {exc}"
+        ) from exc
+    try:
         pack_sha = _readiness.committed_pack_tree_sha256(root)
     except _readiness.ArmReadinessError as exc:
         raise _refuse("AUTHORING_SET", "evidence_author_t0_pack_uncommitted", str(exc)) from exc
@@ -1902,12 +1942,13 @@ def author_arm_readiness_evidence_t0(
         custody_pack_root=custody / root.name,
         tree=tree,
         pack_sha256=pack_sha,
-        plan_sha256=_readiness._pack_identity(root, tree)["plan_sha256"],
+        plan_sha256=_readiness.sha256_bytes(frozen_plan[3]),
         head_commit=str(head),
         head_tree_oid=str(head_tree),
         boot_session_id=boot_session,
         boot_probe=boot_probe,
     )
+    context.values["frozen_plan"] = frozen_plan
     rows = _required_rows(context)
     source_dir = context.custody_pack_root / _SOURCE_DIRECTORY
     evidence_dir = context.custody_pack_root / _EVIDENCE_DIRECTORY

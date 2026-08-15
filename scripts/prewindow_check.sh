@@ -33,7 +33,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 MEASUREMENT_REPO="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)"
 CPU_LIMIT="${CPU_LIMIT:-5.0}"        # percent, per contaminating process
 LOAD_LIMIT="${LOAD_LIMIT:-2.0}"      # 1-minute load average
-SETTLE_CHECKS=3                      # consecutive clean checks required
+MIN_CLEAN_DWELL_S=600                # continuous clean time required by D-134
 INTERVAL_S=30
 
 while [ $# -gt 0 ]; do
@@ -99,7 +99,7 @@ check_once() {
   #    disabled (see scripts/quiet_window_clock.sh); a live adjuster caused two
   #    window failures on 2026-07-26.
   local nt
-  nt="$(sudo -n systemsetup -getusingnetworktime 2>/dev/null | sed -n 's/.*Network Time: *//p')"
+  nt="$(/usr/bin/sudo -n /usr/sbin/systemsetup -getusingnetworktime 2>/dev/null | sed -n 's/.*Network Time: *//p')"
   if [ -z "$nt" ]; then
     warn "cannot read network-time state without admin; confirm the clock is pinned"
   elif [ "$nt" = "Off" ]; then
@@ -174,25 +174,36 @@ if [ "$WAIT" -eq 0 ]; then
   fi
 fi
 
-# --wait: require SETTLE_CHECKS consecutive clean passes, so a daemon that is
-# briefly between bursts does not read as finished.
-deadline=$(( $(date +%s) + TIMEOUT_MIN * 60 ))
-clean=0
-while [ "$(date +%s)" -lt "$deadline" ]; do
+# --wait: require at least ten continuous clean minutes.  Any failed sample
+# resets Bash's elapsed-seconds interval; three quick samples are not a
+# substitute for the idle dwell that D-134's T-0 author independently checks.
+wait_started="$SECONDS"
+deadline=$(( wait_started + TIMEOUT_MIN * 60 ))
+clean_since=-1
+clean_checks=0
+while [ "$SECONDS" -lt "$deadline" ]; do
   if check_once; then
-    clean=$((clean + 1))
-    bold "  clean check ${clean}/${SETTLE_CHECKS}"
-    if [ "$clean" -ge "$SETTLE_CHECKS" ]; then
-      bold ""; bold "READY after $(( ($(date +%s) - (deadline - TIMEOUT_MIN * 60)) / 60 )) min."
+    # The clean interval starts only after a complete successful sample; time
+    # spent proving that first sample is not retroactively counted as clean.
+    now="$SECONDS"
+    if [ "$clean_since" -lt 0 ]; then
+      clean_since="$now"
+    fi
+    clean_checks=$((clean_checks + 1))
+    clean_elapsed=$((now - clean_since))
+    bold "  continuous clean dwell ${clean_elapsed}/${MIN_CLEAN_DWELL_S}s (check ${clean_checks})"
+    if [ "$clean_elapsed" -ge "$MIN_CLEAN_DWELL_S" ]; then
+      bold ""; bold "READY after $(( (now - wait_started) / 60 )) min."
       exit 0
     fi
   else
-    clean=0
+    clean_since=-1
+    clean_checks=0
     bold "  not ready; re-checking in ${INTERVAL_S}s"
   fi
   sleep "$INTERVAL_S"
 done
 
-bold ""; bold "TIMED OUT after ${TIMEOUT_MIN} min without ${SETTLE_CHECKS} consecutive clean checks."
+bold ""; bold "TIMED OUT after ${TIMEOUT_MIN} min without ${MIN_CLEAN_DWELL_S}s continuous clean time."
 bold "Do not launch. Investigate what is keeping the machine busy."
 exit 1

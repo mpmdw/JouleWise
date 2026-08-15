@@ -241,6 +241,7 @@ def make_t0_fixture(
         "joulewise/arm_readiness_evidence_t0.py",
         "joulewise/identity_pins.py",
         "scripts/author_arm_evidence_t0.py",
+        "scripts/capture_t0_step.py",
         "scripts/prewindow_check.sh",
         "scripts/quiet_mac_prep.sh",
         "scripts/recover_calibration_ledger.py",
@@ -372,13 +373,29 @@ def make_t0_fixture(
     window_root = custody / "window-plan"
     window_root.mkdir()
     env = {
+        "MEASUREMENT_REPO": str(repository),
+        "WINDOW_ID": tree["window_identity"]["window_id"],
+        "FROZEN_PLAN": str(plan_path),
         "PACK_ROOT": str(pack),
+        "PACK_ID": pack.name,
+        "PLAN_ID": tree["plan"]["plan_id"],
+        "EVIDENCE_ROOT_ID": tree["window_identity"]["evidence_root_id"],
+        "IDENTITY_EPOCH_JSON": str(epoch_path),
+        "T1_BINDINGS_JSON": str(t1_path),
         "RUNS_ROOT": context["claim_runs_root"],
         "BOUND_RUNS_ROOT": context["bound_runs_root"],
+        "CALIBRATION_LEDGER": str(ledger_path),
+        "LEDGER_HEAD_PIN": str(
+            repository / "configs/calibration/calibration_ledger_head.json"
+        ),
+        "ARM_READINESS_CUSTODY_ROOT": str(custody),
         "CUSTODY_ROOT": context["custody_root"],
+        "WINDOW_CUSTODY_ROOT": context["custody_root"],
         "QUARANTINE_ROOT": context["quarantine_root"],
         "CLAIM_BACKUP_DEST": context["claim_backup_destination"],
         "BOUND_BACKUP_DEST": context["bound_backup_destination"],
+        "WAIVER_PATH": context["waiver_path"],
+        "SETTLE_S": "180",
         "BRACKET_SESSION_ID": context["bracket_session_id"],
         "PRE_ATTEMPT_ID": context["pre_attempt_id"],
         "POST_ATTEMPT_ID": context["post_attempt_id"],
@@ -525,7 +542,11 @@ def make_t0_fixture(
                 {
                     "status": "ready",
                     "early_warning_only": True,
-                    "frozen_plan": {"sha256": plan_sha},
+                    "frozen_plan": {
+                        "path": str(plan_path),
+                        "plan_id": tree["plan"]["plan_id"],
+                        "sha256": plan_sha,
+                    },
                 }
             ),
             boot_session_id=boot_session_id,
@@ -784,6 +805,17 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 source = json.loads(source_raw)
                 self.assertEqual(source["row_id"], row["row_id"])
                 self.assertEqual(source["kind"], receipt["kind"])
+                if row["row_id"] == "clock.network_time_off":
+                    self.assertEqual(
+                        source["probes"][0]["argv"],
+                        [
+                            "/usr/bin/sudo",
+                            "-n",
+                            "/usr/sbin/systemsetup",
+                            "-setusingnetworktime",
+                            "off",
+                        ],
+                    )
                 self.assertEqual(source["facts"][0]["fact_id"], row["predicate_id"])
                 self.assertEqual(source["facts"][0]["value"], fact["value"])
                 independently_observed_rows.append(row["row_id"])
@@ -1040,7 +1072,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     def test_named_refusal_matrix_covers_every_distinct_kind(self) -> None:
         cases = (
             ("CLOCK_ATTESTATION", lambda _r, _p, _c, _x: ( _x / "clock-attestation.json").unlink(), {}),
-            ("CLOCK_PROBE", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, stdout="Network Time: On\n") if "systemsetup" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
+            ("CLOCK_PROBE", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=1, stderr="sudo refused\n") if "systemsetup" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
             ("TERMINAL_REVIEW", lambda *_args: None, {"patch_message": True}),
             ("MAINTENANCE_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=0, stdout="123 XProtect\n") if "XProtect" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
             ("ROOT_PREFLIGHT", lambda _r, _p, c, _x: (Path(c["claim_runs_root"]) / "campaign.lock").write_text("busy\n"), {}),

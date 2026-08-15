@@ -9167,4 +9167,43 @@ accessor clause 2 currently forbids) folds into this WO. NOT licensed as a calle
 V2AuthenticationInputError escaping _pack_inventory on a non-adversarial path (_json_object reads
 outside its try); normalized to WindowDurationMarginsRefusal. The recorder branch then merges on
 receipt-soundness (original blocker L4-B1 cured; round-1 static-invariance guard retained; F-5
-landed) WITH this limitation registered — not as "race closed."
+landed) WITH this limitation registered — not as "race closed."### D-078 registry amendment — 2026-08-15: WO-T0-PRODUCER acquisition refusals
+
+The shipped T-0 acquisition wrapper adds this closed twelve-code vocabulary.
+Every spelling is a fail-closed producer refusal and none licenses ARM,
+launch, or a claim:
+
+- `evidence_author_t0_capture_usage_invalid`
+- `evidence_author_t0_capture_environment_invalid`
+- `evidence_author_t0_capture_boot_probe_failed`
+- `evidence_author_t0_capture_plan_invalid`
+- `evidence_author_t0_capture_terminal_review_missing`
+- `evidence_author_t0_capture_sequence_invalid`
+- `evidence_author_t0_capture_clock_observation_invalid`
+- `evidence_author_t0_capture_command_failed`
+- `evidence_author_t0_capture_result_invalid`
+- `evidence_author_t0_capture_output_collision`
+- `evidence_author_t0_capture_io_error`
+- `evidence_author_t0_capture_internal_error`
+
+The wrapper accepts only pack/custody/window-plan paths and, at E-4, one
+prompted independent-clock UTC literal. Boot identity, monotonic bounds,
+commands, context, manifest, digests, and conclusions are derived. A capture
+is canonical and no-clobber; a preserved nonzero/invalid-result capture still
+refuses and is never permission to continue.
+
+**NEEDS_RULING — R2 frozen-generator follow-up.** The current ALPHA and BETA
+`plan_tree.json` bytes still store repository-relative `plan.path` values,
+and all three frozen generators' `freeze_aware_reservation_plan_arguments`
+omit `--plan` while preserve mode is true. Those generators and pack bytes
+are outside WO-T0-PRODUCER's exhaustive write scope, while R2 requires the
+shared resolver to reject rather than basename-repair them and M-2 clause (f)
+requires the generated argv to converge. Options considered: (A) weaken the
+resolver or repair at runtime (rejected by R2); (B) edit frozen generators and
+pack bytes in this work order (not authorized); (C) include both generator
+repairs in the lead-owned Phase-2 successor freeze transaction. Recommendation:
+option C, emitting pack-relative `calibration_plan.json` and deriving the
+generated reservation `--plan` from that reference before the one atomic
+re-freeze. Until ruled and executed, ALPHA/BETA positive T-0 rehearsal and the
+generated-stage E-9 equivalence remain blocked; GAMMA supplies the conforming
+real-pack positive resolver regression.
