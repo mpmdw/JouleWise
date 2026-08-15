@@ -8936,3 +8936,33 @@ zero active gates (fleet blocker L1-B2).
 4. Until that transaction lands, any surface rendering P2-006 as READY is
    OVERRIDDEN by this ruling; the generated regions are known-stale
    (fleet L1-B2/B3, adjudicated).
+
+### R2 RULED (magistrate, 2026-08-15; council-verdict Phase 0; Sol design consult adopted): FROZEN_PLAN identity
+
+Consult custodied: docs/process_traces/2026-08-15-r2-frozen-plan-consult/
+(rule-2 pre-decision consult, adopted in full). Authority: council verdict
+Phase 0 R2; resolves the B-cluster refuter condition (F6) that blocked
+prose/parser changes.
+
+**Ruling:**
+1. FROZEN_PLAN is the committed pack's `calibration_plan.json` — never a
+   custody reservation JSON, never `plan_tree.json`. Its identity is the
+   tuple (pack_id, canonical pack-relative path, plan_id, SHA-256 of
+   exact committed bytes); the freeze receipts already record exactly
+   this binding.
+2. Authoritative storage is canonical pack-root-relative POSIX syntax
+   (reject absolute paths, `.`/`..`, symlinks, non-regular files,
+   uncommitted bytes). Absolute paths appear ONLY at the execution
+   boundary as one resolved literal; the frozen window.env carries
+   literal absolute values, no `$` expansion.
+3. One SHARED RESOLVER implements rule 2 and replaces every ad-hoc join
+   (_pack_identity, dry-run rehearsal, evidence authoring, the T-0
+   author's plan-path check — the doubled-plan-path defect site).
+   Alpha/beta producers emit `plan.path: "calibration_plan.json"`
+   (gamma already conforms).
+4. E-8 verification requires path + plan_id + sha equality (not sha
+   alone); E-9 uses the identical --plan literal. Runbook §4/§6 prose
+   re-cut accordingly.
+5. Execution rides WO-T0-PRODUCER (council Phase 1) with the ruled
+   real-pack regression test; the consult's per-surface fix list is the
+   work order's checklist.
