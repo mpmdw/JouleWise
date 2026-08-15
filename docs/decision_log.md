@@ -9209,3 +9209,52 @@ generated reservation `--plan` from that reference before the one atomic
 re-freeze. Until ruled and executed, ALPHA/BETA positive T-0 rehearsal and the
 generated-stage E-9 equivalence remain blocked; GAMMA supplies the conforming
 real-pack positive resolver regression.
+
+### T-0 CAPTURE PROVENANCE (F4) — honest-contract fix now + trusted-operator scope call DEFERRED to Ed/advisor (magistrate, 2026-08-15)
+
+Consult custodied: docs/process_traces/2026-08-15-t0-capture-provenance-consult/
+(the ONE home; recurred across THREE review rounds — B-execution,
+singlelens F4, the T0-producer review — so per the standing escalation
+trigger this was a CONSULT, not another patch).
+
+**The finding:** the T-0 evidence author authenticates capture BYTES, keys,
+typed monotonic values, boot identity, freshness, and ordering — but NOT
+which process produced them. A hand-authored canonical JSON with fabricated
+monotonic_ns, or a call through capture_step's public execute/monotonic_ns/
+utc_now injection seam, is indistinguishable to the consumer from a genuine
+capture. The council's WO-T0-PRODUCER scope wanted "boot-bound monotonic-ns
+fields NO HUMAN CAN HAND-PRODUCE" — that property is NOT enforced, so the
+contract currently OVERCLAIMS.
+
+**Distinct from the recorder race (do NOT reuse its justification):** the
+recorder race stayed in-model with an accepted limitation BECAUSE post-grant
+receipt integrity survived. Here forged historical dwell DIRECTLY DEFEATS
+T-0's semantic purpose (binding the arm to a real quiet window). So a
+limitation here is acceptable ONLY through an EXPLICIT trusted-operator /
+no-concurrent-writer assumption — never by claiming integrity survives.
+
+**MANDATORY HONEST-CONTRACT FIX (folds into the WO-T0-PRODUCER branch; not
+optional, truthful either way):** (a) supersede D-134 clause 6's
+"derive-never-enter … no human can hand-produce" with a production-interface/
+ceremony rule that does NOT assert operator-fabrication resistance; correct
+the runbook + author docstrings to match; (b) remove the PUBLIC
+execute/monotonic_ns/utc_now injection seam from capture_step (tests use a
+private/test-only hook), so casual/accidental fabrication is harder and the
+public CLI has no monotonic override.
+
+**REGISTERED LIMITATION (v1):** T-0 capture provenance is TRUSTED-OPERATOR —
+deliberate fabrication by the operator is not defended against; the real
+binding to a real quiet window is the human §5A tap + the terminal-review
+attestation + the single-operator assumption, all STATED as the limitation.
+
+**RULING-REQUIRED — Ed + advisor (Rivoire; metrology-rigor bar); PAPER-SCOPE,
+non-blocking:** does the MVP measurement-integrity claim rest on
+trusted-operator T-0 evidence (accept the limitation, publish it labelled),
+or does the claim need the consult's OPTION (a) — a hardened signed capture
+app + external verifier issuing a pre-E-4 nonce + App Attest assertion
+(Secure Enclave / attestation chain / remote verifier key) binding
+nonce+app+HEAD+boot+monotonic-transcript+argv+output-hashes, countersigned,
+author-pinned? Option (a) genuinely moves the trust root outside Ed but adds
+a server, app distribution, and a macOS-27 dependency — disproportionate to
+this WO, real for a stronger paper. The honest-contract fix lands regardless;
+this call only decides whether option (a) becomes a future work item.

@@ -1,10 +1,27 @@
 {
-  "active_global_gates": [],
+  "active_global_gates": [
+    {
+      "allowed_task_ids": [],
+      "authority": [
+        "docs/decision_log.md#window-gating-directive--2026-08-13-late-ed-t6-council-audited-instrument-readiness-precedes-any-window",
+        "docs/process_traces/2026-08-15-readiness-council/council-verdict.md#verdict"
+      ],
+      "clearance": "docs/process/instrument-readiness-audit-charter.md#verdict-form-amendments-11-12 — a reconvened READY-CANDIDATE council verdict records no NOT-READY, no UNVERIFIED, and all ED-QUALIFICATION rows closed with evidence",
+      "id": "WINDOW-COUNCIL-GATE",
+      "scope": {
+        "lanes": [
+          "quiet_mac"
+        ],
+        "operation": "select"
+      },
+      "summary": "No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; the frozen D-117 packs wait while the council repair program proceeds."
+    }
+  ],
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T3 session 2026-08-09 day: flake fix merged (#123); trust assembled, PR #122 open (16-question delta 16/16, decisive CI gate in progress); U2 frozen; default Codex tier",
-    "path": "RUN_STATE.md"
+    "label": "T6 session 2026-08-13: three D-117 packs frozen and readiness work handed off",
+    "path": "docs/run_reports/2026-08-13-t6-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -45,7 +62,7 @@
       "id": "AUD-FOLLOWUPS",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 35,
+      "rank": 42,
       "status": "queued",
       "status_note": "Accepted small residue only; audit ceremony dispositions remain in the report.",
       "stop_card": null
@@ -70,12 +87,12 @@
       "dependencies": [
         {
           "evidence": null,
-          "kind": "task",
+          "kind": "event",
           "required": "the 2M corpus exists before this roadmap-conditioned refactor lands",
           "scope": "close",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "POST-2M-CAMPAIGN-SCALE"
         }
       ],
       "fallback": null,
@@ -88,14 +105,12 @@
           "rule": "Keep this post-2M and behavior-preserving; do not redesign campaigns or weaken locks, waivers, backups, cooldown, or claim-readiness gates"
         }
       ],
-      "flags": [
-        "blocked_post_2m"
-      ],
+      "flags": [],
       "goal": "After 2M, split scripts/run_campaign.py along tested policy seams, pure validation and provenance first and execution lifecycle second, only when campaign-scale or split or multi-node work first forces edits to that path.",
       "id": "AUD-WO-033",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 36,
+      "rank": 43,
       "status": "queued",
       "stop_card": null
     },
@@ -142,7 +157,7 @@
       "id": "AUD-WO-034",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 37,
+      "rank": 44,
       "status": "queued",
       "stop_card": null
     },
@@ -189,7 +204,7 @@
       "id": "AUD-WO-035",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 38,
+      "rank": 45,
       "status": "queued",
       "status_note": "D-043 supersession closure falls due at landing: add the dated protocol-version supersession line identified by PA-2.",
       "stop_card": null
@@ -237,7 +252,7 @@
       "id": "AUD-WO-036",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 39,
+      "rank": 46,
       "status": "queued",
       "stop_card": null
     },
@@ -286,7 +301,7 @@
       "id": "AUD-WO-037",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 40,
+      "rank": 47,
       "status": "queued",
       "status_note": "D-043 supersession closure falls due at landing: add the dated D-057 governed-reason amendment identified by PA-2.",
       "stop_card": null
@@ -334,7 +349,7 @@
       "id": "AUD-WO-038",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 41,
+      "rank": 48,
       "status": "queued",
       "status_note": "D-043 supersession closure falls due at landing: back-annotate the public adapter and transport contract as required by PA-2.",
       "stop_card": null
@@ -394,7 +409,7 @@
       "id": "AUD-WO-039",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 42,
+      "rank": 49,
       "status": "partial",
       "status_note": "Partial page trim landed 2026-07-15 by redirecting the duplicative capsule task-queue mirror while preserving its routes; remaining payload work is open. D-043 supersession closure falls due at landing through the dated D-051 amendment identified by PA-2.",
       "stop_card": null
@@ -449,7 +464,7 @@
       "id": "AXI-SB-ADAPTER",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 4,
+      "rank": 11,
       "status": "queued",
       "stop_card": null
     },
@@ -504,7 +519,7 @@
       "id": "AXI-SD",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 6,
+      "rank": 13,
       "status": "queued",
       "stop_card": null
     },
@@ -572,7 +587,7 @@
       "id": "AXI-SE",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 7,
+      "rank": 14,
       "status": "queued",
       "stop_card": null
     },
@@ -617,7 +632,7 @@
       "id": "C3-RECOGNIZER-EXACT-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 15,
+      "rank": 22,
       "status": "queued",
       "stop_card": null
     },
@@ -655,7 +670,7 @@
       "id": "CGV-HARDEN-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 53,
+      "rank": 60,
       "status": "queued",
       "status_note": "2026-08-05: runner-scoped because PR #103 removed the validator's --receipt-out; deliberately registered as a sibling of, never folded into, COLDGATE-HANDOFF-01.",
       "stop_card": null
@@ -696,7 +711,7 @@
       "id": "CI-003",
       "lane": "agent",
       "priority": "p3_research_expansion",
-      "rank": 27,
+      "rank": 34,
       "status": "shelved",
       "stop_card": null
     },
@@ -726,7 +741,7 @@
       "id": "CODEX-BRIDGE-SANDBOX-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 13,
+      "rank": 20,
       "status": "queued",
       "status_note": "Caught live 2026-08-05: observer_sandbox is set to read-only, but the non-app review invocation omits the sandbox flag, so audit metadata misstates enforcement.",
       "stop_card": null
@@ -765,7 +780,7 @@
       "id": "COLDGATE-HANDOFF-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 14,
+      "rank": 21,
       "status": "queued",
       "status_note": "Design warnings: holding file descriptors open does NOT seal bytes because a second descriptor can mutate the same inode; path-based launch-time revalidation alone leaves a revalidate-to-read race. Pending-ratification payload carried by this row: the proposed amendment to docs/process/coldgate_charter_registry.md separating validator observation from runner custody. The registry is Ed-ratified and is NOT edited by this or any session without a cold-gate/Ed ratification.",
       "stop_card": null
@@ -797,7 +812,7 @@
       "id": "CUSTODY-HARDEN-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 43,
+      "rank": 50,
       "status": "queued",
       "status_note": "Minted 2026-07-25 from PR #85 gauntlet deferrals; triangle-agreement enforcement (merged) already raises these seams to three-file forgery cost.",
       "stop_card": null
@@ -837,30 +852,27 @@
       "id": "D080-TRIGGER-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 52,
+      "rank": 59,
       "status": "blocked",
       "status_note": "2026-08-03: minted from the two-week soundness sweep's finding that D-080 has never fired, plus Ed's validated concurrent-audit pattern (memory: concurrent-fable-audit-pattern). Non-blocking hardening.",
       "stop_card": null
     },
-    "D117-U11-IDPIN-PROJECTION": {
+    "D117-W-ALPHA": {
       "acceptance": {
         "evidence": [
-          "Synthetic-pack model/runtime/config triple and authenticated projection receipt equal the generalized mint's shared rederivation",
-          "A one-byte recognized model-file perturbation changes the model hash and refuses arm with readiness_identity_environment_dirty",
-          "No arm-path CLI, JSON input field, launch recipe, or public verifier callable accepts operator-supplied identity pins",
-          "Freeze, read-only verify, frozen-mismatch, idempotent freeze, and successor-reissue lifecycle tests pass",
-          "Alpha and beta one-unit shapes plus gamma's ordered A/decode, A/prefill_p256, B/decode, and B/prefill_p256 units validate",
-          "U8 consumes verify_frozen_projection and makes every U11 reason code a readiness REFUSE before any readiness GO"
+          "Exact frozen pack d117_floor_qwen25_1p5b_v1 is used only after council READY and separate T-0 GO",
+          "Fresh live brackets, strict-valid collection bundle, whole-window verdict, margin receipt, backup, and custody records land",
+          "The prospective 1.5B decode and prefill floor artifacts trace to the frozen plan and governed close-out chain"
         ],
         "pointer": {
-          "json_pointer": "/tasks/D117-U11-IDPIN-PROJECTION/acceptance",
-          "label": "D117-U11-IDPIN-PROJECTION acceptance",
+          "json_pointer": "/tasks/D117-W-ALPHA/acceptance",
+          "label": "D117-W-ALPHA acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "D-117 pack identities are derived once from authenticated configs, model bytes, and live adapters, frozen in an append-only receipt, and re-verified read-only before arm."
+        "summary": "The frozen ALPHA pack produces the fresh 1.5B floor window and its complete governed close-out chain."
       },
       "authority": {
-        "label": "D-131 identity-pin projection contract",
+        "label": "D-117 three prospective claim windows",
         "path": "docs/decision_log.md"
       },
       "dependencies": [],
@@ -868,20 +880,124 @@
       "fences": [
         {
           "authority": {
-            "label": "D-131/D-134 freeze, readiness, and launch ordering",
-            "path": "docs/decision_log.md"
+            "label": "2026-08-15 council NOT-READY verdict",
+            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
           },
-          "rule": "Every D-117 pack freeze and arm remains downstream of U11: freeze pins the committed identity projection, T-0 re-verifies it read-only, and only a same-HEAD/pack non-authorizing dry run, complete live evidence, ledger reservation, external GO arm receipt, and atomic capability consumption may precede Ed's physical launch; no automated word is launch authority"
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
         }
       ],
-      "flags": [],
-      "goal": "Implement canonical per-unit identity projection, freeze receipts, and read-only arm re-verification for the alpha, beta, and four-unit gamma D-117 packs.",
-      "id": "D117-U11-IDPIN-PROJECTION",
-      "lane": "agent",
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v1 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.",
+      "id": "D117-W-ALPHA",
+      "lane": "quiet_mac",
       "priority": "p1_phase_gate",
-      "rank": 54,
+      "rank": 2,
       "status": "queued",
-      "status_note": "Enrolled 2026-08-11 from the consult-adopted D-131 contract. Checked-in packs remain unprojected; real-model freeze occurs only after the reviewed integration head, and U8 owns readiness-record consumption.",
+      "status_note": "Current identity-projection and freeze receipts are PASS. The pack is frozen but not selectable: WINDOW-COUNCIL-GATE admits no quiet-mac task, and council Phase 2 requires the ruled successor re-freeze before the re-audit and READY-candidate sitting.",
+      "stop_card": null
+    },
+    "D117-W-BETA": {
+      "acceptance": {
+        "evidence": [
+          "Exact frozen pack d117_floor_qwen25_7b_v1 is used only after ALPHA close-out, council READY, and separate T-0 GO",
+          "Fresh live brackets, strict-valid collection bundle, whole-window verdict, margin receipt, backup, and custody records land",
+          "The prospective 7B decode and prefill floor artifacts trace to the frozen plan and governed close-out chain"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D117-W-BETA/acceptance",
+          "label": "D117-W-BETA acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The frozen BETA pack runs after ALPHA and produces the fresh 7B floor window and its complete governed close-out chain."
+      },
+      "authority": {
+        "label": "D-117 three prospective claim windows",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "ALPHA collection and governed close-out complete",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D117-W-ALPHA"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-08-15 council NOT-READY verdict",
+            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+          },
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Run the frozen BETA pack d117_floor_qwen25_7b_v1 after ALPHA as D-117's fresh 7B decode-floor window with its prefill floor rider and governed close-out.",
+      "id": "D117-W-BETA",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 3,
+      "status": "blocked",
+      "status_note": "Current identity-projection and freeze receipts are PASS. The pack remains behind WINDOW-COUNCIL-GATE and the ruled Phase-2 successor re-freeze, Phase-3 re-audit, and READY-candidate sitting.",
+      "stop_card": null
+    },
+    "D117-W-GAMMA": {
+      "acceptance": {
+        "evidence": [
+          "Exact frozen pack d117_contrast_qwen25_1p5b_vs_7b_v1 is used only after BETA close-out, council READY, and separate T-0 GO",
+          "Fresh live brackets, strict-valid contrast collection bundle, whole-window verdict, backup, and custody records land",
+          "The finalized prospective analysis basis carries the governed decode and p256 prefill contrast outcomes through claim consumption"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D117-W-GAMMA/acceptance",
+          "label": "D117-W-GAMMA acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The frozen GAMMA pack runs after BETA and produces the governed prospective model-contrast window and complete consumption chain."
+      },
+      "authority": {
+        "label": "D-117 three prospective claim windows",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "BETA collection and governed close-out complete",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D117-W-BETA"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "2026-08-15 council NOT-READY verdict",
+            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+          },
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Run the frozen GAMMA pack d117_contrast_qwen25_1p5b_vs_7b_v1 after BETA as D-117's prospective 1.5B-versus-7B contrast window and governed consumption chain.",
+      "id": "D117-W-GAMMA",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 4,
+      "status": "blocked",
+      "status_note": "Current identity-projection and freeze receipts are PASS. The pack remains behind WINDOW-COUNCIL-GATE and the ruled Phase-2 successor re-freeze, Phase-3 re-audit, and READY-candidate sitting.",
       "stop_card": null
     },
     "DOC-008": {
@@ -945,7 +1061,7 @@
       "id": "DOC-008",
       "lane": "agent",
       "priority": "p4_polish",
-      "rank": 32,
+      "rank": 39,
       "status": "partial",
       "status_note": "Reopened by WO-021; phase C repairs work-selection authority while three residual task records remain live.",
       "stop_card": null
@@ -983,7 +1099,7 @@
       "id": "DOC-008-INTAKE",
       "lane": "agent",
       "priority": "p4_polish",
-      "rank": 31,
+      "rank": 38,
       "status": "queued",
       "stop_card": null
     },
@@ -1020,7 +1136,7 @@
       "id": "DOC-008-REFLECTION",
       "lane": "agent",
       "priority": "p4_polish",
-      "rank": 29,
+      "rank": 36,
       "status": "queued",
       "stop_card": null
     },
@@ -1057,7 +1173,7 @@
       "id": "DOC-008-STATUS",
       "lane": "agent",
       "priority": "p4_polish",
-      "rank": 30,
+      "rank": 37,
       "status": "queued",
       "stop_card": null
     },
@@ -1114,7 +1230,7 @@
       "id": "DOC-010",
       "lane": "agent",
       "priority": "p4_polish",
-      "rank": 28,
+      "rank": 35,
       "status": "shelved",
       "stop_card": null
     },
@@ -1152,41 +1268,9 @@
       "id": "FLOOR-BIND-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 3,
+      "rank": 10,
       "status": "queued",
       "status_note": "Minted 2026-07-22 from confirmation round 9 (CR9-1, lead-reproduced). L1 workflow rule mitigates until closed.",
-      "stop_card": null
-    },
-    "FLOOR-COMMONMODE-01": {
-      "acceptance": {
-        "evidence": [
-          "Block-timescale fiducial stationarity registered as a NAMED transfer assumption with its evidence",
-          "Estimator pre-registered before it touches claim-bearing data",
-          "The identical estimator applied to BOTH the calibration blocks and the consuming science contrast (a floor calibrated with cancellation the consumer does not get would understate false effects)",
-          "Quantified gain on a5/a10 blocks versus the worst-case-sum default"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FLOOR-COMMONMODE-01/acceptance",
-          "label": "FLOOR-COMMONMODE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The fiducial term is ~80% of the composed anchor bound (24.9 of ~31.1 ms, verified) and is literally the same artifact for all four members of a block; treating it as four independent adversarial draws is itself an unphysical modelling choice."
-      },
-      "authority": {
-        "label": "2026-07-25 attribution-limit adjudication (Fable ruling + Sol replay; plan in session scratchpad)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Pre-register and evaluate a common-mode anchor estimator for ABBA blocks: sweep one shared fiducial shift across all four members, re-integrate measured curves, and add only genuinely per-bundle components adversarially.",
-      "id": "FLOOR-COMMONMODE-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 47,
-      "status": "queued",
-      "status_note": "Minted 2026-07-25. Quantified same day on a5 decode ABBA (10 complete blocks): implemented worst-case-sum half-width gives a 6.46 J comparative floor; a common-mode proxy gives 2.13 J, a 3x improvement — material, but still above that cell's 0.60 J point floor, so it does not by itself restore extraction under the current gate. Value is in tightening the labelled floor, not in avoiding the label. Fiducial share of the composed bound measured at 80-87%. D-133 (2026-08-11): DESK THREAD, NON-FREEZE-GATING — the cold-gate hybrid ruled the fallback (this branch) merges and the freeze proceeds on the worst-case default estimator; FCM-01 work continues unmerged (ALT-D120 vocabulary closure; arithmetic cleared terminally by the O3 full delta — zero exact understatements in 4096 independent rational cases); packs re-spec back to the tighter estimator ONLY if ALT-D120 + full delta + WO-MINT-ESTIMATOR-VOCAB all land pre-freeze-wave.",
       "stop_card": null
     },
     "FLOOR-WORKLOAD-SIZING-01": {
@@ -1215,7 +1299,7 @@
       "id": "FLOOR-WORKLOAD-SIZING-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 46,
+      "rank": 53,
       "status": "queued",
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
@@ -1395,7 +1479,7 @@
       "id": "MINT-GENERALIZE-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 12,
+      "rank": 19,
       "status": "blocked",
       "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); the night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay completed BYTE-IDENTICAL at pinned 3de370ec (all four digests; docs/process_traces/2026-08-03-q1-remint-bytecompare/). 2026-08-05: condition (a) is satisfied by merged PR #100. Condition (b) preparation is complete and its verification blocker is resolved: the B1 disposition is lead-ruled 30/2/6 and deterministic bootstrap is implemented on impl/ledger-bootstrap, under audit. Condition (c) is in flight on impl/validator-rootpins. The row remains hard-blocked on the still-pending D-110 (b)+(c) completion gate.",
       "stop_card": null
@@ -1434,7 +1518,7 @@
       "id": "MODULARITY-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 49,
+      "rank": 56,
       "status": "queued",
       "status_note": "Minted 2026-07-29 from Ed's modularity directive. Survey verdict: runtime/telemetry Protocol layer and content-addressed provenance spine are already modular; the gap is campaign authoring above the adapter and literal assertions below the reader. Practical payoff lands with the planned Qwen3 cross-generation follow-up.",
       "stop_card": null
@@ -1473,7 +1557,7 @@
       "id": "NODE-CUSTODY-DEFAULT-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 51,
+      "rank": 58,
       "status": "queued",
       "status_note": "Deferred 2026-08-03 from NVIDIA-RETENTION-FLAKE-01 (PR #97 closed the test-side flake); the production hardening is a NEEDS_RULING tradeoff, non-blocking (no current concurrent-client scenario).",
       "stop_card": null
@@ -1522,7 +1606,7 @@
       "id": "NVIDIA-PORTABILITY-01",
       "lane": "agent",
       "priority": "p3_research_expansion",
-      "rank": 50,
+      "rank": 57,
       "status": "blocked",
       "stop_card": null
     },
@@ -1704,7 +1788,7 @@
       "id": "P2-004",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 22,
+      "rank": 29,
       "status": "partial",
       "status_note": "Provisional small-model pick 2026-07-06 opens 2G.",
       "stop_card": null
@@ -1747,114 +1831,9 @@
       "id": "P2-005",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 23,
+      "rank": 30,
       "status": "partial",
       "status_note": "PR #49 merged the code-now verifier, streaming, cleanup, and localhost gates; P1-006 and device execution remain open.",
-      "stop_card": null
-    },
-    "P2-006": {
-      "acceptance": {
-        "evidence": [
-          "Strict-valid campaign bundles under the fixed validator",
-          "Counterbalanced order manifest + drift sentinel positions recorded",
-          "baseline_results.md with variance + prefill/decode comparison"
-        ],
-        "pointer": {
-          "label": "Phase 2 exit checklist",
-          "path": "docs/phase_2/phase_2_exit_checklist.md"
-        },
-        "summary": "Strict-valid reducer-0.5.2/0.6.2 campaign bundles with counterbalanced order and drift sentinels; interpretation uses campaign claim_readiness plus the merged fail-closed analysis engine."
-      },
-      "authority": {
-        "label": "Phase 2 plan + analysis plans",
-        "path": "docs/phase_2/phase_2_plan.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "P2-037 merged analysis-engine integration evidence",
-            "path": "tests/test_analysis_integration.py"
-          },
-          "kind": "task",
-          "required": "contrast/claim analysis engine exists",
-          "scope": "interpret",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-037"
-        },
-        {
-          "evidence": {
-            "label": "P2-041 merged campaign-verdict split evidence",
-            "path": "docs/run_reports/2026-07-11-p2041-vetted-rebuild.md"
-          },
-          "kind": "task",
-          "required": "campaign verdict split exists",
-          "scope": "interpret",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-041"
-        },
-        {
-          "evidence": {
-            "label": "P2-044 governed idle-ESS evidence",
-            "path": "docs/run_reports/2026-07-11-p2044-idle-ess.md"
-          },
-          "kind": "task",
-          "required": "governed idle dependence and effective-sample-size term exists",
-          "scope": "interpret",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-044"
-        },
-        {
-          "evidence": {
-            "label": "Reducer 0.4.2 governed throughput contract",
-            "path": "docs/contracts/run_bundle_layout.md"
-          },
-          "kind": "task",
-          "required": "reducer 0.4.2 governed inter-token throughput semantics exist",
-          "scope": "interpret",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-045"
-        },
-        {
-          "evidence": {
-            "label": "R-016 mitigated: off-machine backup and restore proof",
-            "path": "docs/risk_register.md"
-          },
-          "kind": "task",
-          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
-          "scope": "retain_evidence",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P0-003"
-        },
-        {
-          "evidence": {
-            "label": "P2-015 retired 2026-07-31: claim-grade Window-A floors collected (windows a9/a10, C, D); mint #1 (1.5B decode floor 7.377086 J) mainline via PR #88 (da83337); 7B floor window passed 2026-07-29; contrast window passed 2026-07-31 [D-110 2026-08-03: mint #1 is retroactively NON-CLAIM-BEARING; this dependency stands as a historical event only — any task CONSUMING the floor value must re-verify against the re-mint]",
-            "path": "docs/run_reports/2026-07-31-contrast-window-collection.md"
-          },
-          "kind": "task",
-          "required": "Window-A floors measured first",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-015"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [
-        "lead_only"
-      ],
-      "goal": "Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.",
-      "id": "P2-006",
-      "lane": "quiet_mac",
-      "priority": "p2_next_slice",
-      "rank": 2,
-      "status": "queued",
-      "status_note": "Software interpretation gates are satisfied; Window-A floors landed 2026-07-31 (mint #1 mainline), so only the campaign remains.",
       "stop_card": null
     },
     "P2-010": {
@@ -1909,7 +1888,7 @@
       "id": "P2-010",
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
-      "rank": 3,
+      "rank": 5,
       "status": "queued",
       "status_note": "Envelope-gate script merged 2026-07-09 (PR #23); only the campaign remains.",
       "stop_card": null
@@ -1946,12 +1925,12 @@
         },
         {
           "evidence": null,
-          "kind": "task",
-          "required": "identification-core runs after Window A",
+          "kind": "event",
+          "required": "a new R3-compliant two-model exploratory campaign supplies the identification-core predecessor evidence",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "P2-006-SUCCESSOR-ROW"
         }
       ],
       "fallback": null,
@@ -1963,7 +1942,7 @@
       "id": "P2-012",
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
-      "rank": 6,
+      "rank": 8,
       "status": "blocked",
       "status_note": "Manifests generated + regenerated (PR #26); runner/runtime/validator hash guards merged (PRs #24/#27).",
       "stop_card": null
@@ -1997,24 +1976,22 @@
         },
         {
           "evidence": null,
-          "kind": "task",
+          "kind": "event",
           "required": "the 2M corpus exists",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "POST-2M-CORPUS"
         }
       ],
       "fallback": null,
       "fences": [],
-      "flags": [
-        "blocked_post_2m"
-      ],
+      "flags": [],
       "goal": "Critique-adjudicated queue batch (umbrella a..i): post-2M controller split; node-worker protocol parity tests; NVIDIA skip counts into measurement quality; per-backend raw-to-trace strict generalization; claims-to-evidence index post-2M; schema v0.2 loader/export parity; boundary labels in report index; summary_provenance strict key; token_count_source naming alignment.",
       "id": "P2-016",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 24,
+      "rank": 31,
       "status": "blocked",
       "status_note": "Stage 1 conservatively blocks the parent; a later owning session may split P2-016a..i through normal intake.",
       "stop_card": null
@@ -2052,12 +2029,12 @@
         },
         {
           "evidence": null,
-          "kind": "task",
-          "required": "Window-A baselines size n",
+          "kind": "event",
+          "required": "a new R3-compliant two-model exploratory campaign supplies the sizing baseline",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "P2-006-SUCCESSOR-ROW"
         }
       ],
       "fallback": null,
@@ -2069,7 +2046,7 @@
       "id": "P2-019",
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
-      "rank": 4,
+      "rank": 6,
       "status": "blocked",
       "stop_card": null
     },
@@ -2105,12 +2082,12 @@
         },
         {
           "evidence": null,
-          "kind": "task",
-          "required": "Window-A baselines size n",
+          "kind": "event",
+          "required": "a new R3-compliant two-model exploratory campaign supplies the sizing baseline",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "P2-006-SUCCESSOR-ROW"
         }
       ],
       "fallback": null,
@@ -2122,7 +2099,7 @@
       "id": "P2-020",
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
-      "rank": 5,
+      "rank": 7,
       "status": "blocked",
       "status_note": "Generator merged (PR #19), manifests ready (PR #26); a tiny AP-6 pilot may ride a Window-A tail (CP-6).",
       "stop_card": null
@@ -2147,12 +2124,12 @@
       "dependencies": [
         {
           "evidence": null,
-          "kind": "task",
+          "kind": "event",
           "required": "the 2M corpus exists (post-2M per D-041)",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "POST-2M-CORPUS"
         },
         {
           "evidence": {
@@ -2177,14 +2154,12 @@
           "rule": "Energy-layer-only pin: no accuracy interpretation, no leaderboard join, no pass@k-energy ratio, no general adapter framework; AP row required before any L2 claim"
         }
       ],
-      "flags": [
-        "blocked_post_2m"
-      ],
+      "flags": [],
       "goal": "Marker-shim energy-layer feasibility spike: verdict-shaped export path only (external_markers_supported / partial / external_markers_unsupported).",
       "id": "P2-022",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 17,
+      "rank": 24,
       "status": "blocked",
       "status_note": "C-027: the C-026 revisit-after-Window-A note is a revisit of sequencing, not permission.",
       "stop_card": null
@@ -2208,12 +2183,12 @@
       "dependencies": [
         {
           "evidence": null,
-          "kind": "task",
+          "kind": "event",
           "required": "the 2M corpus exists (post-2M per D-041)",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "POST-2M-CORPUS"
         },
         {
           "evidence": null,
@@ -2235,14 +2210,12 @@
           "rule": "No pass@k, accuracy, or capability claim"
         }
       ],
-      "flags": [
-        "blocked_post_2m"
-      ],
+      "flags": [],
       "goal": "HumanEval import smoke: benchmark_import manifest plus suite profile plumbing goal; freeze subset with C-005 discipline, MIT license/provenance fields, 256/512-token completion policy.",
       "id": "P2-023",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 18,
+      "rank": 25,
       "status": "blocked",
       "stop_card": null
     },
@@ -2266,12 +2239,12 @@
       "dependencies": [
         {
           "evidence": null,
-          "kind": "task",
+          "kind": "event",
           "required": "2M reductions identify floor/MDE headroom",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "POST-2M-REDUCTIONS"
         },
         {
           "evidence": {
@@ -2293,7 +2266,7 @@
       "id": "P2-024",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 19,
+      "rank": 26,
       "status": "blocked",
       "stop_card": null
     },
@@ -2398,7 +2371,7 @@
       "id": "P2-035",
       "lane": "agent",
       "priority": "p3_research_expansion",
-      "rank": 0,
+      "rank": 7,
       "status": "queued",
       "stop_card": null
     },
@@ -2437,7 +2410,7 @@
       "id": "P2-036",
       "lane": "agent",
       "priority": "p3_research_expansion",
-      "rank": 1,
+      "rank": 8,
       "status": "shelved",
       "status_note": "SHELF per C-026 meeting; FLORES language-set decision (D-046/B6) may share the session.",
       "stop_card": null
@@ -2504,7 +2477,7 @@
       "id": "P2-046B",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
-      "rank": 8,
+      "rank": 10,
       "status": "queued",
       "status_note": "Part A merged in PR #50; Part B is quiet-machine physical execution.",
       "stop_card": null
@@ -2556,7 +2529,7 @@
       "id": "P2-047A",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 25,
+      "rank": 32,
       "status": "queued",
       "stop_card": null
     },
@@ -2610,7 +2583,7 @@
       "id": "P2-047B",
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
-      "rank": 9,
+      "rank": 11,
       "status": "blocked",
       "stop_card": null
     },
@@ -2658,7 +2631,7 @@
       "id": "P2-048",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 26,
+      "rank": 33,
       "status": "shelved",
       "status_note": "Conditional on P1-003 selecting an available meter path.",
       "stop_card": null
@@ -2698,7 +2671,7 @@
       "id": "P2-050",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
-      "rank": 33,
+      "rank": 40,
       "status": "queued",
       "stop_card": null
     },
@@ -2736,7 +2709,7 @@
       "id": "P3-000",
       "lane": "agent",
       "priority": "p3_research_expansion",
-      "rank": 16,
+      "rank": 23,
       "status": "blocked",
       "status_note": "3.0.1 complete and merged (PR #9, replay_supported).",
       "stop_card": null
@@ -2760,12 +2733,12 @@
       "dependencies": [
         {
           "evidence": null,
-          "kind": "task",
+          "kind": "event",
           "required": "2M affine coefficients exist",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "P2-006"
+          "target": "POST-2M-AFFINE-COEFFICIENTS"
         }
       ],
       "fallback": null,
@@ -2775,7 +2748,7 @@
       "id": "P3-001b",
       "lane": "agent",
       "priority": "p3_research_expansion",
-      "rank": 21,
+      "rank": 28,
       "status": "blocked",
       "stop_card": null
     },
@@ -2805,7 +2778,7 @@
       "id": "PHASE-SHARE-ESTIMAND-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 48,
+      "rank": 55,
       "status": "queued",
       "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
       "stop_card": null
@@ -2848,7 +2821,7 @@
       "id": "QUIET-GUARD-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 2,
+      "rank": 9,
       "status": "queued",
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
       "stop_card": null
@@ -2899,7 +2872,7 @@
       "id": "SEC5A-REMOTE-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 8,
+      "rank": 15,
       "status": "shelved",
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). Shelved with the guard's shelved commits: the programmatic substrate this amendment needed lived in the dropped watcher/handoff scope.",
       "stop_card": null
@@ -2937,7 +2910,7 @@
       "id": "SUPERSESSION-DUP-REFUSAL-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 10,
+      "rank": 17,
       "status": "queued",
       "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
       "stop_card": null
@@ -2979,7 +2952,7 @@
       "id": "T3-CHAR-PAIR-01",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
-      "rank": 7,
+      "rank": 9,
       "status": "shelved",
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). Both arms shelved: the app-UP r03 re-capture and the app-DOWN arm existed to decide app-adjacent window admissibility, which the descope moots. Reopen only on Ed's word.",
       "stop_card": null
@@ -3019,7 +2992,7 @@
       "id": "T3-PROV-SCHEMA-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 11,
+      "rank": 18,
       "status": "queued",
       "status_note": "Bridge §8 currently validates only self-reported headers; consumption-side fail-closed is the actual protection until this row supplies real enforcement.",
       "stop_card": null
@@ -3058,7 +3031,7 @@
       "id": "TEST-SPEED-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 5,
+      "rank": 12,
       "status": "queued",
       "status_note": "2026-08-03: timing DATA collected (quiet bench, 93 modules, 695s serial; raw in .desk/test-speed-consult/timings-20260803.jsonl) and DESIGN done (.desk/test-speed-consult/DESIGN-from-timing-data.md). Findings: suite is a 2-module problem (run_campaign 182s + p2038 133s = 45%); module-atomic sharding CAPS at 182s so those two must be split by TestCase class; shard-runner + splits -> ~87s wall @8 workers (6.5x); fast tier (drop 11 heavy integ modules) -> 25-40s PR feedback with the full suite still the merge gate. Blacksmith (lever 3) NEEDS ED (account/cost; likely marginal once sharded). Implementation queued: scripts/shard_tests.py + class-split + CI matrix — mechanical, delegatable, zero deletions (D-061). 2026-08-04: PHASE 1 LANDED — PR #98 MERGED (9b02539): module-atomic shard-runner + 8-way CI shard matrix, main CI green under it (~15min -> ~6min proven); worktree/branch pruned. Remaining scope: class-split of the two heavy modules (Phase 2), fast PR tier (lever 2), Blacksmith runners (lever 3, NEEDS ED).",
       "stop_card": null
@@ -3102,9 +3075,293 @@
       "id": "TOOL-01",
       "lane": "agent",
       "priority": "p3_tooling",
-      "rank": 34,
+      "rank": 41,
       "status": "queued",
       "status_note": "lead personal tooling, non-repo",
+      "stop_card": null
+    },
+    "WO-CENSUS-SEMANTICS": {
+      "acceptance": {
+        "evidence": [
+          "ED-Q-L9-3 real quiet-state fixture is committed before implementation",
+          "MAINTENANCE_CENSUS uses the ruled activity-based semantics",
+          "Browser and monitor process patterns pass regressions against the real resident-process fixture without admitting active contaminants"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-CENSUS-SEMANTICS/acceptance",
+          "label": "WO-CENSUS-SEMANTICS acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The L9-B1/B2 census repairs are proven against the real quiet-machine resident-process baseline before their semantics can admit a window."
+      },
+      "authority": {
+        "label": "2026-08-15 council verdict Phase 1 and Opus W9",
+        "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "real quiet-state resident-process baseline fixture is captured with all fleets and agents closed",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ED-Q-L9-3"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Council verdict Disposition 5 and Opus S8/W9",
+            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+          },
+          "rule": "Do not weaken either census from synthetic or self-nominated evidence; ED-Q-L9-3 is a hard precondition"
+        }
+      ],
+      "flags": [],
+      "goal": "Consolidate L9-B1/B2 by reshaping MAINTENANCE_CENSUS around activity and correcting browser/monitor patterns against the real quiet-state fixture.",
+      "id": "WO-CENSUS-SEMANTICS",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 4,
+      "status": "blocked",
+      "status_note": "Council Phase 1 parallel code work, deliberately held until Ed supplies ED-Q-L9-3 early in the batched qualification session.",
+      "stop_card": null
+    },
+    "WO-CONSUMPTION-EDGE": {
+      "acceptance": {
+        "evidence": [
+          "Frozen prospective-manifest validator rejects draft-only postcollection attachments",
+          "Outcome-blind finalizer authenticates completeness, custody, selectors, verdict basis, bracket, ledger terminal head, and aggregate floor lineage",
+          "Analyze-claims accepts only the immutable finalized v3 artifact and the L10 sacrificial rehearsal passes at one head"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-CONSUMPTION-EDGE/acceptance",
+          "label": "WO-CONSUMPTION-EDGE acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A governed validator and outcome-blind finalizer connect each frozen prospective manifest to the only analysis artifact that claim consumption accepts."
+      },
+      "authority": {
+        "label": "WO-CONSUMPTION-EDGE adopted contract and council Phase 1",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "WO-CONSUMPTION-EDGE adopted contract",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The frozen prospective manifest is immutable, the finalizer is outcome-blind, and open claim-semantics rulings surface to Ed rather than being invented"
+        }
+      ],
+      "flags": [],
+      "goal": "Implement the governed prospective-manifest validator, outcome-blind post-collection finalizer, and fail-closed claim-consumption edge for the D-117 packs.",
+      "id": "WO-CONSUMPTION-EDGE",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 2,
+      "status": "queued",
+      "status_note": "Council Phase 1 parallel code work; build and rehearse the heightened-proof post-collection edge before any window is spent.",
+      "stop_card": null
+    },
+    "WO-DETECT-PULSES-BUDGET": {
+      "acceptance": {
+        "evidence": [
+          "Detection-pulse evaluation has an explicit finite evaluation and wall-clock budget",
+          "Budget exhaustion emits registered invalid-evidence rather than hanging or silently truncating",
+          "The governed abort path preserves custody and produces a discriminating regression"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-DETECT-PULSES-BUDGET/acceptance",
+          "label": "WO-DETECT-PULSES-BUDGET acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Detection-pulse search is bounded and converts exhausted work into registered invalid evidence plus a governed abort."
+      },
+      "authority": {
+        "label": "2026-08-15 council verdict Phase 1, L2-1",
+        "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Council verdict L2-1 remedy",
+            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+          },
+          "rule": "Do not turn budget exhaustion into partial-valid evidence or an unregistered operator override"
+        }
+      ],
+      "flags": [],
+      "goal": "Bound detection-pulse evaluation by work and wall budgets, then route exhaustion to registered invalid evidence and governed abort semantics.",
+      "id": "WO-DETECT-PULSES-BUDGET",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 5,
+      "status": "queued",
+      "status_note": "Council Phase 1 parallel code work; the ordered second lens cleared the single-lens condition before implementation.",
+      "stop_card": null
+    },
+    "WO-L2-REAUDIT": {
+      "acceptance": {
+        "evidence": [
+          "The calibration-acquisition evidence universe is independently re-enumerated rather than inherited from the first L2 seat",
+          "Coverage numerator and denominator are reproduced with positive and negative probes",
+          "The adversarial coverage attack is executed and all remaining gaps receive explicit dispositions"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-L2-REAUDIT/acceptance",
+          "label": "WO-L2-REAUDIT acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A fresh L2 audit closes the distinct UNVERIFIED coverage verdict through independent enumeration and adversarial coverage testing."
+      },
+      "authority": {
+        "label": "2026-08-15 council verdict L2 UNVERIFIED disposition and Phase 1",
+        "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Instrument-readiness charter anti-ritual and verdict form",
+            "path": "docs/process/instrument-readiness-audit-charter.md"
+          },
+          "rule": "Do not reuse a self-nominated denominator or collapse NOT-READY and UNVERIFIED into one verdict"
+        }
+      ],
+      "flags": [],
+      "goal": "Re-audit L2 with an independently enumerated universe, reproduced coverage denominator, and the charter's adversarial coverage attack.",
+      "id": "WO-L2-REAUDIT",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 6,
+      "status": "queued",
+      "status_note": "Council Phase 1 cold-added audit obligation; this closes coverage only after fresh evidence, not by carrying forward the first sitting's denominator.",
+      "stop_card": null
+    },
+    "WO-LAUNCH-BINDING": {
+      "acceptance": {
+        "evidence": [
+          "One reviewed launcher atomically consumes the arm capability and immediately execs the frozen chain",
+          "Direct or mismatched launch without the bound consumption context refuses before settle",
+          "Downstream claim consumers authenticate launch-consumption provenance and reject an unconsumed launch"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-LAUNCH-BINDING/acceptance",
+          "label": "WO-LAUNCH-BINDING acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Arm-capability consumption and frozen-chain execution become one fail-closed launch admission boundary with authenticated downstream lineage."
+      },
+      "authority": {
+        "label": "2026-08-15 council verdict Phase 1 and Opus W7",
+        "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Council verdict launch-authority boundary",
+            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+          },
+          "rule": "The launcher enforces admission but never becomes physical launch authority; Ed still launches"
+        }
+      ],
+      "flags": [],
+      "goal": "Bind arm-capability consume to immediate frozen-chain exec and require authenticated launch-consumption provenance at downstream claim consumers.",
+      "id": "WO-LAUNCH-BINDING",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 1,
+      "status": "queued",
+      "status_note": "Council Phase 1 parallel contract-bearing work; it changes the operator sequence and therefore retains the full council gate.",
+      "stop_card": null
+    },
+    "WO-MARGIN-RECORDER-AUTHZ": {
+      "acceptance": {
+        "evidence": [
+          "The recorder invokes the existing governed extraction-spec grant exactly once and only for the plan-tree-selected floor-pack spec",
+          "Returned bytes are hash-compared to the plan-tree pin before census or membership processing",
+          "Frozen-pack regressions model the real re-specced cells and the synthetic green-suite specimen is removed"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-MARGIN-RECORDER-AUTHZ/acceptance",
+          "label": "WO-MARGIN-RECORDER-AUTHZ acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The margin recorder receives the adopted narrow authorization for exactly the plan-tree-pinned extraction spec and proves it on real frozen cell shapes."
+      },
+      "authority": {
+        "label": "WO-MARGIN-RECORDER-AUTHZ adopted contract and council Phase 1",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "WO-MARGIN-RECORDER-AUTHZ adopted contract",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "No new authentication primitive, public API, or scientific semantic; the grant is narrower than the mint and covers exactly one pinned spec"
+        }
+      ],
+      "flags": [],
+      "goal": "Authorize the window-margin recorder to consume exactly the plan-tree-pinned governed extraction spec and replace synthetic census tests with real frozen-pack regressions.",
+      "id": "WO-MARGIN-RECORDER-AUTHZ",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 3,
+      "status": "queued",
+      "status_note": "Council Phase 1 parallel code work executing D-133's close-out gate without changing scientific semantics.",
+      "stop_card": null
+    },
+    "WO-T0-PRODUCER": {
+      "acceptance": {
+        "evidence": [
+          "One integrated producer captures all nine T-0 inputs and emits the terminal-review-trailer evidence",
+          "prewindow_check --wait enforces at least 600 seconds of continuous dwell and the D-127 privileged clock route is implemented for Ed to install",
+          "All env, chain, manifest, argv, custody, margin-recorder, and doubled-plan-path defects close with a real-pack regression",
+          "The full T-0 path passes end-to-end at the exact reviewed head before successor arm-packet issuance"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-T0-PRODUCER/acceptance",
+          "label": "WO-T0-PRODUCER acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The integrated T-0 producer, dwell, privileged clock route, chain fixes, and terminal-review evidence pass end-to-end on a real frozen pack."
+      },
+      "authority": {
+        "label": "2026-08-15 council verdict Phase 1 and R2 FROZEN_PLAN ruling",
+        "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Council verdict WO-T0-PRODUCER bounds",
+            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+          },
+          "rule": "Do not lower the 600-second dwell, perform Ed's sudo installation, or issue a successor arm packet before the exact-head end-to-end pass"
+        }
+      ],
+      "flags": [],
+      "goal": "Implement the integrated nine-input T-0 producer, 600-second dwell, D-127 clock route, chain and manifest fixes, real-pack path regression, and terminal-review-trailer producer.",
+      "id": "WO-T0-PRODUCER",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 0,
+      "status": "queued",
+      "status_note": "Council Phase 1's largest code work order; it blocks the dress rehearsal but is parallelizable with the other Phase-1 rows.",
       "stop_card": null
     },
     "WO-T3-VIS-01": {
@@ -3135,11 +3392,11 @@
       "id": "WO-T3-VIS-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 9,
+      "rank": 16,
       "status": "shelved",
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). t3-thread-bridge shelved: phone-visible delegated rounds are the exact convenience the descope declines to pay for. Reopen only on Ed's word.",
       "stop_card": null
     }
   },
-  "updated": "2026-08-08"
+  "updated": "2026-08-15"
 }

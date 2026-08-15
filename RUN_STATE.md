@@ -14,6 +14,19 @@ Last updated: 2026-08-15 (T8 session, Fable magistrate; COUNCIL VERDICT RECORDED
 
 ## ▶▶ T8 STATE (2026-08-15) — COUNCIL VERDICT: NOT-READY; REPAIR PROGRAM IS THE DESK PROGRAM
 
+**PHASE 1 PROGRESS (latest): PR #150 WO-KERNEL-RECONCILE MERGED (47d2645)
+— the WINDOW-COUNCIL-GATE is LIVE on main** (fleet blocker L1-B2 closed:
+no quiet-mac window selectable until a READY-candidate council verdict;
+P2-006 retired per R3). Phase 0 fully ruled/custodied (R1-R4 + M-2 gate +
+6 WO contracts, docs/process_traces/2026-08-15-*/). In flight: PR #151
+recorder-authz (cold-gated race → registered limitation; awaiting CI);
+WO-T0-PRODUCER (built, 5-blocker review → F1/F2/F3/F5 fix round, F4
+capture-provenance → design consult vs the recorder-race precedent).
+NEW queued: WO-RECORDER-GRANT-IDENTITY (own gate). RULING-REQUIRED:
+contrast-pack pending-ratification/TODO markers (Ed-adjacent); the T-0
+capture-provenance disposition (Ed risk-appetite, parallel to the
+recorder-race threat-model call).
+
 **THE READINESS COUNCIL RAN IN FULL AND RULED: NOT-READY, 0 READY / 11
 NOT-READY.** Full custody (fleet reports, nine refuter verdicts, cold
 pairing rulings, verdict): `docs/process_traces/2026-08-15-readiness-council/`
@@ -3478,11 +3491,20 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-NONE — no global work-selection gate is active.
+Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
+
+### `WINDOW-COUNCIL-GATE`
+
+No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; the frozen D-117 packs wait while the council repair program proceeds.
+
+- Scope: `select` in [QUIET-MAC].
+- Allowed kernel task IDs: NONE.
+- Authority: docs/decision_log.md#window-gating-directive--2026-08-13-late-ed-t6-council-audited-instrument-readiness-precedes-any-window; docs/process_traces/2026-08-15-readiness-council/council-verdict.md#verdict.
+- Clearance: docs/process/instrument-readiness-audit-charter.md#verdict-form-amendments-11-12 — a reconvened READY-CANDIDATE council verdict records no NOT-READY, no UNVERIFIED, and all ED-QUALIFICATION rows closed with evidence
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-08). Latest report: [T3 session 2026-08-09 day: flake fix merged (#123); trust assembled, PR #122 open (16-question delta 16/16, decisive CI gate in progress); U2 frozen; default Codex tier](RUN_STATE.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-15). Latest report: [T6 session 2026-08-13: three D-117 packs frozen and readiness work handed off](docs/run_reports/2026-08-13-t6-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -3490,11 +3512,11 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [QUIET-MAC]
 
-- READY — Q2 `P2-006`: Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.
+- GATED — Q2 `D117-W-ALPHA` (excluded by: WINDOW-COUNCIL-GATE): Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v1 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.
 
 ### [AGENT]
 
-- READY — A0 `P2-035`: RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).
+- READY — A0 `WO-T0-PRODUCER`: Implement the integrated nine-input T-0 producer, 600-second dwell, D-127 clock route, chain and manifest fixes, real-pack path regression, and terminal-review-trailer producer.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

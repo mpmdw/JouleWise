@@ -22,7 +22,12 @@ FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
     # [AGENT]
-    "D117-U11-IDPIN-PROJECTION",
+    # 2026-08-15 council Phase-1 repair program. The landed U11 identity
+    # projection and FLOOR-COMMONMODE rows retired when these successors
+    # entered the live kernel.
+    "WO-T0-PRODUCER", "WO-LAUNCH-BINDING", "WO-CONSUMPTION-EDGE",
+    "WO-MARGIN-RECORDER-AUTHZ", "WO-CENSUS-SEMANTICS",
+    "WO-DETECT-PULSES-BUDGET", "WO-L2-REAUDIT",
     "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
     "P2-047A", "P2-048", "P2-050", "TOOL-01",
@@ -38,7 +43,7 @@ EXPECTED_IDS = {
     # 2026-07-25 attribution-limit adjudication (FLOOR-LABEL-01 completed
     # 2026-07-27 at 3055315 and left the live kernel)
     "FLOOR-WORKLOAD-SIZING-01",
-    "FLOOR-COMMONMODE-01", "PHASE-SHARE-ESTIMAND-01",
+    "PHASE-SHARE-ESTIMAND-01",
     # 2026-07-29/30 mint-arc intake (82ca955; kernel rows added by ruling).
     # STACK-ID-BIND-01 completed 2026-07-30 in PR #88 (da83337).
     "MODULARITY-01",
@@ -86,8 +91,9 @@ EXPECTED_IDS = {
     "T3-PROV-SCHEMA-01", "CODEX-BRIDGE-SANDBOX-01",
     "COLDGATE-HANDOFF-01", "CGV-HARDEN-01",
     # [QUIET-MAC]
+    "D117-W-ALPHA", "D117-W-BETA", "D117-W-GAMMA",
     "MET-WINDOW-C-01",
-    "P2-006", "P2-010", "P2-019", "P2-020",
+    "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-046B", "P2-047B",
     # 2026-08-03 t3-drive chain mint: app-up vs app-down characterization
     # pair (NON-CLAIM), rank 7.
@@ -118,26 +124,26 @@ def load_fixture(name):
         return json.load(fh)
 
 
-def _retire_p2_015(task_ids):
-    """Rewrite the frozen selection oracles' quiet-Mac head in place.
+def _adapt_retired_quiet_mac_head(task_ids):
+    """Rewrite frozen selection oracles to the ruled quiet-Mac head.
 
     The oracles are hand-written and frozen; P2-015 was retired from the
-    kernel on 2026-07-31 and P2-006 (rank 2) inherited the quiet-Mac head.
-    Patching here keeps the fixtures frozen, as the FLOOR-BIND-01 and
-    P2-035 agent-head patches in the same tests already do.
+    kernel on 2026-07-31, and R3 formally retired its former successor
+    P2-006 on 2026-08-15. D117-W-ALPHA (rank 2) is now the dependency-ready
+    quiet-Mac head. Patching here keeps the historical fixtures unchanged.
     """
     for index, task_id in enumerate(task_ids):
-        if task_id == "P2-015":
-            task_ids[index] = "P2-006"
+        if task_id in ("P2-015", "P2-006"):
+            task_ids[index] = "D117-W-ALPHA"
     return task_ids
 
 
-def _retire_p2_015_in_scenarios(scenarios):
-    """Apply the same P2-015 -> P2-006 head rewrite to gate allowlists."""
+def _adapt_retired_quiet_mac_head_in_scenarios(scenarios):
+    """Apply the ruled quiet-Mac head rewrite to frozen gate scenarios."""
     for scenario in scenarios:
-        _retire_p2_015(scenario["expected_selectable_task_ids"])
+        _adapt_retired_quiet_mac_head(scenario["expected_selectable_task_ids"])
         for gate in scenario["active_global_gates"]:
-            _retire_p2_015(gate["allowed_task_ids"])
+            _adapt_retired_quiet_mac_head(gate["allowed_task_ids"])
     return scenarios
 
 
@@ -209,11 +215,11 @@ class TestKernelValidity(unittest.TestCase):
             # dependency-shaped mutations need.
             ("queued with hard start dep", lambda k: k["tasks"]["P2-024"].update(status="queued")),
             ("dangling pending task dep",
-             lambda k: k["tasks"]["P2-024"]["dependencies"][0].update(target="NOPE-1")),
+             lambda k: k["tasks"]["P2-023"]["dependencies"][1].update(target="NOPE-1")),
             ("self-dependency",
-             lambda k: k["tasks"]["P2-024"]["dependencies"][0].update(target="P2-024")),
+             lambda k: k["tasks"]["P2-023"]["dependencies"][1].update(target="P2-023")),
             ("pending dep with evidence",
-             lambda k: k["tasks"]["P2-024"]["dependencies"][0].update(
+             lambda k: k["tasks"]["P2-023"]["dependencies"][1].update(
                  evidence={"path": "docs/decision_log.md", "label": "x"})),
             ("missing pointer target",
              lambda k: k["tasks"]["P2-016"]["authority"].update(path="docs/does_not_exist.md")),
@@ -225,8 +231,7 @@ class TestKernelValidity(unittest.TestCase):
              lambda k: k["tasks"]["P2-019"].update(flags=[])),
             ("blocked_post_2m without P2-006 dep",
              lambda k: k["tasks"]["P2-022"].update(
-                 dependencies=[d for d in k["tasks"]["P2-022"]["dependencies"]
-                               if d["target"] != "P2-006"], status="queued")),
+                 flags=["blocked_post_2m"])),
             ("DOC-010 missing G6 dependency",
              lambda k: k["tasks"]["DOC-010"].update(
                  dependencies=[d for d in k["tasks"]["DOC-010"]["dependencies"]
@@ -239,16 +244,16 @@ class TestKernelValidity(unittest.TestCase):
                 gen_state.validate(kernel)
 
     def test_cycle_rejected(self):
-        # P2-024 already carries a pending hard start edge to P2-006; closing
-        # the loop back from P2-006 makes a genuine cycle. Both ends are set
-        # blocked so invariant 3 passes and the cycle check is what fires.
+        # D117-W-BETA already carries a pending hard start edge to ALPHA;
+        # closing the loop back from ALPHA makes a genuine cycle. Both ends
+        # are blocked so invariant 3 passes and the cycle check is what fires.
         kernel = copy.deepcopy(load_kernel())
-        kernel["tasks"]["P2-006"]["dependencies"] = [
-            {"kind": "task", "target": "P2-024", "required": "cycle",
+        kernel["tasks"]["D117-W-ALPHA"]["dependencies"] = [
+            {"kind": "task", "target": "D117-W-BETA", "required": "cycle",
              "state": "pending", "strength": "hard", "scope": "start",
              "evidence": None}
         ]
-        kernel["tasks"]["P2-006"]["status"] = "blocked"
+        kernel["tasks"]["D117-W-ALPHA"]["status"] = "blocked"
         with self.assertRaisesRegex(gen_state.KernelError, "dependency cycle"):
             gen_state.validate(kernel)
 
@@ -260,14 +265,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_67(self):
-        # 66 -> 65: CAL-BRACKET-D079-01 retired 2026-08-05 (PR #100
-        # merged f75d12b). 65 -> 64: T3-AMEND-01 retired the same day
-        # (PR #101 merged 906ddf9). Registration batch: 64 -> 62 by retiring
-        # COLDGATE-VALIDATOR-01 and WINB-R06-DISPOSITION-01, then 62 -> 66
-        # by registering four follow-ons. Completed table owns all retirements.
+    def test_exact_live_id_set_74(self):
+        # The prior 67-row live set loses landed U11/FCM and R3-retired
+        # P2-006, then gains three D-117 windows and seven Phase-1 work
+        # orders: 67 - 3 + 10 = 74 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 67)
+        self.assertEqual(len(self.tasks), 74)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -284,25 +287,31 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         for tid in sorted(TERMINAL_IDS):
             self.assertIn(f"| {tid} |", completed)
 
-    def test_stop_card_cleared_and_no_global_gate_live(self):
-        # The comprehensive-audit gate was removed at close-out (Ed's
-        # adoption merge of PR #66, 2026-07-15); gate semantics remain
-        # tested against the frozen fixtures below. 2026-08-03: the
-        # T3-DRIVE-PRIORITY gate went live (Ed directive ~23:55).
-        # 2026-08-05: that gate is LIFTED — Ed reversed his own directive
-        # (t3 control-plane build-out not worth its cost; t3 stays the
-        # interactive control plane, t3-resident-during-windows dropped),
-        # so the project queue is ungated again and the shelved t3-chain
-        # rows below no longer compete for selection.
+    def test_stop_card_cleared_and_window_council_gate_live(self):
+        # Earlier audit and T3 gates are cleared; their mechanics remain
+        # covered by frozen fixtures below. The readiness council installed
+        # the current quiet-Mac-only gate without reviving shelved T3 rows.
         self.assertIsNone(self.kernel["active_stop_card"])
         for task in self.tasks.values():
             self.assertIsNone(task["stop_card"])
-        # 2026-08-11 (T4): trust merged (PR #122, mint bar lifted; D-130
-        # decisive-venue ruling) — the T3-2026-08-09-DAY gate's clearance
-        # closed and the assertion cleared back to [] per its own
-        # clear-back note. Normal kernel lane selection resumes.
+        # 2026-08-15 council verdict: no quiet-Mac task may be selected until
+        # a READY-CANDIDATE verdict closes every named readiness condition.
         gates = self.kernel["active_global_gates"]
-        self.assertEqual(gates, [])
+        self.assertEqual(len(gates), 1)
+        gate = gates[0]
+        self.assertEqual(gate["id"], "WINDOW-COUNCIL-GATE")
+        self.assertEqual(
+            gate["scope"], {"operation": "select", "lanes": ["quiet_mac"]}
+        )
+        self.assertEqual(gate["allowed_task_ids"], [])
+        self.assertEqual(
+            set(gate["authority"]),
+            {
+                "docs/decision_log.md#window-gating-directive--2026-08-13-late-ed-t6-council-audited-instrument-readiness-precedes-any-window",
+                "docs/process_traces/2026-08-15-readiness-council/council-verdict.md#verdict",
+            },
+        )
+        self.assertIn("READY-CANDIDATE council verdict", gate["clearance"])
         for tid in ("T3-CHAR-PAIR-01", "WO-T3-VIS-01", "SEC5A-REMOTE-01"):
             self.assertEqual(self.tasks[tid]["status"], "shelved")
 
@@ -310,15 +319,15 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # AXI-S0 (2026-07-15), AXI-SA and AXI-SB (2026-07-16) completed and
         # left the live kernel; the Completed table owns their records.
         # AXI-SB-ADAPTER was minted on the SB supported verdict and takes
-        # rank 4 with the verdict document as its authority (checked below
+        # rank 11 with the verdict document as its authority (checked below
         # separately from the handoff-authority program rows).
         axi_ids = ("AXI-SD", "AXI-SE")
         self.assertEqual(
             {tid: self.tasks[tid]["rank"] for tid in axi_ids},
-            {"AXI-SD": 6, "AXI-SE": 7},
+            {"AXI-SD": 13, "AXI-SE": 14},
         )
         adapter = self.tasks["AXI-SB-ADAPTER"]
-        self.assertEqual(adapter["rank"], 4)
+        self.assertEqual(adapter["rank"], 11)
         self.assertEqual(adapter["status"], "queued")
         self.assertEqual(adapter["lane"], "agent")
         self.assertEqual(adapter["authority"]["path"],
@@ -357,7 +366,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # may be left holding a pending edge to it.
         self.assertNotIn("P2-015", self.tasks)
         dependents = {
-            "AXI-SE", "P2-006", "P2-010", "P2-024",
+            "AXI-SE", "P2-010", "P2-024",
             "P2-035", "P2-047A", "P2-047B",
         }
         for tid in sorted(dependents):
@@ -372,29 +381,41 @@ class TestRefreshedStateFidelity(unittest.TestCase):
                 if dep["target"] == "P2-015":
                     self.assertEqual(dep["state"], "satisfied", task["id"])
 
-    def test_p2_006_gates(self):
-        self.assertEqual(self._hard_start_targets("P2-006"), set())
-        interpret = {
-            d["target"] for d in self.tasks["P2-006"]["dependencies"]
-            if d["scope"] == "interpret" and d["strength"] == "hard"
-        }
-        self.assertEqual(interpret, {"P2-037", "P2-041", "P2-044", "P2-045"})
-        for dep in self.tasks["P2-006"]["dependencies"]:
-            if dep["target"] in interpret:
-                self.assertEqual(dep["state"], "satisfied")
-                self.assertIsNotNone(dep["evidence"])
+    def test_p2_006_formally_retired_without_live_dependency_edges(self):
+        self.assertNotIn("P2-006", self.tasks)
+        self.assertFalse({
+            task["id"]
+            for task in self.tasks.values()
+            for dep in task["dependencies"]
+            if dep["target"] == "P2-006"
+        })
+        with open(os.path.join(ROOT, "docs", "decision_log.md"),
+                  encoding="utf-8") as fh:
+            decision_log = fh.read()
+        self.assertIn("P2-006 formally RETIRED from window selection", decision_log)
 
-    def test_post_2m_flags_and_p2_023_chain(self):
+    def test_post_2m_event_gates_and_p2_023_chain(self):
         for tid in ("P2-022", "P2-023"):
-            self.assertIn("blocked_post_2m", self.tasks[tid]["flags"])
+            self.assertEqual(self.tasks[tid]["flags"], [])
+            self.assertEqual(self.tasks[tid]["status"], "blocked")
             self.assertIn("D-041", self.tasks[tid]["authority"]["label"])
-            self.assertIn("P2-006", self._hard_start_targets(tid))
+            pending_events = {
+                dep["target"] for dep in self.tasks[tid]["dependencies"]
+                if dep["kind"] == "event" and dep["scope"] == "start"
+                and dep["strength"] == "hard" and dep["state"] == "pending"
+            }
+            self.assertEqual(pending_events, {"POST-2M-CORPUS"})
         self.assertIn("P2-022", self._hard_start_targets("P2-023"))
 
     def test_p2_016_conservatively_post_2m_at_parent(self):
-        self.assertIn("blocked_post_2m", self.tasks["P2-016"]["flags"])
+        self.assertEqual(self.tasks["P2-016"]["flags"], [])
         self.assertEqual(self.tasks["P2-016"]["status"], "blocked")
-        self.assertIn("P2-006", self._hard_start_targets("P2-016"))
+        pending_start_events = {
+            dep["target"] for dep in self.tasks["P2-016"]["dependencies"]
+            if dep["kind"] == "event" and dep["scope"] == "start"
+            and dep["strength"] == "hard" and dep["state"] == "pending"
+        }
+        self.assertEqual(pending_start_events, {"POST-2M-CORPUS"})
 
     def test_p2_027_has_satisfied_repro_predecessors(self):
         self.assertEqual(self.tasks["P2-027"]["lane"], "ed_external")
@@ -413,15 +434,14 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertEqual(min(task["rank"] for task in external), 1)
         self.assertEqual(self.tasks["P1-008"]["rank"], 1)
 
-    def test_quiet_mac_all_lead_only_and_p2_006_is_queued_lane_head(self):
+    def test_quiet_mac_all_lead_only_and_d117_alpha_is_queued_lane_head(self):
         # P2-015 (rank 1) retired 2026-07-31; MET-WINDOW-C-01 took rank 1
         # on 2026-08-01 but sits BLOCKED behind the D-100 repair + Ed 5A,
-        # so P2-006 remains the queued (selectable) lane head. 2026-08-03:
-        # T3-CHAR-PAIR-01 joined at rank 7 (queued, after P2-006), so the
-        # dependency-rank head is unchanged; the live T3-DRIVE-PRIORITY
-        # gate is what promotes it to the selectable head.
+        # The 2026-08-15 reconciliation formally retired P2-006 and installed
+        # the D-117 ALPHA/BETA/GAMMA sequence at ranks 2/3/4. ALPHA is the
+        # dependency-ready lane head, but WINDOW-COUNCIL-GATE suppresses it.
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 9)
+        self.assertEqual(len(quiet), 11)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertEqual(self.tasks["MET-WINDOW-C-01"]["rank"], 1)
@@ -430,12 +450,29 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.tasks["MET-WINDOW-C-01"]["rank"],
             min(task["rank"] for task in quiet),
         )
+        self.assertEqual(
+            {
+                tid: (self.tasks[tid]["rank"], self.tasks[tid]["status"])
+                for tid in ("D117-W-ALPHA", "D117-W-BETA", "D117-W-GAMMA")
+            },
+            {
+                "D117-W-ALPHA": (2, "queued"),
+                "D117-W-BETA": (3, "blocked"),
+                "D117-W-GAMMA": (4, "blocked"),
+            },
+        )
+        self.assertEqual(
+            self._hard_start_targets("D117-W-BETA"), {"D117-W-ALPHA"}
+        )
+        self.assertEqual(
+            self._hard_start_targets("D117-W-GAMMA"), {"D117-W-BETA"}
+        )
         queued = [t for t in quiet if t["status"] == "queued"]
         self.assertEqual(
-            self.tasks["P2-006"]["rank"],
+            self.tasks["D117-W-ALPHA"]["rank"],
             min(task["rank"] for task in queued),
         )
-        self.assertEqual(self.tasks["P2-006"]["status"], "queued")
+        self.assertEqual(self.tasks["D117-W-ALPHA"]["status"], "queued")
 
     def test_new_hardening_followups(self):
         self.assertEqual(self._hard_start_targets("P2-046B"), set())
@@ -501,6 +538,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
                 f"{source_id} migration successors missing",
             )
             live_coverage.add(source_id)
+        # R3 is the formal retirement record for P2-006. Keep the frozen
+        # pre-demotion snapshot intact while requiring both live absence and
+        # explicit decision-log authority before treating the row as covered.
+        formally_retired = {"P2-006"}
+        self.assertTrue(formally_retired.isdisjoint(tasks))
+        with open(os.path.join(ROOT, "docs", "decision_log.md"),
+                  encoding="utf-8") as fh:
+            decision_log = fh.read()
+        self.assertIn("P2-006 formally RETIRED from window selection", decision_log)
+        live_coverage.update(formally_retired)
         self.assertTrue(
             set(snapshot["task_ids"]).issubset(
                 live_coverage | self._completed_queue_ids()
@@ -586,7 +633,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         # (2026-07-15); the frozen artifact remains the migration fixture.
         oracle = load_fixture("historical_audit_gate.json")
         oracle["must_suppress_task_ids"].append("FLOOR-BIND-01")
-        _retire_p2_015(oracle["must_suppress_task_ids"])
+        _adapt_retired_quiet_mac_head(oracle["must_suppress_task_ids"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
         selected = gen_state.selectable_task_ids(kernel)
@@ -595,8 +642,8 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_run_state_suppressed_lane_heads_are_exactly_one_gated_entry_per_lane(self):
         gate_oracle = load_fixture("historical_audit_gate.json")
         head_oracle = load_fixture("cleared_audit_gate.json")
-        head_oracle["expected_selectable_task_ids"][0] = "P2-035"
-        _retire_p2_015(head_oracle["expected_selectable_task_ids"])
+        head_oracle["expected_selectable_task_ids"][0] = "WO-T0-PRODUCER"
+        _adapt_retired_quiet_mac_head(head_oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(gate_oracle["active_global_gates"])
         rendered = gen_state.render_run_state(kernel)
         gate_id = gate_oracle["active_global_gates"][0]["id"]
@@ -628,14 +675,16 @@ class TestWorkSelectionFidelity(unittest.TestCase):
 
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
         oracle = load_fixture("cleared_audit_gate.json")
-        oracle["expected_selectable_task_ids"][0] = "P2-035"
-        _retire_p2_015(oracle["expected_selectable_task_ids"])
+        oracle["expected_selectable_task_ids"][0] = "WO-T0-PRODUCER"
+        _adapt_retired_quiet_mac_head(oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
 
     def test_allowlist_lane_matching_and_multi_gate_intersection(self):
         fixture = load_fixture("selection_semantics.json")
-        for scenario in _retire_p2_015_in_scenarios(fixture["scenarios"]):
+        for scenario in _adapt_retired_quiet_mac_head_in_scenarios(
+            fixture["scenarios"]
+        ):
             with self.subTest(scenario=scenario["name"]):
                 kernel = self._kernel_with(scenario["active_global_gates"])
                 self._assert_oracle(kernel, scenario)
@@ -643,7 +692,9 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_stop_card_precedes_gates_and_clear_restores_still_active_gate(self):
         fixture = load_fixture("selection_semantics.json")
         lane_oracle = next(
-            scenario for scenario in _retire_p2_015_in_scenarios(fixture["scenarios"])
+            scenario for scenario in _adapt_retired_quiet_mac_head_in_scenarios(
+                fixture["scenarios"]
+            )
             if scenario["name"] == "lane_matching"
         )
         kernel = self._kernel_with(lane_oracle["active_global_gates"])
@@ -767,20 +818,24 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         self.assertNotIn("| READY |", queue)
         self.assertNotIn("PARTIAL; READY", queue)
 
-    def test_live_kernel_renders_ungated_and_a_gate_renders_gated(self):
-        # 2026-08-05: the live kernel is UNGATED (T3-DRIVE-PRIORITY lifted
-        # with the t3-chain descope). The gate MECHANISM stays pinned by
-        # applying a synthetic gate to a copy — the direction of the
-        # earlier assertion is simply inverted, not dropped.
+    def test_live_window_gate_and_synthetic_gate_both_render_exactly(self):
+        # The live WINDOW-COUNCIL-GATE suppresses quiet-Mac selection. The
+        # synthetic all-lane allowlist below separately pins gate mechanics.
         kernel = load_kernel()
         run_state = gen_state.render_run_state(kernel)
         queue = gen_state.render_queue(kernel)
-        # 2026-08-11 (T4): trust merged — the kernel is UNGATED again and
-        # the live-side assertion inverts back (as on 2026-08-05); the
-        # synthetic-gate half below still pins the mechanism both ways.
         for rendered in (run_state, queue):
             self.assertNotIn("T3-2026-08-09-DAY", rendered)
-            self.assertIn("NONE — no global work-selection gate is active", rendered)
+            self.assertIn("WINDOW-COUNCIL-GATE", rendered)
+            self.assertNotIn(
+                "NONE — no global work-selection gate is active", rendered
+            )
+        self.assertEqual(
+            gen_state.selectable_task_ids(kernel),
+            {"P1-008", "WO-T0-PRODUCER"},
+        )
+        self.assertIn("excluded by: WINDOW-COUNCIL-GATE", run_state)
+        self.assertIn("GATED — WINDOW-COUNCIL-GATE", queue)
 
         gated = copy.deepcopy(kernel)
         gated["active_global_gates"] = [
