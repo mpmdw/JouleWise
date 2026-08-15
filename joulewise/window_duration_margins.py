@@ -179,7 +179,15 @@ def _json_object(
     *,
     label: str,
 ) -> tuple[Mapping[str, Any], bytes]:
-    raw = read_authentication_input(path, grammar="json", label=label)
+    try:
+        raw = read_authentication_input(path, grammar="json", label=label)
+    except V2AuthenticationInputError as exc:
+        # Normalize authentication refusals (e.g. a forbidden estimator_registration
+        # key in a plan tree / report / bundle / GAMMA manifest) into the recorder's
+        # own refusal type; a raw V2AuthenticationInputError must never escape
+        # _pack_inventory (S1 threat-table: grant-construction and read errors are
+        # normalized, not leaked). Reachable with no adversary.
+        _refuse("authoritative_input_invalid", f"{label}: {exc}")
     try:
         value = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -342,6 +350,7 @@ def _gamma_cells(manifest: Mapping[str, Any]) -> list[_RegisteredCell]:
 
 
 def _pack_inventory(
+    authentication: V2AuthenticationReadSession,
     repository_root: Path,
     pack_root: Path,
     pack_identity: str,
@@ -382,7 +391,14 @@ def _pack_inventory(
         _refuse("pack_pin_invalid", "plan tree has no downstream contract")
     extraction = downstream.get("extraction_spec")
     analysis_path = downstream.get("analysis_manifest_path")
-    if isinstance(extraction, Mapping) and analysis_path is None:
+    floor_pack_selected = isinstance(extraction, Mapping)
+    gamma_pack_selected = analysis_path is not None
+    if floor_pack_selected == gamma_pack_selected:
+        _refuse(
+            "registered_cell_inventory_invalid",
+            "pack must select exactly one comparative-cell registry source",
+        )
+    if floor_pack_selected:
         registry_path = _safe_relative_path(
             repository_root,
             extraction.get("path"),
@@ -391,9 +407,39 @@ def _pack_inventory(
         expected_sha = _require_sha256(
             extraction.get("sha256"), label="downstream extraction-spec sha256"
         )
+        # The grant must bind the literal committed file: the selected path
+        # must be resolution-invariant (no symlinked component anywhere from
+        # the repository root down), so an in-repo alias can never retarget
+        # the governed-vocabulary grant to a different pack's spec (adoption
+        # clause 1: never granted the other floor pack's spec).
+        unresolved = repository_root / Path(
+            *PurePosixPath(str(extraction.get("path"))).parts
+        )
+        if unresolved.resolve(strict=False) != registry_path or any(
+            parent.is_symlink()
+            for parent in [unresolved, *unresolved.parents]
+        ):
+            _refuse(
+                "authoritative_input_invalid",
+                "governed extraction-spec path is not resolution-invariant "
+                "(symlinked component)",
+            )
+        try:
+            authentication.allow_governed_extraction_spec(registry_path)
+        except (ValueError, RuntimeError) as exc:
+            _refuse(
+                "authoritative_input_invalid",
+                f"governed extraction-spec authorization failed: {exc}",
+            )
         registry, registry_raw = _json_object(
             registry_path, label="pack-pinned extraction spec"
         )
+        registry_sha = _sha256(registry_raw)
+        if registry_sha != expected_sha:
+            _refuse(
+                "pack_pin_invalid",
+                "registered-cell source sha256 mismatches plan tree",
+            )
         raw_cells = registry.get("cells")
         registered_cell_count = (
             sum(
@@ -406,7 +452,7 @@ def _pack_inventory(
             else 0
         )
         cells = _floor_cells(registry)
-    elif analysis_path is not None and extraction is None:
+    else:
         registry_path = _safe_relative_path(
             pack_root,
             analysis_path,
@@ -419,6 +465,12 @@ def _pack_inventory(
         registry, registry_raw = _json_object(
             registry_path, label="pack-pinned GAMMA analysis manifest"
         )
+        registry_sha = _sha256(registry_raw)
+        if registry_sha != expected_sha:
+            _refuse(
+                "pack_pin_invalid",
+                "registered-cell source sha256 mismatches plan tree",
+            )
         raw_contrasts = registry.get("contrasts")
         registered_cell_count = (
             len(raw_contrasts) if isinstance(raw_contrasts, list) else 0
@@ -434,14 +486,6 @@ def _pack_inventory(
                 "pack_pin_invalid",
                 "GAMMA analysis manifest does not bind the pack plan",
             )
-    else:
-        _refuse(
-            "registered_cell_inventory_invalid",
-            "pack must select exactly one comparative-cell registry source",
-        )
-    registry_sha = _sha256(registry_raw)
-    if registry_sha != expected_sha:
-        _refuse("pack_pin_invalid", "registered-cell source sha256 mismatches plan tree")
     if not cells or len(cells) != registered_cell_count:
         _refuse(
             "registered_cell_inventory_invalid",
@@ -896,7 +940,7 @@ def derive_window_duration_margins(
     try:
         with V2AuthenticationReadSession() as authentication:
             tree_sha, registry_sha, cells = _pack_inventory(
-                repository_root, pack_root, pack_identity
+                authentication, repository_root, pack_root, pack_identity
             )
             member_paths = _resolve_member_paths(runs_root, cells)
             observations: dict[tuple[str, str], _MemberObservation] = {}
