@@ -112,7 +112,11 @@ def _valid_session_receipt(context: dict, plan_sha256: str, tree: dict) -> dict:
 
 
 def _install_synthetic_identity_inputs(
-    repository: Path, pack: Path, tree: dict
+    repository: Path,
+    pack: Path,
+    tree: dict,
+    *,
+    boot_session_override: str | None,
 ) -> None:
     shutil.rmtree(pack / "identity_pin_projection.receipts")
     model = pack / "synthetic-model"
@@ -183,11 +187,13 @@ def stream_generate(model, tokenizer, prompt, *, max_tokens=1, sampler=None):
 """,
         encoding="utf-8",
     )
-    (repository / "sitecustomize.py").write_text(
-        "from joulewise import arm_readiness\n"
-        f"arm_readiness._current_boot_session_id = lambda: {TEST_BOOT_SESSION_ID!r}\n",
-        encoding="utf-8",
-    )
+    if boot_session_override is not None:
+        (repository / "sitecustomize.py").write_text(
+            "from joulewise import arm_readiness\n"
+            "arm_readiness._current_boot_session_id = "
+            f"lambda: {boot_session_override!r}\n",
+            encoding="utf-8",
+        )
 
 
 def _load_synthetic_mlx(repository: Path):
@@ -206,6 +212,7 @@ def make_t0_fixture(
     boot_session_id: str = TEST_BOOT_SESSION_ID,
     now_monotonic_ns: int = 1_000_000_000_000,
     real_identity: bool = False,
+    synthetic_boot_session: bool = True,
 ):
     temporary, repository, pack, custody, _arm_path = make_go_fixture()
     repository = repository.resolve()
@@ -250,7 +257,14 @@ def make_t0_fixture(
         }
     ]
     if real_identity:
-        _install_synthetic_identity_inputs(repository, pack, tree)
+        _install_synthetic_identity_inputs(
+            repository,
+            pack,
+            tree,
+            boot_session_override=(
+                boot_session_id if synthetic_boot_session else None
+            ),
+        )
     tree_raw = readiness.render_json(tree)
     tree_path.write_bytes(tree_raw)
     (pack / "plan_tree.sha256").write_bytes(
@@ -786,7 +800,9 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertEqual(arm["status"], "PASS", arm)
         self.assertEqual(arm["arm_disposition"], "GO")
 
-    def test_forbidden_process_started_after_authoring_expires_before_arm(self) -> None:
+    def _assert_forbidden_process_evidence_expires_before_arm(
+        self, *, start_real_process: bool
+    ) -> None:
         authored_at = 1_000_000_000_000
         short_horizon_ns = 20 * 60 * 1_000_000_000
         temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
@@ -796,17 +812,18 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         with author_environment(repository, now_monotonic_ns=authored_at):
             author_arm_readiness_evidence_t0(pack, custody)
 
-        process = subprocess.Popen(["/usr/bin/caffeinate", "-t", "60"])
+        if start_real_process:
+            process = subprocess.Popen(["/usr/bin/caffeinate", "-t", "60"])
 
-        def stop_forbidden_process() -> None:
-            if process.poll() is None:
-                process.terminate()
-            process.wait(timeout=5)
+            def stop_forbidden_process() -> None:
+                if process.poll() is None:
+                    process.terminate()
+                process.wait(timeout=5)
 
-        self.addCleanup(stop_forbidden_process)
-        self.assertIsNone(
-            process.poll(), "the post-authoring forbidden process must be live"
-        )
+            self.addCleanup(stop_forbidden_process)
+            self.assertIsNone(
+                process.poll(), "the post-authoring forbidden process must be live"
+            )
         with (
             mock.patch.object(
                 readiness,
@@ -836,6 +853,19 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 for refusal in arm_receipt["refusals"]
             ),
             arm_receipt["refusals"],
+        )
+
+    def test_mocked_forbidden_process_evidence_expires_before_arm(self) -> None:
+        self._assert_forbidden_process_evidence_expires_before_arm(
+            start_real_process=False
+        )
+
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's real caffeinate process"
+    )
+    def test_forbidden_process_started_after_authoring_expires_before_arm(self) -> None:
+        self._assert_forbidden_process_evidence_expires_before_arm(
+            start_real_process=True
         )
 
     def _real_probe_source(self, kind, commands):
@@ -896,6 +926,9 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
         return probes, source
 
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's real pgrep command semantics"
+    )
     def test_real_maintenance_census_executes_pgrep_and_binds_output(self) -> None:
         self._real_probe_source(
             "MAINTENANCE_CENSUS",
@@ -908,6 +941,9 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             ),
         )
 
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's real pgrep command semantics"
+    )
     def test_real_process_census_executes_pgrep_and_binds_output(self) -> None:
         self._real_probe_source(
             "PROCESS_CENSUS",
@@ -927,6 +963,9 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             ),
         )
 
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's real sysctl command"
+    )
     def test_real_boot_census_executes_sysctl_and_binds_machine_result(self) -> None:
         probes, _source = self._real_probe_source(
             "MACHINE_PREFLIGHT",
@@ -1327,13 +1366,15 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             value["reason_codes"], ["evidence_author_t0_repository_mismatch"]
         )
 
-    def test_acid_authored_fifteen_then_real_arm_generator_reaches_go(self) -> None:
-        boot_session_id = TEST_BOOT_SESSION_ID
+    def _assert_acid_authored_fifteen_then_arm_generator_reaches_go(
+        self, *, boot_session_id: str, synthetic_boot_session: bool
+    ) -> None:
         now_monotonic_ns = time.monotonic_ns()
         temporary, repository, pack, custody, context, _inputs = make_t0_fixture(
             boot_session_id=boot_session_id,
             now_monotonic_ns=now_monotonic_ns,
             real_identity=True,
+            synthetic_boot_session=synthetic_boot_session,
         )
         self.addCleanup(temporary.cleanup)
         with author_environment(
@@ -1392,10 +1433,16 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             all(check["status"] == "PASS" for check in identity_receipt["checks"])
         )
         self.assertTrue(
-            all("shared_mint_projection" in check["check_id"] for check in identity_receipt["checks"])
+            all(
+                "shared_mint_projection" in check["check_id"]
+                for check in identity_receipt["checks"]
+            )
         )
         self.assertTrue(
-            all(check["expected"] == check["observed"] for check in identity_receipt["checks"])
+            all(
+                check["expected"] == check["observed"]
+                for check in identity_receipt["checks"]
+            )
         )
         self.assertIn(
             "joulewise.identity_pins._runtime_probe_metadata",
@@ -1406,6 +1453,27 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
         self.assertEqual(
             len(identity_receipt["identity_units"][0]["config_inventory"]), 2
+        )
+
+    def test_acid_authored_fifteen_then_real_arm_generator_reaches_go(self) -> None:
+        self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
+            boot_session_id=TEST_BOOT_SESSION_ID,
+            synthetic_boot_session=True,
+        )
+
+    @unittest.skipUnless(
+        sys.platform == "darwin", "requires Darwin's real boot-session sysctl command"
+    )
+    def test_acid_real_boot_session_then_real_arm_generator_reaches_go(self) -> None:
+        try:
+            boot_session_id = readiness._current_boot_session_id()
+        except readiness.ArmReadinessError as exc:
+            if "Operation not permitted" not in str(exc):
+                raise
+            self.skipTest(f"Darwin boot-session sysctl is unavailable: {exc}")
+        self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
+            boot_session_id=boot_session_id,
+            synthetic_boot_session=False,
         )
 
 
