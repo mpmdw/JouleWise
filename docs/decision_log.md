@@ -8889,6 +8889,21 @@ freeze receipt's presence governs and the §5C gate's placeholder-text
 NO-GO reading is OVERRIDDEN for exactly this field by this ruling (scoped,
 recorded — the packet cites it).
 
+**M-2 EXECUTION NOTE (magistrate, 2026-08-15 — factual record per council-verdict R4;
+the override's soundness is REMANDED to its own cold gate, see
+docs/process_traces/2026-08-15-readiness-council/council-verdict.md Disposition 2):**
+the remedy as ruled ("regenerates the sidecar-consistent text via the canonical path")
+did NOT execute as written — #149 shipped freeze-aware status FORWARD-ONLY under
+PRESERVE_CURRENT_FROZEN_BYTES, and the three frozen packs still carry
+`draft_status: "unfrozen_draft"` at the audit baseline (verified by the cold
+adjudicator and sweep-S3). Preserving frozen bytes was the correct engineering
+call; the recorded consequence is that this ruling, scoped as transitional, is the
+STANDING operative instrument for the current packs' lifetime: the freeze receipt's
+presence governs, and the §5C placeholder-text NO-GO reading remains overridden for
+exactly this field. Every arm packet must cite this ruling until the Phase-2
+re-freeze regenerates truthful freeze-aware status text, at which point this
+override RETIRES.
+
 ED-QUALIFICATION batching: all sudo/hardware rows (sudo powermetrics
 checklist, live sampler supervision check, JW-MET-3 rail probe, §5A tap
 familiarization) are assembled into ONE scripted ~15-minute session,
