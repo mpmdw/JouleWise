@@ -68,6 +68,9 @@ _T0_INPUT_DIRECTORY = "arm_readiness.t0.inputs"
 _LAUNCH_BINDING_RECEIPT_MAX_BYTES = 1024 * 1024
 _LAUNCH_BINDING_SIDECAR_MAX_BYTES = 4 * 1024
 _LAUNCH_BINDING_SOURCE_MAX_BYTES = 1024 * 1024
+_LAUNCH_BINDING_MANIFEST_MAX_BYTES = 1024 * 1024
+_LAUNCH_BINDING_ENVIRONMENT_MAX_BYTES = 1024 * 1024
+_LAUNCH_BINDING_CHAIN_MAX_BYTES = 1024 * 1024
 _T0_LAUNCH_SOURCE_KEYS = frozenset(
     {
         "schema_version",
@@ -2829,6 +2832,7 @@ def _discover_evidence(
     boot_session_id: str | None,
     now_monotonic_ns: int | None,
     include_pack: bool = True,
+    launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]], list[dict[str, Any]]]:
     items: list[dict[str, Any]] = []
     receipts: dict[str, Mapping[str, Any]] = {}
@@ -2871,9 +2875,24 @@ def _discover_evidence(
             relative = f"arm_readiness.evidence/{filename}"
             receipt: Mapping[str, Any] | None = None
             try:
-                raw = path.read_bytes()
+                if launch_binding_cache is None:
+                    raw = path.read_bytes()
+                    sidecar_raw = sidecars[filename].read_bytes()
+                else:
+                    raw = _read_launch_binding_artifact(
+                        path,
+                        max_bytes=_LAUNCH_BINDING_RECEIPT_MAX_BYTES,
+                        label="launch-verification evidence receipt",
+                        cache=launch_binding_cache,
+                    )
+                    sidecar_raw = _read_launch_binding_artifact(
+                        sidecars[filename],
+                        max_bytes=_LAUNCH_BINDING_SIDECAR_MAX_BYTES,
+                        label="launch-verification evidence sidecar",
+                        cache=launch_binding_cache,
+                    )
                 digest = sha256_bytes(raw)
-                if sidecars[filename].read_bytes() != gnu_sidecar(digest, filename):
+                if sidecar_raw != gnu_sidecar(digest, filename):
                     raise ArmReadinessError(
                         "readiness_evidence_digest_mismatch", "evidence sidecar mismatch"
                     )
@@ -2922,7 +2941,18 @@ def _discover_evidence(
                         "evidence fact source_path",
                     )
                     try:
-                        source_raw = source_path.read_bytes()
+                        if (
+                            launch_binding_cache is not None
+                            and receipt["kind"] == "LAUNCH_RECIPE"
+                        ):
+                            source_raw = _read_launch_binding_artifact(
+                                source_path,
+                                max_bytes=_LAUNCH_BINDING_SOURCE_MAX_BYTES,
+                                label="launch-recipe T-0 source",
+                                cache=launch_binding_cache,
+                            )
+                        else:
+                            source_raw = source_path.read_bytes()
                     except OSError as exc:
                         raise ArmReadinessError(
                             "readiness_evidence_unreadable",
@@ -4148,6 +4178,8 @@ def _derive_arm_semantics_for_verification(
     root: Path,
     custody_pack_root: Path,
     receipt: Mapping[str, Any],
+    *,
+    launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     pack = _pack_record(root)
     if receipt["pack"] != pack:
@@ -4189,6 +4221,7 @@ def _derive_arm_semantics_for_verification(
         boot_session_id=str(receipt["boot_session_id"]),
         now_monotonic_ns=time.monotonic_ns(),
         include_pack=False,
+        launch_binding_cache=launch_binding_cache,
     )
     freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
         root, tree, freeze_receipt
@@ -4332,6 +4365,7 @@ def _verify_arm_receipt(
     arm_receipt: Path | str,
     *,
     require_unconsumed: bool,
+    launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> dict[str, Any]:
     root = Path(pack_root).resolve(strict=True)
     path = Path(arm_receipt).resolve(strict=True)
@@ -4395,7 +4429,10 @@ def _verify_arm_receipt(
             "readiness_record_consumed", "launch capability was already consumed"
         )
     expected_rows, expected_refusals = _derive_arm_semantics_for_verification(
-        root, custody_pack_root, receipt
+        root,
+        custody_pack_root,
+        receipt,
+        launch_binding_cache=launch_binding_cache,
     )
     if receipt["rows"] != expected_rows or receipt["refusals"] != expected_refusals:
         raise ArmReadinessError(
@@ -4473,7 +4510,13 @@ def _read_launch_lineage_primary(
     return value, raw, digest
 
 
-def _launch_artifact_reference(path: Path) -> dict[str, str]:
+def _launch_artifact_reference(
+    path: Path,
+    *,
+    max_bytes: int,
+    label: str,
+    cache: dict[Path, bytes],
+) -> dict[str, str]:
     if path.is_symlink():
         raise ArmReadinessError(
             "readiness_evidence_unreadable",
@@ -4486,7 +4529,16 @@ def _launch_artifact_reference(path: Path) -> dict[str, str]:
             f"launch artifact must be one regular non-symlink file: {path}",
         )
     try:
-        raw = resolved.read_bytes()
+        raw = _read_launch_binding_artifact(
+            resolved, max_bytes=max_bytes, label=label, cache=cache
+        )
+    except LaunchLineageError:
+        raise
+    except MemoryError as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"{label} is unavailable within its frozen byte limit: {resolved}: {exc}",
+        ) from exc
     except OSError as exc:
         raise ArmReadinessError(
             "readiness_evidence_unreadable",
@@ -4497,10 +4549,17 @@ def _launch_artifact_reference(path: Path) -> dict[str, str]:
 
 def _load_launch_manifest_for_consumption(
     launch_manifest: Path,
+    *,
+    launch_binding_cache: dict[Path, bytes],
 ) -> tuple[Mapping[str, Any], dict[str, str], dict[str, str], dict[str, str]]:
-    manifest_reference = _launch_artifact_reference(launch_manifest)
+    manifest_reference = _launch_artifact_reference(
+        launch_manifest,
+        max_bytes=_LAUNCH_BINDING_MANIFEST_MAX_BYTES,
+        label="launch manifest",
+        cache=launch_binding_cache,
+    )
     try:
-        raw = Path(manifest_reference["path"]).read_bytes()
+        raw = launch_binding_cache[Path(manifest_reference["path"])]
         manifest = validate_launch_manifest(
             parse_json_bytes(raw, require_canonical=True)
         )
@@ -4515,8 +4574,18 @@ def _load_launch_manifest_for_consumption(
             "readiness_evidence_unreadable",
             f"launch manifest window root is unavailable: {exc}",
         ) from exc
-    env_reference = _launch_artifact_reference(window_root / "window.env")
-    chain_reference = _launch_artifact_reference(window_root / "window-chain.zsh")
+    env_reference = _launch_artifact_reference(
+        window_root / "window.env",
+        max_bytes=_LAUNCH_BINDING_ENVIRONMENT_MAX_BYTES,
+        label="window environment",
+        cache=launch_binding_cache,
+    )
+    chain_reference = _launch_artifact_reference(
+        window_root / "window-chain.zsh",
+        max_bytes=_LAUNCH_BINDING_CHAIN_MAX_BYTES,
+        label="window chain",
+        cache=launch_binding_cache,
+    )
     return manifest, manifest_reference, env_reference, chain_reference
 
 
@@ -4549,14 +4618,28 @@ def _read_v2_consumption(
 
 
 def _read_exact_launch_reference(
-    reference: Mapping[str, Any], *, expected_path: Path | None = None
+    reference: Mapping[str, Any],
+    *,
+    max_bytes: int,
+    label: str,
+    expected_path: Path | None = None,
+    launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> tuple[Path, bytes]:
     path = Path(str(reference["path"]))
     try:
         if path.is_symlink():
             raise OSError("symlink refused")
         resolved = path.resolve(strict=True)
-        raw = resolved.read_bytes()
+        raw = _read_launch_binding_artifact(
+            resolved,
+            max_bytes=max_bytes,
+            label=label,
+            cache=(
+                launch_binding_cache
+                if launch_binding_cache is not None
+                else {}
+            ),
+        )
     except OSError as exc:
         raise LaunchLineageError(
             "launch_consumption_invalid",
@@ -4644,11 +4727,12 @@ def _attested_launch_artifact_references(
     pack_root: Path,
     custody_pack_root: Path,
     arm_receipt: Mapping[str, Any],
+    *,
+    launch_binding_cache: dict[Path, bytes],
 ) -> dict[str, dict[str, str]]:
     """Resolve the digest-bound T-0 LAUNCH_RECIPE input identities."""
 
     try:
-        launch_binding_cache: dict[Path, bytes] = {}
         candidates: list[Mapping[str, Any]] = []
         for item in arm_receipt["evidence"]:
             if (
@@ -4774,11 +4858,15 @@ def _reconcile_launch_binding(
     window_chain_reference: Mapping[str, Any],
     window_chain_sha256: str,
     exec_argv: Sequence[str],
+    launch_binding_cache: dict[Path, bytes],
 ) -> None:
     """Bind supplied launch inputs to the arm-attested T-0 identities."""
 
     attested = _attested_launch_artifact_references(
-        pack_root, custody_pack_root, arm_receipt
+        pack_root,
+        custody_pack_root,
+        arm_receipt,
+        launch_binding_cache=launch_binding_cache,
     )
     try:
         canonical_manifest = (
@@ -4849,6 +4937,7 @@ def _replay_consumed_arm(
     require_current_boot: bool,
     require_unexpired: bool,
     replay_arm_semantics: bool,
+    launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> tuple[Mapping[str, Any], Path, Path, Mapping[str, Any]]:
     arm_reference = consumption["arm_receipt"]
     arm_path = consumption_path.parent.parent / str(arm_reference["path"])
@@ -4939,7 +5028,10 @@ def _replay_consumed_arm(
     if replay_arm_semantics:
         try:
             rows, refusals = _derive_arm_semantics_for_verification(
-                recorded_pack_root, consumption_path.parent.parent, arm
+                recorded_pack_root,
+                consumption_path.parent.parent,
+                arm,
+                launch_binding_cache=launch_binding_cache,
             )
         except ArmReadinessError as exc:
             raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
@@ -4966,6 +5058,7 @@ def verify_consumed_launch(
 ) -> dict[str, Any]:
     """Replay a v2 consumption without treating its arm as unconsumed."""
 
+    launch_binding_cache: dict[Path, bytes] = {}
     try:
         root = Path(pack_root).resolve(strict=True)
     except OSError as exc:
@@ -4980,6 +5073,7 @@ def verify_consumed_launch(
         require_current_boot=require_current_boot,
         require_unexpired=require_current_boot,
         replay_arm_semantics=require_current_boot,
+        launch_binding_cache=launch_binding_cache,
     )
     expected_identity = {
         "pack_id": pack["pack_id"],
@@ -5000,7 +5094,10 @@ def verify_consumed_launch(
         )
     manifest_path, manifest_raw = _read_exact_launch_reference(
         consumption["launch_manifest"],
+        max_bytes=_LAUNCH_BINDING_MANIFEST_MAX_BYTES,
+        label="launch manifest",
         expected_path=Path(launch_manifest) if launch_manifest is not None else None,
+        launch_binding_cache=launch_binding_cache,
     )
     try:
         manifest = validate_launch_manifest(
@@ -5018,10 +5115,18 @@ def verify_consumed_launch(
             f"launch manifest window root is unavailable: {exc}",
         ) from exc
     _read_exact_launch_reference(
-        consumption["window_environment"], expected_path=window_root / "window.env"
+        consumption["window_environment"],
+        max_bytes=_LAUNCH_BINDING_ENVIRONMENT_MAX_BYTES,
+        label="window environment",
+        expected_path=window_root / "window.env",
+        launch_binding_cache=launch_binding_cache,
     )
     _read_exact_launch_reference(
-        consumption["window_chain"], expected_path=window_root / "window-chain.zsh"
+        consumption["window_chain"],
+        max_bytes=_LAUNCH_BINDING_CHAIN_MAX_BYTES,
+        label="window chain",
+        expected_path=window_root / "window-chain.zsh",
+        launch_binding_cache=launch_binding_cache,
     )
     manifest_argv = list(manifest["launch_command"])
     _reconcile_launch_binding(
@@ -5038,6 +5143,7 @@ def verify_consumed_launch(
         window_chain_reference=consumption["window_chain"],
         window_chain_sha256=consumption["window_chain"]["sha256"],
         exec_argv=consumption["exec_argv"],
+        launch_binding_cache=launch_binding_cache,
     )
     if expected_exec_argv is not None and list(expected_exec_argv) != manifest_argv:
         raise LaunchLineageError(
@@ -5134,8 +5240,12 @@ def _consume_launch_capability(
     ):
         _require_lower_sha256(value, where)
 
+    launch_binding_cache: dict[Path, bytes] = {}
     verified = _verify_arm_receipt(
-        pack_root, arm_receipt, require_unconsumed=False
+        pack_root,
+        arm_receipt,
+        require_unconsumed=False,
+        launch_binding_cache=launch_binding_cache,
     )
     root = Path(pack_root).resolve(strict=True)
     receipt_path = Path(arm_receipt).resolve(strict=True)
@@ -5181,7 +5291,10 @@ def _consume_launch_capability(
         ]
     )
     manifest, manifest_ref, env_ref, chain_ref = (
-        _load_launch_manifest_for_consumption(Path(launch_manifest))
+        _load_launch_manifest_for_consumption(
+            Path(launch_manifest),
+            launch_binding_cache=launch_binding_cache,
+        )
     )
     try:
         authenticated_manifest = validate_launch_manifest(
@@ -5211,6 +5324,7 @@ def _consume_launch_capability(
         window_chain_reference=chain_ref,
         window_chain_sha256=window_chain_sha256,
         exec_argv=exec_argv,
+        launch_binding_cache=launch_binding_cache,
     )
     pack = receipt["pack"]
     consumption = {
@@ -5591,6 +5705,7 @@ def authenticate_launch_lineage(
 ) -> dict[str, Any]:
     """Authenticate one immutable consumption→start→settle→completion chain."""
 
+    launch_binding_cache: dict[Path, bytes] = {}
     if require_completion and require_completion_absent:
         raise ValueError(
             "completion cannot be simultaneously required and required absent"
@@ -5677,7 +5792,10 @@ def authenticate_launch_lineage(
                 "current checkout HEAD differs from the reviewed launch HEAD",
             )
     manifest_path, manifest_raw = _read_exact_launch_reference(
-        consumption["launch_manifest"]
+        consumption["launch_manifest"],
+        max_bytes=_LAUNCH_BINDING_MANIFEST_MAX_BYTES,
+        label="launch manifest",
+        launch_binding_cache=launch_binding_cache,
     )
     try:
         manifest = validate_launch_manifest(
@@ -5693,10 +5811,18 @@ def authenticate_launch_lineage(
             f"launch manifest window root is unavailable: {exc}",
         ) from exc
     _read_exact_launch_reference(
-        consumption["window_environment"], expected_path=window_root / "window.env"
+        consumption["window_environment"],
+        max_bytes=_LAUNCH_BINDING_ENVIRONMENT_MAX_BYTES,
+        label="window environment",
+        expected_path=window_root / "window.env",
+        launch_binding_cache=launch_binding_cache,
     )
     chain_path, _chain_raw = _read_exact_launch_reference(
-        consumption["window_chain"], expected_path=window_root / "window-chain.zsh"
+        consumption["window_chain"],
+        max_bytes=_LAUNCH_BINDING_CHAIN_MAX_BYTES,
+        label="window chain",
+        expected_path=window_root / "window-chain.zsh",
+        launch_binding_cache=launch_binding_cache,
     )
     manifest_argv = list(manifest["launch_command"])
     if (

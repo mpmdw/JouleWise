@@ -108,7 +108,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "arm_readiness.t0.sources/t0-single-launch-capability.json"
         )
         source_path = custody_pack_root / source_relative
-        source_path.parent.mkdir(parents=True)
+        source_path.parent.mkdir(parents=True, exist_ok=True)
         source = {
             "schema_version": "joulewise.arm_readiness_t0_evidence_source.v1",
             "row_id": "t0.single_launch_capability",
@@ -145,7 +145,7 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         evidence_id = "evidence-t0-t0-single-launch-capability"
         evidence_name = f"{evidence_id}.json"
         evidence_path = custody_pack_root / "arm_readiness.evidence" / evidence_name
-        evidence_path.parent.mkdir()
+        evidence_path.parent.mkdir(exist_ok=True)
         evidence = {
             "schema_version": readiness.EVIDENCE_RECEIPT_SCHEMA,
             "evidence_id": evidence_id,
@@ -200,7 +200,54 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                 / self.pack.name
                 / "arm_readiness.t0.sources/t0-single-launch-capability.json"
             ),
+            "manifest": self.manifest_path,
+            "environment": self.window_root / "window.env",
+            "chain": self.chain_path,
         }
+
+    def _verify_with_launch_recipe_replay(
+        self, consumption_path: Path
+    ) -> dict[str, object]:
+        def replay_semantics(
+            root: Path,
+            custody_pack_root: Path,
+            arm: object,
+            *,
+            launch_binding_cache: dict[Path, bytes] | None = None,
+        ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+            self.assertIsNotNone(launch_binding_cache)
+            self.assertIsInstance(arm, dict)
+            item = arm["evidence"][0]
+            items, receipts, refusals = readiness._discover_evidence(
+                root,
+                custody_pack_root,
+                pack_sha256=arm["pack"]["pack_sha256"],
+                head_commit=arm["reviewed_main"]["head_commit"],
+                boot_session_id=arm["boot_session_id"],
+                now_monotonic_ns=None,
+                include_pack=False,
+                launch_binding_cache=launch_binding_cache,
+            )
+            self.assertEqual(items, [item])
+            self.assertEqual(set(receipts), {item["evidence_id"]})
+            self.assertEqual(refusals, [])
+            return arm["rows"], arm["refusals"]
+
+        with mock.patch.object(
+            readiness,
+            "_derive_arm_semantics_for_verification",
+            side_effect=replay_semantics,
+        ), mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            return readiness.verify_consumed_launch(
+                self.pack,
+                consumption_path,
+                launch_manifest=self.manifest_path,
+                expected_exec_argv=self.exec_argv,
+            )
 
     def _consumer_inputs(self, token: bytes = b"t" * 32) -> dict[str, object]:
         arm_raw = self.arm_path.read_bytes()
@@ -879,7 +926,123 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         with mock.patch.object(Path, "open", new=tracking_open):
             result = self._invoke_consumer(inputs)
         self.assertEqual(result["status"], "CONSUMED")
-        self.assertEqual(read_counts, {"receipt": 1, "sidecar": 1, "source": 1})
+        self.assertEqual(
+            read_counts,
+            {
+                "receipt": 1,
+                "sidecar": 1,
+                "source": 1,
+                "manifest": 1,
+                "environment": 1,
+                "chain": 1,
+            },
+        )
+
+    def test_verify_consumed_launch_reads_each_artifact_once(self) -> None:
+        result = self._consume()
+        consumption_path = Path(str(result["consumption_path"]))
+        targets = {
+            path.resolve(): name
+            for name, path in self._launch_recipe_artifact_paths().items()
+        }
+        read_counts = {name: 0 for name in targets.values()}
+        real_open = Path.open
+
+        def tracking_open(path: Path, *args: object, **kwargs: object):
+            resolved = path.resolve(strict=False)
+            if resolved in targets:
+                read_counts[targets[resolved]] += 1
+            return real_open(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "open", new=tracking_open):
+            verified = self._verify_with_launch_recipe_replay(consumption_path)
+        self.assertEqual(verified["status"], "PASS")
+        self.assertEqual(
+            read_counts,
+            {
+                "receipt": 1,
+                "sidecar": 1,
+                "source": 1,
+                "manifest": 1,
+                "environment": 1,
+                "chain": 1,
+            },
+        )
+
+    def test_verify_consumed_launch_refuses_each_oversized_artifact(self) -> None:
+        cases = {
+            "receipt": readiness._LAUNCH_BINDING_RECEIPT_MAX_BYTES,
+            "sidecar": readiness._LAUNCH_BINDING_SIDECAR_MAX_BYTES,
+            "source": readiness._LAUNCH_BINDING_SOURCE_MAX_BYTES,
+            "manifest": readiness._LAUNCH_BINDING_MANIFEST_MAX_BYTES,
+            "environment": readiness._LAUNCH_BINDING_ENVIRONMENT_MAX_BYTES,
+            "chain": readiness._LAUNCH_BINDING_CHAIN_MAX_BYTES,
+        }
+        for name, cap in cases.items():
+            fixture = LaunchConsumptionV2Tests(
+                methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            )
+            fixture.setUp()
+            try:
+                result = fixture._consume()
+                consumption_path = Path(str(result["consumption_path"]))
+                target = fixture._launch_recipe_artifact_paths()[name]
+                with target.open("r+b") as handle:
+                    handle.truncate(cap + 1)
+                content_reads = 0
+                real_open = Path.open
+
+                class CountingHandle:
+                    def __init__(self, handle: object) -> None:
+                        self.handle = handle
+
+                    def __enter__(self) -> "CountingHandle":
+                        return self
+
+                    def __exit__(self, *args: object) -> None:
+                        self.handle.close()
+
+                    def fileno(self) -> int:
+                        return self.handle.fileno()
+
+                    def read(self, size: int = -1) -> bytes:
+                        nonlocal content_reads
+                        content_reads += 1
+                        return self.handle.read(size)
+
+                def tracking_open(path: Path, *args: object, **kwargs: object):
+                    handle = real_open(path, *args, **kwargs)
+                    if path.resolve(strict=False) == target.resolve(strict=False):
+                        return CountingHandle(handle)
+                    return handle
+
+                with self.subTest(artifact=name), mock.patch.object(
+                    Path, "open", new=tracking_open
+                ):
+                    with self.assertRaises(readiness.LaunchLineageError) as caught:
+                        fixture._verify_with_launch_recipe_replay(consumption_path)
+                self.assertEqual(
+                    caught.exception.reason_code, "launch_binding_mismatch"
+                )
+                self.assertIn(
+                    caught.exception.reason_code,
+                    readiness.LAUNCH_LINEAGE_REASON_CODES,
+                )
+                self.assertEqual(content_reads, 0)
+            finally:
+                fixture.doCleanups()
+
+    def test_exactly_capped_chain_authenticates_at_consume_and_verify(self) -> None:
+        self.chain_path.write_bytes(
+            b"#" * readiness._LAUNCH_BINDING_CHAIN_MAX_BYTES
+        )
+        self._install_attested_launch_recipe()
+        result = self._consume()
+        self.assertEqual(result["status"], "CONSUMED")
+        verified = self._verify_with_launch_recipe_replay(
+            Path(str(result["consumption_path"]))
+        )
+        self.assertEqual(verified["status"], "PASS")
 
     def test_launch_recipe_oversize_refuses_before_content_read(self) -> None:
         cases = {
