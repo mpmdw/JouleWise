@@ -3165,7 +3165,7 @@
       "priority": "p1_phase_gate",
       "rank": 2,
       "status": "queued",
-      "status_note": "Council Phase 1 parallel code work; build and rehearse the heightened-proof post-collection edge before any window is spent.",
+      "status_note": "Code MERGED as #155 (d54db78) after the full gauntlet; the row stays open pending the Ed scientific rulings (prefill test/direction, multiplicity family/m, p256 floor-or-transport), the production freeze, and the same-head production-pack L10 replay",
       "stop_card": null
     },
     "WO-DETECT-PULSES-BUDGET": {
@@ -3207,45 +3207,6 @@
       "status_note": "Council Phase 1 parallel code work; the ordered second lens cleared the single-lens condition before implementation.",
       "stop_card": null
     },
-    "WO-L2-REAUDIT": {
-      "acceptance": {
-        "evidence": [
-          "The calibration-acquisition evidence universe is independently re-enumerated rather than inherited from the first L2 seat",
-          "Coverage numerator and denominator are reproduced with positive and negative probes",
-          "The adversarial coverage attack is executed and all remaining gaps receive explicit dispositions"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/WO-L2-REAUDIT/acceptance",
-          "label": "WO-L2-REAUDIT acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A fresh L2 audit closes the distinct UNVERIFIED coverage verdict through independent enumeration and adversarial coverage testing."
-      },
-      "authority": {
-        "label": "2026-08-15 council verdict L2 UNVERIFIED disposition and Phase 1",
-        "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Instrument-readiness charter anti-ritual and verdict form",
-            "path": "docs/process/instrument-readiness-audit-charter.md"
-          },
-          "rule": "Do not reuse a self-nominated denominator or collapse NOT-READY and UNVERIFIED into one verdict"
-        }
-      ],
-      "flags": [],
-      "goal": "Re-audit L2 with an independently enumerated universe, reproduced coverage denominator, and the charter's adversarial coverage attack.",
-      "id": "WO-L2-REAUDIT",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 6,
-      "status": "queued",
-      "status_note": "Council Phase 1 cold-added audit obligation; this closes coverage only after fresh evidence, not by carrying forward the first sitting's denominator.",
-      "stop_card": null
-    },
     "WO-LAUNCH-BINDING": {
       "acceptance": {
         "evidence": [
@@ -3282,7 +3243,7 @@
       "priority": "p1_phase_gate",
       "rank": 1,
       "status": "queued",
-      "status_note": "Council Phase 1 parallel contract-bearing work; it changes the operator sequence and therefore retains the full council gate.",
+      "status_note": "Stages 1+2 (campaign side) MERGED as #156 (f392ff6) incl. the F3 cold-gate arm-attested binding; remaining: calibration-side stage 2 (coordinates with impl/wo-detect-pulses-budget), stage 3 reduce/mint reauth, stage 4 successor flag (Phase 2). Launch stays NO-GO",
       "stop_card": null
     },
     "WO-PROOF-RUNNABILITY-REPAIR": {

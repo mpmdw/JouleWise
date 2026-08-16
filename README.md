@@ -9,29 +9,28 @@
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
-## Current activity (refreshed each work block; last: 2026-08-15)
+## Current activity (refreshed each work block; last: 2026-08-16)
 
-**Just completed:** the Phase 0 readiness rulings and the first three
-Phase 1 repairs, all merged: the work-selection gate is installed (no
-measurement window is selectable until a readiness council says go), the
-close-out recorder's blocking authorization refusal is cured (its
-check-to-grant race stays a registered limitation with its own queued
-repair), and the night-of-measurement capture tool, strict plan resolver,
-and reviewed network-time route all landed.
-The readiness council's 0/11 NOT-READY verdict is fully preserved with its
-evidence; no measurement window may be armed before a later READY-candidate
-council says the instrument is ready.
+**Just completed:** the readiness council's entire Phase 1 code program, all
+merged: the should-fix documentation batch, the honest night-of-measurement
+capture contract, the analysis consumption edge for the comparison window
+(a validator and outcome-blind finalizer so only authenticated, frozen
+results reach claim analysis), and the launch binding (arming a window and
+launching it are now one atomic, authenticated step — three design formulations
+were adversarially broken and repaired through an independent cold review
+before it landed). A detection-time budget fix is built and staged for the
+next re-freeze. An independent re-audit verified the calibration test
+universe end to end.
 
-**Working on now:** the Phase 1 work orders for the claim-consumption edge,
-the launch binding, and a finite work/time budget for calibration-pulse
-detection.
+**Working on now:** closing bookkeeping for this work block.
 
-**Queued next:** (1) the remaining Phase 1 work orders; (2) one batched Ed
-qualification session as Phase 1 nears close (its quiet-state baseline item
-can ride any earlier tap); (3) the Phase 2-4 sequence — one successor-family
-re-freeze, manifest supersession, focused re-audit, and a READY-candidate
-council sitting; (4) the alpha, beta, and gamma windows only after a GO; and
-(5) the paper fill as governed results become available.
+**Queued next:** (1) the remaining launch-binding stages and two queued
+repairs (recorder grant identity, CI proof-fixture drift); (2) one batched
+operator session (privileged installs, a dress rehearsal, and four recorded
+risk-appetite decisions); (3) the Phase 2-4 sequence — one successor-family
+re-freeze, manifest supersession, focused re-audit, and a fresh readiness
+council; (4) the alpha, beta, and gamma measurement windows only after that
+council says go; and (5) the paper fill as governed results arrive.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
