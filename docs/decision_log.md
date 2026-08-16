@@ -8996,6 +8996,79 @@ restated here). Cures fleet blocker L10-B1/L4 (the gamma claim edge).
 5. The consult's open rulings (prefill/floor/multiplicity finalization
    items) are carried on the work order's RULING-REQUIRED list; any that
    touch claim semantics surface to Ed with the Phase-1 close.
+6. **Mechanism disposition (lead ruling, continuation):** claim-artifact
+   family validation compares the emitted family policy against the exact
+   frozen family semantics carried by the authenticated manifest; it no
+   longer imposes the historical Holm α=.05, m=1 policy as a code constant.
+   Multi-contrast finalized families map LOO omissions by their frozen block
+   number across arm-specific block IDs and refuse under
+   `analysis_manifest_family_semantics_mismatch` if that frozen stratum map
+   is absent or ambiguous. This mechanism takes no position on which family
+   semantics Ed should freeze.
+
+**RULING-REQUIRED — Ed (scientific scope; blocks production freeze, not the
+mechanism build):** (a) the p256 prefill test and scientific direction;
+(b) whether decode and prefill share one multiplicity family or use separate
+families, and the resulting frozen `m`; (c) the owned p256 floor or governed
+transport rule; and (d) authorization of the production successor freeze
+followed by the same-HEAD, production-pack L10 sacrificial replay. Synthetic
+two-family m=1 and shared-family m=2 tests are mechanism discrimination only
+and are not scientific rulings.
+
+### D-078 amendment — 2026-08-15: analysis-manifest consumption-edge refusal registry
+
+The following exact spellings extend D-078's closed, fail-closed refusal
+registry for the adopted prospective → finalized → consumer lifecycle.
+Nested validators may add detail, but must retain one of these top-level
+codes and must exit before estimation or claim-artifact publication.
+
+- Prospective: `analysis_prospective_schema_invalid`,
+  `analysis_prospective_unknown_key`, `analysis_prospective_not_frozen`,
+  `analysis_prospective_identity_mismatch`,
+  `analysis_prospective_plan_tree_mismatch`,
+  `analysis_prospective_source_hash_mismatch`,
+  `analysis_prospective_unsafe_path`,
+  `analysis_prospective_member_cover_mismatch`,
+  `analysis_prospective_block_cover_mismatch`,
+  `analysis_prospective_contrast_cover_mismatch`,
+  `analysis_prospective_family_invalid`,
+  `analysis_prospective_multiplicity_invalid`,
+  `analysis_prospective_floor_dependency_unresolved`, and
+  `analysis_prospective_unresolved_slot`.
+- Finalization: `analysis_finalization_input_unreadable`,
+  `analysis_finalization_prospective_invalid`,
+  `analysis_finalization_attachment_missing`,
+  `analysis_finalization_attachment_invalid`,
+  `analysis_finalization_verdict_not_passed`,
+  `analysis_finalization_evaluation_basis_mismatch`,
+  `analysis_finalization_member_cover_mismatch`,
+  `analysis_finalization_bracket_binding_mismatch`,
+  `analysis_finalization_ledger_head_mismatch`,
+  `analysis_finalization_floor_dependency_unsatisfied`,
+  `analysis_finalization_semantics_mismatch`,
+  `analysis_finalization_noncanonical`, and
+  `analysis_finalization_output_conflict`.
+- Consumer: `analysis_manifest_prospective_not_consumable`,
+  `analysis_manifest_finalized_invalid`,
+  `analysis_manifest_lineage_mismatch`,
+  `analysis_manifest_collection_identity_mismatch`,
+  `analysis_manifest_floor_attachment_mismatch`, and
+  `analysis_manifest_family_semantics_mismatch`.
+
+**Mechanism-only amendment (FIX ROUND 1, 2026-08-15; R-t9-6 carried,
+not decided):** the consumer registry additionally admits
+`analysis_manifest_transport_ruling_pending`,
+`analysis_manifest_runs_root_mismatch`, and
+`analysis_manifest_bundle_path_divergence`. A prospective/finalized v3
+artifact may faithfully freeze either `exact_stack_only.v1` or
+`same_stack_componentwise_worst_case.v1`, including its complete transport
+group, condition-domain, backend, floor-field, and rule bindings. Until Ed
+selects the open p256 floor branch, a valid governed-transport artifact exits
+pre-estimation under `analysis_manifest_transport_ruling_pending`; it is not
+misreported as an exact-stack failure. This amendment carries both branches
+and chooses neither scientific semantics.
+
+**Boundary-classification amendment (FIX ROUND 3, 2026-08-16):** validator defects at the prospective and consumer boundaries refuse under the newly registered `analysis_prospective_internal_error` and `analysis_manifest_internal_error` codes respectively; they are never classified as malformed input.
 
 ### R1 RULED (magistrate synthesis of the rule-11 cold gate, 2026-08-15): freeze-evidence lifecycle — content-bound design ADOPTED WITH THE COMPOSED AMENDMENT SET
 
