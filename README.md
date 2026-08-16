@@ -11,8 +11,8 @@
 
 ## Current activity (refreshed each work block; last: 2026-08-16)
 
-**Just completed:** the readiness council's entire Phase 1 code program, all
-merged: the should-fix documentation batch, the honest night-of-measurement
+**Just completed:** the readiness council's Phase 1 code wave — its four
+mergeable work orders, all merged: the should-fix documentation batch, the honest night-of-measurement
 capture contract, the analysis consumption edge for the comparison window
 (a validator and outcome-blind finalizer so only authenticated, frozen
 results reach claim analysis), and the launch binding (arming a window and
@@ -22,12 +22,13 @@ before it landed). A detection-time budget fix is built and staged for the
 next re-freeze. An independent re-audit verified the calibration test
 universe end to end.
 
-**Working on now:** closing bookkeeping for this work block.
+**Working on now:** the remaining Phase 1 items — the later launch-binding
+stages and the two queued repairs — ahead of the Phase 2 re-freeze.
 
 **Queued next:** (1) the remaining launch-binding stages and two queued
 repairs (recorder grant identity, CI proof-fixture drift); (2) one batched
-operator session (privileged installs, a dress rehearsal, and four recorded
-risk-appetite decisions); (3) the Phase 2-4 sequence — one successor-family
+operator session (privileged installs, a dress rehearsal, and the recorded
+risk-appetite decisions the gates surfaced — see RUN_STATE's Ed-owed list); (3) the Phase 2-4 sequence — one successor-family
 re-freeze, manifest supersession, focused re-audit, and a fresh readiness
 council; (4) the alpha, beta, and gamma measurement windows only after that
 council says go; and (5) the paper fill as governed results arrive.

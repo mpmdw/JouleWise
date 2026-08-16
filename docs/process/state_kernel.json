@@ -20,8 +20,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T6 session 2026-08-13: three D-117 packs frozen and readiness work handed off",
-    "path": "docs/run_reports/2026-08-13-t6-session.md"
+    "label": "T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED",
+    "path": "docs/run_reports/2026-08-16-t9-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -3164,7 +3164,7 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 2,
-      "status": "queued",
+      "status": "partial",
       "status_note": "Code MERGED as #155 (d54db78) after the full gauntlet; the row stays open pending the Ed scientific rulings (prefill test/direction, multiplicity family/m, p256 floor-or-transport), the production freeze, and the same-head production-pack L10 replay",
       "stop_card": null
     },
@@ -3203,8 +3203,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 5,
-      "status": "queued",
-      "status_note": "Council Phase 1 parallel code work; the ordered second lens cleared the single-lens condition before implementation.",
+      "status": "partial",
+      "status_note": "Built + gauntleted on impl/wo-detect-pulses-budget @ 5449e58 (incl. the calexits flake fix); MERGE-STAGED for the atomic Phase-2 re-freeze that re-issues the D-079 acceptance artifact (R-t9-4 / D-138) — not independently selectable",
       "stop_card": null
     },
     "WO-LAUNCH-BINDING": {

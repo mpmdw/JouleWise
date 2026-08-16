@@ -9605,3 +9605,27 @@ derive `TOP`, then authenticate the successor manifest/config/entry/digest and
 attempt-directory relationship before opening exactly TOP's fixed locator.
 Until that projection and its adversarial regressions land, no successor pack
 may freeze or issue `launch_lineage_required` on an AXI config family.
+
+### D-138 — D-079-pinned estimator-input changes are merge-staged into the atomic re-freeze (magistrate, 2026-08-15; promoted from session ruling R-t9-4 at the T9 close)
+
+Any change to a file in the issued D-079 acceptance artifact's
+`estimator_code_sha256` pin set (`joulewise/powermetrics_fiducial.py`,
+`joulewise/uncertainty_evidence.py`, `joulewise/adapters/powermetrics.py`,
+`joulewise/reduce.py`) deliberately stales the issued artifact: the canonical
+suite's authenticated-staleness fan-out is a LIVE INVARIANT (the suite proves
+the issued artifact matches real bytes), and re-keying those tests to fixtures
+to make such a branch mergeable is FORBIDDEN — it would delete the invariant
+that catches accidental estimator drift.
+
+**Consequences:** (1) such branches complete their C-028 gauntlet normally but
+are MERGE-STAGED: they merge ONLY inside the atomic Phase-2 successor
+re-freeze transaction that re-issues the acceptance artifact and every
+dependent pin (first instance: `impl/wo-detect-pulses-budget` @ `5449e58`,
+carrying WO-DETECT-PULSES-BUDGET + the calexits flake fix). (2) Follow-on work
+that must touch the same pinned files RIDES THE SAME BRANCH rather than
+opening a second staleness event on main (the inheritance corollary; the
+flake fix is the precedent). (3) The re-issue and pin update remain lead-owned
+inside the re-freeze; tests may re-key only private synthetic fixtures.
+Authority context: R-t9-4 (docs/run_reports/2026-08-16-t9-session.md), the
+2026-08-15 D-078 registry amendment on the staged branch, and the council's
+Phase-2 re-freeze ruling.

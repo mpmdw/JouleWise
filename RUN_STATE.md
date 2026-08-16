@@ -14,8 +14,8 @@ Last updated: 2026-08-16 (T9 close — Phase-1 code complete)
 
 ## ▶▶ T9 CHECKPOINT (2026-08-16) — PHASE 1 CODE COMPLETE; A NEW SESSION STARTS HERE
 
-**STATE IN ONE BREATH:** T8's successor order is EXECUTED. All four mergeable
-Phase-1 work orders are ON MAIN — #153 should-fix batch (8035bf2, final head 24df3df),
+**STATE IN ONE BREATH:** T8's successor order is EXECUTED. The Phase-1 CODE
+WAVE is merged — all four mergeable work orders are ON MAIN — #153 should-fix batch (8035bf2, final head 24df3df),
 #154 T-0 F4 honest contract (a59c795), #155 WO-CONSUMPTION-EDGE (d54db78),
 #156 WO-LAUNCH-BINDING stages 1+2 campaign side (f392ff6) — each through the
 full C-028 gauntlet + rule-5 final-head passes + a pre-merge integration tree
@@ -3646,7 +3646,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-16). Latest report: [T6 session 2026-08-13: three D-117 packs frozen and readiness work handed off](docs/run_reports/2026-08-13-t6-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-16). Latest report: [T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED](docs/run_reports/2026-08-16-t9-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -4350,8 +4350,10 @@ the top of this file.
 
 ## Known Workspace State
 
-- (2026-08-08 night, CURRENT checkpoint) `main` and `origin/main` are
-  both at `4c6a8fb558d7b979672dd4244efc797689785548`; the worktree is clean.
+- (2026-08-16 T9 close, CURRENT) `main` and `origin/main` at the T9
+  close-and-sweep head (see the T9 checkpoint above); the worktree is clean.
+- (2026-08-08 night, historical) `main` and `origin/main` were
+  both at `4c6a8fb558d7b979672dd4244efc797689785548`.
 - (2026-08-02, historical) `main` and `origin/main` at `bcbc10b`; working
   tree clean except the untracked private `CLAUDE.local.md` (Ed's;
   never commit) and `.desk/` (adjudication custody; never commit).
@@ -4394,9 +4396,9 @@ the top of this file.
 - The generated state-kernel regions in this file and `TASK_QUEUE.md` are
   IN SYNC with `docs/process/state_kernel.json`
   (`python3 scripts/gen_state.py --check` exits 0), and the kernel's own
-  content was refreshed on 2026-08-01 (desk adjudication session):
-  stamped `updated: 2026-08-01`, `latest_report` points at
-  `docs/run_reports/2026-08-01-desk-adjudication-session.md`, the MET
+  content was last refreshed at the T9 close (stamped `updated: 2026-08-16`,
+  `latest_report` → `docs/run_reports/2026-08-16-t9-session.md`); the
+  2026-08-01 refresh below is historical: the MET
   rows are folded in, the completed
   `FLOOR-LABEL-01`, `STACK-ID-BIND-01`, `P2-015`, and
   `COOLDOWN-JOIN-DA1-01` rows are retired to
