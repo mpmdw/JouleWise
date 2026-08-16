@@ -1114,6 +1114,118 @@ def is_abba_v3_consumable_schema(value: object) -> bool:
     return value in {SCHEMA_VERSION, FINALIZED_SCHEMA_VERSION}
 
 
+def frozen_family_block_strata(
+    value: Mapping[str, Any], family_instance_id: str
+) -> tuple[tuple[int, dict[str, str]], ...]:
+    """Return the manifest-frozen block-number mapping for one family.
+
+    Different measurement arms deliberately use different block IDs.  A
+    multi-contrast LOO therefore cannot borrow the first contrast's IDs; its
+    shared omission unit is the block number frozen in the manifest.  This
+    helper is strict so callers can refuse instead of silently suppressing
+    sensitivity evidence when that cross-arm mapping is absent or ambiguous.
+    """
+
+    families = value.get("families")
+    contrasts = value.get("contrasts")
+    blocks = value.get("blocks")
+    if not all(isinstance(rows, list) for rows in (families, contrasts, blocks)):
+        raise AnalysisManifestV3Error("frozen family block strata are absent")
+    matching_families = [
+        row
+        for row in families
+        if isinstance(row, Mapping)
+        and row.get("family_instance_id") == family_instance_id
+    ]
+    if len(matching_families) != 1:
+        raise AnalysisManifestV3Error("frozen family identity is absent or ambiguous")
+    contrast_ids = matching_families[0].get("contrast_ids")
+    if (
+        not isinstance(contrast_ids, list)
+        or not contrast_ids
+        or any(not isinstance(contrast_id, str) for contrast_id in contrast_ids)
+        or len(contrast_ids) != len(set(contrast_ids))
+    ):
+        raise AnalysisManifestV3Error("frozen family contrast membership is invalid")
+
+    contrast_by_id: dict[str, Mapping[str, Any]] = {}
+    for contrast in contrasts:
+        if not isinstance(contrast, Mapping):
+            continue
+        contrast_id = contrast.get("contrast_id")
+        if isinstance(contrast_id, str) and contrast_id not in contrast_by_id:
+            contrast_by_id[contrast_id] = contrast
+        elif isinstance(contrast_id, str):
+            raise AnalysisManifestV3Error("frozen contrast identity is ambiguous")
+    if any(contrast_id not in contrast_by_id for contrast_id in contrast_ids):
+        raise AnalysisManifestV3Error("frozen family names an absent contrast")
+
+    block_number_by_id: dict[str, int] = {}
+    for block in blocks:
+        if not isinstance(block, Mapping):
+            continue
+        block_id = block.get("block_id")
+        block_number = block.get("block_number")
+        if (
+            not isinstance(block_id, str)
+            or not block_id
+            or isinstance(block_number, bool)
+            or not isinstance(block_number, int)
+        ):
+            raise AnalysisManifestV3Error("frozen block stratum is invalid")
+        if block_id in block_number_by_id:
+            raise AnalysisManifestV3Error("frozen block identity is ambiguous")
+        block_number_by_id[block_id] = block_number
+
+    design = value.get("design")
+    sampling = design.get("sampling_plan") if isinstance(design, Mapping) else None
+    planned_n = (
+        sampling.get("planned_n_blocks")
+        if isinstance(sampling, Mapping)
+        else None
+    )
+    if isinstance(planned_n, bool) or not isinstance(planned_n, int) or planned_n < 1:
+        raise AnalysisManifestV3Error("frozen planned block count is invalid")
+    expected_numbers = list(range(1, planned_n + 1))
+
+    block_ids_by_number: dict[str, dict[int, str]] = {}
+    for contrast_id in contrast_ids:
+        block_ids = contrast_by_id[contrast_id].get("block_ids")
+        if (
+            not isinstance(block_ids, list)
+            or len(block_ids) != planned_n
+            or len(block_ids) != len(set(block_ids))
+            or any(not isinstance(block_id, str) for block_id in block_ids)
+        ):
+            raise AnalysisManifestV3Error(
+                f"frozen blocks are incomplete for contrast {contrast_id!r}"
+            )
+        try:
+            mapping = {
+                block_number_by_id[block_id]: block_id for block_id in block_ids
+            }
+        except KeyError as exc:
+            raise AnalysisManifestV3Error(
+                f"frozen block lacks a stratum for contrast {contrast_id!r}"
+            ) from exc
+        if sorted(mapping) != expected_numbers or len(mapping) != len(block_ids):
+            raise AnalysisManifestV3Error(
+                f"frozen strata are not contiguous and unique for contrast {contrast_id!r}"
+            )
+        block_ids_by_number[contrast_id] = mapping
+
+    return tuple(
+        (
+            block_number,
+            {
+                contrast_id: block_ids_by_number[contrast_id][block_number]
+                for contrast_id in contrast_ids
+            },
+        )
+        for block_number in expected_numbers
+    )
+
+
 def _strict_json_bytes(raw: bytes, label: str) -> Mapping[str, Any]:
     def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -2989,6 +3101,37 @@ def validate_finalized_analysis_manifest_v3(
             "collection lookup identity/projection rule differs from prospective authority",
         )
 
+    finalized_families = value.get("families")
+    if isinstance(finalized_families, list):
+        for family in finalized_families:
+            contrast_ids = (
+                family.get("contrast_ids")
+                if isinstance(family, Mapping)
+                else None
+            )
+            family_id = (
+                family.get("family_instance_id")
+                if isinstance(family, Mapping)
+                else None
+            )
+            if not isinstance(contrast_ids, list) or len(contrast_ids) <= 1:
+                continue
+            if not isinstance(family_id, str):
+                _refusal(
+                    refusals,
+                    "analysis_manifest_family_semantics_mismatch",
+                    "multi-contrast family lacks a frozen identity",
+                )
+                continue
+            try:
+                frozen_family_block_strata(value, family_id)
+            except AnalysisManifestV3Error as exc:
+                _refusal(
+                    refusals,
+                    "analysis_manifest_family_semantics_mismatch",
+                    f"multi-contrast family lacks complete frozen block strata: {exc}",
+                )
+
     evidence = value.get("evidence")
     if not _exact_refusal_keys(
         evidence,
@@ -3148,6 +3291,7 @@ __all__ = [
     "calculate_manifest_id",
     "canonical_json_bytes",
     "finalize_prospective_analysis_manifest_v3",
+    "frozen_family_block_strata",
     "is_abba_v3_consumable_schema",
     "normalized_realized_stack_identity",
     "render_manifest",

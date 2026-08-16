@@ -8996,6 +8996,24 @@ restated here). Cures fleet blocker L10-B1/L4 (the gamma claim edge).
 5. The consult's open rulings (prefill/floor/multiplicity finalization
    items) are carried on the work order's RULING-REQUIRED list; any that
    touch claim semantics surface to Ed with the Phase-1 close.
+6. **Mechanism disposition (lead ruling, continuation):** claim-artifact
+   family validation compares the emitted family policy against the exact
+   frozen family semantics carried by the authenticated manifest; it no
+   longer imposes the historical Holm α=.05, m=1 policy as a code constant.
+   Multi-contrast finalized families map LOO omissions by their frozen block
+   number across arm-specific block IDs and refuse under
+   `analysis_manifest_family_semantics_mismatch` if that frozen stratum map
+   is absent or ambiguous. This mechanism takes no position on which family
+   semantics Ed should freeze.
+
+**RULING-REQUIRED — Ed (scientific scope; blocks production freeze, not the
+mechanism build):** (a) the p256 prefill test and scientific direction;
+(b) whether decode and prefill share one multiplicity family or use separate
+families, and the resulting frozen `m`; (c) the owned p256 floor or governed
+transport rule; and (d) authorization of the production successor freeze
+followed by the same-HEAD, production-pack L10 sacrificial replay. Synthetic
+two-family m=1 and shared-family m=2 tests are mechanism discrimination only
+and are not scientific rulings.
 
 ### D-078 amendment — 2026-08-15: analysis-manifest consumption-edge refusal registry
 

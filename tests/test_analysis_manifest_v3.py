@@ -81,11 +81,14 @@ def independent_semantics_sha256(value: dict) -> str:
     ).hexdigest()
 
 
-def install_synthetic_prospective_fixture(root: Path) -> tuple[Path, Path, dict]:
+def install_synthetic_prospective_fixture(
+    root: Path, *, shared_family: bool = False
+) -> tuple[Path, Path, dict]:
     """Install a resolved, shape-true gamma declaration in temporary custody.
 
-    The two m=1 families are a synthetic engine fixture, not a production
-    multiplicity ruling.  The checked-in unresolved pack remains untouched.
+    Both the default two-m=1 shape and the optional shared-m=2 shape are
+    synthetic engine fixtures, not a production multiplicity ruling.  The
+    checked-in unresolved pack remains untouched.
     """
 
     campaign = Path(root) / "pack"
@@ -172,6 +175,28 @@ def install_synthetic_prospective_fixture(root: Path) -> tuple[Path, Path, dict]
                 ),
             }
         )
+    if shared_family:
+        family_id = "synthetic-shared-cross-arm-family"
+        families = [
+            {
+                "family_id": family_id,
+                "family_instance_id": family_id,
+                "plan_id": draft["plan"]["plan_id"],
+                "claim_role": "primary",
+                "metric_tag": "synthetic_cross_arm_energy",
+                "multiplicity": {
+                    "method": "holm",
+                    "alpha": 0.05,
+                    "q": None,
+                    "m": 2,
+                },
+                "contrast_ids": [
+                    contrast["contrast_id"] for contrast in contrasts
+                ],
+            }
+        ]
+        for contrast in contrasts:
+            contrast["family_instance_id"] = family_id
     prospective = {
         "schema_version": PROSPECTIVE_SCHEMA_VERSION,
         "manifest_id": "",

@@ -14,6 +14,7 @@ from joulewise.analysis_manifest_v3 import (
     FINALIZED_BASENAME_SUFFIX,
     calculate_manifest_id,
     finalize_prospective_analysis_manifest_v3,
+    frozen_family_block_strata,
     validate_finalized_analysis_manifest_v3,
 )
 from joulewise.calibration_bracketing import build_calibration_bracket_binding
@@ -173,10 +174,14 @@ def _install_calibration_session(
     return ledger, binding_path
 
 
-def install_synthetic_finalization_fixture(root: Path) -> dict:
+def install_synthetic_finalization_fixture(
+    root: Path, *, shared_family: bool = False
+) -> dict:
     root = Path(root)
     prospective_path, plan_tree_path, prospective = (
-        install_synthetic_prospective_fixture(root)
+        install_synthetic_prospective_fixture(
+            root, shared_family=shared_family
+        )
     )
     runs_root = root / "runs"
     runs_root.mkdir()
@@ -396,6 +401,51 @@ class AnalysisFinalizerTests(unittest.TestCase):
                     first, manifest_path=path, custody_root=fixture["root"]
                 ),
                 (),
+            )
+
+    def test_shared_family_freezes_cross_arm_strata_and_missing_stratum_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(
+                Path(tmp), shared_family=True
+            )
+            manifest = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+            family_id = manifest["families"][0]["family_instance_id"]
+            strata = frozen_family_block_strata(manifest, family_id)
+            self.assertEqual([number for number, _ in strata], list(range(1, 11)))
+            self.assertTrue(
+                all(
+                    len(set(block_ids.values())) == 2
+                    for _, block_ids in strata
+                )
+            )
+
+            attacked = copy.deepcopy(manifest)
+            attacked["blocks"] = attacked["blocks"][:-1]
+            attacked["manifest_id"] = calculate_manifest_id(attacked)
+            path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            reason_codes = {
+                item.reason_code
+                for item in validate_finalized_analysis_manifest_v3(
+                    attacked,
+                    manifest_path=path,
+                    custody_root=fixture["root"],
+                )
+            }
+            self.assertIn(
+                "analysis_manifest_family_semantics_mismatch", reason_codes
             )
 
     def test_failed_whole_window_verdict_refuses_before_output(self) -> None:

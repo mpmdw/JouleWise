@@ -15,8 +15,11 @@ from joulewise.detection_floor import (
     attribution_single_count_discipline,
 )
 from joulewise.analysis_manifest_v3 import (
+    AnalysisManifestV3Error,
     ESTIMATOR_ID as ABBA_ESTIMATOR_ID,
     FLOOR_RULE_ID as CROSS_STACK_FLOOR_RULE_ID,
+    FINALIZED_SCHEMA_VERSION as FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA,
+    frozen_family_block_strata,
     is_abba_v3_consumable_schema,
 )
 
@@ -1389,19 +1392,28 @@ def _loo_family(
     abba_v3 = is_abba_v3_consumable_schema(inputs.manifest.get("schema_version"))
     block_id_by_stratum: dict[str, dict[Any, str]] = {}
     if abba_v3:
-        block_number_by_id = {
-            block["block_id"]: block["block_number"]
-            for block in inputs.manifest.get("blocks", [])
-            if isinstance(block, Mapping)
-            and isinstance(block.get("block_id"), str)
-            and isinstance(block.get("block_number"), int)
-        }
-        for contrast_id in contrast_ids:
-            block_id_by_stratum[contrast_id] = {
-                block_number_by_id[block_id]: block_id
-                for block_id in prepared_by_id[contrast_id]["manifest"]["block_ids"]
-                if block_id in block_number_by_id
+        try:
+            frozen_strata = frozen_family_block_strata(
+                inputs.manifest, family["family_instance_id"]
+            )
+        except (AnalysisManifestV3Error, KeyError, TypeError) as exc:
+            if (
+                inputs.manifest.get("schema_version")
+                == FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA
+                and len(contrast_ids) > 1
+            ):
+                raise AnalysisInputError(
+                    "analysis_manifest_family_semantics_mismatch: "
+                    f"multi-contrast family lacks complete frozen block strata: {exc}"
+                ) from exc
+            return {contrast_id: [] for contrast_id in contrast_ids}
+        block_id_by_stratum = {
+            contrast_id: {
+                block_number: block_ids[contrast_id]
+                for block_number, block_ids in frozen_strata
             }
+            for contrast_id in contrast_ids
+        }
     else:
         shared_block_ids = list(
             prepared_by_id[contrast_ids[0]]["manifest"]["block_ids"]
@@ -1842,9 +1854,16 @@ def analyze_claims(
         "families": family_rows,
         "contrasts": contrast_rows,
     }
-    artifact = finalize_claim_verdicts(body)
+    artifact = finalize_claim_verdicts(
+        body,
+        frozen_manifest=inputs.manifest,
+    )
     if output_path is not None:
-        write_claim_verdicts_atomic(Path(output_path), artifact)
+        write_claim_verdicts_atomic(
+            Path(output_path),
+            artifact,
+            frozen_manifest=inputs.manifest,
+        )
     return artifact
 
 

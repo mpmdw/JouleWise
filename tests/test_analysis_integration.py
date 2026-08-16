@@ -536,7 +536,9 @@ class AnalysisIntegrationTests(unittest.TestCase):
         """L10-shaped wire proof: finalizer -> validator -> real engine."""
 
         with tempfile.TemporaryDirectory() as tmp:
-            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            fixture = install_synthetic_finalization_fixture(
+                Path(tmp), shared_family=True
+            )
             finalized = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"],
                 plan_tree_path=fixture["plan_tree_path"],
@@ -717,8 +719,55 @@ class AnalysisIntegrationTests(unittest.TestCase):
             [row["contrast_id"] for row in finalized["contrasts"]],
         )
         self.assertEqual(len(artifact["contrasts"]), 2)
+        self.assertEqual(len(artifact["families"]), 1)
+        self.assertEqual(artifact["families"][0]["m"], 2)
+        self.assertEqual(
+            validate_claim_verdicts(
+                artifact,
+                frozen_manifest=finalized,
+            ),
+            [],
+        )
         self.assertTrue(
             all(row["loo"]["status"] == "complete" for row in artifact["contrasts"])
+        )
+        first_omissions = [
+            row["omitted_block_id"] for row in artifact["contrasts"][0]["loo"]["rows"]
+        ]
+        second_omissions = [
+            row["omitted_block_id"] for row in artifact["contrasts"][1]["loo"]["rows"]
+        ]
+        self.assertEqual(len(first_omissions), 10)
+        self.assertTrue(
+            all(left != right for left, right in zip(first_omissions, second_omissions))
+        )
+        for omission_index in range(10):
+            raw = {
+                contrast["contrast_id"]: contrast["loo"]["rows"][omission_index][
+                    "raw_p"
+                ]
+                for contrast in artifact["contrasts"]
+            }
+            adjusted = holm_adjust(raw, m=2)
+            for contrast in artifact["contrasts"]:
+                self.assertEqual(
+                    contrast["loo"]["rows"][omission_index]["adjusted_p"],
+                    adjusted[contrast["contrast_id"]],
+                )
+
+        family_drift = copy.deepcopy(artifact)
+        family_drift["families"][0]["alpha"] = 0.01
+        family_drift["claim_verdicts_id"] = calculate_claim_verdicts_id(
+            family_drift
+        )
+        self.assertTrue(
+            any(
+                "frozen analysis-manifest family semantics" in error
+                for error in validate_claim_verdicts(
+                    family_drift,
+                    frozen_manifest=finalized,
+                )
+            )
         )
 
     def _salvage_floor_dispatch_fixture(self, root: Path) -> tuple[dict, dict[str, Path]]:
@@ -830,6 +879,17 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 / "splitwise_decode_v1"
                 / "analysis_manifest_v3.json"
             ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            validate_claim_verdicts(clean, frozen_manifest=manifest), []
+        )
+        self.assertEqual(
+            clean["claim_verdicts_id"],
+            "cv-97532d73a9889e34caab780a64435cda3c9d11ea7e708b1234d4c5ad68ce07e0",
+        )
+        self.assertEqual(
+            hashlib.sha256(render_claim_verdicts(clean)).hexdigest(),
+            "5e8e93e8f3106ec7637baebb0b43ee87f1fda2ba74ed61d1b931893d51a73fe7",
         )
         arm_by_entry = {
             entry["entry_id"]: entry["arm_id"] for entry in manifest["entries"]
