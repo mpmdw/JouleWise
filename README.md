@@ -12,10 +12,12 @@
 ## Current activity (refreshed each work block; last: 2026-08-15)
 
 **Just completed:** the Phase 0 readiness rulings and the first three
-Phase 1 repairs. PR #150 installed the work-selection gate, PR #151 cured the close-out recorder's blocking
-authorization refusal (its check-to-grant race stays a registered
-limitation with its own queued repair), and PR #152 added the T-0
-evidence capture tool, strict plan resolver, and reviewed network-time route.
+Phase 1 repairs, all merged: the work-selection gate is installed (no
+measurement window is selectable until a readiness council says go), the
+close-out recorder's blocking authorization refusal is cured (its
+check-to-grant race stays a registered limitation with its own queued
+repair), and the night-of-measurement capture tool, strict plan resolver,
+and reviewed network-time route all landed.
 The readiness council's 0/11 NOT-READY verdict is fully preserved with its
 evidence; no measurement window may be armed before a later READY-candidate
 council says the instrument is ready.
