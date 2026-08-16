@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import stat
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Mapping
@@ -294,12 +295,61 @@ class AnalysisManifestV3Error(ValueError):
     """Raised when a v3 manifest cannot be built or rendered."""
 
 
+PROSPECTIVE_MALFORMED_VALUE_CODE = "analysis_prospective_schema_invalid"
+PROSPECTIVE_INTERNAL_ERROR_CODE = "analysis_prospective_internal_error"
+FINALIZED_MALFORMED_VALUE_CODE = "analysis_manifest_finalized_invalid"
+FINALIZED_INTERNAL_ERROR_CODE = "analysis_manifest_internal_error"
+
+PROSPECTIVE_REFUSAL_CODES = frozenset(
+    {
+        PROSPECTIVE_MALFORMED_VALUE_CODE,
+        PROSPECTIVE_INTERNAL_ERROR_CODE,
+        "analysis_prospective_unknown_key",
+        "analysis_prospective_not_frozen",
+        "analysis_prospective_identity_mismatch",
+        "analysis_prospective_plan_tree_mismatch",
+        "analysis_prospective_source_hash_mismatch",
+        "analysis_prospective_unsafe_path",
+        "analysis_prospective_member_cover_mismatch",
+        "analysis_prospective_block_cover_mismatch",
+        "analysis_prospective_contrast_cover_mismatch",
+        "analysis_prospective_family_invalid",
+        "analysis_prospective_multiplicity_invalid",
+        "analysis_prospective_floor_dependency_unresolved",
+        "analysis_prospective_unresolved_slot",
+    }
+)
+FINALIZED_REFUSAL_CODES = frozenset(
+    {
+        FINALIZED_MALFORMED_VALUE_CODE,
+        FINALIZED_INTERNAL_ERROR_CODE,
+        "analysis_manifest_lineage_mismatch",
+        "analysis_manifest_collection_identity_mismatch",
+        "analysis_manifest_floor_attachment_mismatch",
+        "analysis_manifest_family_semantics_mismatch",
+    }
+)
+
+
+class _ManifestInputWalkError(ValueError):
+    """A wrong Python container/value encountered in an input-only walk."""
+
+    def __init__(self, path: str, expected: str, value: object) -> None:
+        self.path = path
+        self.expected = expected
+        self.observed_type = type(value).__name__
+        super().__init__(
+            f"{path}: expected {expected}, got {self.observed_type}"
+        )
+
+
 @dataclass(frozen=True)
 class ManifestRefusal:
     """One closed-vocabulary refusal at the prospective/finalized edge."""
 
     reason_code: str
     detail: str
+    cause: BaseException | None = field(default=None, compare=False, repr=False)
 
 
 class AnalysisManifestFinalizationError(AnalysisManifestV3Error):
@@ -1645,6 +1695,193 @@ def _validate_file_binding(
     return parsed if isinstance(parsed, Mapping) else None
 
 
+_INPUT_MALFORMATION_EXCEPTIONS = (
+    TypeError,
+    ValueError,
+    AttributeError,
+    KeyError,
+    IndexError,
+)
+
+
+def _wrong_input_type(path: str, expected: str, value: object) -> None:
+    cause = TypeError(
+        f"{path}: expected {expected}, got {type(value).__name__}"
+    )
+    raise _ManifestInputWalkError(path, expected, value) from cause
+
+
+def _walk_json_value(value: object, path: str) -> None:
+    """Reject Python-only values before canonicalization/helper regions."""
+
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            if not isinstance(key, str):
+                cause = KeyError(
+                    f"{path}: object key has type {type(key).__name__}"
+                )
+                raise _ManifestInputWalkError(
+                    path, "object with string keys", value
+                ) from cause
+            _walk_json_value(child, f"{path}.{key}")
+        return
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            _walk_json_value(child, f"{path}[{index}]")
+        return
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if isinstance(value, float) and math.isfinite(value):
+        return
+    _wrong_input_type(path, "a finite JSON value", value)
+
+
+def _input_mapping(value: object, path: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        _wrong_input_type(path, "object", value)
+    return value
+
+
+def _input_list(value: object, path: str) -> list[Any]:
+    if not isinstance(value, list):
+        _wrong_input_type(path, "array", value)
+    return value
+
+
+def _walk_prospective_input(value: object) -> None:
+    """Walk only attacker-controlled prospective container structure."""
+
+    _walk_json_value(value, "manifest")
+    manifest = _input_mapping(value, "manifest")
+    if set(manifest) != _PROSPECTIVE_TOP_KEYS:
+        return
+    for key in ("plan", "root_order_manifest", "design", "replacement_policy"):
+        _input_mapping(manifest.get(key), f"manifest.{key}")
+
+    design = _input_mapping(manifest.get("design"), "manifest.design")
+    _input_mapping(design.get("sampling_plan"), "manifest.design.sampling_plan")
+
+    for key in ("stage_manifests", "condition_families"):
+        rows = _input_list(manifest.get(key), f"manifest.{key}")
+        for index, row in enumerate(rows):
+            _input_mapping(row, f"manifest.{key}[{index}]")
+
+    families = _input_list(manifest.get("families"), "manifest.families")
+    for index, family_value in enumerate(families):
+        path = f"manifest.families[{index}]"
+        family = _input_mapping(family_value, path)
+        _input_list(family.get("contrast_ids"), f"{path}.contrast_ids")
+        _input_mapping(family.get("multiplicity"), f"{path}.multiplicity")
+
+    contrasts = _input_list(manifest.get("contrasts"), "manifest.contrasts")
+    for index, contrast_value in enumerate(contrasts):
+        path = f"manifest.contrasts[{index}]"
+        contrast = _input_mapping(contrast_value, path)
+        _input_list(contrast.get("block_ids"), f"{path}.block_ids")
+        members = _input_list(contrast.get("members"), f"{path}.members")
+        for member_index, member in enumerate(members):
+            _input_mapping(member, f"{path}.members[{member_index}]")
+        prompt = contrast.get("prompt")
+        if prompt is not None:
+            _input_mapping(prompt, f"{path}.prompt")
+        dependency = _input_mapping(
+            contrast.get("floor_dependency"), f"{path}.floor_dependency"
+        )
+        _input_mapping(
+            dependency.get("floor_selector"),
+            f"{path}.floor_dependency.floor_selector",
+        )
+        transport = _input_mapping(
+            dependency.get("transport"), f"{path}.floor_dependency.transport"
+        )
+        groups = _input_list(
+            transport.get("transport_groups"),
+            f"{path}.floor_dependency.transport.transport_groups",
+        )
+        for group_index, group in enumerate(groups):
+            _input_mapping(
+                group,
+                f"{path}.floor_dependency.transport.transport_groups[{group_index}]",
+            )
+
+    contract = _input_mapping(
+        manifest.get("finalization_contract"), "manifest.finalization_contract"
+    )
+    attachments = _input_list(
+        contract.get("required_attachments"),
+        "manifest.finalization_contract.required_attachments",
+    )
+    for index, attachment in enumerate(attachments):
+        _input_mapping(
+            attachment,
+            f"manifest.finalization_contract.required_attachments[{index}]",
+        )
+
+
+def _walk_finalized_input(value: object) -> None:
+    """Walk only attacker-controlled finalized container structure."""
+
+    _walk_json_value(value, "manifest")
+    manifest = _input_mapping(value, "manifest")
+    if set(manifest) != _FINALIZED_TOP_KEYS:
+        return
+    for key in (
+        "lineage",
+        "design",
+        "replacement_policy",
+        "finalization_contract",
+        "evidence",
+    ):
+        _input_mapping(manifest.get(key), f"manifest.{key}")
+    design = _input_mapping(manifest.get("design"), "manifest.design")
+    _input_mapping(design.get("sampling_plan"), "manifest.design.sampling_plan")
+
+    for key in (
+        "condition_families",
+        "arms",
+        "entries",
+        "blocks",
+        "families",
+        "contrasts",
+    ):
+        rows = _input_list(manifest.get(key), f"manifest.{key}")
+        for index, row_value in enumerate(rows):
+            path = f"manifest.{key}[{index}]"
+            row = _input_mapping(row_value, path)
+            if key == "families":
+                _input_list(row.get("contrast_ids"), f"{path}.contrast_ids")
+                _input_mapping(row.get("multiplicity"), f"{path}.multiplicity")
+            elif key == "blocks":
+                _input_mapping(
+                    row.get("position_entry_ids"), f"{path}.position_entry_ids"
+                )
+            elif key == "contrasts":
+                _input_list(row.get("block_ids"), f"{path}.block_ids")
+                _input_mapping(row.get("metric"), f"{path}.metric")
+                _input_mapping(
+                    row.get("floor_selector"), f"{path}.floor_selector"
+                )
+                _input_mapping(
+                    row.get("floor_dependency"), f"{path}.floor_dependency"
+                )
+
+    contract = _input_mapping(
+        manifest.get("finalization_contract"), "manifest.finalization_contract"
+    )
+    attachments = _input_list(
+        contract.get("required_attachments"),
+        "manifest.finalization_contract.required_attachments",
+    )
+    for index, attachment in enumerate(attachments):
+        _input_mapping(
+            attachment,
+            f"manifest.finalization_contract.required_attachments[{index}]",
+        )
+    evidence = _input_mapping(manifest.get("evidence"), "manifest.evidence")
+    for role in _REQUIRED_ATTACHMENT_ROLES:
+        _input_mapping(evidence.get(role), f"manifest.evidence.{role}")
+
+
 def _validate_prospective_analysis_manifest_v3_unchecked(
     value: Mapping[str, Any],
     *,
@@ -1859,19 +2096,16 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                     "analysis_prospective_source_hash_mismatch",
                     f"{where}.condition_family_id disagrees with source",
                 )
-            try:
-                from joulewise.detection_floor import (
-                    CONDITION_FAMILY_DOMAIN,
-                    canonical_domain_sha256,
-                )
+            from joulewise.detection_floor import (
+                CONDITION_FAMILY_DOMAIN,
+                canonical_domain_sha256,
+            )
 
-                expected_domain_sha = (
-                    canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, parsed)
-                    if isinstance(parsed, Mapping)
-                    else None
-                )
-            except (TypeError, ValueError):
-                expected_domain_sha = None
+            expected_domain_sha = (
+                canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, parsed)
+                if isinstance(parsed, Mapping)
+                else None
+            )
             if (
                 not _is_sha(condition.get("canonical_domain_sha256"))
                 or condition.get("canonical_domain_sha256")
@@ -1993,6 +2227,31 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
             ):
                 continue
             assert isinstance(multiplicity, Mapping)
+            if (
+                not isinstance(multiplicity.get("method"), str)
+                or not isinstance(multiplicity.get("m"), int)
+                or isinstance(multiplicity.get("m"), bool)
+                or (
+                    multiplicity.get("alpha") is not None
+                    and (
+                        not isinstance(multiplicity.get("alpha"), (int, float))
+                        or isinstance(multiplicity.get("alpha"), bool)
+                    )
+                )
+                or (
+                    multiplicity.get("q") is not None
+                    and (
+                        not isinstance(multiplicity.get("q"), (int, float))
+                        or isinstance(multiplicity.get("q"), bool)
+                    )
+                )
+            ):
+                _refusal(
+                    refusals,
+                    "analysis_prospective_multiplicity_invalid",
+                    f"{where}.multiplicity has wrong scalar types",
+                )
+                continue
             try:
                 # This is the production compatibility table, exercised with
                 # null p-values so prospective admission cannot drift from
@@ -2006,7 +2265,7 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                     alpha=multiplicity.get("alpha"),
                     q=multiplicity.get("q"),
                 )
-            except (TypeError, ValueError):
+            except ValueError:
                 _refusal(
                     refusals,
                     "analysis_prospective_multiplicity_invalid",
@@ -2435,7 +2694,7 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
 
     try:
         semantic_sha = analysis_semantics_sha256_v1(value)
-    except (TypeError, ValueError, AnalysisManifestV3Error) as exc:
+    except AnalysisManifestV3Error as exc:
         _refusal(
             refusals,
             "analysis_prospective_schema_invalid",
@@ -2448,21 +2707,13 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                 "analysis_prospective_identity_mismatch",
                 "manifest.frozen_semantics_sha256 does not match the frozen projection",
             )
-    try:
-        expected_id = calculate_manifest_id(value)
-    except (TypeError, ValueError) as exc:
+    expected_id = calculate_manifest_id(value)
+    if value.get("manifest_id") != expected_id:
         _refusal(
             refusals,
-            "analysis_prospective_schema_invalid",
-            f"manifest is not canonical JSON: {exc}",
+            "analysis_prospective_identity_mismatch",
+            "manifest.manifest_id does not match canonical content",
         )
-    else:
-        if value.get("manifest_id") != expected_id:
-            _refusal(
-                refusals,
-                "analysis_prospective_identity_mismatch",
-                "manifest.manifest_id does not match canonical content",
-            )
 
     try:
         tree_raw = Path(plan_tree_path).read_bytes()
@@ -2529,7 +2780,37 @@ def validate_prospective_analysis_manifest_v3(
     manifest_dir: Path,
     plan_tree_path: Path,
 ) -> tuple[ManifestRefusal, ...]:
-    """Total closed-vocabulary wrapper over malformed prospective JSON."""
+    """Total boundary with region-based malformed/defect classification."""
+
+    try:
+        _walk_prospective_input(value)
+    except _ManifestInputWalkError as exc:
+        return (
+            ManifestRefusal(
+                PROSPECTIVE_MALFORMED_VALUE_CODE,
+                f"malformed prospective value at {exc.path}: expected "
+                f"{exc.expected}, got {exc.observed_type}",
+                cause=exc,
+            ),
+        )
+    except _INPUT_MALFORMATION_EXCEPTIONS as exc:
+        return (
+            ManifestRefusal(
+                PROSPECTIVE_MALFORMED_VALUE_CODE,
+                "malformed prospective value during input walk: "
+                f"{type(exc).__name__}: {exc}",
+                cause=exc,
+            ),
+        )
+    except Exception as exc:
+        return (
+            ManifestRefusal(
+                PROSPECTIVE_INTERNAL_ERROR_CODE,
+                "prospective input-walk internal defect: "
+                f"{type(exc).__name__}: {exc}",
+                cause=exc,
+            ),
+        )
 
     try:
         return _validate_prospective_analysis_manifest_v3_unchecked(
@@ -2538,15 +2819,11 @@ def validate_prospective_analysis_manifest_v3(
             plan_tree_path=plan_tree_path,
         )
     except Exception as exc:
-        # This is the public admission boundary for Python values, including
-        # values supplied directly by callers rather than decoded from JSON.
-        # Keep the exception class in the refusal detail so a validator defect
-        # remains distinguishable from ordinary malformed input, but never let
-        # an open-ended implementation exception escape the closed vocabulary.
         return (
             ManifestRefusal(
-                "analysis_prospective_schema_invalid",
-                f"malformed prospective value: {type(exc).__name__}: {exc}",
+                PROSPECTIVE_INTERNAL_ERROR_CODE,
+                f"prospective validator internal defect: {type(exc).__name__}: {exc}",
+                cause=exc,
             ),
         )
 
@@ -3523,7 +3800,7 @@ def finalize_prospective_analysis_manifest_v3(
     return manifest
 
 
-def validate_finalized_analysis_manifest_v3(
+def _validate_finalized_analysis_manifest_v3_unchecked(
     value: Mapping[str, Any],
     *,
     manifest_path: Path,
@@ -3601,6 +3878,18 @@ def validate_finalized_analysis_manifest_v3(
         manifest_dir=prospective_path.parent,
         plan_tree_path=tree_path,
     )
+    prospective_internal = next(
+        (
+            item
+            for item in prospective_refusals
+            if item.reason_code == PROSPECTIVE_INTERNAL_ERROR_CODE
+        ),
+        None,
+    )
+    if prospective_internal is not None:
+        if prospective_internal.cause is not None:
+            raise prospective_internal.cause
+        raise RuntimeError(prospective_internal.detail)
     if prospective_refusals:
         _refusal(
             refusals,
@@ -3691,6 +3980,13 @@ def validate_finalized_analysis_manifest_v3(
         bracket = _strict_json_bytes(
             bracket_path.read_bytes(), "finalized bracket lineage"
         )
+        if not isinstance(bracket, Mapping) or not isinstance(
+            bracket.get("runs_root"), str
+        ):
+            raise AnalysisManifestFinalizationError(
+                "analysis_finalization_bracket_binding_mismatch",
+                "bracket binding runs_root must be a string",
+            )
         runs_root = Path(bracket["runs_root"])
         attachments = _authenticate_finalization_inputs(
             prospective,
@@ -3703,7 +3999,7 @@ def validate_finalized_analysis_manifest_v3(
             aggregate_floor_artifact_path=custody
             / evidence["aggregate_floor_artifact"]["path"],
         )
-    except (KeyError, TypeError, ValueError, AnalysisManifestFinalizationError) as exc:
+    except AnalysisManifestFinalizationError as exc:
         reason = (
             "analysis_manifest_floor_attachment_mismatch"
             if "floor" in str(exc)
@@ -3763,6 +4059,60 @@ def validate_finalized_analysis_manifest_v3(
     return tuple(refusals)
 
 
+def validate_finalized_analysis_manifest_v3(
+    value: Mapping[str, Any],
+    *,
+    manifest_path: Path,
+    custody_root: Path,
+) -> tuple[ManifestRefusal, ...]:
+    """Total boundary with region-based malformed/defect classification."""
+
+    try:
+        _walk_finalized_input(value)
+    except _ManifestInputWalkError as exc:
+        return (
+            ManifestRefusal(
+                FINALIZED_MALFORMED_VALUE_CODE,
+                f"malformed finalized value at {exc.path}: expected "
+                f"{exc.expected}, got {exc.observed_type}",
+                cause=exc,
+            ),
+        )
+    except _INPUT_MALFORMATION_EXCEPTIONS as exc:
+        return (
+            ManifestRefusal(
+                FINALIZED_MALFORMED_VALUE_CODE,
+                "malformed finalized value during input walk: "
+                f"{type(exc).__name__}: {exc}",
+                cause=exc,
+            ),
+        )
+    except Exception as exc:
+        return (
+            ManifestRefusal(
+                FINALIZED_INTERNAL_ERROR_CODE,
+                "finalized input-walk internal defect: "
+                f"{type(exc).__name__}: {exc}",
+                cause=exc,
+            ),
+        )
+
+    try:
+        return _validate_finalized_analysis_manifest_v3_unchecked(
+            value,
+            manifest_path=manifest_path,
+            custody_root=custody_root,
+        )
+    except Exception as exc:
+        return (
+            ManifestRefusal(
+                FINALIZED_INTERNAL_ERROR_CODE,
+                f"finalized validator internal defect: {type(exc).__name__}: {exc}",
+                cause=exc,
+            ),
+        )
+
+
 def write_manifest_atomic(path: Path, value: Mapping[str, Any]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -3795,12 +4145,18 @@ __all__ = [
     "GOVERNED_TRANSPORT_RULE_ID",
     "FINALIZATION_CONTRACT_ID",
     "FINALIZED_BASENAME_SUFFIX",
+    "FINALIZED_INTERNAL_ERROR_CODE",
+    "FINALIZED_MALFORMED_VALUE_CODE",
     "FINALIZED_NAMESPACE_RULE_ID",
+    "FINALIZED_REFUSAL_CODES",
     "FINALIZED_SCHEMA_VERSION",
     "MANIFEST_NAME",
     "ManifestRefusal",
     "PLANNED_N_BLOCKS",
     "PROSPECTIVE_SCHEMA_VERSION",
+    "PROSPECTIVE_INTERNAL_ERROR_CODE",
+    "PROSPECTIVE_MALFORMED_VALUE_CODE",
+    "PROSPECTIVE_REFUSAL_CODES",
     "SCHEMA_VERSION",
     "SEMANTICS_PROJECTION_RULE_ID",
     "STAGE_ORDER_SHA256S",

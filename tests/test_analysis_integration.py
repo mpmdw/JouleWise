@@ -26,6 +26,9 @@ from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_manifest_v3 import (
     ARM_FREEZE,
     FINALIZED_BASENAME_SUFFIX,
+    FINALIZED_INTERNAL_ERROR_CODE,
+    FINALIZED_MALFORMED_VALUE_CODE,
+    FINALIZED_REFUSAL_CODES,
     TRANSPORT_RULING_PENDING_REFUSAL,
     finalize_prospective_analysis_manifest_v3,
     normalized_realized_stack_identity,
@@ -841,13 +844,6 @@ class AnalysisIntegrationTests(unittest.TestCase):
     def test_finalized_load_boundary_maps_wrong_typed_sites_to_closed_vocabulary(
         self,
     ):
-        refusal_codes = {
-            "analysis_manifest_collection_identity_mismatch",
-            "analysis_manifest_family_semantics_mismatch",
-            "analysis_manifest_finalized_invalid",
-            "analysis_manifest_floor_attachment_mismatch",
-            "analysis_manifest_lineage_mismatch",
-        }
         with tempfile.TemporaryDirectory() as tmp:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
             finalized = finalize_prospective_analysis_manifest_v3(
@@ -881,6 +877,20 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 "blocks": {**finalized, "blocks": 7},
                 "families": {**finalized, "families": 7},
                 "contrasts": {**finalized, "contrasts": 7},
+                "nested_multiplicity": {
+                    **finalized,
+                    "families": [
+                        {**finalized["families"][0], "multiplicity": None},
+                        *finalized["families"][1:],
+                    ],
+                },
+                "nested_evidence": {
+                    **finalized,
+                    "evidence": {
+                        **finalized["evidence"],
+                        "bracket_binding": False,
+                    },
+                },
                 "finalization_contract": {
                     **finalized,
                     "finalization_contract": 7,
@@ -894,17 +904,59 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     )
                     with self.assertRaises(AnalysisInputError) as raised:
                         load_manifest(finalized_path)
-                    registered = {
-                        code
-                        for code in refusal_codes
-                        if code in str(raised.exception)
-                    }
-                    self.assertTrue(registered, str(raised.exception))
-                    if label in {"families", "contrasts"}:
-                        self.assertIsInstance(
-                            raised.exception.__cause__, TypeError
-                        )
-                        self.assertIn("TypeError", str(raised.exception))
+                    self.assertIn(
+                        FINALIZED_MALFORMED_VALUE_CODE,
+                        str(raised.exception),
+                    )
+                    self.assertIn("manifest.", str(raised.exception))
+                    self.assertIsNotNone(raised.exception.__cause__)
+                    self.assertIsInstance(
+                        raised.exception.__cause__.__cause__, TypeError
+                    )
+
+    def test_finalized_load_boundary_classifies_internal_helper_failures(self):
+        self.assertNotEqual(
+            FINALIZED_MALFORMED_VALUE_CODE,
+            FINALIZED_INTERNAL_ERROR_CODE,
+        )
+        self.assertIn(FINALIZED_MALFORMED_VALUE_CODE, FINALIZED_REFUSAL_CODES)
+        self.assertIn(FINALIZED_INTERNAL_ERROR_CODE, FINALIZED_REFUSAL_CODES)
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+            finalized_path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            for exception_type in (RuntimeError, TypeError):
+                injected = exception_type("injected validator defect")
+                with self.subTest(exception_type=exception_type.__name__), mock.patch(
+                    "joulewise.analysis_manifest_v3."
+                    "analysis_semantics_sha256_v1",
+                    side_effect=injected,
+                ):
+                    with self.assertRaises(AnalysisInputError) as raised:
+                        load_manifest(finalized_path)
+                    self.assertIn(
+                        FINALIZED_INTERNAL_ERROR_CODE,
+                        str(raised.exception),
+                    )
+                    self.assertNotIn(
+                        FINALIZED_MALFORMED_VALUE_CODE,
+                        str(raised.exception),
+                    )
+                    self.assertIn(exception_type.__name__, str(raised.exception))
+                    self.assertIs(raised.exception.__cause__, injected)
 
     def test_authenticated_nested_bundle_conflicts_with_run_id_rejoin(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -9068,6 +9068,8 @@ pre-estimation under `analysis_manifest_transport_ruling_pending`; it is not
 misreported as an exact-stack failure. This amendment carries both branches
 and chooses neither scientific semantics.
 
+**Boundary-classification amendment (FIX ROUND 3, 2026-08-16):** validator defects at the prospective and consumer boundaries refuse under the newly registered `analysis_prospective_internal_error` and `analysis_manifest_internal_error` codes respectively; they are never classified as malformed input.
+
 ### R1 RULED (magistrate synthesis of the rule-11 cold gate, 2026-08-15): freeze-evidence lifecycle — content-bound design ADOPTED WITH THE COMPOSED AMENDMENT SET
 
 Gate record (the ONE homes; not restated here):

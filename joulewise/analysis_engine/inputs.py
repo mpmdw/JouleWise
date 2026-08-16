@@ -566,27 +566,17 @@ def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]
 def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
     value, raw = _load_json_object(path, "analysis manifest")
     schema_version = value.get("schema_version")
+    refusals = ()
     if schema_version == ANALYSIS_MANIFEST_V1_SCHEMA:
         errors = validate_analysis_manifest(value, manifest_dir=path.parent)
     elif schema_version == ANALYSIS_MANIFEST_V3_SCHEMA:
         errors = validate_analysis_manifest_v3(value, manifest_dir=path.parent)
     elif schema_version == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
-        try:
-            refusals = validate_finalized_analysis_manifest_v3(
-                value,
-                manifest_path=path,
-                custody_root=path.parent,
-            )
-        except Exception as exc:
-            # Finalized manifests are untrusted consumer inputs.  The
-            # validator intentionally exposes detailed programming-error
-            # signals here, but the load boundary must translate every such
-            # signal to the registered refusal vocabulary.
-            raise AnalysisInputError(
-                "invalid analysis manifest: analysis_manifest_finalized_invalid: "
-                "malformed finalized value: "
-                f"{type(exc).__name__}: {exc}"
-            ) from exc
+        refusals = validate_finalized_analysis_manifest_v3(
+            value,
+            manifest_path=path,
+            custody_root=path.parent,
+        )
         errors = [
             f"{refusal.reason_code}: {refusal.detail}"
             for refusal in refusals
@@ -606,7 +596,20 @@ def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
             f"unsupported analysis manifest schema_version: {schema_version!r}"
         )
     if errors:
-        raise AnalysisInputError("invalid analysis manifest: " + "; ".join(errors))
+        error = AnalysisInputError(
+            "invalid analysis manifest: " + "; ".join(errors)
+        )
+        refusal_cause = next(
+            (
+                refusal.cause
+                for refusal in refusals
+                if refusal.cause is not None
+            ),
+            None,
+        )
+        if refusal_cause is not None:
+            raise error from refusal_cause
+        raise error
     return value, hashlib.sha256(raw).hexdigest()
 
 

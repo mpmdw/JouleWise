@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from joulewise.analysis_engine.inputs import (
     load_manifest,
@@ -23,6 +24,9 @@ from joulewise.analysis_manifest_v3 import (
     FINALIZED_BASENAME_SUFFIX,
     FINALIZED_NAMESPACE_RULE_ID,
     PROSPECTIVE_SCHEMA_VERSION,
+    PROSPECTIVE_INTERNAL_ERROR_CODE,
+    PROSPECTIVE_MALFORMED_VALUE_CODE,
+    PROSPECTIVE_REFUSAL_CODES,
     SEMANTICS_PROJECTION_RULE_ID,
     analysis_semantics_sha256_v1,
     build_analysis_manifest_v3,
@@ -611,28 +615,16 @@ class AnalysisManifestV3Tests(unittest.TestCase):
     def test_prospective_boundary_maps_wrong_typed_sites_to_closed_vocabulary(
         self,
     ) -> None:
-        refusal_codes = {
-            "analysis_prospective_block_cover_mismatch",
-            "analysis_prospective_contrast_cover_mismatch",
-            "analysis_prospective_family_invalid",
-            "analysis_prospective_floor_dependency_unresolved",
-            "analysis_prospective_identity_mismatch",
-            "analysis_prospective_member_cover_mismatch",
-            "analysis_prospective_multiplicity_invalid",
-            "analysis_prospective_not_frozen",
-            "analysis_prospective_plan_tree_mismatch",
-            "analysis_prospective_schema_invalid",
-            "analysis_prospective_source_hash_mismatch",
-            "analysis_prospective_unknown_key",
-            "analysis_prospective_unresolved_slot",
-            "analysis_prospective_unsafe_path",
-        }
         with tempfile.TemporaryDirectory() as tmp:
             manifest_path, plan_tree_path, prospective = (
                 install_synthetic_prospective_fixture(Path(tmp))
             )
             cases = {
                 "top_level_list": [],
+                "top_level_integer": 7,
+                "top_level_none": None,
+                "top_level_bool": False,
+                "top_level_bytes": b"not-json",
                 "plan": {**prospective, "plan": 7},
                 "root_order_manifest": {
                     **prospective,
@@ -650,6 +642,20 @@ class AnalysisManifestV3Tests(unittest.TestCase):
                 },
                 "families": {**prospective, "families": 7},
                 "contrasts": {**prospective, "contrasts": 7},
+                "nested_multiplicity": {
+                    **prospective,
+                    "families": [
+                        {**prospective["families"][0], "multiplicity": None},
+                        *prospective["families"][1:],
+                    ],
+                },
+                "nested_members": {
+                    **prospective,
+                    "contrasts": [
+                        {**prospective["contrasts"][0], "members": True},
+                        *prospective["contrasts"][1:],
+                    ],
+                },
                 "finalization_contract": {
                     **prospective,
                     "finalization_contract": 7,
@@ -662,13 +668,15 @@ class AnalysisManifestV3Tests(unittest.TestCase):
                         manifest_dir=manifest_path.parent,
                         plan_tree_path=plan_tree_path,
                     )
-                    self.assertTrue(refusals)
-                    self.assertTrue(
-                        all(
-                            refusal.reason_code in refusal_codes
-                            for refusal in refusals
-                        )
+                    self.assertEqual(len(refusals), 1)
+                    self.assertEqual(
+                        refusals[0].reason_code,
+                        PROSPECTIVE_MALFORMED_VALUE_CODE,
                     )
+                    self.assertIn("manifest", refusals[0].detail)
+                    self.assertIn("got", refusals[0].detail)
+                    self.assertIsNotNone(refusals[0].cause)
+                    self.assertIsInstance(refusals[0].cause.__cause__, TypeError)
 
             exact = validate_prospective_analysis_manifest_v3(
                 [],
@@ -678,9 +686,45 @@ class AnalysisManifestV3Tests(unittest.TestCase):
             self.assertEqual(len(exact), 1)
             self.assertEqual(
                 exact[0].reason_code,
-                "analysis_prospective_schema_invalid",
+                PROSPECTIVE_MALFORMED_VALUE_CODE,
             )
-            self.assertIn("AttributeError", exact[0].detail)
+            self.assertIn("manifest", exact[0].detail)
+            self.assertIn("list", exact[0].detail)
+
+    def test_prospective_boundary_classifies_internal_helper_failures(self) -> None:
+        self.assertNotEqual(
+            PROSPECTIVE_MALFORMED_VALUE_CODE,
+            PROSPECTIVE_INTERNAL_ERROR_CODE,
+        )
+        self.assertIn(PROSPECTIVE_MALFORMED_VALUE_CODE, PROSPECTIVE_REFUSAL_CODES)
+        self.assertIn(PROSPECTIVE_INTERNAL_ERROR_CODE, PROSPECTIVE_REFUSAL_CODES)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path, plan_tree_path, prospective = (
+                install_synthetic_prospective_fixture(Path(tmp))
+            )
+            for exception_type in (RuntimeError, TypeError):
+                injected = exception_type("injected validator defect")
+                with self.subTest(exception_type=exception_type.__name__), mock.patch(
+                    "joulewise.analysis_manifest_v3."
+                    "analysis_semantics_sha256_v1",
+                    side_effect=injected,
+                ):
+                    refusals = validate_prospective_analysis_manifest_v3(
+                        prospective,
+                        manifest_dir=manifest_path.parent,
+                        plan_tree_path=plan_tree_path,
+                    )
+                    self.assertEqual(len(refusals), 1)
+                    self.assertEqual(
+                        refusals[0].reason_code,
+                        PROSPECTIVE_INTERNAL_ERROR_CODE,
+                    )
+                    self.assertNotEqual(
+                        refusals[0].reason_code,
+                        PROSPECTIVE_MALFORMED_VALUE_CODE,
+                    )
+                    self.assertIn(exception_type.__name__, refusals[0].detail)
+                    self.assertIs(refusals[0].cause, injected)
 
     def test_checked_in_placeholder_manifest_is_not_a_frozen_prospective(self) -> None:
         draft = json.loads((GAMMA_DIR / "analysis_manifest_v3.json").read_text())
