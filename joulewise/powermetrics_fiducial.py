@@ -27,6 +27,7 @@ import hashlib
 import json
 import math
 import statistics
+import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
@@ -71,6 +72,18 @@ FIT_HALF_RANGE_S = 0.75
 FIT_COARSE_STEP_S = 0.005
 FIT_FINE_STEP_S = 0.0005
 REGION_COVERAGE_RESOLUTION_S = 0.0001
+# FROZEN operational work bound for the complete multi-pulse projection.
+# A deterministic 59-pulse synthetic acceptance trace evaluates fewer than
+# 10,000 cells; 100,000 preserves an order-of-magnitude margin while making a
+# flat lower-bound surface stop after finite reproducible work instead of
+# exploring hundreds of millions of cells per pulse.
+DETECTION_PROJECTION_CELL_BUDGET = 100_000
+# FROZEN supplementary host-safety deadline.  The evaluated-cell budget above
+# is the primary reproducible mechanism; this deadline only catches unexpected
+# per-cell cost or host pathologies that a cell count cannot bound.
+DETECTION_PROJECTION_WALL_BUDGET_S = 120.0
+DETECTION_NONCONVERGENT = "detection_nonconvergent"
+CLOCK_ANCHOR_UNRESOLVED = "clock_anchor_unresolved"
 MAX_VALIDATED_EDGE_SHIFT_S = 0.50
 MAX_EVENT_CLOCK_SKEW_S = 1.0
 MIN_AUTHENTICATED_PULSE_DURATION_S = 0.8
@@ -140,6 +153,8 @@ FIDUCIAL_DIAGNOSTIC_CODES = frozenset(
         "pulse_count_below_protocol:",
         "raw_or_event_hash_missing_or_invalid",
         "capture_time_missing_or_invalid",
+        DETECTION_NONCONVERGENT,
+        CLOCK_ANCHOR_UNRESOLVED,
     }
 )
 
@@ -458,8 +473,8 @@ class PulseFit:
 
 @dataclass(frozen=True)
 class FiducialDetection:
-    baseline_w: float
-    robust_sigma_w: float
+    baseline_w: float | None
+    robust_sigma_w: float | None
     fits: tuple[PulseFit, ...]
     spurious_plateau_count: int
     all_pulses_detected: bool
@@ -467,6 +482,58 @@ class FiducialDetection:
     residual_median_s: float | None
     residual_p95_s: float | None
     reasons: tuple[str, ...] = field(default_factory=tuple)
+    projection_evaluated_cell_count: int = 0
+    projection_evaluated_cell_budget: int = DETECTION_PROJECTION_CELL_BUDGET
+    projection_wall_budget_s: float = DETECTION_PROJECTION_WALL_BUDGET_S
+    projection_disposition: str | None = None
+    projection_budget_trigger: str | None = None
+
+
+class _ProjectionBudgetExhausted(RuntimeError):
+    """Internal deterministic/supplementary projection stop signal."""
+
+    def __init__(
+        self,
+        *,
+        evaluated_cell_count: int,
+        cell_budget: int,
+        wall_budget_s: float,
+        trigger: str,
+    ) -> None:
+        super().__init__(DETECTION_NONCONVERGENT)
+        self.evaluated_cell_count = evaluated_cell_count
+        self.cell_budget = cell_budget
+        self.wall_budget_s = wall_budget_s
+        self.trigger = trigger
+
+
+@dataclass
+class _ProjectionWorkBudget:
+    """One shared budget across every pulse in a detection attempt."""
+
+    cell_budget: int
+    wall_budget_s: float
+    started_monotonic_s: float = field(default_factory=time.monotonic)
+    evaluated_cell_count: int = 0
+
+    def consume_cell(self) -> None:
+        # Check the deterministic work boundary first so an input reaching the
+        # exact cell limit always has the same primary disposition and count.
+        if self.evaluated_cell_count >= self.cell_budget:
+            raise _ProjectionBudgetExhausted(
+                evaluated_cell_count=self.evaluated_cell_count,
+                cell_budget=self.cell_budget,
+                wall_budget_s=self.wall_budget_s,
+                trigger="evaluated_cell_budget",
+            )
+        if time.monotonic() - self.started_monotonic_s >= self.wall_budget_s:
+            raise _ProjectionBudgetExhausted(
+                evaluated_cell_count=self.evaluated_cell_count,
+                cell_budget=self.cell_budget,
+                wall_budget_s=self.wall_budget_s,
+                trigger="wall_deadline",
+            )
+        self.evaluated_cell_count += 1
 
 
 def _huber(value: float) -> float:
@@ -560,6 +627,7 @@ def _accepted_region_projection(
     sigma_w: float,
     pulse: CommandedPulse,
     loss_limit: float,
+    work_budget: _ProjectionWorkBudget,
 ) -> tuple[float, float, float, float]:
     """Conservatively project the complete accepted 2-D loss region.
 
@@ -583,6 +651,7 @@ def _accepted_region_projection(
     retained: list[tuple[float, float, float, float]] = []
     while stack:
         onset_lower, onset_upper, offset_lower, offset_upper = stack.pop()
+        work_budget.consume_cell()
         lower_bound = _pulse_loss_cell_lower_bound(
             local,
             baseline_w,
@@ -657,6 +726,7 @@ def _fit_pulse(
     intervals: Sequence[TraceInterval],
     baseline_w: float,
     sigma_w: float,
+    projection_work_budget: _ProjectionWorkBudget,
 ) -> PulseFit:
     local = [
         interval
@@ -783,6 +853,7 @@ def _fit_pulse(
         sigma_w=sigma_w,
         pulse=pulse,
         loss_limit=best_loss + tolerance,
+        work_budget=projection_work_budget,
     )
     onset_lower_s -= pulse.on_uncertainty_s
     onset_upper_s += pulse.on_uncertainty_s
@@ -827,6 +898,9 @@ def detect_pulses(
     pulses: Sequence[CommandedPulse],
     *,
     trace_anchor_bound_s: float = 0.0,
+    projection_cell_budget: int = DETECTION_PROJECTION_CELL_BUDGET,
+    projection_wall_budget_s: float = DETECTION_PROJECTION_WALL_BUDGET_S,
+    projection_bypass_reason: str | None = None,
 ) -> FiducialDetection:
     """Fit every commanded pulse and derive the calibration-sample maximum.
 
@@ -844,11 +918,84 @@ def detect_pulses(
         or float(trace_anchor_bound_s) < 0.0
     ):
         raise ValueError("trace_anchor_bound_s must be finite and >= 0")
+    if (
+        isinstance(projection_cell_budget, bool)
+        or not isinstance(projection_cell_budget, int)
+        or projection_cell_budget <= 0
+    ):
+        raise ValueError("projection_cell_budget must be a positive integer")
+    if (
+        isinstance(projection_wall_budget_s, bool)
+        or not isinstance(projection_wall_budget_s, int | float)
+        or not math.isfinite(float(projection_wall_budget_s))
+        or float(projection_wall_budget_s) <= 0.0
+    ):
+        raise ValueError("projection_wall_budget_s must be finite and > 0")
+    if projection_bypass_reason not in (None, CLOCK_ANCHOR_UNRESOLVED):
+        raise ValueError("projection_bypass_reason is not registered")
+    if projection_bypass_reason == CLOCK_ANCHOR_UNRESOLVED:
+        # The capture is already inadmissible, so no fit or full-resolution
+        # projection can add evidence.  Preserve the explicit causal linkage
+        # and record zero evaluated cells rather than deriving partial fits.
+        return FiducialDetection(
+            baseline_w=None,
+            robust_sigma_w=None,
+            fits=tuple(
+                PulseFit(
+                    pulse_index=index,
+                    detected=False,
+                    reasons=(CLOCK_ANCHOR_UNRESOLVED,),
+                )
+                for index, _pulse in enumerate(pulses)
+            ),
+            spurious_plateau_count=0,
+            all_pulses_detected=False,
+            b_fiducial_s=None,
+            residual_median_s=None,
+            residual_p95_s=None,
+            reasons=(CLOCK_ANCHOR_UNRESOLVED,),
+            projection_evaluated_cell_count=0,
+            projection_evaluated_cell_budget=projection_cell_budget,
+            projection_wall_budget_s=float(projection_wall_budget_s),
+            projection_disposition=CLOCK_ANCHOR_UNRESOLVED,
+            projection_budget_trigger="invalid_anchor_bypass",
+        )
     baseline_w, sigma_w, outside = _baseline_stats(intervals, pulses)
-    fits = tuple(
-        _fit_pulse(index, pulse, intervals, baseline_w, sigma_w)
-        for index, pulse in enumerate(pulses)
+    projection_work_budget = _ProjectionWorkBudget(
+        cell_budget=projection_cell_budget,
+        wall_budget_s=float(projection_wall_budget_s),
     )
+    try:
+        fits = tuple(
+            _fit_pulse(
+                index,
+                pulse,
+                intervals,
+                baseline_w,
+                sigma_w,
+                projection_work_budget,
+            )
+            for index, pulse in enumerate(pulses)
+        )
+    except _ProjectionBudgetExhausted as exc:
+        # Discard every partial fit.  Exhausted work is one invalid detection,
+        # never a truncated accepted region or partially valid pulse set.
+        return FiducialDetection(
+            baseline_w=baseline_w,
+            robust_sigma_w=sigma_w,
+            fits=(),
+            spurious_plateau_count=0,
+            all_pulses_detected=False,
+            b_fiducial_s=None,
+            residual_median_s=None,
+            residual_p95_s=None,
+            reasons=(DETECTION_NONCONVERGENT,),
+            projection_evaluated_cell_count=exc.evaluated_cell_count,
+            projection_evaluated_cell_budget=exc.cell_budget,
+            projection_wall_budget_s=exc.wall_budget_s,
+            projection_disposition=DETECTION_NONCONVERGENT,
+            projection_budget_trigger=exc.trigger,
+        )
     spurious = _spurious_plateau_count(outside, baseline_w, sigma_w)
     all_detected = all(fit.detected for fit in fits)
     reasons: list[str] = []
@@ -897,6 +1044,11 @@ def detect_pulses(
         residual_median_s=residual_median_s,
         residual_p95_s=residual_p95_s,
         reasons=tuple(reasons),
+        projection_evaluated_cell_count=(
+            projection_work_budget.evaluated_cell_count
+        ),
+        projection_evaluated_cell_budget=projection_cell_budget,
+        projection_wall_budget_s=float(projection_wall_budget_s),
     )
 
 
@@ -1309,6 +1461,16 @@ def instrument_evidence(
             for fit in detection.fits
         ],
     }
+    if detection.projection_disposition is not None:
+        # Present only on governed invalid-evidence paths. Healthy serialized
+        # evidence remains byte-identical to the pre-budget implementation.
+        payload["detection_projection"] = {
+            "disposition": detection.projection_disposition,
+            "evaluated_cell_count": detection.projection_evaluated_cell_count,
+            "evaluated_cell_budget": detection.projection_evaluated_cell_budget,
+            "wall_budget_s": detection.projection_wall_budget_s,
+            "trigger": detection.projection_budget_trigger,
+        }
     if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
         payload[CAPTURE_TIME_FIELD] = capture_wall_time_s
         payload["max_age_s"] = MAX_AGE_S

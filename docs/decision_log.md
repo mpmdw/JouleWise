@@ -9305,3 +9305,37 @@ gates; (4) successor-config launch_lineage_required flag [PHASE 2 — frozen
 packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
+
+### D-078 registry amendment — 2026-08-15: bounded pulse-detection projection
+
+The instrument-evidence diagnostic vocabulary adds
+`detection_nonconvergent`. It means the joint-loss projection exhausted its
+governed evaluation budget or the supplementary wall deadline. The diagnostic
+always makes the evidence `invalid`, clears the fitted bound, discards every
+partial fit, and exits nonzero; it can never license partial-valid evidence,
+an operator override, ARM, launch, or a claim. `clock_anchor_unresolved`
+remains the already-registered causal refusal: because that condition has
+already invalidated the capture, pulse fitting and the full-resolution
+projection are skipped with zero evaluated cells rather than spending work on
+diagnostics that cannot restore admissibility.
+
+The frozen detector budgets are 100,000 evaluated projection cells across the
+complete multi-pulse attempt and a supplementary 120-second monotonic wall
+deadline. The evaluated-cell count is the primary deterministic mechanism;
+the deadline is only a host-safety backstop. Invalid evidence records the
+disposition, trigger, evaluated-cell count, cell budget, and wall budget in
+`instrument_evidence.json`. The normal ledger taxonomy is unchanged:
+post-capture nonconvergence is a completed `ordinary-invalid` observation,
+not a `calibration_exits` preflight refusal. Its slot-finalization receipt
+hash-binds the complete custody artifacts; for an invalid pre slot the
+terminal bracket-abort receipt carries the exact registered reason
+`detection_nonconvergent` (or `clock_anchor_unresolved`) and the normal
+finalizer releases the writer lease.
+
+Because `joulewise/powermetrics_fiducial.py` is an authenticated estimator
+input, this amendment deliberately makes the currently issued D-079
+acceptance artifact stale. No live writer may cross preflight on the branch.
+Re-issuance and every dependent pin update remain lead-owned inside the
+council's one atomic Phase-2 re-freeze; tests may re-key only a private
+synthetic repository to its own copied bytes and that fixture is never an
+issuance or live evidence.

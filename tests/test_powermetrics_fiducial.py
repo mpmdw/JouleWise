@@ -27,6 +27,9 @@ from joulewise import calibration_ledger as ledger_module
 from joulewise import powermetrics_fiducial as fiducial_module
 from joulewise.powermetrics_fiducial import (
     BINDING_FIELDS,
+    CLOCK_ANCHOR_UNRESOLVED,
+    DETECTION_NONCONVERGENT,
+    DETECTION_PROJECTION_CELL_BUDGET,
     LEGACY_PROTOCOL_ID,
     PROTOCOL_ID,
     PROTOCOL_V2_ID,
@@ -457,6 +460,99 @@ class DetectorTests(unittest.TestCase):
             "fixture must expose an accepted off-axis excursion missed by axes/diagonals",
         )
 
+    def test_flat_loss_projection_exhausts_deterministic_cell_budget(self) -> None:
+        # A zero lower bound prevents every branch-and-bound prune. Without a
+        # work limit this one-pulse analog expands toward the full 2^28 leaf
+        # tree; the small injected limit exercises the production counter.
+        trace, pulses = self.make_case(shift_s=0.0, count=1)
+        outcomes = []
+        for _repeat in range(2):
+            with patch.object(
+                fiducial_module,
+                "_pulse_loss_cell_lower_bound",
+                return_value=0.0,
+            ):
+                outcomes.append(
+                    detect_pulses(
+                        trace,
+                        pulses,
+                        projection_cell_budget=31,
+                    )
+                )
+
+        for detection in outcomes:
+            self.assertFalse(detection.all_pulses_detected)
+            self.assertIsNone(detection.b_fiducial_s)
+            self.assertEqual(detection.fits, ())
+            self.assertEqual(detection.reasons, (DETECTION_NONCONVERGENT,))
+            self.assertEqual(detection.projection_evaluated_cell_count, 31)
+            self.assertEqual(detection.projection_evaluated_cell_budget, 31)
+            self.assertEqual(
+                detection.projection_budget_trigger,
+                "evaluated_cell_budget",
+            )
+        self.assertEqual(
+            (
+                outcomes[0].projection_evaluated_cell_count,
+                outcomes[0].projection_disposition,
+            ),
+            (
+                outcomes[1].projection_evaluated_cell_count,
+                outcomes[1].projection_disposition,
+            ),
+        )
+        payload = instrument_evidence(
+            outcomes[0],
+            bindings={},
+            validation_id="flat-loss-budget",
+            artifact_sha256={},
+            protocol_pulse_count=1,
+            protocol_id=LEGACY_PROTOCOL_ID,
+        )
+        self.assertEqual(payload["status"], "invalid")
+        self.assertIn(DETECTION_NONCONVERGENT, payload["reasons"])
+        self.assertEqual(
+            payload["detection_projection"],
+            {
+                "disposition": DETECTION_NONCONVERGENT,
+                "evaluated_cell_count": 31,
+                "evaluated_cell_budget": 31,
+                "wall_budget_s": 120.0,
+                "trigger": "evaluated_cell_budget",
+            },
+        )
+
+    def test_unresolved_anchor_bypasses_every_projection_cell(self) -> None:
+        trace, pulses = self.make_case(shift_s=0.0, count=3)
+        with patch.object(
+            fiducial_module,
+            "_accepted_region_projection",
+            side_effect=AssertionError("projection must be skipped"),
+        ) as projection:
+            detection = detect_pulses(
+                trace,
+                pulses,
+                projection_bypass_reason=CLOCK_ANCHOR_UNRESOLVED,
+            )
+        projection.assert_not_called()
+        self.assertEqual(
+            detection.projection_disposition,
+            CLOCK_ANCHOR_UNRESOLVED,
+        )
+        self.assertEqual(detection.projection_evaluated_cell_count, 0)
+        self.assertEqual(
+            detection.projection_evaluated_cell_budget,
+            DETECTION_PROJECTION_CELL_BUDGET,
+        )
+        self.assertEqual(detection.reasons, (CLOCK_ANCHOR_UNRESOLVED,))
+        self.assertTrue(
+            all(
+                fit.reasons == (CLOCK_ANCHOR_UNRESOLVED,)
+                and not fit.detected
+                for fit in detection.fits
+            )
+        )
+
     def test_missing_edge_fails_closed(self) -> None:
         trace, pulses = self.make_case(shift_s=0.0)
         # Truncate the capture before the final pulse's off edge margin.
@@ -602,6 +698,25 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(payload["b_fiducial_s"], detection.b_fiducial_s)
         self.assertEqual(set(payload["bindings"]), set(self.bindings()))
         self.assertEqual(payload["pulse_count"], 3)
+
+    def test_healthy_evidence_bytes_match_pre_budget_baseline(self) -> None:
+        payload = instrument_evidence(
+            self.make_detection(),
+            bindings=self.bindings(),
+            validation_id="v-byte-stable",
+            artifact_sha256={
+                "raw/powermetrics.plist": "cd" * 32,
+                "events.jsonl": "ef" * 32,
+            },
+            protocol_pulse_count=3,
+            protocol_id=LEGACY_PROTOCOL_ID,
+        )
+        raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+        self.assertNotIn("detection_projection", payload)
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(),
+            "466f5438ad7a5cfb25539686e2d128f5792b4cea411f53e43866cb5dd4a07120",
+        )
 
     def test_v2_evidence_requires_and_records_capture_wall_time(self) -> None:
         detection = self.make_detection()
@@ -766,14 +881,35 @@ class FrozenProtocolTests(unittest.TestCase):
         expected = Decimal(
             derivation["source_statistics"]["maximum_s"]
         ).quantize(Decimal(rounding["quantum_s"]), rounding=ROUND_HALF_EVEN)
-        observed = validation_script._derive_preflight_systematic_screen_s(
-            artifact["identity_epoch"], acceptance_path=path
-        )
+        # This estimator-bearing branch must remain fail-closed until the
+        # council's later atomic Phase-2 acceptance/pin re-freeze.
+        with self.assertRaisesRegex(
+            validation_script._AcceptancePreflightError,
+            "acceptance_artifact_stale",
+        ):
+            validation_script._derive_preflight_systematic_screen_s(
+                artifact["identity_epoch"], acceptance_path=path
+            )
+        # Isolate decimal derivation under the truthful prospective estimator
+        # pins so this unit still proves the exact screen arithmetic.
+        with patch.object(
+            validation_script,
+            "_current_estimator_code_sha256",
+            return_value=dict(
+                artifact["prospective_rederivation"][
+                    "estimator_code_sha256"
+                ]
+            ),
+        ):
+            observed = validation_script._derive_preflight_systematic_screen_s(
+                artifact["identity_epoch"], acceptance_path=path
+            )
         self.assertIsInstance(observed, Decimal)
         self.assertEqual(observed.as_tuple(), expected.as_tuple())
-        self.assertEqual(
-            validation_script.PREFLIGHT_SYSTEMATIC_SCREEN_S.as_tuple(),
-            expected.as_tuple(),
+        self.assertIsNone(
+            validation_script.PREFLIGHT_SYSTEMATIC_SCREEN_S,
+            "the branch-wide convenience value stays unavailable while the "
+            "issued estimator pin is stale",
         )
 
     def test_writer_has_no_copied_preflight_scalar_and_comparison_is_derived(self) -> None:
@@ -825,6 +961,15 @@ class FrozenProtocolTests(unittest.TestCase):
                             validation_script,
                             "DEFAULT_ACCEPTANCE_BOUND_PATH",
                             acceptance_path,
+                        ),
+                        patch.object(
+                            validation_script,
+                            "_current_estimator_code_sha256",
+                            return_value=dict(
+                                real_artifact["prospective_rederivation"][
+                                    "estimator_code_sha256"
+                                ]
+                            ),
                         ),
                         redirect_stdout(stdout),
                         redirect_stderr(stderr),
@@ -1438,6 +1583,19 @@ os._exit(23)
                     validation_script,
                     "_CaptureLedgerLifecycle",
                     StopAfterCustodyCapture,
+                ),
+                patch.object(
+                    validation_script,
+                    "_current_estimator_code_sha256",
+                    return_value=dict(
+                        json.loads(
+                            validation_script.DEFAULT_ACCEPTANCE_BOUND_PATH.read_text(
+                                encoding="utf-8"
+                            )
+                        )["prospective_rederivation"][
+                            "estimator_code_sha256"
+                        ]
+                    ),
                 ),
             ):
                 return_code = validation_script.main(

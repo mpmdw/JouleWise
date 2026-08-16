@@ -89,6 +89,9 @@ from joulewise.calibration_ledger import (  # noqa: E402
 )
 from joulewise.powermetrics_fiducial import (  # noqa: E402
     BASELINE_S,
+    CLOCK_ANCHOR_UNRESOLVED,
+    DETECTION_NONCONVERGENT,
+    DETECTION_PROJECTION_CELL_BUDGET,
     LEGACY_PROTOCOL_ID,
     PROTOCOL_ID,
     PROTOCOL_V2_ID,
@@ -965,12 +968,21 @@ class _CaptureLedgerLifecycle:
             self.writer_lease.release()
 
     def finalize(
-        self, disposition: str
+        self,
+        disposition: str,
+        *,
+        invalid_evidence_disposition: str | None = None,
     ) -> tuple[Mapping[str, Any], dict[str, Any] | None]:
         """Finalize the exact attempt and return any terminal head candidate."""
 
         if not self.begun or self.closed:
             raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
+        if invalid_evidence_disposition not in (
+            None,
+            CLOCK_ANCHOR_UNRESOLVED,
+            DETECTION_NONCONVERGENT,
+        ):
+            raise ValueError("invalid evidence disposition is not registered")
         try:
             artifacts = ledger_artifact_hashes(Path(self.custody_locator))
             if self.is_bracket_session:
@@ -1000,7 +1012,10 @@ class _CaptureLedgerLifecycle:
                     receipt = abort_bracket_session(
                         self.ledger_path,
                         session_id=self.session_id,
-                        reason=f"pre_capture_{disposition}",
+                        reason=(
+                            invalid_evidence_disposition
+                            or f"pre_capture_{disposition}"
+                        ),
                     )
                 self.closed = True
                 _writer_stage(WriterStage.AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER)
@@ -1080,6 +1095,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--time-scale-for-test", type=float, default=1.0, help=argparse.SUPPRESS
+    )
+    parser.add_argument(
+        "--projection-cell-budget-for-test",
+        type=int,
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--identity-epoch-json-for-test",
@@ -1169,6 +1189,22 @@ def main(argv: list[str] | None = None) -> int:
         return emit_refusal(
             RefusalCode.WRITER_BRACKET_ARGUMENTS,
             context={"detail": "test time scale must be in (0, 1]"},
+            stream=sys.stderr,
+        )
+    if args.projection_cell_budget_for_test is not None and (
+        not args.sampler_direct_for_test
+        or args.time_scale_for_test == 1
+        or args.identity_epoch_json_for_test is None
+        or args.projection_cell_budget_for_test <= 0
+        or args.projection_cell_budget_for_test
+        > DETECTION_PROJECTION_CELL_BUDGET
+    ):
+        # Tests may only tighten the production budget inside the existing
+        # accelerated synthetic seam. There is no live operator override that
+        # can raise, disable, or recover from the frozen fail-closed bound.
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_ARGUMENTS,
+            context={"detail": "invalid test-only projection budget"},
             stream=sys.stderr,
         )
 
@@ -1477,10 +1513,9 @@ def main(argv: list[str] | None = None) -> int:
             "clock_anchor_unresolved: calibration capture cannot be anchored",
             file=sys.stderr,
         )
-        # Fail closed: an unanchored capture can never be a valid calibration.
-        # Detection still runs against the 1 s-quantized native stamps so the
-        # diagnostic artifact records why, but the evidence is forced invalid
-        # and the script exits nonzero below.
+        # Fail closed: an unanchored capture can never be valid. Native records
+        # remain in custody, but the expensive full-resolution projection is
+        # skipped and the explicit causal linkage is serialized below.
         anchored = native_records
     else:
         anchored = parse_powermetrics_records(
@@ -1513,6 +1548,14 @@ def main(argv: list[str] | None = None) -> int:
             float(evidence["clock_anchor"]["effective_clock_anchor_bound_s"])
             if anchor_resolved
             else 0.0
+        ),
+        projection_cell_budget=(
+            args.projection_cell_budget_for_test
+            if args.projection_cell_budget_for_test is not None
+            else DETECTION_PROJECTION_CELL_BUDGET
+        ),
+        projection_bypass_reason=(
+            None if anchor_resolved else CLOCK_ANCHOR_UNRESOLVED
         ),
     )
     events.close()
@@ -1605,7 +1648,10 @@ def main(argv: list[str] | None = None) -> int:
             else "valid"
         )
     try:
-        _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(disposition)
+        _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(
+            disposition,
+            invalid_evidence_disposition=detection.projection_disposition,
+        )
     except CalibrationLedgerError as exc:
         if exc.code == RefusalCode.FINALIZATION_BINDING_CONFLICT:
             # Binding conflict is corruption evidence.  Do not let the generic
@@ -1632,6 +1678,13 @@ def main(argv: list[str] | None = None) -> int:
             "slot": args.slot,
             "attempt_id": args.attempt_id,
         }
+    if detection.projection_disposition is not None:
+        output["invalid_evidence_disposition"] = (
+            detection.projection_disposition
+        )
+        output["detection_projection"] = evidence_payload[
+            "detection_projection"
+        ]
     if bracket_mode and args.slot == "pre":
         _writer_stage(WriterStage.AFTER_PRE_FINALIZATION_BEFORE_SUPERVISOR_DISPATCH)
     print(json.dumps(output, indent=2))
