@@ -1,4 +1,4 @@
-# WO-L2-REAUDIT custody (2026-08-16)
+# WO-L2-REAUDIT custody (2026-08-15)
 
 Independent L2 coverage re-audit discharging the council's distinct UNVERIFIED
 coverage verdict (council Phase 1 cold-added obligation; TASK_QUEUE row A6).
