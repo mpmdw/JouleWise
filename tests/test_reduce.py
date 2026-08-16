@@ -24,6 +24,11 @@ from unittest.mock import patch
 
 from joulewise import reduce as reduce_module
 from joulewise.adapters.powermetrics import duration_weighted_mean_and_sample_variance
+from joulewise.analysis_engine.inputs import (
+    AnalysisInputError,
+    BundleEvidence,
+    _require_common_launch_lineage,
+)
 from joulewise.bundle import RunBundleWriter
 from joulewise.clock import FakeClock
 from joulewise.cli import validate_bundle
@@ -3910,3 +3915,95 @@ class D078R01RegressionTests(unittest.TestCase):
                 self.assertEqual(
                     payload["summary_provenance"]["reducer_version"], expected
                 )
+
+
+class ReductionLaunchLineageBoundaryTests(unittest.TestCase):
+    """Post-hoc admission lives beside callers, not in the pinned reducer."""
+
+    @staticmethod
+    def _lineage(*, plan_id: str = "plan-1") -> dict:
+        return {
+            "schema_version": "joulewise.launch_lineage.v1",
+            "collection_boot_session_id": (
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            ),
+            "pack_id": "pack-1",
+            "plan_id": plan_id,
+            "window_id": "window-1",
+            "bracket_session_id": "bracket-1",
+            "consumption": {"path": "/receipts/consume.json", "sha256": "a" * 64},
+            "start": {"path": "/receipts/start.json", "sha256": "b" * 64},
+            "settle": {"path": "/receipts/settle.json", "sha256": "c" * 64},
+            "completion": None,
+        }
+
+    @classmethod
+    def _evidence(cls, bundle_id: str, lineage: dict | None) -> BundleEvidence:
+        return BundleEvidence(
+            entry={"entry_id": bundle_id},
+            bundle_id=bundle_id,
+            relative_path=bundle_id,
+            path=Path(bundle_id),
+            summary={},
+            metadata={},
+            raw_config=(
+                {
+                    "run_metadata": {
+                        "tags": ["launch_lineage_required"]
+                    }
+                }
+                if lineage is not None
+                else {}
+            ),
+            strict_problems=(),
+            base_reason_codes=(),
+            config_sha256=None,
+            summary_sha256=None,
+            replacement_classification="registered",
+            inclusion_status="included",
+            launch_lineage=(
+                {"launch_lineage": lineage} if lineage is not None else None
+            ),
+        )
+
+    def test_legacy_reduction_remains_dormant(self) -> None:
+        legacy = self._evidence("legacy", None)
+
+        self.assertIsNone(_require_common_launch_lineage((legacy,)))
+        self.assertNotIn("launch_lineage", legacy.audit_row()["window_prechecks"])
+
+    def test_admissible_reduction_carries_full_authenticated_lineage(self) -> None:
+        lineage = self._lineage()
+        members = (
+            self._evidence("member-1", lineage),
+            self._evidence("member-2", lineage),
+        )
+
+        self.assertEqual(_require_common_launch_lineage(members), lineage)
+        self.assertEqual(
+            members[0].audit_row()["window_prechecks"]["launch_lineage"],
+            lineage,
+        )
+
+    def test_mixed_or_nonidentical_reduction_lineages_refuse(self) -> None:
+        lineage = self._lineage()
+        cases = (
+            (
+                self._evidence("marker", lineage),
+                self._evidence("legacy", None),
+            ),
+            (
+                self._evidence("member-1", lineage),
+                self._evidence(
+                    "member-2",
+                    self._lineage(plan_id="plan-2"),
+                ),
+            ),
+        )
+        for members in cases:
+            with self.subTest(members=[row.bundle_id for row in members]):
+                with self.assertRaisesRegex(
+                    AnalysisInputError,
+                    "launch_lineage_conflict",
+                ):
+                    _require_common_launch_lineage(members)

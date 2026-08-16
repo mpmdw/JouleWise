@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
 from joulewise.aggregate import student_t_critical_95
+from joulewise.arm_readiness import LAUNCH_LINEAGE_SCHEMA
 from joulewise.authentication_io import (
     read_authentication_input,
     sha256_authentication_input,
@@ -1942,7 +1943,21 @@ _PROVENANCE_OPTIONAL_KEYS = {
     "producer_calibration_plans",
     "assurance",
     "calibration_custody_store",
+    "launch_lineage",
 }
+_LAUNCH_LINEAGE_KEYS = {
+    "schema_version",
+    "collection_boot_session_id",
+    "pack_id",
+    "plan_id",
+    "window_id",
+    "bracket_session_id",
+    "consumption",
+    "start",
+    "settle",
+    "completion",
+}
+_LAUNCH_LINEAGE_REFERENCE_KEYS = {"path", "sha256"}
 _CALIBRATION_PLAN_KEYS = {
     "plan_id",
     "declared_calibration_scope",
@@ -2895,6 +2910,13 @@ def _validate_provenance(
     ):
         errors.append(f"{where}.mint_tool_version: must be a nonempty string")
 
+    if "launch_lineage" in provenance:
+        _validate_launch_lineage_provenance(
+            provenance["launch_lineage"],
+            f"{where}.launch_lineage",
+            errors,
+        )
+
     mint_tool_version = provenance["mint_tool_version"]
     is_v2 = mint_tool_version == _FLOOR_MINT_TOOL_VERSION_V2
     implementation = provenance["implementation"]
@@ -3031,6 +3053,45 @@ def _validate_provenance(
                 f"{producer_where}.relative_path: must be a nonempty string"
             )
     return frozenset(producer_hashes) if producer_hashes else None
+
+
+def _validate_launch_lineage_provenance(value, where, errors) -> None:
+    """Validate the optional settled-lineage carrier without reopening custody."""
+
+    if not _check_keys(value, _LAUNCH_LINEAGE_KEYS, where, errors):
+        return
+    if value["schema_version"] != LAUNCH_LINEAGE_SCHEMA:
+        errors.append(
+            f"{where}.schema_version: must be {LAUNCH_LINEAGE_SCHEMA!r}"
+        )
+    for key in (
+        "collection_boot_session_id",
+        "pack_id",
+        "plan_id",
+        "window_id",
+        "bracket_session_id",
+    ):
+        if not isinstance(value[key], str) or not value[key]:
+            errors.append(f"{where}.{key}: must be a nonempty string")
+    for key in ("consumption", "start", "settle", "completion"):
+        reference = value[key]
+        if key == "completion" and reference is None:
+            continue
+        reference_where = f"{where}.{key}"
+        if not _check_keys(
+            reference,
+            _LAUNCH_LINEAGE_REFERENCE_KEYS,
+            reference_where,
+            errors,
+        ):
+            continue
+        path = reference["path"]
+        if not isinstance(path, str) or not path or not Path(path).is_absolute():
+            errors.append(f"{reference_where}.path: must be an absolute path")
+        if not _is_hex(reference["sha256"]):
+            errors.append(
+                f"{reference_where}.sha256: must be 64 lowercase hex chars"
+            )
 
 
 def _validate_estimate_math(

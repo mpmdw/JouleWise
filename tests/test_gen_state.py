@@ -25,9 +25,15 @@ EXPECTED_IDS = {
     # 2026-08-15 council Phase-1 repair program. The landed U11 identity
     # projection and FLOOR-COMMONMODE rows retired when these successors
     # entered the live kernel.
-    "WO-T0-PRODUCER", "WO-LAUNCH-BINDING", "WO-CONSUMPTION-EDGE",
-    "WO-MARGIN-RECORDER-AUTHZ", "WO-CENSUS-SEMANTICS",
-    "WO-DETECT-PULSES-BUDGET", "WO-L2-REAUDIT",
+    # (WO-T0-PRODUCER and WO-MARGIN-RECORDER-AUTHZ retired 2026-08-15 when
+    # #152/#151 merged; WO-RECORDER-GRANT-IDENTITY entered per the
+    # recorder-race composed verdict.)
+    # (WO-L2-REAUDIT retired 2026-08-16: delivered, Coverage VERIFIED,
+    # custody docs/process_traces/2026-08-15-l2-reaudit/.)
+    "WO-LAUNCH-BINDING", "WO-CONSUMPTION-EDGE",
+    "WO-CENSUS-SEMANTICS",
+    "WO-DETECT-PULSES-BUDGET",
+    "WO-RECORDER-GRANT-IDENTITY", "WO-PROOF-RUNNABILITY-REPAIR",
     "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
     "P2-047A", "P2-048", "P2-050", "TOOL-01",
@@ -208,7 +214,7 @@ class TestKernelValidity(unittest.TestCase):
              lambda k: k["active_global_gates"][0]["allowed_task_ids"].append("NOPE-1")),
             ("id/key mismatch", lambda k: k["tasks"]["P2-016"].update(id="P2-999")),
             ("terminal status", lambda k: k["tasks"]["P2-016"].update(status="done")),
-            ("duplicate lane rank", lambda k: k["tasks"]["P2-016"].update(rank=0)),
+            ("duplicate lane rank", lambda k: k["tasks"]["P2-016"].update(rank=1)),
             ("blocked without hard start dep", lambda k: k["tasks"]["P1-008"].update(status="blocked")),
             # P2-035's only hard start edge (P2-015) was satisfied at the
             # 2026-07-31 retirement; P2-024 now carries the pending edge these
@@ -265,12 +271,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_74(self):
+    def test_exact_live_id_set(self):
         # The prior 67-row live set loses landed U11/FCM and R3-retired
         # P2-006, then gains three D-117 windows and seven Phase-1 work
-        # orders: 67 - 3 + 10 = 74 exact live records.
+        # orders (67 - 3 + 10 = 74); the 2026-08-15 refresh retires merged
+        # WO-T0-PRODUCER (#152) and WO-MARGIN-RECORDER-AUTHZ (#151) and adds
+        # WO-RECORDER-GRANT-IDENTITY and (2026-08-16) the proof-runnability
+        # repair (74 - 2 + 2 = 74); the T9 close retires delivered
+        # WO-L2-REAUDIT: 74 - 1 = 73 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 74)
+        self.assertEqual(len(self.tasks), 73)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -642,7 +652,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def test_run_state_suppressed_lane_heads_are_exactly_one_gated_entry_per_lane(self):
         gate_oracle = load_fixture("historical_audit_gate.json")
         head_oracle = load_fixture("cleared_audit_gate.json")
-        head_oracle["expected_selectable_task_ids"][0] = "WO-T0-PRODUCER"
+        head_oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
         _adapt_retired_quiet_mac_head(head_oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(gate_oracle["active_global_gates"])
         rendered = gen_state.render_run_state(kernel)
@@ -675,7 +685,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
 
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
         oracle = load_fixture("cleared_audit_gate.json")
-        oracle["expected_selectable_task_ids"][0] = "WO-T0-PRODUCER"
+        oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
         _adapt_retired_quiet_mac_head(oracle["expected_selectable_task_ids"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
@@ -832,7 +842,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             )
         self.assertEqual(
             gen_state.selectable_task_ids(kernel),
-            {"P1-008", "WO-T0-PRODUCER"},
+            {"P1-008", "WO-LAUNCH-BINDING"},
         )
         self.assertIn("excluded by: WINDOW-COUNCIL-GATE", run_state)
         self.assertIn("GATED — WINDOW-COUNCIL-GATE", queue)

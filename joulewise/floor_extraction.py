@@ -69,6 +69,11 @@ from joulewise.analysis_engine.inputs import (
     governed_idle_variance_pair,
     window_evidence_precheck,
 )
+from joulewise.arm_readiness import (
+    LAUNCH_LINEAGE_REASON_CODES,
+    LaunchLineageError,
+    authenticate_bundle_launch_lineage,
+)
 from joulewise.detection_floor import (
     ATTRIBUTION_FLOOR_SOURCE,
     ATTRIBUTION_LIMIT_CLASS,
@@ -96,6 +101,7 @@ from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    canonical_sha256,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
@@ -201,6 +207,7 @@ CELL_REFUSAL_CODES = (
     "common_mode_precondition_failed",
     "common_mode_zero_point_divergence_out_of_domain",
     MOCK_TELEMETRY_CLAIM_REFUSAL,
+    *sorted(LAUNCH_LINEAGE_REASON_CODES),
 )
 CELL_LABELLED_CONDITION_CODES = (
     "admissible_set_uncertainty_dominates_point_floor",
@@ -1213,9 +1220,10 @@ class MemberReport:
     summary_sha256: str | None
     bundle_sha256: str | None
     config_sha256: str | None
+    launch_lineage: Mapping[str, Any] | None = None
 
     def as_row(self) -> dict[str, Any]:
-        return {
+        row = {
             "slot": self.slot,
             "bundle_id": self.bundle_id,
             "block_id": self.block_id,
@@ -1241,6 +1249,9 @@ class MemberReport:
             "bundle_sha256": self.bundle_sha256,
             "config_sha256": self.config_sha256,
         }
+        if isinstance(self.launch_lineage, Mapping):
+            row["launch_lineage"] = dict(self.launch_lineage)
+        return row
 
 
 @dataclass(frozen=True)
@@ -1424,7 +1435,10 @@ _D117_MINT_REPORT_KEYS = {
     "whole_window_drift_allowances",
     "all_cells_extractable",
 }
-_D117_MINT_REPORT_OPTIONAL_KEYS = {"single_count_discipline"}
+_D117_MINT_REPORT_OPTIONAL_KEYS = {
+    "launch_lineage",
+    "single_count_discipline",
+}
 _D117_MINT_CELL_KEYS = {
     "cell_id",
     "kind",
@@ -1491,6 +1505,7 @@ _D117_MINT_MEMBER_KEYS = {
     "bundle_sha256",
     "config_sha256",
 }
+_D117_MINT_MEMBER_OPTIONAL_KEYS = {"launch_lineage"}
 
 
 def _d117_closed_keys(
@@ -1567,6 +1582,7 @@ def validate_d117_mint_consumption_report(value: object) -> list[str]:
     cells = value.get("cells")
     if not isinstance(cells, list) or not cells:
         return [*errors, "extraction report.cells: must be a nonempty array"]
+    member_launch_lineages: list[Mapping[str, Any] | None] = []
     for cell_index, cell in enumerate(cells):
         cell_where = f"extraction report.cells[{cell_index}]"
         errors.extend(
@@ -1594,14 +1610,52 @@ def validate_d117_mint_consumption_report(value: object) -> list[str]:
             errors.append(f"{cell_where}.members: must be an array")
             continue
         for member_index, member in enumerate(members):
+            member_where = f"{cell_where}.members[{member_index}]"
             errors.extend(
                 _d117_closed_keys(
                     member,
                     _D117_MINT_MEMBER_KEYS,
-                    set(),
-                    f"{cell_where}.members[{member_index}]",
+                    _D117_MINT_MEMBER_OPTIONAL_KEYS,
+                    member_where,
                 )
             )
+            if (
+                isinstance(member, Mapping)
+                and "launch_lineage" in member
+                and not isinstance(member["launch_lineage"], Mapping)
+            ):
+                errors.append(
+                    f"{member_where}.launch_lineage: must be an object"
+                )
+            member_launch_lineages.append(
+                member.get("launch_lineage")
+                if isinstance(member, Mapping)
+                and isinstance(member.get("launch_lineage"), Mapping)
+                else None
+            )
+    report_launch_lineage = value.get("launch_lineage")
+    if report_launch_lineage is not None and not isinstance(
+        report_launch_lineage, Mapping
+    ):
+        errors.append("extraction report.launch_lineage: must be an object")
+    elif isinstance(report_launch_lineage, Mapping) and (
+        not member_launch_lineages
+        or any(lineage is None for lineage in member_launch_lineages)
+        or any(
+            canonical_sha256(lineage) != canonical_sha256(report_launch_lineage)
+            for lineage in member_launch_lineages
+            if isinstance(lineage, Mapping)
+        )
+    ):
+        errors.append(
+            "extraction report.launch_lineage: must equal every member lineage"
+        )
+    elif report_launch_lineage is None and any(
+        lineage is not None for lineage in member_launch_lineages
+    ):
+        errors.append(
+            "extraction report.launch_lineage: required when members carry lineage"
+        )
     return errors
 
 
@@ -1821,6 +1875,7 @@ def _evaluate_member(
     anchor_bound: float | None = None
     operative_anchor_envelope: Mapping[str, Any] | None = None
     consumption_provenance: Mapping[str, Any] | None = None
+    launch_lineage: Mapping[str, Any] | None = None
     cap_hit = False
     if read_problem is not None:
         reasons.append(read_problem)
@@ -1837,6 +1892,29 @@ def _evaluate_member(
             )
         except FloorExtractionError:
             metadata = None
+        try:
+            parsed_config = _strict_admission_json_file(
+                path / "config.json", "config.json"
+            )
+            raw_config = (
+                parsed_config if isinstance(parsed_config, Mapping) else None
+            )
+        except FloorExtractionError:
+            raw_config = None
+        try:
+            authenticated_launch = authenticate_bundle_launch_lineage(
+                path,
+                config=raw_config,
+                metadata=metadata,
+                require_completion=True,
+            )
+            launch_lineage = (
+                dict(authenticated_launch["launch_lineage"])
+                if authenticated_launch is not None
+                else None
+            )
+        except LaunchLineageError as exc:
+            reasons.append(exc.reason_code)
         telemetry_identity = custody_telemetry_identity(
             path,
             summary=summary,
@@ -2034,6 +2112,7 @@ def _evaluate_member(
         anchor_shift_bound_j=anchor_bound,
         operative_anchor_envelope=operative_anchor_envelope,
         consumption_provenance=consumption_provenance,
+        launch_lineage=launch_lineage,
         summary_sha256=summary_sha256,
         bundle_sha256=bundle_sha256,
         config_sha256=config_sha256,
@@ -2061,6 +2140,7 @@ def _exclude(member: MemberReport) -> MemberReport:
         anchor_shift_bound_j=member.anchor_shift_bound_j,
         operative_anchor_envelope=member.operative_anchor_envelope,
         consumption_provenance=member.consumption_provenance,
+        launch_lineage=member.launch_lineage,
         summary_sha256=member.summary_sha256,
         bundle_sha256=member.bundle_sha256,
         config_sha256=member.config_sha256,
@@ -2139,6 +2219,15 @@ def extract_absolute_cell(
         )
 
     refusals: list[str] = []
+    launch_lineages = [
+        member.launch_lineage
+        for member in reports
+        if isinstance(member.launch_lineage, Mapping)
+    ]
+    if len({canonical_sha256(value) for value in launch_lineages}) > 1 or (
+        launch_lineages and len(launch_lineages) != len(reports)
+    ):
+        refusals.append("launch_lineage_conflict")
     excluded_slots: list[str] = []
     fallback_exclusion_diagnostics: list[str] = []
     admitted: list[MemberReport] = []
@@ -2594,6 +2683,15 @@ def extract_comparative_cell(
         admitted_members.extend(evaluated)
 
     floor: FloorEstimate | None = None
+    launch_lineages = [
+        member.launch_lineage
+        for member in final_reports
+        if isinstance(member.launch_lineage, Mapping)
+    ]
+    if len({canonical_sha256(value) for value in launch_lineages}) > 1 or (
+        launch_lineages and len(launch_lineages) != len(final_reports)
+    ):
+        refusals.append("launch_lineage_conflict")
     point_floor: FloorEstimate | None = None
     anchor_max: float | None = None
     if not refusals:
@@ -2928,6 +3026,12 @@ def extract_cells(
         for bundle_id in unattributable_omitted
     ]
 
+    report_launch_lineages = [
+        dict(member.launch_lineage)
+        for report in reports
+        for member in report.members
+        if isinstance(member.launch_lineage, Mapping)
+    ]
     result = {
         "schema_version": EXTRACTION_SCHEMA_VERSION,
         "spec_schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
@@ -2977,6 +3081,8 @@ def extract_cells(
             and not spec_membership_refusals
         ),
     }
+    if report_launch_lineages:
+        result["launch_lineage"] = report_launch_lineages[0]
     if any(report.floor_conditions and report.floor is not None for report in reports):
         result["single_count_discipline"] = attribution_single_count_discipline()
     return result

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import hashlib
 import io
@@ -49,6 +50,7 @@ from tests.test_calibration_bracketing import (
     _fixture_snapshot,
     _unissued_acceptance_fixture,
 )
+from tests.test_arm_readiness import LaunchConsumptionV2Tests
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,6 +88,147 @@ def held_campaign_lock(runs_dir: Path):
         raise
     else:
         run_campaign_module.release_campaign_lock(lock_path)
+
+
+class CampaignLaunchLineagePreflightTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.config_dir = self.root / "configs"
+        self.config_dir.mkdir()
+        self.runs_dir = self.root / "runs"
+
+    def _write_config(self, name: str, *, marker: bool) -> Path:
+        tags = ["launch_lineage_required"] if marker else []
+        path = self.config_dir / name
+        path.write_text(
+            json.dumps(
+                {
+                    "run_id": path.stem,
+                    "run_metadata": {"project": "joulewise", "tags": tags},
+                }
+            )
+            + "\n"
+        )
+        return path
+
+    def test_outer_preflight_derives_from_runs_root_and_exact_configs(self) -> None:
+        first = self._write_config("first.json", marker=True)
+        second = self._write_config("second.json", marker=True)
+        expected = {"launch_lineage": {"schema_version": "test"}}
+        with patch.object(
+            run_campaign_module,
+            "authenticate_campaign_launch_lineage",
+            return_value=expected,
+        ) as authenticate:
+            actual = run_campaign_module.authenticate_campaign_writer_preflight(
+                [first, second], self.runs_dir
+            )
+        self.assertIs(actual, expected)
+        authenticate.assert_called_once_with(
+            self.runs_dir, config_paths=[first, second]
+        )
+
+    def test_outer_preflight_refuses_mixed_marker_selection(self) -> None:
+        marked = self._write_config("marked.json", marker=True)
+        legacy = self._write_config("legacy.json", marker=False)
+        with self.assertRaises(run_campaign_module.LaunchLineageError) as caught:
+            run_campaign_module.authenticate_campaign_writer_preflight(
+                [marked, legacy], self.runs_dir
+            )
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+
+    def test_ceremony_bypass_refuses_before_lock_provenance_or_child(self) -> None:
+        self._write_config("member.json", marker=True)
+        self.runs_dir.mkdir()
+        args = run_campaign_module.parse_args(
+            [
+                str(self.config_dir),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--campaign-policy",
+                str(TEST_CAMPAIGN_POLICY),
+            ]
+        )
+        with patch.object(
+            run_campaign_module, "acquire_campaign_lock"
+        ) as acquire, patch.object(
+            run_campaign_module, "new_campaign_provenance"
+        ) as provenance, patch.object(
+            run_campaign_module.subprocess, "run"
+        ) as child:
+            with self.assertRaises(run_campaign_module.LaunchLineageError) as caught:
+                run_campaign_module.run_campaign(args)
+        self.assertEqual(
+            caught.exception.reason_code, "launch_consumption_missing"
+        )
+        acquire.assert_not_called()
+        provenance.assert_not_called()
+        child.assert_not_called()
+
+    def test_consistent_locator_swap_after_outer_preflight_refuses(self) -> None:
+        first = LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        first.setUp()
+        try:
+            first._settle()
+            first_root = Path(first.arm["arm_context"]["claim_runs_root"])
+            selector = self.root / "selected-runs"
+            selector.symlink_to(first_root, target_is_directory=True)
+            outer = first._authenticate_campaign(selector)
+
+            second = LaunchConsumptionV2Tests(
+                methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            )
+            second.setUp()
+            try:
+                second._settle()
+                second_root = Path(second.arm["arm_context"]["claim_runs_root"])
+                bundle = selector / "child-bundle"
+
+                def swap_and_stamp(command, **_kwargs):
+                    selector.unlink()
+                    selector.symlink_to(second_root, target_is_directory=True)
+                    inner = second._authenticate_campaign(selector)
+                    bundle.mkdir()
+                    (bundle / "metadata.json").write_text(
+                        json.dumps(
+                            {
+                                "extra": {
+                                    "launch_lineage": inner["launch_lineage"],
+                                    "launch_lineage_locator_sha256": inner[
+                                        "locator_sha256"
+                                    ],
+                                }
+                            }
+                        )
+                        + "\n"
+                    )
+                    return subprocess.CompletedProcess(command, 0)
+
+                with patch.object(
+                    run_campaign_module.subprocess,
+                    "run",
+                    side_effect=swap_and_stamp,
+                ):
+                    with self.assertRaises(
+                        run_campaign_module.LaunchLineageError
+                    ) as caught:
+                        run_campaign_module.run_authenticated_campaign_child(
+                            ["child"],
+                            env=None,
+                            outer_authentication=outer,
+                            bundle_paths=[bundle],
+                        )
+                self.assertEqual(
+                    caught.exception.reason_code, "launch_lineage_conflict"
+                )
+            finally:
+                second.doCleanups()
+        finally:
+            first.doCleanups()
 
 
 class CampaignLockIdentityTests(unittest.TestCase):
@@ -1966,7 +2109,55 @@ class RunCampaignTests(unittest.TestCase):
         self.assertNotEqual(evidence["three__r2"], evidence["three__r1"])
         self.assertNotEqual(evidence["three__r3"], evidence["three__r1"])
 
-    def test_axi_multi_entry_campaign_records_gate_before_entry_two(self) -> None:
+    def test_marker_bearing_axi_refuses_before_child_dispatch(self) -> None:
+        state = run_campaign_module.load_analysis_manifest(
+            ROOT / "tests" / "fixtures" / "axi_ap_spec"
+        )
+        self.assertIsNotNone(state)
+        assert state is not None
+        binding = run_campaign_module.load_campaign_policy(
+            str(TEST_CAMPAIGN_POLICY)
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker_config = root / "marker.json"
+            config = json.loads(
+                (ROOT / "tests" / "fixtures" / "axi_ap_spec" / "draft_spec_off.json")
+                .read_text()
+            )
+            config["run_metadata"]["tags"].append("launch_lineage_required")
+            marker_config.write_text(json.dumps(config) + "\n")
+            marked_raw = copy.deepcopy(state.raw)
+            for entry in marked_raw["entries"]:
+                entry["config"] = str(marker_config)
+            marked_state = replace(state, raw=marked_raw)
+            runs_dir = root / "runs"
+            with patch.object(
+                run_campaign_module, "run_authenticated_campaign_child"
+            ) as child:
+                with self.assertRaises(
+                    run_campaign_module.LaunchLineageError
+                ) as caught:
+                    run_campaign_module.run_axi_spec_campaign(
+                        run_campaign_module.argparse.Namespace(
+                            dry_run=False,
+                            cli_cmd=None,
+                            arm_quiet_mode=False,
+                            arm_countdown_s=0,
+                            environment_override=None,
+                        ),
+                        marked_state,
+                        runs_dir=runs_dir,
+                        policy_binding=binding,
+                    )
+            self.assertEqual(
+                caught.exception.reason_code,
+                "launch_lineage_axi_unsupported",
+            )
+            child.assert_not_called()
+            self.assertFalse(runs_dir.exists())
+
+    def test_non_marker_axi_multi_entry_campaign_records_gate_before_entry_two(self) -> None:
         state = run_campaign_module.load_analysis_manifest(
             ROOT / "tests" / "fixtures" / "axi_ap_spec"
         )
@@ -2047,6 +2238,7 @@ class RunCampaignTests(unittest.TestCase):
             "admitted": True,
         }
         calibration_snapshot, _candidates = _fixture_snapshot([])
+        loaded_drift_bound = {"sentinel": "loaded-neg8-bound"}
 
         def passing_core_evaluation(evaluations, policy_binding, **_kwargs):
             return run_campaign_module._IdleAdmissionCoreEvaluation(
@@ -2109,6 +2301,16 @@ class RunCampaignTests(unittest.TestCase):
                     "_idle_admission_core_evaluation",
                     side_effect=passing_core_evaluation,
                 ) as core_evaluation,
+                patch.object(
+                    run_campaign_module,
+                    "load_neg8_drift_bound_artifact",
+                    return_value=loaded_drift_bound,
+                ),
+                patch.object(
+                    run_campaign_module,
+                    "build_evaluation_basis",
+                    wraps=run_campaign_module.build_evaluation_basis,
+                ) as basis_builder,
                 patch(
                     "joulewise.calibration_bracketing."
                     "load_calibration_acceptance_bound",
@@ -2137,6 +2339,11 @@ class RunCampaignTests(unittest.TestCase):
         ]
         self.assertEqual(len(whole), 1)
         core_evaluation.assert_called_once()
+        basis_builder.assert_called_once()
+        self.assertIs(
+            basis_builder.call_args.kwargs["drift_bound_artifact"],
+            loaded_drift_bound,
+        )
         self.assertEqual(whole[0]["status"], "passed")
         self.assertFalse(whole[0]["claim_licensing"])
         self.assertEqual(whole[0]["member_failures"], [])
@@ -6954,6 +7161,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         points: list[float] | None = None,
         *,
         derived_at_s: float | None = None,
+        launch_lineage: dict | None = None,
     ) -> dict:
         values = (
             points
@@ -6990,12 +7198,23 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 ),
                 "calibration_identity_sha256": "c" * 64,
             },
+            launch_lineage=launch_lineage,
         )
 
-    def _write_drift_bound(self, points: list[float] | None = None) -> Path:
+    def _write_drift_bound(
+        self,
+        points: list[float] | None = None,
+        *,
+        launch_lineage: dict | None = None,
+    ) -> Path:
         path = self.root / "neg8-drift-bound.json"
         path.write_text(
-            json.dumps(self._drift_bound(points), indent=2, sort_keys=True) + "\n",
+            json.dumps(
+                self._drift_bound(points, launch_lineage=launch_lineage),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
             encoding="utf-8",
         )
         return path
@@ -8536,6 +8755,46 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             + "\n"
         )
 
+    def _install_passing_whole_window_verdict_fixture(
+        self,
+        *,
+        bound_lineage: dict,
+    ):
+        binding = self._binding()
+        drift_bound_path = self._write_drift_bound(
+            launch_lineage=bound_lineage
+        )
+        manifest_members = []
+        for bundle_id, gross_energy_j, position in (
+            ("p2-neg8-reference-start__r1", 8.0, "start"),
+            ("p2-neg8-reference-end__r1", 8.04, "end"),
+        ):
+            member = self._member(
+                bundle_id,
+                records=_clean_idle_records(),
+                gross_energy_j=gross_energy_j,
+                neg8_position=position,
+            )
+            manifest_members.append((bundle_id, position, member))
+            (member.bundle_path / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded", **member.summary}) + "\n"
+            )
+            (member.bundle_path / "metadata.json").write_text(
+                json.dumps(member.metadata) + "\n"
+            )
+        self._install_whole_window_manifest(binding, manifest_members)
+        return binding, run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+                "--neg8-drift-bound",
+                str(drift_bound_path),
+            ]
+        )
+
     def _install_retry_occurrence_manifests(
         self, binding, bundle_roles
     ) -> str:
@@ -8835,56 +9094,37 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         snapshot_loader.assert_called_once_with(str(custody_store))
 
     def test_whole_window_cli_uses_campaign_membership_and_strict_validation(self) -> None:
-        binding = self._binding()
-        drift_bound_path = self._write_drift_bound()
-        bundle_ids = [
-            "p2-neg8-reference-start__r1",
-            "p2-neg8-reference-end__r1",
-        ]
-        manifest_members = []
-        for bundle_id, gross_energy_j, position in (
-            ("p2-neg8-reference-start__r1", 8.0, "start"),
-            ("p2-neg8-reference-end__r1", 8.04, "end"),
-        ):
-            member = self._member(
-                bundle_id,
-                records=_clean_idle_records(),
-                gross_energy_j=gross_energy_j,
-                neg8_position=position,
-            )
-            manifest_members.append((bundle_id, position, member))
-            (member.bundle_path / "summary_metrics.json").write_text(
-                json.dumps({"status": "succeeded", **member.summary}) + "\n"
-            )
-            (member.bundle_path / "metadata.json").write_text(
-                json.dumps(member.metadata) + "\n"
-            )
-        self._install_whole_window_manifest(binding, manifest_members)
-
-        args = run_campaign_module.parse_args(
-            [
-                "--whole-window-verdict",
-                "--runs-dir",
-                str(self.root),
-                "--campaign-policy",
-                str(binding.path),
-                "--neg8-drift-bound",
-                str(drift_bound_path),
-            ]
+        lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
+        _binding, args = self._install_passing_whole_window_verdict_fixture(
+            bound_lineage=lineage
         )
+        calibration_bracket = {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "b_fiducial_s": 0.02,
+            "pre": {"bracket_runs_root": str(self.root)},
+            "post": {},
+        }
         with (
             patch.object(run_campaign_module, "validate_bundle", return_value=[]),
             patch.object(
                 run_campaign_module,
                 "calibration_bracket_for_bundles",
-                return_value=(
-                    {
-                        "schema_version": "joulewise.instrument_calibration_bracket.v1",
-                        "status": "passed",
-                        "b_fiducial_s": 0.02,
-                    },
-                    (),
-                ),
+                return_value=(calibration_bracket, ()),
+            ),
+            patch(
+                "joulewise.whole_window.authenticate_launch_lineage",
+                side_effect=lambda value, **_kwargs: {
+                    "launch_lineage": dict(value)
+                },
+            ),
+            patch(
+                "joulewise.whole_window._authenticated_bundle_launch_lineage_set",
+                return_value=lineage,
+            ),
+            patch(
+                "joulewise.whole_window._calibration_launch_lineages",
+                return_value=(lineage, lineage),
             ),
             patch.object(
                 run_campaign_module,
@@ -8917,6 +9157,55 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             verdict["evaluation_basis"]["consumption_semantics_id"],
             MINTED_CONSUMPTION_SEMANTICS_ID,
         )
+        self.assertEqual(verdict["evaluation_basis"]["launch_lineage"], lineage)
+
+    def test_whole_window_verdict_refuses_mismatched_bound_lineage(self) -> None:
+        member_lineage = {
+            "schema_version": "test-lineage",
+            "plan_id": "plan-1",
+        }
+        bound_lineage = {
+            "schema_version": "test-lineage",
+            "plan_id": "plan-2",
+        }
+        _binding, args = self._install_passing_whole_window_verdict_fixture(
+            bound_lineage=bound_lineage
+        )
+        calibration_bracket = {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "b_fiducial_s": 0.02,
+            "pre": {"bracket_runs_root": str(self.root)},
+            "post": {},
+        }
+        with (
+            patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(calibration_bracket, ()),
+            ),
+            patch(
+                "joulewise.whole_window.authenticate_launch_lineage",
+                side_effect=lambda value, **_kwargs: {
+                    "launch_lineage": dict(value)
+                },
+            ),
+            patch(
+                "joulewise.whole_window._authenticated_bundle_launch_lineage_set",
+                return_value=member_lineage,
+            ),
+            patch(
+                "joulewise.whole_window._calibration_launch_lineages",
+                return_value=(member_lineage, member_lineage),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                run_campaign_module.LaunchLineageError,
+                "members, calibrations, and bound",
+            ):
+                run_campaign_module.run_whole_window_verdict(args)
+        self.assertFalse((self.root / "campaign_log.jsonl").exists())
 
     def test_duplicate_occurrence_without_supersession_still_refuses(self) -> None:
         binding = self._binding()

@@ -10,9 +10,62 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-15 (T8 FINAL CHECKPOINT, Ed clear order)
+Last updated: 2026-08-16 (T9 close — Phase-1 code complete)
 
-## ▶▶ T8 FINAL CHECKPOINT (2026-08-15, Ed clear order) — /clear-SAFE; A NEW SESSION STARTS HERE
+## ▶▶ T9 CHECKPOINT (2026-08-16) — PHASE 1 CODE COMPLETE; A NEW SESSION STARTS HERE
+
+**STATE IN ONE BREATH:** T8's successor order is EXECUTED. The Phase-1 CODE
+WAVE is merged — all four mergeable work orders are ON MAIN — #153 should-fix batch (8035bf2, final head 24df3df),
+#154 T-0 F4 honest contract (a59c795), #155 WO-CONSUMPTION-EDGE (d54db78),
+#156 WO-LAUNCH-BINDING stages 1+2 campaign side (f392ff6) — each through the
+full C-028 gauntlet + rule-5 final-head passes + a pre-merge integration tree
+(all cross-stream seams clean). WO-DETECT-PULSES-BUDGET + the calexits flake
+fix are gauntlet-complete and MERGE-STAGED FOR PHASE 2 on
+impl/wo-detect-pulses-budget @ 5449e58 (R-t9-4: the branch edits D-079-pinned
+estimator inputs; it merges inside the atomic re-freeze that re-issues the
+acceptance artifact). WO-L2-REAUDIT is DELIVERED — Coverage VERIFIED
+(251/251 independent enumeration; custody
+docs/process_traces/2026-08-15-l2-reaudit/). The council's NOT-READY verdict
+STANDS; nothing was measured or armed. Session record:
+docs/run_reports/2026-08-16-t9-session.md (the ONE home for the arc,
+catches, rulings R-t9-1..7, and the launch-binding F3 cold-gate story —
+custody docs/process_traces/2026-08-16-launch-f3-coldgate/, self-contained).
+
+**SUCCESSOR ORDER:**
+1. **Phase-1 residue:** WO-CENSUS-SEMANTICS stays HARD-gated on ED-Q-L9-3.
+   Launch-binding: stage 3 MERGED #157 (bd333de, post-checkpoint); remaining
+   calibration-side stage 2 (coordinates with the staged C branch — same
+   file) + stage 4 successor flag, both Phase-2-coupled. WO-RECORDER-GRANT-IDENTITY (own cold gate) and
+   WO-PROOF-RUNNABILITY-REPAIR (proof-semantics trust gauntlet; restores the
+   proof-matrix automatic triggers) are queued kernel rows.
+2. **Phase 2 (the ruled order, council-verdict.md):** ONE atomic
+   successor-family re-freeze, LAST — folds the D-079 acceptance re-issue
+   (unblocks merging impl/wo-detect-pulses-budget), M-2 retirement, the
+   ALPHA/BETA --plan reconciliation, launch_lineage_required successor flag.
+   Then Phase 3 manifest SUPERSESSION + focused re-audit w/ adversarial
+   coverage re-enumeration; Phase 4 READY-candidate sitting, fresh cold pair.
+3. **ED-OWED (ONE batched session when convenient; nothing blocks on it
+   mid-Phase-1-residue):** unchanged from T8 (qualification script, dress
+   rehearsal, sampler checklist, rail probe, backlight rows, ED-Q-L9-3
+   EARLY, a9/a10 desk replay, ED-QUAL-L4-1) PLUS the three risk-appetite
+   calls now explicitly ONE FAMILY (recorder race, T-0 capture provenance,
+   hostile same-UID injection — the launch-consumption forged-context
+   limitation joined it this session) and the contrast-pack
+   pending-ratification ruling. The WO-CONSUMPTION-EDGE scientific rulings
+   (prefill test/direction, multiplicity family/m, p256 floor-or-transport,
+   production freeze + production-pack L10 replay) are RULING-REQUIRED
+   before gamma's edge can close.
+4. **Desk debt:** none carried — T9 report landed same-session; queue/kernel
+   closures and the consistency sweep landed at T9 close (this commit).
+
+**Standing cautions (T9 additions):** local-date convention bit three times
+in one session — date artifacts at write time from `date`, never from memory;
+one codex-run per background call (never `&`-fanout); never `| tail` a
+discriminating suite run; execution lenses need workspace-write + $TMPDIR;
+kernel edits = kernel + regen + test pins, one transaction; anchors cited to
+file:line and verified; regression lists attack-shaped.
+
+## ▶▶ T8 FINAL CHECKPOINT (2026-08-15, Ed clear order) (superseded by T9 above; kept as record)
 
 **Nothing in flight.** All Sol runs stopped/harvested, zero live codex
 processes, the ancient orphan watcher (pid 29679) killed, the stray
@@ -3593,7 +3646,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-15). Latest report: [T6 session 2026-08-13: three D-117 packs frozen and readiness work handed off](docs/run_reports/2026-08-13-t6-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-16). Latest report: [T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED](docs/run_reports/2026-08-16-t9-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -3605,7 +3658,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A0 `WO-T0-PRODUCER`: Implement the integrated nine-input T-0 producer, 600-second dwell, D-127 clock route, chain and manifest fixes, real-pack path regression, and terminal-review-trailer producer.
+- READY — A1 `WO-LAUNCH-BINDING`: Bind arm-capability consume to immediate frozen-chain exec and require authenticated launch-consumption provenance at downstream claim consumers.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
@@ -4297,8 +4350,10 @@ the top of this file.
 
 ## Known Workspace State
 
-- (2026-08-08 night, CURRENT checkpoint) `main` and `origin/main` are
-  both at `4c6a8fb558d7b979672dd4244efc797689785548`; the worktree is clean.
+- (2026-08-16 T9 close, CURRENT) `main` and `origin/main` at the T9
+  close-and-sweep head (see the T9 checkpoint above); the worktree is clean.
+- (2026-08-08 night, historical) `main` and `origin/main` were
+  both at `4c6a8fb558d7b979672dd4244efc797689785548`.
 - (2026-08-02, historical) `main` and `origin/main` at `bcbc10b`; working
   tree clean except the untracked private `CLAUDE.local.md` (Ed's;
   never commit) and `.desk/` (adjudication custody; never commit).
@@ -4341,9 +4396,9 @@ the top of this file.
 - The generated state-kernel regions in this file and `TASK_QUEUE.md` are
   IN SYNC with `docs/process/state_kernel.json`
   (`python3 scripts/gen_state.py --check` exits 0), and the kernel's own
-  content was refreshed on 2026-08-01 (desk adjudication session):
-  stamped `updated: 2026-08-01`, `latest_report` points at
-  `docs/run_reports/2026-08-01-desk-adjudication-session.md`, the MET
+  content was last refreshed at the T9 close (stamped `updated: 2026-08-16`,
+  `latest_report` → `docs/run_reports/2026-08-16-t9-session.md`); the
+  2026-08-01 refresh below is historical: the MET
   rows are folded in, the completed
   `FLOOR-LABEL-01`, `STACK-ID-BIND-01`, `P2-015`, and
   `COOLDOWN-JOIN-DA1-01` rows are retired to

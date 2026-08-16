@@ -1,0 +1,11 @@
+BOUNDED DESIGN CONSULT (read-only; 1 round; license to disagree) — WO-RECORDER-GRANT-IDENTITY pre-implementation design (rule-2 default; the WO carries its OWN future rule-11 cold gate, so this consult's output feeds a gate packet, not direct adoption).
+
+THE RULED SCOPE (binding context): docs/process_traces/2026-08-15-recorder-race-coldgate/composed-verdict.md + the decision-log "RECORDER CHECK-TO-GRANT RACE" entry: the minimal true cure is to stop allow_governed_extraction_spec (joulewise/authentication_io.py) re-resolving its argument — accept a caller-verified identity verbatim, or key the grant on an fd / (st_dev,st_ino) — which amends the recorder-adoption ruling's clause 2 ("no authentication_io.py change"). F-10's post-grant grant-delta verification (with the read-only accessor clause 2 currently forbids) folds in. NOT licensed as a caller-side patch. Ed's risk-appetite call may drop the WO to the registered limitation alone — so the design must be cleanly droppable/deferrable.
+
+DESIGN QUESTIONS:
+1. The grant-identity mechanism: fd-keyed vs (st_dev,st_ino)-keyed vs caller-verified-identity-verbatim — evaluate each against: atomicity vs the TOCTOU the cold gate executed (10/400, 7/1200 swap wins); hardlink/bind-mount aliasing (the gate proved fd-identity hardlink-defeated in its ROUND-2 formulation — what EXACTLY was defeated and does st_dev/st_ino share the defect?); API blast radius across all governed-vocabulary grant users (enumerate them); Python-level forgery honesty (in-process limits — state what CANNOT be claimed, per the launch-binding precedent).
+2. The D-138-style anchor discipline: cite every anchor to file:line and confirm it resolves (authentication_io.py's grant path; the recorder's invocation; the mint's).
+3. F-10 grant-delta verification: the read-only accessor design + what the delta proves.
+4. The gate packet shape: what the cold gate will need (executed race probes at the new boundary, the aliasing attacks, regression list — attack-shaped per the adversarial-review skill).
+5. Sequencing: any interaction with the Phase-2 re-freeze or the staged detect-pulses branch? (authentication_io.py is NOT in the D-079 pin set — confirm.)
+Report claude-codex-report/v1 genre review with per-question recommendation + rejected-alternatives table. Do NOT modify files.
