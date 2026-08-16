@@ -3,8 +3,10 @@
 The public author accepts only the committed pack and the D-134 custody root.
 It never accepts conclusions, evidence paths, hashes, probe output, or row
 states.  Irreducible operator observations and command captures live in the
-private custody input namespace; every machine-observable condition is
-re-derived here.
+private custody input namespace.  Fresh current-state conditions are probed
+again here; historical E-step captures are authenticated for canonical bytes,
+same-boot freshness, and ordering.  Their producer origin remains a
+trusted-operator limitation: v1 cannot detect deliberate operator fabrication.
 """
 
 from __future__ import annotations

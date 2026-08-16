@@ -19,6 +19,10 @@ from joulewise.detection_floor import (
     ATTRIBUTION_LIMIT_CLASS,
     attribution_single_count_discipline,
 )
+from joulewise.analysis_manifest_v3 import (
+    AnalysisManifestV3Error,
+    frozen_family_block_strata,
+)
 
 from .claims import CLAIM_OUTCOMES, evaluate_claim, ordered_reason_codes
 from .distributions import student_t_quantile, two_sided_student_t_p_value
@@ -675,16 +679,6 @@ def _validate_cross_field_claim_semantics(
 
     contrast_id = contrast.get("contrast_id")
     if isinstance(family, Mapping) and isinstance(contrast_id, str):
-        if _is_v3_claim_contrast(contrast) and not (
-            family.get("method") == "holm"
-            and _same_number(family.get("alpha"), 0.05)
-            and family.get("q") is None
-            and family.get("m") == 1
-            and family.get("contrast_ids") == [contrast_id]
-        ):
-            errors.append(
-                f"{where}.family_instance_id: v3 requires frozen Holm alpha=0.05 m=1"
-            )
         adjusted_values = family.get("adjusted_p_values")
         family_adjusted = (
             adjusted_values.get(contrast_id)
@@ -845,7 +839,107 @@ def _validate_cross_field_claim_semantics(
         errors.append(f"{where}.claim_evaluation.claim_level_ceiling: non-ready result must be below L2")
 
 
-def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
+def _family_semantics_from_manifest(
+    family: Mapping[str, Any],
+) -> dict[str, Any]:
+    multiplicity = family.get("multiplicity")
+    return {
+        "family_instance_id": family.get("family_instance_id"),
+        "plan_id": family.get("plan_id"),
+        "claim_role": family.get("claim_role"),
+        "method": (
+            multiplicity.get("method")
+            if isinstance(multiplicity, Mapping)
+            else None
+        ),
+        "alpha": (
+            multiplicity.get("alpha")
+            if isinstance(multiplicity, Mapping)
+            else None
+        ),
+        "q": (
+            multiplicity.get("q")
+            if isinstance(multiplicity, Mapping)
+            else None
+        ),
+        "m": (
+            multiplicity.get("m")
+            if isinstance(multiplicity, Mapping)
+            else None
+        ),
+        "contrast_ids": family.get("contrast_ids"),
+    }
+
+
+def _family_semantics_from_artifact(
+    family: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        key: family.get(key)
+        for key in (
+            "family_instance_id",
+            "plan_id",
+            "claim_role",
+            "method",
+            "alpha",
+            "q",
+            "m",
+            "contrast_ids",
+        )
+    }
+
+
+def _validate_frozen_family_semantics(
+    artifact: Mapping[str, Any],
+    frozen_manifest: Mapping[str, Any],
+    errors: list[str],
+) -> None:
+    """Bind emitted family policy to the already-authenticated manifest."""
+
+    inputs = artifact.get("inputs")
+    link = (
+        inputs.get("analysis_manifest")
+        if isinstance(inputs, Mapping)
+        else None
+    )
+    if (
+        not isinstance(link, Mapping)
+        or link.get("manifest_id") != frozen_manifest.get("manifest_id")
+    ):
+        errors.append(
+            "artifact.inputs.analysis_manifest.manifest_id: disagrees with frozen manifest"
+        )
+
+    manifest_families = frozen_manifest.get("families")
+    artifact_families = artifact.get("families")
+    if not isinstance(manifest_families, list) or not isinstance(
+        artifact_families, list
+    ):
+        errors.append("artifact.families: frozen manifest family semantics are absent")
+        return
+    expected = [
+        _family_semantics_from_manifest(family)
+        for family in manifest_families
+        if isinstance(family, Mapping)
+    ]
+    observed = [
+        _family_semantics_from_artifact(family)
+        for family in artifact_families
+        if isinstance(family, Mapping)
+    ]
+    if expected != observed or len(expected) != len(manifest_families) or len(
+        observed
+    ) != len(artifact_families):
+        errors.append(
+            "artifact.families: disagrees with frozen analysis-manifest family semantics"
+        )
+
+
+def validate_claim_verdicts(
+    value: Mapping[str, Any],
+    *,
+    frozen_manifest: Mapping[str, Any] | None = None,
+) -> list[str]:
     """Return every structural/canonical error in a v1 verdict artifact."""
 
     errors: list[str] = []
@@ -1491,6 +1585,8 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             "structural_status"
         ] not in {"complete", "invalid"}:
             errors.append(f"{where}.structural_status: invalid")
+    if frozen_manifest is not None:
+        _validate_frozen_family_semantics(value, frozen_manifest, errors)
 
     contrasts = value.get("contrasts")
     if not isinstance(contrasts, list):
@@ -2965,7 +3061,6 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                     )
 
         loo_by_id: dict[str, dict[str, Mapping[str, Any]]] = {}
-        omission_ids: set[str] = set()
         for contrast_id in ids:
             loo = contrast_by_id[contrast_id].get("loo")
             rows = loo.get("rows") if isinstance(loo, Mapping) else None
@@ -2976,11 +3071,52 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
                         row.get("omitted_block_id"), str
                     ):
                         indexed[row["omitted_block_id"]] = row
-                        omission_ids.add(row["omitted_block_id"])
             loo_by_id[contrast_id] = indexed
-        for omitted_block_id in sorted(omission_ids):
+
+        omission_groups: list[tuple[str, dict[str, str]]] = []
+        family_uses_abba_v3 = any(
+            _is_v3_claim_contrast(contrast_by_id[contrast_id])
+            for contrast_id in ids
+        )
+        if frozen_manifest is not None and family_uses_abba_v3:
+            try:
+                frozen_strata = frozen_family_block_strata(
+                    frozen_manifest, family_id
+                )
+            except AnalysisManifestV3Error as exc:
+                errors.append(
+                    f"artifact.families[{family_id}]: frozen block strata are invalid: {exc}"
+                )
+            else:
+                if all(
+                    all(contrast_id in block_ids for contrast_id in ids)
+                    for _, block_ids in frozen_strata
+                ):
+                    omission_groups = [
+                        (f"stratum-{block_number}", block_ids)
+                        for block_number, block_ids in frozen_strata
+                    ]
+        else:
+            omission_sets = [set(loo_by_id[contrast_id]) for contrast_id in ids]
+            if omission_sets and all(
+                omission_set == omission_sets[0]
+                for omission_set in omission_sets[1:]
+            ):
+                omission_groups = [
+                    (
+                        omitted_block_id,
+                        {
+                            contrast_id: omitted_block_id
+                            for contrast_id in ids
+                        },
+                    )
+                    for omitted_block_id in sorted(omission_sets[0])
+                ]
+
+        for omitted_stratum, block_id_by_contrast in omission_groups:
             loo_raw: dict[str, float | None] = {}
             for contrast_id in ids:
+                omitted_block_id = block_id_by_contrast[contrast_id]
                 row = loo_by_id[contrast_id].get(omitted_block_id)
                 candidate = row.get("raw_p") if isinstance(row, Mapping) else None
                 loo_raw[contrast_id] = (
@@ -2997,11 +3133,12 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
             except (TypeError, ValueError):
                 continue
             for contrast_id in ids:
+                omitted_block_id = block_id_by_contrast[contrast_id]
                 row = loo_by_id[contrast_id].get(omitted_block_id)
                 if row is None:
                     continue
                 loo_where = (
-                    f"artifact.contrasts[{contrast_id}].loo[{omitted_block_id}]"
+                    f"artifact.contrasts[{contrast_id}].loo[{omitted_stratum}:{omitted_block_id}]"
                 )
                 expected_adjusted = loo_adjusted[contrast_id]["adjusted_p"]
                 observed_adjusted = row.get("adjusted_p")
@@ -3351,17 +3488,32 @@ def validate_claim_verdicts_for_claim_index(value: Any) -> list[str]:
     return list(dict.fromkeys(errors))
 
 
-def finalize_claim_verdicts(value: Mapping[str, Any]) -> dict[str, Any]:
+def finalize_claim_verdicts(
+    value: Mapping[str, Any],
+    *,
+    frozen_manifest: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     artifact = dict(value)
     artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
-    errors = validate_claim_verdicts(artifact)
+    errors = validate_claim_verdicts(
+        artifact,
+        frozen_manifest=frozen_manifest,
+    )
     if errors:
         raise ClaimArtifactError("invalid claim-verdict artifact: " + "; ".join(errors))
     return artifact
 
 
-def write_claim_verdicts_atomic(path: Path, value: Mapping[str, Any]) -> None:
-    errors = validate_claim_verdicts(value)
+def write_claim_verdicts_atomic(
+    path: Path,
+    value: Mapping[str, Any],
+    *,
+    frozen_manifest: Mapping[str, Any] | None = None,
+) -> None:
+    errors = validate_claim_verdicts(
+        value,
+        frozen_manifest=frozen_manifest,
+    )
     if errors:
         raise ClaimArtifactError("refusing to write invalid artifact: " + "; ".join(errors))
     path = Path(path)

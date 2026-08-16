@@ -45,6 +45,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.bundle import sanitize_id_component  # noqa: E402
+from joulewise.arm_readiness import (  # noqa: E402
+    LaunchLineageError,
+    authenticate_campaign_launch_lineage,
+    launch_lineage_required,
+    render_json,
+)
 from joulewise.cli import validate_bundle  # noqa: E402
 from joulewise.bundle_read import (  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
@@ -1446,6 +1452,107 @@ def discover_configs(config_dir: Path) -> list[Path]:
         for path in config_dir.glob("*.json")
         if path.name not in NON_CONFIG_SIDECARS
     )
+
+
+def authenticate_campaign_writer_preflight(
+    configs: Sequence[Path], runs_dir: Path
+) -> dict[str, Any] | None:
+    """Outer campaign gate; the bundle writer repeats this independently."""
+
+    marker_states = [_config_requires_launch_lineage(path) for path in configs]
+    if not any(marker_states):
+        return None
+    if not all(marker_states):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "campaign config selection mixes marker-bearing and legacy configs",
+        )
+    return authenticate_campaign_launch_lineage(
+        runs_dir, config_paths=configs
+    )
+
+
+def _config_requires_launch_lineage(path: Path) -> bool:
+    try:
+        value = json.loads(path.read_bytes())
+    except (OSError, json.JSONDecodeError):
+        # The established config preflight owns malformed-config diagnostics.
+        # Treat it as non-marker so legacy error order remains unchanged.
+        return False
+    return launch_lineage_required(value)
+
+
+def _refuse_marker_bearing_axi(configs: Sequence[Path]) -> None:
+    if any(_config_requires_launch_lineage(path) for path in configs):
+        raise LaunchLineageError(
+            "launch_lineage_axi_unsupported",
+            "marker-bearing AXI campaigns require the Phase-2 nested-root release gate",
+        )
+
+
+def authenticate_campaign_child_launch_lineage(
+    outer_authentication: Mapping[str, Any] | None,
+    bundle_paths: Sequence[Path],
+) -> None:
+    """Bind finalized child metadata to the lineage authenticated preflight."""
+
+    if outer_authentication is None:
+        return
+    outer_lineage = outer_authentication.get("launch_lineage")
+    outer_locator_digest = outer_authentication.get("locator_sha256")
+    if not isinstance(outer_lineage, Mapping) or not isinstance(
+        outer_locator_digest, str
+    ):
+        raise LaunchLineageError(
+            "launch_lineage_conflict",
+            "outer launch authentication lacks its lineage or locator digest",
+        )
+    outer_lineage_raw = render_json(outer_lineage)
+    for bundle_path in bundle_paths:
+        if not bundle_path.exists():
+            continue
+        try:
+            metadata = json.loads((bundle_path / "metadata.json").read_bytes())
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise LaunchLineageError(
+                "launch_lineage_conflict",
+                f"child bundle lacks readable launch metadata: {bundle_path}",
+            ) from exc
+        extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+        child_lineage = (
+            extra.get("launch_lineage") if isinstance(extra, Mapping) else None
+        )
+        child_locator_digest = (
+            extra.get("launch_lineage_locator_sha256")
+            if isinstance(extra, Mapping)
+            else None
+        )
+        if (
+            not isinstance(child_lineage, Mapping)
+            or render_json(child_lineage) != outer_lineage_raw
+            or child_locator_digest != outer_locator_digest
+        ):
+            raise LaunchLineageError(
+                "launch_lineage_conflict",
+                "child bundle launch lineage differs from outer preflight",
+            )
+
+
+def run_authenticated_campaign_child(
+    command: Sequence[str],
+    *,
+    env: Mapping[str, str] | None,
+    outer_authentication: Mapping[str, Any] | None,
+    bundle_paths: Sequence[Path],
+) -> subprocess.CompletedProcess[Any]:
+    """Run one ordinary child and authenticate its preserved bundle stamps."""
+
+    completed = subprocess.run(command, check=False, env=env)
+    authenticate_campaign_child_launch_lineage(
+        outer_authentication,
+        bundle_paths,
+    )
+    return completed
 
 
 def print_config_file_list(configs: list[Path]) -> None:
@@ -6327,6 +6434,7 @@ def run_axi_spec_campaign(
     policy_binding: CampaignPolicyBinding | None = None,
     log_path: Path | None = None,
     preflight: dict[str, Any] | None = None,
+    launch_authentication: Mapping[str, Any] | None = None,
 ) -> int:
     """Dispatch a frozen v2 manifest with immutable per-attempt evidence.
 
@@ -6355,6 +6463,10 @@ def run_axi_spec_campaign(
             print("error: AXI manifest entries require repetitions == 1", file=sys.stderr)
             return 2
         config_infos[entry["entry_id"]] = loaded
+
+    _refuse_marker_bearing_axi(
+        [info.path for info in config_infos.values()]
+    )
 
     evidence_root = runs_dir / "axi_attempt_evidence" / manifest_id
     identities_dir = evidence_root / "attempt_identities"
@@ -6657,8 +6769,19 @@ def run_axi_spec_campaign(
                     return 1
             dispatch_error: OSError | None = None
             try:
-                completed = subprocess.run(
-                    command, check=False, env=child_environment
+                completed = run_authenticated_campaign_child(
+                    command,
+                    env=child_environment,
+                    outer_authentication=launch_authentication,
+                    bundle_paths=[
+                        _axi_attempt_bundle_path(
+                            runs_dir,
+                            manifest_id,
+                            entry_id,
+                            attempt_ordinal,
+                            info.run_id,
+                        )
+                    ],
                 )
                 exit_code: int | None = completed.returncode
             except OSError as exc:
@@ -7156,6 +7279,13 @@ def run_campaign(args: argparse.Namespace) -> int:
         if order_warning is not None:
             print(order_warning, file=sys.stderr)
         configs = apply_order_manifest(discover_configs(config_dir), order_entries)
+    if analysis_manifest is not None and analysis_manifest.is_axi_v2:
+        _refuse_marker_bearing_axi(configs)
+    launch_authentication = None
+    if not args.dry_run:
+        launch_authentication = authenticate_campaign_writer_preflight(
+            configs, runs_dir
+        )
     order_by_config = order_entry_by_config(order_entries)
     print_config_file_list(configs)
     doctor_gate = config_warning_gate(
@@ -7222,6 +7352,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             policy_binding=policy_binding,
             log_path=log_path,
             preflight=preflight,
+            launch_authentication=launch_authentication,
         )
     items = read_config_infos(configs, order_by_config)
     waivers = load_waivers(args.waivers)
@@ -7750,7 +7881,12 @@ def run_campaign(args: argparse.Namespace) -> int:
                 continue
 
             start = time.monotonic()
-            result = subprocess.run(command, check=False, env=child_environment)
+            result = run_authenticated_campaign_child(
+                command,
+                env=child_environment,
+                outer_authentication=launch_authentication,
+                bundle_paths=expected_member_dirs(info, runs_dir),
+            )
             duration_s = time.monotonic() - start
             exit_code = result.returncode
             physical_cooldowns = _physical_cooldown_evidence_for_config(
@@ -7993,6 +8129,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.whole_window_verdict:
             return run_whole_window_verdict(args)
         return run_campaign(args)
+    except LaunchLineageError as exc:
+        print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
+        return 2
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

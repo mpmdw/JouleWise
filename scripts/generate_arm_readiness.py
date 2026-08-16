@@ -16,7 +16,6 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.arm_readiness import (  # noqa: E402
     ArmReadinessError,
-    consume_launch_capability,
     generate_arm_receipt,
     generate_dry_run_receipt,
     generate_freeze_receipt,
@@ -108,10 +107,10 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "verify":
             result = verify_arm_receipt(args.pack_root, args.arm_receipt)
         else:
-            result = consume_launch_capability(
-                args.pack_root,
-                args.arm_receipt,
-                args.window_custody_root,
+            raise ArmReadinessError(
+                "readiness_usage_invalid",
+                "standalone consume is retired; Ed must invoke "
+                "scripts/launch_window.py for the reviewed consume-to-exec route",
             )
         if read_only and before != _pack_snapshot(args.pack_root):
             raise ArmReadinessError(

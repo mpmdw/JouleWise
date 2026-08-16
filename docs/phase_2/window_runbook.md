@@ -864,6 +864,19 @@ arming; they do not authorize the live night.
    and stderr, and publishes one no-clobber canonical capture. Do not run the
    wrapped command separately.
 
+   This is a production-interface and ceremony rule, not independent producer
+   attestation. When faithfully invoked, the wrapper derives the commands,
+   timestamps, identities, and digests; the author authenticates canonical
+   bytes, same-boot freshness/order, and fresh current-state probes. Direct
+   JSON authorship, modified library invocation, clock/execution substitution,
+   or edits to `arm_readiness.t0.inputs` violate procedure but are not
+   mechanically detectable in v1. T-0 capture provenance is
+   **TRUSTED-OPERATOR**: deliberate operator fabrication is not defended
+   against. The real binding to a real quiet window is Ed's human §5A tap, the
+   terminal-review attestation, and the single-operator assumption. The
+   terminal-review commit attests the reviewed tree and pack, not runtime
+   capture provenance.
+
    ```sh
    WINDOW_PLAN_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness/window-plan
    . "$WINDOW_PLAN_ROOT/window.env"
@@ -931,7 +944,7 @@ arming; they do not authorize the live night.
        --window-plan-root "$WINDOW_PLAN_ROOT"
      ```
 
-   - **E-9:** capture the full reservation superset. The tool always derives
+   - **E-9a:** capture the full reservation superset. The tool always derives
      `--plan` from the same R2 reference used by E-8 and includes `--ledger`,
      `--head-pin`, every identity/root argument, and `--execute`:
 
@@ -943,17 +956,32 @@ arming; they do not authorize the live night.
      ```
 
    Any nonzero command, invalid result identity, boot change, out-of-order
-   call, or existing output path refuses. After E-9, the private input
+   call, or existing output path refuses. After E-9a, the private input
    namespace contains exactly the six captures plus `clock-attestation.json`,
    `arm-context.json`, and `launch-manifest.json`.
+
+   The terminal handback record must state:
+
+   > I personally performed §5A and invoked the unmodified production CLI for
+   > E-4 through E-9a on the recorded boot; I did not create or edit any
+   > `arm_readiness.t0.inputs` file or substitute clock/execution functions;
+   > E-7b remained under wrapper control until READY; launch followed
+   > successful E-9b authoring, E-9c ARM and verify, and my single E-10
+   > invocation of the sole reviewed launcher, which consumed the arm
+   > capability atomically — I ran no separate consume command.
+
+   Bind that attestation to the operator identity, boot UUID, HEAD/tree/pack,
+   all nine input hashes, and the arm/consumption receipts. This is the human
+   record of the trusted-operator ceremony, not mechanically independent
+   producer attestation.
 
    Do not look for a visible `ready_to_arm` field: the enforcing checks are
    internal to reservation and writer, and no diagnostic word (`clean`,
    `ready`) licenses anything. `needs_pin_commit: true` is desk work and ends
    the attempt; no override exists at night.
 
-   Immediately after E-9, author the fifteen T-0 source/evidence pairs as an
-   explicit E-step:
+   - **E-9b:** immediately after E-9a, author the fifteen T-0 source/evidence
+   pairs:
 
    ```sh
    python3 scripts/author_arm_evidence_t0.py \
@@ -962,10 +990,11 @@ arming; they do not authorize the live night.
    ```
 
    Eleven volatile evidence kinds carry a **20-minute monotonic horizon**
-   from authoring. That is the operator's visible clock: do not start any new
+   beginning at E-9b. That is the operator's visible clock: do not start any new
    agent, browser, `caffeinate`, monitor, maintenance, or other polling
-   process after authoring. Run ARM immediately, then verify and consume. The
-   four procedural evidence kinds retain their separate six-hour horizon;
+   process after authoring. Run ARM immediately, verify it, stop for Ed's
+   inspection, and then invoke E-10. The four procedural evidence kinds
+   retain their separate six-hour horizon;
    they do not extend the volatile evidence.
 
    A reboot or any HEAD change voids the authored receipts. Before
@@ -980,9 +1009,9 @@ arming; they do not authorize the live night.
      "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.inputs"
    ```
 
-   Then repeat E-4 through E-9 and T-0 authoring; never reuse a pre-reboot or
-   pre-HEAD-change receipt. ARM is the following command and must be the next
-   new process after the author exits:
+   Then repeat E-4 through E-9b; never reuse a pre-reboot or pre-HEAD-change
+   receipt. **E-9c** is ARM followed by verify, and ARM must be the next new
+   process after the author exits:
 
    ```sh
    python3 scripts/generate_arm_readiness.py arm \
@@ -1009,29 +1038,45 @@ arming; they do not authorize the live night.
    ```
 
    Require the exact unexpired, unsuperseded `PASS`/`GO` result. That result
-   remains necessary evidence, never launch authority.
-3. ARM: first atomically consume that exact arm receipt:
+   remains necessary evidence, never launch authority. Stop at this boundary
+   so Ed can personally inspect the complete `PASS`/`GO` result. No verdict,
+   author, verifier, or other automated command may cross this boundary.
+3. **E-10 — Ed's deliberate physical launch:** after that inspection, Ed
+   personally invokes the sole reviewed launcher exactly once:
 
    ```sh
-   python3 scripts/generate_arm_readiness.py consume \
+   .venv/bin/python scripts/launch_window.py \
      --pack-root "$PACK_ROOT" \
      --arm-receipt "$ARM_RECEIPT" \
-     --window-custody-root "$ARM_READINESS_CUSTODY_ROOT"
+     --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+     --launch-manifest "$LAUNCH_MANIFEST"
    ```
 
-   Consumption re-authenticates the unsuperseded `GO` receipt, current
-   pack/HEAD, roots, backup destinations, and campaign locks, then atomically
-   creates a no-clobber receipt below
-   `ARM_READINESS_CUSTODY_ROOT/PACK_ID/arm_readiness.consumptions/`. **The capability
-   licenses exactly one launch; it never performs one.** After successful
-   consumption, Ed—not the command—performs the physical foreground launch
-   from an ordinary shell using the frozen launch recipe and absolute plan
-   root. The chain begins with the frozen 180-second settle; Ed steps away
-   immediately after launch and does not touch or monitor the machine.
+   This one invocation generates the anonymous-FD handoff, atomically creates
+   and fsyncs the no-clobber consumption primary (the single-use
+   linearization point), publishes its sidecar, replays
+   `verify_consumed_launch`, and calls `execve` on the exact frozen foreground
+   argv. It neither spawns and returns nor retries. The chain begins with the
+   frozen 180-second settle; Ed steps away immediately after invoking E-10 and
+   does not touch or monitor the machine. Standalone `consume`, direct
+   `window-chain.zsh`, and direct stage invocations are not production routes.
+   The retained `generate_arm_readiness.py consume` CLI now refuses with
+   registered `readiness_usage_invalid` and points to
+   `scripts/launch_window.py`; it is not a compatibility launch path.
    This supersedes the pre-D-117 §5A instruction to settle 180 seconds by
    hand before launching: the settle is inside the chain.
-   Inside the chain, the writer's enforcing pre-slot check gates each
-   calibration slot, and the automatic §5B screen gates member 1.
+   **Current implementation boundary (2026-08-15 fix round):** the launcher
+   enforces consume → revalidate → exact `execve`, and marker-bearing campaign
+   collection enforces exact pack-config membership plus outer/inner lineage
+   agreement. Calibration-slot writer enforcement is not implemented yet;
+   neither the three frozen D-117 packs nor their current configs may be
+   changed in place to add the marker. Calibration-side stage 2, downstream
+   reduce/extract/mint stages 3–4, and the Phase-2 successor-family marker
+   freeze remain required. Therefore this E-10 command is a documented target
+   procedure, **not current authority to launch**: every D-117 physical launch
+   remains NO-GO until those gates and the full review gauntlet close. The
+   automatic §5B screen gates member 1 only after that launch-readiness state
+   exists.
    "Exactly once" means once per frozen bracket-session attempt; a
    prospectively licensed new attempt (below) is a new frozen session,
    never a relaunch of the same one. If consumption succeeds but the physical
@@ -1044,7 +1089,9 @@ arming; they do not authorize the live night.
    `needs_pin_commit: true`, an unmapped failure, or failed preservation
    ends the night. A §5B level failure ends the current attempt; only a
    pre-registered retry after a named cause has been removed may begin a
-   newly frozen session. For non-ledger failures, send the lead the
+   newly frozen session. Any failure after the no-clobber consumption primary
+   burns the attempt permanently, including sidecar publication, replay, or
+   `execve` failure. For non-ledger failures, send the lead the
    exact observed condition and complete output (plus the operator ABORT
    alias if using the packet's reporting table). A refused night is
    evidence, not an obstacle course.
@@ -1058,6 +1105,17 @@ gate and lead verification above are human gates: the corpus feeds the
 desk verdict, it never replaces it.
 
 ## 6. The foreground measurement chain
+
+`window-chain.zsh` is private to `scripts/launch_window.py`. It is never an
+operator entrypoint. Its first executable action authenticates the inherited
+anonymous-FD handoff against the v2 consumption receipt and atomically emits
+the immutable start receipt before any settle, directory mutation, or
+collection. The implemented campaign gate applies only when a config already
+carries the exact `launch_lineage_required` run-metadata tag. No current
+frozen D-117 config carries that marker. Adding it is a Phase-2 successor-pack
+freeze transaction, never an in-place repair of frozen bytes; calibration-side
+stage 2 and downstream stages 3–4 also remain open. Until they land and pass
+review, the private chain is not launch-ready and E-10 remains NO-GO.
 
 ### D-117 §6 amendment — durable bracket dispatch and slot resume
 
@@ -1118,7 +1176,9 @@ The reservation argv is deliberately the superset: `--ledger` and
 three is a launch-procedure error.
 
 Save the following as `WINDOW_PLAN_ROOT/window-chain.zsh`, review it, and
-record its SHA-256 before closing all agents:
+record its SHA-256 before closing all agents. `window.env` must additionally
+bind the absolute `ARM_RECEIPT`, `ARM_READINESS_CUSTODY_ROOT`, and
+`LAUNCH_MANIFEST` paths used by E-10:
 
 ```zsh
 #!/bin/zsh
@@ -1129,6 +1189,17 @@ source "$WINDOW_PLAN_ROOT/window.env"
 
 REPO=/Users/edr/JouleWise-measurement-20260813
 PY="$REPO/.venv/bin/python"
+
+# First executable action: consume the inherited one-use FD and mint start
+# custody. Direct shell invocation has no FD 198 and refuses
+# launch_handoff_invalid before settle or collection.
+"$PY" "$REPO/scripts/launch_window.py" \
+  --pack-root "$PACK_ROOT" \
+  --arm-receipt "$ARM_RECEIPT" \
+  --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+  --launch-manifest "$LAUNCH_MANIFEST" \
+  --lifecycle-event start
+
 POLICY="$REPO/configs/campaign_policies/quiet_mac_p2_production.json"
 REF_ROOT="$REPO/configs/campaigns/window_references"
 BOUND_CONFIG_ROOT="$REPO/configs/campaigns/neg8_reference_corpus"
@@ -1263,6 +1334,18 @@ echo "$(timestamp) chain_start" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 # Final settle is chain-owned (D-117 §5C): operator activity ends at launch,
 # and §1's post-activity settle happens here, before the pre-calibration.
 settle
+"$PY" "$REPO/scripts/launch_window.py" \
+  --pack-root "$PACK_ROOT" \
+  --arm-receipt "$ARM_RECEIPT" \
+  --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+  --launch-manifest "$LAUNCH_MANIFEST" \
+  --lifecycle-event settle
+# Settle publishes BOTH fixed locators, each with its GNU SHA-256 sidecar:
+#   $RUNS_ROOT/.joulewise-launch-lineage.json
+#   $BOUND_RUNS_ROOT/.joulewise-launch-lineage.json
+# Publication is canonical, no-clobber, file-fsynced, and directory-fsynced.
+# Any primary/sidecar/root failure burns this attempt and set -e stops here,
+# before pre-calibration or collection; never repair a partial publication.
 echo "$(timestamp) launch_settle_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 
 PRE_CAL_CUSTODY="$(calibrate_slot pre "$PRE_ATTEMPT_ID")"
@@ -1297,19 +1380,41 @@ run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/end_triplet" "$PRE_CAL_CUSTODY" \
 
 POST_CAL_CUSTODY="$(calibrate_slot post "$POST_ATTEMPT_ID")"
 echo "$(timestamp) post_calibration=$POST_CAL_CUSTODY" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+"$PY" "$REPO/scripts/launch_window.py" \
+  --pack-root "$PACK_ROOT" \
+  --arm-receipt "$ARM_RECEIPT" \
+  --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+  --launch-manifest "$LAUNCH_MANIFEST" \
+  --lifecycle-event completion
 echo "$(timestamp) measurement_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 ```
 
-After every agent is closed, launch exactly once:
+E-10's launcher `execve`s the manifest's exact
+`/usr/bin/caffeinate -is /bin/zsh …/window-chain.zsh …` argv. That
+`caffeinate` is the one reviewed keep-awake process for the window. The T-0
+census in §5 is taken before E-10 and must find no `caffeinate` at all; after
+E-10, exactly one exists and it is the chain's parent. Do not invoke that argv
+directly or start a second one for any reason.
 
-```sh
-caffeinate -is /bin/zsh "$WINDOW_PLAN_ROOT/window-chain.zsh" "$WINDOW_PLAN_ROOT"
-```
-
-This `caffeinate` is the one reviewed keep-awake process for the window. The
-T-0 census in §5 is taken before this command runs and must find no
-`caffeinate` at all; after it runs, exactly one exists and it is the chain's
-parent. Do not start a second one for any reason.
+Every marker-bearing campaign invocation derives the constant locator from
+its resolved `--runs-dir`. The outer campaign preflight authenticates both
+root locators, the consumption→arm→start→settle chain, the current collection
+boot and reviewed HEAD, the frozen recipe and exact argv, the authenticated
+pack config membership, the selected arm-context root, and completion
+absence before taking the campaign lock or creating provenance. The inner
+bundle writer independently authenticates the exact CLI-selected config bytes
+as a member of the frozen inventory before creating each bundle. It stamps the
+full authenticated object at `metadata.json` → `extra` → `launch_lineage` and
+the selected locator's authenticated content digest at
+`launch_lineage_locator_sha256`. After each child returns, the outer campaign
+reopens that metadata and requires canonical lineage-byte and locator-digest
+equality with its retained preflight result; disagreement is terminal
+`launch_lineage_conflict`, with the bundle preserved. No receipt path, lineage
+JSON, or token is transported in argv or environment. Writer authentication
+proves that consumption occurred within the arm horizon; it does not reapply
+that short T-0 horizon during a multi-hour window. This paragraph describes
+the implemented marker-bearing campaign gate only, not the still-deferred
+calibration or downstream gates and not present launch authority.
 
 Expected visible behavior: each stage pauses for the 180-second settle, prints
 a 20-second arming countdown, sleeps the display, re-probes the governed
@@ -1493,6 +1598,12 @@ Fresh-process recovery examples:
 | `whole_window_drift_allowance_unrecorded` | A passing basis lacks an authenticated family allowance, or a claim omitted its named allowance term. | Refuse the affected floor/claim. Never substitute zero; rerun the governed verdict/extraction path or recollect if provenance cannot be restored. |
 | `whole_window_campaign_membership_unresolved` | Campaign-log provenance is missing, ambiguous, duplicated, or unbound. | Repair custody or recollect. Do not replace manifest evidence with a directory scan. |
 | `whole_window_verdict_conflict` | Different stored verdict rows purport to govern one basis, or verdict history is malformed. | Stop. Latest-wins is forbidden; preserve the conflict and mint a genuinely new basis if needed. |
+| `launch_consumption_missing` | A marker-bearing claim input lacks its required v2 consumption reference, primary, or sidecar. | Refuse the stage. Preserve any bytes only as diagnostic evidence; issue a newly frozen bracket session and ARM receipt. Never reconstruct or attach a receipt after collection. |
+| `launch_consumption_invalid` | Consumption or lifecycle custody is noncanonical, schema-invalid, has a bad sidecar/digest, or has an invalid predecessor chain. | Stop and preserve the entire namespace. The attempt is burned; no repair-in-place or retry exists. |
+| `launch_binding_mismatch` | Valid receipts disagree on pack, plan, HEAD, arm context, collection boot, session, roots, launch-recipe bytes, or argv. | Refuse the claim basis and preserve the mismatch. Recovery is a new frozen session and capability, never a relabel. |
+| `launch_lineage_conflict` | Members or artifacts name more than one consumption/pack/boot lineage. | Refuse the aggregate. Never choose latest or majority lineage; recollect one coherent window. |
+| `launch_lifecycle_incomplete` | Start or settle is absent, or completion is absent at verdict/extraction/mint. | Treat the attempt as burned and non-claim-bearing. Preserve partial receipts and any collected bytes as diagnostics only. |
+| `launch_handoff_invalid` | Chain entry lacks FD 198, the one-use token hash disagrees, or the handoff/start is replayed. | Refuse before settle or collection. Do not pass a token by argv, environment, or file and do not retry the consumed attempt. |
 | `incomplete_existing` or an occupied run ID | A failed or interrupted bundle already owns the path. | Strict-validate and preserve it, move it outside the runs root, rerun the exact config, then record supersession. |
 | `another campaign appears to be running` | A live process or stale `campaign.lock` owns the root. | Check the PID. Stop for a live PID. Move a dead lock to quarantine; never delete an unreadable lock blindly. |
 | Operator touches display, input, lid, or power | The governed state changed during the window. | Lose the active member. If supply identity changed, end the entire window and start a new root with new calibrations and a new bound. |
@@ -1674,6 +1785,12 @@ Record:
 - the reviewed-head dry-run receipt path and SHA-256;
 - the final arm-receipt path and SHA-256;
 - the launch-consumption receipt path and SHA-256;
+- the linked launch-start, launch-settle, and launch-completion receipt paths
+  and SHA-256 values (completion is mandatory before verdict, extraction, or
+  mint);
+- the one consumption SHA-256 carried byte-for-byte by every marker-bearing
+  bundle/calibration metadata record, whole-window basis, extraction report,
+  and mint input;
 - the root-preflight receipt path and SHA-256;
 - the waiver receipt path and SHA-256;
 - the backup-preflight receipt path and SHA-256;
