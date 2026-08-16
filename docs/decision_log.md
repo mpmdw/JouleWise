@@ -9174,8 +9174,9 @@ Consult custodied: docs/process_traces/2026-08-15-launcher-binding-consult/
 without ceremony not machine-caught; confirmed by both DG lenses).
 
 **Ruling:**
-1. Every D-117 physical launch is NO-GO until machine-enforced: one
-   reviewed launcher (scripts/launch_window.py), invoked PERSONALLY by
+1. Every D-117 physical launch is NO-GO until machine-enforced: the sole
+   supported production route is the reviewed launcher
+   (scripts/launch_window.py), invoked PERSONALLY by
    Ed after inspecting the ARM verification result, performing: atomic
    no-clobber consumption-primary claim (the single-use linearization
    point, fsynced) → verify_consumed_launch replay (arm receipt/PASS/GO/
@@ -9196,6 +9197,63 @@ without ceremony not machine-caught; confirmed by both DG lenses).
    the cold review rides the gauntlet.
 5. Execution = WO-LAUNCH-BINDING (council Phase 1); runbook §6/E-step
    deltas + the ceremony-skip regression battery per the consult.
+
+### D-134/D-137 launcher-binding amendment — 2026-08-15
+
+D-134 clause 8 is narrowed: the reviewed launcher is the sole supported
+production route for atomically claiming the single-launch capability;
+Python does not authenticate its caller.  The atomic no-clobber primary is
+the single-use enforcement.  The consumption receipt alone does not prove a
+launch. Authorization attaches only to the chain start descended from the
+one-use inherited anonymous-FD handoff.
+
+The following clauses are added to D-134:
+
+11. The sole production entrypoint performs consume → revalidate → `execve`;
+    Ed invokes it personally after inspecting ARM `PASS`/`GO`, and no
+    automated verdict invokes it.
+12. Consumption is irrevocable. Start, settle, and completion are append-only
+    successor receipts; absence or any post-claim failure never reopens the
+    capability.
+13. Collection, post-hoc reduction, whole-window verdict, extraction, and
+    mint independently authenticate launch lineage using the D-078 vocabulary
+    registered below. Backup and quarantine remain available on refusal.
+14. Crash injection, race, ceremony-bypass, mutation, and every-downstream-
+    stage tests are release gates for this mechanism.
+
+D-137 is clarified accordingly: current-boot comparison applies through the
+launcher and chain entry. Historical postcollection consumers compare the
+boot identity recorded in the consumption, lifecycle, and bundle records to
+one another, not to the machine's current boot, so a later reboot does not
+destroy otherwise valid immutable evidence.
+
+### D-078 registry amendment — 2026-08-15: launch-consumption lineage refusals
+
+D-078's closed claim-refusal vocabulary is amended additively for the adopted
+WO-LAUNCH-BINDING contract. The following six exact spellings are registered
+at collection, post-hoc reduction, bound derivation, whole-window verdict,
+extraction, and mint boundaries; no synonym, generic provenance downgrade, or
+latest-wins interpretation is permitted:
+
+- `launch_consumption_missing` — a required consumption reference, primary,
+  or sidecar is absent;
+- `launch_consumption_invalid` — consumption/lifecycle custody is
+  noncanonical or schema-invalid, has a bad sidecar/digest or namespace, or
+  has an invalid predecessor chain;
+- `launch_binding_mismatch` — authenticated records disagree on pack, plan,
+  reviewed HEAD, arm context, collection boot, session IDs, roots, launch
+  recipe bytes, or exact exec argv;
+- `launch_lineage_conflict` — members or artifacts name more than one
+  consumption/pack/boot lineage;
+- `launch_lifecycle_incomplete` — start or settle is absent, or completion is
+  absent at verdict, extraction, or mint;
+- `launch_handoff_invalid` — the chain lacks the one-use inherited anonymous
+  FD token, its SHA-256 disagrees, or the handoff/start is replayed.
+
+These are terminal claim refusals. Backup, quarantine, and immutable evidence
+preservation remain available. A refusal never reopens a consumed capability;
+recovery requires a newly frozen bracket session, new attempt IDs, and a new
+ARM receipt.
 
 ### RECORDER CHECK-TO-GRANT RACE — registered limitation + WO-RECORDER-GRANT-IDENTITY queued (magistrate, 2026-08-15; rule-11 cold gate, composed verdict)
 
@@ -9407,3 +9465,110 @@ gates; (4) successor-config launch_lineage_required flag [PHASE 2 — frozen
 packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
+
+### D-078 amendment — 2026-08-15: locator and campaign-writer enforcement landed
+
+The campaign half of WO-LAUNCH-BINDING stage 2 implements the already
+registered six-code launch-consumption vocabulary without adding aliases.
+At marker-bearing collection admission, a missing locator/primary/sidecar is
+`launch_consumption_missing`; malformed canonical bytes, a bad sidecar, or an
+invalid predecessor chain is `launch_consumption_invalid`; a wrong root,
+role, boot, pack, plan, reviewed HEAD, arm-context digest, recipe, argv,
+config membership, or lifecycle phase is `launch_binding_mismatch`; unequal
+authenticated claim/bound locator payloads are `launch_lineage_conflict`;
+absent start/settle is `launch_lifecycle_incomplete`; and FD/token/start
+replay remains `launch_handoff_invalid` at chain entry. The outer campaign
+preflight and inner bundle writer each derive and authenticate from the fixed
+root-local locator. They never receive lineage through argv/environment and
+never reapply the arm's short T-0 expiry after authenticating that consumption
+occurred within it. Calibration writer enforcement remains the separately
+owned next stage-2 landing; downstream stages 3-4 and the C-028 gauntlet still
+gate launch readiness.
+
+**Fix-round authentication clarification (2026-08-15):** collection's inner
+writer authenticates the exact config path already present in the ordinary
+child `run` argv and requires its raw-byte digest at that exact pack-relative
+inventory member; parsed semantic equality alone is insufficient. The inner
+metadata stamp also carries the authenticated selected-locator content digest.
+The outer campaign retains its own authenticated lineage and locator digest,
+then reopens each child bundle after process completion and requires canonical
+lineage-byte plus locator-digest equality. A consistent replacement between
+the outer and inner reads is therefore terminal `launch_lineage_conflict`; the
+attempt evidence is preserved and is never reported successful. This adds no
+receipt, token, or lineage carrier to child argv or environment. Calibration
+writer enforcement remains deferred to the calibration-side stage-2 landing,
+downstream reduce/extract/mint enforcement remains stages 3–4, successor config
+markers remain a Phase-2 freeze transaction, and physical launch remains
+NO-GO pending those gates and the full C-028 gauntlet.
+
+### WO-LAUNCH-BINDING fix round 2 — private required-context API and AXI Phase-2 release gate (lead-adopted consult, 2026-08-15)
+
+F3 adopts `ADOPT_PRIVATE_REQUIRED_CONTEXT_API` exactly.  The public-named
+consumption wrapper and both caller-frame/file-identity guards are deleted;
+caller identity is not represented as security.  The sole supported
+production route is the reviewed launcher calling one underscore-named,
+non-exported consumer with mandatory authenticated arm and launch-manifest
+values, their exact primary/artifact digests, the bound roots, exact exec
+argv, and handoff-token digest.  At reconciliation time, the callee
+independently reopens the arm receipt and follows its digest-pinned
+`evidence[]` LAUNCH_RECIPE item through the authenticated evidence receipt's
+`facts[0].source_path` / `source_sha256` into the custody-root T-0 source
+record.  That source record's `input_artifacts[]` is the identity anchor: the
+caller manifest must occupy the root-locally derived
+`arm_readiness.t0.inputs/launch-manifest.json` path with the attested bytes,
+and `window.env` and `window-chain.zsh` must match their attested paths and
+bytes.  The callee also reconciles boot, custody-contained window root, and
+exact foreground argv before any consumption publication, and replay repeats
+the same reconciliation before PASS.  This required-context API is an
+ordinary-misuse boundary only.  The atomic no-clobber consumption primary is
+the **only real enforcement** and the single-use linearization point; every
+later complete caller loses that write.
+
+The T-0 author validates `window-chain.zsh` content only for exactly one
+reviewed `REPO=` line and the absence of a `QUARANTINE_ROOT=` assignment.
+Consumption therefore binds to the **attested** chain, not to a generally
+reviewed chain; the remaining pre-arm chain-authoring surface is explicit.
+The reconciliation claim is likewise bounded to reconciliation time: the
+registered hostile-same-UID residual includes an exec-time chain swap after
+the final read and before `execve`.
+
+**HONEST REGISTERED LIMITATION:** deliberate in-process invocation of the
+private consumer with forged-but-complete valid inputs is indistinguishable
+from the supported route.  Python code in the same interpreter, or code under
+the same trusted UID, can import private functions, reconstruct readable
+inputs, alter module state, or invoke the launcher.  This mechanism proves
+single use, not caller identity or Unix parentage.  Stronger protection needs
+a separately ruled OS trust boundary.  Ed's batched risk-appetite list carries
+this hostile-same-UID/same-interpreter family with the recorder race and T-0
+provenance limitations; this work order does not silently expand that threat
+model.
+
+**ROUND-3 COLD-GATE RECORD:** the caller-identity/data-authentication pivot was
+recorded by the escalation consult before the third failure, so it is a
+contemporaneous distinction rather than a post-hoc reclassification.  The
+standing trigger was discharged twice: by the consult after failure two and
+by the rule-11 cold gate after failure three; licensing this implementation
+round exercises the cold instance's authority rather than bypassing the
+trigger.  The counterargument remains explicit: under F3's original invariant
+framing (standalone consumption not fully retired), all three failures can be
+read as one class, and mechanism-level repartition without a prior-record test
+could make the trigger unfireable.  Future reauthentication designs must name
+and file:line-confirm the comparison anchor and carry complete-but-foreign,
+attack-shaped regressions.
+
+NDF1 adopts `DEFER_WITH_PHASE_2_RELEASE_GATE`.  D-078's closed vocabulary is
+amended additively with `launch_lineage_axi_unsupported`: a marker-bearing AXI
+v2 campaign is refused before child dispatch because the current fixed
+root-local locator contract covers flat/root-local writers only.  This is a
+release/scheduling boundary, not an exclusion of AXI from launch lineage;
+non-marker AXI campaigns retain their prior behavior.  No nearest-ancestor
+search and no per-attempt locator replication are permitted.
+
+The Phase-2 release gate is the consult's exact mechanism: freeze an
+authenticated successor-schema derivation descriptor (for example,
+`axi_attempt_v1`) and implement exact AXI layout projection
+`TOP/axi_attempt_bundles/<manifest-id>/<entry-id>/a<ordinal>`, mechanically
+derive `TOP`, then authenticate the successor manifest/config/entry/digest and
+attempt-directory relationship before opening exactly TOP's fixed locator.
+Until that projection and its adversarial regressions land, no successor pack
+may freeze or issue `launch_lineage_required` on an AXI config family.

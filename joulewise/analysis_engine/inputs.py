@@ -33,6 +33,10 @@ from joulewise.analysis_manifest_v3 import (
     validate_analysis_manifest_v3,
     validate_finalized_analysis_manifest_v3,
 )
+from joulewise.arm_readiness import (
+    LaunchLineageError,
+    authenticate_bundle_launch_lineage,
+)
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.campaign_provenance import (
     CAMPAIGN_PROVENANCE_SCHEMA_V1,
@@ -436,6 +440,7 @@ class BundleEvidence:
     )
     whole_window_drift_allowance_required: bool = False
     consumption_provenance: Mapping[str, Any] | None = None
+    launch_lineage: Mapping[str, Any] | None = None
 
     @property
     def included(self) -> bool:
@@ -2661,6 +2666,17 @@ def _read_bundle(
     raw_config = reader.raw_config()
     summary = reader.raw_summary()
     metadata = reader.raw_metadata()
+    try:
+        launch_lineage = authenticate_bundle_launch_lineage(
+            path,
+            config=raw_config if isinstance(raw_config, Mapping) else None,
+            metadata=metadata if isinstance(metadata, Mapping) else None,
+            require_completion=False,
+        )
+    except LaunchLineageError as exc:
+        raise AnalysisInputError(
+            f"{exc.reason_code}: {path.name}: {exc}"
+        ) from exc
     strict_problems = tuple(
         (*strict_problems, *_source_provenance_admission_problems(metadata, summary))
     )
@@ -2717,6 +2733,7 @@ def _read_bundle(
         summary_sha256=_sha256_file(path / "summary_metrics.json"),
         replacement_classification=replacement_classification,
         inclusion_status=inclusion,
+        launch_lineage=launch_lineage,
     )
 
 
@@ -3065,6 +3082,16 @@ def load_analysis_inputs(
         cohort_identities,
         cleanup_records,
     )
+    launch_consumptions = {
+        str(evidence.launch_lineage["consumption_sha256"])
+        for evidence in effective.values()
+        if isinstance(evidence.launch_lineage, Mapping)
+    }
+    if len(launch_consumptions) > 1:
+        raise AnalysisInputError(
+            "launch_lineage_conflict: analysis inputs name more than one "
+            "launch consumption"
+        )
     if supersession_diverged:
         # D-093 is a pre-estimation source-visibility gate.  Preserve a
         # claim artifact with the raw/validated counts, but make every

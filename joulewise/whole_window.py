@@ -28,6 +28,11 @@ from joulewise.authentication_io import (
     read_authentication_text,
     sha256_authentication_input,
 )
+from joulewise.arm_readiness import (
+    LaunchLineageError,
+    authenticate_bundle_launch_lineage,
+    authenticate_launch_lineage,
+)
 from joulewise.idle_admission import (
     ADAPTER_CONTINUITY_SCHEMA,
     IdleAdmissionExtension,
@@ -1339,6 +1344,7 @@ def build_neg8_drift_bound_artifact(
     members: Sequence[Mapping[str, Any]],
     derivation_timestamp_s: Any,
     freshness_bindings: Mapping[str, Any],
+    launch_lineage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the dual-family D-054-style point-contrast guard artifact."""
 
@@ -1505,6 +1511,10 @@ def build_neg8_drift_bound_artifact(
             ],
         },
     }
+    if launch_lineage is not None:
+        if not isinstance(launch_lineage, Mapping):
+            raise ValueError("NEG-8 launch lineage must be an object")
+        payload["launch_lineage"] = dict(launch_lineage)
     return {**payload, "derivation_sha256": canonical_sha256(payload)}
 
 
@@ -1527,7 +1537,12 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
     if (
         not isinstance(value, Mapping)
         or frozenset(value)
-        not in {frozenset(base_keys), frozenset(base_keys | {"freshness"})}
+        not in {
+            frozenset(base_keys),
+            frozenset(base_keys | {"freshness"}),
+            frozenset(base_keys | {"launch_lineage"}),
+            frozenset(base_keys | {"freshness", "launch_lineage"}),
+        }
     ):
         return False
     corpus = value.get("reference_corpus")
@@ -1578,6 +1593,11 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
                     "calibration_identity_sha256": "0" * 64,
                 }
             ),
+            launch_lineage=(
+                value.get("launch_lineage")
+                if isinstance(value.get("launch_lineage"), Mapping)
+                else None
+            ),
         )
     except (TypeError, ValueError, statistics.StatisticsError):
         return False
@@ -1590,6 +1610,13 @@ def validate_neg8_drift_bound_artifact(value: Any) -> bool:
                 if key != "derivation_sha256"
             }
         )
+    if isinstance(value.get("launch_lineage"), Mapping):
+        try:
+            authenticate_launch_lineage(
+                value["launch_lineage"], require_completion=False
+            )
+        except LaunchLineageError:
+            return False
     return (
         member_ids == [member.get("bundle_id") for member in members]
         and dict(value) == expected
@@ -2240,6 +2267,48 @@ def ordinary_present_bundle_paths(runs_root: Path, bundle_id: str) -> list[Path]
         ):
             result.append(path)
     return result
+
+
+def launch_lineage_refusal_reasons(
+    runs_root: Path,
+    referenced_bundle_ids: set[str],
+    *,
+    require_completion: bool,
+) -> tuple[str, ...]:
+    """Authenticate one shared launch lineage for every marker-bearing member."""
+
+    reasons: set[str] = set()
+    identities: set[tuple[str, str, str]] = set()
+    for bundle_id in sorted(referenced_bundle_ids):
+        paths = ordinary_present_bundle_paths(Path(runs_root), bundle_id)
+        if len(paths) != 1:
+            # Ordinary missing/ambiguous custody is classified by the existing
+            # occurrence and strict-bundle gates. Never guess a lineage path.
+            continue
+        path = paths[0]
+        config = _read_json_object(path / "config.json")
+        metadata = _read_json_object(path / "metadata.json")
+        try:
+            lineage = authenticate_bundle_launch_lineage(
+                path,
+                config=config,
+                metadata=metadata,
+                require_completion=require_completion,
+            )
+        except LaunchLineageError as exc:
+            reasons.add(exc.reason_code)
+            continue
+        if lineage is not None:
+            identities.add(
+                (
+                    str(lineage["consumption_sha256"]),
+                    str(lineage["pack_sha256"]),
+                    str(lineage["boot_session_id"]),
+                )
+            )
+    if len(identities) > 1:
+        reasons.add("launch_lineage_conflict")
+    return tuple(sorted(reasons))
 
 
 def _occurrence_descriptor_valid(
@@ -3052,6 +3121,7 @@ def mint_neg8_drift_bound_artifact(
 
     evidence_members: list[dict[str, Any]] = []
     freshness_bindings: list[dict[str, str]] = []
+    launch_lineages: list[Mapping[str, Any]] = []
     scientific_identity: str | None = None
     seen_ids: set[str] = set()
     for member in members:
@@ -3073,6 +3143,28 @@ def mint_neg8_drift_bound_artifact(
         seen_ids.add(bundle_id)
         summary = _read_json_object(bundle_path / "summary_metrics.json")
         metadata = _read_json_object(bundle_path / "metadata.json")
+        config = _read_json_object(bundle_path / "config.json")
+        try:
+            authenticated_launch = authenticate_bundle_launch_lineage(
+                bundle_path,
+                config=config,
+                metadata=metadata,
+                require_completion=False,
+            )
+        except LaunchLineageError as exc:
+            raise ValueError(f"{exc.reason_code}: {bundle_id}: {exc}") from exc
+        if authenticated_launch is not None:
+            extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
+            raw_lineage = (
+                extra.get("launch_lineage")
+                if isinstance(extra, Mapping)
+                else None
+            )
+            if not isinstance(raw_lineage, Mapping):
+                raise ValueError(
+                    f"launch_consumption_invalid: {bundle_id}: lineage vanished"
+                )
+            launch_lineages.append(raw_lineage)
         if _custody_strict_invalid(bundle_path, summary, metadata):
             raise ValueError(
                 f"NEG-8 corpus member {bundle_id} custody telemetry triangle disagrees"
@@ -3117,6 +3209,15 @@ def mint_neg8_drift_bound_artifact(
         raise ValueError(
             "NEG-8 reference corpus freshness bindings are not identical"
         )
+    unique_launch_lineages = {
+        canonical_sha256(lineage): lineage for lineage in launch_lineages
+    }
+    if len(unique_launch_lineages) > 1 or (
+        launch_lineages and len(launch_lineages) != len(members)
+    ):
+        raise ValueError(
+            "launch_lineage_conflict: NEG-8 reference members do not share one lineage"
+        )
     return build_neg8_drift_bound_artifact(
         corpus_id=manifest.get("corpus_id"),
         condition_id=manifest.get("condition_id"),
@@ -3125,6 +3226,11 @@ def mint_neg8_drift_bound_artifact(
         members=evidence_members,
         derivation_timestamp_s=time.time(),
         freshness_bindings=next(iter(unique_freshness.values())),
+        launch_lineage=(
+            next(iter(unique_launch_lineages.values()))
+            if unique_launch_lineages
+            else None
+        ),
     )
 
 
@@ -4914,6 +5020,13 @@ def whole_window_refusal_reasons(
 ) -> tuple[str, ...]:
     """Return refusals from the verdict governing the requested exact basis."""
 
+    launch_refusals = launch_lineage_refusal_reasons(
+        Path(runs_root),
+        referenced_bundle_ids,
+        require_completion=True,
+    )
+    if launch_refusals:
+        return launch_refusals
     missing = (
         "whole_window_neg8_verdict_missing",
         "adapter_continuity_evidence_missing",
@@ -5333,6 +5446,7 @@ __all__ = [
     "evaluate_neg8_point_drift",
     "evaluate_neg8_bound_freshness",
     "load_neg8_drift_bound_artifact",
+    "launch_lineage_refusal_reasons",
     "mint_neg8_drift_bound_artifact",
     "neg8_claim_family_for_metric",
     "neg8_freshness_bindings_from_metadata",

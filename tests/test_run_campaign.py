@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import hashlib
 import io
@@ -49,6 +50,7 @@ from tests.test_calibration_bracketing import (
     _fixture_snapshot,
     _unissued_acceptance_fixture,
 )
+from tests.test_arm_readiness import LaunchConsumptionV2Tests
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,6 +88,147 @@ def held_campaign_lock(runs_dir: Path):
         raise
     else:
         run_campaign_module.release_campaign_lock(lock_path)
+
+
+class CampaignLaunchLineagePreflightTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.config_dir = self.root / "configs"
+        self.config_dir.mkdir()
+        self.runs_dir = self.root / "runs"
+
+    def _write_config(self, name: str, *, marker: bool) -> Path:
+        tags = ["launch_lineage_required"] if marker else []
+        path = self.config_dir / name
+        path.write_text(
+            json.dumps(
+                {
+                    "run_id": path.stem,
+                    "run_metadata": {"project": "joulewise", "tags": tags},
+                }
+            )
+            + "\n"
+        )
+        return path
+
+    def test_outer_preflight_derives_from_runs_root_and_exact_configs(self) -> None:
+        first = self._write_config("first.json", marker=True)
+        second = self._write_config("second.json", marker=True)
+        expected = {"launch_lineage": {"schema_version": "test"}}
+        with patch.object(
+            run_campaign_module,
+            "authenticate_campaign_launch_lineage",
+            return_value=expected,
+        ) as authenticate:
+            actual = run_campaign_module.authenticate_campaign_writer_preflight(
+                [first, second], self.runs_dir
+            )
+        self.assertIs(actual, expected)
+        authenticate.assert_called_once_with(
+            self.runs_dir, config_paths=[first, second]
+        )
+
+    def test_outer_preflight_refuses_mixed_marker_selection(self) -> None:
+        marked = self._write_config("marked.json", marker=True)
+        legacy = self._write_config("legacy.json", marker=False)
+        with self.assertRaises(run_campaign_module.LaunchLineageError) as caught:
+            run_campaign_module.authenticate_campaign_writer_preflight(
+                [marked, legacy], self.runs_dir
+            )
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+
+    def test_ceremony_bypass_refuses_before_lock_provenance_or_child(self) -> None:
+        self._write_config("member.json", marker=True)
+        self.runs_dir.mkdir()
+        args = run_campaign_module.parse_args(
+            [
+                str(self.config_dir),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--campaign-policy",
+                str(TEST_CAMPAIGN_POLICY),
+            ]
+        )
+        with patch.object(
+            run_campaign_module, "acquire_campaign_lock"
+        ) as acquire, patch.object(
+            run_campaign_module, "new_campaign_provenance"
+        ) as provenance, patch.object(
+            run_campaign_module.subprocess, "run"
+        ) as child:
+            with self.assertRaises(run_campaign_module.LaunchLineageError) as caught:
+                run_campaign_module.run_campaign(args)
+        self.assertEqual(
+            caught.exception.reason_code, "launch_consumption_missing"
+        )
+        acquire.assert_not_called()
+        provenance.assert_not_called()
+        child.assert_not_called()
+
+    def test_consistent_locator_swap_after_outer_preflight_refuses(self) -> None:
+        first = LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        first.setUp()
+        try:
+            first._settle()
+            first_root = Path(first.arm["arm_context"]["claim_runs_root"])
+            selector = self.root / "selected-runs"
+            selector.symlink_to(first_root, target_is_directory=True)
+            outer = first._authenticate_campaign(selector)
+
+            second = LaunchConsumptionV2Tests(
+                methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            )
+            second.setUp()
+            try:
+                second._settle()
+                second_root = Path(second.arm["arm_context"]["claim_runs_root"])
+                bundle = selector / "child-bundle"
+
+                def swap_and_stamp(command, **_kwargs):
+                    selector.unlink()
+                    selector.symlink_to(second_root, target_is_directory=True)
+                    inner = second._authenticate_campaign(selector)
+                    bundle.mkdir()
+                    (bundle / "metadata.json").write_text(
+                        json.dumps(
+                            {
+                                "extra": {
+                                    "launch_lineage": inner["launch_lineage"],
+                                    "launch_lineage_locator_sha256": inner[
+                                        "locator_sha256"
+                                    ],
+                                }
+                            }
+                        )
+                        + "\n"
+                    )
+                    return subprocess.CompletedProcess(command, 0)
+
+                with patch.object(
+                    run_campaign_module.subprocess,
+                    "run",
+                    side_effect=swap_and_stamp,
+                ):
+                    with self.assertRaises(
+                        run_campaign_module.LaunchLineageError
+                    ) as caught:
+                        run_campaign_module.run_authenticated_campaign_child(
+                            ["child"],
+                            env=None,
+                            outer_authentication=outer,
+                            bundle_paths=[bundle],
+                        )
+                self.assertEqual(
+                    caught.exception.reason_code, "launch_lineage_conflict"
+                )
+            finally:
+                second.doCleanups()
+        finally:
+            first.doCleanups()
 
 
 class CampaignLockIdentityTests(unittest.TestCase):
@@ -1966,7 +2109,55 @@ class RunCampaignTests(unittest.TestCase):
         self.assertNotEqual(evidence["three__r2"], evidence["three__r1"])
         self.assertNotEqual(evidence["three__r3"], evidence["three__r1"])
 
-    def test_axi_multi_entry_campaign_records_gate_before_entry_two(self) -> None:
+    def test_marker_bearing_axi_refuses_before_child_dispatch(self) -> None:
+        state = run_campaign_module.load_analysis_manifest(
+            ROOT / "tests" / "fixtures" / "axi_ap_spec"
+        )
+        self.assertIsNotNone(state)
+        assert state is not None
+        binding = run_campaign_module.load_campaign_policy(
+            str(TEST_CAMPAIGN_POLICY)
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker_config = root / "marker.json"
+            config = json.loads(
+                (ROOT / "tests" / "fixtures" / "axi_ap_spec" / "draft_spec_off.json")
+                .read_text()
+            )
+            config["run_metadata"]["tags"].append("launch_lineage_required")
+            marker_config.write_text(json.dumps(config) + "\n")
+            marked_raw = copy.deepcopy(state.raw)
+            for entry in marked_raw["entries"]:
+                entry["config"] = str(marker_config)
+            marked_state = replace(state, raw=marked_raw)
+            runs_dir = root / "runs"
+            with patch.object(
+                run_campaign_module, "run_authenticated_campaign_child"
+            ) as child:
+                with self.assertRaises(
+                    run_campaign_module.LaunchLineageError
+                ) as caught:
+                    run_campaign_module.run_axi_spec_campaign(
+                        run_campaign_module.argparse.Namespace(
+                            dry_run=False,
+                            cli_cmd=None,
+                            arm_quiet_mode=False,
+                            arm_countdown_s=0,
+                            environment_override=None,
+                        ),
+                        marked_state,
+                        runs_dir=runs_dir,
+                        policy_binding=binding,
+                    )
+            self.assertEqual(
+                caught.exception.reason_code,
+                "launch_lineage_axi_unsupported",
+            )
+            child.assert_not_called()
+            self.assertFalse(runs_dir.exists())
+
+    def test_non_marker_axi_multi_entry_campaign_records_gate_before_entry_two(self) -> None:
         state = run_campaign_module.load_analysis_manifest(
             ROOT / "tests" / "fixtures" / "axi_ap_spec"
         )
