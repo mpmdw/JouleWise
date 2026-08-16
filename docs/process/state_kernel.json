@@ -3323,7 +3323,7 @@
       "priority": "p2_next_slice",
       "rank": 61,
       "status": "queued",
-      "status_note": "Ed-weighted: the batched risk-appetite session may rule the concurrent local writer out of model, dropping this to the registered limitation alone",
+      "status_note": "Ed-weighted: waits for the batched risk-appetite session (may drop to the registered limitation). Design consult custodied 2026-08-16 (caller-verified identity verbatim recommended; gate-packet input only) — docs/process_traces/2026-08-16-grant-identity-consult/",
       "stop_card": null
     },
     "WO-T3-VIS-01": {
