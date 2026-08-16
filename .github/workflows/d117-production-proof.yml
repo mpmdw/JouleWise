@@ -1,12 +1,13 @@
 name: d117-production-proof
 
-# ADVISORY pending D-130 closure (cold-gate ruling 2026-08-11, PR #122):
-# manual dispatch only for the first matrix-split proof. Its first hosted green
-# is the required second independent decisive execution; D-130 closure then
-# flips this workflow back to automatic push/pull_request triggering.
-# Any leg contradiction is an automatic stop signal and requires a cold gate.
+# D-130 closure recorded 2026-08-16: PR #129 landed the matrix split;
+# hosted runs 31541829071 and 31518739878 succeeded, discharging the required
+# second independent execution and restoring the pre-advisory automatic
+# triggers. Any later leg contradiction remains a new automatic stop signal.
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
 
 permissions:
   contents: read

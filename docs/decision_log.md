@@ -9305,3 +9305,21 @@ gates; (4) successor-config launch_lineage_required flag [PHASE 2 — frozen
 packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
+
+### D-130 closure recorded — 2026-08-16
+
+WO-CI-RESTRUCTURE is **CLOSED**. PR #129 (`7a76a29`) landed the
+registry-certified matrix proof, and hosted run `31541829071` succeeded in
+3h20m48s from 2026-08-11T22:18:21Z; this is D-130's required second
+independent decisive execution. Hosted run `31518739878` is a second success.
+Per the pinned magistrate disposition, the temporary local-decisive admission
+therefore expired at closure and the dispatch-only workflow restriction is
+lifted.
+
+**Citation consequence:** D-130's temporary mandatory wording —
+“lead-verified locally … + CI-verified transport/authentication chain” — is no
+longer required for future summaries, which may accurately cite the
+restructured hosted proof as hosted CI evidence. This does not retroactively
+change the historical provenance of PR #122's merge decision: descriptions of
+that merge must still identify the custodied local decisive execution rather
+than recast it as a hosted decisive run.

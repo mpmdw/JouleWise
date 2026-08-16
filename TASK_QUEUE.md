@@ -99,6 +99,10 @@ Current Queue region is the sole live work-selection view.
 
 | ID | Priority | Completed | Task | Evidence |
 |---|---|---|---|---|
+| WO-ARM-EVIDENCE-AUTHOR-01 | P1 Phase Gate | 2026-08-14 | Author the fifteen arm-time evidence kinds and close the packet's launch-chain conflicts | No phase exit-checklist matrix row exists. Merged via #149 (`ac3fe1d`, union including #147): `joulewise/arm_readiness_evidence_t0.py`, `scripts/author_arm_evidence_t0.py`, and the production acid-test suite landed; later council work orders govern the remaining launch repairs. |
+| WO-COLLECTION-MARGIN-01 | P1 Phase Gate | 2026-08-12 | Produce the deterministic comparative-cell window-margin receipt after finalized post-calibration and before backup/extraction | No phase exit-checklist matrix row exists. Merged via #143 (`1092984`): production recorder, CLI, runbook/freeze-manifest bindings, and census/mutation tests landed. |
+| WO-MINT-ESTIMATOR-VOCAB | P2 Next Slice | 2026-08-12 | Add spec-authoritative governed estimator dispatch at all three v2 mint sites | No phase exit-checklist matrix row exists. Merged via #140 (`e11b1ad`): shared estimator dispatcher and full mint-site authentication/equality coverage landed, satisfying the D-133 clause 4 prerequisite. |
+| WO-CI-RESTRUCTURE | P1 Phase Gate | 2026-08-11 | Split the D-117 decisive production proof into a registry-certified hosted matrix under the runner cap | No phase exit-checklist matrix row exists. Merged via #129 (`7a76a29`); hosted run `31541829071` succeeded in 3h20m48s from 2026-08-11T22:18:21Z, discharging D-130's required second independent execution; hosted run `31518739878` also succeeded. D-130's temporary admission and citation discipline expired, and automatic push/pull-request triggering is restored. |
 | COLDGATE-VALIDATOR-01 | P2 Next Slice | 2026-08-05 | Build `scripts/validate_gate_packet.py` as a deliberately validation-time-only cold-gate packet validator | Merged via PR #103 (`b730d89`). Full evidence chain: rule-11 escalation consult after three same-signature F3 rounds -> Option D adopted (attestation subsystem deleted; receipt v2 declares `binding_scope=validation_time_observation_only` and `judge_handoff_bound=false`; `--receipt-out` removed; fence-aware CommonMark scans; `--help` exit-0) -> xhigh delta re-audit FAIL with two live-proved blockers (malformed-digest receipt leak; phantom-fence duplicate suppression) -> fixes (`3835288`) -> final delta ACCEPT with zero introduced defects -> CI green. Records: `docs/process_traces/2026-08-05-cgv-f3-consult/`. NOTE: validator PASS is NOT launch authorization; operational use is blocked on `COLDGATE-HANDOFF-01`. |
 | WINB-R06-DISPOSITION-01 | P1 Phase Gate | 2026-08-05 | Dispose of the Window-B r06 evidence gap under the D-112 removal-channel ruling | **ABANDONED_FOR_FRESH_COLLECTION** under D-113 (Ed ruled channel (c)); no Window B re-evaluation or claim consumption will occur and the original FAILED verdict stands. The unpinned `current_environment_refusals` sub-branch is retained as unresolved historical residue, nonblocking. Evidence: D-113 + `docs/process_traces/2026-08-05-d113-rigor-consult/`. |
 | CAL-BRACKET-D079-01 | P1 Phase Gate | 2026-08-05 | Implement D-079 calibration acceptance v2 in the bracket selector (derived screen, freshness refusal, budgeted excess allowance, evaluation-basis recording, floor/claim propagation) per the D-109 A-min-with-reservation ruling | No matrix row exists in `docs/phase_2/phase_2_exit_checklist.md` for this repair; merged via PR #100 (`f75d12b`) at the audited head `4280ebd` under D-072 with Ed's explicit go (2026-08-05; merge-permission rule added, restoring mechanical self-merge). Full gauntlet: D-109 implementation + fix round 1 (B2+S1) + rule-11-gated fix round 2 (B1 closed both dimensions, delta re-audit CLEAN) + integration-collision resolution per D-109 addendum II (reviewed signature-pin amendment, guard hardening incl. the repr-'None' default-spoof regression the delta re-audit proved live); lead integration-tree replay `Ran 2487 tests OK (skipped=82)` exit-0 unpiped; PR CI green. Records: `docs/process_traces/2026-08-04-calbracket-integration-collision/`, `docs/process_traces/2026-08-03-calbracket-b1-gate/`, D-109 + addenda, C-048. D-110 re-mint condition (a) is satisfied; MINT-GENERALIZE-01 stays blocked on (b) issuance + (c) validator widening; T3-AMEND-01 unblocks as the first desk item after |
@@ -181,28 +185,25 @@ Current Queue region is the sole live work-selection view.
 | DOC-001 | P4 Polish | 2026-06-09 | Unify Phase 1 doc scheme with Phases 2-5 (user-directed) | `docs/phase_1/` reduced to `phase_1_plan.md` + `phase_1_exit_checklist.md`; contracts moved to `docs/contracts/`; run report `docs/run_reports/2026-06-09-phase-1-doc-unification.md` |
 | DOC-002 | P4 Polish | 2026-06-09 | Add advisor-facing status/plan/architecture doc + audit original sketch (user-directed) | Root `PROJECT_STATUS.md`; run report `docs/run_reports/2026-06-09-advisor-status-doc.md` |
 
-## WO-CI-RESTRUCTURE (D-130 condition; registered 2026-08-11)
+## WO-CI-RESTRUCTURE — CLOSED (D-130 condition; recorded 2026-08-16)
 
-Restructure `.github/workflows/d117-production-proof.yml` so the decisive
-proof completes on GitHub-hosted runners: split the attack matrix into
-per-leg jobs (each hydrating from the digest-exact archive cache) and/or
-staged artifacts, preserving the no-substitution/no-skip contract. This is
-PROOF-SEMANTICS work: full D-118/D-121 trust gauntlet; the split's
-proof-equivalence must be certified, not assumed. Closure: the FIRST hosted
-green of the restructured workflow = the required second independent
-decisive execution (D-130); if it ever contradicts the custodied local
-result, that is an automatic stop signal + mandatory cold gate. Deadline:
-before any claim publication and before the pack-freeze merge wave. Also
-owed under D-130 (refuter C3): one Python 3.11 local decisive replay via
-`scripts/replay_d117_decisive.sh` (PYTHON=python3.11). Design lesson to
-carry: bound every decisive job's runtime against its venue's hard cap at
-design time.
+Status: **CLOSED.** PR #129 (`7a76a29`) landed the registry-certified
+matrix split. Hosted run `31541829071` succeeded in 3h20m48s from
+2026-08-11T22:18:21Z and is the required second independent decisive
+execution; hosted run `31518739878` is a second success. The pinned
+magistrate disposition therefore discharges D-130's temporary admission,
+lifts its temporary citation-discipline wording, and restores automatic
+push/pull-request triggering. A result that contradicts the custodied local
+execution would still be a new stop signal, not permission to select a
+favorable venue.
 
-## WO-MINT-ESTIMATOR-VOCAB — SHIPPED (`e11b1ad`, 2026-08-12; registered 2026-08-11)
+## WO-MINT-ESTIMATOR-VOCAB — COMPLETED (`e11b1ad`, 2026-08-12; registered 2026-08-11)
 
-Status: **SHIPPED** in `e11b1ad44d58eef3a5eb56b8e878d82345b531ba` (#140). The section below is the preserved registration/design record, not live work.
+Status: **COMPLETED** in `e11b1ad44d58eef3a5eb56b8e878d82345b531ba`
+(#140) and recorded in the Completed table above. The section below is the
+preserved registration/design record, not live work.
 
-Priority: P2 (rises to P0 critical-path ONLY if Ed rules the gamma-arm
+Historical registration priority: P2 (rises to P0 critical-path ONLY if Ed rules the gamma-arm
 claim capability must ship in the main paper this cycle — D-133 flagged
 schedule call). The pinned mint scripts (mint_floor_artifact.py,
 mint_floor_artifact_generalized.py) carry ZERO estimator vocabulary: the
@@ -226,7 +227,16 @@ failure mode). Pinned core, v2 pinset schema, report/artifact schemas,
 and production specs all UNCHANGED this WO. Cost estimate 360-540
 production LOC + 550-850 test LOC; three audit waves + D-121. Full
 consult: session scratchpad mintvocab-consult-out.md (T4-late).
-Implementation stacks on impl/floor-commonmode-01 after round 9 lands.
+Implementation landed in #140 after the prerequisite estimator work.
+
+## Council-ruled live paper queue (hand-authored; registered 2026-08-16)
+
+This section is the council's explicit hand-authored exception for the paper
+trigger below; it is outside the generated state-kernel region.
+
+| ID | Priority | Lane | State | Owner | Trigger | Action and acceptance evidence |
+|---|---|---|---|---|---|---|
+| CONDITIONAL-INSERT-TIGHTER-FLOOR | P1 Phase Gate | [AGENT] | **LIVE — trigger pending** | Lead | First post-freeze mint under the frozen 1.869502 J selector | The frozen floor packs pre-register `d124_two_shared_edge_common_mode.v1` in six shared-edge comparative cells, while this cycle's retained corpus was issued under the conservative 8.611855 J composition. At the trigger, apply the complete `CONDITIONAL-INSERT-TIGHTER-FLOOR` replacement block in `docs/paper/draft-v1.md` as one paper-consistency transaction and verify every replacement against the minted artifact. Do not apply a partial swap or change any published number before that mint. |
 
 ## SITE-CAPSULE-BUDGET-01 (recorded 2026-08-11, T4-late) — SUPERSEDED BY D-135 (Ed: budgets are ADVISORY; only the physical 1,048,576-byte Lakebed cap may fail anything; implementation of warn-only behavior is OWED, see D-135)
 
@@ -657,9 +667,11 @@ detector reason in the assertion so a real regression is distinguishable
 from this flake. Diagnosis: T6 scratchpad calexits-flake-diag.md (custody
 with T6 session record).
 
-## WO-COLLECTION-MARGIN-01 — SHIPPED (`1092984`, 2026-08-13; registered 2026-08-12, T6)
+## WO-COLLECTION-MARGIN-01 — COMPLETED (`1092984`, 2026-08-12; registered 2026-08-12, T6)
 
-Status: **SHIPPED** in `10929840347e2c06cbec613390e10bd4c142c0de` (#143). The section below is the preserved registration/design record, not live work.
+Status: **COMPLETED** in `10929840347e2c06cbec613390e10bd4c142c0de`
+(#143) and recorded in the Completed table above. The section below is the
+preserved registration/design record, not live work.
 
 Comparative-cell window-margin receipt — the ruled replacement mechanism for
 freeze-plan addendum item (1), whose named implementation (the FCM-01
@@ -680,12 +692,15 @@ derivation completeness, NOT margin positivity (no new acceptance threshold);
 REFUSE never UNKNOWN; freeze-manifest pointer item analogous to D-8′;
 runbook §12 path+SHA recording. D-134 row registry untouched. Consult record:
 T6 scratchpad `item1-consult-out.md` (custody with T6 session record).
-Implementation in flight at registration (Sol xhigh, branch
-impl/collection-margin-receipt).
+Closure evidence: #143 landed the recorder, CLI, runbook/freeze-manifest
+bindings, and census/mutation coverage.
 
-## WO-ARM-EVIDENCE-AUTHOR-01 — SHIPPED (`ac3fe1d`, 2026-08-15; registered 2026-08-13, T6)
+## WO-ARM-EVIDENCE-AUTHOR-01 — COMPLETED (`ac3fe1d`, 2026-08-14; registered 2026-08-13, T6)
 
-Status: **SHIPPED** in `ac3fe1d2fb46ab02b2f70eba387165d63bc1de6b` (#149). The section below is the preserved registration/design record, not live work; later council findings govern remaining launch repairs.
+Status: **COMPLETED** in `ac3fe1d2fb46ab02b2f70eba387165d63bc1de6b`
+(#149, union including #147) and recorded in the Completed table above. The
+section below is the preserved registration/design record, not live work;
+later council findings govern remaining launch repairs.
 
 The arm-side producer gap (packet §0.6, arm-packet-alpha-FINAL-20260813.md):
 generate_arm_readiness.py arm derives only 3 ARM_ONLY rows internally;
@@ -706,4 +721,5 @@ takes PACK_ROOT not WINDOW_PLAN_ROOT), F-G/F-H (prewindow_check window glob
 "unfrozen draft" contradiction), D-7 (plan_tree asserts D117-U2
 required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
-defect) cold gate. Deadline: before the 2026-08-14 arm.
+defect) cold gate. The registered deadline was discharged when #149 landed
+the author and integration repairs; later council work orders remain separate.

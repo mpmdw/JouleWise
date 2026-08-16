@@ -9,32 +9,25 @@
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
-## Current activity (refreshed each work block; last: 2026-08-15, checkpointed at Ed's clear order)
+## Current activity (refreshed each work block; last: 2026-08-16)
 
-**Just completed:** the full repair program's first wave. After the
-readiness audit's not-ready verdict, every pre-code design ruling was made
-(each through independent cold review — two of which rejected the lead's
-own proposals on executed evidence, which is the process working), and
-three repairs landed: the work-selection gate is now live in the kernel
-(no measurement window can be selected until a fresh readiness council
-says go), the close-out margin recorder accepts the frozen packs' specs
-(it deterministically refused before), and the night-of-measurement
-capture tool now exists (the audit's deepest finding: the arming
-procedure required evidence files nothing could produce).
+**Just completed:** the Phase 0 readiness rulings and the first three
+Phase 1 repairs. PR #150 installed the work-selection gate, PR #151 repaired
+the close-out recorder's authorization path, and PR #152 added the T-0
+evidence capture tool, strict plan resolver, and reviewed network-time route.
+The readiness council's 0/11 NOT-READY verdict is fully preserved with its
+evidence; no measurement window may be armed before a later READY-candidate
+council says the instrument is ready.
 
-**Working on now:** checkpointed cleanly at the operator's request; the
-next session resumes from RUN_STATE. First up: merge the capture-tool PR
-when its last two CI jobs finish, then the remaining repairs (the
-analysis consumption path for the comparison window, the launch-ceremony
-binding, census-check corrections).
+**Working on now:** the Phase 1 work orders for the claim-consumption edge,
+the launch binding, and a finite work/time budget for calibration-pulse
+detection.
 
-**Queued next:** (1) the remaining repairs above; (2) a re-freeze of the
-measurement packs under the newly ruled evidence-lifetime policy; (3) one
-batched operator session (a sudo grant, a dress rehearsal, hardware
-probes, and three recorded risk-appetite decisions); (4) a focused
-re-audit and a fresh readiness council; (5) the three measurement windows
-— alpha (~6.3 h), beta (~6.5 h), gamma — only after that council says go;
-(6) the paper, filling with measured numbers as they arrive.
+**Queued next:** (1) the remaining Phase 1 work orders; (2) the Phase 2-4
+sequence — one successor-family re-freeze, manifest supersession, focused
+re-audit, and a READY-candidate council sitting; (3) one batched Ed
+qualification session; (4) the alpha, beta, and gamma windows only after a
+GO; and (5) the paper fill as governed results become available.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
