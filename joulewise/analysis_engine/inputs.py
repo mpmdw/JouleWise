@@ -16,6 +16,7 @@ import inspect
 import json
 import math
 import re
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
@@ -25,9 +26,12 @@ from joulewise.analysis_manifest import (
     validate_analysis_manifest,
 )
 from joulewise.analysis_manifest_v3 import (
+    FINALIZED_SCHEMA_VERSION as ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA,
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V3_SCHEMA,
+    is_abba_v3_consumable_schema,
     normalized_realized_stack_identity,
     validate_analysis_manifest_v3,
+    validate_finalized_analysis_manifest_v3,
 )
 from joulewise.arm_readiness import (
     LaunchLineageError,
@@ -546,8 +550,16 @@ def _expected_bundle_config_sha256(value: Mapping[str, Any]) -> str | None:
 
 
 def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]:
+    path = Path(path)
     try:
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+            raise AnalysisInputError(
+                f"{label} path_resolution_refused: symlink or non-regular file"
+            )
         raw = path.read_bytes()
+    except AnalysisInputError:
+        raise
     except OSError as exc:
         raise AnalysisInputError(f"cannot read {label} {path}: {exc}") from exc
     value = _strict_json_admission_bytes(raw, label)
@@ -559,10 +571,26 @@ def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]
 def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
     value, raw = _load_json_object(path, "analysis manifest")
     schema_version = value.get("schema_version")
+    refusals = ()
     if schema_version == ANALYSIS_MANIFEST_V1_SCHEMA:
         errors = validate_analysis_manifest(value, manifest_dir=path.parent)
     elif schema_version == ANALYSIS_MANIFEST_V3_SCHEMA:
         errors = validate_analysis_manifest_v3(value, manifest_dir=path.parent)
+    elif schema_version == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        refusals = validate_finalized_analysis_manifest_v3(
+            value,
+            manifest_path=path,
+            custody_root=path.parent,
+        )
+        errors = [
+            f"{refusal.reason_code}: {refusal.detail}"
+            for refusal in refusals
+        ]
+    elif schema_version == "joulewise.analysis_manifest.v3.prospective":
+        raise AnalysisInputError(
+            "analysis_manifest_prospective_not_consumable: frozen prospective "
+            "manifests must pass the outcome-blind finalizer"
+        )
     elif schema_version == "joulewise.analysis_manifest.v2":
         raise AnalysisInputError(
             "analysis manifest v2 is the AP-SPEC sibling and is not consumable "
@@ -573,8 +601,240 @@ def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
             f"unsupported analysis manifest schema_version: {schema_version!r}"
         )
     if errors:
-        raise AnalysisInputError("invalid analysis manifest: " + "; ".join(errors))
+        error = AnalysisInputError(
+            "invalid analysis manifest: " + "; ".join(errors)
+        )
+        refusal_cause = next(
+            (
+                refusal.cause
+                for refusal in refusals
+                if refusal.cause is not None
+            ),
+            None,
+        )
+        if refusal_cause is not None:
+            raise error from refusal_cause
+        raise error
     return value, hashlib.sha256(raw).hexdigest()
+
+
+def _manifest_collection_id(manifest: Mapping[str, Any]) -> str:
+    if manifest.get("schema_version") == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        lineage = manifest.get("lineage")
+        identity = (
+            lineage.get("collection_manifest_id")
+            if isinstance(lineage, Mapping)
+            else None
+        )
+        if isinstance(identity, str) and identity:
+            return identity
+        raise AnalysisInputError(
+            "analysis_manifest_collection_identity_mismatch: finalized manifest "
+            "lacks its authenticated collection identity"
+        )
+    return str(manifest["manifest_id"])
+
+
+def _manifest_config_root(
+    manifest: Mapping[str, Any], manifest_path: Path
+) -> Path:
+    root = Path(manifest_path).parent
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        return root
+    lineage = manifest.get("lineage")
+    text = (
+        lineage.get("prospective_manifest_path")
+        if isinstance(lineage, Mapping)
+        else None
+    )
+    if not isinstance(text, str) or not text:
+        raise AnalysisInputError(
+            "analysis_manifest_lineage_mismatch: prospective path is absent"
+        )
+    return (root / text).parent
+
+
+def _lexical_child_path(
+    root: Path,
+    relative: object,
+    *,
+    label: str,
+    require_directory: bool,
+) -> Path:
+    """Resolve one authenticated relative path without following symlinks."""
+
+    if not isinstance(relative, str) or not relative or "\\" in relative:
+        raise AnalysisInputError(f"{label} path_resolution_refused")
+    parsed = PurePosixPath(relative)
+    if (
+        parsed.is_absolute()
+        or parsed.as_posix() != relative
+        or any(part in {"", ".", ".."} for part in parsed.parts)
+    ):
+        raise AnalysisInputError(f"{label} path_resolution_refused")
+    root = Path(root).resolve(strict=True)
+    candidate = root.joinpath(*parsed.parts)
+    current = root
+    try:
+        for part in parsed.parts:
+            current = current / part
+            mode = current.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise AnalysisInputError(f"{label} path_resolution_refused: symlink")
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(root)
+        mode = resolved.stat().st_mode
+    except AnalysisInputError:
+        raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise AnalysisInputError(f"{label} path_resolution_refused") from exc
+    wanted = stat.S_ISDIR(mode) if require_directory else stat.S_ISREG(mode)
+    if not wanted:
+        kind = "directory" if require_directory else "regular file"
+        raise AnalysisInputError(f"{label} must be a {kind}")
+    return resolved
+
+
+def _finalized_runs_root(
+    manifest: Mapping[str, Any], manifest_path: Path, supplied_runs_root: Path
+) -> Path:
+    """Bind consumption to the runs root authenticated by finalization."""
+
+    supplied = Path(supplied_runs_root)
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        try:
+            mode = supplied.lstat().st_mode
+        except OSError as exc:
+            raise AnalysisInputError("runs root path_resolution_refused") from exc
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            raise AnalysisInputError(
+                "runs root path_resolution_refused: must be a non-symlink directory"
+            )
+        return supplied
+    evidence = manifest.get("evidence")
+    bracket_ref = (
+        evidence.get("bracket_binding") if isinstance(evidence, Mapping) else None
+    )
+    relative = bracket_ref.get("path") if isinstance(bracket_ref, Mapping) else None
+    bracket_path = _lexical_child_path(
+        Path(manifest_path).parent,
+        relative,
+        label="authenticated bracket binding",
+        require_directory=False,
+    )
+    bracket, _raw = _load_json_object(bracket_path, "authenticated bracket binding")
+    authenticated_text = bracket.get("runs_root")
+    if not isinstance(authenticated_text, str) or not authenticated_text:
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: bracket has no authenticated runs root"
+        )
+    authenticated = Path(authenticated_text)
+    custody = Path(manifest_path).parent.absolute()
+    resolved_custody = custody.resolve(strict=True)
+    try:
+        try:
+            relative_runs = authenticated.relative_to(custody).as_posix()
+        except ValueError:
+            relative_runs = authenticated.relative_to(resolved_custody).as_posix()
+    except ValueError as exc:
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: authenticated root escapes custody"
+        ) from exc
+    authenticated_resolved = _lexical_child_path(
+        custody,
+        relative_runs,
+        label="authenticated runs root",
+        require_directory=True,
+    )
+    try:
+        supplied_absolute = supplied.absolute()
+        try:
+            supplied_relative = supplied_absolute.relative_to(custody).as_posix()
+        except ValueError:
+            supplied_relative = supplied_absolute.relative_to(
+                resolved_custody
+            ).as_posix()
+        supplied_resolved = _lexical_child_path(
+            custody,
+            supplied_relative,
+            label="supplied runs root",
+            require_directory=True,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: supplied root is not canonical"
+        ) from exc
+    if supplied_resolved != authenticated_resolved:
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: --runs-root differs from finalized authentication"
+        )
+    return authenticated_resolved
+
+
+def _registered_bundle_path(
+    manifest: Mapping[str, Any], entry: Mapping[str, Any], runs_root: Path
+) -> Path:
+    run_id = entry.get("run_id")
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        bundle = Path(runs_root) / str(run_id)
+        _safe_relative(bundle, Path(runs_root))
+        if bundle.exists() and not bundle.is_dir():
+            raise AnalysisInputError(
+                f"registered bundle {run_id!r} must be a directory"
+            )
+        return bundle
+
+    relative = entry.get("bundle_path")
+    bundle = _lexical_child_path(
+        runs_root,
+        relative,
+        label=f"registered bundle {run_id!r}",
+        require_directory=True,
+    )
+    if bundle.name != run_id:
+        raise AnalysisInputError(
+            f"registered bundle path does not preserve run_id {run_id!r}"
+        )
+    legacy_alias = Path(runs_root) / str(run_id)
+    if bundle != legacy_alias.resolve(strict=False) and legacy_alias.exists():
+        raise AnalysisInputError(
+            "analysis_manifest_bundle_path_divergence: authenticated nested "
+            f"bundle {relative!r} conflicts with runs_root/run_id"
+        )
+    for filename in ("config.json", "metadata.json", "summary_metrics.json"):
+        _lexical_child_path(
+            runs_root,
+            f"{relative}/{filename}",
+            label=f"registered bundle {run_id!r}/{filename}",
+            require_directory=False,
+        )
+    return bundle
+
+
+def _enforce_finalized_floor_attachment(
+    manifest: Mapping[str, Any],
+    *,
+    floor_artifact: Mapping[str, Any],
+    floor_sha256: str,
+) -> None:
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        return
+    evidence = manifest.get("evidence")
+    floor = (
+        evidence.get("aggregate_floor_artifact")
+        if isinstance(evidence, Mapping)
+        else None
+    )
+    if (
+        not isinstance(floor, Mapping)
+        or floor.get("sha256") != floor_sha256
+        or floor.get("artifact_id") != floor_artifact.get("artifact_id")
+        or floor.get("schema_version") != floor_artifact.get("schema_version")
+    ):
+        raise AnalysisInputError(
+            "analysis_manifest_floor_attachment_mismatch: --floor-artifact "
+            "is not the exact finalized aggregate floor artifact"
+        )
 
 
 def authenticate_floor_artifact_bytes(
@@ -969,6 +1229,19 @@ def _normalize_evidence_roots(
 
 
 def _manifest_verdict_basis_sha256(manifest: Mapping[str, Any]) -> str | None:
+    if manifest.get("schema_version") == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        evidence = manifest.get("evidence")
+        verdict = (
+            evidence.get("whole_window_verdict")
+            if isinstance(evidence, Mapping)
+            else None
+        )
+        digest = (
+            verdict.get("evaluation_basis_sha256")
+            if isinstance(verdict, Mapping)
+            else None
+        )
+        return digest if isinstance(digest, str) and _SHA256_RE.fullmatch(digest) else None
     if manifest.get("schema_version") != ANALYSIS_MANIFEST_V3_SCHEMA:
         return None
     source = manifest.get("source")
@@ -2478,7 +2751,7 @@ def _enforce_registered_realized_identity(
         if evidence.raw_config is not None and evidence.metadata is not None:
             by_model.setdefault(model_by_entry[entry_id], []).append(evidence)
     expected_by_model: dict[str, Mapping[str, Any]] = {}
-    if manifest.get("schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+    if is_abba_v3_consumable_schema(manifest.get("schema_version")):
         for arm in manifest.get("arms", []):
             if not isinstance(arm, Mapping):
                 continue
@@ -2676,7 +2949,13 @@ def load_analysis_inputs(
     ``evidence_root_mapping_required``.
     """
 
-    manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
+    analysis_manifest_path = Path(analysis_manifest_path)
+    manifest, manifest_sha = load_manifest(analysis_manifest_path)
+    runs_root = _finalized_runs_root(
+        manifest,
+        analysis_manifest_path,
+        Path(runs_root),
+    )
     authenticated_floor = _load_authenticated_floor_artifact(
         Path(floor_artifact_path)
     )
@@ -2697,7 +2976,13 @@ def load_analysis_inputs(
         )
     floor_artifact = authenticated_floor.value
     floor_sha = authenticated_floor.file_sha256
-    runs_root = Path(runs_root)
+    _enforce_finalized_floor_attachment(
+        manifest,
+        floor_artifact=floor_artifact,
+        floor_sha256=floor_sha,
+    )
+    collection_manifest_id = _manifest_collection_id(manifest)
+    config_root = _manifest_config_root(manifest, analysis_manifest_path)
     verdict_basis_sha256 = _manifest_verdict_basis_sha256(manifest)
     normalized_scan_roots, _ = _normalize_evidence_roots(
         authenticated_floor.root_ids,
@@ -2758,7 +3043,7 @@ def load_analysis_inputs(
         calibration_ledger_snapshot=calibration_ledger_snapshot,
     )
     cleanup_records = _campaign_claim_records(
-        runs_root, str(manifest["manifest_id"])
+        runs_root, collection_manifest_id
     )
     registered: dict[str, BundleEvidence] = {}
     for entry in manifest["entries"]:
@@ -2770,11 +3055,16 @@ def load_analysis_inputs(
         ):
             raise AnalysisInputError(f"manifest run_id is not a safe basename: {run_id!r}")
         source_config, _ = _load_json_object(
-            Path(analysis_manifest_path).parent / entry["config"], "manifest config"
+            config_root / entry["config"], "manifest config"
+        )
+        authenticated_bundle_path = _registered_bundle_path(
+            manifest,
+            entry,
+            runs_root,
         )
         registered[entry["entry_id"]] = _read_bundle(
             entry,
-            runs_root / run_id,
+            authenticated_bundle_path,
             runs_root,
             source_config,
             strict_validator,
@@ -2785,7 +3075,7 @@ def load_analysis_inputs(
     cohort_identities = _enforce_registered_realized_identity(manifest, registered)
     effective, extras, replacements, unregistered, top_up_ids = _scan_replacements_and_topups(
         manifest,
-        Path(analysis_manifest_path).parent,
+        config_root,
         runs_root,
         strict_validator,
         registered,
@@ -2809,7 +3099,7 @@ def load_analysis_inputs(
         for evidence in (*registered.values(), *extras):
             _exclude_evidence(evidence, "whole_window_verdict_conflict")
     cooldown_by_bundle = _campaign_cooldown_evidence(
-        runs_root, str(manifest["manifest_id"])
+        runs_root, collection_manifest_id
     )
     for evidence in (*registered.values(), *extras):
         evidence.campaign_cooldown = cooldown_by_bundle.get(evidence.bundle_id)

@@ -15,9 +15,13 @@ from joulewise.detection_floor import (
     attribution_single_count_discipline,
 )
 from joulewise.analysis_manifest_v3 import (
+    AnalysisManifestV3Error,
     ESTIMATOR_ID as ABBA_ESTIMATOR_ID,
     FLOOR_RULE_ID as CROSS_STACK_FLOOR_RULE_ID,
-    SCHEMA_VERSION as ANALYSIS_MANIFEST_V3_SCHEMA,
+    FINALIZED_SCHEMA_VERSION as FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA,
+    TRANSPORT_RULING_PENDING_REFUSAL,
+    frozen_family_block_strata,
+    is_abba_v3_consumable_schema,
 )
 
 from .artifact import finalize_claim_verdicts, write_claim_verdicts_atomic
@@ -364,7 +368,9 @@ def _resolve_contrast_floor(
     request_factory: _FloorRequestFactory | None,
 ) -> list[FloorResolution]:
     resolutions: list[FloorResolution] = []
-    is_v3 = inputs.manifest.get("schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA
+    is_v3 = is_abba_v3_consumable_schema(
+        inputs.manifest.get("schema_version")
+    )
     arm_hashes = {
         arm.get("condition_family_id"): arm.get("condition_family_sha256")
         for arm in inputs.manifest.get("arms", [])
@@ -441,22 +447,6 @@ def _resolve_contrast_floor(
                 request,
                 evidence_binding=binding,
             )
-            if is_v3 and resolution.status != "exact":
-                resolution = FloorResolution(
-                    status="refused",
-                    artifact_id=resolution.artifact_id,
-                    artifact_sha256=resolution.artifact_sha256,
-                    source_cell_ids=resolution.source_cell_ids,
-                    transport_group_id=resolution.transport_group_id,
-                    transport_rule_id=resolution.transport_rule_id,
-                    floor_abs_j=None,
-                    floor_cmp_j=None,
-                    floor_gate_j=None,
-                    reason_codes=(
-                        *resolution.reason_codes,
-                        "exact_stack_required",
-                    ),
-                )
             resolutions.append(resolution)
     return resolutions
 
@@ -467,16 +457,10 @@ def _decorate_v3_floor(
     floor: dict[str, Any],
     resolutions: Sequence[FloorResolution],
 ) -> dict[str, Any]:
-    if manifest.get("schema_version") != ANALYSIS_MANIFEST_V3_SCHEMA:
+    if not is_abba_v3_consumable_schema(manifest.get("schema_version")):
         return floor
-    arm_by_condition = {
-        arm["condition_family_id"]: arm["arm_id"]
-        for arm in manifest.get("arms", [])
-        if isinstance(arm, Mapping)
-        and isinstance(arm.get("condition_family_id"), str)
-        and isinstance(arm.get("arm_id"), str)
-    }
     condition_ids = contrast["floor_selector"]["condition_family_ids"]
+    arm_by_condition = dict(zip(condition_ids, ("A", "B"), strict=True))
     floor.update(
         {
             "claim_floor_rule": CROSS_STACK_FLOOR_RULE_ID,
@@ -767,7 +751,7 @@ def _prepare_contrast_v3(
         "confirmatory_status": confirmatory_status,
         "randomization_check": randomization,
         "evidence_class": evidence_class,
-        "manifest_schema_version": ANALYSIS_MANIFEST_V3_SCHEMA,
+        "manifest_schema_version": inputs.manifest.get("schema_version"),
     }
 
 
@@ -780,7 +764,8 @@ def _prepare_contrast(
     *,
     evidence_class: str,
 ) -> dict[str, Any]:
-    if inputs.manifest.get("schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+    abba_v3 = is_abba_v3_consumable_schema(inputs.manifest.get("schema_version"))
+    if abba_v3:
         return _prepare_contrast_v3(
             inputs,
             contrast,
@@ -1169,7 +1154,7 @@ def _subset_floor(
 def _estimate_prepared_observations(
     prepared: Mapping[str, Any], observations: Sequence[PairedObservation]
 ) -> PairedEstimate:
-    if prepared.get("manifest_schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+    if is_abba_v3_consumable_schema(prepared.get("manifest_schema_version")):
         return estimate_paired_blocks(observations, estimator=ABBA_ESTIMATOR_ID)
     return estimate_manifest_observations(
         prepared["manifest"]["metric"], observations
@@ -1182,7 +1167,7 @@ def _randomization_for_prepared(
     estimate: PairedEstimate | None,
     observations: Sequence[PairedObservation],
 ) -> Mapping[str, Any]:
-    if prepared.get("manifest_schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+    if is_abba_v3_consumable_schema(prepared.get("manifest_schema_version")):
         return {
             "status": "not_required",
             "reason": None,
@@ -1281,8 +1266,9 @@ def _evaluation(
         floor_metadata=floor_metadata,
         hypothesized_direction=(
             prepared["manifest"].get("hypothesized_direction")
-            if prepared.get("manifest_schema_version")
-            == ANALYSIS_MANIFEST_V3_SCHEMA
+            if is_abba_v3_consumable_schema(
+                prepared.get("manifest_schema_version")
+            )
             else None
         ),
     )
@@ -1388,18 +1374,62 @@ def _loo_family(
     }
     if not complete_ids:
         return {contrast_id: [] for contrast_id in contrast_ids}
-    block_ids = list(prepared_by_id[contrast_ids[0]]["manifest"]["block_ids"])
-    if len(block_ids) > 10:
+    abba_v3 = is_abba_v3_consumable_schema(inputs.manifest.get("schema_version"))
+    block_id_by_stratum: dict[str, dict[Any, str]] = {}
+    if abba_v3:
+        try:
+            frozen_strata = frozen_family_block_strata(
+                inputs.manifest, family["family_instance_id"]
+            )
+        except (AnalysisManifestV3Error, KeyError, TypeError) as exc:
+            if (
+                inputs.manifest.get("schema_version")
+                == FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA
+                and len(contrast_ids) > 1
+            ):
+                raise AnalysisInputError(
+                    "analysis_manifest_family_semantics_mismatch: "
+                    f"multi-contrast family lacks complete frozen block strata: {exc}"
+                ) from exc
+            return {contrast_id: [] for contrast_id in contrast_ids}
+        block_id_by_stratum = {
+            contrast_id: {
+                block_number: block_ids[contrast_id]
+                for block_number, block_ids in frozen_strata
+            }
+            for contrast_id in contrast_ids
+        }
+    else:
+        shared_block_ids = list(
+            prepared_by_id[contrast_ids[0]]["manifest"]["block_ids"]
+        )
+        block_id_by_stratum = {
+            contrast_id: {block_id: block_id for block_id in shared_block_ids}
+            for contrast_id in contrast_ids
+        }
+    strata = (
+        sorted(block_id_by_stratum[contrast_ids[0]])
+        if abba_v3
+        else list(block_id_by_stratum[contrast_ids[0]])
+    )
+    if (
+        len(strata) > 10
+        or any(
+            (sorted(mapping) if abba_v3 else list(mapping)) != strata
+            for mapping in block_id_by_stratum.values()
+        )
+    ):
         return {contrast_id: [] for contrast_id in contrast_ids}
     rows: dict[str, list[dict[str, Any]]] = {contrast_id: [] for contrast_id in contrast_ids}
     multiplicity = family["multiplicity"]
-    for omitted_block in block_ids:
+    for omitted_stratum in strata:
         estimates: dict[str, PairedEstimate | None] = {}
         floors: dict[str, dict[str, Any]] = {}
         floor_resolutions: dict[str, tuple[FloorResolution, ...]] = {}
         randomizations: dict[str, Mapping[str, Any]] = {}
         raw: dict[str, float | None] = {}
         for contrast_id in contrast_ids:
+            omitted_block = block_id_by_stratum[contrast_id][omitted_stratum]
             observations = tuple(
                 observation
                 for observation in prepared_by_id[contrast_id]["observations"]
@@ -1438,6 +1468,7 @@ def _loo_family(
         for contrast_id in contrast_ids:
             if contrast_id not in complete_ids:
                 continue
+            omitted_block = block_id_by_stratum[contrast_id][omitted_stratum]
             prepared = prepared_by_id[contrast_id]
             estimate = estimates[contrast_id]
             floor = floors[contrast_id]
@@ -1630,6 +1661,22 @@ def analyze_claims(
         strict_validator=strict_validator,
         evidence_roots=evidence_roots,
     )
+    if inputs.manifest.get("schema_version") == FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA:
+        transported_contrasts = [
+            contrast.get("contrast_id")
+            for contrast in inputs.manifest.get("contrasts", [])
+            if isinstance(contrast, Mapping)
+            and isinstance(contrast.get("floor_dependency"), Mapping)
+            and isinstance(contrast["floor_dependency"].get("transport"), Mapping)
+            and contrast["floor_dependency"]["transport"].get("mode")
+            == "governed_transport"
+        ]
+        if transported_contrasts:
+            raise AnalysisInputError(
+                f"{TRANSPORT_RULING_PENDING_REFUSAL}: valid transported v3 "
+                "floor consumption remains pending the open p256 ruling "
+                f"for {sorted(transported_contrasts)!r}"
+            )
     evidence_class = "legacy_l1" if legacy_l1_mechanics else "current"
     if legacy_l1_mechanics:
         if legacy_allowlist is None:
@@ -1808,9 +1855,16 @@ def analyze_claims(
         "families": family_rows,
         "contrasts": contrast_rows,
     }
-    artifact = finalize_claim_verdicts(body)
+    artifact = finalize_claim_verdicts(
+        body,
+        frozen_manifest=inputs.manifest,
+    )
     if output_path is not None:
-        write_claim_verdicts_atomic(Path(output_path), artifact)
+        write_claim_verdicts_atomic(
+            Path(output_path),
+            artifact,
+            frozen_manifest=inputs.manifest,
+        )
     return artifact
 
 
