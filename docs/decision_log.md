@@ -9124,6 +9124,61 @@ without ceremony not machine-caught; confirmed by both DG lenses).
 5. Execution = WO-LAUNCH-BINDING (council Phase 1); runbook §6/E-step
    deltas + the ceremony-skip regression battery per the consult.
 
+### D-134/D-137 launcher-binding amendment — 2026-08-15
+
+D-134 clause 8 is narrowed: exactly one reviewed launcher may atomically
+claim the single-launch capability, and the consumption receipt alone does
+not prove a launch. Authorization attaches only to the chain start descended
+from that launcher's one-use inherited anonymous-FD handoff.
+
+The following clauses are added to D-134:
+
+11. The sole production entrypoint performs consume → revalidate → `execve`;
+    Ed invokes it personally after inspecting ARM `PASS`/`GO`, and no
+    automated verdict invokes it.
+12. Consumption is irrevocable. Start, settle, and completion are append-only
+    successor receipts; absence or any post-claim failure never reopens the
+    capability.
+13. Collection, post-hoc reduction, whole-window verdict, extraction, and
+    mint independently authenticate launch lineage using the D-078 vocabulary
+    registered below. Backup and quarantine remain available on refusal.
+14. Crash injection, race, ceremony-bypass, mutation, and every-downstream-
+    stage tests are release gates for this mechanism.
+
+D-137 is clarified accordingly: current-boot comparison applies through the
+launcher and chain entry. Historical postcollection consumers compare the
+boot identity recorded in the consumption, lifecycle, and bundle records to
+one another, not to the machine's current boot, so a later reboot does not
+destroy otherwise valid immutable evidence.
+
+### D-078 registry amendment — 2026-08-15: launch-consumption lineage refusals
+
+D-078's closed claim-refusal vocabulary is amended additively for the adopted
+WO-LAUNCH-BINDING contract. The following six exact spellings are registered
+at collection, post-hoc reduction, bound derivation, whole-window verdict,
+extraction, and mint boundaries; no synonym, generic provenance downgrade, or
+latest-wins interpretation is permitted:
+
+- `launch_consumption_missing` — a required consumption reference, primary,
+  or sidecar is absent;
+- `launch_consumption_invalid` — consumption/lifecycle custody is
+  noncanonical or schema-invalid, has a bad sidecar/digest or namespace, or
+  has an invalid predecessor chain;
+- `launch_binding_mismatch` — authenticated records disagree on pack, plan,
+  reviewed HEAD, arm context, collection boot, session IDs, roots, launch
+  recipe bytes, or exact exec argv;
+- `launch_lineage_conflict` — members or artifacts name more than one
+  consumption/pack/boot lineage;
+- `launch_lifecycle_incomplete` — start or settle is absent, or completion is
+  absent at verdict, extraction, or mint;
+- `launch_handoff_invalid` — the chain lacks the one-use inherited anonymous
+  FD token, its SHA-256 disagrees, or the handoff/start is replayed.
+
+These are terminal claim refusals. Backup, quarantine, and immutable evidence
+preservation remain available. A refusal never reopens a consumed capability;
+recovery requires a newly frozen bracket session, new attempt IDs, and a new
+ARM receipt.
+
 ### RECORDER CHECK-TO-GRANT RACE — registered limitation + WO-RECORDER-GRANT-IDENTITY queued (magistrate, 2026-08-15; rule-11 cold gate, composed verdict)
 
 Gate record (the ONE home): docs/process_traces/2026-08-15-recorder-race-coldgate/ —
