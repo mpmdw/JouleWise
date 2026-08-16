@@ -26,7 +26,6 @@ from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_manifest_v3 import (
     ARM_FREEZE,
     FINALIZED_BASENAME_SUFFIX,
-    FINALIZED_SCHEMA_VERSION,
     TRANSPORT_RULING_PENDING_REFUSAL,
     finalize_prospective_analysis_manifest_v3,
     normalized_realized_stack_identity,
@@ -50,7 +49,6 @@ from joulewise.analysis_engine.inputs import (
     floor_stack_identity,
     load_analysis_inputs,
     load_manifest,
-    _registered_bundle_path,
     realized_scientific_identity,
     window_evidence_precheck,
 )
@@ -840,27 +838,283 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     strict_validator=lambda path, strict=True: [],
                 )
 
+    def test_finalized_load_boundary_maps_wrong_typed_sites_to_closed_vocabulary(
+        self,
+    ):
+        refusal_codes = {
+            "analysis_manifest_collection_identity_mismatch",
+            "analysis_manifest_family_semantics_mismatch",
+            "analysis_manifest_finalized_invalid",
+            "analysis_manifest_floor_attachment_mismatch",
+            "analysis_manifest_lineage_mismatch",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            finalized = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+            finalized_path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            cases = {
+                "lineage": {**finalized, "lineage": 7},
+                "condition_families": {
+                    **finalized,
+                    "condition_families": 7,
+                },
+                "design": {**finalized, "design": 7},
+                "replacement_policy": {
+                    **finalized,
+                    "replacement_policy": 7,
+                },
+                "arms": {**finalized, "arms": 7},
+                "entries": {**finalized, "entries": 7},
+                "blocks": {**finalized, "blocks": 7},
+                "families": {**finalized, "families": 7},
+                "contrasts": {**finalized, "contrasts": 7},
+                "finalization_contract": {
+                    **finalized,
+                    "finalization_contract": 7,
+                },
+                "evidence": {**finalized, "evidence": 7},
+            }
+            for label, candidate in cases.items():
+                with self.subTest(label=label):
+                    finalized_path.write_text(
+                        json.dumps(candidate, indent=2, sort_keys=True) + "\n"
+                    )
+                    with self.assertRaises(AnalysisInputError) as raised:
+                        load_manifest(finalized_path)
+                    registered = {
+                        code
+                        for code in refusal_codes
+                        if code in str(raised.exception)
+                    }
+                    self.assertTrue(registered, str(raised.exception))
+                    if label in {"families", "contrasts"}:
+                        self.assertIsInstance(
+                            raised.exception.__cause__, TypeError
+                        )
+                        self.assertIn("TypeError", str(raised.exception))
+
     def test_authenticated_nested_bundle_conflicts_with_run_id_rejoin(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            runs = root / "runs"
-            nested = runs / "nested" / "x"
-            legacy = runs / "x"
-            for bundle in (nested, legacy):
-                bundle.mkdir(parents=True)
-                for filename in (
-                    "config.json",
-                    "metadata.json",
-                    "summary_metrics.json",
-                ):
-                    (bundle / filename).write_text("{}\n")
-            manifest = {"schema_version": FINALIZED_SCHEMA_VERSION}
-            entry = {"run_id": "x", "bundle_path": "nested/x"}
-            with self.assertRaisesRegex(
-                AnalysisInputError,
-                "analysis_manifest_bundle_path_divergence",
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            runs = fixture["runs_root"]
+            campaign_manifest_path = (
+                runs / "campaign_manifests" / "synthetic.json"
+            )
+            campaign_manifest = json.loads(
+                campaign_manifest_path.read_text()
+            )
+            selected_ids = sorted(
+                member["bundle_ids"][0]
+                for member in campaign_manifest["members"]
+            )
+            target_id = selected_ids[2]
+            nested = runs / "nested" / target_id
+            nested.parent.mkdir()
+            shutil.move(str(runs / target_id), nested)
+
+            ledger_path = runs / "selection" / "attempt_ledger.jsonl"
+            ledger_path.parent.mkdir()
+            ledger_path.write_text('{"authenticated":"fixture"}\n')
+            selection = {
+                "schema_version": "joulewise.attempt_ledger_selection.v1",
+                "attempt_ledger_path": ledger_path.relative_to(runs).as_posix(),
+                "attempt_ledger_sha256": hashlib.sha256(
+                    ledger_path.read_bytes()
+                ).hexdigest(),
+                "selected_bundle_ids": selected_ids,
+                "selected_membership_sha256": hashlib.sha256(
+                    json.dumps(
+                        selected_ids,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode()
+                ).hexdigest(),
+                "selected_bundles": [
+                    {
+                        "bundle_id": bundle_id,
+                        "path": (
+                            nested.relative_to(runs).as_posix()
+                            if bundle_id == target_id
+                            else bundle_id
+                        ),
+                    }
+                    for bundle_id in selected_ids
+                ],
+                "quarantined_attempts": [],
+            }
+            selection_manifest = {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "analysis_manifest_id": fixture["prospective"]["manifest_id"],
+                "campaign_policy": campaign_manifest["campaign_policy"],
+                "attempt_ledger_selection": selection,
+                "members": [],
+            }
+            (runs / "campaign_manifests" / "selection.json").write_text(
+                json.dumps(selection_manifest, indent=2, sort_keys=True) + "\n"
+            )
+            (runs / "campaign_log.jsonl").write_text("")
+            policy_path = (
+                ROOT
+                / "configs"
+                / "campaign_policies"
+                / "quiet_mac_p2_production.json"
+            )
+            writer_args = run_campaign_module.parse_args(
+                [
+                    "--whole-window-verdict",
+                    "--runs-dir",
+                    str(runs),
+                    "--campaign-policy",
+                    str(policy_path),
+                    "--neg8-drift-bound",
+                    str(fixture["root"] / "neg8_drift_bound.json"),
+                ]
+            )
+            with (
+                mock.patch.object(
+                    run_campaign_module,
+                    "validated_attempt_selection",
+                    return_value=set(selected_ids),
+                ),
+                mock.patch.object(
+                    run_campaign_module, "validate_bundle", return_value=[]
+                ),
+                mock.patch.object(
+                    run_campaign_module,
+                    "_final_idle_admission_attempt",
+                    return_value=1,
+                ),
+                mock.patch.object(
+                    run_campaign_module,
+                    "_load_idle_rich_telemetry",
+                    return_value=[],
+                ),
+                mock.patch.object(
+                    run_campaign_module,
+                    "post_run_environment_refusals",
+                    return_value=(),
+                ),
+                mock.patch.object(
+                    run_campaign_module,
+                    "evaluate_cpu_idle_admission",
+                    return_value={"decision": "admitted", "conditions": []},
+                ),
+                mock.patch.object(
+                    run_campaign_module,
+                    "_adapter_observations_for",
+                    return_value=[],
+                ),
+                mock.patch.object(
+                    run_campaign_module,
+                    "evaluate_adapter_wattage_continuity",
+                    return_value={
+                        "schema_version": ADAPTER_CONTINUITY_SCHEMA,
+                        "decision": "stable",
+                        "conditions": [],
+                    },
+                ),
+                mock.patch.object(
+                    run_campaign_module,
+                    "_neg8_reference_scientific_config_sha256",
+                    return_value="8" * 64,
+                ),
+                mock.patch.object(
+                    run_campaign_module,
+                    "calibration_bracket_for_bundles",
+                    return_value=(
+                        {
+                            "schema_version": (
+                                "joulewise.instrument_calibration_bracket.v1"
+                            ),
+                            "status": "passed",
+                            "b_fiducial_s": 0.025,
+                        },
+                        (),
+                    ),
+                ),
+                redirect_stdout(io.StringIO()),
             ):
-                _registered_bundle_path(manifest, entry, runs.resolve())
+                self.assertEqual(
+                    run_campaign_module.run_whole_window_verdict(writer_args),
+                    0,
+                )
+            verdict = read_all_jsonl(runs / "campaign_log.jsonl")[-1]
+            occurrence = next(
+                row
+                for row in verdict["evaluation_basis"]["member_occurrences"]
+                if row["bundle_id"] == target_id
+            )
+            self.assertEqual(
+                occurrence["bundle_path"], f"nested/{target_id}"
+            )
+            fixture["verdict_path"].write_text(
+                json.dumps(verdict, indent=2, sort_keys=True) + "\n"
+            )
+            with mock.patch(
+                "joulewise.whole_window.validated_attempt_selection",
+                return_value=set(selected_ids),
+            ), mock.patch(
+                "joulewise.whole_window.whole_window_refusal_reasons",
+                return_value=(),
+            ):
+                finalized = finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=runs,
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                )
+            finalized_path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            finalized_entry = next(
+                entry
+                for entry in finalized["entries"]
+                if entry["run_id"] == target_id
+            )
+            self.assertEqual(
+                finalized_entry["bundle_path"], f"nested/{target_id}"
+            )
+
+            shutil.copytree(nested, runs / target_id)
+            with (
+                mock.patch(
+                    "joulewise.whole_window.validated_attempt_selection",
+                    return_value=set(selected_ids),
+                ),
+                mock.patch(
+                    "joulewise.whole_window.whole_window_refusal_reasons",
+                    return_value=(),
+                ),
+                self.assertRaisesRegex(
+                    AnalysisInputError,
+                    "analysis_manifest_bundle_path_divergence",
+                ),
+            ):
+                load_analysis_inputs(
+                    finalized_path,
+                    runs,
+                    fixture["floor_path"],
+                    strict_validator=lambda path, strict=True: [],
+                )
 
     def test_consumer_rejects_symlink_and_nonregular_manifest_paths(self):
         with tempfile.TemporaryDirectory() as tmp:

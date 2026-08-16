@@ -2537,7 +2537,12 @@ def validate_prospective_analysis_manifest_v3(
             manifest_dir=manifest_dir,
             plan_tree_path=plan_tree_path,
         )
-    except (KeyError, OverflowError, TypeError, ValueError) as exc:
+    except Exception as exc:
+        # This is the public admission boundary for Python values, including
+        # values supplied directly by callers rather than decoded from JSON.
+        # Keep the exception class in the refusal detail so a validator defect
+        # remains distinguishable from ordinary malformed input, but never let
+        # an open-ended implementation exception escape the closed vocabulary.
         return (
             ManifestRefusal(
                 "analysis_prospective_schema_invalid",

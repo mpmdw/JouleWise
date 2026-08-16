@@ -571,11 +571,22 @@ def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
     elif schema_version == ANALYSIS_MANIFEST_V3_SCHEMA:
         errors = validate_analysis_manifest_v3(value, manifest_dir=path.parent)
     elif schema_version == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
-        refusals = validate_finalized_analysis_manifest_v3(
-            value,
-            manifest_path=path,
-            custody_root=path.parent,
-        )
+        try:
+            refusals = validate_finalized_analysis_manifest_v3(
+                value,
+                manifest_path=path,
+                custody_root=path.parent,
+            )
+        except Exception as exc:
+            # Finalized manifests are untrusted consumer inputs.  The
+            # validator intentionally exposes detailed programming-error
+            # signals here, but the load boundary must translate every such
+            # signal to the registered refusal vocabulary.
+            raise AnalysisInputError(
+                "invalid analysis manifest: analysis_manifest_finalized_invalid: "
+                "malformed finalized value: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
         errors = [
             f"{refusal.reason_code}: {refusal.detail}"
             for refusal in refusals

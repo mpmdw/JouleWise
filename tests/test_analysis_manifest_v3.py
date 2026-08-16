@@ -608,6 +608,80 @@ class AnalysisManifestV3Tests(unittest.TestCase):
                 all(item.reason_code.startswith("analysis_") for item in refusals)
             )
 
+    def test_prospective_boundary_maps_wrong_typed_sites_to_closed_vocabulary(
+        self,
+    ) -> None:
+        refusal_codes = {
+            "analysis_prospective_block_cover_mismatch",
+            "analysis_prospective_contrast_cover_mismatch",
+            "analysis_prospective_family_invalid",
+            "analysis_prospective_floor_dependency_unresolved",
+            "analysis_prospective_identity_mismatch",
+            "analysis_prospective_member_cover_mismatch",
+            "analysis_prospective_multiplicity_invalid",
+            "analysis_prospective_not_frozen",
+            "analysis_prospective_plan_tree_mismatch",
+            "analysis_prospective_schema_invalid",
+            "analysis_prospective_source_hash_mismatch",
+            "analysis_prospective_unknown_key",
+            "analysis_prospective_unresolved_slot",
+            "analysis_prospective_unsafe_path",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path, plan_tree_path, prospective = (
+                install_synthetic_prospective_fixture(Path(tmp))
+            )
+            cases = {
+                "top_level_list": [],
+                "plan": {**prospective, "plan": 7},
+                "root_order_manifest": {
+                    **prospective,
+                    "root_order_manifest": 7,
+                },
+                "stage_manifests": {**prospective, "stage_manifests": 7},
+                "condition_families": {
+                    **prospective,
+                    "condition_families": 7,
+                },
+                "design": {**prospective, "design": 7},
+                "replacement_policy": {
+                    **prospective,
+                    "replacement_policy": 7,
+                },
+                "families": {**prospective, "families": 7},
+                "contrasts": {**prospective, "contrasts": 7},
+                "finalization_contract": {
+                    **prospective,
+                    "finalization_contract": 7,
+                },
+            }
+            for label, candidate in cases.items():
+                with self.subTest(label=label):
+                    refusals = validate_prospective_analysis_manifest_v3(
+                        candidate,
+                        manifest_dir=manifest_path.parent,
+                        plan_tree_path=plan_tree_path,
+                    )
+                    self.assertTrue(refusals)
+                    self.assertTrue(
+                        all(
+                            refusal.reason_code in refusal_codes
+                            for refusal in refusals
+                        )
+                    )
+
+            exact = validate_prospective_analysis_manifest_v3(
+                [],
+                manifest_dir=manifest_path.parent,
+                plan_tree_path=plan_tree_path,
+            )
+            self.assertEqual(len(exact), 1)
+            self.assertEqual(
+                exact[0].reason_code,
+                "analysis_prospective_schema_invalid",
+            )
+            self.assertIn("AttributeError", exact[0].detail)
+
     def test_checked_in_placeholder_manifest_is_not_a_frozen_prospective(self) -> None:
         draft = json.loads((GAMMA_DIR / "analysis_manifest_v3.json").read_text())
         refusals = validate_prospective_analysis_manifest_v3(
