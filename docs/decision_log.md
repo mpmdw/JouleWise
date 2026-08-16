@@ -9188,8 +9188,10 @@ launch, or a claim:
 - `evidence_author_t0_capture_io_error`
 - `evidence_author_t0_capture_internal_error`
 
-The wrapper accepts only pack/custody/window-plan paths and, at E-4, one
-prompted independent-clock UTC literal. Boot identity, monotonic bounds,
+The wrapper accepts only pack/custody/window-plan paths and, at E-4, two
+prompted operator observations — the independent-clock UTC literal and the
+pasted prior network-time state output; both are registered irreducible
+operator observations, not derived values. Boot identity, monotonic bounds,
 commands, context, manifest, digests, and conclusions are derived. A capture
 is canonical and no-clobber; a preserved nonzero/invalid-result capture still
 refuses and is never permission to continue.
@@ -9258,6 +9260,33 @@ author-pinned? Option (a) genuinely moves the trust root outside Ed but adds
 a server, app distribution, and a macOS-27 dependency — disproportionate to
 this WO, real for a stronger paper. The honest-contract fix lands regardless;
 this call only decides whether option (a) becomes a future work item.
+
+### D-134 amendment — 2026-08-15: T-0 derive-never-enter is a production ceremony, not producer attestation
+
+This amendment supersedes D-134 clause 6 with the ruling's honest production
+contract:
+
+> Derive-never-enter is a production-interface and ceremony rule, not
+> independent producer attestation. When faithfully invoked, the production
+> CLI derives row values, command captures, timestamps, identities, and
+> digests; operators supply only paths and the registered irreducible
+> observations (at E-4, exactly two: the independent-clock UTC literal and
+> the pasted prior network-time state output). Consumers authenticate
+> canonical bytes, same-boot
+> freshness/order, and fresh current-state probes, but cannot prove that the
+> T-0 input bytes originated in the shipped wrapper. Deliberate fabrication by
+> the trusted operator/authority is outside the v1 single-authority threat
+> model.
+
+The previously claimed property that a human cannot hand-produce acceptable
+historical T-0 capture bytes is **NOT enforced**. Removing production clock
+and execution injection parameters is misuse resistance, not a security
+boundary or independent proof of producer origin.
+
+**REGISTERED LIMITATION (v1):** T-0 capture provenance is TRUSTED-OPERATOR —
+deliberate fabrication by the operator is not defended against; the real
+binding to a real quiet window is the human §5A tap + the terminal-review
+attestation + the single-operator assumption, all STATED as the limitation.
 
 ### WO-LAUNCH-BINDING F2 (lineage-locator) — mechanism ADOPTED + WO staged (magistrate, 2026-08-15; Sol design consult)
 

@@ -839,6 +839,13 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 self.assertEqual(receipt["boot_session_id"], TEST_BOOT_SESSION_ID)
                 self.assertEqual(receipt["status"], "PASS")
                 self.assertEqual(receipt["reason_codes"], [])
+                self.assertEqual(
+                    receipt["assurance"],
+                    {
+                        "model": "single_authority_hash_bound_replay.v1",
+                        "independent_attestation": False,
+                    },
+                )
                 horizon = (
                     t0._VOLATILE_EVIDENCE_VALIDITY_NS
                     if receipt["kind"] in t0._VOLATILE_EVIDENCE_KINDS
