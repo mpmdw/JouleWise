@@ -3593,7 +3593,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-15). Latest report: [T6 session 2026-08-13: three D-117 packs frozen and readiness work handed off](docs/run_reports/2026-08-13-t6-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-16). Latest report: [T6 session 2026-08-13: three D-117 packs frozen and readiness work handed off](docs/run_reports/2026-08-13-t6-session.md).
 
 ### [ED-EXTERNAL]
 
