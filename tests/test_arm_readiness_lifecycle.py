@@ -175,7 +175,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
     def install_launch_manifest(
         self, root: Path, pack: Path, custody: Path, arm_path: Path
     ) -> tuple[argparse.Namespace, list[str]]:
-        window_root = root / "window-plan"
+        window_root = custody / "window-plan"
         window_root.mkdir()
         (window_root / "window.env").write_text("PACK_ROOT=/tmp/pack\n")
         chain_path = window_root / "window-chain.zsh"
@@ -187,7 +187,13 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             str(chain_path),
             str(window_root),
         ]
-        manifest_path = root / "launch-manifest.json"
+        manifest_path = (
+            custody
+            / pack.name
+            / "arm_readiness.t0.inputs"
+            / "launch-manifest.json"
+        )
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_bytes(
             render_json(
                 {
@@ -207,6 +213,26 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             lifecycle_event=None,
         )
         return args, exec_argv
+
+    def launch_artifact_references(
+        self, manifest_path: Path
+    ) -> dict[str, dict[str, str]]:
+        manifest = readiness.parse_json_bytes(
+            manifest_path.read_bytes(), require_canonical=True
+        )
+        window_root = Path(str(manifest["window_plan_root"]))
+
+        def reference(path: Path) -> dict[str, str]:
+            return {
+                "path": str(path.resolve()),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+
+        return {
+            "launch_manifest": reference(manifest_path),
+            "window_environment": reference(window_root / "window.env"),
+            "window_chain": reference(window_root / "window-chain.zsh"),
+        }
 
     def test_freeze_receipts_can_never_carry_go(self) -> None:
         receipt = sample_freeze()
@@ -379,6 +405,10 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         with mock.patch.object(
             launch_window, "_install_handoff"
         ), mock.patch.object(
+            readiness,
+            "_attested_launch_artifact_references",
+            return_value=self.launch_artifact_references(args.launch_manifest),
+        ), mock.patch.object(
             launch_window,
             "verify_consumed_launch",
             return_value={"exec_argv": exec_argv},
@@ -406,7 +436,13 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         self.assertEqual(
             consumption["schema_version"], readiness.CONSUMPTION_RECEIPT_SCHEMA
         )
-        with mock.patch.object(launch_window, "_install_handoff"):
+        with mock.patch.object(
+            launch_window, "_install_handoff"
+        ), mock.patch.object(
+            readiness,
+            "_attested_launch_artifact_references",
+            return_value=self.launch_artifact_references(args.launch_manifest),
+        ):
             with self.assertRaisesRegex(
                 ArmReadinessError, "already consumed"
             ) as replay:
@@ -528,6 +564,12 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 return_value=receipt["reviewed_main"],
             ), mock.patch.object(
                 readiness, "_root_policy_refusals", return_value=([], set())
+            ), mock.patch.object(
+                readiness,
+                "_attested_launch_artifact_references",
+                return_value=self.launch_artifact_references(
+                    args.launch_manifest
+                ),
             ), mock.patch.object(
                 readiness,
                 "_exclusive_write",

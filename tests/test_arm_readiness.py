@@ -50,11 +50,15 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                 hashlib.sha256(arm_raw).hexdigest(), self.arm_path.name
             )
         )
-        self.window_root = root / "window-plan"
+        self.window_root = self.custody / "window-plan"
         self.window_root.mkdir()
-        (self.window_root / "window.env").write_text("PACK_ROOT=/tmp/pack\n")
+        (self.window_root / "window.env").write_text(
+            f"PACK_ROOT={self.pack}\n"
+        )
         self.chain_path = self.window_root / "window-chain.zsh"
-        self.chain_path.write_text("#!/bin/zsh\nexit 0\n")
+        self.chain_path.write_text(
+            f"#!/bin/zsh\n# PACK_ROOT={self.pack}\nexit 0\n"
+        )
         self.exec_argv = [
             "/usr/bin/caffeinate",
             "-is",
@@ -62,7 +66,13 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             str(self.chain_path),
             str(self.window_root),
         ]
-        self.manifest_path = root / "launch-manifest.json"
+        self.manifest_path = (
+            self.custody
+            / self.pack.name
+            / "arm_readiness.t0.inputs"
+            / "launch-manifest.json"
+        )
+        self.manifest_path.parent.mkdir(parents=True)
         self.manifest_path.write_bytes(
             readiness.render_json(
                 {
@@ -74,10 +84,119 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                 }
             )
         )
+        self._install_attested_launch_recipe()
+
+    def _rewrite_arm(self) -> None:
+        raw = readiness.render_json(self.arm)
+        self.arm_path.write_bytes(raw)
+        self.arm_path.with_name(f"{self.arm_path.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(
+                hashlib.sha256(raw).hexdigest(), self.arm_path.name
+            )
+        )
+
+    @staticmethod
+    def _artifact(path: Path) -> dict[str, str]:
+        return {
+            "path": str(path.resolve()),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+
+    def _install_attested_launch_recipe(self) -> None:
+        custody_pack_root = self.custody / self.pack.name
+        source_relative = (
+            "arm_readiness.t0.sources/t0-single-launch-capability.json"
+        )
+        source_path = custody_pack_root / source_relative
+        source_path.parent.mkdir(parents=True)
+        source = {
+            "schema_version": "joulewise.arm_readiness_t0_evidence_source.v1",
+            "row_id": "t0.single_launch_capability",
+            "kind": "LAUNCH_RECIPE",
+            "head_commit": self.arm["reviewed_main"]["head_commit"],
+            "head_tree_oid": self.arm["reviewed_main"]["head_tree_oid"],
+            "pack_sha256": self.arm["pack"]["pack_sha256"],
+            "boot_session_id": self.arm["boot_session_id"],
+            "primary_artifacts": [],
+            "input_artifacts": sorted(
+                (
+                    self._artifact(self.manifest_path),
+                    self._artifact(self.window_root / "window.env"),
+                    self._artifact(self.chain_path),
+                ),
+                key=lambda item: item["path"],
+            ),
+            "probes": [],
+            "facts": [
+                {
+                    "fact_id": "t0.single_launch_capability.v1",
+                    "value": {
+                        "atomic_single_use_capability_available": True,
+                        "attempt_ids_unused": True,
+                        "exact_launch_command_frozen": True,
+                        "session_id_unused": True,
+                    },
+                }
+            ],
+            "derivation": {"launch_command": self.exec_argv},
+        }
+        source_raw = readiness.render_json(source)
+        source_path.write_bytes(source_raw)
+        evidence_id = "evidence-t0-t0-single-launch-capability"
+        evidence_name = f"{evidence_id}.json"
+        evidence_path = custody_pack_root / "arm_readiness.evidence" / evidence_name
+        evidence_path.parent.mkdir()
+        evidence = {
+            "schema_version": readiness.EVIDENCE_RECEIPT_SCHEMA,
+            "evidence_id": evidence_id,
+            "kind": "LAUNCH_RECIPE",
+            "status": "PASS",
+            "issued_at_utc": "2026-08-11T00:00:00Z",
+            "boot_session_id": self.arm["boot_session_id"],
+            "valid_until_monotonic_ns": 10**30,
+            "pack_sha256": self.arm["pack"]["pack_sha256"],
+            "head_commit": self.arm["reviewed_main"]["head_commit"],
+            "facts": [
+                {
+                    "fact_id": "t0.single_launch_capability.v1",
+                    "value_type": "OBJECT",
+                    "value": copy.deepcopy(source["facts"][0]["value"]),
+                    "source_kind": "PROBE",
+                    "source_path": source_relative,
+                    "source_sha256": hashlib.sha256(source_raw).hexdigest(),
+                }
+            ],
+            "checks": [{"check_id": "derive-t0-launch", "status": "PASS"}],
+            "reason_codes": [],
+            "assurance": copy.deepcopy(readiness.ASSURANCE),
+        }
+        evidence_raw = readiness.render_json(evidence)
+        evidence_path.write_bytes(evidence_raw)
+        evidence_digest = hashlib.sha256(evidence_raw).hexdigest()
+        evidence_path.with_name(f"{evidence_name}.sha256").write_bytes(
+            readiness.gnu_sidecar(evidence_digest, evidence_name)
+        )
+        self.arm["evidence"] = [
+            {
+                "evidence_id": evidence_id,
+                "receipt_kind": "LAUNCH_RECIPE",
+                "namespace": "WINDOW_CUSTODY",
+                "path": f"arm_readiness.evidence/{evidence_name}",
+                "sha256": evidence_digest,
+                "schema_version": readiness.EVIDENCE_RECEIPT_SCHEMA,
+                "status": "PASS",
+            }
+        ]
+        self._rewrite_arm()
 
     def _consumer_inputs(self, token: bytes = b"t" * 32) -> dict[str, object]:
         arm_raw = self.arm_path.read_bytes()
         manifest_raw = self.manifest_path.read_bytes()
+        manifest = readiness.parse_json_bytes(
+            manifest_raw, require_canonical=True
+        )
+        window_root = Path(str(manifest["window_plan_root"]))
+        chain_path = window_root / "window-chain.zsh"
         return {
             "pack_root": self.pack,
             "arm_receipt": self.arm_path,
@@ -85,26 +204,20 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             "arm_receipt_sha256": hashlib.sha256(arm_raw).hexdigest(),
             "window_custody_root": self.custody,
             "launch_manifest": self.manifest_path,
-            "authenticated_launch_manifest": readiness.parse_json_bytes(
-                manifest_raw, require_canonical=True
-            ),
+            "authenticated_launch_manifest": manifest,
             "launch_manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
-            "window_plan_root": self.window_root,
+            "window_plan_root": window_root,
             "window_environment_sha256": hashlib.sha256(
-                (self.window_root / "window.env").read_bytes()
+                (window_root / "window.env").read_bytes()
             ).hexdigest(),
             "window_chain_sha256": hashlib.sha256(
-                self.chain_path.read_bytes()
+                chain_path.read_bytes()
             ).hexdigest(),
-            "exec_argv": self.exec_argv,
+            "exec_argv": list(manifest["launch_command"]),
             "handoff_token_sha256": hashlib.sha256(token).hexdigest(),
         }
 
-    def _consume(
-        self, token: bytes = b"t" * 32, **overrides: object
-    ) -> dict[str, object]:
-        inputs = self._consumer_inputs(token)
-        inputs.update(overrides)
+    def _invoke_consumer(self, inputs: dict[str, object]) -> dict[str, object]:
         arm_digest = hashlib.sha256(self.arm_path.read_bytes()).hexdigest()
         with mock.patch.object(
             readiness,
@@ -122,6 +235,13 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             readiness, "_root_policy_refusals", return_value=([], set())
         ):
             return readiness._consume_launch_capability(**inputs)
+
+    def _consume(
+        self, token: bytes = b"t" * 32, **overrides: object
+    ) -> dict[str, object]:
+        inputs = self._consumer_inputs(token)
+        inputs.update(overrides)
+        return self._invoke_consumer(inputs)
 
     def _settle(self, token: bytes = b"l" * 32) -> tuple[Path, dict[str, object]]:
         result = self._consume(token)
@@ -497,6 +617,237 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         )
         exclusive_write.assert_called_once()
 
+    def _author_complete_launch_context(self, name: str) -> None:
+        window_root = self.custody / name
+        window_root.mkdir()
+        (window_root / "window.env").write_text(
+            f"PACK_ROOT=/tmp/{name}\nBRACKET_SESSION_ID={name}\n"
+        )
+        chain_path = window_root / "window-chain.zsh"
+        chain_path.write_text(f"#!/bin/zsh\n# {name}\nexit 0\n")
+        argv = [
+            "/usr/bin/caffeinate",
+            "-is",
+            "/bin/zsh",
+            str(chain_path),
+            str(window_root),
+        ]
+        self.manifest_path.write_bytes(
+            readiness.render_json(
+                {
+                    "schema_version": readiness.LAUNCH_MANIFEST_SCHEMA,
+                    "boot_session_id": TEST_BOOT_SESSION_ID,
+                    "window_plan_root": str(window_root),
+                    "prewindow_command": ["/bin/true"],
+                    "launch_command": argv,
+                }
+            )
+        )
+
+    def _install_foreign_pack_session_context(self) -> None:
+        beta = LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        beta.setUp()
+        try:
+            beta_manifest = readiness.parse_json_bytes(
+                beta.manifest_path.read_bytes(), require_canonical=True
+            )
+            self.assertEqual(
+                beta_manifest["boot_session_id"], self.arm["boot_session_id"]
+            )
+            beta_window = Path(str(beta_manifest["window_plan_root"]))
+            staged_window = self.custody / "beta-pack-session"
+            staged_window.mkdir()
+            (staged_window / "window.env").write_bytes(
+                (beta_window / "window.env").read_bytes()
+            )
+            staged_chain = staged_window / "window-chain.zsh"
+            staged_chain.write_bytes(
+                (beta_window / "window-chain.zsh").read_bytes()
+            )
+            beta_manifest["window_plan_root"] = str(staged_window)
+            beta_manifest["launch_command"] = [
+                "/usr/bin/caffeinate",
+                "-is",
+                "/bin/zsh",
+                str(staged_chain),
+                str(staged_window),
+            ]
+            self.manifest_path.write_bytes(readiness.render_json(beta_manifest))
+        finally:
+            beta.doCleanups()
+
+    def _caller_attested_references(self) -> dict[str, dict[str, str]]:
+        inputs = self._consumer_inputs()
+        window_root = Path(str(inputs["window_plan_root"]))
+        return {
+            "launch_manifest": self._artifact(self.manifest_path),
+            "window_environment": self._artifact(window_root / "window.env"),
+            "window_chain": self._artifact(window_root / "window-chain.zsh"),
+        }
+
+    def _assert_current_context_binding_refusal(self) -> None:
+        consumption_dir = (
+            self.custody / self.pack.name / "arm_readiness.consumptions"
+        )
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            self._consume()
+        self.assertEqual(
+            caught.exception.reason_code, "launch_binding_mismatch"
+        )
+        self.assertFalse(consumption_dir.exists())
+
+    def test_foreign_pack_session_refuses_without_burning_honest_arm(self) -> None:
+        honest_manifest = self.manifest_path.read_bytes()
+        self._install_foreign_pack_session_context()
+        self._assert_current_context_binding_refusal()
+        self.manifest_path.write_bytes(honest_manifest)
+        self.assertEqual(self._consume()["status"], "CONSUMED")
+
+    def test_self_authored_context_refuses_without_burning_honest_arm(self) -> None:
+        honest_manifest = self.manifest_path.read_bytes()
+        self._author_complete_launch_context("self-authored-session")
+        self._assert_current_context_binding_refusal()
+        self.manifest_path.write_bytes(honest_manifest)
+        self.assertEqual(self._consume()["status"], "CONSUMED")
+
+    def test_omitted_digest_and_path_inputs_are_registered_usage_refusals(
+        self,
+    ) -> None:
+        consumption_dir = (
+            self.custody / self.pack.name / "arm_readiness.consumptions"
+        )
+        for omitted in ("launch_manifest_sha256", "launch_manifest"):
+            with self.subTest(omitted=omitted):
+                inputs = self._consumer_inputs()
+                del inputs[omitted]
+                with self.assertRaises(readiness.ArmReadinessError) as caught:
+                    self._invoke_consumer(inputs)
+                self.assertEqual(
+                    caught.exception.reason_code, "readiness_usage_invalid"
+                )
+                self.assertFalse(consumption_dir.exists())
+
+    def test_foreign_consumption_record_refuses_on_replay(self) -> None:
+        self._author_complete_launch_context("foreign-replay-session")
+        with mock.patch.object(
+            readiness,
+            "_attested_launch_artifact_references",
+            return_value=self._caller_attested_references(),
+            create=True,
+        ):
+            result = self._consume()
+        consumption_path = Path(str(result["consumption_path"]))
+        with mock.patch.object(
+            readiness, "_pack_record", return_value=self.arm["pack"]
+        ), mock.patch.object(
+            readiness,
+            "_derive_arm_semantics_for_verification",
+            return_value=(self.arm["rows"], self.arm["refusals"]),
+        ), mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            with self.assertRaises(readiness.LaunchLineageError) as caught:
+                readiness.verify_consumed_launch(self.pack, consumption_path)
+        self.assertEqual(
+            caught.exception.reason_code, "launch_binding_mismatch"
+        )
+
+    def test_attested_identity_lookup_is_load_bearing_for_foreign_attacks(
+        self,
+    ) -> None:
+        for attack in ("foreign-pack-session", "self-authored"):
+            fixture = LaunchConsumptionV2Tests(
+                methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            )
+            fixture.setUp()
+            try:
+                if attack == "foreign-pack-session":
+                    fixture._install_foreign_pack_session_context()
+                else:
+                    fixture._author_complete_launch_context(
+                        "self-authored-session"
+                    )
+                with mock.patch.object(
+                    readiness,
+                    "_attested_launch_artifact_references",
+                    return_value=fixture._caller_attested_references(),
+                    create=True,
+                ):
+                    with self.assertRaises(AssertionError):
+                        fixture._assert_current_context_binding_refusal()
+            finally:
+                fixture.doCleanups()
+
+    def test_byte_identical_manifest_at_noncanonical_path_refuses_no_burn(
+        self,
+    ) -> None:
+        substitute = Path(self.temporary.name) / "manifest-copy.json"
+        substitute.write_bytes(self.manifest_path.read_bytes())
+        consumption_dir = (
+            self.custody / self.pack.name / "arm_readiness.consumptions"
+        )
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            self._consume(launch_manifest=substitute)
+        self.assertEqual(
+            caught.exception.reason_code, "launch_binding_mismatch"
+        )
+        self.assertFalse(consumption_dir.exists())
+        self.assertEqual(self._consume()["status"], "CONSUMED")
+
+    def test_launch_recipe_anchor_requires_exactly_one_satisfying_receipt(
+        self,
+    ) -> None:
+        for mode in ("zero", "multiple"):
+            fixture = LaunchConsumptionV2Tests(
+                methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            )
+            fixture.setUp()
+            try:
+                if mode == "zero":
+                    fixture.arm["evidence"] = []
+                else:
+                    original_item = fixture.arm["evidence"][0]
+                    original_path = (
+                        fixture.custody
+                        / fixture.pack.name
+                        / str(original_item["path"])
+                    )
+                    duplicate = readiness.parse_json_bytes(
+                        original_path.read_bytes(), require_canonical=True
+                    )
+                    duplicate["evidence_id"] = "evidence-t0-launch-duplicate"
+                    duplicate_name = "evidence-t0-launch-duplicate.json"
+                    duplicate_path = original_path.with_name(duplicate_name)
+                    duplicate_raw = readiness.render_json(duplicate)
+                    duplicate_path.write_bytes(duplicate_raw)
+                    duplicate_digest = hashlib.sha256(duplicate_raw).hexdigest()
+                    duplicate_path.with_name(
+                        f"{duplicate_name}.sha256"
+                    ).write_bytes(
+                        readiness.gnu_sidecar(duplicate_digest, duplicate_name)
+                    )
+                    duplicate_item = copy.deepcopy(original_item)
+                    duplicate_item.update(
+                        {
+                            "evidence_id": duplicate["evidence_id"],
+                            "path": f"arm_readiness.evidence/{duplicate_name}",
+                            "sha256": duplicate_digest,
+                        }
+                    )
+                    fixture.arm["evidence"].append(duplicate_item)
+                    fixture.arm["evidence"].sort(
+                        key=lambda item: item["evidence_id"]
+                    )
+                fixture._rewrite_arm()
+                with self.subTest(mode=mode):
+                    fixture._assert_current_context_binding_refusal()
+            finally:
+                fixture.doCleanups()
+
     def test_private_consumer_requires_complete_matching_context_before_write(
         self,
     ) -> None:
@@ -518,10 +869,14 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         )
         for name, overrides in cases.items():
             with self.subTest(name=name):
-                with self.assertRaises(readiness.ArmReadinessError) as caught:
+                with self.assertRaises(
+                    (readiness.ArmReadinessError, readiness.LaunchLineageError)
+                ) as caught:
                     self._consume(**overrides)
                 self.assertIn(
-                    caught.exception.reason_code, readiness.READINESS_REASON_CODES
+                    caught.exception.reason_code,
+                    readiness.READINESS_REASON_CODES
+                    | readiness.LAUNCH_LINEAGE_REASON_CODES,
                 )
                 self.assertFalse(consumption_dir.exists())
 

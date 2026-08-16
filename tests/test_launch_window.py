@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -277,6 +278,74 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 context["window_chain_sha256"],
                 arm_readiness.sha256_bytes(fixture.chain_path.read_bytes()),
             )
+        finally:
+            fixture.doCleanups()
+
+    def test_honest_launcher_consumes_verifies_and_reaches_execve(self) -> None:
+        fixture = LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        fixture.setUp()
+        try:
+            args = argparse.Namespace(
+                pack_root=fixture.pack,
+                arm_receipt=fixture.arm_path,
+                arm_readiness_custody_root=fixture.custody,
+                launch_manifest=fixture.manifest_path,
+                lifecycle_event=None,
+            )
+            arm_digest = hashlib.sha256(
+                fixture.arm_path.read_bytes()
+            ).hexdigest()
+            verified_arm = {
+                "status": "PASS",
+                "arm_disposition": "GO",
+                "receipt_path": str(fixture.arm_path.resolve()),
+                "receipt_sha256": arm_digest,
+                "pack_sha256": fixture.arm["pack"]["pack_sha256"],
+            }
+            with mock.patch.object(
+                launch_window, "_verify_arm_receipt", return_value=verified_arm
+            ), mock.patch.object(
+                arm_readiness, "_verify_arm_receipt", return_value=verified_arm
+            ), mock.patch.object(
+                arm_readiness,
+                "reviewed_main",
+                return_value=fixture.arm["reviewed_main"],
+            ), mock.patch.object(
+                arm_readiness, "_root_policy_refusals", return_value=([], set())
+            ), mock.patch.object(
+                arm_readiness, "_pack_record", return_value=fixture.arm["pack"]
+            ), mock.patch.object(
+                arm_readiness,
+                "_derive_arm_semantics_for_verification",
+                return_value=(fixture.arm["rows"], fixture.arm["refusals"]),
+            ), mock.patch.object(
+                arm_readiness,
+                "_current_boot_session_id",
+                return_value=fixture.arm["boot_session_id"],
+            ), mock.patch.object(
+                launch_window, "_install_handoff"
+            ), mock.patch.object(
+                launch_window.os, "execve"
+            ) as execve:
+                with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
+                    launch_window.launch(args)
+            self.assertEqual(
+                caught.exception.reason_code, "launch_consumption_invalid"
+            )
+            execve.assert_called_once_with(
+                fixture.exec_argv[0],
+                fixture.exec_argv,
+                mock.ANY,
+            )
+            consumption_path = (
+                fixture.custody
+                / fixture.pack.name
+                / "arm_readiness.consumptions"
+                / "arm-0001.consumed.json"
+            )
+            self.assertTrue(consumption_path.is_file())
         finally:
             fixture.doCleanups()
 

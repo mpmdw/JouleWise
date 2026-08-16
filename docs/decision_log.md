@@ -9407,12 +9407,28 @@ caller identity is not represented as security.  The sole supported
 production route is the reviewed launcher calling one underscore-named,
 non-exported consumer with mandatory authenticated arm and launch-manifest
 values, their exact primary/artifact digests, the bound roots, exact exec
-argv, and handoff-token digest.  The callee independently reopens and
-reauthenticates the arm receipt, manifest, `window.env`, window chain, roots,
-argv, and digests before any consumption publication.  This required-context
-API is an ordinary-misuse boundary only.  The atomic no-clobber consumption
-primary is the **only real enforcement** and the single-use linearization
-point; every later complete caller loses that write.
+argv, and handoff-token digest.  At reconciliation time, the callee
+independently reopens the arm receipt and follows its digest-pinned
+`evidence[]` LAUNCH_RECIPE item through the authenticated evidence receipt's
+`facts[0].source_path` / `source_sha256` into the custody-root T-0 source
+record.  That source record's `input_artifacts[]` is the identity anchor: the
+caller manifest must occupy the root-locally derived
+`arm_readiness.t0.inputs/launch-manifest.json` path with the attested bytes,
+and `window.env` and `window-chain.zsh` must match their attested paths and
+bytes.  The callee also reconciles boot, custody-contained window root, and
+exact foreground argv before any consumption publication, and replay repeats
+the same reconciliation before PASS.  This required-context API is an
+ordinary-misuse boundary only.  The atomic no-clobber consumption primary is
+the **only real enforcement** and the single-use linearization point; every
+later complete caller loses that write.
+
+The T-0 author validates `window-chain.zsh` content only for exactly one
+reviewed `REPO=` line and the absence of a `QUARANTINE_ROOT=` assignment.
+Consumption therefore binds to the **attested** chain, not to a generally
+reviewed chain; the remaining pre-arm chain-authoring surface is explicit.
+The reconciliation claim is likewise bounded to reconciliation time: the
+registered hostile-same-UID residual includes an exec-time chain swap after
+the final read and before `execve`.
 
 **HONEST REGISTERED LIMITATION:** deliberate in-process invocation of the
 private consumer with forged-but-complete valid inputs is indistinguishable
@@ -9424,6 +9440,19 @@ a separately ruled OS trust boundary.  Ed's batched risk-appetite list carries
 this hostile-same-UID/same-interpreter family with the recorder race and T-0
 provenance limitations; this work order does not silently expand that threat
 model.
+
+**ROUND-3 COLD-GATE RECORD:** the caller-identity/data-authentication pivot was
+recorded by the escalation consult before the third failure, so it is a
+contemporaneous distinction rather than a post-hoc reclassification.  The
+standing trigger was discharged twice: by the consult after failure two and
+by the rule-11 cold gate after failure three; licensing this implementation
+round exercises the cold instance's authority rather than bypassing the
+trigger.  The counterargument remains explicit: under F3's original invariant
+framing (standalone consumption not fully retired), all three failures can be
+read as one class, and mechanism-level repartition without a prior-record test
+could make the trigger unfireable.  Future reauthentication designs must name
+and file:line-confirm the comparison anchor and carry complete-but-foreign,
+attack-shaped regressions.
 
 NDF1 adopts `DEFER_WITH_PHASE_2_RELEASE_GATE`.  D-078's closed vocabulary is
 amended additively with `launch_lineage_axi_unsupported`: a marker-bearing AXI

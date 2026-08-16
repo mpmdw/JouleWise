@@ -60,6 +60,25 @@ LAUNCH_SETTLE_RECEIPT_SCHEMA = "joulewise.launch_settle_receipt.v1"
 LAUNCH_COMPLETION_RECEIPT_SCHEMA = "joulewise.launch_completion_receipt.v1"
 CONTRACT_ID = "D-134"
 ROW_REGISTRY_RELATIVE_PATH = Path("configs/arm_readiness/d117_row_registry_v1.json")
+_T0_EVIDENCE_SOURCE_SCHEMA = "joulewise.arm_readiness_t0_evidence_source.v1"
+_T0_INPUT_DIRECTORY = "arm_readiness.t0.inputs"
+_T0_LAUNCH_SOURCE_KEYS = frozenset(
+    {
+        "schema_version",
+        "row_id",
+        "kind",
+        "head_commit",
+        "head_tree_oid",
+        "pack_sha256",
+        "boot_session_id",
+        "primary_artifacts",
+        "input_artifacts",
+        "probes",
+        "facts",
+        "derivation",
+    }
+)
+_MISSING_LAUNCH_CONTEXT: Any = object()
 
 ASSURANCE = {
     "model": "single_authority_hash_bound_replay.v1",
@@ -4550,6 +4569,204 @@ def _launch_argv_matches(
     )
 
 
+def _attested_launch_artifact_references(
+    pack_root: Path,
+    custody_pack_root: Path,
+    arm_receipt: Mapping[str, Any],
+) -> dict[str, dict[str, str]]:
+    """Resolve the digest-bound T-0 LAUNCH_RECIPE input identities."""
+
+    try:
+        candidates: list[Mapping[str, Any]] = []
+        for item in arm_receipt["evidence"]:
+            if (
+                item.get("namespace") != "WINDOW_CUSTODY"
+                or item.get("receipt_kind") != "LAUNCH_RECIPE"
+            ):
+                continue
+            evidence = _authenticate_generic_evidence_item(
+                item,
+                pack_root,
+                custody_pack_root,
+                expected_pack_sha256=arm_receipt["pack"]["pack_sha256"],
+                expected_head_commit=arm_receipt["reviewed_main"]["head_commit"],
+                expected_boot_session_id=arm_receipt["boot_session_id"],
+            )
+            if _predicate_passes(
+                evidence, "t0.single_launch_capability.v1"
+            ):
+                candidates.append(evidence)
+        if len(candidates) != 1:
+            raise ValueError("arm must bind exactly one launch-recipe receipt")
+        facts = candidates[0]["facts"]
+        if (
+            not facts
+            or facts[0]["fact_id"] != "t0.single_launch_capability.v1"
+            or facts[0]["source_kind"] != "PROBE"
+        ):
+            raise ValueError("launch-recipe receipt must bind its T-0 source")
+        fact = facts[0]
+        source_path = _resolve_namespace_path(
+            custody_pack_root,
+            fact["source_path"],
+            "launch-recipe T-0 source_path",
+        )
+        source_raw = source_path.read_bytes()
+        if sha256_bytes(source_raw) != fact["source_sha256"]:
+            raise ValueError("launch-recipe T-0 source digest changed")
+        source = parse_json_bytes(source_raw, require_canonical=True)
+        if (
+            not isinstance(source, Mapping)
+            or set(source) != _T0_LAUNCH_SOURCE_KEYS
+            or source["schema_version"] != _T0_EVIDENCE_SOURCE_SCHEMA
+            or source["row_id"] != "t0.single_launch_capability"
+            or source["kind"] != "LAUNCH_RECIPE"
+            or source["head_commit"]
+            != arm_receipt["reviewed_main"]["head_commit"]
+            or source["head_tree_oid"]
+            != arm_receipt["reviewed_main"]["head_tree_oid"]
+            or source["pack_sha256"] != arm_receipt["pack"]["pack_sha256"]
+            or source["boot_session_id"] != arm_receipt["boot_session_id"]
+            or not isinstance(source["input_artifacts"], list)
+        ):
+            raise ValueError("launch-recipe T-0 source identity is invalid")
+        artifacts: list[dict[str, str]] = []
+        for raw_artifact in source["input_artifacts"]:
+            if (
+                not isinstance(raw_artifact, Mapping)
+                or set(raw_artifact) != LAUNCH_ARTIFACT_REFERENCE_KEYS
+                or not isinstance(raw_artifact["path"], str)
+                or not Path(raw_artifact["path"]).is_absolute()
+            ):
+                raise ValueError("launch-recipe input artifact is invalid")
+            artifacts.append(
+                {
+                    "path": raw_artifact["path"],
+                    "sha256": _require_lower_sha256(
+                        raw_artifact["sha256"],
+                        "launch-recipe input artifact.sha256",
+                    ),
+                }
+            )
+        canonical_manifest = (
+            custody_pack_root / _T0_INPUT_DIRECTORY / "launch-manifest.json"
+        ).resolve(strict=False)
+        selections = {
+            "launch_manifest": [
+                item
+                for item in artifacts
+                if Path(item["path"]).resolve(strict=False) == canonical_manifest
+            ],
+            "window_environment": [
+                item for item in artifacts if Path(item["path"]).name == "window.env"
+            ],
+            "window_chain": [
+                item
+                for item in artifacts
+                if Path(item["path"]).name == "window-chain.zsh"
+            ],
+        }
+        if any(len(items) != 1 for items in selections.values()):
+            raise ValueError("launch-recipe artifact identities are ambiguous")
+        return {name: dict(items[0]) for name, items in selections.items()}
+    except LaunchLineageError:
+        raise
+    except (
+        ArmReadinessError,
+        KeyError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"arm-attested launch recipe is unavailable or invalid: {exc}",
+        ) from exc
+
+
+def _reconcile_launch_binding(
+    *,
+    pack_root: Path,
+    custody_pack_root: Path,
+    window_custody_root: Path,
+    arm_receipt: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    manifest_reference: Mapping[str, Any],
+    launch_manifest_sha256: str,
+    window_plan_root: Path,
+    window_environment_reference: Mapping[str, Any],
+    window_environment_sha256: str,
+    window_chain_reference: Mapping[str, Any],
+    window_chain_sha256: str,
+    exec_argv: Sequence[str],
+) -> None:
+    """Bind supplied launch inputs to the arm-attested T-0 identities."""
+
+    attested = _attested_launch_artifact_references(
+        pack_root, custody_pack_root, arm_receipt
+    )
+    try:
+        canonical_manifest = (
+            custody_pack_root / _T0_INPUT_DIRECTORY / "launch-manifest.json"
+        ).resolve(strict=True)
+        manifest_path = Path(str(manifest_reference["path"])).resolve(strict=True)
+        attested_manifest_path = Path(
+            attested["launch_manifest"]["path"]
+        ).resolve(strict=True)
+        custody_root = window_custody_root.resolve(strict=True)
+        supplied_window_root = window_plan_root.resolve(strict=True)
+        manifest_window_root = Path(
+            str(manifest["window_plan_root"])
+        ).resolve(strict=True)
+        manifest_window_root.relative_to(custody_root)
+        environment_path = Path(
+            str(window_environment_reference["path"])
+        ).resolve(strict=True)
+        attested_environment_path = Path(
+            attested["window_environment"]["path"]
+        ).resolve(strict=True)
+        chain_path = Path(str(window_chain_reference["path"])).resolve(
+            strict=True
+        )
+        attested_chain_path = Path(attested["window_chain"]["path"]).resolve(
+            strict=True
+        )
+        manifest_argv = list(manifest["launch_command"])
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"launch binding paths are unavailable or outside custody: {exc}",
+        ) from exc
+    if (
+        manifest_path != canonical_manifest
+        or manifest_path != attested_manifest_path
+        or launch_manifest_sha256 != manifest_reference["sha256"]
+        or launch_manifest_sha256 != attested["launch_manifest"]["sha256"]
+        or environment_path != manifest_window_root / "window.env"
+        or environment_path != attested_environment_path
+        or window_environment_sha256 != window_environment_reference["sha256"]
+        or window_environment_sha256
+        != attested["window_environment"]["sha256"]
+        or chain_path != manifest_window_root / "window-chain.zsh"
+        or chain_path != attested_chain_path
+        or window_chain_sha256 != window_chain_reference["sha256"]
+        or window_chain_sha256 != attested["window_chain"]["sha256"]
+        or manifest["boot_session_id"] != arm_receipt["boot_session_id"]
+        or supplied_window_root != manifest_window_root
+        or list(exec_argv) != manifest_argv
+        or not _launch_argv_matches(
+            list(exec_argv),
+            chain_path=chain_path,
+            window_root=manifest_window_root,
+        )
+    ):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch inputs differ from the arm-attested T-0 recipe",
+        )
+
+
 def _replay_consumed_arm(
     expected_pack_root: Path | None,
     consumption: Mapping[str, Any],
@@ -4729,18 +4946,26 @@ def verify_consumed_launch(
     _read_exact_launch_reference(
         consumption["window_environment"], expected_path=window_root / "window.env"
     )
-    chain_path, _chain_raw = _read_exact_launch_reference(
+    _read_exact_launch_reference(
         consumption["window_chain"], expected_path=window_root / "window-chain.zsh"
     )
     manifest_argv = list(manifest["launch_command"])
-    if (
-        manifest["boot_session_id"] != consumption["boot_session_id"]
-        or manifest_argv != consumption["exec_argv"]
-        or (expected_exec_argv is not None and list(expected_exec_argv) != manifest_argv)
-        or not _launch_argv_matches(
-            manifest_argv, chain_path=chain_path, window_root=window_root
-        )
-    ):
+    _reconcile_launch_binding(
+        pack_root=root,
+        custody_pack_root=path.parent.parent,
+        window_custody_root=path.parent.parent.parent,
+        arm_receipt=arm,
+        manifest=manifest,
+        manifest_reference=consumption["launch_manifest"],
+        launch_manifest_sha256=consumption["launch_manifest"]["sha256"],
+        window_plan_root=window_root,
+        window_environment_reference=consumption["window_environment"],
+        window_environment_sha256=consumption["window_environment"]["sha256"],
+        window_chain_reference=consumption["window_chain"],
+        window_chain_sha256=consumption["window_chain"]["sha256"],
+        exec_argv=consumption["exec_argv"],
+    )
+    if expected_exec_argv is not None and list(expected_exec_argv) != manifest_argv:
         raise LaunchLineageError(
             "launch_binding_mismatch", "exact frozen foreground argv disagrees"
         )
@@ -4763,22 +4988,44 @@ def verify_consumed_launch(
 
 def _consume_launch_capability(
     *,
-    pack_root: Path | str,
-    arm_receipt: Path | str,
-    authenticated_arm_receipt: Mapping[str, Any],
-    arm_receipt_sha256: str,
-    window_custody_root: Path | str,
-    launch_manifest: Path | str,
-    authenticated_launch_manifest: Mapping[str, Any],
-    launch_manifest_sha256: str,
-    window_plan_root: Path | str,
-    window_environment_sha256: str,
-    window_chain_sha256: str,
-    exec_argv: Sequence[str],
-    handoff_token_sha256: str,
+    pack_root: Path | str = _MISSING_LAUNCH_CONTEXT,
+    arm_receipt: Path | str = _MISSING_LAUNCH_CONTEXT,
+    authenticated_arm_receipt: Mapping[str, Any] = _MISSING_LAUNCH_CONTEXT,
+    arm_receipt_sha256: str = _MISSING_LAUNCH_CONTEXT,
+    window_custody_root: Path | str = _MISSING_LAUNCH_CONTEXT,
+    launch_manifest: Path | str = _MISSING_LAUNCH_CONTEXT,
+    authenticated_launch_manifest: Mapping[str, Any] = _MISSING_LAUNCH_CONTEXT,
+    launch_manifest_sha256: str = _MISSING_LAUNCH_CONTEXT,
+    window_plan_root: Path | str = _MISSING_LAUNCH_CONTEXT,
+    window_environment_sha256: str = _MISSING_LAUNCH_CONTEXT,
+    window_chain_sha256: str = _MISSING_LAUNCH_CONTEXT,
+    exec_argv: Sequence[str] = _MISSING_LAUNCH_CONTEXT,
+    handoff_token_sha256: str = _MISSING_LAUNCH_CONTEXT,
 ) -> dict[str, Any]:
     """Reauthenticate complete launch inputs, then atomically claim one GO."""
 
+    if any(
+        value is _MISSING_LAUNCH_CONTEXT
+        for value in (
+            pack_root,
+            arm_receipt,
+            authenticated_arm_receipt,
+            arm_receipt_sha256,
+            window_custody_root,
+            launch_manifest,
+            authenticated_launch_manifest,
+            launch_manifest_sha256,
+            window_plan_root,
+            window_environment_sha256,
+            window_chain_sha256,
+            exec_argv,
+            handoff_token_sha256,
+        )
+    ):
+        raise ArmReadinessError(
+            "readiness_usage_invalid",
+            "complete authenticated launch context is required",
+        )
     if not isinstance(authenticated_arm_receipt, Mapping):
         raise ArmReadinessError(
             "readiness_usage_invalid",
@@ -4863,7 +5110,6 @@ def _consume_launch_capability(
         _load_launch_manifest_for_consumption(Path(launch_manifest))
     )
     try:
-        expected_window_root = Path(window_plan_root).resolve(strict=True)
         authenticated_manifest = validate_launch_manifest(
             authenticated_launch_manifest
         )
@@ -4872,19 +5118,26 @@ def _consume_launch_capability(
             "readiness_evidence_unreadable",
             f"assembled launch root is unavailable: {exc}",
         ) from exc
-    if (
-        dict(authenticated_manifest) != dict(manifest)
-        or launch_manifest_sha256 != manifest_ref["sha256"]
-        or expected_window_root
-        != Path(str(manifest["window_plan_root"])).resolve(strict=True)
-        or window_environment_sha256 != env_ref["sha256"]
-        or window_chain_sha256 != chain_ref["sha256"]
-        or list(exec_argv) != manifest["launch_command"]
-    ):
+    if dict(authenticated_manifest) != dict(manifest):
         raise ArmReadinessError(
             "readiness_usage_invalid",
             "assembled launch context changed before consumption",
         )
+    _reconcile_launch_binding(
+        pack_root=root,
+        custody_pack_root=custody_pack_root,
+        window_custody_root=Path(window_custody_root),
+        arm_receipt=receipt,
+        manifest=manifest,
+        manifest_reference=manifest_ref,
+        launch_manifest_sha256=launch_manifest_sha256,
+        window_plan_root=Path(window_plan_root),
+        window_environment_reference=env_ref,
+        window_environment_sha256=window_environment_sha256,
+        window_chain_reference=chain_ref,
+        window_chain_sha256=window_chain_sha256,
+        exec_argv=exec_argv,
+    )
     pack = receipt["pack"]
     consumption = {
         "schema_version": CONSUMPTION_RECEIPT_SCHEMA,
