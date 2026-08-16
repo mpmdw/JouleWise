@@ -194,9 +194,11 @@ Status: **CLOSED.** PR #129 (`7a76a29`) landed the registry-certified
 matrix split. Hosted run `31541829071` succeeded in 3h20m48s from
 2026-08-11T22:18:21Z and is the required second independent decisive
 execution; hosted run `31518739878` is a second success. The pinned
-magistrate disposition therefore discharges D-130's temporary admission,
-lifts its temporary citation-discipline wording, and restores automatic
-push/pull-request triggering. A result that contradicts the custodied local
+magistrate disposition therefore discharges D-130's temporary admission and
+lifts its temporary citation-discipline wording. Automatic push/pull-request
+triggering was briefly restored, then DEFERRED the same day on runnability
+evidence (fixture drift at current main; D-130 closure addendum +
+WO-PROOF-RUNNABILITY-REPAIR). A result that contradicts the custodied local
 execution would still be a new stop signal, not permission to select a
 favorable venue.
 
