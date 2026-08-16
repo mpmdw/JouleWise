@@ -33,9 +33,9 @@ custody docs/process_traces/2026-08-16-launch-f3-coldgate/, self-contained).
 
 **SUCCESSOR ORDER:**
 1. **Phase-1 residue:** WO-CENSUS-SEMANTICS stays HARD-gated on ED-Q-L9-3.
-   Launch-binding stages: calibration-side stage 2 (coordinates with the
-   staged C branch — same file), stage 3 (reduce/mint reauth), stage 4
-   (successor flag, Phase 2). WO-RECORDER-GRANT-IDENTITY (own cold gate) and
+   Launch-binding: stage 3 MERGED #157 (bd333de, post-checkpoint); remaining
+   calibration-side stage 2 (coordinates with the staged C branch — same
+   file) + stage 4 successor flag, both Phase-2-coupled. WO-RECORDER-GRANT-IDENTITY (own cold gate) and
    WO-PROOF-RUNNABILITY-REPAIR (proof-semantics trust gauntlet; restores the
    proof-matrix automatic triggers) are queued kernel rows.
 2. **Phase 2 (the ruled order, council-verdict.md):** ONE atomic

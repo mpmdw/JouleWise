@@ -3243,7 +3243,7 @@
       "priority": "p1_phase_gate",
       "rank": 1,
       "status": "queued",
-      "status_note": "Stages 1+2 (campaign side) MERGED as #156 (f392ff6) incl. the F3 cold-gate arm-attested binding; remaining: calibration-side stage 2 (coordinates with impl/wo-detect-pulses-budget), stage 3 reduce/mint reauth, stage 4 successor flag (Phase 2). Launch stays NO-GO",
+      "status_note": "Stages 1+2 (campaign) MERGED #156 (f392ff6); stage 3 downstream reauth MERGED #157 (bd333de). Remaining: calibration-side stage 2 + stage 4 successor flag — both Phase-2-coupled (ride/follow the re-freeze). Stage-4 round carries a cosmetic nit (stale alias comment, final-head N1). Launch stays NO-GO",
       "stop_card": null
     },
     "WO-PROOF-RUNNABILITY-REPAIR": {
