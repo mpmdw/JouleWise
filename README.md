@@ -9,33 +9,32 @@
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
-## Current activity (refreshed each work block; last: 2026-08-15, council verdict recorded)
+## Current activity (refreshed each work block; last: 2026-08-15, checkpointed at Ed's clear order)
 
-**Just completed:** the comprehensive instrument-readiness audit ran in
-full — an eleven-reviewer sweep over the whole measurement chain, every
-serious finding independently double-checked by adversarial reviewers,
-and the result adjudicated by a fresh pair of judges with no stake in the
-work. The verdict: **not ready yet** — the audit found real defects that
-would have wasted a measurement night (most notably: the frozen packs'
-arming evidence has expired, one required night-time tool has no way to
-produce its own inputs, and two "is the machine quiet?" checks can never
-pass on real macOS). Every defect fails safe — nothing could have
-produced wrong data — but several would have stopped a night cold. The
-full record is committed under
-`docs/process_traces/2026-08-15-readiness-council/`.
+**Just completed:** the full repair program's first wave. After the
+readiness audit's not-ready verdict, every pre-code design ruling was made
+(each through independent cold review — two of which rejected the lead's
+own proposals on executed evidence, which is the process working), and
+three repairs landed: the work-selection gate is now live in the kernel
+(no measurement window can be selected until a fresh readiness council
+says go), the close-out margin recorder accepts the frozen packs' specs
+(it deterministically refused before), and the night-of-measurement
+capture tool now exists (the audit's deepest finding: the arming
+procedure required evidence files nothing could produce).
 
-**Working on now:** the repair program the council ordered — first the
-design rulings, then the code fixes in parallel (an input-capture tool
-for the arming evidence, a work-selection gate repair, the analysis
-consumption path for the comparison window, census-check corrections),
-then a re-freeze and a focused re-audit.
+**Working on now:** checkpointed cleanly at the operator's request; the
+next session resumes from RUN_STATE. First up: merge the capture-tool PR
+when its last two CI jobs finish, then the remaining repairs (the
+analysis consumption path for the comparison window, the launch-ceremony
+binding, census-check corrections).
 
-**Queued next:** (1) the repair program above; (2) one batched operator
-session (sudo checks, a dress rehearsal of the arming night, a few
-hardware probes) once the fixes are in; (3) the three measurement windows
-— alpha (1.5-billion-parameter model, ~6.3 hours), beta (7-billion,
-~6.5 hours), gamma (the direct comparison) — only after a re-audit says
-go; (4) the paper, filling with measured numbers as they arrive.
+**Queued next:** (1) the remaining repairs above; (2) a re-freeze of the
+measurement packs under the newly ruled evidence-lifetime policy; (3) one
+batched operator session (a sudo grant, a dress rehearsal, hardware
+probes, and three recorded risk-appetite decisions); (4) a focused
+re-audit and a fresh readiness council; (5) the three measurement windows
+— alpha (~6.3 h), beta (~6.5 h), gamma — only after that council says go;
+(6) the paper, filling with measured numbers as they arrive.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
