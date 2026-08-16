@@ -3605,7 +3605,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A0 `WO-T0-PRODUCER`: Implement the integrated nine-input T-0 producer, 600-second dwell, D-127 clock route, chain and manifest fixes, real-pack path regression, and terminal-review-trailer producer.
+- READY — A1 `WO-LAUNCH-BINDING`: Bind arm-capability consume to immediate frozen-chain exec and require authenticated launch-consumption provenance at downstream claim consumers.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

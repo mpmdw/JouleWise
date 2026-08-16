@@ -1,6 +1,6 @@
 name: d117-production-proof
 
-# D-130 closure recorded 2026-08-16: PR #129 landed the matrix split;
+# D-130 closure recorded 2026-08-15: PR #129 landed the matrix split;
 # hosted runs 31541829071 and 31518739878 succeeded, discharging the required
 # second independent execution and restoring the pre-advisory automatic
 # triggers. Any later leg contradiction remains a new automatic stop signal.

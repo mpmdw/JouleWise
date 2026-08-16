@@ -9306,7 +9306,7 @@ packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
 
-### D-130 closure recorded — 2026-08-16
+### D-130 closure recorded — 2026-08-15
 
 WO-CI-RESTRUCTURE is **CLOSED**. PR #129 (`7a76a29`) landed the
 registry-certified matrix proof, and hosted run `31541829071` succeeded in

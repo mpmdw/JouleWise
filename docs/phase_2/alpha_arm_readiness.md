@@ -5,7 +5,7 @@ checkpoint re-anchor of this document MUST resweep every gate row's status
 cell against main in the same commit — a banner-only re-anchor is the defect,
 not a smaller version of the fix. -->
 
-**Checkpoint:** 2026-08-16, post-PR #152 main (`fac87d1`; #152 payload
+**Checkpoint:** 2026-08-15, post-PR #152 main (`fac87d1`; #152 payload
 `a61ac92`). **Current verdict: NOT READY. Do not arm Window ALPHA.** The
 2026-08-15 readiness council recorded 0 READY / 11 NOT-READY, and the live
 `WINDOW-COUNCIL-GATE` permits no quiet-machine selection until a reconvened
@@ -55,7 +55,7 @@ freeze receipts, and the council verdict. A prior `PASS` is reported as dated
 evidence only; it does not override the council gate or the required successor
 re-freeze.
 
-| Gate | Status (2026-08-16) | What makes it green | Who acts | Source |
+| Gate | Status (2026-08-15) | What makes it green | Who acts | Source |
 |---|---|---|---|---|
 | Recovery and calibration-ledger arming path | **IMPLEMENTED; exact-head replay pending.** PR #118 landed the recovery path, and #152 landed the strict R2 plan resolver plus the D-127 network-time route. Neither merge is perishable arm evidence. | Re-run the governed recovery, resolver, and ledger checks against the final successor pack and exact reviewed measurement head. | Lead | PR #118; PR #152 (`a61ac92`); D-127; D-121. |
 | Manual arming and recovery procedure | **IMPLEMENTED; prior rehearsal passed; successor dress rehearsal pending.** The 2026-08-13 `dry-run-0001` passed all four hash-bound checks at `49dcc49`; #152 then amended the runbook and T-0 path. | Complete the expanded operator qualification and full dress rehearsal against the successor pack and exact reviewed head. | Lead + Ed | `docs/process_traces/2026-08-13-freeze-execution/dryrun-alpha.json`; PR #152; council verdict. |
