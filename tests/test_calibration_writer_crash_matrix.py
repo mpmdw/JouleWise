@@ -1243,7 +1243,7 @@ print(json.dumps(output, sort_keys=True))
     def test_detection_budget_refuses_with_terminal_custody_and_released_lease(
         self,
     ) -> None:
-        _root, ledger, pin, _plan, session_id, custody = self._case(
+        _root, ledger, pin, plan, session_id, custody = self._case(
             "detection-budget-terminal"
         )
         completed = self._writer_cli(
@@ -1264,12 +1264,22 @@ print(json.dumps(output, sort_keys=True))
             "detection_nonconvergent",
         )
         self.assertEqual(
-            output["detection_projection"]["evaluated_cell_count"],
+            output["detection_projection"]["diagnostics"][
+                "evaluated_cell_count"
+            ],
             1,
         )
         self.assertEqual(
-            output["detection_projection"]["evaluated_cell_budget"],
+            output["detection_projection"]["cell_budget"],
             1,
+        )
+        self.assertEqual(
+            output["detection_projection"]["diagnostics"],
+            {
+                "reproducible": True,
+                "evaluated_cell_count": 1,
+                "trigger": "evaluated_cell_budget",
+            },
         )
 
         evidence_path = custody["pre"] / "instrument_evidence.json"
@@ -1277,6 +1287,8 @@ print(json.dumps(output, sort_keys=True))
         evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
         self.assertEqual(evidence["status"], "invalid")
         self.assertIn("detection_nonconvergent", evidence["reasons"])
+        self.assertIsNone(evidence["b_fiducial_s"])
+        self.assertEqual(evidence["pulses"], [])
         self.assertEqual(
             evidence["detection_projection"],
             output["detection_projection"],
@@ -1310,6 +1322,109 @@ print(json.dumps(output, sort_keys=True))
         self.assertEqual(len(aborts), 1)
         self.assertEqual(aborts[0]["reason"], "detection_nonconvergent")
         self.assertEqual(business[-1], aborts[0])
+        status = self._cli(
+            ledger,
+            pin,
+            "session-status",
+            "--session-id",
+            session_id,
+            "--plan",
+            str(plan),
+        )
+        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+        self.assertEqual(self._payload(status)["session_state"], "aborted")
+        with fiducial_validator.CalibrationWriterLease(ledger):
+            pass
+
+    def test_post_detection_budget_has_terminal_custody_and_released_lease(
+        self,
+    ) -> None:
+        _root, ledger, pin, plan, session_id, custody = self._case(
+            "post-detection-budget-terminal",
+            prefinalize=True,
+        )
+        completed = self._writer_cli(
+            ledger=ledger,
+            pin=pin,
+            session_id=session_id,
+            slot="post",
+            custody=custody["post"],
+            crash_stage=WriterStage.BEFORE_WRITER_LEASE,
+            authorize_crash=False,
+            projection_cell_budget=1,
+            sampler_initial_offset_s=0.4,
+        )
+        self.assertEqual(
+            completed.returncode,
+            1,
+            completed.stdout + completed.stderr,
+        )
+        output = self._payload(completed)
+        self.assertEqual(
+            output["invalid_evidence_disposition"],
+            "detection_nonconvergent",
+        )
+        self.assertEqual(
+            output["detection_projection"]["diagnostics"],
+            {
+                "reproducible": True,
+                "evaluated_cell_count": 1,
+                "trigger": "evaluated_cell_budget",
+            },
+        )
+        self.assertEqual(output["detection_projection"]["cell_budget"], 1)
+
+        evidence_path = custody["post"] / "instrument_evidence.json"
+        self.assertTrue(evidence_path.is_file())
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        self.assertEqual(evidence["status"], "invalid")
+        self.assertIsNone(evidence["b_fiducial_s"])
+        self.assertEqual(evidence["pulses"], [])
+        self.assertEqual(
+            evidence["detection_projection"],
+            output["detection_projection"],
+        )
+
+        receipts = [
+            json.loads(line)
+            for line in ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        business = [
+            receipt
+            for receipt in receipts
+            if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA
+        ]
+        post_finalizations = [
+            receipt
+            for receipt in business
+            if receipt.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
+            and receipt.get("slot") == "post"
+        ]
+        self.assertEqual(len(post_finalizations), 1)
+        terminal = post_finalizations[0]
+        self.assertEqual(terminal["disposition"], "ordinary-invalid")
+        self.assertEqual(
+            terminal["artifact_sha256"]["instrument_evidence.json"],
+            hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(business[-1], terminal)
+        self.assertFalse(
+            any(
+                receipt.get("event") == BRACKET_SESSION_ABORT_EVENT
+                for receipt in business
+            )
+        )
+        status = self._cli(
+            ledger,
+            pin,
+            "session-status",
+            "--session-id",
+            session_id,
+            "--plan",
+            str(plan),
+        )
+        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+        self.assertEqual(self._payload(status)["session_state"], "finalized")
         with fiducial_validator.CalibrationWriterLease(ledger):
             pass
 

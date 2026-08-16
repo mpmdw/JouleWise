@@ -9322,9 +9322,22 @@ diagnostics that cannot restore admissibility.
 The frozen detector budgets are 100,000 evaluated projection cells across the
 complete multi-pulse attempt and a supplementary 120-second monotonic wall
 deadline. The evaluated-cell count is the primary deterministic mechanism;
-the deadline is only a host-safety backstop. Invalid evidence records the
-disposition, trigger, evaluated-cell count, cell budget, and wall budget in
-`instrument_evidence.json`. The normal ledger taxonomy is unchanged:
+the deadline is only a host-safety backstop. The reproducible projection
+receipt content is the disposition, cell budget, and wall budget. Trigger and
+evaluated-cell count live in a separate diagnostics object: cell-budget
+exhaustion marks those diagnostics reproducible and remains identical for
+identical input, while `wall_deadline` marks them `reproducible: false` because
+host speed determines both values. A wall-trigger record is a host-pathology
+diagnostic, not a reproducible measurement. The flat-loss witness cost was
+approximately 2.7 microseconds per cell, so 100,000 cells cost approximately
+0.27 seconds; the 120-second backstop represents about 440x per-cell slowdown
+(approximately 2.65 decimal orders of magnitude) before it can preempt the
+cell cap. The evidence serializer refuses, rather than silently repairing, any
+object that combines a projection disposition with a fitted bound, a detected
+pulse set, or per-pulse fits. The `clock_anchor_unresolved` zero-cell bypass is
+admissible only when `trace_anchor_bound_s` is zero; a nonzero resolved-anchor
+bound combined with that bypass is an API error. The normal ledger taxonomy
+is unchanged:
 post-capture nonconvergence is a completed `ordinary-invalid` observation,
 not a `calibration_exits` preflight refusal. Its slot-finalization receipt
 hash-binds the complete custody artifacts; for an invalid pre slot the

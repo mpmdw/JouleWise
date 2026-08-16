@@ -515,12 +515,87 @@ class DetectorTests(unittest.TestCase):
             payload["detection_projection"],
             {
                 "disposition": DETECTION_NONCONVERGENT,
-                "evaluated_cell_count": 31,
-                "evaluated_cell_budget": 31,
+                "cell_budget": 31,
                 "wall_budget_s": 120.0,
+                "diagnostics": {
+                    "reproducible": True,
+                    "evaluated_cell_count": 31,
+                    "trigger": "evaluated_cell_budget",
+                },
+            },
+        )
+
+    def test_wall_deadline_is_nonreproducible_host_pathology_diagnostic(
+        self,
+    ) -> None:
+        trace, pulses = self.make_case(shift_s=0.0, count=1)
+        with patch.object(
+            fiducial_module,
+            "_pulse_loss_cell_lower_bound",
+            return_value=0.0,
+        ):
+            deterministic = detect_pulses(
+                trace,
+                pulses,
+                projection_cell_budget=31,
+            )
+        with (
+            patch.object(
+                fiducial_module,
+                "_pulse_loss_cell_lower_bound",
+                return_value=0.0,
+            ),
+            patch.object(fiducial_module.time, "monotonic", return_value=1e99),
+        ):
+            wall = detect_pulses(
+                trace,
+                pulses,
+                projection_cell_budget=31,
+            )
+
+        def evidence_payload(detection):
+            return instrument_evidence(
+                detection,
+                bindings={},
+                validation_id="wall-pathology-diagnostic",
+                artifact_sha256={},
+                protocol_pulse_count=1,
+                protocol_id=LEGACY_PROTOCOL_ID,
+            )
+
+        deterministic_evidence = evidence_payload(deterministic)
+        wall_evidence = evidence_payload(wall)
+        deterministic_projection = deterministic_evidence[
+            "detection_projection"
+        ]
+        wall_projection = wall_evidence["detection_projection"]
+        reproducible_fields = ("disposition", "cell_budget", "wall_budget_s")
+        self.assertEqual(
+            {key: deterministic_projection[key] for key in reproducible_fields},
+            {key: wall_projection[key] for key in reproducible_fields},
+        )
+        self.assertEqual(
+            deterministic_projection["diagnostics"],
+            {
+                "reproducible": True,
+                "evaluated_cell_count": 31,
                 "trigger": "evaluated_cell_budget",
             },
         )
+        self.assertEqual(
+            wall_projection["diagnostics"],
+            {
+                "reproducible": False,
+                "evaluated_cell_count": 0,
+                "trigger": "wall_deadline",
+            },
+        )
+        self.assertEqual(wall.fits, ())
+        self.assertIsNone(wall.b_fiducial_s)
+        self.assertEqual(wall.reasons, (DETECTION_NONCONVERGENT,))
+        self.assertEqual(wall_evidence["status"], "invalid")
+        self.assertIsNone(wall_evidence["b_fiducial_s"])
+        self.assertEqual(wall_evidence["pulses"], [])
 
     def test_unresolved_anchor_bypasses_every_projection_cell(self) -> None:
         trace, pulses = self.make_case(shift_s=0.0, count=3)
@@ -545,13 +620,17 @@ class DetectorTests(unittest.TestCase):
             DETECTION_PROJECTION_CELL_BUDGET,
         )
         self.assertEqual(detection.reasons, (CLOCK_ANCHOR_UNRESOLVED,))
-        self.assertTrue(
-            all(
-                fit.reasons == (CLOCK_ANCHOR_UNRESOLVED,)
-                and not fit.detected
-                for fit in detection.fits
+        self.assertEqual(detection.fits, ())
+
+    def test_unresolved_anchor_bypass_refuses_nonzero_anchor_bound(self) -> None:
+        trace, pulses = self.make_case(shift_s=0.0, count=3)
+        with self.assertRaisesRegex(ValueError, "trace_anchor_bound_s == 0"):
+            detect_pulses(
+                trace,
+                pulses,
+                trace_anchor_bound_s=0.001,
+                projection_bypass_reason=CLOCK_ANCHOR_UNRESOLVED,
             )
-        )
 
     def test_missing_edge_fails_closed(self) -> None:
         trace, pulses = self.make_case(shift_s=0.0)
@@ -700,22 +779,39 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(payload["pulse_count"], 3)
 
     def test_healthy_evidence_bytes_match_pre_budget_baseline(self) -> None:
+        bindings = self.bindings(
+            os_build="25F84",
+            mlx_version="0.29.3",
+            pulse_protocol_id=PROTOCOL_ID,
+            estimator_revision=RESIDUAL_REGION_METHOD,
+            protocol_sha256=PROTOCOL_V3_SHA256,
+        )
         payload = instrument_evidence(
             self.make_detection(),
-            bindings=self.bindings(),
-            validation_id="v-byte-stable",
+            bindings=bindings,
+            validation_id="full-writer-artifact-compare",
             artifact_sha256={
                 "raw/powermetrics.plist": "cd" * 32,
                 "events.jsonl": "ef" * 32,
+                "power_trace.csv": "01" * 32,
             },
             protocol_pulse_count=3,
-            protocol_id=LEGACY_PROTOCOL_ID,
+            protocol_id=PROTOCOL_ID,
+            capture_wall_time_s=1_784_491_000.25,
         )
+        payload["clock_anchor"] = {
+            "method": fiducial_module.CLOCK_METHOD_V2,
+            "effective_clock_anchor_bound_s": 0.0025,
+            "diagnostic": "fixed-review-fixture",
+        }
+        payload["clock_anchor_resolved"] = True
         raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
         self.assertNotIn("detection_projection", payload)
+        self.assertEqual(payload["status"], "valid")
+        self.assertEqual(len(raw), 3923)
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "466f5438ad7a5cfb25539686e2d128f5792b4cea411f53e43866cb5dd4a07120",
+            "254b86581074063da7622fd792d520d53726e2b3e4744a4a0647a4fd68cc02c7",
         )
 
     def test_v2_evidence_requires_and_records_capture_wall_time(self) -> None:
@@ -767,6 +863,34 @@ class EvidenceTests(unittest.TestCase):
         )
         self.assertEqual(payload["status"], "invalid")
         self.assertIn("pulse_detection_incomplete", payload["reasons"])
+
+    def test_projection_disposition_with_fitted_evidence_refuses_serialization(
+        self,
+    ) -> None:
+        inconsistent = replace(
+            self.make_detection(),
+            reasons=(DETECTION_NONCONVERGENT,),
+            projection_evaluated_cell_count=31,
+            projection_evaluated_cell_budget=31,
+            projection_disposition=DETECTION_NONCONVERGENT,
+            projection_budget_trigger="evaluated_cell_budget",
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "detection_nonconvergent: projection disposition conflicts with "
+            "fitted evidence",
+        ):
+            instrument_evidence(
+                inconsistent,
+                bindings=self.bindings(),
+                validation_id="inconsistent-projection",
+                artifact_sha256={
+                    "raw/powermetrics.plist": "cd" * 32,
+                    "events.jsonl": "ef" * 32,
+                },
+                protocol_pulse_count=3,
+                protocol_id=LEGACY_PROTOCOL_ID,
+            )
 
     def test_fitted_bound_below_protocol_pulse_count_is_invalid(self) -> None:
         # Regression: a 3-pulse run yields a fitted bound and all-detected, but

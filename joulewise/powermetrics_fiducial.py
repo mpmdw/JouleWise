@@ -73,10 +73,10 @@ FIT_COARSE_STEP_S = 0.005
 FIT_FINE_STEP_S = 0.0005
 REGION_COVERAGE_RESOLUTION_S = 0.0001
 # FROZEN operational work bound for the complete multi-pulse projection.
-# A deterministic 59-pulse synthetic acceptance trace evaluates fewer than
-# 10,000 cells; 100,000 preserves an order-of-magnitude margin while making a
-# flat lower-bound surface stop after finite reproducible work instead of
-# exploring hundreds of millions of cells per pulse.
+# The measured 59-pulse synthetic acceptance trace evaluates 17,505 cells;
+# 100,000 preserves about 5.7x headroom while making a flat lower-bound surface
+# stop after finite reproducible work instead of exploring hundreds of
+# millions of cells per pulse.
 DETECTION_PROJECTION_CELL_BUDGET = 100_000
 # FROZEN supplementary host-safety deadline.  The evaluated-cell budget above
 # is the primary reproducible mechanism; this deadline only catches unexpected
@@ -934,20 +934,18 @@ def detect_pulses(
     if projection_bypass_reason not in (None, CLOCK_ANCHOR_UNRESOLVED):
         raise ValueError("projection_bypass_reason is not registered")
     if projection_bypass_reason == CLOCK_ANCHOR_UNRESOLVED:
+        if float(trace_anchor_bound_s) != 0.0:
+            raise ValueError(
+                "clock_anchor_unresolved bypass requires "
+                "trace_anchor_bound_s == 0"
+            )
         # The capture is already inadmissible, so no fit or full-resolution
         # projection can add evidence.  Preserve the explicit causal linkage
-        # and record zero evaluated cells rather than deriving partial fits.
+        # and record zero evaluated cells without deriving per-pulse fits.
         return FiducialDetection(
             baseline_w=None,
             robust_sigma_w=None,
-            fits=tuple(
-                PulseFit(
-                    pulse_index=index,
-                    detected=False,
-                    reasons=(CLOCK_ANCHOR_UNRESOLVED,),
-                )
-                for index, _pulse in enumerate(pulses)
-            ),
+            fits=(),
             spurious_plateau_count=0,
             all_pulses_detected=False,
             b_fiducial_s=None,
@@ -1347,6 +1345,23 @@ def instrument_evidence(
 
     if protocol_id not in SUPPORTED_PROTOCOL_IDS:
         raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
+    if detection.projection_disposition is not None:
+        if detection.projection_disposition not in (
+            DETECTION_NONCONVERGENT,
+            CLOCK_ANCHOR_UNRESOLVED,
+        ):
+            raise ValueError("projection disposition is not registered")
+        projection_conflicts = (
+            detection.b_fiducial_s is not None
+            or bool(detection.fits)
+            or detection.all_pulses_detected
+            or detection.projection_disposition not in detection.reasons
+        )
+        if projection_conflicts:
+            raise ValueError(
+                f"{detection.projection_disposition}: projection disposition "
+                "conflicts with fitted evidence"
+            )
     binding_fields = (
         V2_BINDING_FIELDS
         if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
@@ -1384,6 +1399,7 @@ def instrument_evidence(
         and required_hashes_ok
         and detection_reasons_ok
         and capture_time_ok
+        and detection.projection_disposition is None
     )
     reasons = list(detection.reasons)
     if missing:
@@ -1464,12 +1480,23 @@ def instrument_evidence(
     if detection.projection_disposition is not None:
         # Present only on governed invalid-evidence paths. Healthy serialized
         # evidence remains byte-identical to the pre-budget implementation.
+        # The top-level fields are the reproducible disposition receipt. A
+        # wall deadline is host-pathology evidence, so its host-dependent
+        # trigger and evaluated count are quarantined as non-reproducible
+        # diagnostics rather than represented as measurement content.
         payload["detection_projection"] = {
             "disposition": detection.projection_disposition,
-            "evaluated_cell_count": detection.projection_evaluated_cell_count,
-            "evaluated_cell_budget": detection.projection_evaluated_cell_budget,
+            "cell_budget": detection.projection_evaluated_cell_budget,
             "wall_budget_s": detection.projection_wall_budget_s,
-            "trigger": detection.projection_budget_trigger,
+            "diagnostics": {
+                "reproducible": (
+                    detection.projection_budget_trigger != "wall_deadline"
+                ),
+                "evaluated_cell_count": (
+                    detection.projection_evaluated_cell_count
+                ),
+                "trigger": detection.projection_budget_trigger,
+            },
         }
     if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
         payload[CAPTURE_TIME_FIELD] = capture_wall_time_s
