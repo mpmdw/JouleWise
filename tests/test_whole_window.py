@@ -7,10 +7,12 @@ import hashlib
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from joulewise.arm_readiness import LaunchLineageError
 from joulewise.floor_extraction import extract_absolute_cell
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
@@ -25,10 +27,16 @@ from joulewise.whole_window import (
     NEG8_BRACKET_SCHEMA,
     WHOLE_WINDOW_SCHEMA,
     WHOLE_WINDOW_SEMANTIC_IDENTITY_KEYS,
+    _authenticate_whole_window_launch_sources,
+    _calibration_launch_lineages,
     _validate_row,
     _validated_member_failures,
     _whole_window_semantic_identity,
+    build_evaluation_basis,
     build_row_provenance,
+    canonical_sha256,
+    launch_lineage_refusal_reasons,
+    mint_neg8_drift_bound_artifact,
     whole_window_refusal_reasons,
 )
 from joulewise.campaign_provenance import (
@@ -920,6 +928,334 @@ class TwoScopeRefusalTests(unittest.TestCase):
         self.assertEqual(session.path_refusal_reasons, {})
         self.assertEqual(session._summaries, {})
         self.assertEqual(session._provenance, {})
+
+
+class LaunchLineageWholeWindowTests(unittest.TestCase):
+    @staticmethod
+    def _lineage(*, plan_id: str = "plan-1") -> dict:
+        return {
+            "schema_version": "joulewise.launch_lineage.v1",
+            "collection_boot_session_id": (
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            ),
+            "pack_id": "pack-1",
+            "plan_id": plan_id,
+            "window_id": "window-1",
+            "bracket_session_id": "bracket-1",
+            "consumption": {"path": "/consume.json", "sha256": "a" * 64},
+            "start": {"path": "/start.json", "sha256": "b" * 64},
+            "settle": {"path": "/settle.json", "sha256": "c" * 64},
+            "completion": None,
+        }
+
+    @staticmethod
+    def _write_bundle(root: Path, bundle_id: str, *, marker: bool) -> Path:
+        path = root / bundle_id
+        path.mkdir()
+        tags = ["launch_lineage_required"] if marker else []
+        (path / "config.json").write_text(
+            json.dumps({"run_metadata": {"tags": tags}}) + "\n",
+            encoding="utf-8",
+        )
+        (path / "metadata.json").write_text("{}\n", encoding="utf-8")
+        return path
+
+    @classmethod
+    def _write_neg8_corpus(
+        cls,
+        root: Path,
+        *,
+        mixed: bool = False,
+    ) -> tuple[Path, dict]:
+        lineage = cls._lineage()
+        members = []
+        for index in range(10):
+            bundle_id = f"member-{index}"
+            path = cls._write_bundle(root, bundle_id, marker=True)
+            stamped = (
+                cls._lineage(plan_id="plan-2")
+                if mixed and index == 9
+                else lineage
+            )
+            (path / "metadata.json").write_text(
+                json.dumps({"extra": {"launch_lineage": stamped}}) + "\n",
+                encoding="utf-8",
+            )
+            (path / "summary_metrics.json").write_text(
+                "{}\n",
+                encoding="utf-8",
+            )
+            members.append(
+                {"bundle_id": bundle_id, "bundle_path": bundle_id}
+            )
+        manifest_path = root / "neg8-corpus.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.neg8_reference_corpus.v1",
+                    "corpus_id": "launch-lineage-corpus",
+                    "freeze_status": "settled_reference",
+                    "condition_id": "df-rq-mid",
+                    "members": members,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return manifest_path, lineage
+
+    @staticmethod
+    def _neg8_patches():
+        def reference(path: Path):
+            value = 10.0 + float(path.name.rsplit("-", 1)[1])
+            return (
+                {"point_j": value, "lower_j": value, "upper_j": value},
+                value - 1.0,
+                None,
+            )
+
+        return (
+            patch(
+                "joulewise.whole_window.authenticate_bundle_launch_lineage",
+                return_value={"authenticated": True},
+            ),
+            patch(
+                "joulewise.whole_window._custody_strict_invalid",
+                return_value=False,
+            ),
+            patch(
+                "joulewise.whole_window._current_strict_summary",
+                return_value=True,
+            ),
+            patch(
+                "joulewise.whole_window._scientific_config_identity",
+                return_value=("d" * 64, True),
+            ),
+            patch(
+                "joulewise.whole_window._reference_energy_evidence",
+                side_effect=reference,
+            ),
+            patch(
+                "joulewise.whole_window.neg8_freshness_bindings_from_metadata",
+                return_value={
+                    "os_build": "fixture-os",
+                    "power_supply_identity_sha256": "e" * 64,
+                    "calibration_identity_sha256": "f" * 64,
+                },
+            ),
+            patch(
+                "joulewise.whole_window._bundle_evidence_sha256",
+                return_value="1" * 64,
+            ),
+        )
+
+    def test_neg8_bound_refuses_marker_without_direct_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path, _lineage = self._write_neg8_corpus(root)
+            (root / "member-0" / "metadata.json").write_text(
+                "{}\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "launch_consumption_missing",
+            ):
+                mint_neg8_drift_bound_artifact(root, manifest_path)
+
+    def test_neg8_bound_authenticates_every_member_and_seals_full_lineage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path, lineage = self._write_neg8_corpus(root)
+            patches = self._neg8_patches()
+            with ExitStack() as stack:
+                authenticate = stack.enter_context(patches[0])
+                for candidate in patches[1:]:
+                    stack.enter_context(candidate)
+                artifact = mint_neg8_drift_bound_artifact(root, manifest_path)
+
+        self.assertEqual(authenticate.call_count, 10)
+        self.assertEqual(artifact["launch_lineage"], lineage)
+
+    def test_neg8_bound_refuses_mixed_full_lineages(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path, _lineage = self._write_neg8_corpus(
+                root,
+                mixed=True,
+            )
+            patches = self._neg8_patches()
+            with ExitStack() as stack:
+                for candidate in patches:
+                    stack.enter_context(candidate)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "launch_lineage_conflict",
+                ):
+                    mint_neg8_drift_bound_artifact(root, manifest_path)
+
+    def test_member_set_refuses_marker_legacy_mix(self) -> None:
+        lineage = self._lineage()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root, "marker", marker=True)
+            self._write_bundle(root, "legacy", marker=False)
+
+            def authenticate(_path, *, config, **_kwargs):
+                tags = config.get("run_metadata", {}).get("tags", [])
+                return (
+                    {"launch_lineage": lineage}
+                    if "launch_lineage_required" in tags
+                    else None
+                )
+
+            with patch(
+                "joulewise.whole_window.authenticate_bundle_launch_lineage",
+                side_effect=authenticate,
+            ):
+                reasons = launch_lineage_refusal_reasons(
+                    root,
+                    {"marker", "legacy"},
+                    require_completion=False,
+                )
+
+        self.assertEqual(reasons, ("launch_lineage_conflict",))
+
+    def test_completion_required_boundary_preserves_registered_code(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root, "marker", marker=True)
+            with patch(
+                "joulewise.whole_window.authenticate_bundle_launch_lineage",
+                side_effect=LaunchLineageError(
+                    "launch_lifecycle_incomplete",
+                    "completion absent",
+                ),
+            ):
+                reasons = launch_lineage_refusal_reasons(
+                    root,
+                    {"marker"},
+                    require_completion=True,
+                )
+
+        self.assertEqual(reasons, ("launch_lifecycle_incomplete",))
+
+    def test_verdict_sources_require_members_calibrations_and_bound_to_match(
+        self,
+    ) -> None:
+        lineage = self._lineage()
+        with (
+            patch(
+                "joulewise.whole_window._calibration_launch_lineages",
+                return_value=(lineage, lineage),
+            ),
+            patch(
+                "joulewise.whole_window.authenticate_launch_lineage",
+                side_effect=lambda value, **_kwargs: {
+                    "launch_lineage": value
+                },
+            ),
+        ):
+            common = _authenticate_whole_window_launch_sources(
+                lineage,
+                calibration_bracket={"pre": {}, "post": {}},
+                drift_bound_artifact={"launch_lineage": lineage},
+                require_completion=True,
+                require_bound=True,
+            )
+            with self.assertRaisesRegex(
+                LaunchLineageError,
+                "members, calibrations, and bound",
+            ):
+                _authenticate_whole_window_launch_sources(
+                    lineage,
+                    calibration_bracket={"pre": {}, "post": {}},
+                    drift_bound_artifact={
+                        "launch_lineage": self._lineage(plan_id="plan-2")
+                    },
+                    require_completion=True,
+                    require_bound=True,
+                )
+
+        self.assertEqual(common, lineage)
+
+    def test_verdict_reopens_both_calibration_receipts_with_completion(self) -> None:
+        lineage = self._lineage()
+        bracket = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for role in ("pre", "post"):
+                custody = root / role
+                custody.mkdir()
+                raw = json.dumps({"launch_lineage": lineage}).encode("utf-8")
+                (custody / "instrument_evidence.json").write_bytes(raw)
+                bracket[role] = {
+                    "relative_path": str(custody),
+                    "evidence_sha256": hashlib.sha256(raw).hexdigest(),
+                }
+            with patch(
+                "joulewise.whole_window.authenticate_launch_lineage",
+                side_effect=lambda value, **_kwargs: {
+                    "launch_lineage": value
+                },
+            ) as authenticate:
+                observed = _calibration_launch_lineages(
+                    bracket,
+                    require_completion=True,
+                )
+
+        self.assertEqual(observed, (lineage, lineage))
+        self.assertEqual(authenticate.call_count, 2)
+        self.assertTrue(
+            all(
+                call.kwargs["require_completion"] is True
+                for call in authenticate.call_args_list
+            )
+        )
+
+    def test_evaluation_basis_carries_full_lineage_only_when_authenticated(
+        self,
+    ) -> None:
+        lineage = self._lineage()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "member").mkdir()
+            occurrences = [{"bundle_id": "member", "bundle_path": "member"}]
+            bracket = {
+                "pre": {"bracket_runs_root": str(root)},
+                "post": {"bracket_runs_root": str(root)},
+            }
+            with (
+                patch(
+                    "joulewise.whole_window._authenticated_bundle_launch_lineage_set",
+                    return_value=lineage,
+                ),
+                patch(
+                    "joulewise.whole_window._authenticate_whole_window_launch_sources",
+                    return_value=lineage,
+                ),
+            ):
+                basis = build_evaluation_basis(
+                    policy_sha256="d" * 64,
+                    member_occurrences=occurrences,
+                    calibration_bracket=bracket,
+                )
+            legacy = build_evaluation_basis(
+                policy_sha256="d" * 64,
+                member_occurrences=occurrences,
+                calibration_bracket=None,
+            )
+
+        self.assertEqual(basis["launch_lineage"], lineage)
+        self.assertEqual(
+            basis["sha256"],
+            canonical_sha256(
+                {key: value for key, value in basis.items() if key != "sha256"}
+            ),
+        )
+        self.assertNotIn("launch_lineage", legacy)
 
 
 if __name__ == "__main__":

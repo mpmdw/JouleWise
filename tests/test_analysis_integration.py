@@ -16,6 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from joulewise import floor_mint_estimator
 from joulewise.analysis_engine import AnalysisInputError, analyze_claims
 from joulewise.analysis_engine.artifact import render_claim_verdicts
 from joulewise.analysis_engine.artifact import (
@@ -33,6 +34,7 @@ from joulewise.analysis_manifest_v3 import (
     finalize_prospective_analysis_manifest_v3,
     normalized_realized_stack_identity,
 )
+from joulewise.arm_readiness import LaunchLineageError
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
 from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.inputs import (
@@ -6213,3 +6215,138 @@ class CooldownResultKeysetUnitTests(unittest.TestCase):
             _cooldown_result_bundle_ids(declared, {"decl-a": [(("m", 0, 0), {})]}),
             ["decl-a"],
         )
+
+
+class MintLaunchLineageAuthenticationTests(unittest.TestCase):
+    @staticmethod
+    def _lineage(*, plan_id: str = "plan-1") -> dict:
+        return {
+            "schema_version": "joulewise.launch_lineage.v1",
+            "collection_boot_session_id": (
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            ),
+            "pack_id": "pack-1",
+            "plan_id": plan_id,
+            "window_id": "window-1",
+            "bracket_session_id": "bracket-1",
+            "consumption": {"path": "/consume.json", "sha256": "a" * 64},
+            "start": {"path": "/start.json", "sha256": "b" * 64},
+            "settle": {"path": "/settle.json", "sha256": "c" * 64},
+            "completion": None,
+        }
+
+    @staticmethod
+    def _component(report: dict) -> SimpleNamespace:
+        return SimpleNamespace(
+            spec={
+                "cells": [
+                    {
+                        "cell_id": "absolute",
+                        "members": [{"bundle_id": "member"}],
+                    }
+                ]
+            },
+            members=(SimpleNamespace(bundle_id="member"),),
+            report=report,
+            whole_window_evaluation_basis_sha256="d" * 64,
+        )
+
+    @staticmethod
+    def _write_bundle(root: Path, *, marker: bool) -> None:
+        bundle = root / "member"
+        bundle.mkdir()
+        (bundle / "config.json").write_text(
+            json.dumps(
+                {
+                    "run_metadata": {
+                        "tags": (
+                            ["launch_lineage_required"] if marker else []
+                        )
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (bundle / "metadata.json").write_text("{}\n", encoding="utf-8")
+
+    def test_copied_lineage_without_source_receipts_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root, marker=True)
+            component = self._component({"launch_lineage": self._lineage()})
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "launch_consumption_missing",
+            ):
+                floor_mint_estimator._authenticate_mint_launch_lineage(
+                    component,
+                    runs_root=root,
+                )
+
+    def test_legacy_sources_are_dormant_but_cannot_claim_copied_lineage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root, marker=False)
+            self.assertIsNone(
+                floor_mint_estimator._authenticate_mint_launch_lineage(
+                    self._component({}),
+                    runs_root=root,
+                )
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "launch_consumption_missing",
+            ):
+                floor_mint_estimator._authenticate_mint_launch_lineage(
+                    self._component({"launch_lineage": self._lineage()}),
+                    runs_root=root,
+                )
+
+    def test_mint_compares_full_copied_lineage_after_direct_authentication(
+        self,
+    ) -> None:
+        authenticated = self._lineage()
+        copied = self._lineage(plan_id="plan-2")
+        component = self._component({"launch_lineage": copied})
+        with mock.patch.object(
+            floor_mint_estimator,
+            "authenticate_window_launch_lineage",
+            return_value=authenticated,
+        ) as reopened:
+            with self.assertRaisesRegex(
+                ValueError,
+                "launch_lineage_conflict",
+            ):
+                floor_mint_estimator._authenticate_mint_launch_lineage(
+                    component,
+                    runs_root=Path("/authenticated-root"),
+                )
+
+        reopened.assert_called_once_with(
+            Path("/authenticated-root"),
+            {"member"},
+            evaluation_basis_sha256="d" * 64,
+        )
+
+    def test_mint_completion_absence_keeps_registered_refusal(self) -> None:
+        component = self._component({"launch_lineage": self._lineage()})
+        with mock.patch.object(
+            floor_mint_estimator,
+            "authenticate_window_launch_lineage",
+            side_effect=LaunchLineageError(
+                "launch_lifecycle_incomplete",
+                "completion absent",
+            ),
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "launch_lifecycle_incomplete",
+            ):
+                floor_mint_estimator._authenticate_mint_launch_lineage(
+                    component,
+                    runs_root=Path("/authenticated-root"),
+                )

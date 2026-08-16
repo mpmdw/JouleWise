@@ -92,6 +92,7 @@ from tests.test_mint_floor_artifact import (
     PLAN_SOURCE,
     allowance,
     authenticated_components,
+    launch_lineage,
     member,
     report_floor,
     source_regime,
@@ -9608,6 +9609,90 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
 
 
 class GeneralizedMintTests(unittest.TestCase):
+    def test_copied_lineage_cache_without_source_authentication_refuses(self) -> None:
+        _plan, _absolute, comparative = authenticated_components()
+        copied = launch_lineage()
+        report = copy.deepcopy(comparative.report)
+        report["launch_lineage"] = copied
+        attacked = replace(comparative, report=report)
+
+        with (
+            mock.patch.object(
+                generalized.mint_estimator,
+                "authenticate_window_launch_lineage",
+                return_value=None,
+            ),
+            self.assertRaisesRegex(ValueError, "launch_consumption_missing"),
+        ):
+            generalized.mint_estimator.authenticate_mint_launch_lineage(
+                attacked,
+                runs_root=Path("/synthetic/evidence"),
+            )
+
+    def test_v2_component_and_aggregate_constructors_carry_lineage(self) -> None:
+        pinset, inputs, snapshot = synthetic_v2_fixture()
+        lineage = launch_lineage()
+        for producer_index, producer in enumerate(pinset["producer_plans"]):
+            plan_id = producer["plan"]["plan_id"]
+            report = copy.deepcopy(inputs[plan_id].cells["decode"].absolute.report)
+            report["launch_lineage"] = copy.deepcopy(lineage)
+            for report_cell in report["cells"]:
+                for member_row in report_cell["members"]:
+                    member_row["launch_lineage"] = copy.deepcopy(lineage)
+            self.assertEqual(validate_d117_mint_consumption_report(report), [])
+            _reattach_producer_report(
+                pinset,
+                inputs,
+                producer_index,
+                report,
+            )
+            producer_input = inputs[plan_id]
+            inputs[plan_id] = replace(
+                producer_input,
+                cells={
+                    role: replace(
+                        cell,
+                        absolute=replace(
+                            cell.absolute,
+                            launch_lineage=copy.deepcopy(lineage),
+                        ),
+                        comparative=replace(
+                            cell.comparative,
+                            launch_lineage=copy.deepcopy(lineage),
+                        ),
+                    )
+                    for role, cell in producer_input.cells.items()
+                },
+            )
+        _repair_v2_pinset_self_hashes(pinset)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path, digest = write_pinset(Path(tmp), pinset)
+            loaded = generalized.load_pinset(path, digest)
+            self.assertIsInstance(loaded, generalized.V2Pinset)
+            with mock.patch.object(
+                generalized.mint_estimator,
+                "authenticate_window_launch_lineage",
+                return_value=lineage,
+            ):
+                artifact, components = generalized._build_v2_artifacts(
+                    pinset=loaded,
+                    pinset_path=path,
+                    pinset_sha256=digest,
+                    producer_inputs=inputs,
+                    calibration_ledger_snapshot=snapshot,
+                    project_commit="0" * 40,
+                    project_tree_state="clean",
+                )
+
+        self.assertEqual(artifact["provenance"]["launch_lineage"], lineage)
+        self.assertTrue(
+            all(
+                component["provenance"]["launch_lineage"] == lineage
+                for component in components
+            )
+        )
+
     def test_mint1_builder_path_is_byte_identical(self) -> None:
         plan, absolute, comparative = authenticated_components()
         expected = mint1.mint_authenticated_artifact(

@@ -10,13 +10,14 @@ campaign-log, and admitted-bundle bytes are authenticated before any
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
 import os
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
 
@@ -55,6 +56,7 @@ from joulewise.floor_extraction import (  # noqa: E402
     EXTRACTION_SPEC_SCHEMA_VERSION,
     validate_extraction_spec,
 )
+from joulewise import floor_mint_estimator  # noqa: E402
 from joulewise.whole_window import (  # noqa: E402
     AuthenticatedConsumptionSession,
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
@@ -190,6 +192,10 @@ class AuthenticatedComponent:
     # Historical v1 records did not retain the projection in memory, so the
     # optional default preserves their construction and artifact bytes.
     whole_window_calibration_bracket: Mapping[str, Any] | None = None
+    # Filled only after the mint independently reopens every governing source
+    # receipt.  Legacy components keep the default and therefore retain their
+    # exact artifact bytes.
+    launch_lineage: Mapping[str, Any] | None = None
 
 
 def _sha256(raw: bytes) -> str:
@@ -263,6 +269,12 @@ def _assert_path_independent(value: object, label: str = "artifact") -> None:
     if isinstance(value, Mapping):
         for key, child in value.items():
             child_label = f"{label}.{key}"
+            if child_label == "artifact.provenance.launch_lineage":
+                # Launch-lineage receipt references are contractually
+                # absolute and authenticated by their exact path plus digest.
+                # This is the sole declared exception to portable artifact
+                # paths; the closed floor schema validates the carrier.
+                continue
             if key == "relative_path":
                 _safe_relative_posix(child, child_label)
             _assert_path_independent(child, child_label)
@@ -1134,7 +1146,7 @@ def _authenticate_component(
         )
 
     regime, scientific_hash, backend = _source_regime(members)
-    return AuthenticatedComponent(
+    component = AuthenticatedComponent(
         evidence_root_id=paths.evidence_root_id,
         calibration_cell_id=paths.calibration_cell_id,
         kind=paths.expected_kind,
@@ -1164,6 +1176,70 @@ def _authenticate_component(
             else None
         ),
     )
+    try:
+        launch_lineage = floor_mint_estimator.authenticate_mint_launch_lineage(
+            component,
+            runs_root=paths.evidence_root,
+        )
+    except ValueError as exc:
+        raise MintError(str(exc)) from exc
+    return replace(
+        component,
+        launch_lineage=(
+            copy.deepcopy(dict(launch_lineage))
+            if isinstance(launch_lineage, Mapping)
+            else None
+        ),
+    )
+
+
+def _common_authenticated_launch_lineage(
+    *components: AuthenticatedComponent,
+) -> Mapping[str, Any] | None:
+    """Require authenticated mint components to be uniformly legacy or one lineage."""
+
+    lineages: list[Mapping[str, Any]] = []
+    for component in components:
+        authenticated = component.launch_lineage
+        copied = (
+            component.report.get("launch_lineage")
+            if isinstance(component.report, Mapping)
+            else None
+        )
+        if authenticated is None:
+            if copied is not None:
+                raise MintError(
+                    "launch_consumption_missing: extraction report claims "
+                    "launch lineage without directly authenticated mint provenance"
+                )
+            continue
+        if not isinstance(authenticated, Mapping):
+            raise MintError(
+                "launch_consumption_invalid: authenticated mint launch lineage "
+                "is not an object"
+            )
+        if not isinstance(copied, Mapping):
+            raise MintError(
+                "launch_consumption_missing: marker-bearing authenticated mint "
+                "component lacks extraction-report lineage"
+            )
+        if canonical_json_sha256(authenticated) != canonical_json_sha256(copied):
+            raise MintError(
+                "launch_lineage_conflict: extraction report differs from "
+                "directly authenticated mint provenance"
+            )
+        lineages.append(authenticated)
+    if lineages and len(lineages) != len(components):
+        raise MintError(
+            "launch_lineage_conflict: mint components mix marker-bearing "
+            "and legacy launch provenance"
+        )
+    if len({canonical_json_sha256(lineage) for lineage in lineages}) > 1:
+        raise MintError(
+            "launch_lineage_conflict: mint components do not share one "
+            "authenticated launch lineage"
+        )
+    return copy.deepcopy(dict(lineages[0])) if lineages else None
 
 
 def _definition_binding(component: AuthenticatedComponent) -> Mapping[str, Any]:
@@ -1435,6 +1511,10 @@ def mint_authenticated_artifact(
         absolute=absolute,
         comparative=comparative,
     )
+    launch_lineage = _common_authenticated_launch_lineage(
+        absolute,
+        comparative,
+    )
     relative_plan = _safe_relative_posix(
         calibration_plan_relative_path,
         "calibration_plan.relative_path",
@@ -1512,24 +1592,27 @@ def mint_authenticated_artifact(
             }
         ],
     )
+    artifact_provenance = {
+        "calibration_plan": {
+            "plan_id": plan["plan_id"],
+            "declared_calibration_scope": PLAN_DECLARED_SCOPE,
+            "relative_path": relative_plan,
+            "sha256": plan_sha256,
+        },
+        "mint_tool_version": MINT_TOOL_VERSION,
+        "implementation": {
+            "project_commit": project_commit,
+            "project_tree_state": project_tree_state,
+            "python_package": "joulewise",
+        },
+    }
+    if launch_lineage is not None:
+        artifact_provenance["launch_lineage"] = launch_lineage
     artifact = build_floor_artifact(
         artifact_id=artifact_id,
         calibration_scope=CALIBRATION_SCOPE,
         source_class=SOURCE_CLASS,
-        provenance={
-            "calibration_plan": {
-                "plan_id": plan["plan_id"],
-                "declared_calibration_scope": PLAN_DECLARED_SCOPE,
-                "relative_path": relative_plan,
-                "sha256": plan_sha256,
-            },
-            "mint_tool_version": MINT_TOOL_VERSION,
-            "implementation": {
-                "project_commit": project_commit,
-                "project_tree_state": project_tree_state,
-                "python_package": "joulewise",
-            },
-        },
+        provenance=artifact_provenance,
         cells=[cell],
         transport_groups=[group],
     )

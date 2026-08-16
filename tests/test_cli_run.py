@@ -1499,6 +1499,23 @@ class StrictValidateTests(CliRunTestCase):
 class ReduceVerbTests(CliRunTestCase):
     """D-078/GOV-02: post-hoc reduction is a new immutable artifact."""
 
+    @staticmethod
+    def launch_lineage() -> dict:
+        return {
+            "schema_version": "joulewise.launch_lineage.v1",
+            "collection_boot_session_id": (
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            ),
+            "pack_id": "pack-1",
+            "plan_id": "plan-1",
+            "window_id": "window-1",
+            "bracket_session_id": "bracket-1",
+            "consumption": {"path": "/consume.json", "sha256": "a" * 64},
+            "start": {"path": "/start.json", "sha256": "b" * 64},
+            "settle": {"path": "/settle.json", "sha256": "c" * 64},
+            "completion": None,
+        }
+
     def make_bundle(self, run_id: str) -> Path:
         exit_code, out, _ = self.run_verb(self.write_config(run_id))
         self.assertEqual(exit_code, 0)
@@ -1517,11 +1534,55 @@ class ReduceVerbTests(CliRunTestCase):
         self.assertEqual((bundle / "summary_metrics.json").read_bytes(), original_bytes)
         rederived = json.loads(output_path.read_text())
         self.assertEqual(rederived, original)
+        self.assertNotIn("launch_lineage", rederived)
         self.assertFalse(
             (bundle / f"summary_metrics.rereduced.{SUMMARY_REDUCER_VERSION}.json").exists()
         )
         # The re-reduced bundle still validates structurally.
         self.assertEqual(validate_bundle(bundle), [])
+
+    def test_marker_reduce_without_lineage_refuses_before_reducer(self) -> None:
+        bundle = self.make_bundle("reduce-marker-missing-lineage")
+        output_path = self.tmp / "marker-missing.rereduced.json"
+        config = json.loads((bundle / "config.json").read_text())
+        config["run_metadata"]["tags"].append("launch_lineage_required")
+        (bundle / "config.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n"
+        )
+
+        with patch("joulewise.cli.reduce_bundle") as reducer:
+            exit_code, _out, err = _run(
+                ["reduce", str(bundle), "--output", str(output_path)]
+            )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("launch_consumption_missing", err)
+        reducer.assert_not_called()
+        self.assertFalse(output_path.exists())
+
+    def test_marker_reduce_carries_full_authenticated_lineage(self) -> None:
+        bundle = self.make_bundle("reduce-marker-authenticated")
+        output_path = self.tmp / "marker-authenticated.rereduced.json"
+        config = json.loads((bundle / "config.json").read_text())
+        config["run_metadata"]["tags"].append("launch_lineage_required")
+        (bundle / "config.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n"
+        )
+        lineage = self.launch_lineage()
+
+        with patch(
+            "joulewise.cli.authenticate_bundle_launch_lineage",
+            return_value={"launch_lineage": lineage},
+        ):
+            exit_code, _out, err = _run(
+                ["reduce", str(bundle), "--output", str(output_path)]
+            )
+
+        self.assertEqual(exit_code, 0, err)
+        self.assertEqual(
+            json.loads(output_path.read_text())["launch_lineage"],
+            lineage,
+        )
 
     def test_reduce_corrupt_metadata_exit_3_structured_summary(self) -> None:
         bundle = self.make_bundle("reduce-corrupt")

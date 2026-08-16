@@ -2180,6 +2180,38 @@ def build_evaluation_basis(
         ),
     )
     bracket_set = _calibration_bracket_basis(calibration_bracket)
+    launch_lineage: dict[str, Any] | None = None
+    pre_calibration = (
+        calibration_bracket.get("pre")
+        if isinstance(calibration_bracket, Mapping)
+        else None
+    )
+    recorded_runs_root = (
+        pre_calibration.get("bracket_runs_root")
+        if isinstance(pre_calibration, Mapping)
+        else None
+    )
+    if isinstance(recorded_runs_root, str) and recorded_runs_root:
+        try:
+            runs_root = Path(recorded_runs_root).resolve(strict=True)
+            bundle_paths = [
+                _safe_source_path(runs_root, occurrence.get("bundle_path"))
+                for occurrence in occurrences
+            ]
+        except (OSError, RuntimeError):
+            bundle_paths = []
+        if bundle_paths and all(path is not None for path in bundle_paths):
+            member_lineage = _authenticated_bundle_launch_lineage_set(
+                [path for path in bundle_paths if path is not None],
+                require_completion=True,
+            )
+            launch_lineage = _authenticate_whole_window_launch_sources(
+                member_lineage,
+                calibration_bracket=calibration_bracket,
+                drift_bound_artifact=None,
+                require_completion=True,
+                require_bound=False,
+            )
     payload = {
         "schema_version": WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA,
         "policy_sha256": policy_sha256,
@@ -2187,6 +2219,8 @@ def build_evaluation_basis(
         "calibration_bracket_set": bracket_set,
         "consumption_semantics_id": consumption_semantics_id,
     }
+    if launch_lineage is not None:
+        payload["launch_lineage"] = launch_lineage
     if consumption_semantics_id in {
         MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
         SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
@@ -2269,6 +2303,152 @@ def ordinary_present_bundle_paths(runs_root: Path, bundle_id: str) -> list[Path]
     return result
 
 
+def _authenticated_bundle_launch_lineage_set(
+    bundle_paths: Sequence[Path],
+    *,
+    require_completion: bool,
+) -> dict[str, Any] | None:
+    """Directly authenticate one identical lineage across exact bundles."""
+
+    lineages: list[dict[str, Any]] = []
+    for path in bundle_paths:
+        config = _read_json_object(path / "config.json")
+        metadata = _read_json_object(path / "metadata.json")
+        authenticated = authenticate_bundle_launch_lineage(
+            path,
+            config=config,
+            metadata=metadata,
+            require_completion=require_completion,
+        )
+        if authenticated is not None:
+            # authenticate_launch_lineage derives and authenticates the
+            # completion receipt when required.  Preserve the settled full
+            # lineage byte-for-byte: its schema intentionally keeps
+            # completion null because collection precedes completion.
+            raw_lineage = authenticated.get("launch_lineage")
+            lineages.append(
+                dict(raw_lineage)
+                if isinstance(raw_lineage, Mapping)
+                else dict(authenticated)
+            )
+    if not lineages:
+        return None
+    if len(lineages) != len(bundle_paths) or len(
+        {canonical_sha256(lineage) for lineage in lineages}
+    ) != 1:
+        raise LaunchLineageError(
+            "launch_lineage_conflict",
+            "window members do not carry one identical authenticated lineage",
+        )
+    return lineages[0]
+
+
+def _calibration_launch_lineages(
+    calibration_bracket: Mapping[str, Any],
+    *,
+    require_completion: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Reopen both selected calibration evidence files and their receipts."""
+
+    result: list[dict[str, Any]] = []
+    for role in ("pre", "post"):
+        descriptor = calibration_bracket.get(role)
+        if not isinstance(descriptor, Mapping):
+            raise LaunchLineageError(
+                "launch_consumption_missing",
+                f"whole-window {role} calibration descriptor is absent",
+            )
+        source = descriptor.get("relative_path")
+        expected_sha256 = descriptor.get("evidence_sha256")
+        if not isinstance(source, str) or not source:
+            raise LaunchLineageError(
+                "launch_consumption_missing",
+                f"whole-window {role} calibration source is absent",
+            )
+        evidence_path = Path(source) / "instrument_evidence.json"
+        try:
+            raw = read_authentication_input(
+                evidence_path,
+                grammar="json",
+                label=f"whole-window {role} calibration launch lineage",
+            )
+            evidence = json.loads(raw)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise LaunchLineageError(
+                "launch_consumption_missing",
+                f"whole-window {role} calibration evidence is unavailable: {exc}",
+            ) from exc
+        if (
+            not isinstance(expected_sha256, str)
+            or hashlib.sha256(raw).hexdigest() != expected_sha256
+            or not isinstance(evidence, Mapping)
+        ):
+            raise LaunchLineageError(
+                "launch_consumption_invalid",
+                f"whole-window {role} calibration evidence digest is invalid",
+            )
+        lineage = evidence.get("launch_lineage")
+        if not isinstance(lineage, Mapping):
+            raise LaunchLineageError(
+                "launch_consumption_missing",
+                f"whole-window {role} calibration launch lineage is absent",
+            )
+        authenticated = authenticate_launch_lineage(
+            lineage,
+            require_completion=require_completion,
+        )
+        result.append(dict(authenticated["launch_lineage"]))
+    return result[0], result[1]
+
+
+def _authenticate_whole_window_launch_sources(
+    member_lineage: dict[str, Any] | None,
+    *,
+    calibration_bracket: Mapping[str, Any] | None,
+    drift_bound_artifact: Mapping[str, Any] | None,
+    require_completion: bool,
+    require_bound: bool,
+) -> dict[str, Any] | None:
+    """Authenticate calibrations/bound and reconcile them with members."""
+
+    if member_lineage is None:
+        return None
+    if not isinstance(calibration_bracket, Mapping):
+        raise LaunchLineageError(
+            "launch_consumption_missing",
+            "whole-window calibration bracket is absent",
+        )
+    lineages = [
+        member_lineage,
+        *_calibration_launch_lineages(
+            calibration_bracket,
+            require_completion=require_completion,
+        ),
+    ]
+    if require_bound:
+        bound_lineage = (
+            drift_bound_artifact.get("launch_lineage")
+            if isinstance(drift_bound_artifact, Mapping)
+            else None
+        )
+        if not isinstance(bound_lineage, Mapping):
+            raise LaunchLineageError(
+                "launch_consumption_missing",
+                "whole-window NEG-8 bound launch lineage is absent",
+            )
+        authenticated_bound = authenticate_launch_lineage(
+            bound_lineage,
+            require_completion=require_completion,
+        )
+        lineages.append(dict(authenticated_bound["launch_lineage"]))
+    if len({canonical_sha256(lineage) for lineage in lineages}) != 1:
+        raise LaunchLineageError(
+            "launch_lineage_conflict",
+            "members, calibrations, and bound do not share one launch lineage",
+        )
+    return member_lineage
+
+
 def launch_lineage_refusal_reasons(
     runs_root: Path,
     referenced_bundle_ids: set[str],
@@ -2278,37 +2458,117 @@ def launch_lineage_refusal_reasons(
     """Authenticate one shared launch lineage for every marker-bearing member."""
 
     reasons: set[str] = set()
-    identities: set[tuple[str, str, str]] = set()
+    resolved_paths: list[Path] = []
     for bundle_id in sorted(referenced_bundle_ids):
         paths = ordinary_present_bundle_paths(Path(runs_root), bundle_id)
         if len(paths) != 1:
             # Ordinary missing/ambiguous custody is classified by the existing
             # occurrence and strict-bundle gates. Never guess a lineage path.
             continue
-        path = paths[0]
-        config = _read_json_object(path / "config.json")
-        metadata = _read_json_object(path / "metadata.json")
-        try:
-            lineage = authenticate_bundle_launch_lineage(
-                path,
-                config=config,
-                metadata=metadata,
-                require_completion=require_completion,
-            )
-        except LaunchLineageError as exc:
-            reasons.add(exc.reason_code)
-            continue
-        if lineage is not None:
-            identities.add(
-                (
-                    str(lineage["consumption_sha256"]),
-                    str(lineage["pack_sha256"]),
-                    str(lineage["boot_session_id"]),
-                )
-            )
-    if len(identities) > 1:
-        reasons.add("launch_lineage_conflict")
+        resolved_paths.append(paths[0])
+    try:
+        _authenticated_bundle_launch_lineage_set(
+            resolved_paths,
+            require_completion=require_completion,
+        )
+    except LaunchLineageError as exc:
+        reasons.add(exc.reason_code)
     return tuple(sorted(reasons))
+
+
+def authenticate_window_launch_lineage(
+    runs_root: Path,
+    referenced_bundle_ids: set[str],
+    *,
+    evaluation_basis_sha256: str | None = None,
+) -> dict[str, Any] | None:
+    """Reopen every launch source governing a verdict/extraction/mint basis."""
+
+    root = Path(runs_root)
+    paths: list[Path] = []
+    for bundle_id in sorted(referenced_bundle_ids):
+        present = ordinary_present_bundle_paths(root, bundle_id)
+        if len(present) == 1:
+            paths.append(present[0])
+    member_lineage = _authenticated_bundle_launch_lineage_set(
+        paths,
+        require_completion=True,
+    )
+    if member_lineage is None:
+        return None
+    if len(paths) != len(referenced_bundle_ids):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch-bearing window members are missing or ambiguous",
+        )
+    try:
+        lines = read_authentication_text(
+            root / "campaign_log.jsonl",
+            grammar="jsonl",
+            label="launch-lineage whole-window campaign log",
+            encoding="utf-8",
+        ).splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise LaunchLineageError(
+            "launch_consumption_missing",
+            f"whole-window verdict carrying launch lineage is unavailable: {exc}",
+        ) from exc
+    candidates: list[Mapping[str, Any]] = []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        basis = row.get("evaluation_basis") if isinstance(row, Mapping) else None
+        occurrences = (
+            basis.get("member_occurrences")
+            if isinstance(basis, Mapping)
+            else None
+        )
+        ids = {
+            occurrence.get("bundle_id")
+            for occurrence in (
+                occurrences if isinstance(occurrences, list) else []
+            )
+            if isinstance(occurrence, Mapping)
+            and isinstance(occurrence.get("bundle_id"), str)
+        }
+        if (
+            isinstance(row, Mapping)
+            and row.get("record_type")
+            == "idle_admission_whole_window_verdict"
+            and referenced_bundle_ids.issubset(ids)
+            and (
+                evaluation_basis_sha256 is None
+                or isinstance(basis, Mapping)
+                and basis.get("sha256") == evaluation_basis_sha256
+            )
+        ):
+            candidates.append(row)
+    if not candidates:
+        raise LaunchLineageError(
+            "launch_consumption_missing",
+            "whole-window evaluation basis carrying launch lineage is absent",
+        )
+    for row in candidates:
+        reasons = _whole_window_row_launch_refusal_reasons(row, root)
+        if reasons:
+            raise LaunchLineageError(
+                reasons[0],
+                "whole-window launch-lineage source authentication refused",
+            )
+    stored_lineages = {
+        canonical_sha256(row["evaluation_basis"]["launch_lineage"])
+        for row in candidates
+        if isinstance(row.get("evaluation_basis"), Mapping)
+        and isinstance(row["evaluation_basis"].get("launch_lineage"), Mapping)
+    }
+    if stored_lineages != {canonical_sha256(member_lineage)}:
+        raise LaunchLineageError(
+            "launch_lineage_conflict",
+            "whole-window verdict candidates do not carry the authenticated lineage",
+        )
+    return member_lineage
 
 
 def _occurrence_descriptor_valid(
@@ -4244,6 +4504,95 @@ def _validated_evaluation_basis(
     return basis
 
 
+def _whole_window_row_launch_refusal_reasons(
+    row: Mapping[str, Any],
+    runs_root: Path,
+) -> tuple[str, ...]:
+    """Authenticate every launch-bearing source named by one verdict row."""
+
+    basis = row.get("evaluation_basis")
+    occurrences = (
+        basis.get("member_occurrences")
+        if isinstance(basis, Mapping)
+        else None
+    )
+    if not isinstance(occurrences, list) or not occurrences:
+        return ()
+    core = row.get("idle_admission_core")
+    calibration_bracket = (
+        core.get("instrument_calibration_bracket")
+        if isinstance(core, Mapping)
+        else None
+    )
+    root = Path(runs_root).resolve()
+    paths = [
+        _safe_source_path(root, occurrence.get("bundle_path"))
+        if isinstance(occurrence, Mapping)
+        else None
+        for occurrence in occurrences
+    ]
+    if any(path is None for path in paths):
+        return ()
+    try:
+        member_lineage = _authenticated_bundle_launch_lineage_set(
+            [path for path in paths if path is not None],
+            require_completion=True,
+        )
+        if member_lineage is None:
+            return ()
+        basis_payload = {
+            key: value for key, value in basis.items() if key != "sha256"
+        }
+        if (
+            basis.get("sha256") != canonical_sha256(basis_payload)
+            or basis.get("calibration_bracket_set")
+            != _calibration_bracket_basis(
+                calibration_bracket
+                if isinstance(calibration_bracket, Mapping)
+                else None
+            )
+        ):
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "whole-window launch basis or calibration binding is invalid",
+            )
+        neg8_bracket = (
+            core.get("neg8_bracket") if isinstance(core, Mapping) else None
+        )
+        drift_bound = (
+            neg8_bracket.get("drift_bound_artifact")
+            if isinstance(neg8_bracket, Mapping)
+            else None
+        )
+        common = _authenticate_whole_window_launch_sources(
+            member_lineage,
+            calibration_bracket=(
+                calibration_bracket
+                if isinstance(calibration_bracket, Mapping)
+                else None
+            ),
+            drift_bound_artifact=(
+                drift_bound if isinstance(drift_bound, Mapping) else None
+            ),
+            require_completion=True,
+            require_bound=True,
+        )
+        stored = basis.get("launch_lineage")
+        if not isinstance(stored, Mapping):
+            raise LaunchLineageError(
+                "launch_consumption_missing",
+                "whole-window evaluation basis omits launch lineage",
+            )
+        if common is None or canonical_sha256(stored) != canonical_sha256(common):
+            raise LaunchLineageError(
+                "launch_lineage_conflict",
+                "whole-window evaluation basis launch lineage differs from sources",
+            )
+    except LaunchLineageError as exc:
+        return (exc.reason_code,)
+    return ()
+
+
 def _supersession_is_logged(entry: Mapping[str, Any], runs_root: Path) -> bool:
     try:
         lines = read_authentication_text(
@@ -4732,16 +5081,21 @@ def _validate_row_uncached(
         reasons.add("whole_window_verdict_provenance_invalid")
 
     if isinstance(core, Mapping):
-        reasons.update(
-            _current_core_rederivation_reasons(
-                core=core,
-                bundle_ids=bundle_ids,
-                manifests=verified_source_manifests,
-                runs_root=runs_root,
-                policy_sha256=policy_sha,
-                consumption_session=consumption_session,
-            )
+        core_reasons = _current_core_rederivation_reasons(
+            core=core,
+            bundle_ids=bundle_ids,
+            manifests=verified_source_manifests,
+            runs_root=runs_root,
+            policy_sha256=policy_sha,
+            consumption_session=consumption_session,
         )
+        reasons.update(core_reasons)
+        # Only dereference calibration lineage after the ordinary ledger and
+        # whole-window rederivation has authenticated the stored bracket.
+        if not core_reasons and basis is not None:
+            reasons.update(
+                _whole_window_row_launch_refusal_reasons(row, runs_root)
+            )
     if (
         (
             row_semantics == MINTED_CONSUMPTION_SEMANTICS_ID
@@ -5437,6 +5791,7 @@ __all__ = [
     "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
     "WHOLE_WINDOW_PROVENANCE_SCHEMA",
     "WHOLE_WINDOW_SCHEMA",
+    "authenticate_window_launch_lineage",
     "build_evaluation_basis",
     "build_neg8_freshness_observation",
     "build_neg8_drift_bound_artifact",

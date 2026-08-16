@@ -17,12 +17,16 @@ import json
 import shlex
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from joulewise.authentication_io import (
     active_v2_authentication_session,
     read_authentication_input,
     read_authentication_text,
+)
+from joulewise.arm_readiness import (
+    LaunchLineageError,
+    authenticate_bundle_launch_lineage,
 )
 from joulewise.adapters.nvidia_smi import (
     RAW_SAMPLES_NAME as NVIDIA_SMI_RAW_SAMPLES_NAME,
@@ -1827,6 +1831,14 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    try:
+        authenticated_launch = authenticate_bundle_launch_lineage(
+            bundle_path,
+            require_completion=True,
+        )
+    except LaunchLineageError as exc:
+        print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
+        return 2
     stored_path = bundle_path / "summary_metrics.json"
     recorded_version: str | None = None
     if stored_path.is_file():
@@ -1853,6 +1865,12 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     except SchemaError as exc:
         print(f"reduced summary is not admissible: {exc}", file=sys.stderr)
         return 3
+    if isinstance(authenticated_launch, Mapping) and isinstance(
+        authenticated_launch.get("launch_lineage"), Mapping
+    ):
+        payload["launch_lineage"] = dict(
+            authenticated_launch["launch_lineage"]
+        )
     reducer_version = payload.get("summary_provenance", {}).get("reducer_version")
     if args.output:
         output_path = Path(args.output)

@@ -101,6 +101,7 @@ from joulewise.whole_window import (
     MAX_BRACKET_CONSUMPTION_SEMANTICS_ID,
     MINTED_CONSUMPTION_SEMANTICS_ID,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
+    canonical_sha256,
     custody_telemetry_identity,
     neg8_claim_family_for_metric,
     whole_window_drift_allowances,
@@ -1581,6 +1582,7 @@ def validate_d117_mint_consumption_report(value: object) -> list[str]:
     cells = value.get("cells")
     if not isinstance(cells, list) or not cells:
         return [*errors, "extraction report.cells: must be a nonempty array"]
+    member_launch_lineages: list[Mapping[str, Any] | None] = []
     for cell_index, cell in enumerate(cells):
         cell_where = f"extraction report.cells[{cell_index}]"
         errors.extend(
@@ -1616,6 +1618,35 @@ def validate_d117_mint_consumption_report(value: object) -> list[str]:
                     f"{cell_where}.members[{member_index}]",
                 )
             )
+            member_launch_lineages.append(
+                member.get("launch_lineage")
+                if isinstance(member, Mapping)
+                and isinstance(member.get("launch_lineage"), Mapping)
+                else None
+            )
+    report_launch_lineage = value.get("launch_lineage")
+    if report_launch_lineage is not None and not isinstance(
+        report_launch_lineage, Mapping
+    ):
+        errors.append("extraction report.launch_lineage: must be an object")
+    elif isinstance(report_launch_lineage, Mapping) and (
+        not member_launch_lineages
+        or any(lineage is None for lineage in member_launch_lineages)
+        or any(
+            canonical_sha256(lineage) != canonical_sha256(report_launch_lineage)
+            for lineage in member_launch_lineages
+            if isinstance(lineage, Mapping)
+        )
+    ):
+        errors.append(
+            "extraction report.launch_lineage: must equal every member lineage"
+        )
+    elif report_launch_lineage is None and any(
+        lineage is not None for lineage in member_launch_lineages
+    ):
+        errors.append(
+            "extraction report.launch_lineage: required when members carry lineage"
+        )
     return errors
 
 
@@ -1862,11 +1893,16 @@ def _evaluate_member(
         except FloorExtractionError:
             raw_config = None
         try:
-            launch_lineage = authenticate_bundle_launch_lineage(
+            authenticated_launch = authenticate_bundle_launch_lineage(
                 path,
                 config=raw_config,
                 metadata=metadata,
                 require_completion=True,
+            )
+            launch_lineage = (
+                dict(authenticated_launch["launch_lineage"])
+                if authenticated_launch is not None
+                else None
             )
         except LaunchLineageError as exc:
             reasons.append(exc.reason_code)
@@ -2174,13 +2210,14 @@ def extract_absolute_cell(
         )
 
     refusals: list[str] = []
-    if len(
-        {
-            str(member.launch_lineage["consumption_sha256"])
-            for member in reports
-            if isinstance(member.launch_lineage, Mapping)
-        }
-    ) > 1:
+    launch_lineages = [
+        member.launch_lineage
+        for member in reports
+        if isinstance(member.launch_lineage, Mapping)
+    ]
+    if len({canonical_sha256(value) for value in launch_lineages}) > 1 or (
+        launch_lineages and len(launch_lineages) != len(reports)
+    ):
         refusals.append("launch_lineage_conflict")
     excluded_slots: list[str] = []
     fallback_exclusion_diagnostics: list[str] = []
@@ -2637,13 +2674,14 @@ def extract_comparative_cell(
         admitted_members.extend(evaluated)
 
     floor: FloorEstimate | None = None
-    if len(
-        {
-            str(member.launch_lineage["consumption_sha256"])
-            for member in final_reports
-            if isinstance(member.launch_lineage, Mapping)
-        }
-    ) > 1:
+    launch_lineages = [
+        member.launch_lineage
+        for member in final_reports
+        if isinstance(member.launch_lineage, Mapping)
+    ]
+    if len({canonical_sha256(value) for value in launch_lineages}) > 1 or (
+        launch_lineages and len(launch_lineages) != len(final_reports)
+    ):
         refusals.append("launch_lineage_conflict")
     point_floor: FloorEstimate | None = None
     anchor_max: float | None = None
@@ -2979,12 +3017,12 @@ def extract_cells(
         for bundle_id in unattributable_omitted
     ]
 
-    report_launch_lineage = {
-        member.bundle_id: dict(member.launch_lineage)
+    report_launch_lineages = [
+        dict(member.launch_lineage)
         for report in reports
         for member in report.members
         if isinstance(member.launch_lineage, Mapping)
-    }
+    ]
     result = {
         "schema_version": EXTRACTION_SCHEMA_VERSION,
         "spec_schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
@@ -3034,8 +3072,8 @@ def extract_cells(
             and not spec_membership_refusals
         ),
     }
-    if report_launch_lineage:
-        result["launch_lineage"] = report_launch_lineage
+    if report_launch_lineages:
+        result["launch_lineage"] = report_launch_lineages[0]
     if any(report.floor_conditions and report.floor is not None for report in reports):
         result["single_count_discipline"] = attribution_single_count_discipline()
     return result

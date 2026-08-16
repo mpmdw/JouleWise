@@ -135,6 +135,21 @@ def whole_window_allowance(
     }
 
 
+def launch_lineage():
+    return {
+        "schema_version": "joulewise.launch_lineage.v1",
+        "collection_boot_session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "pack_id": "pack-1",
+        "plan_id": "plan-1",
+        "window_id": "window-1",
+        "bracket_session_id": "bracket-1",
+        "consumption": {"path": "/receipts/consume.json", "sha256": HEX_A},
+        "start": {"path": "/receipts/start.json", "sha256": HEX_B},
+        "settle": {"path": "/receipts/settle.json", "sha256": HEX_C},
+        "completion": None,
+    }
+
+
 class TestCompleteBundleHash(unittest.TestCase):
     def test_hash_binds_all_regular_file_bytes_and_is_relocation_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2167,6 +2182,35 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assertEqual(artifact["source_class"], "synthetic")
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_optional_launch_lineage_provenance_is_closed_and_additive(self):
+        legacy = make_artifact()
+        self.assertNotIn("launch_lineage", legacy["provenance"])
+        self.assertEqual(validate_floor_artifact(legacy), [])
+
+        marker = make_artifact()
+        marker["provenance"]["launch_lineage"] = launch_lineage()
+        self.assertEqual(validate_floor_artifact(marker), [])
+
+        malformed = json.loads(json.dumps(marker))
+        malformed["provenance"]["launch_lineage"]["settle"]["sha256"] = (
+            "not-a-digest"
+        )
+        self.assertTrue(
+            any(
+                "launch_lineage.settle.sha256" in error
+                for error in validate_floor_artifact(malformed)
+            )
+        )
+
+        unknown = json.loads(json.dumps(marker))
+        unknown["provenance"]["launch_lineage"]["extra"] = True
+        self.assertTrue(
+            any(
+                "launch_lineage: unrecognized key 'extra'" in error
+                for error in validate_floor_artifact(unknown)
+            )
+        )
 
     def test_injected_estimator_registration_is_not_artifact_vocabulary(self):
         artifact_path = Path(__file__).resolve().parents[1] / (
