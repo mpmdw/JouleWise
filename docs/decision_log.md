@@ -9188,8 +9188,10 @@ launch, or a claim:
 - `evidence_author_t0_capture_io_error`
 - `evidence_author_t0_capture_internal_error`
 
-The wrapper accepts only pack/custody/window-plan paths and, at E-4, one
-prompted independent-clock UTC literal. Boot identity, monotonic bounds,
+The wrapper accepts only pack/custody/window-plan paths and, at E-4, two
+prompted operator observations — the independent-clock UTC literal and the
+pasted prior network-time state output; both are registered irreducible
+operator observations, not derived values. Boot identity, monotonic bounds,
 commands, context, manifest, digests, and conclusions are derived. A capture
 is canonical and no-clobber; a preserved nonzero/invalid-result capture still
 refuses and is never permission to continue.

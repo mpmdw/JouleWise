@@ -2,9 +2,11 @@
 """Execute and byte-canonically capture one governed D-134 T-0 E-step.
 
 The production CLI is a trusted-operator ceremony interface, not independent
-producer attestation.  When faithfully invoked it derives commands, clock
-values, identities, and canonical captures without accepting those values from
-the operator; v1 does not defend against deliberate operator fabrication.
+producer attestation.  When faithfully invoked it derives commands,
+identities, and canonical captures; the only operator-supplied values are
+E-4's two registered irreducible observations (the independent-clock UTC
+literal and the pasted prior network-time state output). v1 does not defend
+against deliberate operator fabrication.
 """
 
 from __future__ import annotations
