@@ -10,9 +10,98 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-15 (T8 session, Fable magistrate; COUNCIL VERDICT RECORDED)
+Last updated: 2026-08-15 (T8 FINAL CHECKPOINT, Ed clear order)
 
-## ▶▶ T8 STATE (2026-08-15) — COUNCIL VERDICT: NOT-READY; REPAIR PROGRAM IS THE DESK PROGRAM
+## ▶▶ T8 FINAL CHECKPOINT (2026-08-15, Ed clear order) — /clear-SAFE; A NEW SESSION STARTS HERE
+
+**Nothing in flight.** All Sol runs stopped/harvested, zero live codex
+processes, the ancient orphan watcher (pid 29679) killed, the stray
+caffeinate gone on its own. Everything load-bearing is pushed (main @ a61ac92). Scratchpad worktrees are disposable (all branches pushed or
+deliberately deleted). Session task list is superseded by this block.
+
+**STATE IN ONE BREATH:** the readiness council ruled **NOT-READY 0/11**
+(full custody docs/process_traces/2026-08-15-readiness-council/ — read
+council-verdict.md FIRST); **Phase 0 is COMPLETE** (R1 content-bound
+freeze-evidence lifecycle via cold gate; R2 FROZEN_PLAN; R3 P2-006
+retirement; R4 + the remanded M-2 gate — instrument narrowed, scope pinned
+to three receipt hashes; six WO contracts adopted; every ruling custodied
+under docs/process_traces/2026-08-15-*/); **Phase 1 is 2 MERGED + 1 PR +
+1 staged**: #150 kernel (WINDOW-COUNCIL-GATE LIVE on main — no quiet-mac
+selection until a READY-candidate verdict), #151 recorder (close-out
+blocker L4-B1 cured; check-to-grant race = REGISTERED LIMITATION,
+WO-RECORDER-GRANT-IDENTITY queued for its own gate).
+
+**SUCCESSOR ORDER:**
+1. ~~PR #152~~ **MERGED at checkpoint close (a61ac92)** — CI went all-green
+   during the checkpoint; D-121 verified (head 9e8936a unchanged) and
+   merged. ALL THREE built Phase-1 streams are now ON MAIN: #150 kernel
+   gate, #151 recorder, #152 T-0 producer.
+2. **WO-CONSUMPTION-EDGE: relaunch FRESH — the successor's FIRST action** (nothing lost — the in-flight
+   build was stopped ~20 min in per the T7 precedent). Contract = the
+   decision-log "WO-CONSUMPTION-EDGE contract ADOPTED" entry + the ONE
+   home docs/process_traces/2026-08-15-consumption-edge-consult/. Fresh
+   worktree + branch impl/wo-consumption-edge off current main; Sol xhigh,
+   workspace-write, WRITE_SCOPE from the contract entry; then C-028
+   gauntlet.
+3. **WO-LAUNCH-BINDING stage 2+**: branch impl/wo-launch-binding @
+   345bfbb is a WIP CHECKPOINT (launcher core + verify_consumed_launch +
+   3 downstream gates, focused-green; does NOT yet cure L8-B7 — launch
+   stays NO-GO). The F2 lineage-locator mechanism is ADOPTED (decision
+   log + docs/process_traces/2026-08-15-launch-lineage-consult/): stages
+   1-4 enumerated there; stage 4 is Phase 2. Continue with stage 1
+   completion (retire public consume) + stage 2 (writer-side 8-point
+   auth) on that branch.
+4. **Remaining Phase-1 launches:** WO-DETECT-PULSES-BUDGET (carry the
+   singlelens refuter's L2-1 remedy correction: deterministic budget +
+   anchor-unresolved bypass), WO-L2-REAUDIT (251-test universe),
+   WO-CENSUS-SEMANTICS (HARD-gated on ED-Q-L9-3 — needs Ed),
+   should-fix batch (sweep B1 alpha_arm_readiness re-anchor, B2/B3 queue
+   closures + D-130 disposition, B6 README, B7 paper floor-regime row
+   [P1 claim-bearing], L11's three paper corrections, and
+   FLAKE-CALEXITS-311-REDERIVE — the flake cost another CI rerun today;
+   implement its registered fix shape). T-0 F4 honest-contract deltas
+   (correct the D-134 cl.6 overclaim + remove the injection seam) fold
+   into a follow-up on the t0-producer lane after #152 merges.
+5. **Phases 2-4** per council-verdict.md: successor-family re-freeze
+   (R1-ruled route, ONCE, atomically, LAST — folds M-2 retirement, the
+   ALPHA/BETA plan-path + --plan reconciliation, launch_lineage_required)
+   → baseline-manifest SUPERSESSION (+pack_digest_algorithm + chain-
+   template note) → focused re-audit w/ adversarial coverage
+   re-enumeration → READY-candidate sitting, fresh cold pairing.
+6. **Desk debt owed:** T8 run report + C-058 ADDENDUM (the record after
+   the council verdict: Phase 0 rulings, both cold gates incl. the
+   recorder-race gate that REJECTED the magistrate's own proposal on
+   executed evidence, #150/#151/#152, the wake-source failure class +
+   memory rule); consistency sweep over the span; skill-log rows are
+   current through today.
+
+**ED-OWED (ONE batched session when Phase 1 nears close; NOTHING now):**
+the expanded qualification script (D-127 sudoers install
+scripts/joulewise-network-time.sudoers sha 7dfe980b… + exercise both
+vectors; dress rehearsal E-4→E-9 + author→arm→verify→consume vs scratch
+custody; sampler checklist; rail probe; backlight rows; ED-Q-L9-3
+quiet-state baseline — EARLY if any tap happens, it gates the census WO;
+a9/a10 desk replay; ED-QUAL-L4-1 decisive replay) PLUS three
+risk-appetite/paper-scope calls the gates surfaced: (1) recorder-race
+threat model (concurrent local writer in/out of model), (2) T-0 capture
+provenance (trusted-operator MVP claim vs option-(a) attested
+architecture — Rivoire-bar question, consult custodied), (3) hostile
+same-UID mid-window injection (the launch-lineage residual, same family).
+Plus the contrast-pack pending-ratification/TODO-markers ruling.
+
+**Standing cautions minted this session (fold at bookkeeping):** never end
+a turn with zero live background work (memory: turn-end-wake-source-rule —
+two occurrences cost hours); subagent relays wrapping the codex MCP route
+wedge silently — lead-shell codex-run-v3 launches, one worktree per run
+(per-worktree lock), WRITE_SCOPE must START a line, -C a scratchpad
+worktree to dodge the nested-repo refusal; rc-65/thin-report runs often
+completed on disk — harvest via git diff + report file before relaunching;
+NEEDS_SCOPE is never resumable (fresh continuation run in the same
+worktree works); decision-log tail conflicts are append-unions — resolve
+by keeping both, guard the heading-glue class; macOS has no `timeout`;
+D-121 requires branch head == audited head, verified in the same turn.
+
+## ▶▶ T8 STATE (superseded by FINAL CHECKPOINT above; kept as record) (2026-08-15) — COUNCIL VERDICT: NOT-READY; REPAIR PROGRAM IS THE DESK PROGRAM
 
 **PHASE 1 PROGRESS (latest): PR #150 WO-KERNEL-RECONCILE MERGED (47d2645)
 — the WINDOW-COUNCIL-GATE is LIVE on main** (fleet blocker L1-B2 closed:

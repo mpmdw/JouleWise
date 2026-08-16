@@ -2211,27 +2211,109 @@ def _pack_record(pack_root: Path) -> dict[str, Any]:
 
 
 def _pack_identity(pack_root: Path, tree: Mapping[str, Any]) -> dict[str, Any]:
+    plan_path, plan_relative, plan_id, raw = resolve_frozen_plan(pack_root, tree)
     plan = tree.get("plan")
     window = tree.get("window_identity")
     if not isinstance(plan, Mapping) or not isinstance(window, Mapping):
         raise ArmReadinessError(
             "readiness_schema_invalid", "plan tree omits plan/window identity"
         )
-    plan_path_value = plan.get("path")
-    if not isinstance(plan_path_value, str):
-        raise ArmReadinessError(
-            "readiness_schema_invalid", "plan path is invalid"
-        )
-    plan_path = PurePosixPath(plan_path_value).name
-    raw = (pack_root / plan_path).read_bytes()
     return {
         "pack_id": pack_root.name,
-        "plan_id": _require_string(plan.get("plan_id"), "plan.plan_id"),
+        "plan_id": plan_id,
         "window_id": _require_string(window.get("window_id"), "window_identity.window_id"),
         "pack_root": str(pack_root.resolve()),
-        "plan_path": plan_path,
+        "plan_path": plan_relative,
         "plan_sha256": sha256_bytes(raw),
     }
+
+
+def resolve_frozen_plan(
+    pack_root: Path | str,
+    tree: Mapping[str, Any] | None = None,
+) -> tuple[Path, str, str, bytes]:
+    """Resolve and authenticate R2's committed pack-relative plan reference.
+
+    The stored path is never repaired with a basename or repository-root
+    fallback.  The absolute path returned here is the sole execution-boundary
+    literal for ``FROZEN_PLAN`` and every governed ``--plan`` argument.
+    """
+
+    try:
+        root = Path(pack_root).resolve(strict=True)
+    except OSError as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable", f"pack root is unreadable: {exc}"
+        ) from exc
+    if tree is None:
+        tree, _tree_raw = _plan_tree(root)
+    plan = tree.get("plan")
+    if not isinstance(plan, Mapping):
+        raise ArmReadinessError(
+            "readiness_schema_invalid", "plan tree omits plan identity"
+        )
+    relative = _require_relative_path(plan.get("path"), "plan.path")
+    plan_id = _require_string(plan.get("plan_id"), "plan.plan_id")
+    candidate = root.joinpath(*PurePosixPath(relative).parts)
+    try:
+        current = root
+        for component in PurePosixPath(relative).parts:
+            current = current / component
+            status = current.lstat()
+            if stat.S_ISLNK(status.st_mode):
+                raise ArmReadinessError(
+                    "readiness_pack_namespace_anomalous",
+                    f"frozen plan reference traverses a symlink: {relative}",
+                )
+        if not stat.S_ISREG(candidate.lstat().st_mode):
+            raise ArmReadinessError(
+                "readiness_pack_namespace_anomalous",
+                f"frozen plan is not a regular file: {relative}",
+            )
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(root)
+        raw = candidate.read_bytes()
+    except ArmReadinessError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable",
+            f"frozen plan is missing, unreadable, or outside the pack: {relative}",
+        ) from exc
+
+    repository, _pack_prefix, pack_relative = _repository_and_pack_relative(root)
+    repository_relative = (PurePosixPath(pack_relative) / relative).as_posix()
+    committed = _git_blob_at_head(repository, repository_relative)
+    if committed is None:
+        raise ArmReadinessError(
+            "readiness_pack_not_committed",
+            f"frozen plan is not committed at HEAD: {relative}",
+        )
+    if committed != raw:
+        raise ArmReadinessError(
+            "readiness_pack_digest_mismatch",
+            f"frozen plan differs from committed bytes: {relative}",
+        )
+    try:
+        plan_value = parse_json_bytes(raw)
+    except ArmReadinessError as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable", f"frozen plan is invalid JSON: {relative}"
+        ) from exc
+    if not isinstance(plan_value, Mapping) or plan_value.get("plan_id") != plan_id:
+        raise ArmReadinessError(
+            "readiness_pack_digest_mismatch",
+            "frozen plan plan_id differs from plan_tree.json",
+        )
+    digest = sha256_bytes(raw)
+    for field_name in ("actual_sha256", "declared_sha256"):
+        declared = plan.get(field_name)
+        if declared is not None and declared != digest:
+            raise ArmReadinessError(
+                "readiness_pack_digest_mismatch",
+                f"plan.{field_name} differs from the committed frozen plan",
+            )
+    return resolved, relative, plan_id, raw
 
 
 def _profile_rows(
@@ -3385,8 +3467,9 @@ def _run_under_lease_rehearsal(
         )
     )
     tree, _raw = _plan_tree(pack_root)
-    plan_path = pack_root / PurePosixPath(str(tree["plan"]["path"])).name
-    plan_raw = plan_path.read_bytes()
+    plan_path, _plan_relative, _plan_id, plan_raw = resolve_frozen_plan(
+        pack_root, tree
+    )
     session_id = f"dry-{rehearsal_id}"
     pre_attempt = f"{session_id}-pre"
     post_attempt = f"{session_id}-post"
@@ -5245,8 +5328,9 @@ __all__ = [
     "launch_lineage_required",
     "parse_json_bytes",
     "plan_arm_readiness_attachment",
-    "render_json",
     "record_launch_lifecycle_event",
+    "render_json",
+    "resolve_frozen_plan",
     "reviewed_main",
     "scan_receipt_namespace",
     "sha256_bytes",

@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
+import joulewise.arm_readiness_evidence as generic_evidence
 import joulewise.arm_readiness_evidence_t0 as t0
 import joulewise.calibration_ledger as ledger
 import joulewise.identity_pins as identity_pins
@@ -241,6 +242,7 @@ def make_t0_fixture(
         "joulewise/arm_readiness_evidence_t0.py",
         "joulewise/identity_pins.py",
         "scripts/author_arm_evidence_t0.py",
+        "scripts/capture_t0_step.py",
         "scripts/prewindow_check.sh",
         "scripts/quiet_mac_prep.sh",
         "scripts/recover_calibration_ledger.py",
@@ -372,13 +374,29 @@ def make_t0_fixture(
     window_root = custody / "window-plan"
     window_root.mkdir()
     env = {
+        "MEASUREMENT_REPO": str(repository),
+        "WINDOW_ID": tree["window_identity"]["window_id"],
+        "FROZEN_PLAN": str(plan_path),
         "PACK_ROOT": str(pack),
+        "PACK_ID": pack.name,
+        "PLAN_ID": tree["plan"]["plan_id"],
+        "EVIDENCE_ROOT_ID": tree["window_identity"]["evidence_root_id"],
+        "IDENTITY_EPOCH_JSON": str(epoch_path),
+        "T1_BINDINGS_JSON": str(t1_path),
         "RUNS_ROOT": context["claim_runs_root"],
         "BOUND_RUNS_ROOT": context["bound_runs_root"],
+        "CALIBRATION_LEDGER": str(ledger_path),
+        "LEDGER_HEAD_PIN": str(
+            repository / "configs/calibration/calibration_ledger_head.json"
+        ),
+        "ARM_READINESS_CUSTODY_ROOT": str(custody),
         "CUSTODY_ROOT": context["custody_root"],
+        "WINDOW_CUSTODY_ROOT": context["custody_root"],
         "QUARANTINE_ROOT": context["quarantine_root"],
         "CLAIM_BACKUP_DEST": context["claim_backup_destination"],
         "BOUND_BACKUP_DEST": context["bound_backup_destination"],
+        "WAIVER_PATH": context["waiver_path"],
+        "SETTLE_S": "180",
         "BRACKET_SESSION_ID": context["bracket_session_id"],
         "PRE_ATTEMPT_ID": context["pre_attempt_id"],
         "POST_ATTEMPT_ID": context["post_attempt_id"],
@@ -468,7 +486,7 @@ def make_t0_fixture(
     captures = {
         "clock-prior-state.json": _capture(
             "clock-prior-state",
-            ["/usr/bin/sudo", "/usr/sbin/systemsetup", "-getusingnetworktime"],
+            ["operator-interactive", "network-time-prior-state"],
             repository,
             time_origin + 20,
             time_origin + 30,
@@ -525,7 +543,11 @@ def make_t0_fixture(
                 {
                     "status": "ready",
                     "early_warning_only": True,
-                    "frozen_plan": {"sha256": plan_sha},
+                    "frozen_plan": {
+                        "path": str(plan_path),
+                        "plan_id": tree["plan"]["plan_id"],
+                        "sha256": plan_sha,
+                    },
                 }
             ),
             boot_session_id=boot_session_id,
@@ -663,6 +685,61 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     maxDiff = None
 
+    def test_alpha_beta_repo_relative_plan_refuses_both_generic_r2_sites(self) -> None:
+        for profile, pack_name in (
+            ("ALPHA", "d117_floor_qwen25_1p5b_v1"),
+            ("BETA", "d117_floor_qwen25_7b_v1"),
+        ):
+            pack = ROOT / "configs/campaigns" / pack_name
+            tree, _raw = readiness._plan_tree(pack)
+            with self.subTest(profile=profile, site="shared-resolver"):
+                with self.assertRaises(readiness.ArmReadinessError):
+                    readiness.resolve_frozen_plan(pack, tree)
+            context = generic_evidence._DerivationContext(
+                pack_root=pack,
+                repository=ROOT,
+                tree=tree,
+                pack_sha256="0" * 64,
+                head_commit="0" * 40,
+            )
+            for site_name, site in (
+                (
+                    "manifest-validation",
+                    lambda: generic_evidence._validate_manifests(
+                        context, kind="PACK_AUTHENTICATION"
+                    ),
+                ),
+                (
+                    "estimator-derivation",
+                    lambda: generic_evidence._derive_estimator_identity(context),
+                ),
+            ):
+                with self.subTest(profile=profile, site=site_name):
+                    with self.assertRaises(
+                        generic_evidence.EvidenceAuthoringError
+                    ) as caught:
+                        site()
+                    self.assertIn("R2 frozen-plan reference is invalid", str(caught.exception))
+
+    def test_legacy_privileged_prior_state_capture_is_refused(self) -> None:
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        prior_path = inputs / "clock-prior-state.json"
+        prior = json.loads(prior_path.read_text(encoding="utf-8"))
+        prior["argv"] = [
+            "/usr/bin/sudo",
+            "/usr/sbin/systemsetup",
+            "-getusingnetworktime",
+        ]
+        _write_json(prior_path, prior)
+        with (
+            author_environment(repository),
+            self.assertRaises(T0EvidenceAuthoringError) as caught,
+        ):
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.kind, "CLOCK_ATTESTATION")
+        self.assertIn("not Ed's interactive action", str(caught.exception))
+
     def test_public_namespace_and_signature_are_closed(self) -> None:
         self.assertEqual(
             tuple(inspect.signature(author_arm_readiness_evidence_t0).parameters),
@@ -784,6 +861,17 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 source = json.loads(source_raw)
                 self.assertEqual(source["row_id"], row["row_id"])
                 self.assertEqual(source["kind"], receipt["kind"])
+                if row["row_id"] == "clock.network_time_off":
+                    self.assertEqual(
+                        source["probes"][0]["argv"],
+                        [
+                            "/usr/bin/sudo",
+                            "-n",
+                            "/usr/sbin/systemsetup",
+                            "-setusingnetworktime",
+                            "off",
+                        ],
+                    )
                 self.assertEqual(source["facts"][0]["fact_id"], row["predicate_id"])
                 self.assertEqual(source["facts"][0]["value"], fact["value"])
                 independently_observed_rows.append(row["row_id"])
@@ -1040,7 +1128,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     def test_named_refusal_matrix_covers_every_distinct_kind(self) -> None:
         cases = (
             ("CLOCK_ATTESTATION", lambda _r, _p, _c, _x: ( _x / "clock-attestation.json").unlink(), {}),
-            ("CLOCK_PROBE", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, stdout="Network Time: On\n") if "systemsetup" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
+            ("CLOCK_PROBE", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=1, stderr="sudo refused\n") if "systemsetup" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
             ("TERMINAL_REVIEW", lambda *_args: None, {"patch_message": True}),
             ("MAINTENANCE_CENSUS", lambda *_args: None, {"probe": lambda argv, *, cwd: _probe_result(argv, cwd, exit_code=0, stdout="123 XProtect\n") if "XProtect" in " ".join(argv) else passing_probe(argv, cwd=cwd)}),
             ("ROOT_PREFLIGHT", lambda _r, _p, c, _x: (Path(c["claim_runs_root"]) / "campaign.lock").write_text("busy\n"), {}),
