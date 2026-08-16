@@ -16,8 +16,7 @@ Last updated: 2026-08-15 (T8 FINAL CHECKPOINT, Ed clear order)
 
 **Nothing in flight.** All Sol runs stopped/harvested, zero live codex
 processes, the ancient orphan watcher (pid 29679) killed, the stray
-caffeinate gone on its own. Everything load-bearing is pushed (main @
-5fe977d). Scratchpad worktrees are disposable (all branches pushed or
+caffeinate gone on its own. Everything load-bearing is pushed (main @ a61ac92). Scratchpad worktrees are disposable (all branches pushed or
 deliberately deleted). Session task list is superseded by this block.
 
 **STATE IN ONE BREATH:** the readiness council ruled **NOT-READY 0/11**
@@ -33,13 +32,11 @@ blocker L4-B1 cured; check-to-grant race = REGISTERED LIMITATION,
 WO-RECORDER-GRANT-IDENTITY queued for its own gate).
 
 **SUCCESSOR ORDER:**
-1. **PR #152 (WO-T0-PRODUCER)** was 12-pass/2-pending (crash-matrix pair)
-   at checkpoint. On green: D-121 terminal review at head **9e8936a**
-   (verify no commits landed after; full gauntlet already ACCEPT-FOR-MERGE
-   incl. mutant-discrimination) → merge → prune wo-t0producer/review-t0
-   worktrees. If the crash-matrix jobs fail, it is the KNOWN
-   WO-CRASHMATRIX class — disposition per its standing record, rerun.
-2. **WO-CONSUMPTION-EDGE: relaunch FRESH** (nothing lost — the in-flight
+1. ~~PR #152~~ **MERGED at checkpoint close (a61ac92)** — CI went all-green
+   during the checkpoint; D-121 verified (head 9e8936a unchanged) and
+   merged. ALL THREE built Phase-1 streams are now ON MAIN: #150 kernel
+   gate, #151 recorder, #152 T-0 producer.
+2. **WO-CONSUMPTION-EDGE: relaunch FRESH — the successor's FIRST action** (nothing lost — the in-flight
    build was stopped ~20 min in per the T7 precedent). Contract = the
    decision-log "WO-CONSUMPTION-EDGE contract ADOPTED" entry + the ONE
    home docs/process_traces/2026-08-15-consumption-edge-consult/. Fresh
