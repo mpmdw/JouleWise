@@ -54,6 +54,8 @@ LEGACY_CONSUMPTION_RECEIPT_SCHEMA = (
 CONSUMPTION_RECEIPT_SCHEMA = "joulewise.arm_readiness_launch_consumption.v2"
 LAUNCH_MANIFEST_SCHEMA = "joulewise.arm_readiness_t0_launch_manifest.v1"
 LAUNCH_LINEAGE_SCHEMA = "joulewise.launch_lineage.v1"
+LAUNCH_LINEAGE_LOCATOR_SCHEMA = "joulewise.launch_lineage_locator.v1"
+LAUNCH_LINEAGE_LOCATOR_BASENAME = ".joulewise-launch-lineage.json"
 LAUNCH_START_RECEIPT_SCHEMA = "joulewise.launch_start_receipt.v1"
 LAUNCH_SETTLE_RECEIPT_SCHEMA = "joulewise.launch_settle_receipt.v1"
 LAUNCH_COMPLETION_RECEIPT_SCHEMA = "joulewise.launch_completion_receipt.v1"
@@ -406,6 +408,15 @@ LAUNCH_LINEAGE_KEYS = {
     "settle",
     "completion",
 }
+LAUNCH_LINEAGE_LOCATOR_KEYS = {
+    "schema_version",
+    "root_role",
+    "root_path",
+    "launch_lineage",
+}
+LAUNCH_LINEAGE_ROOT_ROLES = frozenset(
+    {"claim_runs_root", "bound_runs_root"}
+)
 LAUNCH_LIFECYCLE_RECEIPT_KEYS = {
     "schema_version",
     "receipt_kind",
@@ -4361,8 +4372,21 @@ def _read_launch_lineage_primary(
     missing_code: str,
 ) -> tuple[Mapping[str, Any], bytes, str]:
     try:
+        if path.is_symlink():
+            raise LaunchLineageError(
+                "launch_consumption_invalid",
+                f"launch-lineage primary must not be a symlink: {path}",
+            )
+        sidecar_path = path.with_name(f"{path.name}.sha256")
+        if sidecar_path.is_symlink():
+            raise LaunchLineageError(
+                "launch_consumption_invalid",
+                f"launch-lineage sidecar must not be a symlink: {sidecar_path}",
+            )
         raw = path.read_bytes()
-        sidecar = path.with_name(f"{path.name}.sha256").read_bytes()
+        sidecar = sidecar_path.read_bytes()
+    except LaunchLineageError:
+        raise
     except OSError as exc:
         raise LaunchLineageError(
             missing_code, f"launch-lineage receipt is absent: {path}: {exc}"
@@ -4423,7 +4447,13 @@ def _load_launch_manifest_for_consumption(
         raise ArmReadinessError(
             "readiness_evidence_unreadable", f"cannot read launch manifest: {exc}"
         ) from exc
-    window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
+    try:
+        window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ArmReadinessError(
+            "readiness_evidence_unreadable",
+            f"launch manifest window root is unavailable: {exc}",
+        ) from exc
     env_reference = _launch_artifact_reference(window_root / "window.env")
     chain_reference = _launch_artifact_reference(window_root / "window-chain.zsh")
     return manifest, manifest_reference, env_reference, chain_reference
@@ -4486,13 +4516,36 @@ def _read_exact_launch_reference(
     return resolved, raw
 
 
+def _launch_argv_matches(
+    argv: Sequence[str], *, chain_path: Path, window_root: Path
+) -> bool:
+    """Compare the exact frozen argv without leaking path-resolution errors."""
+
+    if len(argv) != 5:
+        return False
+    try:
+        resolved_chain = Path(argv[3]).resolve(strict=True)
+        resolved_root = Path(argv[4]).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    return (
+        Path(argv[0]).name == "caffeinate"
+        and argv[1] == "-is"
+        and argv[2] == "/bin/zsh"
+        and resolved_chain == chain_path
+        and resolved_root == window_root
+    )
+
+
 def _replay_consumed_arm(
-    root: Path,
+    expected_pack_root: Path | None,
     consumption: Mapping[str, Any],
     consumption_path: Path,
     *,
     require_current_boot: bool,
-) -> tuple[Mapping[str, Any], Path]:
+    require_unexpired: bool,
+    replay_arm_semantics: bool,
+) -> tuple[Mapping[str, Any], Path, Path, Mapping[str, Any]]:
     arm_reference = consumption["arm_receipt"]
     arm_path = consumption_path.parent.parent / str(arm_reference["path"])
     try:
@@ -4509,6 +4562,37 @@ def _replay_consumed_arm(
         raise LaunchLineageError(
             "launch_consumption_invalid", "consumption predecessor reference disagrees"
         )
+    try:
+        recorded_pack_root = Path(str(arm["pack"]["pack_root"])).resolve(
+            strict=True
+        )
+        if (
+            expected_pack_root is not None
+            and recorded_pack_root
+            != Path(expected_pack_root).resolve(strict=True)
+        ):
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "consumed arm pack root differs from the caller-expected root",
+            )
+        authenticated_pack = _pack_record(recorded_pack_root)
+    except LaunchLineageError:
+        raise
+    except (ArmReadinessError, OSError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"consumed arm pack root cannot be authenticated: {exc}",
+        ) from exc
+    if dict(authenticated_pack) != dict(arm["pack"]):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "consumed arm pack record differs from authenticated pack bytes",
+        )
+    if consumption_path.parent.parent.name != recorded_pack_root.name:
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "consumption/arm namespace does not belong to the authenticated pack",
+        )
     if require_current_boot:
         try:
             current_boot = _current_boot_session_id()
@@ -4518,7 +4602,7 @@ def _replay_consumed_arm(
             raise LaunchLineageError(
                 "launch_binding_mismatch", "consumed arm belongs to another boot"
             )
-        if time.monotonic_ns() > arm["valid_until_monotonic_ns"]:
+        if require_unexpired and time.monotonic_ns() > arm["valid_until_monotonic_ns"]:
             raise LaunchLineageError(
                 "launch_binding_mismatch", "consumed arm expired before launch entry"
             )
@@ -4544,14 +4628,14 @@ def _replay_consumed_arm(
         }
         for item in scanned
     ) if target is not None else False
-    if target is None or (require_current_boot and superseded):
+    if target is None or (replay_arm_semantics and superseded):
         raise LaunchLineageError(
             "launch_binding_mismatch", "consumed arm is absent or superseded"
         )
-    if require_current_boot:
+    if replay_arm_semantics:
         try:
             rows, refusals = _derive_arm_semantics_for_verification(
-                root, consumption_path.parent.parent, arm
+                recorded_pack_root, consumption_path.parent.parent, arm
             )
         except ArmReadinessError as exc:
             raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
@@ -4565,7 +4649,7 @@ def _replay_consumed_arm(
             raise LaunchLineageError(
                 "launch_binding_mismatch", "consumed arm no longer replays to PASS/GO"
             )
-    return arm, arm_path
+    return arm, arm_path, recorded_pack_root, authenticated_pack
 
 
 def verify_consumed_launch(
@@ -4585,13 +4669,14 @@ def verify_consumed_launch(
             "launch_binding_mismatch", f"pack root is unavailable: {exc}"
         ) from exc
     consumption, _raw, digest, path = _read_v2_consumption(consumption_receipt)
-    arm, _arm_path = _replay_consumed_arm(
-        root, consumption, path, require_current_boot=require_current_boot
+    arm, _arm_path, _recorded_pack_root, pack = _replay_consumed_arm(
+        root,
+        consumption,
+        path,
+        require_current_boot=require_current_boot,
+        require_unexpired=require_current_boot,
+        replay_arm_semantics=require_current_boot,
     )
-    try:
-        pack = _pack_record(root)
-    except ArmReadinessError as exc:
-        raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
     expected_identity = {
         "pack_id": pack["pack_id"],
         "pack_sha256": pack["pack_sha256"],
@@ -4621,7 +4706,13 @@ def verify_consumed_launch(
         raise LaunchLineageError(
             "launch_consumption_invalid", f"launch manifest is invalid: {exc}"
         ) from exc
-    window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
+    try:
+        window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"launch manifest window root is unavailable: {exc}",
+        ) from exc
     _read_exact_launch_reference(
         consumption["window_environment"], expected_path=window_root / "window.env"
     )
@@ -4633,12 +4724,9 @@ def verify_consumed_launch(
         manifest["boot_session_id"] != consumption["boot_session_id"]
         or manifest_argv != consumption["exec_argv"]
         or (expected_exec_argv is not None and list(expected_exec_argv) != manifest_argv)
-        or len(manifest_argv) != 5
-        or Path(manifest_argv[0]).name != "caffeinate"
-        or manifest_argv[1] != "-is"
-        or manifest_argv[2] != "/bin/zsh"
-        or Path(manifest_argv[3]).resolve(strict=True) != chain_path
-        or Path(manifest_argv[4]).resolve(strict=True) != window_root
+        or not _launch_argv_matches(
+            manifest_argv, chain_path=chain_path, window_root=window_root
+        )
     ):
         raise LaunchLineageError(
             "launch_binding_mismatch", "exact frozen foreground argv disagrees"
@@ -4827,6 +4915,102 @@ def _read_lifecycle_receipt(
     return receipt, digest, path.resolve(strict=True)
 
 
+def _launch_lineage_for_event(
+    consumption: Mapping[str, Any],
+    consumption_path: Path,
+    consumption_digest: str,
+    arm: Mapping[str, Any],
+    event: str,
+    event_path: Path,
+    event_digest: str,
+) -> dict[str, Any]:
+    start_path = _lifecycle_receipt_path(consumption_path, "start")
+    start_reference = (
+        _reference_for_existing_receipt(event_path, event_digest)
+        if event == "start"
+        else _reference_for_existing_receipt(
+            start_path,
+            _read_lifecycle_receipt(
+                start_path, expected_kind="launch_start"
+            )[1],
+        )
+    )
+    settle_reference: dict[str, str] | None = None
+    if event == "settle":
+        settle_reference = _reference_for_existing_receipt(
+            event_path, event_digest
+        )
+    elif event == "completion":
+        settle_path = _lifecycle_receipt_path(consumption_path, "settle")
+        settle_reference = _reference_for_existing_receipt(
+            settle_path,
+            _read_lifecycle_receipt(
+                settle_path, expected_kind="launch_settle"
+            )[1],
+        )
+    return {
+        "schema_version": LAUNCH_LINEAGE_SCHEMA,
+        "collection_boot_session_id": consumption["boot_session_id"],
+        "pack_id": consumption["pack_id"],
+        "plan_id": consumption["plan_id"],
+        "window_id": consumption["window_id"],
+        "bracket_session_id": arm["arm_context"]["bracket_session_id"],
+        "consumption": _reference_for_existing_receipt(
+            consumption_path, consumption_digest
+        ),
+        "start": start_reference,
+        "settle": settle_reference,
+        "completion": (
+            _reference_for_existing_receipt(event_path, event_digest)
+            if event == "completion"
+            else None
+        ),
+    }
+
+
+def _publish_launch_lineage_locator(
+    root: Path,
+    *,
+    root_role: str,
+    launch_lineage: Mapping[str, Any],
+) -> Path:
+    try:
+        resolved_root = root.resolve(strict=True)
+    except OSError as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"authenticated {root_role} is unavailable: {exc}",
+        ) from exc
+    if not resolved_root.is_dir():
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"authenticated {root_role} is not a directory",
+        )
+    locator = {
+        "schema_version": LAUNCH_LINEAGE_LOCATOR_SCHEMA,
+        "root_role": root_role,
+        "root_path": str(resolved_root),
+        "launch_lineage": copy.deepcopy(dict(launch_lineage)),
+    }
+    raw = render_json(locator)
+    path = resolved_root / LAUNCH_LINEAGE_LOCATOR_BASENAME
+    try:
+        _exclusive_write(path, raw)
+        _fsync_directory(resolved_root)
+        digest = sha256_bytes(raw)
+        _exclusive_write(
+            path.with_name(f"{path.name}.sha256"),
+            gnu_sidecar(digest, path.name),
+        )
+        _fsync_directory(resolved_root)
+    except ArmReadinessError as exc:
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            f"launch-lineage locator publication failed and burned the attempt: {exc}",
+        ) from exc
+    return path
+
+
 def record_launch_lifecycle_event(
     pack_root: Path | str,
     consumption_receipt: Path | str,
@@ -4843,8 +5027,13 @@ def record_launch_lifecycle_event(
     consumption, _raw, consumption_digest, consumption_path = (
         _read_v2_consumption(consumption_receipt)
     )
-    arm, _arm_path = _replay_consumed_arm(
-        Path(pack_root), consumption, consumption_path, require_current_boot=False
+    arm, _arm_path, _recorded_pack_root, _pack = _replay_consumed_arm(
+        Path(pack_root),
+        consumption,
+        consumption_path,
+        require_current_boot=False,
+        require_unexpired=False,
+        replay_arm_semantics=False,
     )
     try:
         current_boot = _current_boot_session_id()
@@ -4946,53 +5135,47 @@ def record_launch_lifecycle_event(
         raise LaunchLineageError(
             "launch_consumption_invalid", f"lifecycle sidecar publication failed: {exc}"
         ) from exc
+    launch_lineage = _launch_lineage_for_event(
+        consumption,
+        consumption_path,
+        consumption_digest,
+        arm,
+        event,
+        path,
+        digest,
+    )
+    if event == "settle":
+        claim_root = Path(str(arm["arm_context"]["claim_runs_root"]))
+        bound_root = Path(str(arm["arm_context"]["bound_runs_root"]))
+        try:
+            if claim_root.resolve(strict=True) == bound_root.resolve(strict=True):
+                raise LaunchLineageError(
+                    "launch_binding_mismatch",
+                    "claim and bound runs roots must be distinct locator namespaces",
+                )
+        except OSError as exc:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"authenticated runs root is unavailable: {exc}",
+            ) from exc
+        # Fixed order is deliberate. Any failure after either no-clobber
+        # primary leaves the settle receipt durable and makes retry impossible.
+        _publish_launch_lineage_locator(
+            claim_root,
+            root_role="claim_runs_root",
+            launch_lineage=launch_lineage,
+        )
+        _publish_launch_lineage_locator(
+            bound_root,
+            root_role="bound_runs_root",
+            launch_lineage=launch_lineage,
+        )
     return {
         "status": "RECORDED",
         "event": event,
         "receipt_path": str(path),
         "receipt_sha256": digest,
-        "launch_lineage": {
-            "schema_version": LAUNCH_LINEAGE_SCHEMA,
-            "collection_boot_session_id": consumption["boot_session_id"],
-            "pack_id": consumption["pack_id"],
-            "plan_id": consumption["plan_id"],
-            "window_id": consumption["window_id"],
-            "bracket_session_id": arm["arm_context"]["bracket_session_id"],
-            "consumption": _reference_for_existing_receipt(
-                consumption_path, consumption_digest
-            ),
-            "start": (
-                _reference_for_existing_receipt(path, digest)
-                if event == "start"
-                else _reference_for_existing_receipt(
-                    _lifecycle_receipt_path(consumption_path, "start"),
-                    _read_lifecycle_receipt(
-                        _lifecycle_receipt_path(consumption_path, "start"),
-                        expected_kind="launch_start",
-                    )[1],
-                )
-            ),
-            "settle": (
-                _reference_for_existing_receipt(path, digest)
-                if event == "settle"
-                else (
-                    _reference_for_existing_receipt(
-                        _lifecycle_receipt_path(consumption_path, "settle"),
-                        _read_lifecycle_receipt(
-                            _lifecycle_receipt_path(consumption_path, "settle"),
-                            expected_kind="launch_settle",
-                        )[1],
-                    )
-                    if event == "completion"
-                    else None
-                )
-            ),
-            "completion": (
-                _reference_for_existing_receipt(path, digest)
-                if event == "completion"
-                else None
-            ),
-        },
+        "launch_lineage": launch_lineage,
     }
 
 
@@ -5013,8 +5196,16 @@ def authenticate_launch_lineage(
     value: object,
     *,
     require_completion: bool,
+    expected_pack_root: Path | str | None = None,
+    require_current_boot: bool = False,
+    require_completion_absent: bool = False,
 ) -> dict[str, Any]:
     """Authenticate one immutable consumption→start→settle→completion chain."""
+
+    if require_completion and require_completion_absent:
+        raise ValueError(
+            "completion cannot be simultaneously required and required absent"
+        )
 
     if not isinstance(value, Mapping):
         raise LaunchLineageError(
@@ -5046,8 +5237,13 @@ def authenticate_launch_lineage(
         raise LaunchLineageError(
             "launch_consumption_invalid", "consumption digest reference disagrees"
         )
-    arm, _arm_path = _replay_consumed_arm(
-        Path("."), consumption, consumption_path, require_current_boot=False
+    arm, _arm_path, pack_root, pack = _replay_consumed_arm(
+        Path(expected_pack_root) if expected_pack_root is not None else None,
+        consumption,
+        consumption_path,
+        require_current_boot=require_current_boot,
+        require_unexpired=False,
+        replay_arm_semantics=False,
     )
     expected_identity = {
         "collection_boot_session_id": consumption["boot_session_id"],
@@ -5060,6 +5256,37 @@ def authenticate_launch_lineage(
         raise LaunchLineageError(
             "launch_binding_mismatch", "bundle lineage differs from consumption identity"
         )
+    if any(
+        consumption[name] != expected
+        for name, expected in (
+            ("pack_id", pack["pack_id"]),
+            ("pack_sha256", pack["pack_sha256"]),
+            ("plan_id", pack["plan_id"]),
+            ("window_id", pack["window_id"]),
+            ("boot_session_id", arm["boot_session_id"]),
+            ("head_commit", arm["reviewed_main"]["head_commit"]),
+            (
+                "arm_context_sha256",
+                sha256_bytes(render_json(arm["arm_context"])),
+            ),
+        )
+    ):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "consumption identity differs from its authenticated arm/pack",
+        )
+    if consumption["consumed_at_monotonic_ns"] > arm["valid_until_monotonic_ns"]:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "consumption occurred after the arm validity horizon",
+        )
+    if require_current_boot:
+        current_head = _git_text(pack_root, "rev-parse", "HEAD")
+        if current_head != consumption["head_commit"]:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "current checkout HEAD differs from the reviewed launch HEAD",
+            )
     manifest_path, manifest_raw = _read_exact_launch_reference(
         consumption["launch_manifest"]
     )
@@ -5069,16 +5296,27 @@ def authenticate_launch_lineage(
         )
     except ArmReadinessError as exc:
         raise LaunchLineageError("launch_consumption_invalid", str(exc)) from exc
-    window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
+    try:
+        window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"launch manifest window root is unavailable: {exc}",
+        ) from exc
     _read_exact_launch_reference(
         consumption["window_environment"], expected_path=window_root / "window.env"
     )
-    _read_exact_launch_reference(
+    chain_path, _chain_raw = _read_exact_launch_reference(
         consumption["window_chain"], expected_path=window_root / "window-chain.zsh"
     )
+    manifest_argv = list(manifest["launch_command"])
     if (
         manifest_path != Path(str(consumption["launch_manifest"]["path"])).resolve(strict=True)
-        or list(manifest["launch_command"]) != consumption["exec_argv"]
+        or manifest["boot_session_id"] != consumption["boot_session_id"]
+        or manifest_argv != consumption["exec_argv"]
+        or not _launch_argv_matches(
+            manifest_argv, chain_path=chain_path, window_root=window_root
+        )
     ):
         raise LaunchLineageError(
             "launch_binding_mismatch", "launch manifest no longer binds the consumed argv"
@@ -5107,6 +5345,11 @@ def authenticate_launch_lineage(
 
     lifecycle = ((start, start_path, start_digest), (settle, settle_path, settle_digest))
     for receipt, _path, _digest in lifecycle:
+        if receipt["consumption"] != consumption_ref:
+            raise LaunchLineageError(
+                "launch_consumption_invalid",
+                "lifecycle consumption predecessor differs",
+            )
         if any(
             receipt[name] != expected
             for name, expected in (
@@ -5117,29 +5360,47 @@ def authenticate_launch_lineage(
                 ("window_id", consumption["window_id"]),
                 ("bracket_session_id", arm["arm_context"]["bracket_session_id"]),
                 ("window_chain", consumption["window_chain"]),
-                ("consumption", consumption_ref),
             )
         ):
             raise LaunchLineageError(
                 "launch_binding_mismatch", "lifecycle identity differs from consumption"
             )
-    if start["predecessor"] != consumption_ref or start[
-        "handoff_token_sha256"
-    ] != consumption["handoff_token_sha256"]:
+    if (
+        start["predecessor"] != consumption_ref
+        or start["handoff_token_sha256"]
+        != consumption["handoff_token_sha256"]
+        or start["issued_at_monotonic_ns"]
+        < consumption["consumed_at_monotonic_ns"]
+    ):
         raise LaunchLineageError(
-            "launch_binding_mismatch", "start receipt predecessor/handoff binding differs"
+            "launch_consumption_invalid",
+            "start receipt predecessor/handoff/order binding differs",
         )
     if settle["predecessor"] != start_ref or settle[
         "issued_at_monotonic_ns"
     ] < start["issued_at_monotonic_ns"]:
         raise LaunchLineageError(
-            "launch_binding_mismatch", "settle receipt predecessor/order differs"
+            "launch_consumption_invalid", "settle receipt predecessor/order differs"
         )
 
     completion: Mapping[str, Any] | None = None
     completion_ref = value["completion"]
+    completion_path = _lifecycle_receipt_path(consumption_path, "completion")
+    completion_sidecar = completion_path.with_name(
+        f"{completion_path.name}.sha256"
+    )
+    if require_completion_absent and (
+        completion_ref is not None
+        or completion_path.exists()
+        or completion_path.is_symlink()
+        or completion_sidecar.exists()
+        or completion_sidecar.is_symlink()
+    ):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch completion already exists before new collection",
+        )
     if require_completion and completion_ref is None:
-        completion_path = _lifecycle_receipt_path(consumption_path, "completion")
         completion, completion_digest, completion_path = _read_lifecycle_receipt(
             completion_path, expected_kind="launch_completion"
         )
@@ -5169,7 +5430,12 @@ def authenticate_launch_lineage(
         completion["predecessor"] != settle_ref
         or completion["consumption"] != consumption_ref
         or completion["issued_at_monotonic_ns"] < settle["issued_at_monotonic_ns"]
-        or any(
+    ):
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "completion receipt predecessor/order differs",
+        )
+    if completion is not None and any(
             completion[name] != expected
             for name, expected in (
                 ("boot_session_id", consumption["boot_session_id"]),
@@ -5180,10 +5446,10 @@ def authenticate_launch_lineage(
                 ("bracket_session_id", arm["arm_context"]["bracket_session_id"]),
                 ("window_chain", consumption["window_chain"]),
             )
-        )
     ):
         raise LaunchLineageError(
-            "launch_binding_mismatch", "completion receipt predecessor/identity differs"
+            "launch_binding_mismatch",
+            "completion receipt identity differs",
         )
     return {
         "schema_version": LAUNCH_LINEAGE_SCHEMA,
@@ -5196,6 +5462,9 @@ def authenticate_launch_lineage(
         "plan_id": consumption["plan_id"],
         "window_id": consumption["window_id"],
         "bracket_session_id": arm["arm_context"]["bracket_session_id"],
+        "pack_root": str(pack_root),
+        "arm_context": copy.deepcopy(dict(arm["arm_context"])),
+        "launch_lineage": copy.deepcopy(dict(value)),
         "start_sha256": start_digest,
         "settle_sha256": settle_digest,
         "completion_sha256": (
@@ -5203,6 +5472,217 @@ def authenticate_launch_lineage(
             if isinstance(completion_ref, Mapping)
             else None
         ),
+    }
+
+
+def _read_launch_lineage_locator(
+    path: Path,
+    *,
+    expected_root: Path,
+    expected_role: str | None = None,
+) -> Mapping[str, Any]:
+    if path.name != LAUNCH_LINEAGE_LOCATOR_BASENAME:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch-lineage locator does not use the fixed basename",
+        )
+    value, _raw, _digest = _read_launch_lineage_primary(
+        path, missing_code="launch_consumption_missing"
+    )
+    if (
+        set(value) != LAUNCH_LINEAGE_LOCATOR_KEYS
+        or value.get("schema_version") != LAUNCH_LINEAGE_LOCATOR_SCHEMA
+    ):
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "launch-lineage locator schema/keys are invalid",
+        )
+    role = value.get("root_role")
+    if role not in LAUNCH_LINEAGE_ROOT_ROLES:
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "launch-lineage locator root_role is invalid",
+        )
+    root_path = value.get("root_path")
+    if not isinstance(root_path, str) or not Path(root_path).is_absolute():
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "launch-lineage locator root_path is invalid",
+        )
+    try:
+        resolved_expected = expected_root.resolve(strict=True)
+        resolved_recorded = Path(root_path).resolve(strict=True)
+        resolved_locator_parent = path.parent.resolve(strict=True)
+    except OSError as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"launch-lineage locator root is unavailable: {exc}",
+        ) from exc
+    if (
+        root_path != str(resolved_expected)
+        or resolved_recorded != resolved_expected
+        or resolved_locator_parent != resolved_expected
+        or (expected_role is not None and role != expected_role)
+    ):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "launch-lineage locator root role/path differs from the selected root",
+        )
+    if not isinstance(value.get("launch_lineage"), Mapping):
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "launch-lineage locator payload is not an object",
+        )
+    return value
+
+
+def _authenticated_pack_config_inventory(
+    pack_root: Path,
+) -> dict[str, str]:
+    try:
+        tree, _raw = _plan_tree(pack_root)
+        attachments = tree["arm_attachments"]
+        projection = attachments["identity_pin_projection"]
+        units = projection["identity_units"]
+    except (ArmReadinessError, KeyError, TypeError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"authenticated pack omits its config inventory: {exc}",
+        ) from exc
+    if not isinstance(units, list) or not units:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "authenticated pack config inventory is empty or invalid",
+        )
+    inventory: dict[str, str] = {}
+    for unit in units:
+        rows = unit.get("config_inventory") if isinstance(unit, Mapping) else None
+        if not isinstance(rows, list) or not rows:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "authenticated pack config inventory unit is invalid",
+            )
+        for row in rows:
+            if not isinstance(row, Mapping) or set(row) != {"path", "sha256"}:
+                raise LaunchLineageError(
+                    "launch_binding_mismatch",
+                    "authenticated pack config inventory row is invalid",
+                )
+            relative = row.get("path")
+            digest = row.get("sha256")
+            try:
+                _require_relative_path(relative, "config inventory.path")
+                _require_lower_sha256(digest, "config inventory.sha256")
+            except ArmReadinessError as exc:
+                raise LaunchLineageError(
+                    "launch_binding_mismatch",
+                    f"authenticated pack config inventory row is invalid: {exc}",
+                ) from exc
+            assert isinstance(relative, str) and isinstance(digest, str)
+            prior = inventory.get(relative)
+            if prior is not None and prior != digest:
+                raise LaunchLineageError(
+                    "launch_binding_mismatch",
+                    "authenticated pack config inventory has conflicting duplicates",
+                )
+            inventory[relative] = digest
+    return inventory
+
+
+def authenticate_campaign_launch_lineage(
+    runs_root: Path | str,
+    *,
+    config_paths: Sequence[Path | str] = (),
+) -> dict[str, Any]:
+    """Derive and authenticate the campaign writer's fixed root-local locator."""
+
+    try:
+        selected_root = Path(runs_root).resolve(strict=True)
+    except OSError as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch", f"campaign runs root is unavailable: {exc}"
+        ) from exc
+    if not selected_root.is_dir():
+        raise LaunchLineageError(
+            "launch_binding_mismatch", "campaign runs root is not a directory"
+        )
+    locator_path = selected_root / LAUNCH_LINEAGE_LOCATOR_BASENAME
+    locator = _read_launch_lineage_locator(
+        locator_path, expected_root=selected_root
+    )
+    authenticated = authenticate_launch_lineage(
+        locator["launch_lineage"],
+        require_completion=False,
+        require_current_boot=True,
+        require_completion_absent=True,
+    )
+    context = authenticated["arm_context"]
+    resolved_roots: dict[str, Path] = {}
+    try:
+        for role in sorted(LAUNCH_LINEAGE_ROOT_ROLES):
+            resolved_roots[role] = Path(str(context[role])).resolve(strict=True)
+    except (KeyError, OSError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"authenticated arm runs root is unavailable: {exc}",
+        ) from exc
+    matching_roles = [
+        role for role, root in resolved_roots.items() if root == selected_root
+    ]
+    if len(matching_roles) != 1:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "campaign runs root is not exactly one authenticated arm-context root",
+        )
+    selected_role = matching_roles[0]
+    if locator["root_role"] != selected_role:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "campaign locator role differs from its authenticated arm-context root",
+        )
+    lineage = locator["launch_lineage"]
+    for role, root in resolved_roots.items():
+        sibling = _read_launch_lineage_locator(
+            root / LAUNCH_LINEAGE_LOCATOR_BASENAME,
+            expected_root=root,
+            expected_role=role,
+        )
+        if sibling["launch_lineage"] != lineage:
+            raise LaunchLineageError(
+                "launch_lineage_conflict",
+                "claim and bound roots carry different authenticated launch lineages",
+            )
+    pack_root = Path(str(authenticated["pack_root"]))
+    inventory = _authenticated_pack_config_inventory(pack_root)
+    for config_path in config_paths:
+        candidate = Path(config_path)
+        try:
+            if candidate.is_symlink():
+                raise OSError("symlink refused")
+            resolved = candidate.resolve(strict=True)
+            relative = resolved.relative_to(pack_root).as_posix()
+            raw = resolved.read_bytes()
+        except (OSError, ValueError) as exc:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"campaign config is outside the authenticated pack: {candidate}: {exc}",
+            ) from exc
+        if inventory.get(relative) != sha256_bytes(raw):
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"campaign config is not an authenticated pack member: {relative}",
+            )
+    return {
+        "launch_lineage": copy.deepcopy(dict(lineage)),
+        "pack_root": str(pack_root),
+        "root_role": selected_role,
+        "root_path": str(selected_root),
+        "config_inventory": copy.deepcopy(inventory),
+        "authentication": {
+            key: copy.deepcopy(value)
+            for key, value in authenticated.items()
+            if key not in {"arm_context", "launch_lineage"}
+        },
     }
 
 
@@ -5304,6 +5784,8 @@ __all__ = [
     "EVIDENCE_RECEIPT_SCHEMA",
     "FREEZE_RECEIPT_SCHEMA",
     "LAUNCH_COMPLETION_RECEIPT_SCHEMA",
+    "LAUNCH_LINEAGE_LOCATOR_BASENAME",
+    "LAUNCH_LINEAGE_LOCATOR_SCHEMA",
     "LAUNCH_LINEAGE_REASON_CODES",
     "LAUNCH_LINEAGE_SCHEMA",
     "LAUNCH_MANIFEST_SCHEMA",
@@ -5317,6 +5799,7 @@ __all__ = [
     "SYNTHETIC_DOMAINS",
     "applicability_for_row",
     "authenticate_bundle_launch_lineage",
+    "authenticate_campaign_launch_lineage",
     "authenticate_launch_lineage",
     "committed_pack_tree_sha256",
     "consume_launch_capability",

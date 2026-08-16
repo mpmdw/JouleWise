@@ -25,6 +25,7 @@ All timestamps come from the injected :class:`joulewise.clock.Clock`
 from __future__ import annotations
 
 import csv
+import copy
 import fcntl
 import hashlib
 import json
@@ -42,6 +43,11 @@ from pathlib import Path
 from typing import Any, Iterator
 
 import joulewise
+from joulewise.arm_readiness import (
+    LaunchLineageError,
+    authenticate_campaign_launch_lineage,
+    launch_lineage_required,
+)
 from joulewise.clock import Clock
 from joulewise.cooldown_anchor import COOLDOWN_ANCHOR_VERDICT_SCHEMA_VERSION
 from joulewise.interfaces import PowerSample, RunContext, RuntimeEvent
@@ -75,6 +81,61 @@ _GIT_POPEN = subprocess.Popen
 
 class BundleError(Exception):
     """Raised when a bundle invariant (layout, ordering, immutability) breaks."""
+
+
+def _writer_launch_lineage(
+    runs_root: Path,
+    config: BenchmarkConfig,
+) -> dict[str, Any] | None:
+    """Independently authenticate a marker-bearing writer before bundle mkdir."""
+
+    if not launch_lineage_required(config.to_dict()):
+        return None
+    try:
+        context = authenticate_campaign_launch_lineage(runs_root)
+        pack_root = Path(str(context["pack_root"]))
+        inventory = context["config_inventory"]
+        if not isinstance(inventory, dict):
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "authenticated campaign config inventory is invalid",
+            )
+        run_id = config.run_id
+        candidates = [
+            relative
+            for relative in inventory
+            if run_id is None or Path(relative).stem == run_id
+        ]
+        matched = False
+        for relative in candidates:
+            source_path = pack_root / relative
+            try:
+                if source_path.is_symlink():
+                    continue
+                raw = source_path.read_bytes()
+                if hashlib.sha256(raw).hexdigest() != inventory[relative]:
+                    continue
+                source_value = json.loads(raw)
+                source_config = BenchmarkConfig.from_mapping(source_value)
+            except (OSError, ValueError, TypeError):
+                continue
+            if source_config == config:
+                matched = True
+                break
+        if not matched:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "writer config is not a semantic member of the authenticated pack",
+            )
+        lineage = context.get("launch_lineage")
+        if not isinstance(lineage, dict):
+            raise LaunchLineageError(
+                "launch_consumption_invalid",
+                "authenticated campaign launch lineage is invalid",
+            )
+        return copy.deepcopy(lineage)
+    except LaunchLineageError as exc:
+        raise BundleError(f"{exc.reason_code}: {exc}") from exc
 
 
 def _json_pointer_child(path: str, key: str) -> str:
@@ -817,6 +878,7 @@ class RunBundleWriter:
         config_sha256: str,
         clock: Clock,
         source_state_start: dict[str, str],
+        launch_lineage: dict[str, Any] | None = None,
     ) -> None:
         self._path = path
         self._run_id = run_id
@@ -824,6 +886,7 @@ class RunBundleWriter:
         self._config_sha256 = config_sha256
         self._clock = clock
         self._source_state_start = source_state_start
+        self._launch_lineage = copy.deepcopy(launch_lineage)
         self._metadata_written = False
         self._power_trace_written = False
         self._suite_manifest_written = False
@@ -837,8 +900,10 @@ class RunBundleWriter:
         Raises :class:`BundleError` if the bundle directory already exists
         (bundles are immutable evidence; never overwrite, D-010).
         """
+        root = Path(runs_root)
+        launch_lineage = _writer_launch_lineage(root, config)
         run_id = generate_run_id(config, clock)
-        path = Path(runs_root) / run_id
+        path = root / run_id
         if path.exists():
             raise BundleError(
                 f"bundle directory already exists: {path} (bundles are immutable evidence)"
@@ -860,6 +925,7 @@ class RunBundleWriter:
             config_sha256=config_sha256,
             clock=clock,
             source_state_start=source_state_start,
+            launch_lineage=launch_lineage,
         )
 
     @property
@@ -940,6 +1006,25 @@ class RunBundleWriter:
         self._require_open("write metadata")
         if self._metadata_written:
             raise BundleError("metadata.json already written")
+        extra = dict(extra)
+        if self._launch_lineage is not None:
+            controller_extra = extra.get("extra")
+            if controller_extra is None:
+                controller_extra = {}
+            elif not isinstance(controller_extra, dict):
+                raise BundleError(
+                    "marker-bearing metadata.extra must be an object"
+                )
+            else:
+                controller_extra = dict(controller_extra)
+            if "launch_lineage" in controller_extra:
+                raise BundleError(
+                    "launch_lineage is writer-owned and cannot be caller supplied"
+                )
+            controller_extra["launch_lineage"] = copy.deepcopy(
+                self._launch_lineage
+            )
+            extra["extra"] = controller_extra
         base_keys = {
             "platform",
             "machine",

@@ -45,6 +45,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.bundle import sanitize_id_component  # noqa: E402
+from joulewise.arm_readiness import (  # noqa: E402
+    LaunchLineageError,
+    authenticate_campaign_launch_lineage,
+    launch_lineage_required,
+)
 from joulewise.cli import validate_bundle  # noqa: E402
 from joulewise.bundle_read import (  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
@@ -1445,6 +1450,34 @@ def discover_configs(config_dir: Path) -> list[Path]:
         path
         for path in config_dir.glob("*.json")
         if path.name not in NON_CONFIG_SIDECARS
+    )
+
+
+def authenticate_campaign_writer_preflight(
+    configs: Sequence[Path], runs_dir: Path
+) -> dict[str, Any] | None:
+    """Outer campaign gate; the bundle writer repeats this independently."""
+
+    marker_states: list[bool] = []
+    for path in configs:
+        try:
+            value = json.loads(path.read_bytes())
+        except (OSError, json.JSONDecodeError):
+            # The established config preflight owns malformed-config
+            # diagnostics. Treat it as non-marker here so legacy error order
+            # and no-write behavior remain unchanged.
+            marker_states.append(False)
+            continue
+        marker_states.append(launch_lineage_required(value))
+    if not any(marker_states):
+        return None
+    if not all(marker_states):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "campaign config selection mixes marker-bearing and legacy configs",
+        )
+    return authenticate_campaign_launch_lineage(
+        runs_dir, config_paths=configs
     )
 
 
@@ -7156,6 +7189,8 @@ def run_campaign(args: argparse.Namespace) -> int:
         if order_warning is not None:
             print(order_warning, file=sys.stderr)
         configs = apply_order_manifest(discover_configs(config_dir), order_entries)
+    if not args.dry_run:
+        authenticate_campaign_writer_preflight(configs, runs_dir)
     order_by_config = order_entry_by_config(order_entries)
     print_config_file_list(configs)
     doctor_gate = config_warning_gate(
@@ -7993,6 +8028,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.whole_window_verdict:
             return run_whole_window_verdict(args)
         return run_campaign(args)
+    except LaunchLineageError as exc:
+        print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
+        return 2
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -4,6 +4,8 @@ import argparse
 import importlib.util
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -152,6 +154,33 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
             consume.assert_called_once()
             verify.assert_called_once()
             execve.assert_called_once()
+
+    def test_standalone_consume_cli_is_retired_with_launcher_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            pack.mkdir()
+            (pack / "sentinel.txt").write_text("immutable\n")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/generate_arm_readiness.py"),
+                    "consume",
+                    "--pack-root",
+                    str(pack),
+                    "--arm-receipt",
+                    str(root / "arm.json"),
+                    "--window-custody-root",
+                    str(root / "custody"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(completed.returncode, 2)
+        refusal = json.loads(completed.stdout)
+        self.assertEqual(refusal["reason_codes"], ["readiness_usage_invalid"])
+        self.assertIn("scripts/launch_window.py", refusal["detail"])
 
 
 class CeremonySkipConsumerTests(unittest.TestCase):

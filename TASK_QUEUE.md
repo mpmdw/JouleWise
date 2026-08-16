@@ -442,6 +442,17 @@ addendum + addendum II; the delegated related-work sweep
 | DOC-RUNSDIR-ABS-01 | P4 Polish | [AGENT] | Tool contract doc note: the extraction CLI's `--runs-dir` **must be an absolute path**. Document it at the tool contract, and consider a fail-closed check rather than leaving it as operator lore. | Doc note landed; optionally a refusal on a relative `--runs-dir` with a regression. | [D-086](docs/decision_log.md) (queued from lieutenant findings) |
 | LITREAD-VERIFY-01 | P4 Polish | [AGENT] | Pre-submission verbatim re-verification of the two load-bearing related-work sources against the **PDFs of record**: TokenPowerBench (arXiv **2512.03024**) and "The Illusion of Power Capping in LLM Decode" (arXiv **2605.11999**). Both were read in full text during the sweep, but through WebFetch's extraction model against the arXiv HTML renders. | Every quote and number cited in a submission re-checked against the PDF. **Note the id correction:** TokenPowerBench is 2512.03024; 2605.11999 is the Illusion paper — earlier handoff text conflated the two. | [Sweep-techniques access summary](docs/run_reports/2026-07-30-sweep-techniques.md) |
 
+## WO-LAUNCH-BINDING stage checkpoint — 2026-08-15
+
+Stage 1 plus the campaign half of stage 2 are implemented on
+`impl/wo-launch-binding`: settle publishes both fixed root-local locators;
+standalone consume refuses in favor of the sole launcher; campaign outer
+preflight and the inner bundle writer independently authenticate from disk;
+and marker-bearing bundle metadata carries the full lineage. This does not
+close A1 or clear `WINDOW-COUNCIL-GATE`: the sibling calibration writer,
+stages 3-4, successor-family freeze transaction, and full C-028 gauntlet
+remain outstanding.
+
 ## Current Queue
 
 The generated region below is the sole live queue and source of truth for

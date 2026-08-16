@@ -88,6 +88,89 @@ def held_campaign_lock(runs_dir: Path):
         run_campaign_module.release_campaign_lock(lock_path)
 
 
+class CampaignLaunchLineagePreflightTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.config_dir = self.root / "configs"
+        self.config_dir.mkdir()
+        self.runs_dir = self.root / "runs"
+
+    def _write_config(self, name: str, *, marker: bool) -> Path:
+        tags = ["launch_lineage_required"] if marker else []
+        path = self.config_dir / name
+        path.write_text(
+            json.dumps(
+                {
+                    "run_id": path.stem,
+                    "run_metadata": {"project": "joulewise", "tags": tags},
+                }
+            )
+            + "\n"
+        )
+        return path
+
+    def test_outer_preflight_derives_from_runs_root_and_exact_configs(self) -> None:
+        first = self._write_config("first.json", marker=True)
+        second = self._write_config("second.json", marker=True)
+        expected = {"launch_lineage": {"schema_version": "test"}}
+        with patch.object(
+            run_campaign_module,
+            "authenticate_campaign_launch_lineage",
+            return_value=expected,
+        ) as authenticate:
+            actual = run_campaign_module.authenticate_campaign_writer_preflight(
+                [first, second], self.runs_dir
+            )
+        self.assertIs(actual, expected)
+        authenticate.assert_called_once_with(
+            self.runs_dir, config_paths=[first, second]
+        )
+
+    def test_outer_preflight_refuses_mixed_marker_selection(self) -> None:
+        marked = self._write_config("marked.json", marker=True)
+        legacy = self._write_config("legacy.json", marker=False)
+        with self.assertRaises(run_campaign_module.LaunchLineageError) as caught:
+            run_campaign_module.authenticate_campaign_writer_preflight(
+                [marked, legacy], self.runs_dir
+            )
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+
+    def test_ceremony_bypass_refuses_before_lock_provenance_or_child(self) -> None:
+        self._write_config("member.json", marker=True)
+        args = run_campaign_module.parse_args(
+            [
+                str(self.config_dir),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--campaign-policy",
+                str(TEST_CAMPAIGN_POLICY),
+            ]
+        )
+        error = run_campaign_module.LaunchLineageError(
+            "launch_consumption_missing", "injected missing locator"
+        )
+        with patch.object(
+            run_campaign_module,
+            "authenticate_campaign_writer_preflight",
+            side_effect=error,
+        ) as preflight, patch.object(
+            run_campaign_module, "acquire_campaign_lock"
+        ) as acquire, patch.object(
+            run_campaign_module, "new_campaign_provenance"
+        ) as provenance, patch.object(
+            run_campaign_module.subprocess, "run"
+        ) as child:
+            with self.assertRaises(run_campaign_module.LaunchLineageError) as caught:
+                run_campaign_module.run_campaign(args)
+        self.assertIs(caught.exception, error)
+        preflight.assert_called_once()
+        acquire.assert_not_called()
+        provenance.assert_not_called()
+        child.assert_not_called()
+
+
 class CampaignLockIdentityTests(unittest.TestCase):
     def test_r1_foreign_same_named_lock_with_matching_pid_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

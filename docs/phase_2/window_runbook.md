@@ -1032,6 +1032,9 @@ arming; they do not authorize the live night.
    frozen 180-second settle; Ed steps away immediately after invoking E-10 and
    does not touch or monitor the machine. Standalone `consume`, direct
    `window-chain.zsh`, and direct stage invocations are not production routes.
+   The retained `generate_arm_readiness.py consume` CLI now refuses with
+   registered `readiness_usage_invalid` and points to
+   `scripts/launch_window.py`; it is not a compatibility launch path.
    This supersedes the pre-D-117 §5A instruction to settle 180 seconds by
    hand before launching: the settle is inside the chain.
    Inside the chain, the writer's enforcing pre-slot check gates each
@@ -1298,6 +1301,12 @@ settle
   --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
   --launch-manifest "$LAUNCH_MANIFEST" \
   --lifecycle-event settle
+# Settle publishes BOTH fixed locators, each with its GNU SHA-256 sidecar:
+#   $RUNS_ROOT/.joulewise-launch-lineage.json
+#   $BOUND_RUNS_ROOT/.joulewise-launch-lineage.json
+# Publication is canonical, no-clobber, file-fsynced, and directory-fsynced.
+# Any primary/sidecar/root failure burns this attempt and set -e stops here,
+# before pre-calibration or collection; never repair a partial publication.
 echo "$(timestamp) launch_settle_complete" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 
 PRE_CAL_CUSTODY="$(calibrate_slot pre "$PRE_ATTEMPT_ID")"
@@ -1347,6 +1356,19 @@ E-10's launcher `execve`s the manifest's exact
 census in §5 is taken before E-10 and must find no `caffeinate` at all; after
 E-10, exactly one exists and it is the chain's parent. Do not invoke that argv
 directly or start a second one for any reason.
+
+Every marker-bearing campaign invocation derives the constant locator from
+its resolved `--runs-dir`. The outer campaign preflight authenticates both
+root locators, the consumption→arm→start→settle chain, the current collection
+boot and reviewed HEAD, the frozen recipe and exact argv, the authenticated
+pack config membership, the selected arm-context root, and completion
+absence before taking the campaign lock or creating provenance. The inner
+bundle writer independently repeats the disk authentication before creating
+each bundle and stamps the full authenticated object at
+`metadata.json` → `extra` → `launch_lineage`. No lineage path, JSON, or token
+is transported in argv or environment. Writer authentication proves that
+consumption occurred within the arm horizon; it does not reapply that short
+T-0 horizon during a multi-hour window.
 
 Expected visible behavior: each stage pauses for the 180-second settle, prints
 a 20-second arming countdown, sleeps the display, re-probes the governed

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +22,12 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         self.custody = root / "arm-custody"
         self.arm = sample_arm(root / "context")
         self.arm["boot_session_id"] = TEST_BOOT_SESSION_ID
+        self.arm["pack"]["pack_root"] = str(self.pack)
+        pack_record_patch = mock.patch.object(
+            readiness, "_pack_record", return_value=self.arm["pack"]
+        )
+        pack_record_patch.start()
+        self.addCleanup(pack_record_patch.stop)
         for name in (
             "claim_runs_root",
             "bound_runs_root",
@@ -85,6 +92,47 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                 launch_manifest=self.manifest_path,
                 exec_argv=self.exec_argv,
                 handoff_token_sha256=hashlib.sha256(token).hexdigest(),
+            )
+
+    def _settle(self, token: bytes = b"l" * 32) -> tuple[Path, dict[str, object]]:
+        result = self._consume(token)
+        consumption_path = Path(str(result["consumption_path"]))
+        with mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "start", handoff_token=token
+            )
+            settled = readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "settle"
+            )
+        return consumption_path, settled
+
+    def _authenticate_campaign(
+        self, runs_root: Path, *, config_paths: tuple[Path, ...] = ()
+    ) -> dict[str, object]:
+        with mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ), mock.patch.object(
+            readiness,
+            "_git_text",
+            return_value=self.arm["reviewed_main"]["head_commit"],
+        ), mock.patch.object(
+            readiness,
+            "_authenticated_pack_config_inventory",
+            return_value={
+                path.resolve().relative_to(self.pack.resolve()).as_posix():
+                hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in config_paths
+                if path.resolve().is_relative_to(self.pack.resolve())
+            },
+        ):
+            return readiness.authenticate_campaign_launch_lineage(
+                runs_root, config_paths=config_paths
             )
 
     def test_v2_claim_is_fsynced_and_replays_from_consumption(self) -> None:
@@ -152,6 +200,267 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         )
         self.assertEqual(lineage["consumption_sha256"], result["consumption_sha256"])
         self.assertIsNotNone(lineage["completion_sha256"])
+
+    def test_settle_publishes_both_canonical_no_clobber_locators(self) -> None:
+        with mock.patch.object(
+            readiness, "_fsync_directory", wraps=readiness._fsync_directory
+        ) as fsync_directory:
+            _consumption_path, settled = self._settle()
+        for role in ("claim_runs_root", "bound_runs_root"):
+            root = Path(self.arm["arm_context"][role])
+            locator_path = root / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+            raw = locator_path.read_bytes()
+            locator = readiness.parse_json_bytes(raw, require_canonical=True)
+            self.assertEqual(
+                set(locator), readiness.LAUNCH_LINEAGE_LOCATOR_KEYS
+            )
+            self.assertEqual(
+                locator["schema_version"],
+                readiness.LAUNCH_LINEAGE_LOCATOR_SCHEMA,
+            )
+            self.assertEqual(locator["root_role"], role)
+            self.assertEqual(locator["root_path"], str(root.resolve()))
+            self.assertEqual(locator["launch_lineage"], settled["launch_lineage"])
+            self.assertIsNone(locator["launch_lineage"]["completion"])
+            self.assertEqual(
+                locator_path.with_name(f"{locator_path.name}.sha256").read_bytes(),
+                readiness.gnu_sidecar(
+                    hashlib.sha256(raw).hexdigest(), locator_path.name
+                ),
+            )
+            self.assertEqual(
+                sum(
+                    Path(call.args[0]).resolve() == root.resolve()
+                    for call in fsync_directory.call_args_list
+                ),
+                2,
+            )
+        authenticated = self._authenticate_campaign(
+            Path(self.arm["arm_context"]["claim_runs_root"])
+        )
+        self.assertEqual(
+            readiness.render_json(authenticated["launch_lineage"]),
+            readiness.render_json(settled["launch_lineage"]),
+        )
+
+    def test_lineage_replay_derives_pack_root_and_rejects_caller_mismatch(self) -> None:
+        _consumption_path, settled = self._settle()
+        replay = readiness.authenticate_launch_lineage(
+            settled["launch_lineage"], require_completion=False
+        )
+        self.assertEqual(replay["pack_root"], str(self.pack.resolve()))
+        other = Path(self.temporary.name) / "other-pack"
+        other.mkdir()
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            readiness.authenticate_launch_lineage(
+                settled["launch_lineage"],
+                require_completion=False,
+                expected_pack_root=other,
+            )
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+
+    def test_partial_locator_publication_burns_and_cannot_be_repaired(self) -> None:
+        token = b"p" * 32
+        result = self._consume(token)
+        consumption_path = Path(str(result["consumption_path"]))
+        bound_locator = (
+            Path(self.arm["arm_context"]["bound_runs_root"])
+            / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        real_write = readiness._exclusive_write
+
+        def fail_bound_primary(path: Path, raw: bytes) -> None:
+            if path.resolve(strict=False) == bound_locator.resolve(strict=False):
+                raise readiness.ArmReadinessError(
+                    "readiness_io_error", "injected bound-locator crash"
+                )
+            real_write(path, raw)
+
+        with mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "start", handoff_token=token
+            )
+            with mock.patch.object(
+                readiness, "_exclusive_write", side_effect=fail_bound_primary
+            ):
+                with self.assertRaises(readiness.LaunchLineageError) as caught:
+                    readiness.record_launch_lifecycle_event(
+                        self.pack, consumption_path, "settle"
+                    )
+            self.assertEqual(
+                caught.exception.reason_code, "launch_consumption_invalid"
+            )
+            claim_locator = (
+                Path(self.arm["arm_context"]["claim_runs_root"])
+                / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+            )
+            self.assertTrue(claim_locator.is_file())
+            self.assertTrue(
+                claim_locator.with_name(f"{claim_locator.name}.sha256").is_file()
+            )
+            self.assertFalse(bound_locator.exists())
+            with self.assertRaises(readiness.LaunchLineageError) as replay:
+                readiness.record_launch_lifecycle_event(
+                    self.pack, consumption_path, "settle"
+                )
+        self.assertEqual(
+            replay.exception.reason_code, "launch_consumption_invalid"
+        )
+
+    def test_precreated_locator_burns_settle_without_publishing_sibling(self) -> None:
+        token = b"o" * 32
+        result = self._consume(token)
+        consumption_path = Path(str(result["consumption_path"]))
+        claim_locator = (
+            Path(self.arm["arm_context"]["claim_runs_root"])
+            / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        claim_locator.write_text("precreated\n")
+        with mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "start", handoff_token=token
+            )
+            with self.assertRaises(readiness.LaunchLineageError) as caught:
+                readiness.record_launch_lifecycle_event(
+                    self.pack, consumption_path, "settle"
+                )
+        self.assertEqual(caught.exception.reason_code, "launch_consumption_invalid")
+        bound_locator = (
+            Path(self.arm["arm_context"]["bound_runs_root"])
+            / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        self.assertFalse(bound_locator.exists())
+
+    def test_locator_missing_corrupt_root_swap_and_mixed_are_discriminated(self) -> None:
+        self._settle()
+        claim = (
+            Path(self.arm["arm_context"]["claim_runs_root"])
+            / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        bound = (
+            Path(self.arm["arm_context"]["bound_runs_root"])
+            / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        paths = (
+            claim,
+            claim.with_name(f"{claim.name}.sha256"),
+            bound,
+            bound.with_name(f"{bound.name}.sha256"),
+        )
+        original = {path: path.read_bytes() for path in paths}
+
+        claim.with_name(f"{claim.name}.sha256").unlink()
+        with self.assertRaises(readiness.LaunchLineageError) as missing:
+            self._authenticate_campaign(claim.parent)
+        self.assertEqual(missing.exception.reason_code, "launch_consumption_missing")
+        for path, raw in original.items():
+            path.write_bytes(raw)
+
+        claim.with_name(f"{claim.name}.sha256").write_text("corrupt\n")
+        with self.assertRaises(readiness.LaunchLineageError) as corrupt:
+            self._authenticate_campaign(claim.parent)
+        self.assertEqual(corrupt.exception.reason_code, "launch_consumption_invalid")
+        for path, raw in original.items():
+            path.write_bytes(raw)
+
+        claim.write_bytes(original[bound])
+        claim.with_name(f"{claim.name}.sha256").write_bytes(
+            original[bound.with_name(f"{bound.name}.sha256")]
+        )
+        bound.write_bytes(original[claim])
+        bound.with_name(f"{bound.name}.sha256").write_bytes(
+            original[claim.with_name(f"{claim.name}.sha256")]
+        )
+        with self.assertRaises(readiness.LaunchLineageError) as swapped:
+            self._authenticate_campaign(claim.parent)
+        self.assertEqual(swapped.exception.reason_code, "launch_binding_mismatch")
+        for path, raw in original.items():
+            path.write_bytes(raw)
+
+        mixed = json.loads(original[bound])
+        mixed["launch_lineage"]["pack_id"] = "different-pack"
+        mixed_raw = readiness.render_json(mixed)
+        bound.write_bytes(mixed_raw)
+        bound.with_name(f"{bound.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(
+                hashlib.sha256(mixed_raw).hexdigest(), bound.name
+            )
+        )
+        with self.assertRaises(readiness.LaunchLineageError) as conflict:
+            self._authenticate_campaign(claim.parent)
+        self.assertEqual(conflict.exception.reason_code, "launch_lineage_conflict")
+
+    def test_campaign_config_membership_and_completion_absence_are_enforced(self) -> None:
+        consumption_path, _settled = self._settle()
+        config_path = self.pack / "member.json"
+        config_path.write_text('{"run_id":"member"}\n')
+        authenticated = self._authenticate_campaign(
+            Path(self.arm["arm_context"]["claim_runs_root"]),
+            config_paths=(config_path,),
+        )
+        self.assertEqual(authenticated["pack_root"], str(self.pack.resolve()))
+        copied = Path(self.temporary.name) / "copied-member.json"
+        copied.write_bytes(config_path.read_bytes())
+        with self.assertRaises(readiness.LaunchLineageError) as outside:
+            self._authenticate_campaign(
+                Path(self.arm["arm_context"]["claim_runs_root"]),
+                config_paths=(copied,),
+            )
+        self.assertEqual(outside.exception.reason_code, "launch_binding_mismatch")
+        with mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "completion"
+            )
+        with self.assertRaises(readiness.LaunchLineageError) as completed:
+            self._authenticate_campaign(
+                Path(self.arm["arm_context"]["claim_runs_root"]),
+                config_paths=(config_path,),
+            )
+        self.assertEqual(completed.exception.reason_code, "launch_binding_mismatch")
+
+    def test_writer_auth_does_not_reapply_short_arm_expiration(self) -> None:
+        self.arm["valid_until_monotonic_ns"] = 200
+        arm_raw = readiness.render_json(self.arm)
+        self.arm_path.write_bytes(arm_raw)
+        self.arm_path.with_name(f"{self.arm_path.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(
+                hashlib.sha256(arm_raw).hexdigest(), self.arm_path.name
+            )
+        )
+        token = b"e" * 32
+        with mock.patch.object(readiness.time, "monotonic_ns", return_value=100):
+            result = self._consume(token)
+        consumption_path = Path(str(result["consumption_path"]))
+        with mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ), mock.patch.object(
+            readiness.time, "monotonic_ns", side_effect=(110, 120)
+        ):
+            readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "start", handoff_token=token
+            )
+            readiness.record_launch_lifecycle_event(
+                self.pack, consumption_path, "settle"
+            )
+        with mock.patch.object(readiness.time, "monotonic_ns", return_value=10_000):
+            authenticated = self._authenticate_campaign(
+                Path(self.arm["arm_context"]["claim_runs_root"])
+            )
+        self.assertEqual(authenticated["authentication"]["consumption_sha256"], result["consumption_sha256"])
 
     def test_missing_consumption_sidecar_is_machine_refusal(self) -> None:
         result = self._consume()
@@ -366,6 +675,20 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                 readiness.verify_consumed_launch(self.pack, consumption_path)
         self.assertEqual(
             launch_entry.exception.reason_code, "launch_binding_mismatch"
+        )
+
+
+class LaunchPackConfigInventoryTests(unittest.TestCase):
+    def test_real_pack_inventory_authenticates_exact_member_bytes(self) -> None:
+        pack = (
+            Path(__file__).resolve().parents[1]
+            / "configs/campaigns/d117_floor_qwen25_1p5b_v1"
+        )
+        inventory = readiness._authenticated_pack_config_inventory(pack)
+        relative = "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json"
+        self.assertEqual(
+            inventory[relative],
+            hashlib.sha256((pack / relative).read_bytes()).hexdigest(),
         )
 
 

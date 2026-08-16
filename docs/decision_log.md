@@ -9360,3 +9360,22 @@ gates; (4) successor-config launch_lineage_required flag [PHASE 2 — frozen
 packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
+
+### D-078 amendment — 2026-08-15: locator and campaign-writer enforcement landed
+
+The campaign half of WO-LAUNCH-BINDING stage 2 implements the already
+registered six-code launch-consumption vocabulary without adding aliases.
+At marker-bearing collection admission, a missing locator/primary/sidecar is
+`launch_consumption_missing`; malformed canonical bytes, a bad sidecar, or an
+invalid predecessor chain is `launch_consumption_invalid`; a wrong root,
+role, boot, pack, plan, reviewed HEAD, arm-context digest, recipe, argv,
+config membership, or lifecycle phase is `launch_binding_mismatch`; unequal
+authenticated claim/bound locator payloads are `launch_lineage_conflict`;
+absent start/settle is `launch_lifecycle_incomplete`; and FD/token/start
+replay remains `launch_handoff_invalid` at chain entry. The outer campaign
+preflight and inner bundle writer each derive and authenticate from the fixed
+root-local locator. They never receive lineage through argv/environment and
+never reapply the arm's short T-0 expiry after authenticating that consumption
+occurred within it. Calibration writer enforcement remains the separately
+owned next stage-2 landing; downstream stages 3-4 and the C-028 gauntlet still
+gate launch readiness.
