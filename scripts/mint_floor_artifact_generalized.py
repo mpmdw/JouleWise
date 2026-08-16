@@ -2689,6 +2689,39 @@ def _v2_pre_registration_gate(
     return absolute_binding
 
 
+def _common_minted_artifact_launch_lineage(
+    artifacts: Sequence[Mapping[str, Any]],
+    *,
+    label: str,
+) -> Mapping[str, Any] | None:
+    """Require component artifacts to omit lineage together or carry one value."""
+
+    lineages: list[Mapping[str, Any]] = []
+    for artifact in artifacts:
+        provenance = artifact.get("provenance")
+        lineage = (
+            provenance.get("launch_lineage")
+            if isinstance(provenance, Mapping)
+            else None
+        )
+        if lineage is None:
+            continue
+        if not isinstance(lineage, Mapping):
+            raise MintError(
+                f"launch_consumption_invalid: {label} launch lineage is not an object"
+            )
+        lineages.append(lineage)
+    if lineages and len(lineages) != len(artifacts):
+        raise MintError(
+            f"launch_lineage_conflict: {label} mixes marker-bearing and legacy provenance"
+        )
+    if len({_canonical_json_sha256(lineage) for lineage in lineages}) > 1:
+        raise MintError(
+            f"launch_lineage_conflict: {label} does not carry one authenticated lineage"
+        )
+    return copy.deepcopy(dict(lineages[0])) if lineages else None
+
+
 def _mint_v2_cell_artifact(
     *,
     core: ModuleType,
@@ -2714,6 +2747,10 @@ def _mint_v2_cell_artifact(
         plan=plan,
         absolute=absolute,
         comparative=comparative,
+    )
+    launch_lineage = core._common_authenticated_launch_lineage(
+        absolute,
+        comparative,
     )
     relative_plan = core._safe_relative_posix(
         plan_pins["relative_path"], "calibration_plan.relative_path"
@@ -2810,6 +2847,8 @@ def _mint_v2_cell_artifact(
         provenance["calibration_custody_store"] = dict(
             custody_store_provenance
         )
+    if launch_lineage is not None:
+        provenance["launch_lineage"] = copy.deepcopy(dict(launch_lineage))
     artifact = core.build_floor_artifact(
         artifact_id=producer["component_artifact"]["artifact_id"],
         calibration_scope=plan_pins["artifact_calibration_scope"],
@@ -2870,6 +2909,7 @@ def _build_v2_artifacts(
             raise MintError(f"producer {plan_id!r}: calibration plan identity mismatch")
         producer_cells: list[Mapping[str, Any]] = []
         producer_groups: list[Mapping[str, Any]] = []
+        producer_cell_artifacts: list[Mapping[str, Any]] = []
         recomputations: dict[str, V2CellRecomputation] = {}
         # Authenticate every spec, member, config, order, and producer pin
         # before the first per-cell estimator selection can execute.
@@ -2944,14 +2984,23 @@ def _build_v2_artifacts(
             group["allowed_consumer_condition_families"] = allowed
             producer_cells.append(cell)
             producer_groups.append(group)
+            producer_cell_artifacts.append(cell_artifact)
 
-        first_cell_artifact = cell_artifact
+        producer_launch_lineage = _common_minted_artifact_launch_lineage(
+            producer_cell_artifacts,
+            label=f"producer {plan_id!r} cells",
+        )
+        first_cell_artifact = producer_cell_artifacts[0]
         component = {
             **copy.deepcopy(first_cell_artifact),
             "artifact_id": producer["component_artifact"]["artifact_id"],
             "cells": producer_cells,
             "transport_groups": producer_groups,
         }
+        if producer_launch_lineage is not None:
+            component["provenance"]["launch_lineage"] = (
+                producer_launch_lineage
+            )
         component_errors = validate_floor_artifact(
             artifact=component,
             pinset_path=pinset_path,
@@ -2999,6 +3048,12 @@ def _build_v2_artifacts(
         aggregate_provenance["calibration_custody_store"] = copy.deepcopy(
             custody_store_provenance
         )
+    aggregate_launch_lineage = _common_minted_artifact_launch_lineage(
+        component_artifacts,
+        label="aggregate components",
+    )
+    if aggregate_launch_lineage is not None:
+        aggregate_provenance["launch_lineage"] = aggregate_launch_lineage
     artifact = {
         **copy.deepcopy(component_artifacts[0]),
         "artifact_id": aggregate["artifact_id"],

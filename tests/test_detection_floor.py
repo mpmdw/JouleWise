@@ -20,6 +20,7 @@ from fractions import Fraction
 from pathlib import Path
 from unittest.mock import patch
 
+import joulewise.arm_readiness as arm_readiness
 import joulewise.detection_floor as detection_floor
 import joulewise.floor_extraction as floor_extraction
 from joulewise.analysis_engine.inputs import (
@@ -78,6 +79,8 @@ from joulewise.whole_window import (
     WholeWindowDriftAllowanceResult,
     neg8_claim_family_for_metric,
 )
+from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 
 TOL = 1e-12
 HEX_A = "a" * 64
@@ -132,6 +135,21 @@ def whole_window_allowance(
             "derived_component": "derived_repeatability_bound_j",
         },
         "whole_window_evaluation_basis_sha256": basis_sha256,
+    }
+
+
+def launch_lineage():
+    return {
+        "schema_version": "joulewise.launch_lineage.v1",
+        "collection_boot_session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "pack_id": "pack-1",
+        "plan_id": "plan-1",
+        "window_id": "window-1",
+        "bracket_session_id": "bracket-1",
+        "consumption": {"path": "/receipts/consume.json", "sha256": HEX_A},
+        "start": {"path": "/receipts/start.json", "sha256": HEX_B},
+        "settle": {"path": "/receipts/settle.json", "sha256": HEX_C},
+        "completion": None,
     }
 
 
@@ -2167,6 +2185,77 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assertEqual(artifact["source_class"], "synthetic")
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_optional_launch_lineage_provenance_is_closed_and_additive(self):
+        legacy = make_artifact()
+        self.assertNotIn("launch_lineage", legacy["provenance"])
+        self.assertEqual(validate_floor_artifact(legacy), [])
+
+        marker = make_artifact()
+        marker["provenance"]["launch_lineage"] = launch_lineage()
+        self.assertEqual(validate_floor_artifact(marker), [])
+
+        malformed = json.loads(json.dumps(marker))
+        malformed["provenance"]["launch_lineage"]["settle"]["sha256"] = (
+            "not-a-digest"
+        )
+        self.assertTrue(
+            any(
+                "launch_lineage.settle.sha256" in error
+                for error in validate_floor_artifact(malformed)
+            )
+        )
+
+        unknown = json.loads(json.dumps(marker))
+        unknown["provenance"]["launch_lineage"]["extra"] = True
+        self.assertTrue(
+            any(
+                "launch_lineage: unrecognized key 'extra'" in error
+                for error in validate_floor_artifact(unknown)
+            )
+        )
+
+    def test_floor_consumer_refuses_forged_self_authored_launch_lineage(self):
+        artifact = make_artifact()
+        artifact["provenance"]["launch_lineage"] = launch_lineage()
+        raw = (
+            json.dumps(artifact, sort_keys=True, allow_nan=False) + "\n"
+        ).encode("utf-8")
+
+        self.assertEqual(validate_floor_artifact(artifact), [])
+        with self.assertRaisesRegex(
+            AnalysisInputError,
+            "launch_consumption_missing",
+        ):
+            authenticate_floor_artifact_bytes(raw)
+
+    def test_floor_consumer_reauthenticates_real_completed_launch_lineage(self):
+        launch = LaunchConsumptionV2Tests()
+        launch.setUp()
+        self.addCleanup(launch.doCleanups)
+        consumption_path, settled = launch._settle()
+        with patch.object(
+            arm_readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            arm_readiness.record_launch_lifecycle_event(
+                launch.pack,
+                consumption_path,
+                "completion",
+            )
+        artifact = make_artifact()
+        artifact["provenance"]["launch_lineage"] = settled["launch_lineage"]
+        raw = (
+            json.dumps(artifact, sort_keys=True, allow_nan=False) + "\n"
+        ).encode("utf-8")
+
+        admitted = authenticate_floor_artifact_bytes(raw)
+
+        self.assertEqual(
+            admitted.value["provenance"]["launch_lineage"],
+            settled["launch_lineage"],
+        )
 
     def test_injected_estimator_registration_is_not_artifact_vocabulary(self):
         artifact_path = Path(__file__).resolve().parents[1] / (

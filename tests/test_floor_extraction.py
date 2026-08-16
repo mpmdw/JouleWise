@@ -27,6 +27,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import joulewise.arm_readiness as arm_readiness
 from joulewise.analysis_engine.inputs import (
     AnalysisInputError,
     _strict_jsonl_admission_bytes,
@@ -104,6 +105,7 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.reduce import _integrate
+from tests.test_arm_readiness import LaunchConsumptionV2Tests
 
 # Whole-window verdict re-derivation anchors NEG-8 tolerances to a
 # repo-REGISTERED campaign policy (the only trust anchor outside bundle
@@ -6052,6 +6054,165 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
             report = extract_cells(runs_root, spec)
         self.assertEqual(report["spec_membership_refusals"], [])
         self.assertTrue(report["all_cells_extractable"])
+
+
+class LaunchLineageExtractionTests(unittest.TestCase):
+    FIXTURE_PATH = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "d117_postcollection_trust"
+        / "extraction_report.json"
+    )
+
+    @staticmethod
+    def _lineage(*, plan_id: str = "plan-1") -> dict:
+        return {
+            "schema_version": "joulewise.launch_lineage.v1",
+            "collection_boot_session_id": (
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            ),
+            "pack_id": "pack-1",
+            "plan_id": plan_id,
+            "window_id": "window-1",
+            "bracket_session_id": "bracket-1",
+            "consumption": {"path": "/consume.json", "sha256": "a" * 64},
+            "start": {"path": "/start.json", "sha256": "b" * 64},
+            "settle": {"path": "/settle.json", "sha256": "c" * 64},
+            "completion": None,
+        }
+
+    @staticmethod
+    def _member(bundle_id: str, lineage: dict | None) -> MemberReport:
+        return MemberReport(
+            slot=bundle_id,
+            bundle_id=bundle_id,
+            block_id=None,
+            position=None,
+            value_j=1.0,
+            cooldown_result="recovered",
+            cooldown_verified=True,
+            cap_hit=False,
+            excluded=False,
+            reasons=(),
+            anchor_shift_bound_j=0.0,
+            operative_anchor_envelope={"half_width_j": 0.0},
+            consumption_provenance={},
+            summary_sha256="a" * 64,
+            bundle_sha256="b" * 64,
+            config_sha256="c" * 64,
+            launch_lineage=lineage,
+        )
+
+    def test_report_carries_one_full_lineage_and_rejects_copied_conflict(
+        self,
+    ) -> None:
+        report = json.loads(self.FIXTURE_PATH.read_text(encoding="utf-8"))
+        lineage = self._lineage()
+        report["launch_lineage"] = lineage
+        for cell in report["cells"]:
+            for member in cell["members"]:
+                member["launch_lineage"] = lineage
+
+        self.assertEqual(validate_d117_mint_consumption_report(report), [])
+        report["cells"][0]["members"][0]["launch_lineage"] = self._lineage(
+            plan_id="plan-2"
+        )
+        self.assertIn(
+            "extraction report.launch_lineage: must equal every member lineage",
+            validate_d117_mint_consumption_report(report),
+        )
+
+    def test_closed_report_rejects_present_non_object_member_lineage(self) -> None:
+        for malformed in (None, "not-an-object"):
+            with self.subTest(malformed=malformed):
+                report = json.loads(
+                    self.FIXTURE_PATH.read_text(encoding="utf-8")
+                )
+                report["cells"][0]["members"][0]["launch_lineage"] = malformed
+
+                self.assertIn(
+                    "extraction report.cells[0].members[0].launch_lineage: "
+                    "must be an object",
+                    validate_d117_mint_consumption_report(report),
+                )
+
+    def test_absolute_cell_refuses_marker_legacy_or_full_lineage_mix(self) -> None:
+        lineage = self._lineage()
+        cases = (
+            (lineage, None),
+            (lineage, self._lineage(plan_id="plan-2")),
+        )
+        for first, second in cases:
+            reports = {
+                "member-1": self._member("member-1", first),
+                "member-2": self._member("member-2", second),
+            }
+            with self.subTest(second=second), mock.patch(
+                "joulewise.floor_extraction._evaluate_member",
+                side_effect=lambda **kwargs: reports[kwargs["bundle_id"]],
+            ):
+                result = extract_absolute_cell(
+                    cell_id="launch-mix",
+                    metric="gross_energy_j",
+                    window_class="request",
+                    members=[
+                        {"slot": "member-1", "bundle_id": "member-1"},
+                        {"slot": "member-2", "bundle_id": "member-2"},
+                    ],
+                    runs_root=Path("."),
+                    cooldowns={},
+                )
+
+            self.assertIn("launch_lineage_conflict", result.refusal_reasons)
+
+    def test_direct_extraction_requires_completion_for_marker_bundle(self) -> None:
+        launch = LaunchConsumptionV2Tests()
+        launch.setUp()
+        self.addCleanup(launch.doCleanups)
+        _consumption_path, settled = launch._settle()
+        root = Path(launch.arm["arm_context"]["claim_runs_root"])
+        bundle = root / "marker"
+        bundle.mkdir()
+        (bundle / "config.json").write_text(
+            json.dumps(
+                {"run_metadata": {"tags": ["launch_lineage_required"]}}
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        locator_path = root / arm_readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        (bundle / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "extra": {
+                        "launch_lineage": settled["launch_lineage"],
+                        "launch_lineage_locator_sha256": hashlib.sha256(
+                            locator_path.read_bytes()
+                        ).hexdigest(),
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (bundle / "summary_metrics.json").write_text(
+            '{"status":"succeeded"}\n',
+            encoding="utf-8",
+        )
+        member = _evaluate_member(
+            slot="marker",
+            bundle_id="marker",
+            block_id=None,
+            position=None,
+            runs_root=root,
+            metric="gross_energy_j",
+            window_class="request",
+            cooldowns={},
+            hash_bundles=False,
+            strict_validator=lambda _path, _strict: (),
+        )
+
+        self.assertIn("launch_lifecycle_incomplete", member.reasons)
 
 
 if __name__ == "__main__":

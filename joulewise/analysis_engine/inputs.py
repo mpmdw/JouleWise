@@ -36,6 +36,7 @@ from joulewise.analysis_manifest_v3 import (
 from joulewise.arm_readiness import (
     LaunchLineageError,
     authenticate_bundle_launch_lineage,
+    authenticate_launch_lineage,
 )
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.campaign_provenance import (
@@ -450,6 +451,11 @@ class BundleEvidence:
         token = token_provenance(self)
         identity = realized_scientific_identity(self.raw_config, self.metadata)
         quality = self.summary.get("measurement_quality") if isinstance(self.summary, Mapping) else None
+        launch_lineage = (
+            self.launch_lineage.get("launch_lineage")
+            if isinstance(self.launch_lineage, Mapping)
+            else None
+        )
         return {
             "bundle_id": self.bundle_id,
             "relative_path": self.relative_path,
@@ -477,6 +483,11 @@ class BundleEvidence:
                         )
                     }
                     if isinstance(self.consumption_provenance, Mapping)
+                    else {}
+                ),
+                **(
+                    {"launch_lineage": copy.deepcopy(dict(launch_lineage))}
+                    if isinstance(launch_lineage, Mapping)
                     else {}
                 ),
             },
@@ -872,6 +883,28 @@ def authenticate_floor_artifact_bytes(
         raise AnalysisInputError(
             "floor artifact bytes artifact_id does not match bound artifact_id"
         )
+    provenance = value.get("provenance")
+    stored_launch_lineage = (
+        provenance.get("launch_lineage")
+        if isinstance(provenance, Mapping)
+        else None
+    )
+    if isinstance(stored_launch_lineage, Mapping):
+        # A minted carrier is metadata, not authority. Claim-bearing admission
+        # independently reopens consumption/start/settle/completion; consumers
+        # without those receipts must refuse rather than trust copied digests.
+        try:
+            authenticated_launch = authenticate_launch_lineage(
+                stored_launch_lineage,
+                require_completion=True,
+            )
+        except LaunchLineageError as exc:
+            raise AnalysisInputError(f"{exc.reason_code}: {exc}") from exc
+        if authenticated_launch.get("launch_lineage") != stored_launch_lineage:
+            raise AnalysisInputError(
+                "launch_lineage_conflict: floor artifact lineage differs from "
+                "directly authenticated receipts"
+            )
     root_ids = frozenset(
         root_id
         for cell in value.get("cells", [])
@@ -2930,6 +2963,39 @@ def _scan_replacements_and_topups(
     return effective, extras, valid_replacements, unmatched_rows, top_up_entry_ids
 
 
+def _require_common_launch_lineage(
+    evidence_rows: Sequence[BundleEvidence],
+) -> Mapping[str, Any] | None:
+    """Require one full directly authenticated lineage across a reduction."""
+
+    launch_lineages = [
+        evidence.launch_lineage["launch_lineage"]
+        for evidence in evidence_rows
+        if isinstance(evidence.launch_lineage, Mapping)
+        and isinstance(evidence.launch_lineage.get("launch_lineage"), Mapping)
+    ]
+    launch_lineage_digests = {
+        hashlib.sha256(
+            json.dumps(
+                lineage,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        for lineage in launch_lineages
+    }
+    if len(launch_lineage_digests) > 1 or (
+        launch_lineages and len(launch_lineages) != len(evidence_rows)
+    ):
+        raise AnalysisInputError(
+            "launch_lineage_conflict: analysis inputs do not carry one "
+            "identical authenticated launch lineage"
+        )
+    return copy.deepcopy(dict(launch_lineages[0])) if launch_lineages else None
+
+
 def load_analysis_inputs(
     analysis_manifest_path: Path,
     runs_root: Path,
@@ -3082,16 +3148,7 @@ def load_analysis_inputs(
         cohort_identities,
         cleanup_records,
     )
-    launch_consumptions = {
-        str(evidence.launch_lineage["consumption_sha256"])
-        for evidence in effective.values()
-        if isinstance(evidence.launch_lineage, Mapping)
-    }
-    if len(launch_consumptions) > 1:
-        raise AnalysisInputError(
-            "launch_lineage_conflict: analysis inputs name more than one "
-            "launch consumption"
-        )
+    _require_common_launch_lineage(tuple(effective.values()))
     if supersession_diverged:
         # D-093 is a pre-estimation source-visibility gate.  Preserve a
         # claim artifact with the raw/validated counts, but make every

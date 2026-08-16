@@ -9629,3 +9629,54 @@ inside the re-freeze; tests may re-key only private synthetic fixtures.
 Authority context: R-t9-4 (docs/run_reports/2026-08-16-t9-session.md), the
 2026-08-15 D-078 registry amendment on the staged branch, and the council's
 Phase-2 re-freeze ruling.
+
+### WO-LAUNCH-BINDING stage 3 downstream-authentication checkpoint — 2026-08-16
+
+The authorized downstream implementation keeps D-138's D-079 estimator-input
+pin intact: `joulewise/reduce.py` is unchanged.  The analysis-input boundary
+reopens bundle receipts, requires one identical full lineage across the
+effective corpus, and carries that lineage into the reduction audit row.  That
+is a sound gate for analysis-engine consumption, but it does **not** close the
+standalone post-hoc reduction boundary: `joulewise.cli._cmd_reduce` calls the
+pinned reducer directly and is outside this stage's authorized write set.
+Calling the analysis-only gate sufficient for the standalone verb would be a
+dodge.  The reducer can remain pure arithmetic; the minimal missing gate is at
+that CLI caller, before `reduce_bundle`, with the authenticated full lineage
+added only to marker-bearing prospective reduction output.
+
+Marker-bearing NEG-8 derivation directly authenticates every member without
+requiring completion and seals one identical settled lineage into the bound.
+Marker-bearing whole-window verdict authentication reopens the members, both
+selected calibration evidence files, and the bound; it derives and requires
+the deterministic completion receipt through `authenticate_launch_lineage`
+and seals the identical settled full lineage into the evaluation basis.
+Extraction independently reopens every source with completion required,
+refuses marker/legacy or nonidentical mixtures, and carries the common full
+lineage in both member basis rows and the report.  The settled lineage remains
+byte-identical across carriers; its schema's `completion: null` is not
+rewritten after collection, because historical authentication derives the
+completion path from the authenticated consumption identity.
+
+Mint-side estimator entry points now reopen the full extraction-spec source
+set and governing whole-window sources, require completion, and compare the
+directly authenticated full lineage with the extraction report.  A copied
+lineage without source receipts is `launch_consumption_missing`; no new
+D-078 code is introduced.  Legacy artifacts remain dormant when neither
+sources nor report claim launch lineage.
+
+R-t9-8 grants that scope and closes both remaining boundaries while preserving
+D-138: marker-bearing standalone reductions authenticate before the unchanged
+reducer is called and carry the full authenticated lineage only in the new
+prospective artifact; legacy reductions remain byte-stable.  Detection-floor
+artifact v2 follows the codebase's additive closed-schema precedent by
+registering `provenance.launch_lineage` as an optional slot without changing
+the schema version, and both mint constructors propagate only a directly
+authenticated, identical lineage while legacy artifacts omit the slot.
+
+The two mint scripts are separately hash-pinned as T-0 sources by the frozen
+packs' `arm_readiness.sources/mint-trust.json`, but those packs are
+non-selectable and no live suite invariant binds the issued hashes.  Their
+source pins are therefore **superseded-pending-refreeze**: the Phase-2 atomic
+successor re-freeze transaction re-derives every T-0 source at the successor
+head.  Editing them here is sanctioned for main and is **not** a live-invariant
+break, unlike D-138's issued D-079 estimator-input pins.

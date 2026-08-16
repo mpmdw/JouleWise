@@ -424,6 +424,76 @@ def make_artifact() -> dict:
     )
 
 
+def launch_lineage() -> dict:
+    return {
+        "schema_version": "joulewise.launch_lineage.v1",
+        "collection_boot_session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "pack_id": "pack-1",
+        "plan_id": "plan-1",
+        "window_id": "window-1",
+        "bracket_session_id": "bracket-1",
+        "consumption": {"path": "/receipts/consume.json", "sha256": "a" * 64},
+        "start": {"path": "/receipts/start.json", "sha256": "b" * 64},
+        "settle": {"path": "/receipts/settle.json", "sha256": "c" * 64},
+        "completion": None,
+    }
+
+
+class LaunchLineageMintTests(unittest.TestCase):
+    @staticmethod
+    def _with_lineage(component, lineage):
+        report = copy.deepcopy(component.report)
+        report["launch_lineage"] = copy.deepcopy(lineage)
+        return replace(
+            component,
+            report=report,
+            launch_lineage=copy.deepcopy(lineage),
+        )
+
+    def test_marker_artifact_carries_authenticated_lineage_in_provenance(self) -> None:
+        plan, absolute, comparative = authenticated_components()
+        lineage = launch_lineage()
+        artifact = mint.mint_authenticated_artifact(
+            artifact_id="synthetic-marker-mint",
+            plan=plan,
+            plan_sha256=mint.PLAN_SHA256,
+            calibration_plan_relative_path="calibration_plan.json",
+            absolute=self._with_lineage(absolute, lineage),
+            comparative=self._with_lineage(comparative, lineage),
+            project_commit="0" * 40,
+            project_tree_state="clean",
+        )
+
+        self.assertEqual(artifact["provenance"]["launch_lineage"], lineage)
+        self.assertEqual(validate_floor_artifact(artifact), [])
+        mint._assert_path_independent(artifact)
+
+    def test_legacy_artifact_omits_optional_lineage(self) -> None:
+        artifact = make_artifact()
+        self.assertNotIn("launch_lineage", artifact["provenance"])
+
+    def test_copied_lineage_without_authenticated_component_refuses(self) -> None:
+        plan, absolute, comparative = authenticated_components()
+        copied = launch_lineage()
+        copied_report = copy.deepcopy(absolute.report)
+        copied_report["launch_lineage"] = copied
+
+        with self.assertRaisesRegex(
+            mint.MintError,
+            "launch_consumption_missing",
+        ):
+            mint.mint_authenticated_artifact(
+                artifact_id="copied-lineage-attack",
+                plan=plan,
+                plan_sha256=mint.PLAN_SHA256,
+                calibration_plan_relative_path="calibration_plan.json",
+                absolute=replace(absolute, report=copied_report),
+                comparative=comparative,
+                project_commit="0" * 40,
+                project_tree_state="clean",
+            )
+
+
 class PreRegistrationGateTests(unittest.TestCase):
     def setUp(self) -> None:
         self.plan, self.absolute, self.comparative = authenticated_components()

@@ -16,9 +16,12 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from joulewise import detection_floor, floor_extraction
+from joulewise.arm_readiness import LaunchLineageError
 from joulewise.authentication_io import active_v2_authentication_session
 from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
+    authenticate_window_launch_lineage,
+    canonical_sha256,
     whole_window_refusal_reasons,
 )
 
@@ -302,6 +305,63 @@ def _full_spec_member_ids(spec: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _authenticate_mint_launch_lineage(
+    component: Any,
+    *,
+    runs_root: Path,
+) -> Mapping[str, Any] | None:
+    """Reopen authoritative receipts; the copied extraction field is a cache."""
+
+    spec = getattr(component, "spec", None)
+    member_ids = (
+        _full_spec_member_ids(spec)
+        if isinstance(spec, Mapping)
+        else tuple(
+            member.bundle_id
+            for member in getattr(component, "members", ())
+            if isinstance(getattr(member, "bundle_id", None), str)
+        )
+    )
+    try:
+        authenticated = authenticate_window_launch_lineage(
+            Path(runs_root),
+            set(member_ids),
+            evaluation_basis_sha256=getattr(
+                component,
+                "whole_window_evaluation_basis_sha256",
+                None,
+            ),
+        )
+    except LaunchLineageError as exc:
+        raise _MintEstimatorError(f"{exc.reason_code}: {exc}") from exc
+    report = getattr(component, "report", None)
+    copied = (
+        report.get("launch_lineage") if isinstance(report, Mapping) else None
+    )
+    if authenticated is None:
+        if copied is not None:
+            raise _MintEstimatorError(
+                "launch_consumption_missing: extraction report claims launch "
+                "lineage without authenticated source receipts"
+            )
+        return None
+    if not isinstance(copied, Mapping):
+        raise _MintEstimatorError(
+            "launch_consumption_missing: extraction report omits launch lineage"
+        )
+    if canonical_sha256(copied) != canonical_sha256(authenticated):
+        raise _MintEstimatorError(
+            "launch_lineage_conflict: copied extraction lineage differs from "
+            "directly authenticated source receipts"
+        )
+    return authenticated
+
+
+# Preserve the review-pinned Stage 3 test seam while constructors use the
+# public spelling above.  Both names execute the same authentication gate.
+_authenticate_mint_launch_lineage = _authenticate_mint_launch_lineage
+
+
 def _comparative_layout(component: Any, core: Any) -> tuple[
     tuple[Mapping[str, Any], ...], tuple[float, ...]
 ]:
@@ -394,6 +454,10 @@ def recompute_comparative_estimate(
 ) -> _ComparativeRecomputation:
     """Recompute one comparative cell from authenticated members and bytes."""
 
+    _authenticate_mint_launch_lineage(
+        comparative_component,
+        runs_root=Path(runs_root),
+    )
     path = selection_from_authenticated_spec(
         comparative_component.spec_cell,
         calibration_acceptance=calibration_acceptance,
@@ -517,6 +581,10 @@ def bind_v2_floor_artifact_evidence(
 ) -> Mapping[str, tuple[str, ...]]:
     """Preserve the pinned binder and add exact spec-selected v2 widths."""
 
+    _authenticate_mint_launch_lineage(
+        comparative_component,
+        runs_root=Path(runs_root),
+    )
     path = selection_from_authenticated_spec(
         comparative_component.spec_cell,
         calibration_acceptance=calibration_acceptance,
