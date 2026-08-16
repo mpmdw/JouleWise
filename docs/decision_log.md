@@ -9269,8 +9269,10 @@ contract:
 > Derive-never-enter is a production-interface and ceremony rule, not
 > independent producer attestation. When faithfully invoked, the production
 > CLI derives row values, command captures, timestamps, identities, and
-> digests; operators supply only paths and registered irreducible
-> observations. Consumers authenticate canonical bytes, same-boot
+> digests; operators supply only paths and the registered irreducible
+> observations (at E-4, exactly two: the independent-clock UTC literal and
+> the pasted prior network-time state output). Consumers authenticate
+> canonical bytes, same-boot
 > freshness/order, and fresh current-state probes, but cannot prove that the
 > T-0 input bytes originated in the shipped wrapper. Deliberate fabrication by
 > the trusted operator/authority is outside the v1 single-authority threat

@@ -3,10 +3,11 @@
 
 The production CLI is a trusted-operator ceremony interface, not independent
 producer attestation.  When faithfully invoked it derives commands,
-identities, and canonical captures; the only operator-supplied values are
-E-4's two registered irreducible observations (the independent-clock UTC
-literal and the pasted prior network-time state output). v1 does not defend
-against deliberate operator fabrication.
+identities, and canonical captures; beyond the step selector and the three
+governed path arguments, the only operator-supplied values are E-4's two
+registered irreducible observations (the independent-clock UTC literal and
+the pasted prior network-time state output). v1 does not defend against
+deliberate operator fabrication.
 """
 
 from __future__ import annotations
