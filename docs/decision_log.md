@@ -9055,6 +9055,19 @@ codes and must exit before estimation or claim-artifact publication.
   `analysis_manifest_floor_attachment_mismatch`, and
   `analysis_manifest_family_semantics_mismatch`.
 
+**Mechanism-only amendment (FIX ROUND 1, 2026-08-15; R-t9-6 carried,
+not decided):** the consumer registry additionally admits
+`analysis_manifest_transport_ruling_pending`,
+`analysis_manifest_runs_root_mismatch`, and
+`analysis_manifest_bundle_path_divergence`. A prospective/finalized v3
+artifact may faithfully freeze either `exact_stack_only.v1` or
+`same_stack_componentwise_worst_case.v1`, including its complete transport
+group, condition-domain, backend, floor-field, and rule bindings. Until Ed
+selects the open p256 floor branch, a valid governed-transport artifact exits
+pre-estimation under `analysis_manifest_transport_ruling_pending`; it is not
+misreported as an exact-stack failure. This amendment carries both branches
+and chooses neither scientific semantics.
+
 ### R1 RULED (magistrate synthesis of the rule-11 cold gate, 2026-08-15): freeze-evidence lifecycle — content-bound design ADOPTED WITH THE COMPOSED AMENDMENT SET
 
 Gate record (the ONE homes; not restated here):

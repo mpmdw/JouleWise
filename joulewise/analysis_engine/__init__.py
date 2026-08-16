@@ -19,6 +19,7 @@ from joulewise.analysis_manifest_v3 import (
     ESTIMATOR_ID as ABBA_ESTIMATOR_ID,
     FLOOR_RULE_ID as CROSS_STACK_FLOOR_RULE_ID,
     FINALIZED_SCHEMA_VERSION as FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA,
+    TRANSPORT_RULING_PENDING_REFUSAL,
     frozen_family_block_strata,
     is_abba_v3_consumable_schema,
 )
@@ -446,22 +447,6 @@ def _resolve_contrast_floor(
                 request,
                 evidence_binding=binding,
             )
-            if is_v3 and resolution.status != "exact":
-                resolution = FloorResolution(
-                    status="refused",
-                    artifact_id=resolution.artifact_id,
-                    artifact_sha256=resolution.artifact_sha256,
-                    source_cell_ids=resolution.source_cell_ids,
-                    transport_group_id=resolution.transport_group_id,
-                    transport_rule_id=resolution.transport_rule_id,
-                    floor_abs_j=None,
-                    floor_cmp_j=None,
-                    floor_gate_j=None,
-                    reason_codes=(
-                        *resolution.reason_codes,
-                        "exact_stack_required",
-                    ),
-                )
             resolutions.append(resolution)
     return resolutions
 
@@ -1676,6 +1661,22 @@ def analyze_claims(
         strict_validator=strict_validator,
         evidence_roots=evidence_roots,
     )
+    if inputs.manifest.get("schema_version") == FINALIZED_ANALYSIS_MANIFEST_V3_SCHEMA:
+        transported_contrasts = [
+            contrast.get("contrast_id")
+            for contrast in inputs.manifest.get("contrasts", [])
+            if isinstance(contrast, Mapping)
+            and isinstance(contrast.get("floor_dependency"), Mapping)
+            and isinstance(contrast["floor_dependency"].get("transport"), Mapping)
+            and contrast["floor_dependency"]["transport"].get("mode")
+            == "governed_transport"
+        ]
+        if transported_contrasts:
+            raise AnalysisInputError(
+                f"{TRANSPORT_RULING_PENDING_REFUSAL}: valid transported v3 "
+                "floor consumption remains pending the open p256 ruling "
+                f"for {sorted(transported_contrasts)!r}"
+            )
     evidence_class = "legacy_l1" if legacy_l1_mechanics else "current"
     if legacy_l1_mechanics:
         if legacy_allowlist is None:

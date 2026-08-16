@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,10 @@ PLANNED_N_BLOCKS = 10
 ESTIMATOR_ID = "abba_block_arm_mean_difference_t_v1"
 FLOOR_RULE_ID = "cross_stack_armwise_max.v1"
 EXACT_STACK_RULE_ID = "exact_stack_only.v1"
+GOVERNED_TRANSPORT_RULE_ID = "same_stack_componentwise_worst_case.v1"
+TRANSPORT_RULING_PENDING_REFUSAL = (
+    "analysis_manifest_transport_ruling_pending"
+)
 VERDICT_BASIS_SHA256 = (
     "1e08e8eff4ede001a6d68525a7748bbf66f81278a3b963b9b24e7405d105d147"
 )
@@ -1018,6 +1023,13 @@ _FLOOR_DEPENDENCY_KEYS = {
     "floor_selector",
     "transport",
 }
+_TRANSPORT_KEYS = {"mode", "rule_id", "transport_groups"}
+_TRANSPORT_GROUP_BINDING_KEYS = {
+    "transport_group_id",
+    "condition_family_id",
+    "condition_domain_sha256",
+    "group_rule_id",
+}
 _PROMPT_KEYS = {"path", "sha256", "status"}
 _FINALIZATION_CONTRACT_KEYS = {
     "contract_id",
@@ -1101,8 +1113,16 @@ _FINALIZED_CONTRAST_KEYS = {
     "floor_dependency",
     "prompt",
 }
+_FINALIZED_ENTRY_KEYS = {*ENTRY_KEYS, "bundle_path"}
 _WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
 _WHOLE_WINDOW_BASIS_SCHEMA = "joulewise.idle_admission_evaluation_basis.v1"
+_WHOLE_WINDOW_OCCURRENCE_KEYS = {
+    "bundle_id",
+    "bundle_path",
+    "config_sha256",
+    "metadata_sha256",
+    "summary_sha256",
+}
 _BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
 _LEDGER_SCHEMA = "joulewise.calibration_observation_ledger.v1"
 _FLOOR_SCHEMA = "joulewise.detection_floor_artifact.v2"
@@ -1319,6 +1339,15 @@ def _is_sha(value: Any) -> bool:
     return isinstance(value, str) and SHA_RE.fullmatch(value) is not None
 
 
+def _unique_nonempty_strings(value: Any) -> bool:
+    return bool(
+        isinstance(value, list)
+        and value
+        and all(isinstance(item, str) and item for item in value)
+        and len(value) == len(set(value))
+    )
+
+
 def _safe_relative_file(root: Path, text: Any) -> Path | None:
     if not isinstance(text, str) or not text or "\\" in text:
         return None
@@ -1336,42 +1365,113 @@ def _safe_relative_file(root: Path, text: Any) -> Path | None:
         resolved = candidate.resolve(strict=True)
     except (OSError, RuntimeError):
         return None
-    if root not in resolved.parents or not resolved.is_file():
+    try:
+        mode = resolved.stat().st_mode
+    except OSError:
+        return None
+    if root not in resolved.parents or not stat.S_ISREG(mode):
         return None
     return resolved
 
 
 def _path_under_root(path: Path, root: Path, label: str) -> tuple[Path, str]:
-    root = Path(root).resolve(strict=True)
+    lexical_root = Path(root).absolute()
+    root = lexical_root.resolve(strict=True)
     candidate = Path(path)
-    candidate = candidate if candidate.is_absolute() else root / candidate
-    if not candidate.exists():
+    candidate = candidate if candidate.is_absolute() else lexical_root / candidate
+    try:
+        try:
+            relative = candidate.relative_to(lexical_root)
+        except ValueError:
+            relative = candidate.relative_to(root)
+    except ValueError as exc:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            f"{label}: path is outside custody",
+        ) from exc
+    if any(part in {"", ".", ".."} for part in relative.parts):
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            f"{label}: path is not canonical",
+        )
+    current = root
+    try:
+        for part in relative.parts:
+            current = current / part
+            mode = current.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_attachment_invalid",
+                    f"{label}: symlinks are forbidden",
+                )
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(root)
+    except FileNotFoundError as exc:
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_attachment_missing",
             f"{label}: path does not exist",
-        )
-    try:
-        resolved = candidate.resolve(strict=True)
-        relative = resolved.relative_to(root)
+        ) from exc
+    except AnalysisManifestFinalizationError:
+        raise
     except (OSError, RuntimeError, ValueError) as exc:
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_attachment_invalid",
             f"{label}: path is outside custody or unreadable",
         ) from exc
-    current = root
-    for part in relative.parts:
-        current = current / part
-        if current.is_symlink():
-            raise AnalysisManifestFinalizationError(
-                "analysis_finalization_attachment_invalid",
-                f"{label}: symlinks are forbidden",
-            )
-    if not resolved.is_file():
+    if not stat.S_ISREG(resolved.stat().st_mode):
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_attachment_invalid",
             f"{label}: must be a regular file",
         )
     return resolved, relative.as_posix()
+
+
+def _directory_under_root(path: Path, root: Path, label: str) -> Path:
+    """Resolve a custody directory without erasing lexical symlink evidence."""
+
+    lexical_root = Path(root).absolute()
+    root = lexical_root.resolve(strict=True)
+    candidate = Path(path)
+    candidate = candidate if candidate.is_absolute() else lexical_root / candidate
+    try:
+        try:
+            relative = candidate.relative_to(lexical_root)
+        except ValueError:
+            relative = candidate.relative_to(root)
+    except ValueError as exc:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            f"{label}: path is outside custody",
+        ) from exc
+    if any(part in {"", ".", ".."} for part in relative.parts):
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            f"{label}: path is not canonical",
+        )
+    current = root
+    try:
+        for part in relative.parts:
+            current = current / part
+            if stat.S_ISLNK(current.lstat().st_mode):
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_attachment_invalid",
+                    f"{label}: symlinks are forbidden",
+                )
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(root)
+    except AnalysisManifestFinalizationError:
+        raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            f"{label}: path is outside custody or unreadable",
+        ) from exc
+    if not resolved.is_dir():
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            f"{label}: must be a directory",
+        )
+    return resolved
 
 
 def _canonical_sha(value: Any) -> str:
@@ -1545,7 +1645,7 @@ def _validate_file_binding(
     return parsed if isinstance(parsed, Mapping) else None
 
 
-def validate_prospective_analysis_manifest_v3(
+def _validate_prospective_analysis_manifest_v3_unchecked(
     value: Mapping[str, Any],
     *,
     manifest_dir: Path,
@@ -1693,6 +1793,7 @@ def validate_prospective_analysis_manifest_v3(
     conditions = value.get("condition_families")
     condition_ids: set[str] = set()
     condition_id_by_slot: dict[tuple[str, str], str] = {}
+    condition_sha_by_id: dict[str, str] = {}
     expected_condition_slots = {
         ("decode", "A"),
         ("decode", "B"),
@@ -1728,10 +1829,15 @@ def validate_prospective_analysis_manifest_v3(
                 )
             else:
                 condition_ids.add(condition_id)
-            observed_condition_slots.add(
-                (condition.get("measurement_arm"), condition.get("arm"))
-            )
             slot = (condition.get("measurement_arm"), condition.get("arm"))
+            if all(isinstance(item, str) for item in slot):
+                observed_condition_slots.add(slot)
+            else:
+                _refusal(
+                    refusals,
+                    "analysis_prospective_schema_invalid",
+                    f"{where}: measurement_arm/arm must be strings",
+                )
             if all(isinstance(item, str) for item in slot) and isinstance(
                 condition_id, str
             ):
@@ -1776,6 +1882,8 @@ def validate_prospective_analysis_manifest_v3(
                     "analysis_prospective_source_hash_mismatch",
                     f"{where}.canonical_domain_sha256 does not bind the source definition",
                 )
+            elif isinstance(condition_id, str):
+                condition_sha_by_id[condition_id] = str(expected_domain_sha)
         if observed_condition_slots != expected_condition_slots:
             _refusal(
                 refusals,
@@ -1865,9 +1973,7 @@ def validate_prospective_analysis_manifest_v3(
                 not isinstance(family_id, str)
                 or not family_id
                 or family_id in family_by_id
-                or not isinstance(ids, list)
-                or not ids
-                or len(ids) != len(set(ids))
+                or not _unique_nonempty_strings(ids)
             ):
                 _refusal(
                     refusals,
@@ -1887,18 +1993,24 @@ def validate_prospective_analysis_manifest_v3(
             ):
                 continue
             assert isinstance(multiplicity, Mapping)
-            alpha = multiplicity.get("alpha")
-            if (
-                multiplicity.get("method") not in {"holm", "benjamini_hochberg", "exploratory_none"}
-                or isinstance(alpha, bool)
-                or not isinstance(alpha, (int, float))
-                or not 0.0 < float(alpha) < 1.0
-                or multiplicity.get("m") != len(ids)
-            ):
+            try:
+                # This is the production compatibility table, exercised with
+                # null p-values so prospective admission cannot drift from
+                # the post-preparation adjustment boundary.
+                from joulewise.analysis_engine.multiplicity import adjust_p_values
+
+                adjust_p_values(
+                    {contrast_id: None for contrast_id in ids},
+                    method=multiplicity.get("method"),
+                    m=multiplicity.get("m"),
+                    alpha=multiplicity.get("alpha"),
+                    q=multiplicity.get("q"),
+                )
+            except (TypeError, ValueError):
                 _refusal(
                     refusals,
                     "analysis_prospective_multiplicity_invalid",
-                    f"{where}.multiplicity is not closed over its frozen contrast count",
+                    f"{where}.multiplicity is incompatible with the production adjustment method",
                 )
 
     contrasts = value.get("contrasts")
@@ -1984,7 +2096,11 @@ def validate_prospective_analysis_manifest_v3(
                             f"{where}.prompt.status must be a frozen nonempty value",
                         )
             family_id = contrast.get("family_instance_id")
-            family = family_by_id.get(family_id)
+            family = (
+                family_by_id.get(family_id)
+                if isinstance(family_id, str)
+                else None
+            )
             if not isinstance(family, Mapping) or contrast_id not in family.get("contrast_ids", []):
                 _refusal(
                     refusals,
@@ -2001,6 +2117,8 @@ def validate_prospective_analysis_manifest_v3(
                 )
             measurement_arm = contrast.get("measurement_arm")
             if (
+                not isinstance(measurement_arm, str)
+                or
                 contrast.get("condition_a_id")
                 != condition_id_by_slot.get((measurement_arm, "A"))
                 or contrast.get("condition_b_id")
@@ -2033,23 +2151,107 @@ def validate_prospective_analysis_manifest_v3(
             ):
                 continue
             assert isinstance(selector, Mapping)
+            transport = floor_dependency.get("transport")
             if (
                 floor_dependency.get("required_artifact_schema") != _FLOOR_SCHEMA
                 or selector.get("metric") != contrast.get("metric")
                 or selector.get("condition_family_ids")
                 != [contrast.get("condition_a_id"), contrast.get("condition_b_id")]
-                or not isinstance(floor_dependency.get("transport"), Mapping)
+                or selector.get("backend") not in {"from_bundle", "powermetrics"}
+                or selector.get("floor_field") != "floor_gate_j"
+                or selector.get("claim_floor_rule") != FLOOR_RULE_ID
             ):
                 _refusal(
                     refusals,
                     "analysis_prospective_floor_dependency_unresolved",
                     f"{where}.floor_dependency does not freeze the exact selector/transport",
                 )
+            if _exact_refusal_keys(
+                transport,
+                _TRANSPORT_KEYS,
+                f"{where}.floor_dependency.transport",
+                refusals,
+                schema_code="analysis_prospective_floor_dependency_unresolved",
+                unknown_code="analysis_prospective_unknown_key",
+            ):
+                assert isinstance(transport, Mapping)
+                mode = transport.get("mode")
+                rule_id = transport.get("rule_id")
+                expected_rule = (
+                    EXACT_STACK_RULE_ID
+                    if mode == "exact_stack_only"
+                    else GOVERNED_TRANSPORT_RULE_ID
+                    if mode == "governed_transport"
+                    else None
+                )
+                bindings = transport.get("transport_groups")
+                binding_conditions: list[str] = []
+                if not isinstance(bindings, list) or len(bindings) != 2:
+                    _refusal(
+                        refusals,
+                        "analysis_prospective_floor_dependency_unresolved",
+                        f"{where}.floor_dependency.transport must bind two transport groups",
+                    )
+                else:
+                    for binding_index, binding in enumerate(bindings):
+                        binding_where = (
+                            f"{where}.floor_dependency.transport."
+                            f"transport_groups[{binding_index}]"
+                        )
+                        if not _exact_refusal_keys(
+                            binding,
+                            _TRANSPORT_GROUP_BINDING_KEYS,
+                            binding_where,
+                            refusals,
+                            schema_code=(
+                                "analysis_prospective_floor_dependency_unresolved"
+                            ),
+                            unknown_code="analysis_prospective_unknown_key",
+                        ):
+                            continue
+                        assert isinstance(binding, Mapping)
+                        condition_id = binding.get("condition_family_id")
+                        if isinstance(condition_id, str):
+                            binding_conditions.append(condition_id)
+                        if (
+                            not isinstance(binding.get("transport_group_id"), str)
+                            or not binding.get("transport_group_id")
+                            or condition_id
+                            not in {
+                                contrast.get("condition_a_id"),
+                                contrast.get("condition_b_id"),
+                            }
+                            or binding.get("condition_domain_sha256")
+                            != condition_sha_by_id.get(condition_id)
+                            or binding.get("group_rule_id")
+                            != GOVERNED_TRANSPORT_RULE_ID
+                        ):
+                            _refusal(
+                                refusals,
+                                "analysis_prospective_floor_dependency_unresolved",
+                                f"{binding_where} does not freeze the condition-domain/group rule",
+                            )
+                if (
+                    expected_rule is None
+                    or rule_id != expected_rule
+                    or selector.get("transport_rule_id") != expected_rule
+                    or binding_conditions
+                    != [
+                        contrast.get("condition_a_id"),
+                        contrast.get("condition_b_id"),
+                    ]
+                ):
+                    _refusal(
+                        refusals,
+                        "analysis_prospective_floor_dependency_unresolved",
+                        f"{where}.floor_dependency transport mode/rules are inconsistent",
+                    )
             block_ids = contrast.get("block_ids")
             members = contrast.get("members")
             if (
                 not isinstance(block_ids, list)
                 or len(block_ids) != 10
+                or not all(isinstance(block_id, str) and block_id for block_id in block_ids)
                 or len(block_ids) != len(set(block_ids))
             ):
                 _refusal(
@@ -2215,6 +2417,7 @@ def validate_prospective_analysis_manifest_v3(
             attachment.get("role"): attachment.get("schema_version")
             for attachment in attachments
             if isinstance(attachment, Mapping)
+            and isinstance(attachment.get("role"), str)
         } if isinstance(attachments, list) else {}
         if (
             contract.get("contract_id") != FINALIZATION_CONTRACT_ID
@@ -2320,6 +2523,29 @@ def validate_prospective_analysis_manifest_v3(
     return tuple(refusals)
 
 
+def validate_prospective_analysis_manifest_v3(
+    value: Mapping[str, Any],
+    *,
+    manifest_dir: Path,
+    plan_tree_path: Path,
+) -> tuple[ManifestRefusal, ...]:
+    """Total closed-vocabulary wrapper over malformed prospective JSON."""
+
+    try:
+        return _validate_prospective_analysis_manifest_v3_unchecked(
+            value,
+            manifest_dir=manifest_dir,
+            plan_tree_path=plan_tree_path,
+        )
+    except (KeyError, OverflowError, TypeError, ValueError) as exc:
+        return (
+            ManifestRefusal(
+                "analysis_prospective_schema_invalid",
+                f"malformed prospective value: {type(exc).__name__}: {exc}",
+            ),
+        )
+
+
 def build_prospective_analysis_manifest_v3(
     campaign_dir: Path, *, plan_tree_path: Path
 ) -> dict[str, Any]:
@@ -2355,7 +2581,7 @@ def _verify_basis_members(
     *,
     manifest_dir: Path,
     runs_root: Path,
-) -> Mapping[str, Any]:
+) -> tuple[Mapping[str, Any], dict[str, Path]]:
     basis = verdict.get("evaluation_basis")
     if (
         not isinstance(basis, Mapping)
@@ -2380,11 +2606,15 @@ def _verify_basis_members(
         for member in contrast["members"]
     }
     by_id: dict[str, Mapping[str, Any]] = {}
+    bundle_paths: dict[str, Path] = {}
     for index, occurrence in enumerate(occurrences):
-        if not isinstance(occurrence, Mapping):
+        if (
+            not isinstance(occurrence, Mapping)
+            or set(occurrence) != _WHOLE_WINDOW_OCCURRENCE_KEYS
+        ):
             raise AnalysisManifestFinalizationError(
                 "analysis_finalization_evaluation_basis_mismatch",
-                f"member_occurrences[{index}] is not an object",
+                f"member_occurrences[{index}] is not an exact production occurrence",
             )
         bundle_id = occurrence.get("bundle_id")
         if not isinstance(bundle_id, str) or not bundle_id or bundle_id in by_id:
@@ -2454,6 +2684,7 @@ def _verify_basis_members(
                 f"bundle config for {bundle_id!r} differs from its frozen source",
             )
         by_id[bundle_id] = occurrence
+        bundle_paths[bundle_id] = bundle_dir
     expected = set(expected_members)
     verdict_ids = verdict.get("bundle_ids")
     if (
@@ -2466,7 +2697,7 @@ def _verify_basis_members(
             "analysis_finalization_member_cover_mismatch",
             "passed verdict/evaluation basis does not cover all 80 frozen members",
         )
-    return basis
+    return basis, bundle_paths
 
 
 def _derive_arms_and_entries(
@@ -2474,6 +2705,7 @@ def _derive_arms_and_entries(
     *,
     manifest_dir: Path,
     runs_root: Path,
+    bundle_paths: Mapping[str, Path],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     # Local import avoids a module-import cycle: inputs imports this module to
     # validate both v3 siblings.  Realized identity reads config/metadata only,
@@ -2504,7 +2736,12 @@ def _derive_arms_and_entries(
             members = [row for row in contrast["members"] if row["arm"] == arm_label]
             identities: list[Mapping[str, Any]] = []
             for member in members:
-                bundle = Path(runs_root) / member["run_id"]
+                bundle = bundle_paths.get(member["run_id"])
+                if bundle is None:
+                    raise AnalysisManifestFinalizationError(
+                        "analysis_finalization_member_cover_mismatch",
+                        f"authenticated bundle path is missing for {member['run_id']}",
+                    )
                 try:
                     raw_config = json.loads((bundle / "config.json").read_bytes())
                     metadata = json.loads((bundle / "metadata.json").read_bytes())
@@ -2553,6 +2790,9 @@ def _derive_arms_and_entries(
                         "config": member["config"],
                         "config_sha256": member["config_sha256"],
                         "run_id": member["run_id"],
+                        "bundle_path": bundle_paths[
+                            member["run_id"]
+                        ].relative_to(runs_root).as_posix(),
                         "model_tag": model_tag,
                         "role": "condition",
                         "arm_id": arm_id,
@@ -2591,6 +2831,160 @@ def _derive_arms_and_entries(
     return arms, entries, blocks
 
 
+def _floor_consumer_contexts(
+    prospective: Mapping[str, Any],
+    bundle_paths: Mapping[str, Path],
+) -> dict[str, tuple[str, str]]:
+    """Derive each frozen condition's backend and governed stack hash."""
+
+    from joulewise.identity_pins import build_stack_identity, stack_identity_sha256
+
+    contexts: dict[str, tuple[str, str]] = {}
+    for contrast in prospective["contrasts"]:
+        for arm_label, condition_key in (
+            ("A", "condition_a_id"),
+            ("B", "condition_b_id"),
+        ):
+            condition_id = str(contrast[condition_key])
+            observed: set[tuple[str, str]] = set()
+            for member in contrast["members"]:
+                if member["arm"] != arm_label:
+                    continue
+                bundle = bundle_paths[member["run_id"]]
+                raw_config = _strict_json_bytes(
+                    (bundle / "config.json").read_bytes(),
+                    f"floor selector config for {member['run_id']}",
+                )
+                metadata = _strict_json_bytes(
+                    (bundle / "metadata.json").read_bytes(),
+                    f"floor selector metadata for {member['run_id']}",
+                )
+                hardware = raw_config.get("hardware_target")
+                backend = (
+                    hardware.get("telemetry_backend")
+                    if isinstance(hardware, Mapping)
+                    else None
+                )
+                stack = build_stack_identity(raw_config, metadata)
+                if not isinstance(backend, str) or not backend or stack is None:
+                    raise AnalysisManifestFinalizationError(
+                        "analysis_finalization_floor_dependency_unsatisfied",
+                        f"realized floor selector is incomplete for {member['run_id']}",
+                    )
+                observed.add((backend, stack_identity_sha256(stack)))
+            if len(observed) != 1:
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_floor_dependency_unsatisfied",
+                    f"realized floor selector varies within condition {condition_id}",
+                )
+            contexts[condition_id] = next(iter(observed))
+    return contexts
+
+
+def _authenticate_floor_dependencies(
+    prospective: Mapping[str, Any],
+    floor: Mapping[str, Any],
+    *,
+    bundle_paths: Mapping[str, Path],
+) -> None:
+    """Authenticate every frozen selector and its complete transport group."""
+
+    contexts = _floor_consumer_contexts(prospective, bundle_paths)
+    condition_shas = {
+        row["condition_family_id"]: row["canonical_domain_sha256"]
+        for row in prospective["condition_families"]
+    }
+    cells = [row for row in floor.get("cells", []) if isinstance(row, Mapping)]
+    groups = [
+        row for row in floor.get("transport_groups", []) if isinstance(row, Mapping)
+    ]
+    for contrast in prospective["contrasts"]:
+        dependency = contrast["floor_dependency"]
+        selector = dependency["floor_selector"]
+        transport = dependency["transport"]
+        bindings = transport["transport_groups"]
+        binding_by_condition = {
+            row["condition_family_id"]: row for row in bindings
+        }
+        for condition_id in selector["condition_family_ids"]:
+            binding = binding_by_condition[condition_id]
+            expected_backend, expected_stack_sha = contexts[condition_id]
+            if selector["backend"] not in {"from_bundle", expected_backend}:
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_floor_dependency_unsatisfied",
+                    f"selector backend does not match {condition_id}",
+                )
+            if (
+                binding["condition_domain_sha256"] != condition_shas[condition_id]
+                or binding["group_rule_id"] != GOVERNED_TRANSPORT_RULE_ID
+            ):
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_floor_dependency_unsatisfied",
+                    f"condition-domain/transport rule does not match {condition_id}",
+                )
+            matching_groups = [
+                group
+                for group in groups
+                if group.get("transport_group_id")
+                == binding["transport_group_id"]
+            ]
+            if len(matching_groups) != 1:
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_floor_dependency_unsatisfied",
+                    f"declared transport group is absent or ambiguous for {condition_id}",
+                )
+            group = matching_groups[0]
+            allowed = group.get("allowed_consumer_condition_families")
+            allowed_matches = [
+                row
+                for row in allowed or []
+                if isinstance(row, Mapping)
+                and row.get("condition_family_id") == condition_id
+                and row.get("condition_family_sha256")
+                == condition_shas[condition_id]
+            ]
+            composed_field = "composed_" + selector["floor_field"]
+            if (
+                group.get("rule_id") != binding["group_rule_id"]
+                or group.get("backend") != expected_backend
+                or group.get("metric") != selector["metric"]
+                or group.get("window_class") != selector["window_class"]
+                or group.get("stack_identity_sha256") != expected_stack_sha
+                or len(allowed_matches) != 1
+                or isinstance(group.get(composed_field), bool)
+                or not isinstance(group.get(composed_field), (int, float))
+            ):
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_floor_dependency_unsatisfied",
+                    f"transport group does not satisfy the complete selector for {condition_id}",
+                )
+            direct = [
+                cell
+                for cell in cells
+                if isinstance(cell.get("key"), Mapping)
+                and cell["key"].get("backend") == expected_backend
+                and cell["key"].get("metric") == selector["metric"]
+                and cell["key"].get("window_class") == selector["window_class"]
+                and cell["key"].get("condition_family_id") == condition_id
+                and cell["key"].get("condition_family_sha256")
+                == condition_shas[condition_id]
+                and cell.get("transport_group_id")
+                == binding["transport_group_id"]
+                and isinstance(cell.get("source_regime"), Mapping)
+                and cell["source_regime"].get("stack_identity_sha256")
+                == expected_stack_sha
+                and isinstance(cell.get("eligibility"), Mapping)
+                and cell["eligibility"].get("claim_usable") is True
+                and not isinstance(cell.get(selector["floor_field"]), bool)
+                and isinstance(cell.get(selector["floor_field"]), (int, float))
+            ]
+            if transport["mode"] == "exact_stack_only" and len(direct) != 1:
+                raise AnalysisManifestFinalizationError(
+                    "analysis_finalization_floor_dependency_unsatisfied",
+                    f"exact-stack floor cell is absent or ambiguous for {condition_id}",
+                )
+
+
 def _authenticate_finalization_inputs(
     prospective: Mapping[str, Any],
     *,
@@ -2603,18 +2997,12 @@ def _authenticate_finalization_inputs(
     aggregate_floor_artifact_path: Path,
 ) -> dict[str, Any]:
     schemas = _declared_attachment_schemas(prospective)
-    resolved_runs = Path(runs_root).resolve(strict=True)
-    custody = Path(custody_root).resolve(strict=True)
-    try:
-        resolved_runs.relative_to(custody)
-    except ValueError as exc:
-        raise AnalysisManifestFinalizationError(
-            "analysis_finalization_attachment_invalid",
-            "runs_root must be inside custody_root",
-        ) from exc
+    custody_input = Path(custody_root).absolute()
+    custody = custody_input.resolve(strict=True)
+    resolved_runs = _directory_under_root(runs_root, custody_input, "runs root")
 
     verdict_path, verdict_relative = _path_under_root(
-        whole_window_verdict_path, custody, "whole-window verdict"
+        whole_window_verdict_path, custody_input, "whole-window verdict"
     )
     verdict, verdict_raw = _read_strict_object(verdict_path, "whole-window verdict")
     if (
@@ -2631,7 +3019,7 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_verdict_not_passed",
             "whole-window verdict must be claim-licensing and passed",
         )
-    basis = _verify_basis_members(
+    basis, bundle_paths = _verify_basis_members(
         prospective,
         verdict,
         manifest_dir=manifest_dir,
@@ -2639,17 +3027,31 @@ def _authenticate_finalization_inputs(
     )
 
     bracket_path, bracket_relative = _path_under_root(
-        bracket_binding_path, custody, "bracket binding"
+        bracket_binding_path, custody_input, "bracket binding"
     )
     bracket, bracket_raw = _read_strict_object(bracket_path, "bracket binding")
+    try:
+        bracket_runs_root = (
+            _directory_under_root(
+                Path(bracket["runs_root"]),
+                custody_input,
+                "bracket-authenticated runs root",
+            )
+            if isinstance(bracket.get("runs_root"), str)
+            else None
+        )
+    except (KeyError, AnalysisManifestFinalizationError) as exc:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_bracket_binding_mismatch",
+            f"bracket runs root is not a canonical non-symlink directory: {exc}",
+        ) from exc
     if (
         schemas.get("bracket_binding") != _BRACKET_BINDING_SCHEMA
         or bracket.get("schema_version") != schemas.get("bracket_binding")
         or bracket.get("plan_id") != prospective["plan"]["plan_id"]
         or bracket.get("plan_sha256") != prospective["plan"]["sha256"]
         or bracket.get("evidence_root_id") != prospective["evidence_root_id"]
-        or not isinstance(bracket.get("runs_root"), str)
-        or Path(bracket["runs_root"]).resolve() != resolved_runs
+        or bracket_runs_root != resolved_runs
         or bracket.get("binding_digest")
         != _canonical_sha(
             {key: value for key, value in bracket.items() if key != "binding_digest"}
@@ -2661,7 +3063,7 @@ def _authenticate_finalization_inputs(
         )
 
     ledger_path, ledger_relative = _path_under_root(
-        calibration_ledger_path, custody, "calibration ledger"
+        calibration_ledger_path, custody_input, "calibration ledger"
     )
     ledger_raw = ledger_path.read_bytes()
     if schemas.get("calibration_ledger") != _LEDGER_SCHEMA:
@@ -2669,8 +3071,16 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_attachment_invalid",
             "calibration-ledger schema declaration is unsupported",
         )
+    head_pin_path, _head_pin_relative = _path_under_root(
+        ledger_path.with_name("calibration_ledger_head.json"),
+        custody_input,
+        "calibration ledger head pin",
+    )
     try:
-        from joulewise.calibration_ledger import terminal_head_pin_for_session
+        from joulewise.calibration_ledger import (
+            load_calibration_ledger_snapshot,
+            terminal_head_pin_for_session,
+        )
 
         terminal_head = terminal_head_pin_for_session(
             ledger_path, session_id=str(bracket.get("session_id"))
@@ -2685,9 +3095,118 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_ledger_head_mismatch",
             "bracket terminal head is not the actual ledger terminal head",
         )
+    snapshot = load_calibration_ledger_snapshot(
+        ledger_path,
+        head_pin_path,
+        require_committed_pin=False,
+        verify_custody=True,
+    )
+    if snapshot.refusal_reasons:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_ledger_head_mismatch",
+            "calibration ledger snapshot refused: "
+            + ", ".join(snapshot.refusal_reasons),
+        )
+    try:
+        from joulewise.calibration_bracketing import (
+            validate_calibration_bracket_binding,
+        )
+
+        bracket_pair = validate_calibration_bracket_binding(
+            bracket,
+            snapshot,
+            window_id=str(bracket.get("window_id")),
+            plan_id=prospective["plan"]["plan_id"],
+            plan_sha256=prospective["plan"]["sha256"],
+            evidence_root_id=prospective["evidence_root_id"],
+            # The authoritative validator binds the recorded path spelling;
+            # lexical safety/equality was established above without erasing it.
+            runs_root=Path(bracket["runs_root"]),
+        )
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_bracket_binding_mismatch",
+            f"authoritative bracket validation failed: {exc}",
+        ) from exc
+    if bracket_pair is None:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_bracket_binding_mismatch",
+            "authoritative bracket validator rejected the binding",
+        )
+
+    try:
+        from joulewise.schemas import CampaignPolicy
+        from joulewise.whole_window import (
+            AuthenticatedConsumptionSession,
+            _registered_policy,
+            whole_window_refusal_reasons,
+        )
+
+        policy_record = verdict.get("campaign_policy")
+        policy_sha = (
+            policy_record.get("sha256")
+            if isinstance(policy_record, Mapping)
+            else None
+        )
+        registered_policy = _registered_policy(policy_sha)
+        if not isinstance(registered_policy, Mapping):
+            raise ValueError("campaign policy is not registered")
+        policy = CampaignPolicy.from_mapping(dict(registered_policy))
+        semantics_id = basis.get("consumption_semantics_id")
+        session = AuthenticatedConsumptionSession(
+            resolved_runs,
+            set(bundle_paths),
+            evaluation_basis_sha256=str(basis["sha256"]),
+            consumption_semantics_id=str(semantics_id),
+            calibration_ledger_snapshot=snapshot,
+        )
+        session._prepare(bundle_paths=bundle_paths, policy=policy)
+        verdict_reasons = whole_window_refusal_reasons(
+            resolved_runs,
+            set(bundle_paths),
+            evaluation_basis_sha256=str(basis["sha256"]),
+            consumption_session=session,
+            consumption_semantics_id=str(semantics_id),
+        )
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            f"authoritative whole-window validation failed: {exc}",
+        ) from exc
+    if verdict_reasons:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            "authoritative whole-window validator refused: "
+            + ", ".join(verdict_reasons),
+        )
+    try:
+        campaign_rows = [
+            _strict_json_bytes(line.encode("utf-8"), "campaign-log verdict")
+            for line in (resolved_runs / "campaign_log.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip()
+        ]
+    except (OSError, UnicodeDecodeError, AnalysisManifestFinalizationError) as exc:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            f"whole-window campaign log is unreadable: {exc}",
+        ) from exc
+    matching_rows = [
+        row
+        for row in campaign_rows
+        if isinstance(row, Mapping)
+        and row.get("record_type") == "idle_admission_whole_window_verdict"
+        and canonical_json_bytes(row) == canonical_json_bytes(verdict)
+    ]
+    if len(matching_rows) != 1:
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_attachment_invalid",
+            "whole-window attachment is not exactly one authoritative campaign-log row",
+        )
 
     floor_path, floor_relative = _path_under_root(
-        aggregate_floor_artifact_path, custody, "aggregate floor artifact"
+        aggregate_floor_artifact_path, custody_input, "aggregate floor artifact"
     )
     floor, floor_raw = _read_strict_object(floor_path, "aggregate floor artifact")
     if (
@@ -2714,31 +3233,26 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_floor_dependency_unsatisfied",
             "aggregate floor artifact is invalid: " + "; ".join(floor_errors),
         )
-    floor_cells = [
-        cell for cell in floor.get("cells", []) if isinstance(cell, Mapping)
-    ]
-    for contrast in prospective["contrasts"]:
-        dependency = contrast["floor_dependency"]
-        selector = dependency["floor_selector"]
-        matching_conditions = {
-            cell.get("key", {}).get("condition_family_id")
-            for cell in floor_cells
-            if isinstance(cell.get("key"), Mapping)
-            and cell["key"].get("metric") == selector["metric"]
-            and cell["key"].get("window_class") == selector["window_class"]
-            and cell.get("eligibility", {}).get("claim_usable") is True
-        }
-        if (
-            dependency["required_artifact_schema"] != floor.get("schema_version")
-            or set(selector["condition_family_ids"]) - matching_conditions
-        ):
-            raise AnalysisManifestFinalizationError(
-                "analysis_finalization_floor_dependency_unsatisfied",
-                f"aggregate floor artifact does not satisfy {contrast['contrast_id']} selectors",
-            )
+    if any(
+        contrast["floor_dependency"]["required_artifact_schema"]
+        != floor.get("schema_version")
+        for contrast in prospective["contrasts"]
+    ):
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_floor_dependency_unsatisfied",
+            "aggregate floor artifact schema does not satisfy the frozen dependency",
+        )
+    _authenticate_floor_dependencies(
+        prospective,
+        floor,
+        bundle_paths=bundle_paths,
+    )
 
     arms, entries, blocks = _derive_arms_and_entries(
-        prospective, manifest_dir=manifest_dir, runs_root=resolved_runs
+        prospective,
+        manifest_dir=manifest_dir,
+        runs_root=resolved_runs,
+        bundle_paths=bundle_paths,
     )
     return {
         "runs_root": resolved_runs,
@@ -2938,6 +3452,7 @@ def finalize_prospective_analysis_manifest_v3(
     """Derive one immutable finalized artifact without reading an effect value."""
 
     try:
+        custody_input = Path(custody_root).absolute()
         custody = Path(custody_root).resolve(strict=True)
         output = Path(output_dir).resolve(strict=True)
     except OSError as exc:
@@ -2951,10 +3466,10 @@ def finalize_prospective_analysis_manifest_v3(
             "output_dir must equal custody_root so consumer-relative lineage is stable",
         )
     prospective_path, prospective_relative = _path_under_root(
-        prospective_manifest_path, custody, "prospective manifest"
+        prospective_manifest_path, custody_input, "prospective manifest"
     )
     tree_path, tree_relative = _path_under_root(
-        plan_tree_path, custody, "plan tree"
+        plan_tree_path, custody_input, "plan tree"
     )
     prospective, prospective_raw = _read_strict_object(
         prospective_path, "prospective analysis manifest"
@@ -2972,7 +3487,7 @@ def finalize_prospective_analysis_manifest_v3(
     attachments = _authenticate_finalization_inputs(
         prospective,
         manifest_dir=prospective_path.parent,
-        custody_root=custody,
+        custody_root=custody_input,
         runs_root=runs_root,
         whole_window_verdict_path=whole_window_verdict_path,
         bracket_binding_path=bracket_binding_path,
@@ -2992,7 +3507,7 @@ def finalize_prospective_analysis_manifest_v3(
     path = output / filename
     raw = render_manifest(manifest)
     refusals = validate_finalized_analysis_manifest_v3(
-        manifest, manifest_path=path, custody_root=custody
+        manifest, manifest_path=path, custody_root=custody_input
     )
     if refusals:
         raise AnalysisManifestFinalizationError(
@@ -3272,6 +3787,7 @@ __all__ = [
     "ESTIMATOR_ID",
     "EXACT_STACK_RULE_ID",
     "FLOOR_RULE_ID",
+    "GOVERNED_TRANSPORT_RULE_ID",
     "FINALIZATION_CONTRACT_ID",
     "FINALIZED_BASENAME_SUFFIX",
     "FINALIZED_NAMESPACE_RULE_ID",
@@ -3283,6 +3799,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "SEMANTICS_PROJECTION_RULE_ID",
     "STAGE_ORDER_SHA256S",
+    "TRANSPORT_RULING_PENDING_REFUSAL",
     "VERDICT_BASIS_SHA256",
     "analysis_semantics_projection_v1",
     "analysis_semantics_sha256_v1",

@@ -15,7 +15,9 @@ from joulewise.analysis_engine.inputs import (
 from joulewise.analysis_manifest_v3 import (
     ARM_FREEZE,
     ESTIMATOR_ID,
+    EXACT_STACK_RULE_ID,
     FLOOR_RULE_ID,
+    GOVERNED_TRANSPORT_RULE_ID,
     SCHEMA_VERSION,
     FINALIZATION_CONTRACT_ID,
     FINALIZED_BASENAME_SUFFIX,
@@ -82,7 +84,10 @@ def independent_semantics_sha256(value: dict) -> str:
 
 
 def install_synthetic_prospective_fixture(
-    root: Path, *, shared_family: bool = False
+    root: Path,
+    *,
+    shared_family: bool = False,
+    transport_mode: str = "exact_stack_only",
 ) -> tuple[Path, Path, dict]:
     """Install a resolved, shape-true gamma declaration in temporary custody.
 
@@ -120,6 +125,11 @@ def install_synthetic_prospective_fixture(
                 "contrast_ids": [contrast_id],
             }
         )
+        transport_rule = (
+            EXACT_STACK_RULE_ID
+            if transport_mode == "exact_stack_only"
+            else GOVERNED_TRANSPORT_RULE_ID
+        )
         selector = {
             "backend": "from_bundle",
             "metric": source["metric"],
@@ -129,7 +139,7 @@ def install_synthetic_prospective_fixture(
                 source["condition_b_id"],
             ],
             "floor_field": "floor_gate_j",
-            "transport_rule_id": "exact_stack_only.v1",
+            "transport_rule_id": transport_rule,
             "claim_floor_rule": "cross_stack_armwise_max.v1",
         }
         contrasts.append(
@@ -160,8 +170,31 @@ def install_synthetic_prospective_fixture(
                     ),
                     "floor_selector": selector,
                     "transport": {
-                        "mode": "exact_stack_only",
-                        "rule_id": "exact_stack_only.v1",
+                        "mode": transport_mode,
+                        "rule_id": transport_rule,
+                        "transport_groups": [
+                            {
+                                "transport_group_id": (
+                                    "synthetic-floor-group-"
+                                    f"{source['measurement_arm']}-{arm.lower()}"
+                                ),
+                                "condition_family_id": condition_id,
+                                "condition_domain_sha256": next(
+                                    row["canonical_domain_sha256"]
+                                    for row in draft["condition_families"]
+                                    if row["condition_family_id"] == condition_id
+                                ),
+                                "group_rule_id": GOVERNED_TRANSPORT_RULE_ID,
+                            }
+                            for arm, condition_id in zip(
+                                ("A", "B"),
+                                (
+                                    source["condition_a_id"],
+                                    source["condition_b_id"],
+                                ),
+                                strict=True,
+                            )
+                        ],
                     },
                 },
                 "prompt": (
@@ -428,26 +461,151 @@ class AnalysisManifestV3Tests(unittest.TestCase):
 
     def test_resolved_prospective_schema_is_deterministic_and_source_bound(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            manifest_path, plan_tree_path, prospective = (
-                install_synthetic_prospective_fixture(Path(tmp))
+            first_path, first_tree, first = (
+                install_synthetic_prospective_fixture(Path(tmp) / "first")
+            )
+            second_path, second_tree, second = (
+                install_synthetic_prospective_fixture(Path(tmp) / "second")
             )
             self.assertEqual(
                 validate_prospective_analysis_manifest_v3(
-                    prospective,
-                    manifest_dir=manifest_path.parent,
-                    plan_tree_path=plan_tree_path,
+                    first,
+                    manifest_dir=first_path.parent,
+                    plan_tree_path=first_tree,
                 ),
                 (),
             )
+            self.assertEqual(first, second)
+            self.assertEqual(first_path.read_bytes(), second_path.read_bytes())
+            self.assertEqual(first_tree.read_bytes(), second_tree.read_bytes())
             self.assertEqual(
-                analysis_semantics_sha256_v1(prospective),
-                independent_semantics_sha256(prospective),
+                analysis_semantics_sha256_v1(first),
+                independent_semantics_sha256(first),
             )
             self.assertEqual(
                 build_prospective_analysis_manifest_v3(
-                    manifest_path.parent, plan_tree_path=plan_tree_path
+                    first_path.parent, plan_tree_path=first_tree
                 ),
-                prospective,
+                first,
+            )
+
+    def test_prospective_transport_and_multiplicity_boundaries_are_total(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest_path, plan_tree_path, prospective = (
+                install_synthetic_prospective_fixture(root / "exact")
+            )
+            transported_path, transported_tree, transported = (
+                install_synthetic_prospective_fixture(
+                    root / "transported",
+                    transport_mode="governed_transport",
+                )
+            )
+            self.assertEqual(
+                validate_prospective_analysis_manifest_v3(
+                    transported,
+                    manifest_dir=transported_path.parent,
+                    plan_tree_path=transported_tree,
+                ),
+                (),
+            )
+
+            for method, alpha, q in (
+                ("benjamini_hochberg", None, 0.05),
+                ("exploratory_none", None, None),
+            ):
+                with self.subTest(valid_method=method):
+                    valid = copy.deepcopy(prospective)
+                    for family in valid["families"]:
+                        family["multiplicity"].update(
+                            method=method,
+                            alpha=alpha,
+                            q=q,
+                        )
+                    valid["frozen_semantics_sha256"] = (
+                        independent_semantics_sha256(valid)
+                    )
+                    reidentify(valid)
+                    manifest_path.write_bytes(render_manifest(valid))
+                    tree = json.loads(plan_tree_path.read_text())
+                    tree["downstream_contract"]["analysis_manifest_sha256"] = (
+                        hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+                    )
+                    plan_tree_path.write_text(json.dumps(tree, indent=2) + "\n")
+                    self.assertEqual(
+                        validate_prospective_analysis_manifest_v3(
+                            valid,
+                            manifest_dir=manifest_path.parent,
+                            plan_tree_path=plan_tree_path,
+                        ),
+                        (),
+                    )
+
+            manifest_path.write_bytes(render_manifest(prospective))
+            tree = json.loads(plan_tree_path.read_text())
+            tree["downstream_contract"]["analysis_manifest_sha256"] = (
+                hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+            )
+            plan_tree_path.write_text(json.dumps(tree, indent=2) + "\n")
+
+            mutations = {
+                "backend": lambda value: value["contrasts"][0][
+                    "floor_dependency"
+                ]["floor_selector"].__setitem__("backend", "mock"),
+                "floor_field": lambda value: value["contrasts"][0][
+                    "floor_dependency"
+                ]["floor_selector"].__setitem__("floor_field", "floor_abs_j"),
+                "claim_rule": lambda value: value["contrasts"][0][
+                    "floor_dependency"
+                ]["floor_selector"].__setitem__("claim_floor_rule", "max.v0"),
+                "condition_domain": lambda value: value["contrasts"][0][
+                    "floor_dependency"
+                ]["transport"]["transport_groups"][0].__setitem__(
+                    "condition_domain_sha256", "0" * 64
+                ),
+                "holm_q": lambda value: value["families"][0][
+                    "multiplicity"
+                ].__setitem__("q", 0.05),
+                "bh_alpha": lambda value: value["families"][0][
+                    "multiplicity"
+                ].update(
+                    method="benjamini_hochberg", alpha=0.05, q=0.05
+                ),
+                "exploratory_alpha": lambda value: value["families"][0][
+                    "multiplicity"
+                ].update(method="exploratory_none", alpha=0.05, q=None),
+            }
+            for label, mutate in mutations.items():
+                with self.subTest(label=label):
+                    candidate = copy.deepcopy(prospective)
+                    mutate(candidate)
+                    candidate["frozen_semantics_sha256"] = (
+                        independent_semantics_sha256(candidate)
+                    )
+                    reidentify(candidate)
+                    reasons = validate_prospective_analysis_manifest_v3(
+                        candidate,
+                        manifest_dir=manifest_path.parent,
+                        plan_tree_path=plan_tree_path,
+                    )
+                    self.assertTrue(reasons)
+                    self.assertTrue(
+                        all(
+                            reason.reason_code.startswith("analysis_")
+                            for reason in reasons
+                        )
+                    )
+
+            fuzzed = copy.deepcopy(prospective)
+            fuzzed["families"][0]["contrast_ids"] = [{}]
+            refusals = validate_prospective_analysis_manifest_v3(
+                fuzzed,
+                manifest_dir=manifest_path.parent,
+                plan_tree_path=plan_tree_path,
+            )
+            self.assertTrue(refusals)
+            self.assertTrue(
+                all(item.reason_code.startswith("analysis_") for item in refusals)
             )
 
     def test_checked_in_placeholder_manifest_is_not_a_frozen_prospective(self) -> None:

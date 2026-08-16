@@ -26,6 +26,8 @@ from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_manifest_v3 import (
     ARM_FREEZE,
     FINALIZED_BASENAME_SUFFIX,
+    FINALIZED_SCHEMA_VERSION,
+    TRANSPORT_RULING_PENDING_REFUSAL,
     finalize_prospective_analysis_manifest_v3,
     normalized_realized_stack_identity,
 )
@@ -48,6 +50,7 @@ from joulewise.analysis_engine.inputs import (
     floor_stack_identity,
     load_analysis_inputs,
     load_manifest,
+    _registered_bundle_path,
     realized_scientific_identity,
     window_evidence_precheck,
 )
@@ -532,8 +535,8 @@ class AnalysisIntegrationTests(unittest.TestCase):
         session_patch.start()
         self.addCleanup(session_patch.stop)
 
-    def test_finalized_gamma_shape_consumes_both_contrasts_and_prospective_refuses(self):
-        """L10-shaped wire proof: finalizer -> validator -> real engine."""
+    def test_finalized_gamma_runs_real_engine_then_isolates_math_layers(self):
+        """Real synthetic end-to-end pass followed by isolated math seams."""
 
         with tempfile.TemporaryDirectory() as tmp:
             fixture = install_synthetic_finalization_fixture(
@@ -556,6 +559,34 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
             loaded_manifest, manifest_sha = load_manifest(finalized_path)
             self.assertEqual(loaded_manifest, finalized)
+            real_inputs = load_analysis_inputs(
+                finalized_path,
+                fixture["runs_root"],
+                fixture["floor_path"],
+                strict_validator=lambda path, strict=True: [],
+            )
+            self.assertEqual(len(real_inputs.registered), 80)
+            self.assertEqual(
+                {
+                    evidence.relative_path
+                    for evidence in real_inputs.registered.values()
+                },
+                {entry["bundle_path"] for entry in finalized["entries"]},
+            )
+            end_to_end_artifact = analyze_claims(
+                finalized_path,
+                fixture["runs_root"],
+                fixture["floor_path"],
+                strict_validator=lambda path, strict=True: [],
+            )
+            self.assertEqual(
+                [row["contrast_id"] for row in end_to_end_artifact["contrasts"]],
+                [row["contrast_id"] for row in finalized["contrasts"]],
+            )
+            self.assertEqual(
+                end_to_end_artifact["inputs"]["analysis_manifest"]["file_sha256"],
+                manifest_sha,
+            )
 
             with self.assertRaisesRegex(
                 AnalysisInputError,
@@ -570,7 +601,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
 
             evidence_by_entry = {}
             for entry in finalized["entries"]:
-                bundle = fixture["runs_root"] / entry["run_id"]
+                bundle = fixture["runs_root"] / entry["bundle_path"]
                 raw_config = json.loads((bundle / "config.json").read_text())
                 metadata = json.loads((bundle / "metadata.json").read_text())
                 summary = {
@@ -588,7 +619,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 evidence_by_entry[entry["entry_id"]] = BundleEvidence(
                     entry=entry,
                     bundle_id=entry["run_id"],
-                    relative_path=entry["run_id"],
+                    relative_path=entry["bundle_path"],
                     path=bundle,
                     summary=summary,
                     metadata=metadata,
@@ -769,6 +800,87 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 )
             )
         )
+
+    def test_governed_transport_finalizes_then_refuses_with_pending_ruling_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(
+                Path(tmp),
+                transport_mode="governed_transport",
+            )
+            finalized = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+            finalized_path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            self.assertTrue(
+                all(
+                    contrast["floor_dependency"]["transport"]["mode"]
+                    == "governed_transport"
+                    for contrast in finalized["contrasts"]
+                )
+            )
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                TRANSPORT_RULING_PENDING_REFUSAL,
+            ):
+                analyze_claims(
+                    finalized_path,
+                    fixture["runs_root"],
+                    fixture["floor_path"],
+                    strict_validator=lambda path, strict=True: [],
+                )
+
+    def test_authenticated_nested_bundle_conflicts_with_run_id_rejoin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / "runs"
+            nested = runs / "nested" / "x"
+            legacy = runs / "x"
+            for bundle in (nested, legacy):
+                bundle.mkdir(parents=True)
+                for filename in (
+                    "config.json",
+                    "metadata.json",
+                    "summary_metrics.json",
+                ):
+                    (bundle / filename).write_text("{}\n")
+            manifest = {"schema_version": FINALIZED_SCHEMA_VERSION}
+            entry = {"run_id": "x", "bundle_path": "nested/x"}
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "analysis_manifest_bundle_path_divergence",
+            ):
+                _registered_bundle_path(manifest, entry, runs.resolve())
+
+    def test_consumer_rejects_symlink_and_nonregular_manifest_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / "target.json"
+            target.write_text("{}\n")
+            alias = root / "alias.json"
+            alias.symlink_to(target.name)
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "path_resolution_refused",
+            ):
+                load_manifest(alias)
+            directory = root / "manifest-directory"
+            directory.mkdir()
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "path_resolution_refused",
+            ):
+                load_manifest(directory)
 
     def _salvage_floor_dispatch_fixture(self, root: Path) -> tuple[dict, dict[str, Path]]:
         artifact = make_artifact()

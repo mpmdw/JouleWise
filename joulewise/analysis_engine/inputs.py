@@ -16,6 +16,7 @@ import inspect
 import json
 import math
 import re
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
@@ -544,8 +545,16 @@ def _expected_bundle_config_sha256(value: Mapping[str, Any]) -> str | None:
 
 
 def _load_json_object(path: Path, label: str) -> tuple[Mapping[str, Any], bytes]:
+    path = Path(path)
     try:
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+            raise AnalysisInputError(
+                f"{label} path_resolution_refused: symlink or non-regular file"
+            )
         raw = path.read_bytes()
+    except AnalysisInputError:
+        raise
     except OSError as exc:
         raise AnalysisInputError(f"cannot read {label} {path}: {exc}") from exc
     value = _strict_json_admission_bytes(raw, label)
@@ -624,6 +633,163 @@ def _manifest_config_root(
             "analysis_manifest_lineage_mismatch: prospective path is absent"
         )
     return (root / text).parent
+
+
+def _lexical_child_path(
+    root: Path,
+    relative: object,
+    *,
+    label: str,
+    require_directory: bool,
+) -> Path:
+    """Resolve one authenticated relative path without following symlinks."""
+
+    if not isinstance(relative, str) or not relative or "\\" in relative:
+        raise AnalysisInputError(f"{label} path_resolution_refused")
+    parsed = PurePosixPath(relative)
+    if (
+        parsed.is_absolute()
+        or parsed.as_posix() != relative
+        or any(part in {"", ".", ".."} for part in parsed.parts)
+    ):
+        raise AnalysisInputError(f"{label} path_resolution_refused")
+    root = Path(root).resolve(strict=True)
+    candidate = root.joinpath(*parsed.parts)
+    current = root
+    try:
+        for part in parsed.parts:
+            current = current / part
+            mode = current.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise AnalysisInputError(f"{label} path_resolution_refused: symlink")
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(root)
+        mode = resolved.stat().st_mode
+    except AnalysisInputError:
+        raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise AnalysisInputError(f"{label} path_resolution_refused") from exc
+    wanted = stat.S_ISDIR(mode) if require_directory else stat.S_ISREG(mode)
+    if not wanted:
+        kind = "directory" if require_directory else "regular file"
+        raise AnalysisInputError(f"{label} must be a {kind}")
+    return resolved
+
+
+def _finalized_runs_root(
+    manifest: Mapping[str, Any], manifest_path: Path, supplied_runs_root: Path
+) -> Path:
+    """Bind consumption to the runs root authenticated by finalization."""
+
+    supplied = Path(supplied_runs_root)
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        try:
+            mode = supplied.lstat().st_mode
+        except OSError as exc:
+            raise AnalysisInputError("runs root path_resolution_refused") from exc
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            raise AnalysisInputError(
+                "runs root path_resolution_refused: must be a non-symlink directory"
+            )
+        return supplied
+    evidence = manifest.get("evidence")
+    bracket_ref = (
+        evidence.get("bracket_binding") if isinstance(evidence, Mapping) else None
+    )
+    relative = bracket_ref.get("path") if isinstance(bracket_ref, Mapping) else None
+    bracket_path = _lexical_child_path(
+        Path(manifest_path).parent,
+        relative,
+        label="authenticated bracket binding",
+        require_directory=False,
+    )
+    bracket, _raw = _load_json_object(bracket_path, "authenticated bracket binding")
+    authenticated_text = bracket.get("runs_root")
+    if not isinstance(authenticated_text, str) or not authenticated_text:
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: bracket has no authenticated runs root"
+        )
+    authenticated = Path(authenticated_text)
+    custody = Path(manifest_path).parent.absolute()
+    resolved_custody = custody.resolve(strict=True)
+    try:
+        try:
+            relative_runs = authenticated.relative_to(custody).as_posix()
+        except ValueError:
+            relative_runs = authenticated.relative_to(resolved_custody).as_posix()
+    except ValueError as exc:
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: authenticated root escapes custody"
+        ) from exc
+    authenticated_resolved = _lexical_child_path(
+        custody,
+        relative_runs,
+        label="authenticated runs root",
+        require_directory=True,
+    )
+    try:
+        supplied_absolute = supplied.absolute()
+        try:
+            supplied_relative = supplied_absolute.relative_to(custody).as_posix()
+        except ValueError:
+            supplied_relative = supplied_absolute.relative_to(
+                resolved_custody
+            ).as_posix()
+        supplied_resolved = _lexical_child_path(
+            custody,
+            supplied_relative,
+            label="supplied runs root",
+            require_directory=True,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: supplied root is not canonical"
+        ) from exc
+    if supplied_resolved != authenticated_resolved:
+        raise AnalysisInputError(
+            "analysis_manifest_runs_root_mismatch: --runs-root differs from finalized authentication"
+        )
+    return authenticated_resolved
+
+
+def _registered_bundle_path(
+    manifest: Mapping[str, Any], entry: Mapping[str, Any], runs_root: Path
+) -> Path:
+    run_id = entry.get("run_id")
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        bundle = Path(runs_root) / str(run_id)
+        _safe_relative(bundle, Path(runs_root))
+        if bundle.exists() and not bundle.is_dir():
+            raise AnalysisInputError(
+                f"registered bundle {run_id!r} must be a directory"
+            )
+        return bundle
+
+    relative = entry.get("bundle_path")
+    bundle = _lexical_child_path(
+        runs_root,
+        relative,
+        label=f"registered bundle {run_id!r}",
+        require_directory=True,
+    )
+    if bundle.name != run_id:
+        raise AnalysisInputError(
+            f"registered bundle path does not preserve run_id {run_id!r}"
+        )
+    legacy_alias = Path(runs_root) / str(run_id)
+    if bundle != legacy_alias.resolve(strict=False) and legacy_alias.exists():
+        raise AnalysisInputError(
+            "analysis_manifest_bundle_path_divergence: authenticated nested "
+            f"bundle {relative!r} conflicts with runs_root/run_id"
+        )
+    for filename in ("config.json", "metadata.json", "summary_metrics.json"):
+        _lexical_child_path(
+            runs_root,
+            f"{relative}/{filename}",
+            label=f"registered bundle {run_id!r}/{filename}",
+            require_directory=False,
+        )
+    return bundle
 
 
 def _enforce_finalized_floor_attachment(
@@ -2752,7 +2918,13 @@ def load_analysis_inputs(
     ``evidence_root_mapping_required``.
     """
 
-    manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
+    analysis_manifest_path = Path(analysis_manifest_path)
+    manifest, manifest_sha = load_manifest(analysis_manifest_path)
+    runs_root = _finalized_runs_root(
+        manifest,
+        analysis_manifest_path,
+        Path(runs_root),
+    )
     authenticated_floor = _load_authenticated_floor_artifact(
         Path(floor_artifact_path)
     )
@@ -2778,9 +2950,8 @@ def load_analysis_inputs(
         floor_artifact=floor_artifact,
         floor_sha256=floor_sha,
     )
-    runs_root = Path(runs_root)
     collection_manifest_id = _manifest_collection_id(manifest)
-    config_root = _manifest_config_root(manifest, Path(analysis_manifest_path))
+    config_root = _manifest_config_root(manifest, analysis_manifest_path)
     verdict_basis_sha256 = _manifest_verdict_basis_sha256(manifest)
     normalized_scan_roots, _ = _normalize_evidence_roots(
         authenticated_floor.root_ids,
@@ -2855,9 +3026,14 @@ def load_analysis_inputs(
         source_config, _ = _load_json_object(
             config_root / entry["config"], "manifest config"
         )
+        authenticated_bundle_path = _registered_bundle_path(
+            manifest,
+            entry,
+            runs_root,
+        )
         registered[entry["entry_id"]] = _read_bundle(
             entry,
-            runs_root / run_id,
+            authenticated_bundle_path,
             runs_root,
             source_config,
             strict_validator,

@@ -5,13 +5,16 @@ import hashlib
 import io
 import json
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from joulewise.analysis_manifest_v3 import (
     AnalysisManifestFinalizationError,
     FINALIZED_BASENAME_SUFFIX,
+    analysis_semantics_sha256_v1,
     calculate_manifest_id,
     finalize_prospective_analysis_manifest_v3,
     frozen_family_block_strata,
@@ -30,13 +33,17 @@ from joulewise.calibration_ledger import (
 )
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
 from joulewise.schemas import BenchmarkConfig
+from joulewise.identity_pins import build_stack_identity
 from tests.test_analysis_manifest_v3 import install_synthetic_prospective_fixture
 from joulewise.detection_floor import (
     build_floor_artifact,
     build_transport_group,
     validate_floor_artifact,
 )
-from tests.test_detection_floor import condition_family, make_artifact, make_cell
+from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA
+from joulewise.whole_window import build_neg8_drift_bound_artifact, canonical_sha256
+from tests.test_detection_floor import make_artifact, make_cell, make_regime
+from tests.test_run_campaign import read_all_jsonl, run_campaign_module
 from scripts.finalize_analysis_manifest import main as finalize_main
 
 
@@ -63,13 +70,25 @@ def _metadata_for_config(config: dict, model_token: str) -> dict:
                 "class": "TokenizerWrapper",
                 "vocab_size": 151643,
             },
+            "sampler": {
+                "api": "mlx.sample",
+                "kind": "deterministic_greedy",
+                "pinned": True,
+            },
+            "output_policy": {
+                "name": "fixed_token_count",
+                "requested_tokens": config["workload_profile"]["output_tokens"],
+                "stop_condition": "requested_tokens",
+            },
         },
         "adapters": {
             "runtime": {
                 "name": "mlx",
                 "prepare_metadata": {
                     "adapter": "mlx_runtime",
-                    "version": None,
+                    "version": "synthetic-mlx-1",
+                    "kernel_library": "synthetic-kernel-1",
+                    "batching_concurrency_policy": "single-request sequential",
                 },
             },
             "telemetry": {"name": "powermetrics"},
@@ -80,6 +99,17 @@ def _metadata_for_config(config: dict, model_token: str) -> dict:
             "rail_manifest": ["cpu_power", "gpu_power", "ane_power"],
             "boundary": "Apple SoC CPU + GPU + ANE package power",
         },
+        "machine": "synthetic-mac",
+        "platform": {"build_version": "25F84"},
+        "environment": {
+            "build_version": "25F84",
+            "power_source": "AC Power",
+            "power": {
+                "adapter_watts": 100.0,
+                "adapter_description": "Synthetic 100W Adapter",
+            },
+        },
+        "instrument_calibration": {"artifact_sha256": "9" * 64},
         "model": config["model"],
         "quantization": config["quantization"],
     }
@@ -175,17 +205,22 @@ def _install_calibration_session(
 
 
 def install_synthetic_finalization_fixture(
-    root: Path, *, shared_family: bool = False
+    root: Path,
+    *,
+    shared_family: bool = False,
+    transport_mode: str = "exact_stack_only",
 ) -> dict:
     root = Path(root)
     prospective_path, plan_tree_path, prospective = (
         install_synthetic_prospective_fixture(
-            root, shared_family=shared_family
+            root,
+            shared_family=shared_family,
+            transport_mode=transport_mode,
         )
     )
     runs_root = root / "runs"
     runs_root.mkdir()
-    occurrences = []
+    bundle_paths: dict[str, Path] = {}
     for contrast in prospective["contrasts"]:
         for member in contrast["members"]:
             bundle = runs_root / member["run_id"]
@@ -205,9 +240,11 @@ def install_synthetic_finalization_fixture(
             model_token = (
                 "a" if member["arm"] == "A" else "b"
             )
+            metadata = _metadata_for_config(config, model_token)
+            metadata["config_sha256"] = hashlib.sha256(config_raw).hexdigest()
             metadata_raw = (
                 json.dumps(
-                    _metadata_for_config(config, model_token),
+                    metadata,
                     indent=2,
                     sort_keys=True,
                 )
@@ -221,51 +258,173 @@ def install_synthetic_finalization_fixture(
                         "synthetic_effect_value_j": (
                             -1000.0 if contrast["measurement_arm"] == "prefill_p256" else 1000.0
                         ),
+                        "measurement_quality": {
+                            "telemetry_source": "powermetrics",
+                        },
                     },
                     sort_keys=True,
                 )
                 + "\n"
             ).encode()
             (bundle / "summary_metrics.json").write_bytes(summary_raw)
-            occurrences.append(
-                {
-                    "bundle_id": member["run_id"],
-                    "bundle_path": member["run_id"],
-                    "config_sha256": hashlib.sha256(config_raw).hexdigest(),
-                    "metadata_sha256": hashlib.sha256(metadata_raw).hexdigest(),
-                    "summary_sha256": hashlib.sha256(summary_raw).hexdigest(),
+            bundle_paths[member["run_id"]] = bundle
+
+    bundle_ids = sorted(bundle_paths)
+    reference_ids = (bundle_ids[0], bundle_ids[-1])
+    for bundle_id, gross, idle in (
+        (reference_ids[0], 8.0, 7.0),
+        (reference_ids[1], 8.001, 7.001),
+    ):
+        summary_path = bundle_paths[bundle_id] / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text())
+        summary.update(
+            gross_energy_j=gross,
+            idle_subtracted_energy_j=idle,
+            energy_anchor_shift_envelopes={
+                "/gross_energy_j": {
+                    "point_j": gross,
+                    "lower_j": gross - 0.001,
+                    "upper_j": gross + 0.001,
                 }
+            },
+        )
+        _write_json(summary_path, summary)
+
+    policy_path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "campaign_policies"
+        / "quiet_mac_p2_production.json"
+    )
+    policy_sha = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+    campaign_manifest = {
+        "schema_version": "joulewise.campaign_provenance.v1",
+        "analysis_manifest_id": prospective["manifest_id"],
+        "campaign_policy": {"sha256": policy_sha},
+        "members": [
+            {
+                "config": f"{bundle_id}.json",
+                "run_id": bundle_id,
+                "execution": "invoked",
+                "bundle_ids": [bundle_id],
+                "role": (
+                    run_campaign_module.NEG8_REFERENCE_ROLE
+                    if bundle_id in reference_ids
+                    else None
+                ),
+                "sentinel_position": (
+                    "start"
+                    if bundle_id == reference_ids[0]
+                    else "end"
+                    if bundle_id == reference_ids[1]
+                    else None
+                ),
+                "scientific_config_sha256": "8" * 64,
+                "canonical_neg8_workload": bundle_id in reference_ids,
+            }
+            for bundle_id in bundle_ids
+        ],
+    }
+    _write_json(
+        runs_root / "campaign_manifests" / "synthetic.json",
+        campaign_manifest,
+    )
+    freshness = {
+        "os_build": "25F84",
+        "power_supply_identity_sha256": canonical_sha256(
+            {
+                "power_source": "AC Power",
+                "adapter_watts": 100.0,
+                "adapter_description": "Synthetic 100W Adapter",
+            }
+        ),
+        "calibration_identity_sha256": "9" * 64,
+    }
+    drift = build_neg8_drift_bound_artifact(
+        corpus_id="synthetic-neg8-reference-corpus",
+        condition_id="synthetic-neg8",
+        manifest_sha256="7" * 64,
+        scientific_config_sha256="8" * 64,
+        members=[
+            {
+                "bundle_id": f"synthetic-neg8-reference-{index}",
+                "point_gross_j": 8.0 + index / 1000.0,
+                "point_idle_subtracted_j": 7.0 + index / 1000.0,
+                "bundle_evidence_sha256": f"{index:x}" * 64,
+            }
+            for index in range(1, 11)
+        ],
+        derivation_timestamp_s=time.time(),
+        freshness_bindings=freshness,
+    )
+    drift_path = root / "neg8_drift_bound.json"
+    _write_json(drift_path, drift)
+    writer_args = run_campaign_module.parse_args(
+        [
+            "--whole-window-verdict",
+            "--runs-dir",
+            str(runs_root),
+            "--campaign-policy",
+            str(policy_path),
+            "--neg8-drift-bound",
+            str(drift_path),
+        ]
+    )
+    writer_stdout = io.StringIO()
+    with (
+        mock.patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+        mock.patch.object(
+            run_campaign_module, "_final_idle_admission_attempt", return_value=1
+        ),
+        mock.patch.object(
+            run_campaign_module, "_load_idle_rich_telemetry", return_value=[]
+        ),
+        mock.patch.object(
+            run_campaign_module, "post_run_environment_refusals", return_value=()
+        ),
+        mock.patch.object(
+            run_campaign_module,
+            "evaluate_cpu_idle_admission",
+            return_value={"decision": "admitted", "conditions": []},
+        ),
+        mock.patch.object(
+            run_campaign_module, "_adapter_observations_for", return_value=[]
+        ),
+        mock.patch.object(
+            run_campaign_module,
+            "evaluate_adapter_wattage_continuity",
+            return_value={
+                "schema_version": ADAPTER_CONTINUITY_SCHEMA,
+                "decision": "stable",
+                "conditions": [],
+            },
+        ),
+        mock.patch.object(
+            run_campaign_module,
+            "_neg8_reference_scientific_config_sha256",
+            return_value="8" * 64,
+        ),
+        mock.patch.object(
+            run_campaign_module,
+            "calibration_bracket_for_bundles",
+            return_value=(
+                {
+                    "schema_version": "joulewise.instrument_calibration_bracket.v1",
+                    "status": "passed",
+                    "b_fiducial_s": 0.025,
+                },
+                (),
+            ),
+        ),
+        redirect_stdout(writer_stdout),
+    ):
+        if run_campaign_module.run_whole_window_verdict(writer_args) != 0:
+            rows = read_all_jsonl(runs_root / "campaign_log.jsonl")
+            raise AssertionError(
+                "production whole-window writer refused fixture: "
+                f"{writer_stdout.getvalue()} {rows[-1] if rows else None}"
             )
-    occurrences.sort(key=lambda row: row["bundle_id"])
-    basis_body = {
-        "schema_version": "joulewise.idle_admission_evaluation_basis.v1",
-        "policy_sha256": "c" * 64,
-        "member_occurrences": occurrences,
-        "calibration_bracket_set": [],
-        "consumption_semantics_id": "d078_minted_envelopes_v1",
-    }
-    basis = {
-        **basis_body,
-        "sha256": hashlib.sha256(
-            json.dumps(
-                basis_body,
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode()
-        ).hexdigest(),
-    }
-    verdict = {
-        "schema_version": "joulewise.idle_admission_whole_window_verdict.v1",
-        "record_type": "idle_admission_whole_window_verdict",
-        "status": "passed",
-        "claim_licensing": True,
-        "bundle_ids": sorted(row["bundle_id"] for row in occurrences),
-        "evaluation_basis": basis,
-        "decision_envelope_outcomes": {
-            "decode": "supported",
-            "prefill_p256": "refused_below_floor",
-        },
-    }
+    verdict = read_all_jsonl(runs_root / "campaign_log.jsonl")[-1]
     verdict_path = root / "whole_window_verdict.json"
     _write_json(verdict_path, verdict)
     ledger_path, bracket_path = _install_calibration_session(
@@ -274,36 +433,67 @@ def install_synthetic_finalization_fixture(
     cells = []
     groups = []
     for contrast_index, contrast in enumerate(prospective["contrasts"]):
-        group_id = f"synthetic-exact-group-{contrast_index}"
-        group_cells = []
         condition_ids = [
             contrast["condition_a_id"],
             contrast["condition_b_id"],
         ]
         for condition_index, condition_id in enumerate(condition_ids):
+            arm = "A" if condition_index == 0 else "B"
+            representative = next(
+                member
+                for member in contrast["members"]
+                if member["arm"] == arm
+            )
+            bundle = bundle_paths[representative["run_id"]]
+            stack = build_stack_identity(
+                json.loads((bundle / "config.json").read_text()),
+                json.loads((bundle / "metadata.json").read_text()),
+            )
+            if stack is None:
+                raise AssertionError("synthetic fixture lacks a stack identity")
+            condition_row = next(
+                row
+                for row in prospective["condition_families"]
+                if row["condition_family_id"] == condition_id
+            )
+            condition_definition = json.loads(
+                (prospective_path.parent / condition_row["path"]).read_text()
+            )
+            group_id = (
+                f"synthetic-floor-group-{contrast['measurement_arm']}-{arm.lower()}"
+            )
             cell = make_cell(
                 cell_id=f"synthetic-floor-{contrast_index}-{condition_index}",
                 condition=condition_id,
                 metric=contrast["metric"],
+                regime=make_regime(stack_identity=stack),
             )
             cell["key"]["window_class"] = "phase"
+            cell["key"]["condition_family_definition"] = condition_definition
+            cell["key"]["condition_family_sha256"] = condition_row[
+                "canonical_domain_sha256"
+            ]
             cell["transport_group_id"] = group_id
             cells.append(cell)
-            group_cells.append(cell)
-        groups.append(
-            build_transport_group(
-                transport_group_id=group_id,
-                backend="powermetrics",
-                metric=contrast["metric"],
-                window_class="phase",
-                stack_identity=group_cells[0]["source_regime"]["stack_identity"],
-                source_cells=group_cells,
-                allowed_consumer_condition_families=[
-                    condition_family(condition_id)
-                    for condition_id in condition_ids
-                ],
+            groups.append(
+                build_transport_group(
+                    transport_group_id=group_id,
+                    backend="powermetrics",
+                    metric=contrast["metric"],
+                    window_class="phase",
+                    stack_identity=stack,
+                    source_cells=[cell],
+                    allowed_consumer_condition_families=[
+                        {
+                            "condition_family_id": condition_id,
+                            "condition_family_definition": condition_definition,
+                            "condition_family_sha256": condition_row[
+                                "canonical_domain_sha256"
+                            ],
+                        }
+                    ],
+                )
             )
-        )
     base_floor = make_artifact()
     floor = build_floor_artifact(
         artifact_id="synthetic-exact-aggregate-floor",
@@ -332,6 +522,48 @@ def install_synthetic_finalization_fixture(
 
 
 class AnalysisFinalizerTests(unittest.TestCase):
+    def test_cli_maps_fuzz_shaped_prospective_value_to_closed_refusal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prospective_path, plan_tree_path, prospective = (
+                install_synthetic_prospective_fixture(root)
+            )
+            prospective["families"][0]["contrast_ids"] = [{}]
+            _write_json(prospective_path, prospective)
+            runs = root / "runs"
+            runs.mkdir()
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = finalize_main(
+                    [
+                        "--prospective-manifest",
+                        str(prospective_path),
+                        "--plan-tree",
+                        str(plan_tree_path),
+                        "--custody-root",
+                        str(root),
+                        "--runs-root",
+                        str(runs),
+                        "--whole-window-verdict",
+                        str(prospective_path),
+                        "--bracket-binding",
+                        str(prospective_path),
+                        "--calibration-ledger",
+                        str(prospective_path),
+                        "--aggregate-floor-artifact",
+                        str(prospective_path),
+                        "--output-dir",
+                        str(root),
+                    ]
+                )
+            self.assertEqual(code, 2)
+            refusal = json.loads(stdout.getvalue())
+            self.assertEqual(refusal["status"], "REFUSE")
+            self.assertEqual(
+                refusal["reason"],
+                "analysis_finalization_prospective_invalid",
+            )
+
     def test_cli_emits_machine_readable_finalized_result(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
@@ -380,10 +612,20 @@ class AnalysisFinalizerTests(unittest.TestCase):
             first = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"], **kwargs
             )
+            path = (
+                fixture["root"]
+                / f"{fixture['prospective']['manifest_id']}{FINALIZED_BASENAME_SUFFIX}"
+            )
+            first_bytes = path.read_bytes()
             second = finalize_prospective_analysis_manifest_v3(
                 fixture["prospective_path"], **kwargs
             )
             self.assertEqual(first, second)
+            self.assertEqual(path.read_bytes(), first_bytes)
+            self.assertEqual(
+                hashlib.sha256(path.read_bytes()).hexdigest(),
+                hashlib.sha256(first_bytes).hexdigest(),
+            )
             self.assertEqual(
                 [row["measurement_arm"] for row in first["contrasts"]],
                 ["decode", "prefill_p256"],
@@ -391,10 +633,6 @@ class AnalysisFinalizerTests(unittest.TestCase):
             self.assertEqual(
                 first["lineage"]["prospective_semantics_sha256"],
                 first["lineage"]["finalized_semantics_sha256"],
-            )
-            path = (
-                fixture["root"]
-                / f"{fixture['prospective']['manifest_id']}{FINALIZED_BASENAME_SUFFIX}"
             )
             self.assertEqual(
                 validate_finalized_analysis_manifest_v3(
@@ -469,6 +707,11 @@ class AnalysisFinalizerTests(unittest.TestCase):
                     aggregate_floor_artifact_path=fixture["floor_path"],
                     output_dir=fixture["root"],
                 )
+            output = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            self.assertFalse(output.exists())
 
     def test_missing_attachment_and_conflicting_namespace_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -497,6 +740,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 + FINALIZED_BASENAME_SUFFIX
             )
             output_path.write_text("occupied\n")
+            occupied_bytes = output_path.read_bytes()
             with self.assertRaisesRegex(
                 AnalysisManifestFinalizationError,
                 "analysis_finalization_output_conflict",
@@ -512,6 +756,7 @@ class AnalysisFinalizerTests(unittest.TestCase):
                     aggregate_floor_artifact_path=fixture["floor_path"],
                     output_dir=fixture["root"],
                 )
+            self.assertEqual(output_path.read_bytes(), occupied_bytes)
 
     def test_finalized_semantic_mutation_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -529,6 +774,9 @@ class AnalysisFinalizerTests(unittest.TestCase):
             )
             attacked = copy.deepcopy(manifest)
             attacked["contrasts"][0]["sidedness"] = "greater"
+            attacked["lineage"]["finalized_semantics_sha256"] = (
+                analysis_semantics_sha256_v1(attacked)
+            )
             attacked["manifest_id"] = calculate_manifest_id(attacked)
             path = fixture["root"] / (
                 fixture["prospective"]["manifest_id"]
@@ -543,6 +791,157 @@ class AnalysisFinalizerTests(unittest.TestCase):
                 )
             }
             self.assertIn("analysis_manifest_family_semantics_mismatch", reason_codes)
+
+    def test_self_authored_verdict_and_stripped_bracket_refuse(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            production = json.loads(fixture["verdict_path"].read_text())
+            forged = {
+                "schema_version": production["schema_version"],
+                "record_type": production["record_type"],
+                "status": "passed",
+                "claim_licensing": True,
+                "bundle_ids": production["bundle_ids"],
+                "evaluation_basis": production["evaluation_basis"],
+            }
+            _write_json(fixture["verdict_path"], forged)
+            with self.assertRaisesRegex(
+                AnalysisManifestFinalizationError,
+                "analysis_finalization_attachment_invalid",
+            ):
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            bracket = json.loads(fixture["bracket_path"].read_text())
+            bracket["endpoints"]["pre"]["receipt_digest"] = "0" * 64
+            bracket["binding_digest"] = hashlib.sha256(
+                json.dumps(
+                    {
+                        key: value
+                        for key, value in bracket.items()
+                        if key != "binding_digest"
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            _write_json(fixture["bracket_path"], bracket)
+            with self.assertRaisesRegex(
+                AnalysisManifestFinalizationError,
+                "analysis_finalization_bracket_binding_mismatch",
+            ):
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                )
+
+    def test_attachment_symlinks_and_nonregular_paths_refuse(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            alias = fixture["root"] / "verdict-alias.json"
+            alias.symlink_to(fixture["verdict_path"].name)
+            common = {
+                "plan_tree_path": fixture["plan_tree_path"],
+                "custody_root": fixture["root"],
+                "runs_root": fixture["runs_root"],
+                "bracket_binding_path": fixture["bracket_path"],
+                "calibration_ledger_path": fixture["ledger_path"],
+                "aggregate_floor_artifact_path": fixture["floor_path"],
+                "output_dir": fixture["root"],
+            }
+            with self.assertRaisesRegex(
+                AnalysisManifestFinalizationError,
+                "analysis_finalization_attachment_invalid",
+            ):
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    whole_window_verdict_path=alias,
+                    **common,
+                )
+            directory = fixture["root"] / "not-a-file"
+            directory.mkdir()
+            with self.assertRaisesRegex(
+                AnalysisManifestFinalizationError,
+                "analysis_finalization_attachment_invalid",
+            ):
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    whole_window_verdict_path=directory,
+                    **common,
+                )
+
+            runs_alias = fixture["root"] / "runs-alias"
+            runs_alias.symlink_to(
+                fixture["runs_root"].relative_to(fixture["root"]),
+                target_is_directory=True,
+            )
+            bracket = json.loads(fixture["bracket_path"].read_text())
+            bracket["runs_root"] = str(runs_alias)
+            bracket["binding_digest"] = hashlib.sha256(
+                json.dumps(
+                    {
+                        key: value
+                        for key, value in bracket.items()
+                        if key != "binding_digest"
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest()
+            _write_json(fixture["bracket_path"], bracket)
+            with self.assertRaisesRegex(
+                AnalysisManifestFinalizationError,
+                "analysis_finalization_bracket_binding_mismatch",
+            ):
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    **common,
+                )
+
+    def test_realized_floor_selector_mismatch_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            floor = json.loads(fixture["floor_path"].read_text())
+            for cell in floor["cells"]:
+                cell["key"]["backend"] = "mock"
+            for group in floor["transport_groups"]:
+                group["backend"] = "mock"
+            self.assertEqual(validate_floor_artifact(floor), [])
+            _write_json(fixture["floor_path"], floor)
+            with self.assertRaisesRegex(
+                AnalysisManifestFinalizationError,
+                "analysis_finalization_floor_dependency_unsatisfied",
+            ):
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                )
 
 
 if __name__ == "__main__":
