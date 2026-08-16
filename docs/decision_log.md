@@ -9217,3 +9217,50 @@ author-pinned? Option (a) genuinely moves the trust root outside Ed but adds
 a server, app distribution, and a macOS-27 dependency — disproportionate to
 this WO, real for a stronger paper. The honest-contract fix lands regardless;
 this call only decides whether option (a) becomes a future work item.
+
+### WO-LAUNCH-BINDING F2 (lineage-locator) — mechanism ADOPTED + WO staged (magistrate, 2026-08-15; Sol design consult)
+
+Consult custodied: docs/process_traces/2026-08-15-launch-lineage-consult/
+(the ONE home for the 8-point authentication chain + schema). Resolves the
+F2 blocker: how a child collection/calibration writer receives the
+authenticated launch lineage WITHOUT argv/env.
+
+**Adopted mechanism (option c backed by a):** at settle,
+record_launch_lifecycle_event("settle") publishes a fixed root-local
+locator `<claim_runs_root>/.joulewise-launch-lineage.json` and
+`<bound_runs_root>/.joulewise-launch-lineage.json` (+ GNU sha256 sidecars),
+canonical/no-clobber/fsynced, never repaired; partial publication burns
+the attempt. Roots come from the consumed arm receipt's authenticated
+arm_context. Schema `joulewise.launch_lineage_locator.v1` (exact-key);
+CONSTANT basename (identities live in authenticated CONTENT, never the
+path — no scanning/"latest" ambiguity). Writers DERIVE the path from their
+own --runs-dir / --output-root.parent (calibration requires
+output_root.name == "instrument_validation") — no receipt path, token, or
+lineage JSON in child argv/env. Before any bundle/custody dir/provenance/
+slot claim the writer runs the consult's 8-point authentication (locator +
+consumption predecessor + pack digest/HEAD/IDs + start predecessor +
+handoff_token_sha256 without accessing the token + settle ordering + boot
+equality + config membership + runs-root match); reduce/mint reauthenticate
+the same. Fail-closed refusals REGISTERED under D-078 (append at
+implementation). Lineage receipt is SESSION/boot-bound (matches the arm
+capability lifetime), NOT R1 content-bound.
+
+**RESIDUAL (recorded):** a fixed authenticated locator is intentionally
+observable; it stops absent-lineage and wrong-session bypass but does NOT
+cryptographically prove each writer's Unix parent is the frozen chain. The
+existing fresh-root / campaign-lock / exact-membership / calibration-slot
+single-use gates cover ordinary/direct-invocation bypass. Hostile same-UID
+mid-window process injection is a LARGER contract (a frozen per-stage
+dispatcher minting one-use stage receipts via anonymous FD) — NOT smuggled
+into this mechanism; rule separately IF in scope (Ed risk-appetite, same
+family as the recorder-race + T-0-provenance trusted-operator calls).
+
+**WO-LAUNCH-BINDING STAGES (re-scoped):** (1) launcher core + verify_
+consumed_launch + the locator publication at settle + retire the public
+standalone consume CLI [impl/wo-launch-binding — the launcher core is the
+current WIP checkpoint]; (2) writer-side derivation + 8-point auth +
+stamping [after this adoption]; (3) reduce/mint downstream reauthentication
+gates; (4) successor-config launch_lineage_required flag [PHASE 2 — frozen
+packs can't be edited in place; lands with the successor-family freeze
+transaction under R1]. The full binding is contract-bearing → C-028
+gauntlet before merge.
