@@ -9624,7 +9624,7 @@ class GeneralizedMintTests(unittest.TestCase):
             ),
             self.assertRaisesRegex(ValueError, "launch_consumption_missing"),
         ):
-            generalized.mint_estimator.authenticate_mint_launch_lineage(
+            generalized.mint_estimator._authenticate_mint_launch_lineage(
                 attacked,
                 runs_root=Path("/synthetic/evidence"),
             )

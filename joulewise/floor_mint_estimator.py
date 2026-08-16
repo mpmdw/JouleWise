@@ -28,7 +28,6 @@ from joulewise.whole_window import (
 
 __all__ = [
     "selection_from_authenticated_spec",
-    "authenticate_mint_launch_lineage",
     "recompute_comparative_estimate",
     "bind_v2_floor_artifact_evidence",
 ]
@@ -306,7 +305,7 @@ def _full_spec_member_ids(spec: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(result)
 
 
-def authenticate_mint_launch_lineage(
+def _authenticate_mint_launch_lineage(
     component: Any,
     *,
     runs_root: Path,
@@ -360,7 +359,7 @@ def authenticate_mint_launch_lineage(
 
 # Preserve the review-pinned Stage 3 test seam while constructors use the
 # public spelling above.  Both names execute the same authentication gate.
-_authenticate_mint_launch_lineage = authenticate_mint_launch_lineage
+_authenticate_mint_launch_lineage = _authenticate_mint_launch_lineage
 
 
 def _comparative_layout(component: Any, core: Any) -> tuple[
@@ -455,7 +454,7 @@ def recompute_comparative_estimate(
 ) -> _ComparativeRecomputation:
     """Recompute one comparative cell from authenticated members and bytes."""
 
-    authenticate_mint_launch_lineage(
+    _authenticate_mint_launch_lineage(
         comparative_component,
         runs_root=Path(runs_root),
     )
@@ -582,7 +581,7 @@ def bind_v2_floor_artifact_evidence(
 ) -> Mapping[str, tuple[str, ...]]:
     """Preserve the pinned binder and add exact spec-selected v2 widths."""
 
-    authenticate_mint_launch_lineage(
+    _authenticate_mint_launch_lineage(
         comparative_component,
         runs_root=Path(runs_root),
     )

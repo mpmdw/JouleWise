@@ -1177,7 +1177,7 @@ def _authenticate_component(
         ),
     )
     try:
-        launch_lineage = floor_mint_estimator.authenticate_mint_launch_lineage(
+        launch_lineage = floor_mint_estimator._authenticate_mint_launch_lineage(
             component,
             runs_root=paths.evidence_root,
         )
