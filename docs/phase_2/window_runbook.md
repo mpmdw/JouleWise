@@ -963,10 +963,12 @@ arming; they do not authorize the live night.
    The terminal handback record must state:
 
    > I personally performed §5A and invoked the unmodified production CLI for
-   > E-4 through E-9 on the recorded boot; I did not create or edit any
+   > E-4 through E-9a on the recorded boot; I did not create or edit any
    > `arm_readiness.t0.inputs` file or substitute clock/execution functions;
    > E-7b remained under wrapper control until READY; launch followed
-   > successful author→ARM→verify→consume.
+   > successful E-9b authoring, E-9c ARM and verify, and my single E-10
+   > invocation of the sole reviewed launcher, which consumed the arm
+   > capability atomically — I ran no separate consume command.
 
    Bind that attestation to the operator identity, boot UUID, HEAD/tree/pack,
    all nine input hashes, and the arm/consumption receipts. This is the human
