@@ -1834,7 +1834,7 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     try:
         authenticated_launch = authenticate_bundle_launch_lineage(
             bundle_path,
-            require_completion=True,
+            require_completion=False,
         )
     except LaunchLineageError as exc:
         print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)

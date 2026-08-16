@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import joulewise.arm_readiness as arm_readiness
 from joulewise.arm_readiness import LaunchLineageError
 from joulewise.floor_extraction import extract_absolute_cell
 from joulewise.calibration_ledger import (
@@ -44,6 +45,8 @@ from joulewise.campaign_provenance import (
     load_authenticated_campaign_catalog,
 )
 from tests.test_calibration_bracketing import _fixture_snapshot
+from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 
 
 LOCAL_CROSSING = "clock_bound_exceeds_quarter_window"
@@ -960,6 +963,77 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
         (path / "metadata.json").write_text("{}\n", encoding="utf-8")
         return path
 
+    def _completed_launch(self) -> tuple[LaunchConsumptionV2Tests, dict]:
+        launch = LaunchConsumptionV2Tests()
+        launch.setUp()
+        self.addCleanup(launch.doCleanups)
+        consumption_path, settled = launch._settle()
+        with patch.object(
+            arm_readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            arm_readiness.record_launch_lifecycle_event(
+                launch.pack,
+                consumption_path,
+                "completion",
+            )
+        return launch, settled["launch_lineage"]
+
+    @staticmethod
+    def _write_authenticated_marker_bundle(
+        launch: LaunchConsumptionV2Tests,
+        lineage: dict,
+        bundle_id: str,
+    ) -> tuple[Path, dict]:
+        runs_root = Path(launch.arm["arm_context"]["claim_runs_root"])
+        bundle = runs_root / bundle_id
+        bundle.mkdir()
+        (bundle / "config.json").write_text(
+            json.dumps(
+                {"run_metadata": {"tags": ["launch_lineage_required"]}}
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        locator_path = runs_root / arm_readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        (bundle / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "extra": {
+                        "launch_lineage": lineage,
+                        "launch_lineage_locator_sha256": hashlib.sha256(
+                            locator_path.read_bytes()
+                        ).hexdigest(),
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return runs_root, {
+            "bundle_id": bundle_id,
+            "bundle_path": bundle_id,
+        }
+
+    @staticmethod
+    def _write_calibration_bracket(
+        root: Path,
+        lineage: dict,
+    ) -> dict:
+        bracket: dict[str, dict] = {}
+        for role in ("pre", "post"):
+            custody = root / f"calibration-{role}"
+            custody.mkdir()
+            raw = json.dumps({"launch_lineage": lineage}).encode("utf-8")
+            (custody / "instrument_evidence.json").write_bytes(raw)
+            bracket[role] = {
+                "relative_path": str(custody),
+                "evidence_sha256": hashlib.sha256(raw).hexdigest(),
+            }
+        bracket["pre"]["bracket_runs_root"] = str(root)
+        return bracket
+
     @classmethod
     def _write_neg8_corpus(
         cls,
@@ -1256,6 +1330,43 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
             ),
         )
         self.assertNotIn("launch_lineage", legacy)
+
+    def test_verdict_issuance_refuses_real_mismatched_bound_lineage(self) -> None:
+        launch, lineage = self._completed_launch()
+        runs_root, occurrence = self._write_authenticated_marker_bundle(
+            launch,
+            lineage,
+            "member",
+        )
+        bracket = self._write_calibration_bracket(runs_root, lineage)
+        other_launch, other_lineage = self._completed_launch()
+        pack_records = {
+            launch.pack.resolve(): launch.arm["pack"],
+            other_launch.pack.resolve(): other_launch.arm["pack"],
+        }
+        with patch.object(
+            arm_readiness,
+            "_pack_record",
+            side_effect=lambda root: pack_records[Path(root).resolve()],
+        ):
+            matching = build_evaluation_basis(
+                policy_sha256="d" * 64,
+                member_occurrences=[occurrence],
+                calibration_bracket=bracket,
+                drift_bound_artifact={"launch_lineage": lineage},
+            )
+            self.assertEqual(matching["launch_lineage"], lineage)
+
+            with self.assertRaisesRegex(
+                LaunchLineageError,
+                "members, calibrations, and bound",
+            ):
+                build_evaluation_basis(
+                    policy_sha256="d" * 64,
+                    member_occurrences=[occurrence],
+                    calibration_bracket=bracket,
+                    drift_bound_artifact={"launch_lineage": other_lineage},
+                )
 
 
 if __name__ == "__main__":

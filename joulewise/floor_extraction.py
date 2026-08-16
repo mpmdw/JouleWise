@@ -1610,14 +1610,23 @@ def validate_d117_mint_consumption_report(value: object) -> list[str]:
             errors.append(f"{cell_where}.members: must be an array")
             continue
         for member_index, member in enumerate(members):
+            member_where = f"{cell_where}.members[{member_index}]"
             errors.extend(
                 _d117_closed_keys(
                     member,
                     _D117_MINT_MEMBER_KEYS,
                     _D117_MINT_MEMBER_OPTIONAL_KEYS,
-                    f"{cell_where}.members[{member_index}]",
+                    member_where,
                 )
             )
+            if (
+                isinstance(member, Mapping)
+                and "launch_lineage" in member
+                and not isinstance(member["launch_lineage"], Mapping)
+            ):
+                errors.append(
+                    f"{member_where}.launch_lineage: must be an object"
+                )
             member_launch_lineages.append(
                 member.get("launch_lineage")
                 if isinstance(member, Mapping)

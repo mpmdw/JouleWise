@@ -2238,6 +2238,7 @@ class RunCampaignTests(unittest.TestCase):
             "admitted": True,
         }
         calibration_snapshot, _candidates = _fixture_snapshot([])
+        loaded_drift_bound = {"sentinel": "loaded-neg8-bound"}
 
         def passing_core_evaluation(evaluations, policy_binding, **_kwargs):
             return run_campaign_module._IdleAdmissionCoreEvaluation(
@@ -2300,6 +2301,16 @@ class RunCampaignTests(unittest.TestCase):
                     "_idle_admission_core_evaluation",
                     side_effect=passing_core_evaluation,
                 ) as core_evaluation,
+                patch.object(
+                    run_campaign_module,
+                    "load_neg8_drift_bound_artifact",
+                    return_value=loaded_drift_bound,
+                ),
+                patch.object(
+                    run_campaign_module,
+                    "build_evaluation_basis",
+                    wraps=run_campaign_module.build_evaluation_basis,
+                ) as basis_builder,
                 patch(
                     "joulewise.calibration_bracketing."
                     "load_calibration_acceptance_bound",
@@ -2328,6 +2339,11 @@ class RunCampaignTests(unittest.TestCase):
         ]
         self.assertEqual(len(whole), 1)
         core_evaluation.assert_called_once()
+        basis_builder.assert_called_once()
+        self.assertIs(
+            basis_builder.call_args.kwargs["drift_bound_artifact"],
+            loaded_drift_bound,
+        )
         self.assertEqual(whole[0]["status"], "passed")
         self.assertFalse(whole[0]["claim_licensing"])
         self.assertEqual(whole[0]["member_failures"], [])
@@ -7145,6 +7161,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         points: list[float] | None = None,
         *,
         derived_at_s: float | None = None,
+        launch_lineage: dict | None = None,
     ) -> dict:
         values = (
             points
@@ -7181,12 +7198,23 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 ),
                 "calibration_identity_sha256": "c" * 64,
             },
+            launch_lineage=launch_lineage,
         )
 
-    def _write_drift_bound(self, points: list[float] | None = None) -> Path:
+    def _write_drift_bound(
+        self,
+        points: list[float] | None = None,
+        *,
+        launch_lineage: dict | None = None,
+    ) -> Path:
         path = self.root / "neg8-drift-bound.json"
         path.write_text(
-            json.dumps(self._drift_bound(points), indent=2, sort_keys=True) + "\n",
+            json.dumps(
+                self._drift_bound(points, launch_lineage=launch_lineage),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
             encoding="utf-8",
         )
         return path
@@ -8727,6 +8755,46 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             + "\n"
         )
 
+    def _install_passing_whole_window_verdict_fixture(
+        self,
+        *,
+        bound_lineage: dict,
+    ):
+        binding = self._binding()
+        drift_bound_path = self._write_drift_bound(
+            launch_lineage=bound_lineage
+        )
+        manifest_members = []
+        for bundle_id, gross_energy_j, position in (
+            ("p2-neg8-reference-start__r1", 8.0, "start"),
+            ("p2-neg8-reference-end__r1", 8.04, "end"),
+        ):
+            member = self._member(
+                bundle_id,
+                records=_clean_idle_records(),
+                gross_energy_j=gross_energy_j,
+                neg8_position=position,
+            )
+            manifest_members.append((bundle_id, position, member))
+            (member.bundle_path / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded", **member.summary}) + "\n"
+            )
+            (member.bundle_path / "metadata.json").write_text(
+                json.dumps(member.metadata) + "\n"
+            )
+        self._install_whole_window_manifest(binding, manifest_members)
+        return binding, run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+                "--neg8-drift-bound",
+                str(drift_bound_path),
+            ]
+        )
+
     def _install_retry_occurrence_manifests(
         self, binding, bundle_roles
     ) -> str:
@@ -9026,56 +9094,37 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         snapshot_loader.assert_called_once_with(str(custody_store))
 
     def test_whole_window_cli_uses_campaign_membership_and_strict_validation(self) -> None:
-        binding = self._binding()
-        drift_bound_path = self._write_drift_bound()
-        bundle_ids = [
-            "p2-neg8-reference-start__r1",
-            "p2-neg8-reference-end__r1",
-        ]
-        manifest_members = []
-        for bundle_id, gross_energy_j, position in (
-            ("p2-neg8-reference-start__r1", 8.0, "start"),
-            ("p2-neg8-reference-end__r1", 8.04, "end"),
-        ):
-            member = self._member(
-                bundle_id,
-                records=_clean_idle_records(),
-                gross_energy_j=gross_energy_j,
-                neg8_position=position,
-            )
-            manifest_members.append((bundle_id, position, member))
-            (member.bundle_path / "summary_metrics.json").write_text(
-                json.dumps({"status": "succeeded", **member.summary}) + "\n"
-            )
-            (member.bundle_path / "metadata.json").write_text(
-                json.dumps(member.metadata) + "\n"
-            )
-        self._install_whole_window_manifest(binding, manifest_members)
-
-        args = run_campaign_module.parse_args(
-            [
-                "--whole-window-verdict",
-                "--runs-dir",
-                str(self.root),
-                "--campaign-policy",
-                str(binding.path),
-                "--neg8-drift-bound",
-                str(drift_bound_path),
-            ]
+        lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
+        _binding, args = self._install_passing_whole_window_verdict_fixture(
+            bound_lineage=lineage
         )
+        calibration_bracket = {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "b_fiducial_s": 0.02,
+            "pre": {"bracket_runs_root": str(self.root)},
+            "post": {},
+        }
         with (
             patch.object(run_campaign_module, "validate_bundle", return_value=[]),
             patch.object(
                 run_campaign_module,
                 "calibration_bracket_for_bundles",
-                return_value=(
-                    {
-                        "schema_version": "joulewise.instrument_calibration_bracket.v1",
-                        "status": "passed",
-                        "b_fiducial_s": 0.02,
-                    },
-                    (),
-                ),
+                return_value=(calibration_bracket, ()),
+            ),
+            patch(
+                "joulewise.whole_window.authenticate_launch_lineage",
+                side_effect=lambda value, **_kwargs: {
+                    "launch_lineage": dict(value)
+                },
+            ),
+            patch(
+                "joulewise.whole_window._authenticated_bundle_launch_lineage_set",
+                return_value=lineage,
+            ),
+            patch(
+                "joulewise.whole_window._calibration_launch_lineages",
+                return_value=(lineage, lineage),
             ),
             patch.object(
                 run_campaign_module,
@@ -9108,6 +9157,55 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             verdict["evaluation_basis"]["consumption_semantics_id"],
             MINTED_CONSUMPTION_SEMANTICS_ID,
         )
+        self.assertEqual(verdict["evaluation_basis"]["launch_lineage"], lineage)
+
+    def test_whole_window_verdict_refuses_mismatched_bound_lineage(self) -> None:
+        member_lineage = {
+            "schema_version": "test-lineage",
+            "plan_id": "plan-1",
+        }
+        bound_lineage = {
+            "schema_version": "test-lineage",
+            "plan_id": "plan-2",
+        }
+        _binding, args = self._install_passing_whole_window_verdict_fixture(
+            bound_lineage=bound_lineage
+        )
+        calibration_bracket = {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "b_fiducial_s": 0.02,
+            "pre": {"bracket_runs_root": str(self.root)},
+            "post": {},
+        }
+        with (
+            patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(calibration_bracket, ()),
+            ),
+            patch(
+                "joulewise.whole_window.authenticate_launch_lineage",
+                side_effect=lambda value, **_kwargs: {
+                    "launch_lineage": dict(value)
+                },
+            ),
+            patch(
+                "joulewise.whole_window._authenticated_bundle_launch_lineage_set",
+                return_value=member_lineage,
+            ),
+            patch(
+                "joulewise.whole_window._calibration_launch_lineages",
+                return_value=(member_lineage, member_lineage),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                run_campaign_module.LaunchLineageError,
+                "members, calibrations, and bound",
+            ):
+                run_campaign_module.run_whole_window_verdict(args)
+        self.assertFalse((self.root / "campaign_log.jsonl").exists())
 
     def test_duplicate_occurrence_without_supersession_still_refuses(self) -> None:
         binding = self._binding()

@@ -2147,6 +2147,7 @@ def build_evaluation_basis(
     policy_sha256: str,
     member_occurrences: Sequence[Mapping[str, Any]],
     calibration_bracket: Mapping[str, Any] | None,
+    drift_bound_artifact: Mapping[str, Any] | None = None,
     consumption_semantics_id: str = MINTED_CONSUMPTION_SEMANTICS_ID,
     consumption_provenance: Mapping[str, Mapping[str, Any]] | None = None,
     salvage_dangler_exclusion: Mapping[str, Any] | None = None,
@@ -2208,9 +2209,9 @@ def build_evaluation_basis(
             launch_lineage = _authenticate_whole_window_launch_sources(
                 member_lineage,
                 calibration_bracket=calibration_bracket,
-                drift_bound_artifact=None,
+                drift_bound_artifact=drift_bound_artifact,
                 require_completion=True,
-                require_bound=False,
+                require_bound=True,
             )
     payload = {
         "schema_version": WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA,

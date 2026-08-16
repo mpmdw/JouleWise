@@ -9,6 +9,7 @@ these runs are instant and deterministic.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -21,6 +22,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import joulewise.arm_readiness as arm_readiness
 from joulewise.adapters.powermetrics import (
     RAW_IDLE_NAME,
     RAW_SAMPLES_NAME,
@@ -44,6 +46,7 @@ from tests.test_powermetrics import (
     fixture_documents,
     rebased_documents,
 )
+from tests.test_arm_readiness import LaunchConsumptionV2Tests
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -1521,6 +1524,36 @@ class ReduceVerbTests(CliRunTestCase):
         self.assertEqual(exit_code, 0)
         return self.bundle_path_from_line(out.splitlines()[0])
 
+    def make_settled_launch_bundle(self, run_id: str) -> tuple[Path, dict]:
+        """Use the real consume/start/settle writers to stamp one bundle."""
+
+        launch = LaunchConsumptionV2Tests()
+        launch.setUp()
+        self.addCleanup(launch.doCleanups)
+        _consumption_path, settled = launch._settle()
+        lineage = settled["launch_lineage"]
+        runs_root = Path(launch.arm["arm_context"]["claim_runs_root"])
+        bundle = self.make_bundle(run_id)
+        bundle = bundle.rename(runs_root / bundle.name)
+
+        config = json.loads((bundle / "config.json").read_text())
+        config["run_metadata"]["tags"].append("launch_lineage_required")
+        (bundle / "config.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n"
+        )
+        locator_path = runs_root / arm_readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["extra"] = {
+            "launch_lineage": lineage,
+            "launch_lineage_locator_sha256": hashlib.sha256(
+                locator_path.read_bytes()
+            ).hexdigest(),
+        }
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
+        return bundle, lineage
+
     def test_reduce_rederives_identical_summary_exit_0(self) -> None:
         bundle = self.make_bundle("reduce-identical")
         output_path = self.tmp / "reduce-identical.rereduced.json"
@@ -1560,29 +1593,50 @@ class ReduceVerbTests(CliRunTestCase):
         reducer.assert_not_called()
         self.assertFalse(output_path.exists())
 
-    def test_marker_reduce_carries_full_authenticated_lineage(self) -> None:
-        bundle = self.make_bundle("reduce-marker-authenticated")
-        output_path = self.tmp / "marker-authenticated.rereduced.json"
-        config = json.loads((bundle / "config.json").read_text())
-        config["run_metadata"]["tags"].append("launch_lineage_required")
-        (bundle / "config.json").write_text(
-            json.dumps(config, indent=2, sort_keys=True) + "\n"
+    def test_settled_marker_reduce_before_completion_carries_full_lineage(
+        self,
+    ) -> None:
+        bundle, lineage = self.make_settled_launch_bundle(
+            "reduce-marker-authenticated"
         )
-        lineage = self.launch_lineage()
-
-        with patch(
-            "joulewise.cli.authenticate_bundle_launch_lineage",
-            return_value={"launch_lineage": lineage},
-        ):
-            exit_code, _out, err = _run(
-                ["reduce", str(bundle), "--output", str(output_path)]
-            )
+        output_path = self.tmp / "marker-authenticated.rereduced.json"
+        exit_code, _out, err = _run(
+            ["reduce", str(bundle), "--output", str(output_path)]
+        )
 
         self.assertEqual(exit_code, 0, err)
         self.assertEqual(
             json.loads(output_path.read_text())["launch_lineage"],
             lineage,
         )
+
+    def test_marker_reduce_still_refuses_missing_consumption_start_or_settle(
+        self,
+    ) -> None:
+        for receipt_name, expected_code in (
+            ("consumption", "launch_consumption_missing"),
+            ("start", "launch_lifecycle_incomplete"),
+            ("settle", "launch_lifecycle_incomplete"),
+        ):
+            with self.subTest(receipt=receipt_name):
+                bundle, lineage = self.make_settled_launch_bundle(
+                    f"reduce-marker-missing-{receipt_name}"
+                )
+                receipt_path = Path(lineage[receipt_name]["path"])
+                receipt_path.rename(
+                    receipt_path.with_name(receipt_path.name + ".absent")
+                )
+                output_path = self.tmp / f"missing-{receipt_name}.rereduced.json"
+
+                with patch("joulewise.cli.reduce_bundle") as reducer:
+                    exit_code, _out, err = _run(
+                        ["reduce", str(bundle), "--output", str(output_path)]
+                    )
+
+                self.assertEqual(exit_code, 2)
+                self.assertIn(expected_code, err)
+                reducer.assert_not_called()
+                self.assertFalse(output_path.exists())
 
     def test_reduce_corrupt_metadata_exit_3_structured_summary(self) -> None:
         bundle = self.make_bundle("reduce-corrupt")

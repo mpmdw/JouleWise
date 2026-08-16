@@ -5676,6 +5676,7 @@ def _run_whole_window_verdict_locked(
             if isinstance(core.get("instrument_calibration_bracket"), dict)
             else None
         ),
+        drift_bound_artifact=neg8_drift_bound,
         consumption_semantics_id=consumption_semantics_id,
         consumption_provenance=consumption_provenance,
         salvage_dangler_exclusion=membership.salvage_dangler_exclusion,
@@ -7194,6 +7195,7 @@ def run_axi_spec_campaign(
                         )
                         else None
                     ),
+                    drift_bound_artifact=neg8_drift_bound,
                 ),
                 "campaign_policy": policy_binding.to_metadata(),
                 "bundle_ids": [row.bundle_id for row in selected_evaluations],

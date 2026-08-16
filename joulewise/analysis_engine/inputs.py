@@ -36,6 +36,7 @@ from joulewise.analysis_manifest_v3 import (
 from joulewise.arm_readiness import (
     LaunchLineageError,
     authenticate_bundle_launch_lineage,
+    authenticate_launch_lineage,
 )
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.campaign_provenance import (
@@ -882,6 +883,28 @@ def authenticate_floor_artifact_bytes(
         raise AnalysisInputError(
             "floor artifact bytes artifact_id does not match bound artifact_id"
         )
+    provenance = value.get("provenance")
+    stored_launch_lineage = (
+        provenance.get("launch_lineage")
+        if isinstance(provenance, Mapping)
+        else None
+    )
+    if isinstance(stored_launch_lineage, Mapping):
+        # A minted carrier is metadata, not authority. Claim-bearing admission
+        # independently reopens consumption/start/settle/completion; consumers
+        # without those receipts must refuse rather than trust copied digests.
+        try:
+            authenticated_launch = authenticate_launch_lineage(
+                stored_launch_lineage,
+                require_completion=True,
+            )
+        except LaunchLineageError as exc:
+            raise AnalysisInputError(f"{exc.reason_code}: {exc}") from exc
+        if authenticated_launch.get("launch_lineage") != stored_launch_lineage:
+            raise AnalysisInputError(
+                "launch_lineage_conflict: floor artifact lineage differs from "
+                "directly authenticated receipts"
+            )
     root_ids = frozenset(
         root_id
         for cell in value.get("cells", [])
