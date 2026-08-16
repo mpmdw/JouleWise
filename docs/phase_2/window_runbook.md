@@ -864,6 +864,19 @@ arming; they do not authorize the live night.
    and stderr, and publishes one no-clobber canonical capture. Do not run the
    wrapped command separately.
 
+   This is a production-interface and ceremony rule, not independent producer
+   attestation. When faithfully invoked, the wrapper derives the commands,
+   timestamps, identities, and digests; the author authenticates canonical
+   bytes, same-boot freshness/order, and fresh current-state probes. Direct
+   JSON authorship, modified library invocation, clock/execution substitution,
+   or edits to `arm_readiness.t0.inputs` violate procedure but are not
+   mechanically detectable in v1. T-0 capture provenance is
+   **TRUSTED-OPERATOR**: deliberate operator fabrication is not defended
+   against. The real binding to a real quiet window is Ed's human §5A tap, the
+   terminal-review attestation, and the single-operator assumption. The
+   terminal-review commit attests the reviewed tree and pack, not runtime
+   capture provenance.
+
    ```sh
    WINDOW_PLAN_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness/window-plan
    . "$WINDOW_PLAN_ROOT/window.env"
@@ -946,6 +959,19 @@ arming; they do not authorize the live night.
    call, or existing output path refuses. After E-9, the private input
    namespace contains exactly the six captures plus `clock-attestation.json`,
    `arm-context.json`, and `launch-manifest.json`.
+
+   The terminal handback record must state:
+
+   > I personally performed §5A and invoked the unmodified production CLI for
+   > E-4 through E-9 on the recorded boot; I did not create or edit any
+   > `arm_readiness.t0.inputs` file or substitute clock/execution functions;
+   > E-7b remained under wrapper control until READY; launch followed
+   > successful author→ARM→verify→consume.
+
+   Bind that attestation to the operator identity, boot UUID, HEAD/tree/pack,
+   all nine input hashes, and the arm/consumption receipts. This is the human
+   record of the trusted-operator ceremony, not mechanically independent
+   producer attestation.
 
    Do not look for a visible `ready_to_arm` field: the enforcing checks are
    internal to reservation and writer, and no diagnostic word (`clean`,

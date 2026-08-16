@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import shutil
@@ -128,7 +129,7 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
         ):
             for step_id in capture.STEP_ORDER:
-                result = capture.capture_step(
+                result = capture._capture_step_for_test(
                     step_id,
                     pack,
                     custody,
@@ -222,7 +223,7 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
             self.assertRaises(capture.CaptureT0Error) as caught,
         ):
-            capture.capture_step(
+            capture._capture_step_for_test(
                 "clock-disable",
                 pack,
                 custody,
@@ -300,7 +301,7 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
             self.assertRaises(capture.CaptureT0Error) as invalid,
         ):
-            capture.capture_step(
+            capture._capture_step_for_test(
                 "ledger-readiness",
                 pack,
                 custody,
@@ -324,7 +325,7 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
             self.assertRaises(capture.CaptureT0Error) as sequence,
         ):
-            capture.capture_step(
+            capture._capture_step_for_test(
                 "ledger-reservation",
                 pack,
                 custody,
@@ -384,7 +385,7 @@ class CaptureT0StepTests(unittest.TestCase):
                 return_value=TEST_BOOT_SESSION_ID,
             ),
         ):
-            result = capture.capture_step(
+            result = capture._capture_step_for_test(
                 "clock-prior-state",
                 pack,
                 custody,
@@ -500,7 +501,7 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
             self.assertRaises(capture.CaptureT0Error) as caught,
         ):
-            capture.capture_step(
+            capture._capture_step_for_test(
                 "clock-prior-state",
                 pack,
                 custody,
@@ -521,6 +522,26 @@ class CaptureT0StepTests(unittest.TestCase):
         for reason_code in capture.CAPTURE_REASON_CODES:
             self.assertTrue(reason_code.startswith("evidence_author_t0_capture_"))
             self.assertEqual(decision_log.count(f"`{reason_code}`"), 1)
+
+    def test_public_capture_surface_has_no_dependency_injection(self) -> None:
+        self.assertEqual(
+            tuple(inspect.signature(capture.capture_step).parameters),
+            ("step_id", "pack_root", "custody_root", "window_plan_root"),
+        )
+        parser_destinations = {
+            action.dest for action in capture._parser()._actions
+        }
+        for name in ("prompt", "execute", "monotonic_ns", "utc_now"):
+            with self.subTest(name=name):
+                self.assertNotIn(name, parser_destinations)
+                with self.assertRaises(TypeError):
+                    capture.capture_step(
+                        "unused",
+                        Path("unused"),
+                        Path("unused"),
+                        Path("unused"),
+                        **{name: object()},
+                    )
 
     def test_terminal_review_trailers_are_required_before_execution(self) -> None:
         with (

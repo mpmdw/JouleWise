@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Execute and byte-canonically capture one governed D-134 T-0 E-step."""
+"""Execute and byte-canonically capture one governed D-134 T-0 E-step.
+
+The production CLI is a trusted-operator ceremony interface, not independent
+producer attestation.  When faithfully invoked it derives commands, clock
+values, identities, and canonical captures without accepting those values from
+the operator; v1 does not defend against deliberate operator fabrication.
+"""
 
 from __future__ import annotations
 
@@ -868,7 +874,7 @@ def _validate_result(
             )
 
 
-def capture_step(
+def _capture_step_with_dependencies(
     step_id: str,
     pack_root: Path | str,
     custody_root: Path | str,
@@ -954,6 +960,51 @@ def capture_step(
             else "author_arm_evidence_t0"
         ),
     }
+
+
+def _capture_step_for_test(
+    step_id: str,
+    pack_root: Path | str,
+    custody_root: Path | str,
+    window_plan_root: Path | str,
+    *,
+    prompt: Callable[[str], str] = input,
+    execute: Callable[..., subprocess.CompletedProcess[bytes]] = _execute,
+    monotonic_ns: Callable[[], int] = time.monotonic_ns,
+    utc_now: Callable[[], str] = readiness._utc_now,
+) -> dict[str, object]:
+    """Private test hook for deterministic capture dependencies."""
+
+    return _capture_step_with_dependencies(
+        step_id,
+        pack_root,
+        custody_root,
+        window_plan_root,
+        prompt=prompt,
+        execute=execute,
+        monotonic_ns=monotonic_ns,
+        utc_now=utc_now,
+    )
+
+
+def capture_step(
+    step_id: str,
+    pack_root: Path | str,
+    custody_root: Path | str,
+    window_plan_root: Path | str,
+) -> dict[str, object]:
+    """Run one step through the non-injectable production interface."""
+
+    return _capture_step_with_dependencies(
+        step_id,
+        pack_root,
+        custody_root,
+        window_plan_root,
+        prompt=input,
+        execute=_execute,
+        monotonic_ns=time.monotonic_ns,
+        utc_now=readiness._utc_now,
+    )
 
 
 class _ArgumentParser(argparse.ArgumentParser):

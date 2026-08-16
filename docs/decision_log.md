@@ -9259,6 +9259,31 @@ a server, app distribution, and a macOS-27 dependency — disproportionate to
 this WO, real for a stronger paper. The honest-contract fix lands regardless;
 this call only decides whether option (a) becomes a future work item.
 
+### D-134 amendment — 2026-08-15: T-0 derive-never-enter is a production ceremony, not producer attestation
+
+This amendment supersedes D-134 clause 6 with the ruling's honest production
+contract:
+
+> Derive-never-enter is a production-interface and ceremony rule, not
+> independent producer attestation. When faithfully invoked, the production
+> CLI derives row values, command captures, timestamps, identities, and
+> digests; operators supply only paths and registered irreducible
+> observations. Consumers authenticate canonical bytes, same-boot
+> freshness/order, and fresh current-state probes, but cannot prove that the
+> T-0 input bytes originated in the shipped wrapper. Deliberate fabrication by
+> the trusted operator/authority is outside the v1 single-authority threat
+> model.
+
+The previously claimed property that a human cannot hand-produce acceptable
+historical T-0 capture bytes is **NOT enforced**. Removing production clock
+and execution injection parameters is misuse resistance, not a security
+boundary or independent proof of producer origin.
+
+**REGISTERED LIMITATION (v1):** T-0 capture provenance is TRUSTED-OPERATOR —
+deliberate fabrication by the operator is not defended against; the real
+binding to a real quiet window is the human §5A tap + the terminal-review
+attestation + the single-operator assumption, all STATED as the limitation.
+
 ### WO-LAUNCH-BINDING F2 (lineage-locator) — mechanism ADOPTED + WO staged (magistrate, 2026-08-15; Sol design consult)
 
 Consult custodied: docs/process_traces/2026-08-15-launch-lineage-consult/
