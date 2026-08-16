@@ -189,6 +189,19 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         ]
         self._rewrite_arm()
 
+    def _launch_recipe_artifact_paths(self) -> dict[str, Path]:
+        item = self.arm["evidence"][0]
+        receipt = self.custody / self.pack.name / str(item["path"])
+        return {
+            "receipt": receipt,
+            "sidecar": receipt.with_name(f"{receipt.name}.sha256"),
+            "source": (
+                self.custody
+                / self.pack.name
+                / "arm_readiness.t0.sources/t0-single-launch-capability.json"
+            ),
+        }
+
     def _consumer_inputs(self, token: bytes = b"t" * 32) -> dict[str, object]:
         arm_raw = self.arm_path.read_bytes()
         manifest_raw = self.manifest_path.read_bytes()
@@ -847,6 +860,92 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                     fixture._assert_current_context_binding_refusal()
             finally:
                 fixture.doCleanups()
+
+    def test_launch_recipe_reconciliation_reads_each_artifact_once(self) -> None:
+        targets = {
+            path.resolve(): name
+            for name, path in self._launch_recipe_artifact_paths().items()
+        }
+        read_counts = {name: 0 for name in targets.values()}
+        real_open = Path.open
+
+        def tracking_open(path: Path, *args: object, **kwargs: object):
+            resolved = path.resolve(strict=False)
+            if resolved in targets:
+                read_counts[targets[resolved]] += 1
+            return real_open(path, *args, **kwargs)
+
+        inputs = self._consumer_inputs()
+        with mock.patch.object(Path, "open", new=tracking_open):
+            result = self._invoke_consumer(inputs)
+        self.assertEqual(result["status"], "CONSUMED")
+        self.assertEqual(read_counts, {"receipt": 1, "sidecar": 1, "source": 1})
+
+    def test_launch_recipe_oversize_refuses_before_content_read(self) -> None:
+        cases = {
+            "receipt": readiness._LAUNCH_BINDING_RECEIPT_MAX_BYTES,
+            "sidecar": readiness._LAUNCH_BINDING_SIDECAR_MAX_BYTES,
+            "source": readiness._LAUNCH_BINDING_SOURCE_MAX_BYTES,
+        }
+        for name, cap in cases.items():
+            fixture = LaunchConsumptionV2Tests(
+                methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            )
+            fixture.setUp()
+            try:
+                target = fixture._launch_recipe_artifact_paths()[name]
+                with target.open("r+b") as handle:
+                    handle.truncate(cap + 1)
+                inputs = fixture._consumer_inputs()
+                content_reads = 0
+                real_open = Path.open
+
+                class CountingHandle:
+                    def __init__(self, handle: object) -> None:
+                        self.handle = handle
+
+                    def __enter__(self) -> "CountingHandle":
+                        return self
+
+                    def __exit__(self, *args: object) -> None:
+                        self.handle.close()
+
+                    def fileno(self) -> int:
+                        return self.handle.fileno()
+
+                    def read(self, size: int = -1) -> bytes:
+                        nonlocal content_reads
+                        content_reads += 1
+                        return self.handle.read(size)
+
+                def tracking_open(path: Path, *args: object, **kwargs: object):
+                    handle = real_open(path, *args, **kwargs)
+                    if path.resolve(strict=False) == target.resolve(strict=False):
+                        return CountingHandle(handle)
+                    return handle
+
+                with self.subTest(artifact=name), mock.patch.object(
+                    Path, "open", new=tracking_open
+                ):
+                    with self.assertRaises(readiness.LaunchLineageError) as caught:
+                        fixture._invoke_consumer(inputs)
+                self.assertEqual(
+                    caught.exception.reason_code, "launch_binding_mismatch"
+                )
+                self.assertEqual(content_reads, 0)
+            finally:
+                fixture.doCleanups()
+
+    def test_launch_recipe_memory_error_is_normalized(self) -> None:
+        inputs = self._consumer_inputs()
+        with mock.patch.object(
+            readiness,
+            "_read_launch_binding_artifact",
+            side_effect=MemoryError("injected allocation refusal"),
+        ):
+            with self.assertRaises(readiness.LaunchLineageError) as caught:
+                self._invoke_consumer(inputs)
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
 
     def test_private_consumer_requires_complete_matching_context_before_write(
         self,

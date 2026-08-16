@@ -62,6 +62,12 @@ CONTRACT_ID = "D-134"
 ROW_REGISTRY_RELATIVE_PATH = Path("configs/arm_readiness/d117_row_registry_v1.json")
 _T0_EVIDENCE_SOURCE_SCHEMA = "joulewise.arm_readiness_t0_evidence_source.v1"
 _T0_INPUT_DIRECTORY = "arm_readiness.t0.inputs"
+# Launch-recipe receipts and sources are canonical JSON records measured in
+# kilobytes.  Freeze generous ceilings here so reconciliation never slurps an
+# attacker-sized artifact before its digest can fail closed.
+_LAUNCH_BINDING_RECEIPT_MAX_BYTES = 1024 * 1024
+_LAUNCH_BINDING_SIDECAR_MAX_BYTES = 4 * 1024
+_LAUNCH_BINDING_SOURCE_MAX_BYTES = 1024 * 1024
 _T0_LAUNCH_SOURCE_KEYS = frozenset(
     {
         "schema_version",
@@ -2696,6 +2702,7 @@ def _authenticate_generic_evidence_item(
     expected_head_commit: str | None = None,
     expected_boot_session_id: str | None = None,
     now_monotonic_ns: int | None = None,
+    launch_binding_cache: dict[Path, bytes] | None = None,
 ) -> Mapping[str, Any]:
     _validate_evidence_item(item, "evidence item")
     if item["schema_version"] != EVIDENCE_RECEIPT_SCHEMA:
@@ -2712,8 +2719,22 @@ def _authenticate_generic_evidence_item(
         "evidence item.path",
     )
     try:
-        raw = path.read_bytes()
-        sidecar = path.with_name(f"{path.name}.sha256").read_bytes()
+        if launch_binding_cache is None:
+            raw = path.read_bytes()
+            sidecar = path.with_name(f"{path.name}.sha256").read_bytes()
+        else:
+            raw = _read_launch_binding_artifact(
+                path,
+                max_bytes=_LAUNCH_BINDING_RECEIPT_MAX_BYTES,
+                label="launch-recipe evidence receipt",
+                cache=launch_binding_cache,
+            )
+            sidecar = _read_launch_binding_artifact(
+                path.with_name(f"{path.name}.sha256"),
+                max_bytes=_LAUNCH_BINDING_SIDECAR_MAX_BYTES,
+                label="launch-recipe evidence sidecar",
+                cache=launch_binding_cache,
+            )
     except OSError as exc:
         raise ArmReadinessError(
             "readiness_evidence_unreadable", f"cannot read evidence item: {exc}"
@@ -2777,7 +2798,15 @@ def _authenticate_generic_evidence_item(
             "evidence fact source_path",
         )
         try:
-            source_raw = source_path.read_bytes()
+            if launch_binding_cache is None:
+                source_raw = source_path.read_bytes()
+            else:
+                source_raw = _read_launch_binding_artifact(
+                    source_path,
+                    max_bytes=_LAUNCH_BINDING_SOURCE_MAX_BYTES,
+                    label="launch-recipe T-0 source",
+                    cache=launch_binding_cache,
+                )
         except OSError as exc:
             raise ArmReadinessError(
                 "readiness_evidence_unreadable",
@@ -4569,6 +4598,48 @@ def _launch_argv_matches(
     )
 
 
+def _read_launch_binding_artifact(
+    path: Path,
+    *,
+    max_bytes: int,
+    label: str,
+    cache: dict[Path, bytes],
+) -> bytes:
+    """Read one reconciliation artifact once, with a fixed memory ceiling."""
+
+    cached = cache.get(path)
+    if cached is not None:
+        return cached
+    try:
+        with path.open("rb") as handle:
+            opened = os.fstat(handle.fileno())
+            if not stat.S_ISREG(opened.st_mode):
+                raise LaunchLineageError(
+                    "launch_binding_mismatch",
+                    f"{label} is not a regular file: {path}",
+                )
+            if opened.st_size > max_bytes:
+                raise LaunchLineageError(
+                    "launch_binding_mismatch",
+                    f"{label} exceeds the frozen {max_bytes}-byte limit: {path}",
+                )
+            raw = handle.read(max_bytes + 1)
+    except LaunchLineageError:
+        raise
+    except (MemoryError, OSError) as exc:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"{label} is unavailable within its frozen byte limit: {path}: {exc}",
+        ) from exc
+    if len(raw) > max_bytes:
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            f"{label} exceeds the frozen {max_bytes}-byte limit: {path}",
+        )
+    cache[path] = raw
+    return raw
+
+
 def _attested_launch_artifact_references(
     pack_root: Path,
     custody_pack_root: Path,
@@ -4577,6 +4648,7 @@ def _attested_launch_artifact_references(
     """Resolve the digest-bound T-0 LAUNCH_RECIPE input identities."""
 
     try:
+        launch_binding_cache: dict[Path, bytes] = {}
         candidates: list[Mapping[str, Any]] = []
         for item in arm_receipt["evidence"]:
             if (
@@ -4591,6 +4663,7 @@ def _attested_launch_artifact_references(
                 expected_pack_sha256=arm_receipt["pack"]["pack_sha256"],
                 expected_head_commit=arm_receipt["reviewed_main"]["head_commit"],
                 expected_boot_session_id=arm_receipt["boot_session_id"],
+                launch_binding_cache=launch_binding_cache,
             )
             if _predicate_passes(
                 evidence, "t0.single_launch_capability.v1"
@@ -4611,7 +4684,7 @@ def _attested_launch_artifact_references(
             fact["source_path"],
             "launch-recipe T-0 source_path",
         )
-        source_raw = source_path.read_bytes()
+        source_raw = launch_binding_cache[source_path]
         if sha256_bytes(source_raw) != fact["source_sha256"]:
             raise ValueError("launch-recipe T-0 source digest changed")
         source = parse_json_bytes(source_raw, require_canonical=True)
@@ -4674,6 +4747,7 @@ def _attested_launch_artifact_references(
     except (
         ArmReadinessError,
         KeyError,
+        MemoryError,
         OSError,
         RuntimeError,
         TypeError,
