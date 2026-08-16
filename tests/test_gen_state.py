@@ -31,7 +31,7 @@ EXPECTED_IDS = {
     "WO-LAUNCH-BINDING", "WO-CONSUMPTION-EDGE",
     "WO-CENSUS-SEMANTICS",
     "WO-DETECT-PULSES-BUDGET", "WO-L2-REAUDIT",
-    "WO-RECORDER-GRANT-IDENTITY",
+    "WO-RECORDER-GRANT-IDENTITY", "WO-PROOF-RUNNABILITY-REPAIR",
     "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
     "P2-047A", "P2-048", "P2-050", "TOOL-01",
@@ -269,14 +269,15 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_73(self):
+    def test_exact_live_id_set(self):
         # The prior 67-row live set loses landed U11/FCM and R3-retired
         # P2-006, then gains three D-117 windows and seven Phase-1 work
         # orders (67 - 3 + 10 = 74); the 2026-08-15 refresh retires merged
         # WO-T0-PRODUCER (#152) and WO-MARGIN-RECORDER-AUTHZ (#151) and adds
-        # WO-RECORDER-GRANT-IDENTITY: 74 - 2 + 1 = 73 exact live records.
+        # WO-RECORDER-GRANT-IDENTITY and (2026-08-16) the proof-runnability
+        # repair: 74 - 2 + 2 = 74 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 73)
+        self.assertEqual(len(self.tasks), 74)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

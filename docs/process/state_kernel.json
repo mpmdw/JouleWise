@@ -3285,6 +3285,46 @@
       "status_note": "Council Phase 1 parallel contract-bearing work; it changes the operator sequence and therefore retains the full council gate.",
       "stop_card": null
     },
+    "WO-PROOF-RUNNABILITY-REPAIR": {
+      "acceptance": {
+        "evidence": [
+          "The decisive-proof fixtures build at a current-main head (the STACK_IDENTITY_DOMAIN drift and any sibling drift repaired)",
+          "The full 22-leg matrix runs green on hosted runners at that head",
+          "The repair passed the proof-semantics trust gauntlet (proof-equivalence certified, not assumed)",
+          "The same change restores automatic push/pull_request triggering"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-PROOF-RUNNABILITY-REPAIR/acceptance",
+          "label": "WO-PROOF-RUNNABILITY-REPAIR acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The decisive proof matrix is runnable and green at current main under the trust gauntlet, and automatic triggering is restored."
+      },
+      "authority": {
+        "label": "D-130 closure addendum 2026-08-16 (automatic triggering deferred on fixture drift)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "WO-CI-RESTRUCTURE registration: proof-semantics work carries the full trust gauntlet",
+            "path": "TASK_QUEUE.md"
+          },
+          "rule": "The decisive-proof tests are PROOF-SEMANTICS: no drive-by symbol rename without the D-118/D-121 trust gauntlet and certified proof-equivalence; a leg contradiction (as opposed to setup drift) is an automatic stop signal and cold gate"
+        }
+      ],
+      "flags": [],
+      "goal": "Repair the decisive-proof fixture drift against current main under the trust gauntlet and restore the workflow's automatic triggering",
+      "id": "WO-PROOF-RUNNABILITY-REPAIR",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 62,
+      "status": "queued",
+      "status_note": "Registered 2026-08-16 when the restored triggers exposed the drift; blocks PR-gating by the proof matrix, not any Phase-1 merge",
+      "stop_card": null
+    },
     "WO-RECORDER-GRANT-IDENTITY": {
       "acceptance": {
         "evidence": [
