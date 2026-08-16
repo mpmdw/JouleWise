@@ -1459,17 +1459,7 @@ def authenticate_campaign_writer_preflight(
 ) -> dict[str, Any] | None:
     """Outer campaign gate; the bundle writer repeats this independently."""
 
-    marker_states: list[bool] = []
-    for path in configs:
-        try:
-            value = json.loads(path.read_bytes())
-        except (OSError, json.JSONDecodeError):
-            # The established config preflight owns malformed-config
-            # diagnostics. Treat it as non-marker here so legacy error order
-            # and no-write behavior remain unchanged.
-            marker_states.append(False)
-            continue
-        marker_states.append(launch_lineage_required(value))
+    marker_states = [_config_requires_launch_lineage(path) for path in configs]
     if not any(marker_states):
         return None
     if not all(marker_states):
@@ -1480,6 +1470,24 @@ def authenticate_campaign_writer_preflight(
     return authenticate_campaign_launch_lineage(
         runs_dir, config_paths=configs
     )
+
+
+def _config_requires_launch_lineage(path: Path) -> bool:
+    try:
+        value = json.loads(path.read_bytes())
+    except (OSError, json.JSONDecodeError):
+        # The established config preflight owns malformed-config diagnostics.
+        # Treat it as non-marker so legacy error order remains unchanged.
+        return False
+    return launch_lineage_required(value)
+
+
+def _refuse_marker_bearing_axi(configs: Sequence[Path]) -> None:
+    if any(_config_requires_launch_lineage(path) for path in configs):
+        raise LaunchLineageError(
+            "launch_lineage_axi_unsupported",
+            "marker-bearing AXI campaigns require the Phase-2 nested-root release gate",
+        )
 
 
 def authenticate_campaign_child_launch_lineage(
@@ -6456,6 +6464,10 @@ def run_axi_spec_campaign(
             return 2
         config_infos[entry["entry_id"]] = loaded
 
+    _refuse_marker_bearing_axi(
+        [info.path for info in config_infos.values()]
+    )
+
     evidence_root = runs_dir / "axi_attempt_evidence" / manifest_id
     identities_dir = evidence_root / "attempt_identities"
     receipts_dir = evidence_root / "dispatch_receipts"
@@ -7267,6 +7279,8 @@ def run_campaign(args: argparse.Namespace) -> int:
         if order_warning is not None:
             print(order_warning, file=sys.stderr)
         configs = apply_order_manifest(discover_configs(config_dir), order_entries)
+    if analysis_manifest is not None and analysis_manifest.is_axi_v2:
+        _refuse_marker_bearing_axi(configs)
     launch_authentication = None
     if not args.dry_run:
         launch_authentication = authenticate_campaign_writer_preflight(

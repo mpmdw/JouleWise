@@ -18,10 +18,12 @@ if str(REPOSITORY_ROOT) not in sys.path:
 from joulewise.arm_readiness import (  # noqa: E402
     ArmReadinessError,
     LaunchLineageError,
-    consume_launch_capability,
+    _consume_launch_capability,
+    _verify_arm_receipt,
     parse_json_bytes,
     record_launch_lifecycle_event,
     render_json,
+    validate_arm_receipt,
     validate_launch_manifest,
     verify_consumed_launch,
 )
@@ -49,13 +51,29 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _load_manifest(path: Path) -> dict[str, object]:
+def _read_required_launch_input(path: Path, label: str) -> tuple[Path, bytes]:
     try:
-        raw = path.resolve(strict=True).read_bytes()
+        if path.is_symlink():
+            raise LaunchLineageError(
+                "launch_consumption_invalid", f"{label} must not be a symlink"
+            )
+        resolved = path.resolve(strict=True)
+        raw = resolved.read_bytes()
+    except LaunchLineageError:
+        raise
     except OSError as exc:
         raise LaunchLineageError(
-            "launch_consumption_missing", f"launch manifest is unavailable: {exc}"
+            "launch_consumption_missing", f"{label} is unavailable: {exc}"
         ) from exc
+    if not resolved.is_file():
+        raise LaunchLineageError(
+            "launch_consumption_invalid", f"{label} is not a regular file"
+        )
+    return resolved, raw
+
+
+def _load_manifest_input(path: Path) -> tuple[dict[str, object], Path, bytes]:
+    resolved, raw = _read_required_launch_input(path, "launch manifest")
     try:
         value = validate_launch_manifest(
             parse_json_bytes(raw, require_canonical=True)
@@ -64,7 +82,76 @@ def _load_manifest(path: Path) -> dict[str, object]:
         raise LaunchLineageError(
             "launch_consumption_invalid", f"launch manifest is invalid: {exc}"
         ) from exc
-    return dict(value)
+    return dict(value), resolved, raw
+
+
+def _load_manifest(path: Path) -> dict[str, object]:
+    manifest, _resolved, _raw = _load_manifest_input(path)
+    return manifest
+
+
+def _assemble_launch_inputs(args: argparse.Namespace) -> dict[str, object]:
+    """Authenticate and assemble every required input for callee replay."""
+
+    try:
+        pack_root = args.pack_root.resolve(strict=True)
+        custody_root = args.arm_readiness_custody_root.resolve(strict=True)
+    except OSError as exc:
+        raise LaunchLineageError(
+            "launch_consumption_missing", f"launch root is unavailable: {exc}"
+        ) from exc
+    arm_path, arm_raw = _read_required_launch_input(
+        args.arm_receipt, "arm receipt"
+    )
+    manifest, manifest_path, manifest_raw = _load_manifest_input(
+        args.launch_manifest
+    )
+    try:
+        arm = validate_arm_receipt(
+            parse_json_bytes(arm_raw, require_canonical=True)
+        )
+    except ArmReadinessError as exc:
+        raise LaunchLineageError(
+            "launch_consumption_invalid", f"arm receipt is invalid: {exc}"
+        ) from exc
+    verified_arm = _verify_arm_receipt(
+        pack_root, arm_path, require_unconsumed=False
+    )
+    arm_digest = hashlib.sha256(arm_raw).hexdigest()
+    if (
+        verified_arm["receipt_sha256"] != arm_digest
+        or verified_arm["receipt_path"] != str(arm_path)
+    ):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "authenticated arm receipt changed during launch assembly",
+        )
+    try:
+        window_root = Path(str(manifest["window_plan_root"])).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise LaunchLineageError(
+            "launch_consumption_missing", f"window plan root is unavailable: {exc}"
+        ) from exc
+    _env_path, env_raw = _read_required_launch_input(
+        window_root / "window.env", "window.env"
+    )
+    _chain_path, chain_raw = _read_required_launch_input(
+        window_root / "window-chain.zsh", "window chain"
+    )
+    return {
+        "pack_root": pack_root,
+        "arm_receipt": arm_path,
+        "authenticated_arm_receipt": dict(arm),
+        "arm_receipt_sha256": arm_digest,
+        "window_custody_root": custody_root,
+        "launch_manifest": manifest_path,
+        "authenticated_launch_manifest": manifest,
+        "launch_manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
+        "window_plan_root": window_root,
+        "window_environment_sha256": hashlib.sha256(env_raw).hexdigest(),
+        "window_chain_sha256": hashlib.sha256(chain_raw).hexdigest(),
+        "exec_argv": list(manifest["launch_command"]),
+    }
 
 
 def _consumption_path(args: argparse.Namespace) -> Path:
@@ -137,16 +224,12 @@ def _read_one_use_handoff() -> bytes:
 
 
 def launch(args: argparse.Namespace) -> int:
-    manifest = _load_manifest(args.launch_manifest)
-    argv = list(manifest["launch_command"])
+    launch_inputs = _assemble_launch_inputs(args)
+    argv = list(launch_inputs["exec_argv"])
     token = secrets.token_bytes(HANDOFF_TOKEN_BYTES)
     _install_handoff(token)
-    result = consume_launch_capability(
-        args.pack_root,
-        args.arm_receipt,
-        args.arm_readiness_custody_root,
-        launch_manifest=args.launch_manifest,
-        exec_argv=argv,
+    result = _consume_launch_capability(
+        **launch_inputs,
         handoff_token_sha256=hashlib.sha256(token).hexdigest(),
     )
     verified = verify_consumed_launch(

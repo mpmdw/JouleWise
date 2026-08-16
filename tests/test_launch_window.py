@@ -15,6 +15,7 @@ from unittest import mock
 from joulewise import arm_readiness
 from joulewise.analysis_engine import inputs as analysis_inputs
 from joulewise import floor_extraction, whole_window
+from tests.test_arm_readiness import LaunchConsumptionV2Tests
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,24 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
             launch_manifest=root / "launch-manifest.json",
             lifecycle_event=None,
         )
+
+    def _launch_inputs(
+        self, args: argparse.Namespace, argv: list[str]
+    ) -> dict[str, object]:
+        return {
+            "pack_root": args.pack_root,
+            "arm_receipt": args.arm_receipt,
+            "authenticated_arm_receipt": {"schema_version": "test"},
+            "arm_receipt_sha256": "a" * 64,
+            "window_custody_root": args.arm_readiness_custody_root,
+            "launch_manifest": args.launch_manifest,
+            "authenticated_launch_manifest": {"launch_command": argv},
+            "launch_manifest_sha256": "b" * 64,
+            "window_plan_root": Path(argv[-1]),
+            "window_environment_sha256": "c" * 64,
+            "window_chain_sha256": "d" * 64,
+            "exec_argv": argv,
+        }
 
     def test_eight_launchers_make_one_claim_and_one_execve(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -75,12 +94,12 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
 
             with mock.patch.object(
                 launch_window,
-                "_load_manifest",
-                return_value={"launch_command": argv},
+                "_assemble_launch_inputs",
+                return_value=self._launch_inputs(args, argv),
             ), mock.patch.object(
                 launch_window, "_install_handoff"
             ), mock.patch.object(
-                launch_window, "consume_launch_capability", side_effect=consume
+                launch_window, "_consume_launch_capability", side_effect=consume
             ), mock.patch.object(
                 launch_window,
                 "verify_consumed_launch",
@@ -132,13 +151,13 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
             ]
             with mock.patch.object(
                 launch_window,
-                "_load_manifest",
-                return_value={"launch_command": argv},
+                "_assemble_launch_inputs",
+                return_value=self._launch_inputs(args, argv),
             ), mock.patch.object(
                 launch_window, "_install_handoff"
             ), mock.patch.object(
                 launch_window,
-                "consume_launch_capability",
+                "_consume_launch_capability",
                 return_value={"consumption_path": "/tmp/consumed.json"},
             ) as consume, mock.patch.object(
                 launch_window,
@@ -167,12 +186,12 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
             ]
             with mock.patch.object(
                 launch_window,
-                "_load_manifest",
-                return_value={"launch_command": argv},
+                "_assemble_launch_inputs",
+                return_value=self._launch_inputs(args, argv),
             ), mock.patch.object(
                 launch_window, "_install_handoff"
             ), mock.patch.object(
-                arm_readiness,
+                launch_window,
                 "_consume_launch_capability",
                 return_value={"consumption_path": "/tmp/consumed.json"},
             ) as private_consume, mock.patch.object(
@@ -183,7 +202,83 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 with self.assertRaises(arm_readiness.LaunchLineageError):
                     launch_window.launch(args)
             private_consume.assert_called_once()
-            self.assertNotIn("_launcher_context", private_consume.call_args.kwargs)
+            self.assertEqual(
+                set(private_consume.call_args.kwargs),
+                {
+                    "pack_root",
+                    "arm_receipt",
+                    "authenticated_arm_receipt",
+                    "arm_receipt_sha256",
+                    "window_custody_root",
+                    "launch_manifest",
+                    "authenticated_launch_manifest",
+                    "launch_manifest_sha256",
+                    "window_plan_root",
+                    "window_environment_sha256",
+                    "window_chain_sha256",
+                    "exec_argv",
+                    "handoff_token_sha256",
+                },
+            )
+
+    def test_launch_assembles_and_passes_reauthenticated_file_context(self) -> None:
+        fixture = LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        fixture.setUp()
+        try:
+            args = argparse.Namespace(
+                pack_root=fixture.pack,
+                arm_receipt=fixture.arm_path,
+                arm_readiness_custody_root=fixture.custody,
+                launch_manifest=fixture.manifest_path,
+                lifecycle_event=None,
+            )
+            arm_raw = fixture.arm_path.read_bytes()
+            verified_arm = {
+                "status": "PASS",
+                "arm_disposition": "GO",
+                "receipt_path": str(fixture.arm_path.resolve()),
+                "receipt_sha256": arm_readiness.sha256_bytes(arm_raw),
+                "pack_sha256": fixture.arm["pack"]["pack_sha256"],
+            }
+            with mock.patch.object(
+                launch_window,
+                "_verify_arm_receipt",
+                return_value=verified_arm,
+            ), mock.patch.object(
+                launch_window, "_install_handoff"
+            ), mock.patch.object(
+                launch_window,
+                "_consume_launch_capability",
+                return_value={"consumption_path": "/tmp/consumed.json"},
+            ) as consume, mock.patch.object(
+                launch_window,
+                "verify_consumed_launch",
+                return_value={"exec_argv": fixture.exec_argv},
+            ), mock.patch.object(launch_window.os, "execve"):
+                with self.assertRaises(arm_readiness.LaunchLineageError):
+                    launch_window.launch(args)
+            context = consume.call_args.kwargs
+            self.assertEqual(
+                context["authenticated_arm_receipt"], fixture.arm
+            )
+            self.assertEqual(
+                context["authenticated_launch_manifest"]["launch_command"],
+                fixture.exec_argv,
+            )
+            self.assertEqual(
+                context["window_environment_sha256"],
+                arm_readiness.sha256_bytes(
+                    (fixture.window_root / "window.env").read_bytes()
+                ),
+            )
+            self.assertEqual(
+                context["window_chain_sha256"],
+                arm_readiness.sha256_bytes(fixture.chain_path.read_bytes()),
+            )
+        finally:
+            fixture.doCleanups()
 
     def test_standalone_consume_cli_is_retired_with_launcher_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

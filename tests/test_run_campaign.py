@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import hashlib
 import io
@@ -2108,7 +2109,55 @@ class RunCampaignTests(unittest.TestCase):
         self.assertNotEqual(evidence["three__r2"], evidence["three__r1"])
         self.assertNotEqual(evidence["three__r3"], evidence["three__r1"])
 
-    def test_axi_multi_entry_campaign_records_gate_before_entry_two(self) -> None:
+    def test_marker_bearing_axi_refuses_before_child_dispatch(self) -> None:
+        state = run_campaign_module.load_analysis_manifest(
+            ROOT / "tests" / "fixtures" / "axi_ap_spec"
+        )
+        self.assertIsNotNone(state)
+        assert state is not None
+        binding = run_campaign_module.load_campaign_policy(
+            str(TEST_CAMPAIGN_POLICY)
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker_config = root / "marker.json"
+            config = json.loads(
+                (ROOT / "tests" / "fixtures" / "axi_ap_spec" / "draft_spec_off.json")
+                .read_text()
+            )
+            config["run_metadata"]["tags"].append("launch_lineage_required")
+            marker_config.write_text(json.dumps(config) + "\n")
+            marked_raw = copy.deepcopy(state.raw)
+            for entry in marked_raw["entries"]:
+                entry["config"] = str(marker_config)
+            marked_state = replace(state, raw=marked_raw)
+            runs_dir = root / "runs"
+            with patch.object(
+                run_campaign_module, "run_authenticated_campaign_child"
+            ) as child:
+                with self.assertRaises(
+                    run_campaign_module.LaunchLineageError
+                ) as caught:
+                    run_campaign_module.run_axi_spec_campaign(
+                        run_campaign_module.argparse.Namespace(
+                            dry_run=False,
+                            cli_cmd=None,
+                            arm_quiet_mode=False,
+                            arm_countdown_s=0,
+                            environment_override=None,
+                        ),
+                        marked_state,
+                        runs_dir=runs_dir,
+                        policy_binding=binding,
+                    )
+            self.assertEqual(
+                caught.exception.reason_code,
+                "launch_lineage_axi_unsupported",
+            )
+            child.assert_not_called()
+            self.assertFalse(runs_dir.exists())
+
+    def test_non_marker_axi_multi_entry_campaign_records_gate_before_entry_two(self) -> None:
         state = run_campaign_module.load_analysis_manifest(
             ROOT / "tests" / "fixtures" / "axi_ap_spec"
         )

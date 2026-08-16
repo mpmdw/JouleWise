@@ -17,7 +17,6 @@ import os
 import re
 import stat
 import subprocess
-import sys
 import tempfile
 import time
 import uuid
@@ -135,6 +134,7 @@ LAUNCH_LINEAGE_REASON_CODES = frozenset(
         "launch_consumption_invalid",
         "launch_binding_mismatch",
         "launch_lineage_conflict",
+        "launch_lineage_axi_unsupported",
         "launch_lifecycle_incomplete",
         "launch_handoff_invalid",
     }
@@ -4279,8 +4279,11 @@ def _read_arm_with_sidecar(path: Path) -> tuple[Mapping[str, Any], bytes, str]:
     return receipt, raw, digest
 
 
-def verify_arm_receipt(
-    pack_root: Path | str, arm_receipt: Path | str
+def _verify_arm_receipt(
+    pack_root: Path | str,
+    arm_receipt: Path | str,
+    *,
+    require_unconsumed: bool,
 ) -> dict[str, Any]:
     root = Path(pack_root).resolve(strict=True)
     path = Path(arm_receipt).resolve(strict=True)
@@ -4337,7 +4340,9 @@ def verify_arm_receipt(
         / "arm_readiness.consumptions"
         / f"{receipt['receipt_id']}.consumed.json"
     )
-    if consumption_path.exists() or consumption_path.is_symlink():
+    if require_unconsumed and (
+        consumption_path.exists() or consumption_path.is_symlink()
+    ):
         raise ArmReadinessError(
             "readiness_record_consumed", "launch capability was already consumed"
         )
@@ -4364,6 +4369,14 @@ def verify_arm_receipt(
         "receipt_sha256": digest,
         "pack_sha256": receipt["pack"]["pack_sha256"],
     }
+
+
+def verify_arm_receipt(
+    pack_root: Path | str, arm_receipt: Path | str
+) -> dict[str, Any]:
+    return _verify_arm_receipt(
+        pack_root, arm_receipt, require_unconsumed=True
+    )
 
 
 def _read_launch_lineage_primary(
@@ -4748,50 +4761,80 @@ def verify_consumed_launch(
     }
 
 
-def _require_launcher_consumption_context() -> None:
-    """Refuse unless the private writer was entered by the reviewed launcher."""
-
-    try:
-        private_frame = sys._getframe(1)
-        wrapper_frame = sys._getframe(2)
-        launcher_frame = sys._getframe(3)
-        caller_path = Path(str(launcher_frame.f_globals["__file__"])).resolve()
-    except (KeyError, RuntimeError, OSError):
-        caller_path = Path()
-        private_frame = wrapper_frame = None
-    reviewed_launcher = (
-        Path(__file__).resolve().parents[1] / "scripts" / "launch_window.py"
-    )
-    if (
-        private_frame is None
-        or private_frame.f_code is not _consume_launch_capability.__code__
-        or wrapper_frame is None
-        or wrapper_frame.f_code is not consume_launch_capability.__code__
-        or caller_path != reviewed_launcher
-    ):
-        raise ArmReadinessError(
-            "readiness_usage_invalid",
-            "launch capability consumption is private to scripts/launch_window.py",
-        )
-
-
 def _consume_launch_capability(
+    *,
     pack_root: Path | str,
     arm_receipt: Path | str,
+    authenticated_arm_receipt: Mapping[str, Any],
+    arm_receipt_sha256: str,
     window_custody_root: Path | str,
-    *,
     launch_manifest: Path | str,
+    authenticated_launch_manifest: Mapping[str, Any],
+    launch_manifest_sha256: str,
+    window_plan_root: Path | str,
+    window_environment_sha256: str,
+    window_chain_sha256: str,
     exec_argv: Sequence[str],
     handoff_token_sha256: str,
 ) -> dict[str, Any]:
-    """Atomically claim one GO receipt inside the reviewed launcher context."""
+    """Reauthenticate complete launch inputs, then atomically claim one GO."""
 
-    _require_launcher_consumption_context()
+    if not isinstance(authenticated_arm_receipt, Mapping):
+        raise ArmReadinessError(
+            "readiness_usage_invalid",
+            "authenticated arm receipt context is required",
+        )
+    if not isinstance(authenticated_launch_manifest, Mapping):
+        raise ArmReadinessError(
+            "readiness_usage_invalid",
+            "authenticated launch-manifest context is required",
+        )
+    for value, where in (
+        (pack_root, "pack_root"),
+        (arm_receipt, "arm_receipt"),
+        (window_custody_root, "window_custody_root"),
+        (launch_manifest, "launch_manifest"),
+        (window_plan_root, "window_plan_root"),
+    ):
+        if not isinstance(value, (str, os.PathLike)):
+            raise ArmReadinessError(
+                "readiness_usage_invalid", f"{where} is required"
+            )
+    if isinstance(exec_argv, (str, bytes)) or not isinstance(exec_argv, Sequence):
+        raise ArmReadinessError(
+            "readiness_usage_invalid", "exact exec argv is required"
+        )
+    for value, where in (
+        (arm_receipt_sha256, "arm_receipt_sha256"),
+        (launch_manifest_sha256, "launch_manifest_sha256"),
+        (window_environment_sha256, "window_environment_sha256"),
+        (window_chain_sha256, "window_chain_sha256"),
+        (handoff_token_sha256, "handoff_token_sha256"),
+    ):
+        _require_lower_sha256(value, where)
 
-    verified = verify_arm_receipt(pack_root, arm_receipt)
+    verified = _verify_arm_receipt(
+        pack_root, arm_receipt, require_unconsumed=False
+    )
     root = Path(pack_root).resolve(strict=True)
     receipt_path = Path(arm_receipt).resolve(strict=True)
     receipt, _raw, digest = _read_arm_with_sidecar(receipt_path)
+    if (
+        dict(authenticated_arm_receipt) != dict(receipt)
+        or arm_receipt_sha256 != digest
+        or dict(verified)
+        != {
+            "status": "PASS",
+            "arm_disposition": "GO",
+            "receipt_path": str(receipt_path),
+            "receipt_sha256": arm_receipt_sha256,
+            "pack_sha256": receipt["pack"]["pack_sha256"],
+        }
+    ):
+        raise ArmReadinessError(
+            "readiness_usage_invalid",
+            "authenticated arm receipt context changed before consumption",
+        )
     reviewed = reviewed_main(root)
     context = receipt["arm_context"]
     root_refusals, _passes = _root_policy_refusals(context, [])
@@ -4805,9 +4848,6 @@ def _consume_launch_capability(
             "readiness_receipt_namespace_anomalous",
             "consumption custody root differs from the arm receipt namespace",
         )
-    consumption_dir = custody_pack_root / "arm_readiness.consumptions"
-    consumption_dir.mkdir(parents=True, exist_ok=True)
-    _fsync_directory(custody_pack_root)
     consumption_name = f"{receipt['receipt_id']}.consumed.json"
     relative_arm_path = f"arm_readiness.receipts/{receipt_path.name}"
     volatile_checks = sorted(
@@ -4819,14 +4859,31 @@ def _consume_launch_capability(
             "same_head",
         ]
     )
-    _require_lower_sha256(handoff_token_sha256, "handoff_token_sha256")
     manifest, manifest_ref, env_ref, chain_ref = (
         _load_launch_manifest_for_consumption(Path(launch_manifest))
     )
-    if list(exec_argv) != manifest["launch_command"]:
+    try:
+        expected_window_root = Path(window_plan_root).resolve(strict=True)
+        authenticated_manifest = validate_launch_manifest(
+            authenticated_launch_manifest
+        )
+    except (OSError, RuntimeError) as exc:
+        raise ArmReadinessError(
+            "readiness_evidence_unreadable",
+            f"assembled launch root is unavailable: {exc}",
+        ) from exc
+    if (
+        dict(authenticated_manifest) != dict(manifest)
+        or launch_manifest_sha256 != manifest_ref["sha256"]
+        or expected_window_root
+        != Path(str(manifest["window_plan_root"])).resolve(strict=True)
+        or window_environment_sha256 != env_ref["sha256"]
+        or window_chain_sha256 != chain_ref["sha256"]
+        or list(exec_argv) != manifest["launch_command"]
+    ):
         raise ArmReadinessError(
             "readiness_usage_invalid",
-            "exec argv differs from the exact launch-manifest command",
+            "assembled launch context changed before consumption",
         )
     pack = receipt["pack"]
     consumption = {
@@ -4857,7 +4914,13 @@ def _consume_launch_capability(
     }
     validate_consumption_receipt(consumption)
     raw = render_json(consumption)
+    consumption_dir = custody_pack_root / "arm_readiness.consumptions"
+    consumption_dir.mkdir(parents=True, exist_ok=True)
+    _fsync_directory(custody_pack_root)
     consumption_path = consumption_dir / consumption_name
+    # Python caller identity is not authenticated here.  This atomic
+    # no-clobber primary is the only real enforcement and the single-use
+    # linearization point; every later complete caller must lose this write.
     try:
         _exclusive_write(consumption_path, raw)
     except ArmReadinessError as exc:
@@ -4879,45 +4942,6 @@ def _consume_launch_capability(
         "consumption_path": str(consumption_path),
         "consumption_sha256": digest_out,
     }
-
-
-def consume_launch_capability(
-    pack_root: Path | str,
-    arm_receipt: Path | str,
-    window_custody_root: Path | str,
-    *,
-    launch_manifest: Path | str | None = None,
-    exec_argv: Sequence[str] | None = None,
-    handoff_token_sha256: str | None = None,
-) -> dict[str, Any]:
-    """Launcher-only compatibility import; not part of the public API."""
-
-    try:
-        caller_path = Path(str(sys._getframe(1).f_globals["__file__"])).resolve()
-    except (KeyError, RuntimeError, OSError):
-        caller_path = Path()
-    reviewed_launcher = (
-        Path(__file__).resolve().parents[1] / "scripts" / "launch_window.py"
-    )
-    if caller_path != reviewed_launcher or any(
-        value is None
-        for value in (launch_manifest, exec_argv, handoff_token_sha256)
-    ):
-        raise ArmReadinessError(
-            "readiness_usage_invalid",
-            "launch capability consumption is private to scripts/launch_window.py",
-        )
-    assert launch_manifest is not None
-    assert exec_argv is not None
-    assert handoff_token_sha256 is not None
-    return _consume_launch_capability(
-        pack_root,
-        arm_receipt,
-        window_custody_root,
-        launch_manifest=launch_manifest,
-        exec_argv=exec_argv,
-        handoff_token_sha256=handoff_token_sha256,
-    )
 
 
 def _lifecycle_receipt_path(consumption_path: Path, event: str) -> Path:

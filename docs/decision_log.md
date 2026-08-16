@@ -9101,8 +9101,9 @@ Consult custodied: docs/process_traces/2026-08-15-launcher-binding-consult/
 without ceremony not machine-caught; confirmed by both DG lenses).
 
 **Ruling:**
-1. Every D-117 physical launch is NO-GO until machine-enforced: one
-   reviewed launcher (scripts/launch_window.py), invoked PERSONALLY by
+1. Every D-117 physical launch is NO-GO until machine-enforced: the sole
+   supported production route is the reviewed launcher
+   (scripts/launch_window.py), invoked PERSONALLY by
    Ed after inspecting the ARM verification result, performing: atomic
    no-clobber consumption-primary claim (the single-use linearization
    point, fsynced) → verify_consumed_launch replay (arm receipt/PASS/GO/
@@ -9126,10 +9127,12 @@ without ceremony not machine-caught; confirmed by both DG lenses).
 
 ### D-134/D-137 launcher-binding amendment — 2026-08-15
 
-D-134 clause 8 is narrowed: exactly one reviewed launcher may atomically
-claim the single-launch capability, and the consumption receipt alone does
-not prove a launch. Authorization attaches only to the chain start descended
-from that launcher's one-use inherited anonymous-FD handoff.
+D-134 clause 8 is narrowed: the reviewed launcher is the sole supported
+production route for atomically claiming the single-launch capability;
+Python does not authenticate its caller.  The atomic no-clobber primary is
+the single-use enforcement.  The consumption receipt alone does not prove a
+launch. Authorization attaches only to the chain start descended from the
+one-use inherited anonymous-FD handoff.
 
 The following clauses are added to D-134:
 
@@ -9395,3 +9398,46 @@ writer enforcement remains deferred to the calibration-side stage-2 landing,
 downstream reduce/extract/mint enforcement remains stages 3–4, successor config
 markers remain a Phase-2 freeze transaction, and physical launch remains
 NO-GO pending those gates and the full C-028 gauntlet.
+
+### WO-LAUNCH-BINDING fix round 2 — private required-context API and AXI Phase-2 release gate (lead-adopted consult, 2026-08-15)
+
+F3 adopts `ADOPT_PRIVATE_REQUIRED_CONTEXT_API` exactly.  The public-named
+consumption wrapper and both caller-frame/file-identity guards are deleted;
+caller identity is not represented as security.  The sole supported
+production route is the reviewed launcher calling one underscore-named,
+non-exported consumer with mandatory authenticated arm and launch-manifest
+values, their exact primary/artifact digests, the bound roots, exact exec
+argv, and handoff-token digest.  The callee independently reopens and
+reauthenticates the arm receipt, manifest, `window.env`, window chain, roots,
+argv, and digests before any consumption publication.  This required-context
+API is an ordinary-misuse boundary only.  The atomic no-clobber consumption
+primary is the **only real enforcement** and the single-use linearization
+point; every later complete caller loses that write.
+
+**HONEST REGISTERED LIMITATION:** deliberate in-process invocation of the
+private consumer with forged-but-complete valid inputs is indistinguishable
+from the supported route.  Python code in the same interpreter, or code under
+the same trusted UID, can import private functions, reconstruct readable
+inputs, alter module state, or invoke the launcher.  This mechanism proves
+single use, not caller identity or Unix parentage.  Stronger protection needs
+a separately ruled OS trust boundary.  Ed's batched risk-appetite list carries
+this hostile-same-UID/same-interpreter family with the recorder race and T-0
+provenance limitations; this work order does not silently expand that threat
+model.
+
+NDF1 adopts `DEFER_WITH_PHASE_2_RELEASE_GATE`.  D-078's closed vocabulary is
+amended additively with `launch_lineage_axi_unsupported`: a marker-bearing AXI
+v2 campaign is refused before child dispatch because the current fixed
+root-local locator contract covers flat/root-local writers only.  This is a
+release/scheduling boundary, not an exclusion of AXI from launch lineage;
+non-marker AXI campaigns retain their prior behavior.  No nearest-ancestor
+search and no per-attempt locator replication are permitted.
+
+The Phase-2 release gate is the consult's exact mechanism: freeze an
+authenticated successor-schema derivation descriptor (for example,
+`axi_attempt_v1`) and implement exact AXI layout projection
+`TOP/axi_attempt_bundles/<manifest-id>/<entry-id>/a<ordinal>`, mechanically
+derive `TOP`, then authenticate the successor manifest/config/entry/digest and
+attempt-directory relationship before opening exactly TOP's fixed locator.
+Until that projection and its adversarial regressions land, no successor pack
+may freeze or issue `launch_lineage_required` on an AXI config family.

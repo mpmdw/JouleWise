@@ -75,26 +75,53 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             )
         )
 
-    def _consume(self, token: bytes = b"t" * 32) -> dict[str, object]:
+    def _consumer_inputs(self, token: bytes = b"t" * 32) -> dict[str, object]:
+        arm_raw = self.arm_path.read_bytes()
+        manifest_raw = self.manifest_path.read_bytes()
+        return {
+            "pack_root": self.pack,
+            "arm_receipt": self.arm_path,
+            "authenticated_arm_receipt": copy.deepcopy(self.arm),
+            "arm_receipt_sha256": hashlib.sha256(arm_raw).hexdigest(),
+            "window_custody_root": self.custody,
+            "launch_manifest": self.manifest_path,
+            "authenticated_launch_manifest": readiness.parse_json_bytes(
+                manifest_raw, require_canonical=True
+            ),
+            "launch_manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
+            "window_plan_root": self.window_root,
+            "window_environment_sha256": hashlib.sha256(
+                (self.window_root / "window.env").read_bytes()
+            ).hexdigest(),
+            "window_chain_sha256": hashlib.sha256(
+                self.chain_path.read_bytes()
+            ).hexdigest(),
+            "exec_argv": self.exec_argv,
+            "handoff_token_sha256": hashlib.sha256(token).hexdigest(),
+        }
+
+    def _consume(
+        self, token: bytes = b"t" * 32, **overrides: object
+    ) -> dict[str, object]:
+        inputs = self._consumer_inputs(token)
+        inputs.update(overrides)
+        arm_digest = hashlib.sha256(self.arm_path.read_bytes()).hexdigest()
         with mock.patch.object(
             readiness,
-            "verify_arm_receipt",
-            return_value={"pack_sha256": self.arm["pack"]["pack_sha256"]},
+            "_verify_arm_receipt",
+            return_value={
+                "status": "PASS",
+                "arm_disposition": "GO",
+                "receipt_path": str(self.arm_path.resolve()),
+                "receipt_sha256": arm_digest,
+                "pack_sha256": self.arm["pack"]["pack_sha256"],
+            },
         ), mock.patch.object(
             readiness, "reviewed_main", return_value=self.arm["reviewed_main"]
         ), mock.patch.object(
             readiness, "_root_policy_refusals", return_value=([], set())
-        ), mock.patch.object(
-            readiness, "_require_launcher_consumption_context"
         ):
-            return readiness._consume_launch_capability(
-                self.pack,
-                self.arm_path,
-                self.custody,
-                launch_manifest=self.manifest_path,
-                exec_argv=self.exec_argv,
-                handoff_token_sha256=hashlib.sha256(token).hexdigest(),
-            )
+            return readiness._consume_launch_capability(**inputs)
 
     def _settle(self, token: bytes = b"l" * 32) -> tuple[Path, dict[str, object]]:
         result = self._consume(token)
@@ -448,25 +475,63 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             self._authenticate_campaign(claim.parent)
         self.assertEqual(conflict.exception.reason_code, "launch_lineage_conflict")
 
-    def test_consumption_is_not_public_and_direct_call_refuses(self) -> None:
+    def test_public_consumption_name_is_absent(self) -> None:
         self.assertNotIn("consume_launch_capability", readiness.__all__)
-        with self.assertRaises(readiness.ArmReadinessError) as caught:
-            readiness.consume_launch_capability(
-                self.pack,
-                self.arm_path,
-                self.custody,
+        with self.assertRaises(AttributeError):
+            getattr(readiness, "consume_launch_capability")
+        with self.assertRaises(ImportError):
+            exec(
+                "from joulewise.arm_readiness import consume_launch_capability",
+                {},
             )
-        self.assertEqual(caught.exception.reason_code, "readiness_usage_invalid")
-        with self.assertRaises(readiness.ArmReadinessError) as private:
+
+    def test_private_complete_context_consumes_once_at_atomic_primary(self) -> None:
+        self._consume()
+        with mock.patch.object(
+            readiness, "_exclusive_write", wraps=readiness._exclusive_write
+        ) as exclusive_write:
+            with self.assertRaises(readiness.ArmReadinessError) as replay:
+                self._consume()
+        self.assertEqual(
+            replay.exception.reason_code, "readiness_record_consumed"
+        )
+        exclusive_write.assert_called_once()
+
+    def test_private_consumer_requires_complete_matching_context_before_write(
+        self,
+    ) -> None:
+        other_window_root = Path(self.temporary.name) / "other-window"
+        other_window_root.mkdir()
+        cases = {
+            "missing_arm": {"authenticated_arm_receipt": None},
+            "missing_manifest": {"authenticated_launch_manifest": None},
+            "missing_window_root": {"window_plan_root": None},
+            "arm_digest": {"arm_receipt_sha256": "0" * 64},
+            "manifest_digest": {"launch_manifest_sha256": "0" * 64},
+            "window_root": {"window_plan_root": other_window_root},
+            "environment_digest": {"window_environment_sha256": "0" * 64},
+            "chain_digest": {"window_chain_sha256": "0" * 64},
+            "exec_argv": {"exec_argv": ["/bin/false"]},
+        }
+        consumption_dir = (
+            self.custody / self.pack.name / "arm_readiness.consumptions"
+        )
+        for name, overrides in cases.items():
+            with self.subTest(name=name):
+                with self.assertRaises(readiness.ArmReadinessError) as caught:
+                    self._consume(**overrides)
+                self.assertIn(
+                    caught.exception.reason_code, readiness.READINESS_REASON_CODES
+                )
+                self.assertFalse(consumption_dir.exists())
+
+        with self.assertRaises(TypeError):
             readiness._consume_launch_capability(
                 self.pack,
                 self.arm_path,
                 self.custody,
-                launch_manifest=self.manifest_path,
-                exec_argv=self.exec_argv,
-                handoff_token_sha256="0" * 64,
             )
-        self.assertEqual(private.exception.reason_code, "readiness_usage_invalid")
+        self.assertFalse(consumption_dir.exists())
 
     def test_campaign_config_membership_and_completion_absence_are_enforced(self) -> None:
         consumption_path, _settled = self._settle()

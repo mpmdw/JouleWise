@@ -18,7 +18,6 @@ import joulewise.arm_readiness as readiness
 from joulewise.arm_readiness import (
     ArmReadinessError,
     _pack_record,
-    consume_launch_capability,
     generate_arm_receipt,
     generate_dry_run_receipt,
     generate_freeze_receipt,
@@ -362,9 +361,6 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         args, exec_argv = self.install_launch_manifest(
             Path(temporary.name), pack, custody, arm_path
         )
-        with self.assertRaises(ArmReadinessError) as direct:
-            consume_launch_capability(pack, arm_path, custody)
-        self.assertEqual(direct.exception.reason_code, "readiness_usage_invalid")
         barrier = threading.Barrier(8)
         outcomes: list[str] = []
         lock = threading.Lock()
@@ -451,10 +447,6 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             Path(temporary.name), pack, custody, arm_path
         )
 
-        with self.assertRaises(ArmReadinessError) as direct:
-            consume_launch_capability(pack, arm_path, custody)
-        self.assertEqual(direct.exception.reason_code, "readiness_usage_invalid")
-
         same_boot = verify_arm_receipt(pack, arm_path)
         self.assertEqual(same_boot["status"], "PASS")
         changed_boot = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
@@ -488,18 +480,44 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             arm_path.parent.mkdir(parents=True)
             arm_path.write_bytes(b"placeholder\n")
             receipt = sample_arm(root / "context")
-            args, _exec_argv = self.install_launch_manifest(
+            args, exec_argv = self.install_launch_manifest(
                 root, pack, custody, arm_path
             )
-            with self.assertRaises(ArmReadinessError) as direct:
-                consume_launch_capability(pack, arm_path, custody)
-            self.assertEqual(
-                direct.exception.reason_code, "readiness_usage_invalid"
+            manifest_raw = args.launch_manifest.read_bytes()
+            manifest = readiness.parse_json_bytes(
+                manifest_raw, require_canonical=True
             )
+            window_root = Path(manifest["window_plan_root"])
+            launch_inputs = {
+                "pack_root": pack,
+                "arm_receipt": arm_path,
+                "authenticated_arm_receipt": receipt,
+                "arm_receipt_sha256": "0" * 64,
+                "window_custody_root": custody,
+                "launch_manifest": args.launch_manifest,
+                "authenticated_launch_manifest": manifest,
+                "launch_manifest_sha256": hashlib.sha256(
+                    manifest_raw
+                ).hexdigest(),
+                "window_plan_root": window_root,
+                "window_environment_sha256": hashlib.sha256(
+                    (window_root / "window.env").read_bytes()
+                ).hexdigest(),
+                "window_chain_sha256": hashlib.sha256(
+                    (window_root / "window-chain.zsh").read_bytes()
+                ).hexdigest(),
+                "exec_argv": exec_argv,
+            }
             with mock.patch.object(
                 readiness,
-                "verify_arm_receipt",
-                return_value={"pack_sha256": "0" * 64},
+                "_verify_arm_receipt",
+                return_value={
+                    "status": "PASS",
+                    "arm_disposition": "GO",
+                    "receipt_path": str(arm_path.resolve()),
+                    "receipt_sha256": "0" * 64,
+                    "pack_sha256": receipt["pack"]["pack_sha256"],
+                },
             ), mock.patch.object(
                 readiness,
                 "_read_arm_with_sidecar",
@@ -518,6 +536,10 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 ),
             ), mock.patch.object(
                 launch_window, "_install_handoff"
+            ), mock.patch.object(
+                launch_window,
+                "_assemble_launch_inputs",
+                return_value=launch_inputs,
             ):
                 with self.assertRaises(ArmReadinessError) as caught:
                     launch_window.launch(args)
@@ -542,15 +564,13 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         args, _exec_argv = self.install_launch_manifest(
             Path(temporary.name), pack, custody, dry_path
         )
-        with self.assertRaises(ArmReadinessError) as direct:
-            consume_launch_capability(pack, dry_path, custody)
-        self.assertEqual(direct.exception.reason_code, "readiness_usage_invalid")
-        with mock.patch.object(launch_window, "_install_handoff"):
-            with self.assertRaisesRegex(ArmReadinessError, "dry-run") as caught:
-                launch_window.launch(args)
+        with self.assertRaisesRegex(
+            readiness.LaunchLineageError, "arm receipt is invalid"
+        ) as caught:
+            launch_window.launch(args)
         self.assertEqual(
             caught.exception.reason_code,
-            "readiness_dry_run_used_as_arm_record",
+            "launch_consumption_invalid",
         )
 
     def test_cli_derives_conclusions_and_rejects_override_options(self) -> None:
@@ -590,12 +610,14 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             generate_freeze_receipt,
             generate_dry_run_receipt,
             generate_arm_receipt,
-            consume_launch_capability,
         ):
             with self.subTest(function=function.__name__):
                 self.assertTrue(
                     forbidden.isdisjoint(inspect.signature(function).parameters)
                 )
+        self.assertNotIn("consume_launch_capability", readiness.__all__)
+        with self.assertRaises(AttributeError):
+            getattr(readiness, "consume_launch_capability")
 
 
 if __name__ == "__main__":
