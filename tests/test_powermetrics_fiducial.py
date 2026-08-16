@@ -7,9 +7,11 @@ bounds against them.
 
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
+import copy
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from decimal import Decimal, ROUND_HALF_EVEN
 import io
+import importlib
 import math
 import json
 import hashlib
@@ -21,6 +23,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import Mapping
 from unittest.mock import patch
 
 from joulewise import calibration_ledger as ledger_module
@@ -53,6 +56,18 @@ from scripts.validate_powermetrics_fiducial import (
     verify_frozen_protocol,
 )
 from scripts import validate_powermetrics_fiducial as validation_script
+
+try:
+    stage1_test_module = importlib.import_module("tests.test_arm_readiness")
+    from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
+except ModuleNotFoundError as exc:  # Stage-1 lands via the lead-owned main sync.
+    if exc.name not in {
+        "tests.test_arm_readiness",
+        "tests.test_arm_readiness_schemas",
+    }:
+        raise
+    stage1_test_module = None
+    TEST_BOOT_SESSION_ID = None
 
 CADENCE_S = 0.1
 BASELINE_W = 2.0
@@ -814,6 +829,47 @@ class EvidenceTests(unittest.TestCase):
             "254b86581074063da7622fd792d520d53726e2b3e4744a4a0647a4fd68cc02c7",
         )
 
+    def test_launch_lineage_stamping_preserves_projection_disposition(self) -> None:
+        projected = replace(
+            self.make_detection(),
+            all_pulses_detected=False,
+            b_fiducial_s=None,
+            fits=(),
+            reasons=(DETECTION_NONCONVERGENT,),
+            projection_evaluated_cell_count=31,
+            projection_evaluated_cell_budget=31,
+            projection_disposition=DETECTION_NONCONVERGENT,
+            projection_budget_trigger="evaluated_cell_budget",
+        )
+        kwargs = {
+            "bindings": {},
+            "validation_id": "launch-bound-projection",
+            "artifact_sha256": {},
+            "protocol_pulse_count": 0,
+            "protocol_id": LEGACY_PROTOCOL_ID,
+        }
+        legacy = instrument_evidence(projected, **kwargs)
+        lineage = {
+            "schema_version": "joulewise.launch_lineage.v1",
+            "pack_id": "pack-stage-2",
+            "completion": None,
+        }
+        stamped = instrument_evidence(
+            projected,
+            launch_lineage=lineage,
+            **kwargs,
+        )
+
+        self.assertEqual(
+            stamped["detection_projection"], legacy["detection_projection"]
+        )
+        self.assertEqual(stamped["launch_lineage"], lineage)
+        without_lineage = dict(stamped)
+        without_lineage.pop("launch_lineage")
+        self.assertEqual(without_lineage, legacy)
+        lineage["pack_id"] = "mutated-after-serialization"
+        self.assertEqual(stamped["launch_lineage"]["pack_id"], "pack-stage-2")
+
     def test_v2_evidence_requires_and_records_capture_wall_time(self) -> None:
         detection = self.make_detection()
         bindings = self.bindings(
@@ -989,6 +1045,335 @@ class EvidenceTests(unittest.TestCase):
         self.assertAlmostEqual(new_min_s, 0.10771531806155038, places=14)
         self.assertLessEqual(old_min_s, window_s)
         self.assertGreater(new_min_s, window_s)
+
+
+class CalibrationLaunchBoundaryTests(unittest.TestCase):
+    def test_non_marker_config_keeps_launch_binding_dormant(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "acceptance.json"
+            config.write_text('{"schema_version":"legacy"}\n', encoding="utf-8")
+            self.assertIsNone(
+                validation_script.authenticate_calibration_writer_launch_lineage(
+                    root / "wrong-output-name",
+                    session_id=None,
+                    slot=None,
+                    attempt_id=None,
+                    source_config_path=config,
+                )
+            )
+
+    def test_marker_checks_output_basename_before_locator_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "acceptance.json"
+            config.write_text(
+                '{"run_metadata":{"tags":["launch_lineage_required"]}}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError) as caught:
+                validation_script.authenticate_calibration_writer_launch_lineage(
+                    root / "wrong-output-name",
+                    session_id="session-1",
+                    slot="pre",
+                    attempt_id="attempt-pre",
+                    source_config_path=config,
+                )
+            self.assertEqual(
+                caught.exception.reason_code, "launch_binding_mismatch"
+            )
+
+    def test_external_acceptance_requires_authenticated_plan_path_and_digest(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = root / "pack"
+            pack.mkdir()
+            config = root / "acceptance.json"
+            config.write_text('{"run_metadata":{"tags":[]}}\n', encoding="utf-8")
+            digest = hashlib.sha256(config.read_bytes()).hexdigest()
+            plan = {
+                "acceptance_policy": {
+                    "issued_acceptance": {
+                        "path": "acceptance.json",
+                        "artifact_sha256": digest,
+                    }
+                }
+            }
+            (pack / "plan_tree.json").write_text(json.dumps(plan), encoding="utf-8")
+            authentication = {"pack_root": str(pack), "config_inventory": {}}
+            with patch.object(validation_script, "REPO_ROOT", root):
+                validation_script._authenticate_calibration_source_config(
+                    authentication,
+                    config_path=config,
+                    config_raw=config.read_bytes(),
+                )
+                plan["acceptance_policy"]["issued_acceptance"][
+                    "artifact_sha256"
+                ] = "0" * 64
+                (pack / "plan_tree.json").write_text(
+                    json.dumps(plan), encoding="utf-8"
+                )
+                with self.assertRaises(ValueError) as caught:
+                    validation_script._authenticate_calibration_source_config(
+                        authentication,
+                        config_path=config,
+                        config_raw=config.read_bytes(),
+                    )
+            self.assertEqual(
+                caught.exception.reason_code, "launch_binding_mismatch"
+            )
+
+    def test_marker_missing_locator_refuses_before_ledger_construction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "acceptance.json"
+            config.write_text(
+                json.dumps(
+                    {"run_metadata": {"tags": ["launch_lineage_required"]}}
+                ),
+                encoding="utf-8",
+            )
+            output_root = root / "runs" / "instrument_validation"
+            output_root.parent.mkdir()
+
+            class ForbiddenLedgerLifecycle:
+                def __init__(self, **_kwargs):
+                    raise AssertionError("ledger construction must not occur")
+
+            stderr = io.StringIO()
+            with (
+                patch.object(validation_script, "verify_frozen_protocol", return_value=True),
+                patch.object(
+                    validation_script,
+                    "DEFAULT_ACCEPTANCE_BOUND_PATH",
+                    config,
+                ),
+                patch.object(
+                    validation_script,
+                    "_CaptureLedgerLifecycle",
+                    ForbiddenLedgerLifecycle,
+                ),
+                redirect_stderr(stderr),
+            ):
+                result = validation_script.main(
+                    [
+                        "--allow-live",
+                        "--output-root",
+                        str(output_root),
+                        "--session-id",
+                        "session-1",
+                        "--slot",
+                        "pre",
+                        "--attempt-id",
+                        "attempt-pre",
+                        "--power-policy",
+                        "ac_high_power",
+                    ]
+                )
+
+            self.assertEqual(result, 2)
+            self.assertIn("launch_consumption_missing", stderr.getvalue())
+            self.assertFalse(output_root.exists())
+
+
+@unittest.skipUnless(
+    stage1_test_module is not None
+    and hasattr(validation_script.arm_readiness_module, "authenticate_launch_lineage"),
+    "stage-1 launch-lineage machinery awaits lead-owned main sync",
+)
+class CalibrationLaunchAuthenticationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        assert stage1_test_module is not None
+        self.stage1 = stage1_test_module.LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        self.stage1.setUp()
+        self.addCleanup(self.stage1.doCleanups)
+        self.readiness = validation_script.arm_readiness_module
+        self.config = self.stage1.pack / "calibration-acceptance.json"
+        self.config.write_bytes(
+            self.readiness.render_json(
+                {
+                    "schema_version": "synthetic.calibration_acceptance.v1",
+                    "run_metadata": {
+                        "tags": ["launch_lineage_required"]
+                    },
+                }
+            )
+        )
+        self.output_root = (
+            Path(self.stage1.arm["arm_context"]["claim_runs_root"])
+            / "instrument_validation"
+        )
+
+    @contextmanager
+    def _authentication_environment(
+        self,
+        *,
+        boot_session_id: str | None = None,
+        inventory: Mapping[str, str] | None = None,
+    ):
+        if boot_session_id is None:
+            boot_session_id = str(TEST_BOOT_SESSION_ID)
+        if inventory is None:
+            inventory = {
+                self.config.relative_to(self.stage1.pack).as_posix():
+                hashlib.sha256(self.config.read_bytes()).hexdigest()
+            }
+        with (
+            patch.object(
+                self.readiness,
+                "_current_boot_session_id",
+                return_value=boot_session_id,
+            ),
+            patch.object(
+                self.readiness,
+                "_git_text",
+                return_value=self.stage1.arm["reviewed_main"]["head_commit"],
+            ),
+            patch.object(
+                self.readiness,
+                "_authenticated_pack_config_inventory",
+                return_value=dict(inventory),
+            ),
+        ):
+            yield
+
+    def _authenticate(
+        self,
+        *,
+        output_root: Path | None = None,
+        session_id: str = "session-1",
+        slot: str = "pre",
+        attempt_id: str = "attempt-pre",
+        boot_session_id: str | None = None,
+        inventory: Mapping[str, str] | None = None,
+    ) -> dict[str, object] | None:
+        with self._authentication_environment(
+            boot_session_id=boot_session_id,
+            inventory=inventory,
+        ):
+            return validation_script.authenticate_calibration_writer_launch_lineage(
+                self.output_root if output_root is None else output_root,
+                session_id=session_id,
+                slot=slot,
+                attempt_id=attempt_id,
+                source_config_path=self.config,
+            )
+
+    def _assert_refusal(self, code: str, **kwargs) -> None:
+        with self.assertRaises(ValueError) as caught:
+            self._authenticate(**kwargs)
+        self.assertEqual(caught.exception.reason_code, code)
+
+    def test_real_settle_locator_authenticates_all_writer_bindings(self) -> None:
+        _consumption_path, settled = self.stage1._settle()
+        authenticated = self._authenticate()
+        assert authenticated is not None
+        self.assertEqual(
+            authenticated["launch_lineage"], settled["launch_lineage"]
+        )
+        self.assertEqual(
+            authenticated["selected_config_sha256"],
+            hashlib.sha256(self.config.read_bytes()).hexdigest(),
+        )
+
+    def test_missing_locator_refuses_registered_missing_code(self) -> None:
+        self._assert_refusal("launch_consumption_missing")
+
+    def test_corrupt_locator_refuses_registered_invalid_code(self) -> None:
+        self.stage1._settle()
+        locator = (
+            self.output_root.parent
+            / self.readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        locator.write_bytes(locator.read_bytes() + b" ")
+        self._assert_refusal("launch_consumption_invalid")
+
+    def test_wrong_root_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        source = (
+            self.output_root.parent
+            / self.readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        alien_root = Path(self.stage1.temporary.name) / "alien-root"
+        alien_root.mkdir()
+        alien = alien_root / source.name
+        alien.write_bytes(source.read_bytes())
+        alien.with_name(f"{alien.name}.sha256").write_bytes(
+            source.with_name(f"{source.name}.sha256").read_bytes()
+        )
+        self._assert_refusal(
+            "launch_binding_mismatch",
+            output_root=alien_root / "instrument_validation",
+        )
+
+    def test_wrong_boot_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        self._assert_refusal(
+            "launch_binding_mismatch",
+            boot_session_id="00000000-0000-4000-8000-000000000099",
+        )
+
+    def test_wrong_bracket_session_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        self._assert_refusal(
+            "launch_binding_mismatch", session_id="session-other"
+        )
+
+    def test_wrong_attempt_for_slot_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        self._assert_refusal(
+            "launch_binding_mismatch",
+            slot="post",
+            attempt_id="attempt-pre",
+        )
+
+    def test_unauthenticated_config_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        self._assert_refusal("launch_binding_mismatch", inventory={})
+
+    def test_mixed_root_lineages_refuse_conflict(self) -> None:
+        self.stage1._settle()
+        assert stage1_test_module is not None
+        second = stage1_test_module.LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        second.setUp()
+        try:
+            second._settle()
+            second_locator_path = (
+                Path(second.arm["arm_context"]["bound_runs_root"])
+                / self.readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+            )
+            second_locator = self.readiness.parse_json_bytes(
+                second_locator_path.read_bytes(), require_canonical=True
+            )
+        finally:
+            second.doCleanups()
+        bound_locator_path = (
+            Path(self.stage1.arm["arm_context"]["bound_runs_root"])
+            / self.readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        mixed = self.readiness.parse_json_bytes(
+            bound_locator_path.read_bytes(), require_canonical=True
+        )
+        mixed["launch_lineage"] = copy.deepcopy(
+            second_locator["launch_lineage"]
+        )
+        mixed_raw = self.readiness.render_json(mixed)
+        bound_locator_path.write_bytes(mixed_raw)
+        bound_locator_path.with_name(
+            f"{bound_locator_path.name}.sha256"
+        ).write_bytes(
+            self.readiness.gnu_sidecar(
+                hashlib.sha256(mixed_raw).hexdigest(),
+                bound_locator_path.name,
+            )
+        )
+        self._assert_refusal("launch_lineage_conflict")
 
 
 class FrozenProtocolTests(unittest.TestCase):

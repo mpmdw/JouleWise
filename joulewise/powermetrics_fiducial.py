@@ -23,6 +23,7 @@ capture is lead-owned and driven by ``scripts/validate_powermetrics_fiducial.py`
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -1333,6 +1334,7 @@ def instrument_evidence(
     protocol_pulse_count: int = PULSE_COUNT,
     protocol_id: str = PROTOCOL_ID,
     capture_wall_time_s: float | None = None,
+    launch_lineage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble ``instrument_evidence.json`` content, failing closed.
 
@@ -1345,6 +1347,8 @@ def instrument_evidence(
 
     if protocol_id not in SUPPORTED_PROTOCOL_IDS:
         raise ValueError(f"unsupported fiducial protocol: {protocol_id!r}")
+    if launch_lineage is not None and not isinstance(launch_lineage, Mapping):
+        raise ValueError("launch_lineage must be an object when present")
     if detection.projection_disposition is not None:
         if detection.projection_disposition not in (
             DETECTION_NONCONVERGENT,
@@ -1498,6 +1502,8 @@ def instrument_evidence(
                 "trigger": detection.projection_budget_trigger,
             },
         }
+    if launch_lineage is not None:
+        payload["launch_lineage"] = copy.deepcopy(dict(launch_lineage))
     if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
         payload[CAPTURE_TIME_FIELD] = capture_wall_time_s
         payload["max_age_s"] = MAX_AGE_S

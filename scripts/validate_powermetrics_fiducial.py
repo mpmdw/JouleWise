@@ -52,6 +52,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.calibration_exits import RefusalCode, emit_refusal  # noqa: E402
+from joulewise import arm_readiness as arm_readiness_module  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
     POWER_METRICS,
     SAMPLERS,
@@ -152,6 +153,28 @@ TEST_LOGICAL_PROTOCOL_EVENTS = frozenset(
 )
 _AUTHORIZED_WRITER_CRASH_STAGE: str | None = None
 _CRASH_HOOK_DIAGNOSTIC_EMITTED = False
+_LAUNCH_LINEAGE_LOCATOR_BASENAME = ".joulewise-launch-lineage.json"
+_CALIBRATION_OUTPUT_ROOT_BASENAME = "instrument_validation"
+_CALIBRATION_LAUNCH_REASON_CODES = frozenset(
+    {
+        "launch_consumption_missing",
+        "launch_consumption_invalid",
+        "launch_binding_mismatch",
+        "launch_lineage_conflict",
+        "launch_lifecycle_incomplete",
+        "launch_handoff_invalid",
+    }
+)
+
+
+class _CalibrationLaunchLineageError(ValueError):
+    """Fallback D-078 refusal while the staged branch awaits stage-1 sync."""
+
+    def __init__(self, reason_code: str, message: str) -> None:
+        if reason_code not in _CALIBRATION_LAUNCH_REASON_CODES:
+            raise ValueError(f"unregistered calibration launch code {reason_code!r}")
+        super().__init__(message)
+        self.reason_code = reason_code
 
 
 class _LogicalTestClock:
@@ -542,6 +565,257 @@ def _write_text_artifact(path: Path, payload: str, stage: WriterStage) -> None:
 
 def sha256_path(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _raise_calibration_launch_lineage(
+    reason_code: str, detail: str
+) -> None:
+    error_type = getattr(
+        arm_readiness_module,
+        "LaunchLineageError",
+        _CalibrationLaunchLineageError,
+    )
+    raise error_type(reason_code, detail)
+
+
+def _calibration_launch_reason_code(exc: BaseException) -> str | None:
+    reason_code = getattr(exc, "reason_code", None)
+    return (
+        reason_code
+        if isinstance(reason_code, str)
+        and reason_code in _CALIBRATION_LAUNCH_REASON_CODES
+        else None
+    )
+
+
+def _emit_calibration_launch_refusal(exc: BaseException) -> int:
+    reason_code = _calibration_launch_reason_code(exc)
+    if reason_code is None:
+        raise exc
+    print(f"error: {reason_code}: {exc}", file=sys.stderr)
+    return 2
+
+
+def _launch_lineage_required(config: object) -> bool:
+    predicate = getattr(arm_readiness_module, "launch_lineage_required", None)
+    if callable(predicate):
+        return bool(predicate(config))
+    if not isinstance(config, Mapping):
+        return False
+    metadata = config.get("run_metadata")
+    tags = metadata.get("tags") if isinstance(metadata, Mapping) else None
+    return isinstance(tags, list) and "launch_lineage_required" in tags
+
+
+def _load_calibration_source_config(
+    config_path: Path,
+) -> tuple[Mapping[str, Any] | None, bytes | None, Path | None]:
+    """Read the existing acceptance input without perturbing legacy failures."""
+
+    try:
+        if config_path.is_symlink():
+            return None, None, None
+        resolved = config_path.resolve(strict=True)
+        raw = resolved.read_bytes()
+        parsed = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, None, None
+    return (
+        (parsed if isinstance(parsed, Mapping) else None),
+        raw,
+        resolved,
+    )
+
+
+def _authenticate_calibration_source_config(
+    authentication: Mapping[str, Any],
+    *,
+    config_path: Path,
+    config_raw: bytes,
+) -> None:
+    """Bind the acceptance input as a pack member or pack-pinned artifact."""
+
+    try:
+        pack_root = Path(str(authentication["pack_root"])).resolve(strict=True)
+        config_resolved = config_path.resolve(strict=True)
+    except (KeyError, OSError) as exc:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            f"authenticated calibration config root is unavailable: {exc}",
+        )
+    config_sha256 = hashlib.sha256(config_raw).hexdigest()
+    try:
+        relative = config_resolved.relative_to(pack_root).as_posix()
+    except ValueError:
+        relative = None
+    inventory = authentication.get("config_inventory")
+    if (
+        relative is not None
+        and isinstance(inventory, Mapping)
+        and inventory.get(relative) == config_sha256
+    ):
+        return
+
+    try:
+        plan = json.loads((pack_root / "plan_tree.json").read_bytes())
+        policy = plan["acceptance_policy"]
+        reference = policy["issued_acceptance"]
+        reference_path = reference["path"]
+        reference_sha256 = reference["artifact_sha256"]
+        if not isinstance(reference_path, str) or not reference_path:
+            raise ValueError("issued acceptance path is invalid")
+        expected_path = Path(reference_path)
+        if not expected_path.is_absolute():
+            expected_path = REPO_ROOT / expected_path
+        expected_path = expected_path.resolve(strict=True)
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            f"authenticated pack omits the selected calibration config: {exc}",
+        )
+    if expected_path != config_resolved or reference_sha256 != config_sha256:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            "selected calibration config is not bound by authenticated pack bytes",
+        )
+
+
+def authenticate_calibration_writer_launch_lineage(
+    output_root: Path,
+    *,
+    session_id: str | None,
+    slot: str | None,
+    attempt_id: str | None,
+    source_config_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Authenticate the fixed calibration locator before any custody claim."""
+
+    selected_config_path = (
+        DEFAULT_ACCEPTANCE_BOUND_PATH
+        if source_config_path is None
+        else Path(source_config_path)
+    )
+    config, config_raw, config_resolved = _load_calibration_source_config(
+        selected_config_path
+    )
+    if not _launch_lineage_required(config):
+        return None
+    if Path(output_root).name != _CALIBRATION_OUTPUT_ROOT_BASENAME:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            "calibration --output-root must end in instrument_validation",
+        )
+    if session_id is None or slot not in BRACKET_SESSION_SLOTS or attempt_id is None:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            "marker-bearing calibration requires an exact bracket session and slot",
+        )
+    assert config_raw is not None and config_resolved is not None
+    try:
+        resolved_output_root = Path(output_root).resolve(strict=False)
+        selected_root = resolved_output_root.parent.resolve(strict=True)
+    except OSError as exc:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            f"calibration output parent is unavailable: {exc}",
+        )
+    locator_basename = getattr(
+        arm_readiness_module,
+        "LAUNCH_LINEAGE_LOCATOR_BASENAME",
+        _LAUNCH_LINEAGE_LOCATOR_BASENAME,
+    )
+    locator_path = selected_root / locator_basename
+    if not locator_path.exists() or not locator_path.with_name(
+        f"{locator_path.name}.sha256"
+    ).exists():
+        _raise_calibration_launch_lineage(
+            "launch_consumption_missing",
+            "marker-bearing calibration launch-lineage locator is absent",
+        )
+    authenticate_campaign = getattr(
+        arm_readiness_module,
+        "authenticate_campaign_launch_lineage",
+        None,
+    )
+    authenticate_lineage = getattr(
+        arm_readiness_module,
+        "authenticate_launch_lineage",
+        None,
+    )
+    if not callable(authenticate_campaign) or not callable(authenticate_lineage):
+        _raise_calibration_launch_lineage(
+            "launch_consumption_invalid",
+            "launch-lineage authenticator is unavailable in this checkout",
+        )
+    authentication = authenticate_campaign(selected_root)
+    _authenticate_calibration_source_config(
+        authentication,
+        config_path=config_resolved,
+        config_raw=config_raw,
+    )
+    direct = authenticate_lineage(
+        authentication["launch_lineage"],
+        require_completion=False,
+        expected_pack_root=authentication["pack_root"],
+        require_current_boot=True,
+        require_completion_absent=True,
+    )
+    arm_context = direct.get("arm_context")
+    attempt_key = f"{slot}_attempt_id"
+    if (
+        not isinstance(arm_context, Mapping)
+        or arm_context.get("bracket_session_id") != session_id
+        or arm_context.get(attempt_key) != attempt_id
+    ):
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            "calibration bracket session/attempt differs from authenticated arm context",
+        )
+    return {
+        "launch_lineage": authentication["launch_lineage"],
+        "locator_sha256": authentication["locator_sha256"],
+        "selected_config_path": str(config_resolved),
+        "selected_config_sha256": hashlib.sha256(config_raw).hexdigest(),
+    }
+
+
+def reconcile_calibration_writer_launch_lineage(
+    outer: Mapping[str, Any],
+    output_root: Path,
+    *,
+    session_id: str | None,
+    slot: str | None,
+    attempt_id: str | None,
+    source_config_path: Path | None = None,
+) -> dict[str, Any]:
+    """Reopen writer inputs and reject any outer/inner lineage swap."""
+
+    inner = authenticate_calibration_writer_launch_lineage(
+        output_root,
+        session_id=session_id,
+        slot=slot,
+        attempt_id=attempt_id,
+        source_config_path=source_config_path,
+    )
+    compared_fields = (
+        "launch_lineage",
+        "locator_sha256",
+        "selected_config_path",
+        "selected_config_sha256",
+    )
+    if inner is None or any(inner.get(name) != outer.get(name) for name in compared_fields):
+        _raise_calibration_launch_lineage(
+            "launch_lineage_conflict",
+            "calibration launch lineage/config changed during writer execution",
+        )
+    return inner
 
 
 def _sysctl_identity(name: str) -> str:
@@ -1269,6 +1543,17 @@ def main(argv: list[str] | None = None) -> int:
             RefusalCode.OUTPUT_REQUIRES_REDERIVE,
             stream=sys.stderr,
         )
+    try:
+        launch_authentication = authenticate_calibration_writer_launch_lineage(
+            args.output_root,
+            session_id=args.session_id,
+            slot=args.slot,
+            attempt_id=args.attempt_id,
+        )
+    except ValueError as exc:
+        if _calibration_launch_reason_code(exc) is None:
+            raise
+        return _emit_calibration_launch_refusal(exc)
     if not args.allow_live:
         return emit_refusal(
             RefusalCode.QUIET_MAC_AUTH_REQUIRED,
@@ -1726,6 +2011,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     events.close()
 
+    if launch_authentication is not None:
+        try:
+            launch_authentication = reconcile_calibration_writer_launch_lineage(
+                launch_authentication,
+                args.output_root,
+                session_id=args.session_id,
+                slot=args.slot,
+                attempt_id=args.attempt_id,
+            )
+        except ValueError as exc:
+            if _calibration_launch_reason_code(exc) is None:
+                raise
+            finalize_abandoned(_calibration_launch_reason_code(exc) or "")
+            atexit.unregister(finalize_abandoned)
+            return _emit_calibration_launch_refusal(exc)
+
     device_meta = native_records[0].metadata if native_records else {}
     bindings = {
         "hardware_model": device_meta.get("hw_model"),
@@ -1762,6 +2063,11 @@ def main(argv: list[str] | None = None) -> int:
             "power_trace.csv": sha256_path(trace_path),
         },
         capture_wall_time_s=sampling_started.epoch_s,
+        launch_lineage=(
+            launch_authentication["launch_lineage"]
+            if launch_authentication is not None
+            else None
+        ),
     )
     evidence_payload["clock_anchor"] = evidence["clock_anchor"]
     evidence_payload["clock_anchor_resolved"] = anchor_resolved

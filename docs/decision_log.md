@@ -9306,6 +9306,41 @@ packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
 
+### D-078 registry amendment — 2026-08-16: calibration-writer launch binding
+
+The calibration writer consumes the stage-1 lineage locator before any
+calibration custody directory, writer lease, ledger reservation, or bracket
+slot claim. For a marker-bearing acceptance input, it first requires the
+literal `--output-root` basename `instrument_validation`, then derives the
+only admissible locator as
+`resolve(--output-root).parent/.joulewise-launch-lineage.json`. No receipt
+path, handoff token, or lineage value is accepted through argv or environment.
+The writer authenticates the locator/sidecar and sibling-root agreement, the
+consumption/arm/pack/HEAD/launch-recipe chain, start and settle predecessors,
+current boot, selected acceptance bytes, authenticated root, bracket session,
+and exact pre/post attempt slot. The selected acceptance must be either an
+authenticated pack inventory member or the external issued-acceptance path
+and raw artifact digest pinned by authenticated `plan_tree.json` bytes.
+
+The writer reopens the same inputs immediately before evidence serialization.
+A valid-but-different locator, full lineage, selected config path, or selected
+config digest is `launch_lineage_conflict`. The authenticated full
+`joulewise.launch_lineage.v1` object is stamped at
+`instrument_evidence.json -> launch_lineage`; the manifest hashes those
+evidence bytes and the calibration ledger's artifact hashes preserve that
+binding. Writer authentication intentionally verifies that consumption
+occurred within the arm horizon but does not reapply the short T-0 expiration
+at collection time.
+
+The closed calibration boundary uses the six D-078 codes
+`launch_consumption_missing`, `launch_consumption_invalid`,
+`launch_binding_mismatch`, `launch_lineage_conflict`,
+`launch_lifecycle_incomplete`, and `launch_handoff_invalid`. A non-marker
+legacy acceptance leaves the mechanism dormant, omits `launch_lineage`, and
+preserves the pre-amendment serialized evidence bytes. Marker rollout remains
+part of the lead-owned successor-family transaction; frozen predecessors are
+not edited in place.
+
 ### D-078 registry amendment — 2026-08-15: bounded pulse-detection projection
 
 The instrument-evidence diagnostic vocabulary adds
