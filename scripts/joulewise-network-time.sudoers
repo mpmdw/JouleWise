@@ -1,0 +1,4 @@
+# JouleWise D-127: fixed network-time toggle capability for operator edr.
+Cmnd_Alias JOULEWISE_NETWORK_TIME = /usr/sbin/systemsetup -setusingnetworktime off, /usr/sbin/systemsetup -setusingnetworktime on
+Defaults!JOULEWISE_NETWORK_TIME !requiretty
+edr ALL=(root) NOPASSWD: JOULEWISE_NETWORK_TIME

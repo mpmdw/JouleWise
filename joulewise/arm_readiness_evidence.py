@@ -679,10 +679,12 @@ def _derive_acceptance_successor(context: _DerivationContext) -> _DerivedKind:
 
 
 def _validate_manifests(context: _DerivationContext, *, kind: str) -> dict[str, Any]:
-    plan_pin = context.tree.get("plan")
-    if not isinstance(plan_pin, Mapping) or not isinstance(plan_pin.get("path"), str):
-        raise _underivable(kind, "pack plan path is missing")
-    plan_path = context.pack_root / PurePosixPath(plan_pin["path"]).name
+    try:
+        plan_path, _plan_pack_relative, _plan_id, _resolved_raw = (
+            _readiness.resolve_frozen_plan(context.pack_root, context.tree)
+        )
+    except _readiness.ArmReadinessError as exc:
+        raise _underivable(kind, f"R2 frozen-plan reference is invalid: {exc}") from exc
     plan_relative = _repo_relative(context.repository, plan_path)
     plan_artifact, plan_raw = _committed_artifact(
         context.repository, plan_relative, kind=kind
@@ -870,13 +872,13 @@ def _collect_named_values(value: object, names: frozenset[str]) -> list[str]:
 
 def _derive_estimator_identity(context: _DerivationContext) -> _DerivedKind:
     kind = "ESTIMATOR_IDENTITY"
-    plan = context.tree.get("plan")
-    if not isinstance(plan, Mapping) or not isinstance(plan.get("path"), str):
-        raise _underivable(kind, "frozen plan path is missing")
-    plan_relative = _repo_relative(
-        context.repository,
-        context.pack_root / PurePosixPath(plan["path"]).name,
-    )
+    try:
+        plan_path, _plan_pack_relative, _plan_id, _resolved_raw = (
+            _readiness.resolve_frozen_plan(context.pack_root, context.tree)
+        )
+    except _readiness.ArmReadinessError as exc:
+        raise _underivable(kind, f"R2 frozen-plan reference is invalid: {exc}") from exc
+    plan_relative = _repo_relative(context.repository, plan_path)
     plan_artifact, plan_raw = _committed_artifact(
         context.repository, plan_relative, kind=kind
     )

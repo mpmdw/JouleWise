@@ -320,6 +320,34 @@ def sample_frozen_projection(
 class ArmReadinessSchemaTests(unittest.TestCase):
     maxDiff = None
 
+    def test_r2_shared_resolver_uses_real_pack_relative_reference(self) -> None:
+        gamma = (
+            ROOT
+            / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"
+        )
+        tree, _raw = readiness._plan_tree(gamma)
+        path, relative, plan_id, plan_raw = readiness.resolve_frozen_plan(
+            gamma, tree
+        )
+        self.assertEqual(relative, "calibration_plan.json")
+        self.assertEqual(path, (gamma / relative).resolve())
+        self.assertEqual(plan_id, tree["plan"]["plan_id"])
+        self.assertEqual(hashlib.sha256(plan_raw).hexdigest(), tree["plan"]["actual_sha256"])
+
+    def test_r2_shared_resolver_rejects_real_doubled_pack_paths(self) -> None:
+        for pack_id in (
+            "d117_floor_qwen25_1p5b_v1",
+            "d117_floor_qwen25_7b_v1",
+        ):
+            with self.subTest(pack_id=pack_id):
+                pack = ROOT / "configs/campaigns" / pack_id
+                tree, _raw = readiness._plan_tree(pack)
+                with self.assertRaises(ArmReadinessError) as caught:
+                    readiness.resolve_frozen_plan(pack, tree)
+                self.assertEqual(
+                    caught.exception.reason_code, "readiness_pack_unreadable"
+                )
+
     def schema_cases(self) -> list[tuple[str, Mapping[str, Any], Callable[[object], object]]]:
         registry, _raw = load_registry(ROOT)
         return [
