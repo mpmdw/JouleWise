@@ -3204,7 +3204,7 @@
       "priority": "p1_phase_gate",
       "rank": 5,
       "status": "partial",
-      "status_note": "Built + gauntleted on impl/wo-detect-pulses-budget @ 5449e58 (incl. the calexits flake fix); MERGE-STAGED for the atomic Phase-2 re-freeze that re-issues the D-079 acceptance artifact (R-t9-4 / D-138) — not independently selectable",
+      "status_note": "COMPLETE Phase-2 payload on impl/wo-detect-pulses-budget @ e22e658 (main-synced): detection budget + calexits flake fix + calibration-side launch-lineage stage 2 — each delta-ACCEPTED (final: 9/9 settle, 81/81 focused). MERGE-STAGED for the atomic re-freeze (D-138); plan custodied docs/process_traces/2026-08-16-phase2-plan-consult/",
       "stop_card": null
     },
     "WO-LAUNCH-BINDING": {
@@ -3243,7 +3243,7 @@
       "priority": "p1_phase_gate",
       "rank": 1,
       "status": "queued",
-      "status_note": "Stages 1+2 (campaign) MERGED #156 (f392ff6); stage 3 downstream reauth MERGED #157 (bd333de). Remaining: calibration-side stage 2 + stage 4 successor flag — both Phase-2-coupled (ride/follow the re-freeze). Stage-4 round carries a cosmetic nit (stale alias comment, final-head N1). Launch stays NO-GO",
+      "status_note": "Stages 1-3 MERGED (#156 f392ff6, #157 bd333de); calibration-side stage 2 DONE on the staged estimator branch @ e22e658 (delta-ACCEPTED, rides the re-freeze per the Phase-2 plan); remaining: stage 4 successor flag inside the transaction. Launch stays NO-GO",
       "stop_card": null
     },
     "WO-PROOF-RUNNABILITY-REPAIR": {
