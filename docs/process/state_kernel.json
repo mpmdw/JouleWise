@@ -3285,6 +3285,46 @@
       "status_note": "Council Phase 1 parallel contract-bearing work; it changes the operator sequence and therefore retains the full council gate.",
       "stop_card": null
     },
+    "WO-RECORDER-GRANT-IDENTITY": {
+      "acceptance": {
+        "evidence": [
+          "allow_governed_extraction_spec no longer re-resolves its argument: the grant accepts a caller-verified identity verbatim or keys on an fd or (st_dev,st_ino) identity",
+          "The F-10 post-grant grant-delta verification lands with the read-only accessor the prior clause 2 forbade",
+          "A concurrent-writer alias/swap regression executes the former TOCTOU and refuses instead of silently succeeding",
+          "The change passes its own rule-11 cold gate before merge"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WO-RECORDER-GRANT-IDENTITY/acceptance",
+          "label": "WO-RECORDER-GRANT-IDENTITY acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The authority-plane grant is keyed to a verified identity rather than re-resolving the caller's path, closing the registered check-to-grant race under its own cold gate."
+      },
+      "authority": {
+        "label": "2026-08-15 recorder-race cold gate composed verdict (registered limitation + queued authority-plane cure)",
+        "path": "docs/process_traces/2026-08-15-recorder-race-coldgate/composed-verdict.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Recorder-race composed verdict: not licensed as a caller-side patch",
+            "path": "docs/process_traces/2026-08-15-recorder-race-coldgate/composed-verdict.md"
+          },
+          "rule": "No caller-side patch may claim this closure; the cure edits joulewise/authentication_io.py under its OWN rule-11 cold gate, and Ed's batched risk-appetite call may drop the work order to the registered limitation alone"
+        }
+      ],
+      "flags": [],
+      "goal": "Stop the governed extraction-spec grant re-resolving the caller's path: key the grant on a verified identity, fold in F-10 grant-delta verification, and retire the registered check-to-grant limitation",
+      "id": "WO-RECORDER-GRANT-IDENTITY",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 61,
+      "status": "queued",
+      "status_note": "Ed-weighted: the batched risk-appetite session may rule the concurrent local writer out of model, dropping this to the registered limitation alone",
+      "stop_card": null
+    },
     "WO-T3-VIS-01": {
       "acceptance": {
         "evidence": [
