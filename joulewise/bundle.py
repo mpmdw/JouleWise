@@ -35,6 +35,7 @@ import platform
 import secrets
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from contextlib import contextmanager
@@ -86,13 +87,43 @@ class BundleError(Exception):
 def _writer_launch_lineage(
     runs_root: Path,
     config: BenchmarkConfig,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any], str] | None:
     """Independently authenticate a marker-bearing writer before bundle mkdir."""
 
     if not launch_lineage_required(config.to_dict()):
         return None
     try:
-        context = authenticate_campaign_launch_lineage(runs_root)
+        argv = sys.argv[1:]
+        if len(argv) < 2 or argv[0] != "run":
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "writer cannot identify the CLI-selected config source",
+            )
+        source_path = Path(argv[1])
+        if source_path.is_symlink():
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "writer config source is a symlink",
+            )
+        try:
+            resolved_source = source_path.resolve(strict=True)
+            source_raw = resolved_source.read_bytes()
+            source_value = json.loads(source_raw)
+            source_config = BenchmarkConfig.from_mapping(source_value)
+        except (OSError, ValueError, TypeError) as exc:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                f"writer config source is unavailable or invalid: {exc}",
+            ) from exc
+        if source_config != config:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "writer config differs from the CLI-selected source bytes",
+            )
+        context = authenticate_campaign_launch_lineage(
+            runs_root,
+            config_paths=(resolved_source,),
+        )
         pack_root = Path(str(context["pack_root"]))
         inventory = context["config_inventory"]
         if not isinstance(inventory, dict):
@@ -100,32 +131,18 @@ def _writer_launch_lineage(
                 "launch_binding_mismatch",
                 "authenticated campaign config inventory is invalid",
             )
-        run_id = config.run_id
-        candidates = [
-            relative
-            for relative in inventory
-            if run_id is None or Path(relative).stem == run_id
-        ]
-        matched = False
-        for relative in candidates:
-            source_path = pack_root / relative
-            try:
-                if source_path.is_symlink():
-                    continue
-                raw = source_path.read_bytes()
-                if hashlib.sha256(raw).hexdigest() != inventory[relative]:
-                    continue
-                source_value = json.loads(raw)
-                source_config = BenchmarkConfig.from_mapping(source_value)
-            except (OSError, ValueError, TypeError):
-                continue
-            if source_config == config:
-                matched = True
-                break
-        if not matched:
+        try:
+            relative = resolved_source.relative_to(pack_root.resolve(strict=True)).as_posix()
+        except (OSError, ValueError) as exc:
             raise LaunchLineageError(
                 "launch_binding_mismatch",
-                "writer config is not a semantic member of the authenticated pack",
+                "writer config source is outside the authenticated pack",
+            ) from exc
+        source_digest = hashlib.sha256(source_raw).hexdigest()
+        if inventory.get(relative) != source_digest:
+            raise LaunchLineageError(
+                "launch_binding_mismatch",
+                "writer config bytes are not an authenticated pack member",
             )
         lineage = context.get("launch_lineage")
         if not isinstance(lineage, dict):
@@ -133,7 +150,17 @@ def _writer_launch_lineage(
                 "launch_consumption_invalid",
                 "authenticated campaign launch lineage is invalid",
             )
-        return copy.deepcopy(lineage)
+        locator_digest = context.get("locator_sha256")
+        if (
+            not isinstance(locator_digest, str)
+            or len(locator_digest) != 64
+            or any(character not in "0123456789abcdef" for character in locator_digest)
+        ):
+            raise LaunchLineageError(
+                "launch_consumption_invalid",
+                "authenticated campaign locator digest is invalid",
+            )
+        return copy.deepcopy(lineage), locator_digest
     except LaunchLineageError as exc:
         raise BundleError(f"{exc.reason_code}: {exc}") from exc
 
@@ -879,6 +906,7 @@ class RunBundleWriter:
         clock: Clock,
         source_state_start: dict[str, str],
         launch_lineage: dict[str, Any] | None = None,
+        launch_lineage_locator_sha256: str | None = None,
     ) -> None:
         self._path = path
         self._run_id = run_id
@@ -887,6 +915,7 @@ class RunBundleWriter:
         self._clock = clock
         self._source_state_start = source_state_start
         self._launch_lineage = copy.deepcopy(launch_lineage)
+        self._launch_lineage_locator_sha256 = launch_lineage_locator_sha256
         self._metadata_written = False
         self._power_trace_written = False
         self._suite_manifest_written = False
@@ -901,7 +930,13 @@ class RunBundleWriter:
         (bundles are immutable evidence; never overwrite, D-010).
         """
         root = Path(runs_root)
-        launch_lineage = _writer_launch_lineage(root, config)
+        launch_authentication = _writer_launch_lineage(root, config)
+        launch_lineage = (
+            launch_authentication[0] if launch_authentication is not None else None
+        )
+        launch_lineage_locator_sha256 = (
+            launch_authentication[1] if launch_authentication is not None else None
+        )
         run_id = generate_run_id(config, clock)
         path = root / run_id
         if path.exists():
@@ -926,6 +961,7 @@ class RunBundleWriter:
             clock=clock,
             source_state_start=source_state_start,
             launch_lineage=launch_lineage,
+            launch_lineage_locator_sha256=launch_lineage_locator_sha256,
         )
 
     @property
@@ -1021,8 +1057,15 @@ class RunBundleWriter:
                 raise BundleError(
                     "launch_lineage is writer-owned and cannot be caller supplied"
                 )
+            if "launch_lineage_locator_sha256" in controller_extra:
+                raise BundleError(
+                    "launch_lineage_locator_sha256 is writer-owned and cannot be caller supplied"
+                )
             controller_extra["launch_lineage"] = copy.deepcopy(
                 self._launch_lineage
+            )
+            controller_extra["launch_lineage_locator_sha256"] = (
+                self._launch_lineage_locator_sha256
             )
             extra["extra"] = controller_extra
         base_keys = {

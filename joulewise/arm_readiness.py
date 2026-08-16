@@ -4748,21 +4748,45 @@ def verify_consumed_launch(
     }
 
 
-def consume_launch_capability(
+def _require_launcher_consumption_context() -> None:
+    """Refuse unless the private writer was entered by the reviewed launcher."""
+
+    try:
+        private_frame = sys._getframe(1)
+        wrapper_frame = sys._getframe(2)
+        launcher_frame = sys._getframe(3)
+        caller_path = Path(str(launcher_frame.f_globals["__file__"])).resolve()
+    except (KeyError, RuntimeError, OSError):
+        caller_path = Path()
+        private_frame = wrapper_frame = None
+    reviewed_launcher = (
+        Path(__file__).resolve().parents[1] / "scripts" / "launch_window.py"
+    )
+    if (
+        private_frame is None
+        or private_frame.f_code is not _consume_launch_capability.__code__
+        or wrapper_frame is None
+        or wrapper_frame.f_code is not consume_launch_capability.__code__
+        or caller_path != reviewed_launcher
+    ):
+        raise ArmReadinessError(
+            "readiness_usage_invalid",
+            "launch capability consumption is private to scripts/launch_window.py",
+        )
+
+
+def _consume_launch_capability(
     pack_root: Path | str,
     arm_receipt: Path | str,
     window_custody_root: Path | str,
     *,
-    launch_manifest: Path | str | None = None,
-    exec_argv: Sequence[str] | None = None,
-    handoff_token_sha256: str | None = None,
+    launch_manifest: Path | str,
+    exec_argv: Sequence[str],
+    handoff_token_sha256: str,
 ) -> dict[str, Any]:
-    """Atomically claim one GO receipt for the reviewed exec launcher.
+    """Atomically claim one GO receipt inside the reviewed launcher context."""
 
-    The all-``None`` form preserves the pre-binding v1 library primitive for
-    historical tests and forensic replay.  It cannot pass
-    :func:`verify_consumed_launch` and therefore cannot authorize a launch.
-    """
+    _require_launcher_consumption_context()
 
     verified = verify_arm_receipt(pack_root, arm_receipt)
     root = Path(pack_root).resolve(strict=True)
@@ -4786,14 +4810,6 @@ def consume_launch_capability(
     _fsync_directory(custody_pack_root)
     consumption_name = f"{receipt['receipt_id']}.consumed.json"
     relative_arm_path = f"arm_readiness.receipts/{receipt_path.name}"
-    launch_values = (launch_manifest, exec_argv, handoff_token_sha256)
-    if any(value is not None for value in launch_values) and any(
-        value is None for value in launch_values
-    ):
-        raise ArmReadinessError(
-            "readiness_usage_invalid",
-            "launch manifest, exact exec argv, and handoff-token digest are required together",
-        )
     volatile_checks = sorted(
         [
             "arm_receipt_unsuperseded",
@@ -4803,59 +4819,42 @@ def consume_launch_capability(
             "same_head",
         ]
     )
-    if launch_manifest is None:
-        consumption = {
-            "schema_version": LEGACY_CONSUMPTION_RECEIPT_SCHEMA,
-            "receipt_kind": "launch_consumption",
-            "consumed_at_utc": _utc_now(),
-            "arm_receipt": {
-                "receipt_id": receipt["receipt_id"],
-                "path": relative_arm_path,
-                "sha256": digest,
-            },
-            "pack_sha256": verified["pack_sha256"],
-            "head_commit": reviewed["head_commit"],
-            "volatile_checks": volatile_checks,
-            "assurance": copy.deepcopy(ASSURANCE),
-        }
-    else:
-        assert exec_argv is not None and handoff_token_sha256 is not None
-        _require_lower_sha256(handoff_token_sha256, "handoff_token_sha256")
-        manifest, manifest_ref, env_ref, chain_ref = (
-            _load_launch_manifest_for_consumption(Path(launch_manifest))
+    _require_lower_sha256(handoff_token_sha256, "handoff_token_sha256")
+    manifest, manifest_ref, env_ref, chain_ref = (
+        _load_launch_manifest_for_consumption(Path(launch_manifest))
+    )
+    if list(exec_argv) != manifest["launch_command"]:
+        raise ArmReadinessError(
+            "readiness_usage_invalid",
+            "exec argv differs from the exact launch-manifest command",
         )
-        if list(exec_argv) != manifest["launch_command"]:
-            raise ArmReadinessError(
-                "readiness_usage_invalid",
-                "exec argv differs from the exact launch-manifest command",
-            )
-        pack = receipt["pack"]
-        consumption = {
-            "schema_version": CONSUMPTION_RECEIPT_SCHEMA,
-            "receipt_kind": "launch_consumption",
-            "consumption_id": f"{receipt['receipt_id']}-launch",
-            "consumed_at_utc": _utc_now(),
-            "consumed_at_monotonic_ns": time.monotonic_ns(),
-            "boot_session_id": receipt["boot_session_id"],
-            "pack_id": pack["pack_id"],
-            "pack_sha256": verified["pack_sha256"],
-            "plan_id": pack["plan_id"],
-            "window_id": pack["window_id"],
-            "arm_receipt": {
-                "receipt_id": receipt["receipt_id"],
-                "path": relative_arm_path,
-                "sha256": digest,
-            },
-            "head_commit": reviewed["head_commit"],
-            "arm_context_sha256": sha256_bytes(render_json(context)),
-            "launch_manifest": manifest_ref,
-            "window_environment": env_ref,
-            "window_chain": chain_ref,
-            "exec_argv": list(exec_argv),
-            "handoff_token_sha256": handoff_token_sha256,
-            "volatile_checks": volatile_checks,
-            "assurance": copy.deepcopy(ASSURANCE),
-        }
+    pack = receipt["pack"]
+    consumption = {
+        "schema_version": CONSUMPTION_RECEIPT_SCHEMA,
+        "receipt_kind": "launch_consumption",
+        "consumption_id": f"{receipt['receipt_id']}-launch",
+        "consumed_at_utc": _utc_now(),
+        "consumed_at_monotonic_ns": time.monotonic_ns(),
+        "boot_session_id": receipt["boot_session_id"],
+        "pack_id": pack["pack_id"],
+        "pack_sha256": verified["pack_sha256"],
+        "plan_id": pack["plan_id"],
+        "window_id": pack["window_id"],
+        "arm_receipt": {
+            "receipt_id": receipt["receipt_id"],
+            "path": relative_arm_path,
+            "sha256": digest,
+        },
+        "head_commit": reviewed["head_commit"],
+        "arm_context_sha256": sha256_bytes(render_json(context)),
+        "launch_manifest": manifest_ref,
+        "window_environment": env_ref,
+        "window_chain": chain_ref,
+        "exec_argv": list(exec_argv),
+        "handoff_token_sha256": handoff_token_sha256,
+        "volatile_checks": volatile_checks,
+        "assurance": copy.deepcopy(ASSURANCE),
+    }
     validate_consumption_receipt(consumption)
     raw = render_json(consumption)
     consumption_path = consumption_dir / consumption_name
@@ -4880,6 +4879,45 @@ def consume_launch_capability(
         "consumption_path": str(consumption_path),
         "consumption_sha256": digest_out,
     }
+
+
+def consume_launch_capability(
+    pack_root: Path | str,
+    arm_receipt: Path | str,
+    window_custody_root: Path | str,
+    *,
+    launch_manifest: Path | str | None = None,
+    exec_argv: Sequence[str] | None = None,
+    handoff_token_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Launcher-only compatibility import; not part of the public API."""
+
+    try:
+        caller_path = Path(str(sys._getframe(1).f_globals["__file__"])).resolve()
+    except (KeyError, RuntimeError, OSError):
+        caller_path = Path()
+    reviewed_launcher = (
+        Path(__file__).resolve().parents[1] / "scripts" / "launch_window.py"
+    )
+    if caller_path != reviewed_launcher or any(
+        value is None
+        for value in (launch_manifest, exec_argv, handoff_token_sha256)
+    ):
+        raise ArmReadinessError(
+            "readiness_usage_invalid",
+            "launch capability consumption is private to scripts/launch_window.py",
+        )
+    assert launch_manifest is not None
+    assert exec_argv is not None
+    assert handoff_token_sha256 is not None
+    return _consume_launch_capability(
+        pack_root,
+        arm_receipt,
+        window_custody_root,
+        launch_manifest=launch_manifest,
+        exec_argv=exec_argv,
+        handoff_token_sha256=handoff_token_sha256,
+    )
 
 
 def _lifecycle_receipt_path(consumption_path: Path, event: str) -> Path:
@@ -5480,13 +5518,13 @@ def _read_launch_lineage_locator(
     *,
     expected_root: Path,
     expected_role: str | None = None,
-) -> Mapping[str, Any]:
+) -> tuple[Mapping[str, Any], str]:
     if path.name != LAUNCH_LINEAGE_LOCATOR_BASENAME:
         raise LaunchLineageError(
             "launch_binding_mismatch",
             "launch-lineage locator does not use the fixed basename",
         )
-    value, _raw, _digest = _read_launch_lineage_primary(
+    value, _raw, digest = _read_launch_lineage_primary(
         path, missing_code="launch_consumption_missing"
     )
     if (
@@ -5533,7 +5571,7 @@ def _read_launch_lineage_locator(
             "launch_consumption_invalid",
             "launch-lineage locator payload is not an object",
         )
-    return value
+    return value, digest
 
 
 def _authenticated_pack_config_inventory(
@@ -5607,7 +5645,7 @@ def authenticate_campaign_launch_lineage(
             "launch_binding_mismatch", "campaign runs root is not a directory"
         )
     locator_path = selected_root / LAUNCH_LINEAGE_LOCATOR_BASENAME
-    locator = _read_launch_lineage_locator(
+    locator, locator_digest = _read_launch_lineage_locator(
         locator_path, expected_root=selected_root
     )
     authenticated = authenticate_launch_lineage(
@@ -5642,7 +5680,7 @@ def authenticate_campaign_launch_lineage(
         )
     lineage = locator["launch_lineage"]
     for role, root in resolved_roots.items():
-        sibling = _read_launch_lineage_locator(
+        sibling, _sibling_digest = _read_launch_lineage_locator(
             root / LAUNCH_LINEAGE_LOCATOR_BASENAME,
             expected_root=root,
             expected_role=role,
@@ -5677,6 +5715,7 @@ def authenticate_campaign_launch_lineage(
         "pack_root": str(pack_root),
         "root_role": selected_role,
         "root_path": str(selected_root),
+        "locator_sha256": locator_digest,
         "config_inventory": copy.deepcopy(inventory),
         "authentication": {
             key: copy.deepcopy(value)
@@ -5726,6 +5765,36 @@ def authenticate_bundle_launch_lineage(
             metadata = None
     extra = metadata.get("extra") if isinstance(metadata, Mapping) else None
     lineage = extra.get("launch_lineage") if isinstance(extra, Mapping) else None
+    if not isinstance(lineage, Mapping):
+        raise LaunchLineageError(
+            "launch_consumption_missing",
+            "bundle launch-lineage stamp is absent",
+        )
+    locator_digest = (
+        extra.get("launch_lineage_locator_sha256")
+        if isinstance(extra, Mapping)
+        else None
+    )
+    if not isinstance(locator_digest, str) or not _LOWER_SHA256_RE.fullmatch(
+        locator_digest
+    ):
+        raise LaunchLineageError(
+            "launch_consumption_invalid",
+            "bundle launch-lineage locator digest is absent or invalid",
+        )
+    locator_path = path.parent / LAUNCH_LINEAGE_LOCATOR_BASENAME
+    locator, authenticated_locator_digest = _read_launch_lineage_locator(
+        locator_path,
+        expected_root=path.parent,
+    )
+    if (
+        authenticated_locator_digest != locator_digest
+        or locator.get("launch_lineage") != lineage
+    ):
+        raise LaunchLineageError(
+            "launch_binding_mismatch",
+            "bundle launch lineage differs from its authenticated root locator",
+        )
     return authenticate_launch_lineage(
         lineage, require_completion=require_completion
     )
@@ -5802,7 +5871,6 @@ __all__ = [
     "authenticate_campaign_launch_lineage",
     "authenticate_launch_lineage",
     "committed_pack_tree_sha256",
-    "consume_launch_capability",
     "generate_arm_receipt",
     "generate_dry_run_receipt",
     "generate_freeze_receipt",

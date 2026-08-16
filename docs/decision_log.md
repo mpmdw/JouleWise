@@ -9379,3 +9379,19 @@ never reapply the arm's short T-0 expiry after authenticating that consumption
 occurred within it. Calibration writer enforcement remains the separately
 owned next stage-2 landing; downstream stages 3-4 and the C-028 gauntlet still
 gate launch readiness.
+
+**Fix-round authentication clarification (2026-08-15):** collection's inner
+writer authenticates the exact config path already present in the ordinary
+child `run` argv and requires its raw-byte digest at that exact pack-relative
+inventory member; parsed semantic equality alone is insufficient. The inner
+metadata stamp also carries the authenticated selected-locator content digest.
+The outer campaign retains its own authenticated lineage and locator digest,
+then reopens each child bundle after process completion and requires canonical
+lineage-byte plus locator-digest equality. A consistent replacement between
+the outer and inner reads is therefore terminal `launch_lineage_conflict`; the
+attempt evidence is preserved and is never reported successful. This adds no
+receipt, token, or lineage carrier to child argv or environment. Calibration
+writer enforcement remains deferred to the calibration-side stage-2 landing,
+downstream reduce/extract/mint enforcement remains stages 3–4, successor config
+markers remain a Phase-2 freeze transaction, and physical launch remains
+NO-GO pending those gates and the full C-028 gauntlet.

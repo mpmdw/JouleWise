@@ -49,6 +49,7 @@ from tests.test_calibration_bracketing import (
     _fixture_snapshot,
     _unissued_acceptance_fixture,
 )
+from tests.test_arm_readiness import LaunchConsumptionV2Tests
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -139,6 +140,7 @@ class CampaignLaunchLineagePreflightTests(unittest.TestCase):
 
     def test_ceremony_bypass_refuses_before_lock_provenance_or_child(self) -> None:
         self._write_config("member.json", marker=True)
+        self.runs_dir.mkdir()
         args = run_campaign_module.parse_args(
             [
                 str(self.config_dir),
@@ -148,14 +150,7 @@ class CampaignLaunchLineagePreflightTests(unittest.TestCase):
                 str(TEST_CAMPAIGN_POLICY),
             ]
         )
-        error = run_campaign_module.LaunchLineageError(
-            "launch_consumption_missing", "injected missing locator"
-        )
         with patch.object(
-            run_campaign_module,
-            "authenticate_campaign_writer_preflight",
-            side_effect=error,
-        ) as preflight, patch.object(
             run_campaign_module, "acquire_campaign_lock"
         ) as acquire, patch.object(
             run_campaign_module, "new_campaign_provenance"
@@ -164,11 +159,75 @@ class CampaignLaunchLineagePreflightTests(unittest.TestCase):
         ) as child:
             with self.assertRaises(run_campaign_module.LaunchLineageError) as caught:
                 run_campaign_module.run_campaign(args)
-        self.assertIs(caught.exception, error)
-        preflight.assert_called_once()
+        self.assertEqual(
+            caught.exception.reason_code, "launch_consumption_missing"
+        )
         acquire.assert_not_called()
         provenance.assert_not_called()
         child.assert_not_called()
+
+    def test_consistent_locator_swap_after_outer_preflight_refuses(self) -> None:
+        first = LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        first.setUp()
+        try:
+            first._settle()
+            first_root = Path(first.arm["arm_context"]["claim_runs_root"])
+            selector = self.root / "selected-runs"
+            selector.symlink_to(first_root, target_is_directory=True)
+            outer = first._authenticate_campaign(selector)
+
+            second = LaunchConsumptionV2Tests(
+                methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+            )
+            second.setUp()
+            try:
+                second._settle()
+                second_root = Path(second.arm["arm_context"]["claim_runs_root"])
+                bundle = selector / "child-bundle"
+
+                def swap_and_stamp(command, **_kwargs):
+                    selector.unlink()
+                    selector.symlink_to(second_root, target_is_directory=True)
+                    inner = second._authenticate_campaign(selector)
+                    bundle.mkdir()
+                    (bundle / "metadata.json").write_text(
+                        json.dumps(
+                            {
+                                "extra": {
+                                    "launch_lineage": inner["launch_lineage"],
+                                    "launch_lineage_locator_sha256": inner[
+                                        "locator_sha256"
+                                    ],
+                                }
+                            }
+                        )
+                        + "\n"
+                    )
+                    return subprocess.CompletedProcess(command, 0)
+
+                with patch.object(
+                    run_campaign_module.subprocess,
+                    "run",
+                    side_effect=swap_and_stamp,
+                ):
+                    with self.assertRaises(
+                        run_campaign_module.LaunchLineageError
+                    ) as caught:
+                        run_campaign_module.run_authenticated_campaign_child(
+                            ["child"],
+                            env=None,
+                            outer_authentication=outer,
+                            bundle_paths=[bundle],
+                        )
+                self.assertEqual(
+                    caught.exception.reason_code, "launch_lineage_conflict"
+                )
+            finally:
+                second.doCleanups()
+        finally:
+            first.doCleanups()
 
 
 class CampaignLockIdentityTests(unittest.TestCase):

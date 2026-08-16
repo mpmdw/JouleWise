@@ -1037,8 +1037,18 @@ arming; they do not authorize the live night.
    `scripts/launch_window.py`; it is not a compatibility launch path.
    This supersedes the pre-D-117 §5A instruction to settle 180 seconds by
    hand before launching: the settle is inside the chain.
-   Inside the chain, the writer's enforcing pre-slot check gates each
-   calibration slot, and the automatic §5B screen gates member 1.
+   **Current implementation boundary (2026-08-15 fix round):** the launcher
+   enforces consume → revalidate → exact `execve`, and marker-bearing campaign
+   collection enforces exact pack-config membership plus outer/inner lineage
+   agreement. Calibration-slot writer enforcement is not implemented yet;
+   neither the three frozen D-117 packs nor their current configs may be
+   changed in place to add the marker. Calibration-side stage 2, downstream
+   reduce/extract/mint stages 3–4, and the Phase-2 successor-family marker
+   freeze remain required. Therefore this E-10 command is a documented target
+   procedure, **not current authority to launch**: every D-117 physical launch
+   remains NO-GO until those gates and the full review gauntlet close. The
+   automatic §5B screen gates member 1 only after that launch-readiness state
+   exists.
    "Exactly once" means once per frozen bracket-session attempt; a
    prospectively licensed new attempt (below) is a new frozen session,
    never a relaunch of the same one. If consumption succeeds but the physical
@@ -1072,11 +1082,12 @@ desk verdict, it never replaces it.
 operator entrypoint. Its first executable action authenticates the inherited
 anonymous-FD handoff against the v2 consumption receipt and atomically emits
 the immutable start receipt before any settle, directory mutation, or
-collection. Every successor D-117 config carries the exact
-`launch_lineage_required` run-metadata tag; an individual stage therefore
-refuses before bundle creation unless the collection writer can copy the
-authenticated consumption/start/settle references into immutable bundle
-metadata.
+collection. The implemented campaign gate applies only when a config already
+carries the exact `launch_lineage_required` run-metadata tag. No current
+frozen D-117 config carries that marker. Adding it is a Phase-2 successor-pack
+freeze transaction, never an in-place repair of frozen bytes; calibration-side
+stage 2 and downstream stages 3–4 also remain open. Until they land and pass
+review, the private chain is not launch-ready and E-10 remains NO-GO.
 
 ### D-117 §6 amendment — durable bracket dispatch and slot resume
 
@@ -1363,12 +1374,19 @@ root locators, the consumption→arm→start→settle chain, the current collect
 boot and reviewed HEAD, the frozen recipe and exact argv, the authenticated
 pack config membership, the selected arm-context root, and completion
 absence before taking the campaign lock or creating provenance. The inner
-bundle writer independently repeats the disk authentication before creating
-each bundle and stamps the full authenticated object at
-`metadata.json` → `extra` → `launch_lineage`. No lineage path, JSON, or token
-is transported in argv or environment. Writer authentication proves that
-consumption occurred within the arm horizon; it does not reapply that short
-T-0 horizon during a multi-hour window.
+bundle writer independently authenticates the exact CLI-selected config bytes
+as a member of the frozen inventory before creating each bundle. It stamps the
+full authenticated object at `metadata.json` → `extra` → `launch_lineage` and
+the selected locator's authenticated content digest at
+`launch_lineage_locator_sha256`. After each child returns, the outer campaign
+reopens that metadata and requires canonical lineage-byte and locator-digest
+equality with its retained preflight result; disagreement is terminal
+`launch_lineage_conflict`, with the bundle preserved. No receipt path, lineage
+JSON, or token is transported in argv or environment. Writer authentication
+proves that consumption occurred within the arm horizon; it does not reapply
+that short T-0 horizon during a multi-hour window. This paragraph describes
+the implemented marker-bearing campaign gate only, not the still-deferred
+calibration or downstream gates and not present launch authority.
 
 Expected visible behavior: each stage pauses for the 180-second settle, prints
 a 20-second arming countdown, sleeps the display, re-probes the governed

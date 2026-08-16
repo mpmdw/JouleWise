@@ -251,6 +251,7 @@ class RunBundleWriterTests(unittest.TestCase):
                 ).hexdigest()
             },
             "launch_lineage": lineage,
+            "locator_sha256": "4" * 64,
         }
         return config, source_path, lineage, context
 
@@ -273,11 +274,15 @@ class RunBundleWriterTests(unittest.TestCase):
         self.assertEqual((writer.path / "events.jsonl").read_text(), "")
 
     def test_marker_writer_authenticates_before_bundle_creation(self) -> None:
-        config, _source_path, _lineage, _context = self.marker_config_fixture()
+        config, source_path, _lineage, _context = self.marker_config_fixture()
         error = bundle_module.LaunchLineageError(
             "launch_consumption_missing", "injected missing locator"
         )
         with mock.patch.object(
+            bundle_module.sys,
+            "argv",
+            ["joulewise", "run", str(source_path), "--runs-dir", str(self.runs_root)],
+        ), mock.patch.object(
             bundle_module,
             "authenticate_campaign_launch_lineage",
             side_effect=error,
@@ -286,18 +291,28 @@ class RunBundleWriterTests(unittest.TestCase):
                 BundleError, "launch_consumption_missing"
             ):
                 RunBundleWriter.create(self.runs_root, config, self.clock)
-        authenticate.assert_called_once_with(self.runs_root)
+        authenticate.assert_called_once_with(
+            self.runs_root,
+            config_paths=(source_path.resolve(),),
+        )
         self.assertFalse(self.runs_root.exists())
 
     def test_marker_writer_stamps_byte_identical_authenticated_lineage(self) -> None:
-        config, _source_path, lineage, context = self.marker_config_fixture()
+        config, source_path, lineage, context = self.marker_config_fixture()
         with mock.patch.object(
+            bundle_module.sys,
+            "argv",
+            ["joulewise", "run", str(source_path), "--runs-dir", str(self.runs_root)],
+        ), mock.patch.object(
             bundle_module,
             "authenticate_campaign_launch_lineage",
             return_value=context,
         ) as authenticate:
             writer = RunBundleWriter.create(self.runs_root, config, self.clock)
-        authenticate.assert_called_once_with(self.runs_root)
+        authenticate.assert_called_once_with(
+            self.runs_root,
+            config_paths=(source_path.resolve(),),
+        )
         writer.write_metadata({"extra": {"existing": "kept"}})
         metadata = json.loads((writer.path / "metadata.json").read_bytes())
         self.assertEqual(metadata["extra"]["existing"], "kept")
@@ -311,10 +326,18 @@ class RunBundleWriterTests(unittest.TestCase):
                 lineage, sort_keys=True, separators=(",", ":")
             ).encode(),
         )
+        self.assertEqual(
+            metadata["extra"]["launch_lineage_locator_sha256"],
+            context["locator_sha256"],
+        )
 
     def test_marker_writer_refuses_caller_supplied_lineage(self) -> None:
-        config, _source_path, lineage, context = self.marker_config_fixture()
+        config, source_path, lineage, context = self.marker_config_fixture()
         with mock.patch.object(
+            bundle_module.sys,
+            "argv",
+            ["joulewise", "run", str(source_path), "--runs-dir", str(self.runs_root)],
+        ), mock.patch.object(
             bundle_module,
             "authenticate_campaign_launch_lineage",
             return_value=context,
@@ -322,6 +345,34 @@ class RunBundleWriterTests(unittest.TestCase):
             writer = RunBundleWriter.create(self.runs_root, config, self.clock)
         with self.assertRaisesRegex(BundleError, "writer-owned"):
             writer.write_metadata({"extra": {"launch_lineage": lineage}})
+
+    def test_marker_writer_refuses_byte_differing_semantic_clone(self) -> None:
+        config, source_path, _lineage, context = self.marker_config_fixture()
+        clone = source_path.parent / "semantic-clone.json"
+        clone.write_text(json.dumps(json.loads(source_path.read_bytes())) + "\n")
+        self.assertEqual(
+            BenchmarkConfig.from_mapping(json.loads(clone.read_bytes())),
+            config,
+        )
+        self.assertNotEqual(clone.read_bytes(), source_path.read_bytes())
+        with mock.patch.object(
+            bundle_module.sys,
+            "argv",
+            ["joulewise", "run", str(clone), "--runs-dir", str(self.runs_root)],
+        ), mock.patch.object(
+            bundle_module,
+            "authenticate_campaign_launch_lineage",
+            return_value=context,
+        ) as authenticate:
+            with self.assertRaisesRegex(
+                BundleError, "launch_binding_mismatch"
+            ):
+                RunBundleWriter.create(self.runs_root, config, self.clock)
+        authenticate.assert_called_once_with(
+            self.runs_root,
+            config_paths=(clone.resolve(),),
+        )
+        self.assertFalse(self.runs_root.exists())
 
     def test_config_json_is_sorted_normalized_form(self) -> None:
         writer = self.make_writer()

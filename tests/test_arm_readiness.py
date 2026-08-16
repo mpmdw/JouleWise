@@ -84,8 +84,10 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             readiness, "reviewed_main", return_value=self.arm["reviewed_main"]
         ), mock.patch.object(
             readiness, "_root_policy_refusals", return_value=([], set())
+        ), mock.patch.object(
+            readiness, "_require_launcher_consumption_context"
         ):
-            return readiness.consume_launch_capability(
+            return readiness._consume_launch_capability(
                 self.pack,
                 self.arm_path,
                 self.custody,
@@ -242,6 +244,14 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             readiness.render_json(authenticated["launch_lineage"]),
             readiness.render_json(settled["launch_lineage"]),
         )
+        selected_locator = (
+            Path(self.arm["arm_context"]["claim_runs_root"])
+            / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        self.assertEqual(
+            authenticated["locator_sha256"],
+            hashlib.sha256(selected_locator.read_bytes()).hexdigest(),
+        )
 
     def test_lineage_replay_derives_pack_root_and_rejects_caller_mismatch(self) -> None:
         _consumption_path, settled = self._settle()
@@ -338,6 +348,20 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
         )
         self.assertFalse(bound_locator.exists())
+        claim_locator.unlink()
+        with mock.patch.object(
+            readiness,
+            "_current_boot_session_id",
+            return_value=TEST_BOOT_SESSION_ID,
+        ):
+            with self.assertRaises(readiness.LaunchLineageError) as replay:
+                readiness.record_launch_lifecycle_event(
+                    self.pack, consumption_path, "settle"
+                )
+        self.assertEqual(
+            replay.exception.reason_code, "launch_consumption_invalid"
+        )
+        self.assertFalse(bound_locator.exists())
 
     def test_locator_missing_corrupt_root_swap_and_mixed_are_discriminated(self) -> None:
         self._settle()
@@ -364,10 +388,21 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         for path, raw in original.items():
             path.write_bytes(raw)
 
-        claim.with_name(f"{claim.name}.sha256").write_text("corrupt\n")
-        with self.assertRaises(readiness.LaunchLineageError) as corrupt:
+        claim.write_bytes(original[claim] + b" ")
+        with self.assertRaises(readiness.LaunchLineageError) as corrupt_primary:
             self._authenticate_campaign(claim.parent)
-        self.assertEqual(corrupt.exception.reason_code, "launch_consumption_invalid")
+        self.assertEqual(
+            corrupt_primary.exception.reason_code, "launch_consumption_invalid"
+        )
+        for path, raw in original.items():
+            path.write_bytes(raw)
+
+        claim.with_name(f"{claim.name}.sha256").write_text("corrupt\n")
+        with self.assertRaises(readiness.LaunchLineageError) as corrupt_sidecar:
+            self._authenticate_campaign(claim.parent)
+        self.assertEqual(
+            corrupt_sidecar.exception.reason_code, "launch_consumption_invalid"
+        )
         for path, raw in original.items():
             path.write_bytes(raw)
 
@@ -385,8 +420,23 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         for path, raw in original.items():
             path.write_bytes(raw)
 
+        second = LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        second.setUp()
+        try:
+            second._settle()
+            second_bound_path = (
+                Path(second.arm["arm_context"]["bound_runs_root"])
+                / readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+            )
+            second_locator = readiness.parse_json_bytes(
+                second_bound_path.read_bytes(), require_canonical=True
+            )
+        finally:
+            second.doCleanups()
         mixed = json.loads(original[bound])
-        mixed["launch_lineage"]["pack_id"] = "different-pack"
+        mixed["launch_lineage"] = second_locator["launch_lineage"]
         mixed_raw = readiness.render_json(mixed)
         bound.write_bytes(mixed_raw)
         bound.with_name(f"{bound.name}.sha256").write_bytes(
@@ -397,6 +447,26 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
         with self.assertRaises(readiness.LaunchLineageError) as conflict:
             self._authenticate_campaign(claim.parent)
         self.assertEqual(conflict.exception.reason_code, "launch_lineage_conflict")
+
+    def test_consumption_is_not_public_and_direct_call_refuses(self) -> None:
+        self.assertNotIn("consume_launch_capability", readiness.__all__)
+        with self.assertRaises(readiness.ArmReadinessError) as caught:
+            readiness.consume_launch_capability(
+                self.pack,
+                self.arm_path,
+                self.custody,
+            )
+        self.assertEqual(caught.exception.reason_code, "readiness_usage_invalid")
+        with self.assertRaises(readiness.ArmReadinessError) as private:
+            readiness._consume_launch_capability(
+                self.pack,
+                self.arm_path,
+                self.custody,
+                launch_manifest=self.manifest_path,
+                exec_argv=self.exec_argv,
+                handoff_token_sha256="0" * 64,
+            )
+        self.assertEqual(private.exception.reason_code, "readiness_usage_invalid")
 
     def test_campaign_config_membership_and_completion_absence_are_enforced(self) -> None:
         consumption_path, _settled = self._settle()

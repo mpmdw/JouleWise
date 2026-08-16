@@ -155,6 +155,36 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
             verify.assert_called_once()
             execve.assert_called_once()
 
+    def test_reviewed_launcher_enters_private_consumption_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            args = self._args(Path(temporary))
+            argv = [
+                "/usr/bin/caffeinate",
+                "-is",
+                "/bin/zsh",
+                "/tmp/window-chain.zsh",
+                "/tmp/window-plan",
+            ]
+            with mock.patch.object(
+                launch_window,
+                "_load_manifest",
+                return_value={"launch_command": argv},
+            ), mock.patch.object(
+                launch_window, "_install_handoff"
+            ), mock.patch.object(
+                arm_readiness,
+                "_consume_launch_capability",
+                return_value={"consumption_path": "/tmp/consumed.json"},
+            ) as private_consume, mock.patch.object(
+                launch_window,
+                "verify_consumed_launch",
+                return_value={"exec_argv": argv},
+            ), mock.patch.object(launch_window.os, "execve"):
+                with self.assertRaises(arm_readiness.LaunchLineageError):
+                    launch_window.launch(args)
+            private_consume.assert_called_once()
+            self.assertNotIn("_launcher_context", private_consume.call_args.kwargs)
+
     def test_standalone_consume_cli_is_retired_with_launcher_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
