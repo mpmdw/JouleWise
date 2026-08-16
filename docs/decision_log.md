@@ -9466,6 +9466,39 @@ packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
 
+### D-130 closure recorded — 2026-08-15
+
+WO-CI-RESTRUCTURE is **CLOSED**. PR #129 (`7a76a29`) landed the
+registry-certified matrix proof, and hosted run `31541829071` succeeded in
+3h20m48s from 2026-08-11T22:18:21Z; this is D-130's required second
+independent decisive execution. Hosted run `31518739878` is a second success.
+Per the pinned magistrate disposition, the temporary local-decisive admission
+therefore expired at closure and the dispatch-only workflow restriction is
+lifted.
+
+**Citation consequence:** D-130's temporary mandatory wording —
+“lead-verified locally … + CI-verified transport/authentication chain” — is no
+longer required for future summaries, which may accurately cite the
+restructured hosted proof as hosted CI evidence. This does not retroactively
+change the historical provenance of PR #122's merge decision: descriptions of
+that merge must still identify the custodied local decisive execution rather
+than recast it as a hosted decisive run.
+
+**ADDENDUM (2026-08-16): automatic triggering DEFERRED, closure unchanged.**
+Restoring push/pull_request triggers exposed that the decisive matrix is not
+runnable at current main: every leg fails at fixture setup with
+`AttributeError: module 'scripts.mint_floor_artifact' has no attribute
+'STACK_IDENTITY_DOMAIN'` (tests/test_mint_floor_artifact_generalized.py:4974;
+failed PR runs 31928874193, 31929587168, 31929945739). This is fixture/API
+drift accumulated while the workflow was dispatch-only — a runnability
+failure at setup, not a leg contradiction of proof semantics, so it is not a
+stop signal and does not reopen D-130 (the second independent execution
+remains a historical fact at #129's head). The workflow returns to
+`workflow_dispatch` and WO-PROOF-RUNNABILITY-REPAIR is registered: repair the
+fixture drift under the full proof-semantics trust gauntlet the
+WO-CI-RESTRUCTURE registration prescribed, prove the matrix green at a
+current-main head, then restore automatic triggering in the same change.
+
 ### D-078 amendment — 2026-08-15: locator and campaign-writer enforcement landed
 
 The campaign half of WO-LAUNCH-BINDING stage 2 implements the already

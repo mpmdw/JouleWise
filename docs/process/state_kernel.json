@@ -3285,22 +3285,23 @@
       "status_note": "Council Phase 1 parallel contract-bearing work; it changes the operator sequence and therefore retains the full council gate.",
       "stop_card": null
     },
-    "WO-MARGIN-RECORDER-AUTHZ": {
+    "WO-PROOF-RUNNABILITY-REPAIR": {
       "acceptance": {
         "evidence": [
-          "The recorder invokes the existing governed extraction-spec grant exactly once and only for the plan-tree-selected floor-pack spec",
-          "Returned bytes are hash-compared to the plan-tree pin before census or membership processing",
-          "Frozen-pack regressions model the real re-specced cells and the synthetic green-suite specimen is removed"
+          "The decisive-proof fixtures build at a current-main head (the STACK_IDENTITY_DOMAIN drift and any sibling drift repaired)",
+          "The full 22-leg matrix runs green on hosted runners at that head",
+          "The repair passed the proof-semantics trust gauntlet (proof-equivalence certified, not assumed)",
+          "The same change restores automatic push/pull_request triggering"
         ],
         "pointer": {
-          "json_pointer": "/tasks/WO-MARGIN-RECORDER-AUTHZ/acceptance",
-          "label": "WO-MARGIN-RECORDER-AUTHZ acceptance",
+          "json_pointer": "/tasks/WO-PROOF-RUNNABILITY-REPAIR/acceptance",
+          "label": "WO-PROOF-RUNNABILITY-REPAIR acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The margin recorder receives the adopted narrow authorization for exactly the plan-tree-pinned extraction spec and proves it on real frozen cell shapes."
+        "summary": "The decisive proof matrix is runnable and green at current main under the trust gauntlet, and automatic triggering is restored."
       },
       "authority": {
-        "label": "WO-MARGIN-RECORDER-AUTHZ adopted contract and council Phase 1",
+        "label": "D-130 closure addendum 2026-08-16 (automatic triggering deferred on fixture drift)",
         "path": "docs/decision_log.md"
       },
       "dependencies": [],
@@ -3308,60 +3309,60 @@
       "fences": [
         {
           "authority": {
-            "label": "WO-MARGIN-RECORDER-AUTHZ adopted contract",
-            "path": "docs/decision_log.md"
+            "label": "WO-CI-RESTRUCTURE registration: proof-semantics work carries the full trust gauntlet",
+            "path": "TASK_QUEUE.md"
           },
-          "rule": "No new authentication primitive, public API, or scientific semantic; the grant is narrower than the mint and covers exactly one pinned spec"
+          "rule": "The decisive-proof tests are PROOF-SEMANTICS: no drive-by symbol rename without the D-118/D-121 trust gauntlet and certified proof-equivalence; a leg contradiction (as opposed to setup drift) is an automatic stop signal and cold gate"
         }
       ],
       "flags": [],
-      "goal": "Authorize the window-margin recorder to consume exactly the plan-tree-pinned governed extraction spec and replace synthetic census tests with real frozen-pack regressions.",
-      "id": "WO-MARGIN-RECORDER-AUTHZ",
+      "goal": "Repair the decisive-proof fixture drift against current main under the trust gauntlet and restore the workflow's automatic triggering",
+      "id": "WO-PROOF-RUNNABILITY-REPAIR",
       "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 3,
+      "priority": "p2_next_slice",
+      "rank": 62,
       "status": "queued",
-      "status_note": "Council Phase 1 parallel code work executing D-133's close-out gate without changing scientific semantics.",
+      "status_note": "Registered 2026-08-16 when the restored triggers exposed the drift; blocks PR-gating by the proof matrix, not any Phase-1 merge",
       "stop_card": null
     },
-    "WO-T0-PRODUCER": {
+    "WO-RECORDER-GRANT-IDENTITY": {
       "acceptance": {
         "evidence": [
-          "One integrated producer captures all nine T-0 inputs and emits the terminal-review-trailer evidence",
-          "prewindow_check --wait enforces at least 600 seconds of continuous dwell and the D-127 privileged clock route is implemented for Ed to install",
-          "All env, chain, manifest, argv, custody, margin-recorder, and doubled-plan-path defects close with a real-pack regression",
-          "The full T-0 path passes end-to-end at the exact reviewed head before successor arm-packet issuance"
+          "allow_governed_extraction_spec no longer re-resolves its argument: the grant accepts a caller-verified identity verbatim or keys on an fd or (st_dev,st_ino) identity",
+          "The F-10 post-grant grant-delta verification lands with the read-only accessor the prior clause 2 forbade",
+          "A concurrent-writer alias/swap regression executes the former TOCTOU and refuses instead of silently succeeding",
+          "The change passes its own rule-11 cold gate before merge"
         ],
         "pointer": {
-          "json_pointer": "/tasks/WO-T0-PRODUCER/acceptance",
-          "label": "WO-T0-PRODUCER acceptance",
+          "json_pointer": "/tasks/WO-RECORDER-GRANT-IDENTITY/acceptance",
+          "label": "WO-RECORDER-GRANT-IDENTITY acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The integrated T-0 producer, dwell, privileged clock route, chain fixes, and terminal-review evidence pass end-to-end on a real frozen pack."
+        "summary": "The authority-plane grant is keyed to a verified identity rather than re-resolving the caller's path, closing the registered check-to-grant race under its own cold gate."
       },
       "authority": {
-        "label": "2026-08-15 council verdict Phase 1 and R2 FROZEN_PLAN ruling",
-        "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+        "label": "2026-08-15 recorder-race cold gate composed verdict (registered limitation + queued authority-plane cure)",
+        "path": "docs/process_traces/2026-08-15-recorder-race-coldgate/composed-verdict.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "label": "Council verdict WO-T0-PRODUCER bounds",
-            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+            "label": "Recorder-race composed verdict: not licensed as a caller-side patch",
+            "path": "docs/process_traces/2026-08-15-recorder-race-coldgate/composed-verdict.md"
           },
-          "rule": "Do not lower the 600-second dwell, perform Ed's sudo installation, or issue a successor arm packet before the exact-head end-to-end pass"
+          "rule": "No caller-side patch may claim this closure; the cure edits joulewise/authentication_io.py under its OWN rule-11 cold gate, and Ed's batched risk-appetite call may drop the work order to the registered limitation alone"
         }
       ],
       "flags": [],
-      "goal": "Implement the integrated nine-input T-0 producer, 600-second dwell, D-127 clock route, chain and manifest fixes, real-pack path regression, and terminal-review-trailer producer.",
-      "id": "WO-T0-PRODUCER",
+      "goal": "Stop the governed extraction-spec grant re-resolving the caller's path: key the grant on a verified identity, fold in F-10 grant-delta verification, and retire the registered check-to-grant limitation",
+      "id": "WO-RECORDER-GRANT-IDENTITY",
       "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 0,
+      "priority": "p2_next_slice",
+      "rank": 61,
       "status": "queued",
-      "status_note": "Council Phase 1's largest code work order; it blocks the dress rehearsal but is parallelizable with the other Phase-1 rows.",
+      "status_note": "Ed-weighted: the batched risk-appetite session may rule the concurrent local writer out of model, dropping this to the registered limitation alone",
       "stop_card": null
     },
     "WO-T3-VIS-01": {
@@ -3398,5 +3399,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-15"
+  "updated": "2026-08-16"
 }
