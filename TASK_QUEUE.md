@@ -656,7 +656,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 <!-- END GENERATED: state-kernel current-queue -->
 
-## FLAKE-CALEXITS-311-REDERIVE (registered 2026-08-12, T6; evidence row, no work yet)
+## FLAKE-CALEXITS-311-REDERIVE (fixed 2026-08-15 on Phase-2 branch; rides merge)
 
 New calexits hosted-flake signature distinct from the #139-killed class:
 `test_parameterized_durable_public_cli_witnesses` FAILED on 3.11 only
@@ -670,11 +670,17 @@ producer; a 120 ms writer suspension reproduces the exact hosted failure
 shape (status=invalid, b_fiducial_s=null) on the valid-writer step. Harness
 false negative; both failing runs certified safe-to-rerun (each failed case
 passed on its automatic later in-job execution; neither PR touches the
-writer). Fix shape registered (NOT applied): make the pulse producer honor
-the test clock (event-driven, WO-CALEXITS-RELIABILITY lineage) and keep the
-detector reason in the assertion so a real regression is distinguishable
-from this flake. Diagnosis: T6 scratchpad calexits-flake-diag.md (custody
-with T6 session record).
+writer). Fix applied on `impl/wo-detect-pulses-budget`: the test-only producer
+now uses logical protocol-event time and waits for durable sampler
+acknowledgements at each command transition, so command stamps, pulse
+duration, and schedule advancement are scheduler-independent. The production
+real-time driver and fail-closed detector remain unchanged; the
+corrected-writer assertion now surfaces the detector subbranch, and a
+producer-mid-pulse 120 ms delay regression proves identical evidence bytes.
+This deliberately rides the Phase-2 merge because the branch already carries
+stale authenticated estimator inputs; landing it separately on main would
+require a second D-079 re-issuance. Diagnosis: T6 scratchpad
+calexits-flake-diag.md (custody with T6 session record).
 
 ## WO-COLLECTION-MARGIN-01 — SHIPPED (`1092984`, 2026-08-13; registered 2026-08-12, T6)
 

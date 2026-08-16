@@ -135,50 +135,135 @@ TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
 TEST_WRITER_CRASH_CAPABILITY_ROOT_ENV = (
     "JOULEWISE_TEST_WRITER_CRASH_CAPABILITY_ROOT"
 )
+TEST_LOGICAL_SAMPLER_ACK_ENV = "JW_FAKE_SAMPLER_ACK_PATH"
+TEST_LOGICAL_CLOCK_ORIGIN_ENV = "JW_FAKE_LOGICAL_CLOCK_ORIGIN"
+TEST_LOGICAL_ACK_SCHEMA = "joulewise.test_sampler_ack.v1"
+TEST_LOGICAL_READY_EVENT = "sampler_ready"
+TEST_LOGICAL_READY_SEQUENCE = 0
+TEST_LOGICAL_PROTOCOL_EVENTS = frozenset(
+    {
+        "sampling_started",
+        "warmup_command_on",
+        "warmup_command_off",
+        "pulse_command_on",
+        "pulse_command_off",
+        "sampling_stopped",
+    }
+)
 _AUTHORIZED_WRITER_CRASH_STAGE: str | None = None
 _CRASH_HOOK_DIAGNOSTIC_EMITTED = False
 
 
-class _AcceleratedSystemClock:
-    """Expose test-scaled real time without bypassing the production clock seam."""
+class _LogicalTestClock:
+    """Test-only clock advanced solely by synthetic protocol transitions."""
 
-    def __init__(self, scale: float, *, epoch_origin_s: float | None = None) -> None:
-        self._scale = scale
-        self._clock = SystemClock()
-        self._origin = self._clock.stamp()
-        self._epoch_origin_s = (
-            self._origin.epoch_s if epoch_origin_s is None else epoch_origin_s
-        )
-        self._monotonic_origin_s = (
-            self._origin.monotonic_before_s
-            + self._origin.monotonic_after_s
-        ) / 2.0
-        self._accelerated_epoch_origin_s = self._scaled(
-            self._origin.epoch_s,
-            self._epoch_origin_s,
-        )
-        self._wall_minus_monotonic_s = (
-            self._accelerated_epoch_origin_s - self._monotonic_origin_s
-        )
-
-    def _scaled(self, value: float, origin: float) -> float:
-        return origin + ((value - origin) / self._scale)
+    def __init__(self, epoch_origin_s: float) -> None:
+        if not math.isfinite(epoch_origin_s):
+            raise ValueError("test logical clock origin must be finite")
+        self._now_s = float(epoch_origin_s)
 
     def now(self) -> float:
-        return self._scaled(time.time(), self._epoch_origin_s)
+        return self._now_s
 
     def stamp(self) -> ClockStamp:
-        epoch_s = self.now()
-        accelerated_monotonic_s = epoch_s - self._wall_minus_monotonic_s
         return ClockStamp(
-            epoch_s=epoch_s,
-            monotonic_before_s=accelerated_monotonic_s,
-            monotonic_after_s=accelerated_monotonic_s,
-            wall_resolution_s=self._origin.wall_resolution_s / self._scale,
-            monotonic_resolution_s=(
-                self._origin.monotonic_resolution_s / self._scale
-            ),
+            epoch_s=self._now_s,
+            monotonic_before_s=self._now_s,
+            monotonic_after_s=self._now_s,
+            wall_resolution_s=0.0,
+            monotonic_resolution_s=0.0,
         )
+
+    def advance(self, seconds: float) -> None:
+        if not math.isfinite(seconds) or seconds < 0.0:
+            raise ValueError("test logical clock advance must be finite and nonnegative")
+        self._now_s += seconds
+
+    def advance_to(self, epoch_s: float) -> None:
+        if not math.isfinite(epoch_s) or epoch_s < self._now_s:
+            raise ValueError("test logical clock cannot move backward")
+        self._now_s = float(epoch_s)
+
+
+class _LogicalTestPulseDriver:
+    """Synchronize each test command transition with a durable sampler ack."""
+
+    def __init__(
+        self,
+        clock: _LogicalTestClock,
+        acknowledgement_path: Path,
+        *,
+        timeout_s: float,
+    ) -> None:
+        self.clock = clock
+        self.acknowledgement_path = acknowledgement_path
+        self.timeout_s = timeout_s
+        self._next_sequence = TEST_LOGICAL_READY_SEQUENCE + 1
+
+    def next_sequence(self, event_type: str) -> int:
+        if event_type not in TEST_LOGICAL_PROTOCOL_EVENTS:
+            raise ValueError("test logical pulse event is not registered")
+        sequence = self._next_sequence
+        self._next_sequence += 1
+        return sequence
+
+    def await_acknowledgement(
+        self,
+        process: subprocess.Popen,
+        *,
+        sequence: int,
+        event_type: str,
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + self.timeout_s
+        while time.monotonic() < deadline:
+            try:
+                lines = self.acknowledgement_path.read_text(
+                    encoding="utf-8"
+                ).splitlines()
+            except (OSError, UnicodeDecodeError):
+                lines = []
+            for line in lines:
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    isinstance(row, Mapping)
+                    and row.get("schema") == TEST_LOGICAL_ACK_SCHEMA
+                    and row.get("sequence") == sequence
+                ):
+                    if row.get("event_type") != event_type:
+                        raise RuntimeError("test sampler acknowledgement event mismatch")
+                    return dict(row)
+            if process.poll() is not None:
+                raise RuntimeError("test sampler exited before acknowledgement")
+            time.sleep(min(0.001, self.timeout_s / 4))
+        raise RuntimeError(
+            f"test sampler acknowledgement timeout: {event_type}:{sequence}"
+        )
+
+    def await_ready(self, process: subprocess.Popen) -> None:
+        row = self.await_acknowledgement(
+            process,
+            sequence=TEST_LOGICAL_READY_SEQUENCE,
+            event_type=TEST_LOGICAL_READY_EVENT,
+        )
+        ready_epoch_s = row.get("logical_epoch_s")
+        if isinstance(ready_epoch_s, bool) or not isinstance(
+            ready_epoch_s, int | float
+        ):
+            raise RuntimeError("test sampler ready acknowledgement lacks logical time")
+        self.clock.advance_to(float(ready_epoch_s))
+
+    def drive_fenced_pulse(self, buffers: Any) -> int:
+        """Issue fixed logical work; pulse duration advances only by protocol."""
+
+        import mlx.core as mx  # noqa: PLC0415 - synthetic writer dependency
+
+        left, right = buffers
+        product = mx.matmul(left, right)
+        mx.eval(product)
+        return 1
 
 
 class _AcceptancePreflightError(ValueError):
@@ -563,14 +648,23 @@ def _sampler_lifetime(
     command: list[str],
     *,
     event_reporter=None,
+    environment: Mapping[str, str] | None = None,
 ):
     """Join the direct sampler child on every exit path, then census."""
 
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    if environment is None:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=environment,
+        )
     try:
         yield process
     finally:
@@ -1242,18 +1336,14 @@ def main(argv: list[str] | None = None) -> int:
 
     import mlx.core as mx  # noqa: PLC0415
 
-    clock = (
-        SystemClock()
+    logical_test_clock = (
+        None
         if args.time_scale_for_test == 1
-        else _AcceleratedSystemClock(
-            args.time_scale_for_test,
-            epoch_origin_s=(
-                float(os.environ["JW_FAKE_TIME_ORIGIN"])
-                if "JW_FAKE_TIME_ORIGIN" in os.environ
-                else None
-            ),
+        else _LogicalTestClock(
+            float(os.environ.get("JW_FAKE_TIME_ORIGIN", time.time()))
         )
     )
+    clock = SystemClock() if logical_test_clock is None else logical_test_clock
     validation_id = (
         args.attempt_id
         if bracket_mode
@@ -1345,22 +1435,46 @@ def main(argv: list[str] | None = None) -> int:
     events_path = out_dir / "events.jsonl"
     events = events_path.open("w", encoding="utf-8")
     _writer_stage(WriterStage.AFTER_EVENT_STREAM_OPEN)
+    logical_driver = (
+        None
+        if logical_test_clock is None
+        else _LogicalTestPulseDriver(
+            logical_test_clock,
+            out_dir / ".test-sampler-acks.jsonl",
+            timeout_s=args.sampler_ready_timeout_s,
+        )
+    )
+    active_sampler: subprocess.Popen | None = None
 
     def emit(event_type: str, metadata: dict) -> None:
+        sequence = (
+            logical_driver.next_sequence(event_type)
+            if logical_driver is not None
+            and event_type in TEST_LOGICAL_PROTOCOL_EVENTS
+            else None
+        )
+        row = {
+            "timestamp_s": clock.now(),
+            "event_type": event_type,
+            "phase": "instrument_validation",
+            "message": event_type,
+            "metadata": metadata,
+        }
+        if sequence is not None:
+            row["test_protocol_sequence"] = sequence
         events.write(
-            json.dumps(
-                {
-                    "timestamp_s": clock.now(),
-                    "event_type": event_type,
-                    "phase": "instrument_validation",
-                    "message": event_type,
-                    "metadata": metadata,
-                },
-                sort_keys=True,
-            )
-            + "\n"
+            json.dumps(row, sort_keys=True) + "\n"
         )
         events.flush()
+        if sequence is not None:
+            os.fsync(events.fileno())
+            if active_sampler is None:
+                raise RuntimeError("test sampler is unavailable for acknowledgement")
+            logical_driver.await_acknowledgement(
+                active_sampler,
+                sequence=sequence,
+                event_type=event_type,
+            )
 
     buffers = allocate_matmul_buffers()
     command = ([] if args.sampler_direct_for_test else ["sudo", "-n"]) + [
@@ -1376,11 +1490,20 @@ def main(argv: list[str] | None = None) -> int:
         "-o",
         str(capture_path),
     ]
+    sampler_environment = None
+    if logical_driver is not None:
+        sampler_environment = os.environ.copy()
+        sampler_environment[TEST_LOGICAL_SAMPLER_ACK_ENV] = str(
+            logical_driver.acknowledgement_path
+        )
+        sampler_environment[TEST_LOGICAL_CLOCK_ORIGIN_ENV] = repr(clock.now())
     pre_spawn = clock.stamp()
     with _sampler_lifetime(
         command,
         event_reporter=emit,
+        environment=sampler_environment,
     ) as process:
+        active_sampler = process
         _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
         first_parse = None
         deadline = time.monotonic() + args.sampler_ready_timeout_s
@@ -1393,6 +1516,8 @@ def main(argv: list[str] | None = None) -> int:
                     except ValueError:
                         pass
                     else:
+                        if logical_driver is not None:
+                            logical_driver.await_ready(process)
                         first_parse = clock.stamp()
                         break
             time.sleep(
@@ -1429,7 +1554,10 @@ def main(argv: list[str] | None = None) -> int:
         sampling_started = clock.stamp()
         emit("sampling_started", {})
 
-        time.sleep(BASELINE_S * args.time_scale_for_test)
+        if logical_driver is None:
+            time.sleep(BASELINE_S * args.time_scale_for_test)
+        else:
+            logical_test_clock.advance(BASELINE_S)
         warmups: list[CommandedPulse] = []
         for warmup_index in range(WARMUP_PULSE_COUNT):
             on_stamp = clock.stamp()
@@ -1437,7 +1565,14 @@ def main(argv: list[str] | None = None) -> int:
                 "warmup_command_on",
                 {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
             )
-            run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
+            if logical_driver is None:
+                run_matmul_pulse(
+                    PULSE_DURATION_S * args.time_scale_for_test,
+                    buffers,
+                )
+            else:
+                logical_driver.drive_fenced_pulse(buffers)
+                logical_test_clock.advance(PULSE_DURATION_S)
             off_stamp = clock.stamp()
             emit(
                 "warmup_command_off",
@@ -1451,21 +1586,38 @@ def main(argv: list[str] | None = None) -> int:
                     off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
                 )
             )
-            time.sleep(1.5 * args.time_scale_for_test)
-        time.sleep(BASELINE_S * args.time_scale_for_test)
+            if logical_driver is None:
+                time.sleep(1.5 * args.time_scale_for_test)
+            else:
+                logical_test_clock.advance(1.5)
+        if logical_driver is None:
+            time.sleep(BASELINE_S * args.time_scale_for_test)
+        else:
+            logical_test_clock.advance(BASELINE_S)
 
         # Van der Corput spacing is schedule-relative (offsets start at 0 for the
         # first pulse), so the loop cursor MUST be measured from the pulse-loop
         # start, not from sampling-start (which precedes it by the baseline +
         # warmup + baseline preamble). Measuring elapsed against sampling_started
         # made every gap negative and collapsed the pulses back-to-back.
-        pulse_loop_mono0 = time.monotonic()
+        pulse_loop_mono0 = (
+            time.monotonic() if logical_driver is None else None
+        )
+        pulse_loop_epoch0 = clock.now() if logical_driver is not None else None
         pulses: list[CommandedPulse] = []
         for raw_on_offset_s, raw_off_offset_s in pulse_schedule(args.pulse_count):
-            on_offset_s = raw_on_offset_s * args.time_scale_for_test
-            off_offset_s = raw_off_offset_s * args.time_scale_for_test
+            if logical_driver is None:
+                on_offset_s = raw_on_offset_s * args.time_scale_for_test
+                off_offset_s = raw_off_offset_s * args.time_scale_for_test
+            else:
+                on_offset_s = raw_on_offset_s
+                off_offset_s = raw_off_offset_s
             _writer_stage(WriterStage.DURING_CAPTURE)
-            if pulses:
+            if logical_driver is not None:
+                assert pulse_loop_epoch0 is not None
+                logical_test_clock.advance_to(pulse_loop_epoch0 + on_offset_s)
+            elif pulses:
+                assert pulse_loop_mono0 is not None
                 elapsed_s = time.monotonic() - pulse_loop_mono0
                 time.sleep(max(0.0, on_offset_s - elapsed_s))
             on_stamp = clock.stamp()
@@ -1473,7 +1625,14 @@ def main(argv: list[str] | None = None) -> int:
                 "pulse_command_on",
                 {"clock_stamp": asdict(on_stamp), "planned_on_offset_s": on_offset_s},
             )
-            run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
+            if logical_driver is None:
+                run_matmul_pulse(
+                    PULSE_DURATION_S * args.time_scale_for_test,
+                    buffers,
+                )
+            else:
+                logical_driver.drive_fenced_pulse(buffers)
+                logical_test_clock.advance_to(pulse_loop_epoch0 + off_offset_s)
             off_stamp = clock.stamp()
             emit(
                 "pulse_command_off",
@@ -1487,12 +1646,19 @@ def main(argv: list[str] | None = None) -> int:
                     off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
                 )
             )
-        time.sleep(BASELINE_S * args.time_scale_for_test)
+        if logical_driver is None:
+            time.sleep(BASELINE_S * args.time_scale_for_test)
+        else:
+            logical_test_clock.advance(BASELINE_S)
         sampling_stopped = clock.stamp()
         emit("sampling_stopped", {})
         _terminate_powermetrics(process)
         _writer_stage(WriterStage.AFTER_SAMPLER_TEARDOWN)
         post_parse = clock.stamp()
+        active_sampler = None
+
+    if logical_driver is not None:
+        logical_driver.acknowledgement_path.unlink(missing_ok=True)
 
     data = capture_path.read_bytes()
     _writer_stage(WriterStage.DURING_RAW_EVENTS_ARTIFACT)

@@ -1,5 +1,8 @@
-"""Yielding MLX process fixture for public calibration-writer tests."""
+"""MLX process fixture for public calibration-writer tests."""
 
+import json
+import os
+from pathlib import Path
 import time
 
 
@@ -18,6 +21,7 @@ class _Random:
 
 random = _Random()
 float16 = object()
+_fence_count = 0
 
 
 def matmul(_left, _right):
@@ -25,7 +29,24 @@ def matmul(_left, _right):
 
 
 def eval(*_values):
-    # The production pulse remains a real timed loop, but the fake backend
-    # yields instead of turning the entire interval into a busy-spin.
+    global _fence_count
+    # Buffer allocation fences two arrays. Pulse fences one product, which
+    # gives the suspension-immunity regression a precise producer-mid-pulse
+    # delay seam without altering the logical command clock.
+    if len(_values) == 1:
+        _fence_count += 1
+        delay_target = int(os.environ.get("JW_FAKE_MLX_DELAY_ON_FENCE", "0"))
+        if delay_target == _fence_count:
+            delay_s = float(os.environ.get("JW_FAKE_MLX_DELAY_S", "0"))
+            marker = os.environ.get("JW_FAKE_MLX_DELAY_RESULT_PATH")
+            if marker:
+                Path(marker).write_text(
+                    json.dumps(
+                        {"delay_s": delay_s, "fence": _fence_count},
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+            time.sleep(delay_s)
     time.sleep(0.0005)
-

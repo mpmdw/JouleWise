@@ -16,6 +16,11 @@ from xml.sax.saxutils import escape
 
 OWNED_REGISTRY_ENV = "JOULEWISE_TEST_OWNED_DESCENDANT_REGISTRY"
 OWNED_REGISTRY_SCHEMA = "joulewise.test_owned_fake_sampler.v1"
+LOGICAL_ACK_PATH_ENV = "JW_FAKE_SAMPLER_ACK_PATH"
+LOGICAL_CLOCK_ORIGIN_ENV = "JW_FAKE_LOGICAL_CLOCK_ORIGIN"
+LOGICAL_ACK_SCHEMA = "joulewise.test_sampler_ack.v1"
+LOGICAL_FIRST_RECORD_DELAY_S = 0.1
+LOGICAL_READY_EPSILON_S = 0.000001
 
 
 def register_owned_sampler() -> None:
@@ -72,6 +77,9 @@ time_scale = float(os.environ.get("JW_FAKE_TIME_SCALE", "1"))
 hw_model = os.environ["JW_FAKE_HW_MODEL"]
 os_build = os.environ["JW_FAKE_OS_BUILD"]
 events_path = output.parent.parent / "events.jsonl"
+ack_path_value = os.environ.get(LOGICAL_ACK_PATH_ENV)
+logical_origin_value = os.environ.get(LOGICAL_CLOCK_ORIGIN_ENV)
+ack_path = Path(ack_path_value) if ack_path_value else None
 last_endpoint: float | None = None
 record_count = 0
 
@@ -125,7 +133,32 @@ def emit_idle_to(handle, endpoint: float) -> None:
 
 
 events_handle = None
+ack_handle = None
 active_on: float | None = None
+
+
+def acknowledge(handle, sequence: int, event_type: str, **metadata) -> None:
+    global ack_handle
+    if ack_path is None:
+        return
+    handle.flush()
+    os.fsync(handle.fileno())
+    if ack_handle is None:
+        ack_handle = ack_path.open("x", encoding="utf-8")
+    ack_handle.write(
+        json.dumps(
+            {
+                "schema": LOGICAL_ACK_SCHEMA,
+                "sequence": sequence,
+                "event_type": event_type,
+                **metadata,
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    ack_handle.flush()
+    os.fsync(ack_handle.fileno())
 
 
 def drain_events(handle) -> int:
@@ -144,6 +177,7 @@ def drain_events(handle) -> int:
             row = json.loads(line)
             timestamp_s = float(row["timestamp_s"])
             event_type = str(row["event_type"])
+            sequence = row.get("test_protocol_sequence")
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             continue
         consumed += 1
@@ -156,22 +190,34 @@ def drain_events(handle) -> int:
             if active_on is not None:
                 emit_fixed_span(handle, active_on, timestamp_s, 64, 30000)
             active_on = None
+        if isinstance(sequence, int) and not isinstance(sequence, bool):
+            acknowledge(handle, sequence, event_type)
     return consumed
 
 
 with output.open("wb", buffering=0) as capture:
-    # Anchor placement may observe the clock once; record *quantity* never
-    # does.  This mirrors the accelerated writer clock closely enough for the
-    # real clock-intersection gate while keeping all subsequent work event-led.
-    first_endpoint = float(
-        os.environ.get(
-            "JW_FAKE_INITIAL_ENDPOINT",
-            str(origin + ((time.time() - origin) / time_scale)),
+    # The legacy direct-fixture path may observe the clock once for anchor
+    # placement; record *quantity* never does. The logical writer instead
+    # supplies a fixed origin and advances all subsequent work by events.
+    if logical_origin_value is None:
+        first_endpoint = float(
+            os.environ.get(
+                "JW_FAKE_INITIAL_ENDPOINT",
+                str(origin + ((time.time() - origin) / time_scale)),
+            )
         )
-    )
+    else:
+        first_endpoint = float(logical_origin_value) + LOGICAL_FIRST_RECORD_DELAY_S
     append_record(capture, first_endpoint, 10000)
     if mode != "one":
         append_record(capture, first_endpoint + 1.0, 10000)
+    if ack_path is not None:
+        acknowledge(
+            capture,
+            0,
+            "sampler_ready",
+            logical_epoch_s=first_endpoint + LOGICAL_READY_EPSILON_S,
+        )
     while running:
         if mode != "one":
             drain_events(capture)
@@ -183,6 +229,8 @@ with output.open("wb", buffering=0) as capture:
 
 if events_handle is not None:
     events_handle.close()
+if ack_handle is not None:
+    ack_handle.close()
 result_path = os.environ.get("JW_FAKE_SAMPLER_RESULT_PATH")
 if result_path:
     raw = output.read_bytes()
