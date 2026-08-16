@@ -8,7 +8,22 @@ D-095 chain, an adjudication); quote verdicts as issued, never
 reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 `WINDOW_STATUS.md` (machine state), `docs/decision_log.md` (policy).
 
-Last updated: **2026-08-07** (D-117: the historical re-mint path is
+Last updated: **2026-08-16** (T9 close). Since the 2026-08-07 entry below:
+all three D-117 packs were **frozen** (2026-08-13, receipts PASS ×3) with the
+tighter pre-registered floor selector (`d124_two_shared_edge_common_mode.v1`,
+1.869502 J on the retained contrast cell — issued results this cycle remain
+under the conservative 8.611855 J composition until the first post-freeze
+mint); the **readiness council ruled NOT-READY 0/11** (2026-08-15) — no window
+may be armed before a READY-candidate verdict, so every prospective claim
+remains BLOCKED on the repair program, whose Phase-1 code is now **merged**
+(five PRs, 2026-08-16) with the claim-consumption edge in place: analysis
+accepts only an authenticated finalized manifest, and refusals are first-class
+results. No claim-bearing number changed; the paper's characterization prose
+was provenance-corrected (council L11) without altering any value. Next
+claim-state change: the Phase-2 re-freeze → re-audit → READY-candidate
+council → the alpha/beta/gamma windows.
+
+Previous entry — Last updated: **2026-08-07** (D-117: the historical re-mint path is
 SUPERSEDED — structurally closed at main after the D-116 issuance
 (candidate discovery excludes import-marked receipts by design); the
 claim path forward is THREE PROSPECTIVE WINDOWS — fresh 1.5B decode
