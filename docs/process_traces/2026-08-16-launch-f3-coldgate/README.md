@@ -7,8 +7,9 @@ forged caller-frame guard, then incomplete required-context reauthentication
 `66884c6`).
 
 - `assemble.py` + `MANIFEST.json` — mechanical non-author packet assembly
-  (11 verbatim artifacts, SHA-256 pinned; the packet's evidence files 01-11
-  live in the session scratchpad and are reproducible from the named sources:
+  (11 verbatim artifacts, SHA-256 pinned; files 01-11 are COMMITTED HERE as of
+  the same session's close — custody is self-contained, hashes re-verified
+  against the manifest at commit time; they comprise:
   both lens reports, fix prompts 1/2, delta reports 1/2, the escalation
   consult, the fix-2b report, the branch diff at `66884c6`).
 - `12-cold-adjudicator-ruling.md` — cold Fable adjudicator (fresh instance):
