@@ -8997,6 +8997,46 @@ restated here). Cures fleet blocker L10-B1/L4 (the gamma claim edge).
    items) are carried on the work order's RULING-REQUIRED list; any that
    touch claim semantics surface to Ed with the Phase-1 close.
 
+### D-078 amendment — 2026-08-15: analysis-manifest consumption-edge refusal registry
+
+The following exact spellings extend D-078's closed, fail-closed refusal
+registry for the adopted prospective → finalized → consumer lifecycle.
+Nested validators may add detail, but must retain one of these top-level
+codes and must exit before estimation or claim-artifact publication.
+
+- Prospective: `analysis_prospective_schema_invalid`,
+  `analysis_prospective_unknown_key`, `analysis_prospective_not_frozen`,
+  `analysis_prospective_identity_mismatch`,
+  `analysis_prospective_plan_tree_mismatch`,
+  `analysis_prospective_source_hash_mismatch`,
+  `analysis_prospective_unsafe_path`,
+  `analysis_prospective_member_cover_mismatch`,
+  `analysis_prospective_block_cover_mismatch`,
+  `analysis_prospective_contrast_cover_mismatch`,
+  `analysis_prospective_family_invalid`,
+  `analysis_prospective_multiplicity_invalid`,
+  `analysis_prospective_floor_dependency_unresolved`, and
+  `analysis_prospective_unresolved_slot`.
+- Finalization: `analysis_finalization_input_unreadable`,
+  `analysis_finalization_prospective_invalid`,
+  `analysis_finalization_attachment_missing`,
+  `analysis_finalization_attachment_invalid`,
+  `analysis_finalization_verdict_not_passed`,
+  `analysis_finalization_evaluation_basis_mismatch`,
+  `analysis_finalization_member_cover_mismatch`,
+  `analysis_finalization_bracket_binding_mismatch`,
+  `analysis_finalization_ledger_head_mismatch`,
+  `analysis_finalization_floor_dependency_unsatisfied`,
+  `analysis_finalization_semantics_mismatch`,
+  `analysis_finalization_noncanonical`, and
+  `analysis_finalization_output_conflict`.
+- Consumer: `analysis_manifest_prospective_not_consumable`,
+  `analysis_manifest_finalized_invalid`,
+  `analysis_manifest_lineage_mismatch`,
+  `analysis_manifest_collection_identity_mismatch`,
+  `analysis_manifest_floor_attachment_mismatch`, and
+  `analysis_manifest_family_semantics_mismatch`.
+
 ### R1 RULED (magistrate synthesis of the rule-11 cold gate, 2026-08-15): freeze-evidence lifecycle — content-bound design ADOPTED WITH THE COMPOSED AMENDMENT SET
 
 Gate record (the ONE homes; not restated here):

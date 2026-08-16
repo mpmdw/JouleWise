@@ -25,9 +25,12 @@ from joulewise.analysis_manifest import (
     validate_analysis_manifest,
 )
 from joulewise.analysis_manifest_v3 import (
+    FINALIZED_SCHEMA_VERSION as ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA,
     SCHEMA_VERSION as ANALYSIS_MANIFEST_V3_SCHEMA,
+    is_abba_v3_consumable_schema,
     normalized_realized_stack_identity,
     validate_analysis_manifest_v3,
+    validate_finalized_analysis_manifest_v3,
 )
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.campaign_provenance import (
@@ -558,6 +561,21 @@ def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
         errors = validate_analysis_manifest(value, manifest_dir=path.parent)
     elif schema_version == ANALYSIS_MANIFEST_V3_SCHEMA:
         errors = validate_analysis_manifest_v3(value, manifest_dir=path.parent)
+    elif schema_version == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        refusals = validate_finalized_analysis_manifest_v3(
+            value,
+            manifest_path=path,
+            custody_root=path.parent,
+        )
+        errors = [
+            f"{refusal.reason_code}: {refusal.detail}"
+            for refusal in refusals
+        ]
+    elif schema_version == "joulewise.analysis_manifest.v3.prospective":
+        raise AnalysisInputError(
+            "analysis_manifest_prospective_not_consumable: frozen prospective "
+            "manifests must pass the outcome-blind finalizer"
+        )
     elif schema_version == "joulewise.analysis_manifest.v2":
         raise AnalysisInputError(
             "analysis manifest v2 is the AP-SPEC sibling and is not consumable "
@@ -570,6 +588,68 @@ def load_manifest(path: Path) -> tuple[Mapping[str, Any], str]:
     if errors:
         raise AnalysisInputError("invalid analysis manifest: " + "; ".join(errors))
     return value, hashlib.sha256(raw).hexdigest()
+
+
+def _manifest_collection_id(manifest: Mapping[str, Any]) -> str:
+    if manifest.get("schema_version") == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        lineage = manifest.get("lineage")
+        identity = (
+            lineage.get("collection_manifest_id")
+            if isinstance(lineage, Mapping)
+            else None
+        )
+        if isinstance(identity, str) and identity:
+            return identity
+        raise AnalysisInputError(
+            "analysis_manifest_collection_identity_mismatch: finalized manifest "
+            "lacks its authenticated collection identity"
+        )
+    return str(manifest["manifest_id"])
+
+
+def _manifest_config_root(
+    manifest: Mapping[str, Any], manifest_path: Path
+) -> Path:
+    root = Path(manifest_path).parent
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        return root
+    lineage = manifest.get("lineage")
+    text = (
+        lineage.get("prospective_manifest_path")
+        if isinstance(lineage, Mapping)
+        else None
+    )
+    if not isinstance(text, str) or not text:
+        raise AnalysisInputError(
+            "analysis_manifest_lineage_mismatch: prospective path is absent"
+        )
+    return (root / text).parent
+
+
+def _enforce_finalized_floor_attachment(
+    manifest: Mapping[str, Any],
+    *,
+    floor_artifact: Mapping[str, Any],
+    floor_sha256: str,
+) -> None:
+    if manifest.get("schema_version") != ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        return
+    evidence = manifest.get("evidence")
+    floor = (
+        evidence.get("aggregate_floor_artifact")
+        if isinstance(evidence, Mapping)
+        else None
+    )
+    if (
+        not isinstance(floor, Mapping)
+        or floor.get("sha256") != floor_sha256
+        or floor.get("artifact_id") != floor_artifact.get("artifact_id")
+        or floor.get("schema_version") != floor_artifact.get("schema_version")
+    ):
+        raise AnalysisInputError(
+            "analysis_manifest_floor_attachment_mismatch: --floor-artifact "
+            "is not the exact finalized aggregate floor artifact"
+        )
 
 
 def authenticate_floor_artifact_bytes(
@@ -964,6 +1044,19 @@ def _normalize_evidence_roots(
 
 
 def _manifest_verdict_basis_sha256(manifest: Mapping[str, Any]) -> str | None:
+    if manifest.get("schema_version") == ANALYSIS_MANIFEST_FINALIZED_V3_SCHEMA:
+        evidence = manifest.get("evidence")
+        verdict = (
+            evidence.get("whole_window_verdict")
+            if isinstance(evidence, Mapping)
+            else None
+        )
+        digest = (
+            verdict.get("evaluation_basis_sha256")
+            if isinstance(verdict, Mapping)
+            else None
+        )
+        return digest if isinstance(digest, str) and _SHA256_RE.fullmatch(digest) else None
     if manifest.get("schema_version") != ANALYSIS_MANIFEST_V3_SCHEMA:
         return None
     source = manifest.get("source")
@@ -2461,7 +2554,7 @@ def _enforce_registered_realized_identity(
         if evidence.raw_config is not None and evidence.metadata is not None:
             by_model.setdefault(model_by_entry[entry_id], []).append(evidence)
     expected_by_model: dict[str, Mapping[str, Any]] = {}
-    if manifest.get("schema_version") == ANALYSIS_MANIFEST_V3_SCHEMA:
+    if is_abba_v3_consumable_schema(manifest.get("schema_version")):
         for arm in manifest.get("arms", []):
             if not isinstance(arm, Mapping):
                 continue
@@ -2680,7 +2773,14 @@ def load_analysis_inputs(
         )
     floor_artifact = authenticated_floor.value
     floor_sha = authenticated_floor.file_sha256
+    _enforce_finalized_floor_attachment(
+        manifest,
+        floor_artifact=floor_artifact,
+        floor_sha256=floor_sha,
+    )
     runs_root = Path(runs_root)
+    collection_manifest_id = _manifest_collection_id(manifest)
+    config_root = _manifest_config_root(manifest, Path(analysis_manifest_path))
     verdict_basis_sha256 = _manifest_verdict_basis_sha256(manifest)
     normalized_scan_roots, _ = _normalize_evidence_roots(
         authenticated_floor.root_ids,
@@ -2741,7 +2841,7 @@ def load_analysis_inputs(
         calibration_ledger_snapshot=calibration_ledger_snapshot,
     )
     cleanup_records = _campaign_claim_records(
-        runs_root, str(manifest["manifest_id"])
+        runs_root, collection_manifest_id
     )
     registered: dict[str, BundleEvidence] = {}
     for entry in manifest["entries"]:
@@ -2753,7 +2853,7 @@ def load_analysis_inputs(
         ):
             raise AnalysisInputError(f"manifest run_id is not a safe basename: {run_id!r}")
         source_config, _ = _load_json_object(
-            Path(analysis_manifest_path).parent / entry["config"], "manifest config"
+            config_root / entry["config"], "manifest config"
         )
         registered[entry["entry_id"]] = _read_bundle(
             entry,
@@ -2768,7 +2868,7 @@ def load_analysis_inputs(
     cohort_identities = _enforce_registered_realized_identity(manifest, registered)
     effective, extras, replacements, unregistered, top_up_ids = _scan_replacements_and_topups(
         manifest,
-        Path(analysis_manifest_path).parent,
+        config_root,
         runs_root,
         strict_validator,
         registered,
@@ -2782,7 +2882,7 @@ def load_analysis_inputs(
         for evidence in (*registered.values(), *extras):
             _exclude_evidence(evidence, "whole_window_verdict_conflict")
     cooldown_by_bundle = _campaign_cooldown_evidence(
-        runs_root, str(manifest["manifest_id"])
+        runs_root, collection_manifest_id
     )
     for evidence in (*registered.values(), *extras):
         evidence.campaign_cooldown = cooldown_by_bundle.get(evidence.bundle_id)

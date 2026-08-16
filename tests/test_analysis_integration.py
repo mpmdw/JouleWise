@@ -25,6 +25,8 @@ from joulewise.analysis_engine.artifact import (
 from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_manifest_v3 import (
     ARM_FREEZE,
+    FINALIZED_BASENAME_SUFFIX,
+    finalize_prospective_analysis_manifest_v3,
     normalized_realized_stack_identity,
 )
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
@@ -45,6 +47,7 @@ from joulewise.analysis_engine.inputs import (
     floor_request_for_evidence,
     floor_stack_identity,
     load_analysis_inputs,
+    load_manifest,
     realized_scientific_identity,
     window_evidence_precheck,
 )
@@ -97,6 +100,7 @@ from tests.test_run_campaign import (
     read_all_jsonl,
     run_campaign_module,
 )
+from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -527,6 +531,195 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         session_patch.start()
         self.addCleanup(session_patch.stop)
+
+    def test_finalized_gamma_shape_consumes_both_contrasts_and_prospective_refuses(self):
+        """L10-shaped wire proof: finalizer -> validator -> real engine."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            finalized = finalize_prospective_analysis_manifest_v3(
+                fixture["prospective_path"],
+                plan_tree_path=fixture["plan_tree_path"],
+                custody_root=fixture["root"],
+                runs_root=fixture["runs_root"],
+                whole_window_verdict_path=fixture["verdict_path"],
+                bracket_binding_path=fixture["bracket_path"],
+                calibration_ledger_path=fixture["ledger_path"],
+                aggregate_floor_artifact_path=fixture["floor_path"],
+                output_dir=fixture["root"],
+            )
+            finalized_path = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            loaded_manifest, manifest_sha = load_manifest(finalized_path)
+            self.assertEqual(loaded_manifest, finalized)
+
+            with self.assertRaisesRegex(
+                AnalysisInputError,
+                "analysis_manifest_prospective_not_consumable",
+            ):
+                analyze_claims(
+                    fixture["prospective_path"],
+                    fixture["runs_root"],
+                    fixture["floor_path"],
+                    strict_validator=lambda path, strict=True: [],
+                )
+
+            evidence_by_entry = {}
+            for entry in finalized["entries"]:
+                bundle = fixture["runs_root"] / entry["run_id"]
+                raw_config = json.loads((bundle / "config.json").read_text())
+                metadata = json.loads((bundle / "metadata.json").read_text())
+                summary = {
+                    "status": "succeeded",
+                    "test_value": (
+                        20.0 + entry["block_number"]
+                        if entry["arm_id"].endswith(":B")
+                        else 10.0 + entry["block_number"]
+                    ),
+                    "measurement_quality": {
+                        "cooldown_cap_hit": False,
+                        "idle_window_suspect": False,
+                    },
+                }
+                evidence_by_entry[entry["entry_id"]] = BundleEvidence(
+                    entry=entry,
+                    bundle_id=entry["run_id"],
+                    relative_path=entry["run_id"],
+                    path=bundle,
+                    summary=summary,
+                    metadata=metadata,
+                    raw_config=raw_config,
+                    strict_problems=(),
+                    base_reason_codes=(),
+                    config_sha256=entry["config_sha256"],
+                    expected_config_sha256=entry["config_sha256"],
+                    summary_sha256=hashlib.sha256(
+                        json.dumps(summary, sort_keys=True).encode()
+                    ).hexdigest(),
+                    replacement_classification="registered",
+                    inclusion_status="included",
+                )
+            floor_artifact = make_artifact()
+            floor_artifact["artifact_id"] = "synthetic-finalized-edge-floor"
+            floor_bytes = (json.dumps(floor_artifact, indent=2) + "\n").encode()
+            floor_sha = hashlib.sha256(floor_bytes).hexdigest()
+            loaded_inputs = LoadedAnalysisInputs(
+                manifest=finalized,
+                manifest_sha256=manifest_sha,
+                floor_artifact=floor_artifact,
+                floor_sha256=floor_sha,
+                floor_artifact_bytes=floor_bytes,
+                registered=evidence_by_entry,
+                effective=evidence_by_entry,
+                extra_audits=(),
+                valid_replacements=(),
+                unregistered_matching=(),
+                top_up_entry_ids=frozenset(),
+                supersession_audit=(
+                    {
+                        "scope": "analysis_corpus",
+                        "evidence_root_id": None,
+                        "authenticated_basis": {
+                            "kind": "whole_window_evaluation_basis_sha256",
+                            "sha256": finalized["evidence"][
+                                "whole_window_verdict"
+                            ]["evaluation_basis_sha256"],
+                        },
+                        "raw_count": 1,
+                        "validated_count": 1,
+                        "status": "clean",
+                    },
+                    {
+                        "scope": "floor_evidence",
+                        "evidence_root_id": "a10",
+                        "authenticated_basis": {
+                            "kind": "floor_component_campaign_log_sha256",
+                            "sha256s": ["e" * 64],
+                        },
+                        "raw_count": 0,
+                        "validated_count": 0,
+                        "status": "clean",
+                    },
+                    {
+                        "scope": "floor_evidence",
+                        "evidence_root_id": "window_c",
+                        "authenticated_basis": {
+                            "kind": "floor_component_campaign_log_sha256",
+                            "sha256s": ["f" * 64],
+                        },
+                        "raw_count": 0,
+                        "validated_count": 0,
+                        "status": "clean",
+                    },
+                ),
+            )
+            floor_resolutions = [
+                FloorResolution(
+                    status="exact",
+                    artifact_id=floor_artifact["artifact_id"],
+                    artifact_sha256=floor_sha,
+                    source_cell_ids=(condition_id,),
+                    transport_group_id=None,
+                    transport_rule_id=None,
+                    floor_abs_j=0.5,
+                    floor_cmp_j=1.0,
+                    floor_gate_j=1.0,
+                    reason_codes=(),
+                )
+                for condition_id in (
+                    finalized["contrasts"][0]["condition_a_id"],
+                    finalized["contrasts"][0]["condition_b_id"],
+                )
+            ]
+            with (
+                mock.patch(
+                    "joulewise.analysis_engine.metric_value",
+                    side_effect=lambda summary, metric: summary["test_value"],
+                ),
+                mock.patch(
+                    "joulewise.analysis_engine.window_evidence_precheck",
+                    return_value={"reasons": ()},
+                ),
+                mock.patch(
+                    "joulewise.analysis_engine.governed_stochastic_variance",
+                    return_value=([{"name": "idle", "variance": 0.0}], ()),
+                ),
+                mock.patch(
+                    "joulewise.analysis_engine.deterministic_bounds",
+                    return_value=(
+                        {
+                            "E_interpolation_joint_edge_bound_j": 0.05,
+                            "E_clock_anchor_shift_bound_j": 0.10,
+                        },
+                        (),
+                    ),
+                ),
+                mock.patch(
+                    "joulewise.analysis_engine._resolve_contrast_floor",
+                    return_value=floor_resolutions,
+                ),
+                mock.patch(
+                    "joulewise.analysis_engine.load_analysis_inputs",
+                    return_value=loaded_inputs,
+                ),
+            ):
+                artifact = analyze_claims(
+                    finalized_path,
+                    fixture["runs_root"],
+                    fixture["floor_path"],
+                    strict_validator=lambda path, strict=True: [],
+                )
+
+        self.assertEqual(
+            [row["contrast_id"] for row in artifact["contrasts"]],
+            [row["contrast_id"] for row in finalized["contrasts"]],
+        )
+        self.assertEqual(len(artifact["contrasts"]), 2)
+        self.assertTrue(
+            all(row["loo"]["status"] == "complete" for row in artifact["contrasts"])
+        )
 
     def _salvage_floor_dispatch_fixture(self, root: Path) -> tuple[dict, dict[str, Path]]:
         artifact = make_artifact()
