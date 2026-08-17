@@ -1,37 +1,49 @@
 # JouleWise
 
+Terms used on this page: a *measurement window* is one uninterrupted,
+calibrated collection session; a *pack* is the frozen campaign plan and its
+authenticated supporting files; a *detection floor* is the largest false
+difference the admitted measurement system can produce; a *mint* is the
+governed process that issues a floor artifact; an *arm* is one pre-registered
+workload or comparison track; a *verdict* is the final governed decision to
+admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
+result when a required gate or piece of evidence fails.
+
 > **🟡 MACHINE: BETWEEN RUNS — D-117 pre-window state.** This document
 > does not assert that a measurement window is in flight; verify live
-> machine state directly before acting. Current work is the U1-U10
-> readiness path followed by the prospective alpha, beta, and gamma
+> machine state directly before acting. Current work is the ten-item U1-U10
+> instrument-readiness repair path, followed by the prospective alpha, beta, and gamma
 > claim windows. Live selection remains owned by the generated
-> state-kernel regions in [`RUN_STATE.md`](RUN_STATE.md) and
+> state-kernel work-selection tables in [`RUN_STATE.md`](RUN_STATE.md) and
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
 ## Current activity (refreshed each work block; last: 2026-08-16)
 
-**Just completed:** the readiness council's Phase 1 code wave — its four
-mergeable work orders, all merged: the should-fix documentation batch, the honest night-of-measurement
-capture contract, the analysis consumption edge for the comparison window
-(a validator and outcome-blind finalizer so only authenticated, frozen
-results reach claim analysis), and the launch binding (arming a window and
-launching it are now one atomic, authenticated step — three design formulations
-were adversarially broken and repaired through an independent cold review
-before it landed). A detection-time budget fix is built and staged for the
-next re-freeze. An independent re-audit verified the calibration test
-universe end to end.
+**Just completed:** the readiness council's Phase 1 code wave. Its four
+mergeable work orders are all merged: the should-fix documentation batch; the
+honest night-of-measurement capture contract; the comparison window's
+claim-analysis admission path, whose validator and outcome-blind finalizer let
+only authenticated, frozen results reach claim analysis; and the launch
+binding, which makes arming and launching one atomic, authenticated step.
+Reviewers broke and repaired three design formulations before the launch
+binding passed an independent cold review, meaning a review performed without
+the authors' framing. A detection-time budget fix is built and staged for the
+next re-freeze, which will issue the successor family of frozen packs. An
+independent re-audit verified the calibration test universe end to end.
 
 **Working on now:** the remaining Phase 1 items — the later launch-binding
 stages and the two queued repairs — ahead of the Phase 2 re-freeze.
 
 **Queued next:** (1) the remaining launch-binding stages and two queued
-repairs (recorder grant identity, CI proof-fixture drift); (2) one batched
-operator session (privileged installs, a dress rehearsal, and the recorded
-risk-appetite decisions the gates surfaced — see RUN_STATE's Ed-owed list); (3) the Phase 2-4 sequence — one successor-family
-re-freeze, manifest supersession, focused re-audit, and a fresh readiness
-council; (4) the alpha, beta, and gamma measurement windows only after that
-council says go; and (5) the paper fill as governed results arrive.
+repairs: binding the recorder's permission grant to its verified identity and
+repairing drift in the continuous-integration proof fixture; (2) one batched
+operator session for privileged installs, a dress rehearsal, and the recorded
+risk-appetite decisions surfaced by the gates (see `RUN_STATE.md`'s Ed-owed
+list); (3) the Phase 2-4 sequence of one successor-family re-freeze, manifest
+supersession, focused re-audit, and a fresh readiness council; (4) the alpha,
+beta, and gamma measurement windows only after that council says go; and (5)
+completion of the paper as governed results arrive.
 
 JouleWise is an extensible measurement harness for energy-wise LLM inference
 across heterogeneous local hardware. The benchmark layered on that harness is
@@ -51,7 +63,7 @@ The harness is designed around three stable ideas:
 completed its instrument repair (D-078 phase 0) and the repaired path has
 collected 229 strict members across four bracketed windows, a5-a8. Those
 windows are non-claim-bearing diagnostic, instrument-proving evidence, not
-published floors. The SCREEN+BUDGET rules are ratified and merged
+published floors. The SCREEN+BUDGET screening-and-uncertainty rules are ratified and merged
 (D-078 clause 10; council C-045):
 they screen gross and idle-subtracted energy separately, retain a nonzero
 drift allowance for each family, require a fresh 24-hour bound, reject
@@ -125,14 +137,15 @@ without proliferating theses: DSpark/DFlash break-even and control riders,
 on-device quantized KV, one named hybrid pair, and attached
 cache/context/kernel/backend provenance work. Every admitted unit remains a
 floor-gated candidate at or below L2 with a named forbidden upgrade; unresolved
-runtime and device-fit questions stay NEEDS-WEB, and Ed retains commitment
+runtime and device-fit questions remain pending current external verification
+(`NEEDS-WEB`), and Ed retains commitment
 authority. Separate lead-run DSpark/DFlash smokes established native MLX
 execution and per-round observability only. Their thinking-mode,
 unmatched-output throughput inversion is hypothesis-generating, not energy
 evidence.
 
 Quiet-machine windows still require Ed and a quiet Mac, and each one follows
-the run-book: mint the drift bound inside the window, then collect a start
+the run-book: issue, or mint, the governed drift-bound artifact inside the window, then collect a start
 triplet, midpoint reference, and end triplet around the science members. That
 protocol ran five times and passed five times — windows C, D, a10, the 7B
 floor window, and the contrast window — under the merged screening and
@@ -174,11 +187,12 @@ handling. The NV-5 localhost lead gate passed 3/3, but ALL remote protocol
 pins remain PROVISIONAL pending first live hardware contact; Jetson Orin (2L)
 remains gated on device access.
 
-The landed C-028 arc includes the frozen analysis manifest, the
+The landed C-028 implementation and review cycle includes the frozen analysis manifest, the
 production-uncertainty path, the campaign-verdict split, idle-dependence/HAC
 uncertainty, the inter-token metric, doctor preflight, and the contrast/claim
 engine. The analysis trio—manifest, verdict split, and contrast/claim
-engine—is complete. The six frozen legacy arms and 0.3.x/0.4.x dispatch rules
+engine—is complete. The six frozen legacy arms, meaning the pre-registered
+workload tracks, and 0.3.x/0.4.x dispatch rules
 remain explicit; landed software is not being presented as new live evidence.
 P0-003 closed with an iCloud Drive backup and a fresh restore that was
 strict-valid and byte-identical. No new live NVIDIA or quiet-Mac measurement

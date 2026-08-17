@@ -5,6 +5,15 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
+Terms used here: a *measurement window* is one uninterrupted, calibrated
+collection session; a *pack* is the frozen campaign plan and its authenticated
+supporting files; a *detection floor* is the largest false difference the
+admitted measurement system can produce; a *mint* is the governed process that
+issues a floor artifact; an *arm* is one pre-registered workload or comparison
+track; a *verdict* is the final governed decision to admit or refuse evidence;
+and a *refusal* is a recorded decision not to issue a result when a required
+gate or piece of evidence fails.
+
 - Freshness owner: phase completion lives in the phase exit checklists; live
   gates and work selection live only in the generated state-kernel regions of
   `RUN_STATE.md` and `TASK_QUEUE.md`; the canonical suite command and CI own
@@ -13,51 +22,56 @@ are provided for anyone who wants the full evidence trail.
 - Repository state: `main` contains the repaired measurement instrument
   (D-078 phase 0), the audited screening and uncertainty-budget rules
   (D-078 clause 10; council C-045), and the first floor artifact minted
-  on 2026-07-30. D-110 made that artifact non-claim-bearing; D-117 then
-  retired the historical re-derivation/remint path. **2026-08-07
-  supersession (D-117): the historical a10/re-mint and old C/D plan are
-  retired. Claim authority can now arise only from the prospective alpha,
-  beta, and gamma windows; the separately named Window C characterization
-  night remains Ed ruling #1.** The pre-genesis 7B calibration remains
-  diagnostic and design input for the fresh 7B floor window.
-  The pre-registered head-to-head model comparison **collected and
-  passed overnight on 2026-07-30→31** (40 paired measurements, every
-  collection-quality gate green). Its result remains a preliminary
-  diagnostic, not a gated claim; D-117 requires the fresh prospective
-  alpha/beta/gamma sequence before formal claim consumption. As of 2026-07-30 the
-  project's framing is **metrology-centric** (advisor-ratified): the measurement
-  instrument itself is the product, and model comparisons serve as
-  demonstration studies of what it can resolve. The first two nights of
-  the dedicated metrology campaign ran on 2026-07-31 and 2026-08-01:
-  the linearity data set is complete (40 of 40 runs), two of the three
-  planned "measure nothing and confirm the instrument reads zero"
-  rungs are complete, and the additivity data set stands at 23 of 24
-  runs from the second night's single collection root, with 21 of 24
-  corroborating runs from the first night. The measurements themselves are collected, verified, and
-  safely backed up. The automated end-of-night quality verdict for both
-  nights, however, came back FAILED — not because the data is bad, but
-  because these were the first nights that ended early under the
-  campaign's own safety rules (a run is abandoned after three
-  environmental interruptions), and the verdict software had never
-  before evaluated a night with that shape. That question has now been adjudicated (decisions D-100 and D-106):
-  the first night's data cannot be promoted — an end-of-night
-  calibration was recorded under a mismatched identity, an unfixable
-  collection-time error — while the second night's
-  re-evaluation was actually attempted on 2026-08-03 after every
-  required repair landed — and the software refused, correctly: one
-  measured run from that night has a genuinely unresolvable internal
-  clock alignment, and the fail-closed design will not certify a night
-  containing it. A judge-style review confirmed the refusal was the
-  instrument working as designed, not a bug. **2026-08-05 supersession
-  (D-113): Window B is permanently non-claim-bearing; its
-  re-evaluation/license chain is retired and no set-aside or
-  claim-consumption decision remains pending.** Two genuine instrument findings also came out of
-  those nights and will appear in the paper: the instrument's internal
-  clock-alignment step operates with about a millisecond of margin —
-  effectively a coin flip at the current capture length — and needs a
-  small redesign; and the operating computer's own text output, if it
-  streams while a measurement is waiting for a quiet moment, is enough
-  activity to spoil that measurement's admission check.
+  on 2026-07-30. D-110 made that artifact non-claim-bearing. D-117 then
+  retired the historical re-derivation/remint path.
+
+  **2026-08-07 supersession (D-117): the historical a10/re-mint and old C/D
+  plan are retired. Claim authority can now arise only from the prospective
+  alpha, beta, and gamma windows; the separately named Window C
+  characterization night remains Ed ruling #1.** The pre-genesis 7B
+  calibration remains diagnostic evidence and design input for the fresh 7B
+  floor window.
+
+  The pre-registered head-to-head model comparison **collected and passed
+  overnight on 2026-07-30→31** (40 paired measurements, with every
+  collection-quality gate green). Its result remains a preliminary diagnostic,
+  not a gated claim. D-117 requires the fresh prospective alpha/beta/gamma
+  sequence before evidence can formally support a claim. As of 2026-07-30,
+  the project's framing is **metrology-centric** (advisor-ratified): the
+  measurement instrument itself is the product, and model comparisons
+  demonstrate what it can resolve.
+
+  The first two nights of the dedicated metrology campaign ran on 2026-07-31
+  and 2026-08-01. The linearity data set is complete (40 of 40 runs). Two of
+  the three planned "measure nothing and confirm the instrument reads zero"
+  rungs are complete. The additivity data set stands at 23 of 24 runs from the
+  second night's single collection root, with 21 of 24 corroborating runs from
+  the first night. The measurements are collected, verified, and safely backed
+  up.
+
+  The automated end-of-night quality verdict for both nights nevertheless came
+  back FAILED. The finding does not mean that the recorded data are bad. These
+  were the first nights to end early under the campaign's safety rule that
+  abandons a run after three environmental interruptions, and the verdict
+  software had never evaluated that collection shape.
+
+  Decisions D-100 and D-106 have now adjudicated the two nights. The first
+  night's data cannot be promoted because its end-of-night calibration was
+  recorded under a mismatched identity, an unfixable collection-time error. The
+  second night's re-evaluation ran on 2026-08-03 after every required repair
+  landed. The software correctly refused it because one measured run has a
+  genuinely unresolvable internal clock alignment, and the fail-closed design
+  will not certify a night containing it. A judge-style review confirmed that
+  this refusal was the instrument working as designed, not a bug.
+
+  **2026-08-05 supersession (D-113): Window B is permanently
+  non-claim-bearing; its re-evaluation/license chain is retired and no
+  set-aside or claim-consumption decision remains pending.** Those nights also
+  produced two genuine instrument findings that will appear in the paper. The
+  internal clock-alignment step operates with about a millisecond of margin —
+  effectively a coin flip at the current capture length — and needs a small
+  redesign. The operating computer's own text output can also spoil an
+  admission check if it streams while a measurement waits for a quiet moment.
 - Project phase: see the phase exit checklists for exact completion state;
   live eligibility and next work come from the generated state kernel, not
   this reader-facing summary.
@@ -86,20 +100,22 @@ remain non-claim-bearing, instrument-proving evidence.
 
 **The head-to-head comparison ran on 2026-07-30→31 and passed every
 collection and whole-window gate.** Comparing the small (1.5B) and large (7B)
-model decoding the same text, the large model used **about 147 J (whole-request, idle-subtracted — a diagnostic view; the registered per-phase comparison metric gives 141.29 J) more energy per response**
-— and the run-to-run scatter of that difference across ten paired blocks
-was only about **0.24 J**, roughly six hundred times smaller than the
-effect. This is the kind of demonstration the metrology framing calls for: a
-real effect the instrument resolves with enormous margin, measured under
-frozen, pre-registered rules. (Preliminary observation from the raw
-per-run summaries. The comparison's bookkeeping schema landed on
-2026-08-02, but D-117 requires a fresh prospective contrast window before
-formal consumption.) The same overnight session survived two
+model decoding the same text, the large model used **about 147 J more energy
+per response** on the whole-request, idle-subtracted diagnostic view. The
+registered per-phase comparison metric gives **141.29 J**. The run-to-run
+scatter of that difference across ten paired blocks was only about **0.24 J**,
+roughly six hundred times smaller than the effect. This is the kind of
+demonstration the metrology framing calls for: a real effect that the
+instrument resolves with enormous margin under frozen, pre-registered rules.
+This is a preliminary observation from the raw per-run summaries. The
+comparison's bookkeeping schema landed on 2026-08-02, but D-117 requires a
+fresh prospective contrast window before formal consumption. The same overnight session survived two
 background-process intrusions — macOS's own malware scanner — which the
 admission gates refused on the spot and the written recovery playbook
 turned into a completed window with zero lost science measurements.
 
-That problem is now resolved in the merged SCREEN+BUDGET rules (D-078 clause 10). Gross and
+The earlier drift-screen problem is now resolved in the merged SCREEN+BUDGET
+screening-and-uncertainty rules (D-078 clause 10). Gross and
 idle-subtracted energy are screened separately; each passing window keeps a
 nonzero drift allowance in its uncertainty budget; the drift bound expires
 after 24 hours; fallback-clock members cannot support a floor; and mock
@@ -460,10 +476,11 @@ speculative decoding / native MTP, MoE versus dense execution, quantization,
 and reasoning-length variance are five stress tests of Q4's single
 fixed-plus-marginal energy thesis, not five additional theses. The harness
 must instrument every axis well enough to produce strict-valid L0 smoke
-bundles; the benchmark supplies the frozen workload suite, run rules, and
+bundles, which establish only that the capability and evidence path work; the benchmark supplies the frozen workload suite, run rules, and
 strict validator for claim-bearing runs. Per Ed's ruling, all five axes have
 characterized-study commitments. Every study remains floor-gated and capped
-at L2; L3 is available only through Q4/AP-1's existing holdout machinery.
+at L2, the within-boundary comparative-result level; L3, a model fit tested on
+held-out cells, is available only through Q4/AP-1's existing holdout machinery.
 Window A remains first, and no AXI quiet-Mac characterization starts before
 Window A completes. Static batching is the capstone scope; continuous
 batching remains a post-capstone extension.
@@ -504,13 +521,13 @@ Complete so far (all verifiable in the repository):
 
 - A runnable harness: from a typed config, one command
   (`python3 -m joulewise run ...`) produces a complete, schema-valid,
-  auditable run bundle and reduces it to energy/latency summary metrics -
-  proven first on deterministic mock adapters (controller, bundle
-  contract, and reducer math verified without hardware) and now running
-  live on the Mac target. Bundle writer, controller
-  lifecycle, reducer, static-HTML report generator, and CLI verbs `run` /
-  `validate-bundle` / `reduce` (post-hoc re-derivation of summary metrics
-  from the recorded power trace and events) / `report`. Strict validation
+  auditable run bundle and reduces it to energy and latency summary metrics.
+  Deterministic mock adapters first proved the controller, bundle contract,
+  and reducer mathematics without hardware; the same path now runs live on
+  the Mac target. Implemented components include the bundle writer, controller
+  lifecycle, reducer, static-HTML report generator, and the CLI verbs `run`,
+  `validate-bundle`, `reduce` (post-hoc re-derivation of summary metrics from
+  the recorded power trace and events), and `report`. Strict validation
   now also re-derives powermetrics traces from raw plist evidence, checks
   legacy additive-summary compatibility, and requires shape-valid
   provenance on new-era bundles. All bundle consumers read through one
@@ -842,11 +859,11 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 The machinery exists to protect measurement claims from unchecked summaries,
 stale assumptions, and review-induced drift.
 
-This project is developed by a human researcher directing a multi-agent
-AI system he designed and iteratively engineered over the course of the
-project — the orchestration itself is a second, deliberate piece of
-engineering alongside the measurement harness and its benchmark, and by now
-it is interesting in its own right.
+This project is developed by a human researcher directing a multi-agent AI
+system that he designed and iteratively engineered during the project. The
+orchestration is a second, deliberate engineering effort alongside the
+measurement harness and benchmark, and it is now a substantive project result
+in its own right.
 
 The full description lives in `docs/orchestration.md` (the loop, the
 roles, the artifact system, and how the topology itself evolved under
@@ -855,44 +872,45 @@ its own review machinery); this section is the summary.
 **The division of labor.** Ed sets the research direction, the
 methodology standards (the decision log's non-negotiables: raw-evidence
 bundles, dual-basis capture with gross-energy headlines, named measurement
-boundaries, no unauditable claims), the hardware and access decisions, and — the part
-that is easy to underrate — the *process policy*: every rule below
-exists because he observed a failure or an opportunity and issued a
-standing instruction. The AI staff executes: the designated lead agent is
-the final reviewer and single point
-of accountability: decomposition, design adjudication, every final diff
-gate, live verification, merges, and bookkeeping. Independent implementation
-and review agents do the volume work against
-pinned specs, adversarial review lenses, test writing, and
-fresh-instance test auditing; specialist agents handle bounded sweeps.
-Cross-model review is load-bearing by design: the
-attributed catch record shows the models and review layers catching
-different classes of defect.
+boundaries, and no unauditable claims), plus the hardware and access
+decisions. He also sets the *process policy*: every rule below exists because
+he observed a failure or opportunity and issued a standing instruction. The AI
+staff executes that policy. The designated lead agent is the final reviewer
+and single point of accountability for decomposition, design adjudication,
+every final diff gate, live verification, merges, and bookkeeping. Independent
+implementation and review agents handle work against pinned specifications,
+adversarial review lenses, test writing, and fresh-instance test auditing;
+specialist agents handle bounded sweeps. Cross-model review is load-bearing by
+design because the attributed catch record shows the models and review layers
+catching different classes of defect.
 
 **The machinery, briefly.** Independent tasks run as parallel git
-worktrees, the lead driving each stream's implementation/review pipeline directly (a
-topology that is itself the product of a signed cross-model
-meta-review, then validated by a full session with zero coordination
-stalls — the evolution is traced in `docs/orchestration.md`). Every
-implementation passes through a layered pipeline: a design argument
-round (the implementer must argue trade-offs before coding),
-fresh-instance counterreview lenses with lead-triaged dispositions, a
-test-amplification round, a writer-never-reviews-its-own-tests audit,
-the lead's diff gate, and lead-side live verification on real hardware
-— the one layer never delegated, because it has repeatedly caught
-blockers whose own tests were green (the tests encoded the same wrong
-assumption as the code). Merges add their own gate: a
-pre-merge oversight pass by fresh reviewers with distinct angles, and a
-standing *final-head rule* — any commit landing after the last review
-round gets one more fresh review before merge (its first application
-caught a crash path in a "trivial" late fix). After parallel streams
-merge, a dedicated integration review hunts the cross-stream defects no
-per-stream review can see (two interaction defects on its first outing, two more on its second). An
-event-driven review council convenes for contract-bearing work, and —
-per Ed's instruction — its *deliberations* are recorded, not just its
-verdicts: the council log preserves positions, the reasoning exchanged,
-who prevailed and why, and overridden dissents, so a future reader (or
-model) can reconstruct why any decision was made.
+worktrees, and the lead drives each stream's implementation and review pipeline
+directly. A signed cross-model meta-review produced this topology; a full
+session then validated it with zero coordination stalls. The evolution is
+traced in `docs/orchestration.md`.
+
+Every implementation passes through a layered pipeline. The implementer first
+argues the design trade-offs before coding. Fresh reviewers then examine the
+change from distinct angles, and the lead records a disposition for each
+finding. A separate round adds tests; a writer never audits their own tests;
+the lead reviews the final diff; and the lead alone performs live verification
+on real hardware. That final layer is never delegated because it has repeatedly
+caught blockers whose own tests encoded the same wrong assumption as the code.
+
+Merges add a pre-merge oversight pass by fresh reviewers with distinct angles.
+They also carry a standing *final-head rule*: any commit that lands after the
+last review round gets one more fresh review before merge. The rule's first
+application caught a crash path in a "trivial" late fix. After parallel streams
+merge, a dedicated integration review looks for cross-stream defects that no
+per-stream review can see; it found two interaction defects on its first outing
+and two more on its second.
+
+An event-driven review council convenes for contract-bearing work. Per Ed's
+instruction, the council records its *deliberations*, not only its verdicts.
+The council log preserves positions, the reasoning exchanged, who prevailed
+and why, and overridden dissents, so a future reader or model can reconstruct
+why each decision was made.
 
 **The paper trail (each claim traceable to its evidence home; the
 external re-reduction demonstration is still pending).** Each fact has one home:
