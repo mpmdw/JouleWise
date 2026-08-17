@@ -42,11 +42,21 @@ from joulewise.identity_pins import (
 PACK_DIGEST_ALGORITHM = "joulewise.committed_pack_tree_sha256.v1"
 PACK_DIGEST_DOMAIN = b"joulewise.committed_pack_tree_sha256.v1\n"
 ROW_REGISTRY_SCHEMA = "joulewise.arm_readiness_row_registry.v1"
+R1_ROW_REGISTRY_SCHEMA = "joulewise.arm_readiness_row_registry.v2"
 ROW_REGISTRY_ID = "d117-row-registry-v1"
 FREEZE_RECEIPT_SCHEMA = "joulewise.arm_readiness_freeze_receipt.v1"
 ARM_RECEIPT_SCHEMA = "joulewise.arm_readiness_receipt.v1"
 DRY_RUN_RECEIPT_SCHEMA = "joulewise.arm_readiness_dry_run_receipt.v1"
 EVIDENCE_RECEIPT_SCHEMA = "joulewise.arm_readiness_evidence_receipt.v1"
+CONTENT_EVIDENCE_RECEIPT_SCHEMA = (
+    "joulewise.arm_readiness_content_evidence_receipt.v1"
+)
+EXECUTION_EVIDENCE_RECEIPT_SCHEMA = (
+    "joulewise.arm_readiness_execution_evidence_receipt.v1"
+)
+R1_LIFECYCLE_REGISTRY_SCHEMA = (
+    "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v1"
+)
 LEGACY_CONSUMPTION_RECEIPT_SCHEMA = (
     "joulewise.arm_readiness_launch_consumption.v1"
 )
@@ -220,8 +230,11 @@ _PROFILE_BY_PACK = {
     "d117_floor_qwen25_7b_v1": "BETA",
     "d117_contrast_qwen25_1p5b_vs_7b_v1": "GAMMA",
 }
+# R1 clause 6: successor pack IDs are Ed-reserved.  They are intentionally
+# absent, so a candidate successor refuses profile routing until that ruling.
 
 REGISTRY_KEYS = {"schema_version", "registry_id", "plan_profiles", "rows"}
+R1_ROW_REGISTRY_KEYS = REGISTRY_KEYS | {"freeze_evidence_lifecycle"}
 PROFILE_KEYS = {"profile_id", "window_kind", "required_row_ids"}
 ROW_DEFINITION_KEYS = {
     "row_id",
@@ -383,6 +396,116 @@ EVIDENCE_RECEIPT_KEYS = {
     "checks",
     "reason_codes",
     "assurance",
+}
+CONTENT_EVIDENCE_RECEIPT_KEYS = {
+    "schema_version",
+    "evidence_id",
+    "kind",
+    "status",
+    "issued_at_utc",
+    "freshness_class",
+    "freshness_policy_id",
+    "pack_sha256",
+    "derivation_commit",
+    "dependency_manifest_sha256",
+    "facts",
+    "checks",
+    "reason_codes",
+    "assurance",
+}
+EXECUTION_EVIDENCE_RECEIPT_KEYS = CONTENT_EVIDENCE_RECEIPT_KEYS | {
+    "boot_session_id",
+    "valid_until_monotonic_ns",
+    "environment_fingerprint",
+}
+GENERIC_EVIDENCE_RECEIPT_SCHEMAS = frozenset(
+    {
+        EVIDENCE_RECEIPT_SCHEMA,
+        CONTENT_EVIDENCE_RECEIPT_SCHEMA,
+        EXECUTION_EVIDENCE_RECEIPT_SCHEMA,
+    }
+)
+
+# R1 clause 6 deliberately leaves the values below to Ed.  The registry is
+# the single input for every reserved lifecycle value; this code owns only
+# its exact shape and the complete refusal-role census.  The placeholder is
+# useful for tooling construction but is never an issuable registry.
+R1_FRESHNESS_CLASSES = frozenset(
+    {
+        "RE_DERIVABLE",
+        "EXECUTION_BOUND",
+        "TIME_BOUND",
+        "SESSION_STATE_BOUND",
+        "TEMPORAL_CAPABILITY",
+    }
+)
+R1_REFUSAL_ROLES = frozenset(
+    {
+        "CLASS_MISMATCH",
+        "DEPENDENCY_CHANGED_SET",
+        "DEPENDENCY_MANIFEST",
+        "FAMILY_PUBLICATION",
+        "SUCCESSOR_CHAIN",
+        "TEMPORAL_BUDGET",
+        "UNKNOWN_POLICY",
+        "V1_GRANDFATHERING",
+    }
+)
+_R1_REGISTRY_KEYS = {
+    "schema_version",
+    "registry_id",
+    "irrelevant_path_allowlist",
+    "evidence_policies",
+    "row_policies",
+    "arm_policy",
+    "successor_policy",
+    "refusal_vocabulary",
+}
+_R1_EVIDENCE_POLICY_KEYS = {
+    "kind",
+    "freshness_class",
+    "freshness_policy_id",
+    "horizon_ns",
+    "environment_comparison",
+}
+_R1_ROW_POLICY_KEYS = {"row_id", "freshness_policy_id"}
+_R1_ARM_POLICY_KEYS = {"capability_horizon_ns", "arm_to_consume_budget_ns"}
+_R1_SUCCESSOR_POLICY_KEYS = {
+    "successor_pack_ids",
+    "cross_chain_numbering",
+    "freeze_receipt_v2_predecessor_bindings",
+    "family_publication_marker_schema",
+}
+_R1_REFUSAL_ENTRY_KEYS = {"role", "code", "type"}
+_R1_ED_RESERVED_PREFIX = "ED_RESERVED:"
+R1_LIFECYCLE_REGISTRY_PLACEHOLDER = {
+    "schema_version": R1_LIFECYCLE_REGISTRY_SCHEMA,
+    "registry_id": "ED_RESERVED:r1-lifecycle-registry-id",
+    "irrelevant_path_allowlist": [],
+    "evidence_policies": [],
+    "row_policies": [],
+    "arm_policy": {
+        "capability_horizon_ns": "ED_RESERVED:arm-capability-horizon-ns",
+        "arm_to_consume_budget_ns": "ED_RESERVED:arm-to-consume-budget-ns",
+    },
+    "successor_policy": {
+        "successor_pack_ids": "ED_RESERVED:successor-pack-ids",
+        "cross_chain_numbering": "ED_RESERVED:cross-chain-numbering",
+        "freeze_receipt_v2_predecessor_bindings": (
+            "ED_RESERVED:freeze-receipt-v2-predecessor-bindings"
+        ),
+        "family_publication_marker_schema": (
+            "ED_RESERVED:family-publication-marker-schema"
+        ),
+    },
+    "refusal_vocabulary": [
+        {
+            "role": role,
+            "code": f"ED_RESERVED:refusal-code:{role.lower()}",
+            "type": "ED_RESERVED:refusal-type",
+        }
+        for role in sorted(R1_REFUSAL_ROLES)
+    ],
 }
 LEGACY_CONSUMPTION_RECEIPT_KEYS = {
     "schema_version",
@@ -742,6 +865,35 @@ class ArmReadinessError(ValueError):
     def refusal(self) -> dict[str, Any]:
         return {
             "type": REASON_TYPE_BY_CODE[self.reason_code],
+            "code": self.reason_code,
+            "row_id": self.row_id,
+            "evidence_id": self.evidence_id,
+        }
+
+
+class EvidenceLifecycleError(ValueError):
+    """An R1 refusal whose spelling and type come only from its registry."""
+
+    def __init__(
+        self,
+        registry: Mapping[str, Any],
+        role: str,
+        message: str,
+        *,
+        row_id: str | None = None,
+        evidence_id: str | None = None,
+    ) -> None:
+        entry = _r1_refusal_entry(registry, role)
+        super().__init__(message)
+        self.role = role
+        self.reason_code = str(entry["code"])
+        self.reason_type = str(entry["type"])
+        self.row_id = row_id
+        self.evidence_id = evidence_id
+
+    def refusal(self) -> dict[str, Any]:
+        return {
+            "type": self.reason_type,
             "code": self.reason_code,
             "row_id": self.row_id,
             "evidence_id": self.evidence_id,
@@ -1175,16 +1327,316 @@ def _validate_rows_and_refusals(receipt: Mapping[str, Any]) -> None:
         )
 
 
+def _r1_contains_reserved(value: object) -> bool:
+    if isinstance(value, str):
+        return value.startswith(_R1_ED_RESERVED_PREFIX)
+    if isinstance(value, Mapping):
+        return any(_r1_contains_reserved(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_r1_contains_reserved(item) for item in value)
+    return False
+
+
+def validate_r1_lifecycle_registry(
+    value: object, *, require_resolved: bool = True
+) -> Mapping[str, Any]:
+    """Validate the single R1 lifecycle-policy input.
+
+    Clause-6 values may exist as explicit ``ED_RESERVED:`` placeholders for
+    dry construction only.  Every issuance/consumption caller uses the
+    default ``require_resolved=True`` and therefore fails closed.
+    """
+
+    registry = _require_exact_keys(value, _R1_REGISTRY_KEYS, "R1 lifecycle registry")
+    if registry["schema_version"] != R1_LIFECYCLE_REGISTRY_SCHEMA:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 lifecycle registry schema_version is invalid",
+        )
+    registry_id = _require_string(
+        registry["registry_id"], "R1 lifecycle registry.registry_id"
+    )
+    if not registry_id:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch", "R1 lifecycle registry_id is empty"
+        )
+
+    allowlist = registry["irrelevant_path_allowlist"]
+    if (
+        not isinstance(allowlist, list)
+        or allowlist != sorted(set(allowlist))
+        or any(
+            not isinstance(path, str)
+            or not path
+            or "\\" in path
+            or Path(path).is_absolute()
+            or any(part in {"", ".", ".."} for part in PurePosixPath(path).parts)
+            for path in allowlist
+        )
+    ):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 irrelevant-path allowlist must be sorted unique exact repository paths",
+        )
+
+    raw_policies = registry["evidence_policies"]
+    if not isinstance(raw_policies, list):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch", "R1 evidence policies must be an array"
+        )
+    policy_kinds: list[str] = []
+    policy_ids: list[str] = []
+    for index, raw_policy in enumerate(raw_policies):
+        policy = _require_exact_keys(
+            raw_policy, _R1_EVIDENCE_POLICY_KEYS, f"R1 evidence_policies[{index}]"
+        )
+        kind = _require_string(policy["kind"], f"R1 evidence_policies[{index}].kind")
+        policy_id = _require_string(
+            policy["freshness_policy_id"],
+            f"R1 evidence_policies[{index}].freshness_policy_id",
+        )
+        policy_kinds.append(kind)
+        policy_ids.append(policy_id)
+        if policy["freshness_class"] not in R1_FRESHNESS_CLASSES:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                f"R1 evidence_policies[{index}].freshness_class is invalid",
+            )
+        horizon = policy["horizon_ns"]
+        if not (
+            horizon is None
+            or (isinstance(horizon, int) and not isinstance(horizon, bool) and horizon > 0)
+            or (
+                isinstance(horizon, str)
+                and horizon.startswith(_R1_ED_RESERVED_PREFIX)
+            )
+        ):
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                f"R1 evidence_policies[{index}].horizon_ns is invalid",
+            )
+        _require_string(
+            policy["environment_comparison"],
+            f"R1 evidence_policies[{index}].environment_comparison",
+        )
+    if policy_kinds != sorted(set(policy_kinds)):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 evidence kinds must be sorted and unique",
+        )
+    definitions_by_policy_id: dict[str, tuple[object, object, object]] = {}
+    for policy in raw_policies:
+        definition = (
+            policy["freshness_class"],
+            policy["horizon_ns"],
+            policy["environment_comparison"],
+        )
+        prior = definitions_by_policy_id.setdefault(
+            policy["freshness_policy_id"], definition
+        )
+        if prior != definition:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                "one freshness policy ID has conflicting definitions",
+            )
+
+    raw_rows = registry["row_policies"]
+    if not isinstance(raw_rows, list):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch", "R1 row policies must be an array"
+        )
+    row_ids: list[str] = []
+    for index, raw_row in enumerate(raw_rows):
+        row = _require_exact_keys(
+            raw_row, _R1_ROW_POLICY_KEYS, f"R1 row_policies[{index}]"
+        )
+        row_ids.append(
+            _require_string(row["row_id"], f"R1 row_policies[{index}].row_id")
+        )
+        referenced = _require_string(
+            row["freshness_policy_id"],
+            f"R1 row_policies[{index}].freshness_policy_id",
+        )
+        if referenced not in set(policy_ids) and not referenced.startswith(
+            _R1_ED_RESERVED_PREFIX
+        ):
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                f"R1 row_policies[{index}] references an unknown policy",
+            )
+    if row_ids != sorted(set(row_ids)):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch", "R1 row policy IDs must be sorted and unique"
+        )
+
+    arm_policy = _require_exact_keys(
+        registry["arm_policy"], _R1_ARM_POLICY_KEYS, "R1 arm_policy"
+    )
+    for name in sorted(_R1_ARM_POLICY_KEYS):
+        item = arm_policy[name]
+        if not (
+            (isinstance(item, int) and not isinstance(item, bool) and item > 0)
+            or (isinstance(item, str) and item.startswith(_R1_ED_RESERVED_PREFIX))
+        ):
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch", f"R1 arm_policy.{name} is invalid"
+            )
+
+    successor_policy = _require_exact_keys(
+        registry["successor_policy"],
+        _R1_SUCCESSOR_POLICY_KEYS,
+        "R1 successor_policy",
+    )
+    pack_ids = successor_policy["successor_pack_ids"]
+    if not (
+        (isinstance(pack_ids, str) and pack_ids.startswith(_R1_ED_RESERVED_PREFIX))
+        or (
+            isinstance(pack_ids, list)
+            and len(pack_ids) == 3
+            and pack_ids == sorted(set(pack_ids))
+            and all(
+                isinstance(pack_id, str)
+                and pack_id
+                and "/" not in pack_id
+                and "\\" not in pack_id
+                for pack_id in pack_ids
+            )
+        )
+    ):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 successor pack IDs are invalid",
+        )
+    predecessor_bindings = successor_policy[
+        "freeze_receipt_v2_predecessor_bindings"
+    ]
+    if not (
+        isinstance(predecessor_bindings, str)
+        and predecessor_bindings.startswith(_R1_ED_RESERVED_PREFIX)
+    ) and not (
+        isinstance(predecessor_bindings, list)
+        and bool(predecessor_bindings)
+        and predecessor_bindings == sorted(set(predecessor_bindings))
+        and all(isinstance(item, str) and item for item in predecessor_bindings)
+    ):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 freeze-v2 predecessor bindings are invalid",
+        )
+    for name in ("cross_chain_numbering", "family_publication_marker_schema"):
+        _require_string(successor_policy[name], f"R1 successor_policy.{name}")
+
+    raw_refusals = registry["refusal_vocabulary"]
+    if not isinstance(raw_refusals, list):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch", "R1 refusal vocabulary must be an array"
+        )
+    roles: list[str] = []
+    codes: list[str] = []
+    for index, raw_entry in enumerate(raw_refusals):
+        entry = _require_exact_keys(
+            raw_entry, _R1_REFUSAL_ENTRY_KEYS, f"R1 refusal_vocabulary[{index}]"
+        )
+        role = _require_string(
+            entry["role"], f"R1 refusal_vocabulary[{index}].role"
+        )
+        code = _require_string(
+            entry["code"], f"R1 refusal_vocabulary[{index}].code"
+        )
+        reason_type = _require_string(
+            entry["type"], f"R1 refusal_vocabulary[{index}].type"
+        )
+        roles.append(role)
+        codes.append(code)
+        if not code.startswith(_R1_ED_RESERVED_PREFIX) and re.fullmatch(
+            r"[a-z][a-z0-9_]*", code
+        ) is None:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                f"R1 refusal_vocabulary[{index}].code is invalid",
+            )
+        if not reason_type.startswith(_R1_ED_RESERVED_PREFIX) and reason_type not in {
+            "STRUCTURE",
+            "CUSTODY",
+            "GIT",
+            "LIFECYCLE",
+            "POLICY",
+            "IDENTITY",
+            "ENVIRONMENT",
+        }:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                f"R1 refusal_vocabulary[{index}].type is invalid",
+            )
+    if roles != sorted(R1_REFUSAL_ROLES) or len(codes) != len(set(codes)):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 refusal vocabulary must register every role exactly once",
+        )
+    if require_resolved and (
+        _r1_contains_reserved(registry)
+        or not raw_policies
+        or not raw_rows
+    ):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 lifecycle registry contains unresolved Ed-reserved values",
+        )
+    return registry
+
+
+def _r1_policy_for_kind(
+    registry: Mapping[str, Any], kind: str
+) -> Mapping[str, Any]:
+    validated = validate_r1_lifecycle_registry(registry)
+    matches = [
+        policy for policy in validated["evidence_policies"] if policy["kind"] == kind
+    ]
+    if len(matches) != 1:
+        raise EvidenceLifecycleError(
+            validated, "UNKNOWN_POLICY", f"no unique R1 policy for evidence kind {kind!r}"
+        )
+    return matches[0]
+
+
+def _r1_refusal_entry(
+    registry: Mapping[str, Any], role: str
+) -> Mapping[str, Any]:
+    if role not in R1_REFUSAL_ROLES:
+        raise ValueError(f"unknown R1 refusal role {role!r}")
+    validated = validate_r1_lifecycle_registry(registry)
+    matches = [
+        entry for entry in validated["refusal_vocabulary"] if entry["role"] == role
+    ]
+    if len(matches) != 1:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch", f"R1 refusal role {role!r} is not unique"
+        )
+    return matches[0]
+
+
 def validate_registry(value: object) -> Mapping[str, Any]:
-    registry = _require_exact_keys(value, REGISTRY_KEYS, "registry")
-    if registry["schema_version"] != ROW_REGISTRY_SCHEMA:
+    if not isinstance(value, Mapping):
+        raise ArmReadinessError(
+            "readiness_schema_invalid", "registry must be an object"
+        )
+    schema = value.get("schema_version")
+    registry = _require_exact_keys(
+        value,
+        R1_ROW_REGISTRY_KEYS if schema == R1_ROW_REGISTRY_SCHEMA else REGISTRY_KEYS,
+        "registry",
+    )
+    if schema not in {ROW_REGISTRY_SCHEMA, R1_ROW_REGISTRY_SCHEMA}:
         raise ArmReadinessError(
             "readiness_schema_invalid", "registry schema_version is invalid"
         )
-    if registry["registry_id"] != ROW_REGISTRY_ID:
+    if schema == ROW_REGISTRY_SCHEMA and registry["registry_id"] != ROW_REGISTRY_ID:
         raise ArmReadinessError(
             "readiness_row_registry_mismatch", "registry_id is invalid"
         )
+    if schema == R1_ROW_REGISTRY_SCHEMA:
+        _require_string(registry["registry_id"], "registry.registry_id")
+        validate_r1_lifecycle_registry(registry["freeze_evidence_lifecycle"])
     profiles = registry["plan_profiles"]
     rows = registry["rows"]
     if not isinstance(profiles, list) or not isinstance(rows, list):
@@ -1221,6 +1673,36 @@ def validate_registry(value: object) -> Mapping[str, Any]:
         raise ArmReadinessError(
             "readiness_row_set_incomplete", "registry must contain 35 unique sorted rows"
         )
+    if schema == R1_ROW_REGISTRY_SCHEMA:
+        lifecycle = registry["freeze_evidence_lifecycle"]
+        lifecycle_row_ids = [item["row_id"] for item in lifecycle["row_policies"]]
+        if lifecycle_row_ids != row_ids:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                "R1 lifecycle registry must assign a policy to every row",
+            )
+        policy_id_by_kind = {
+            item["kind"]: item["freshness_policy_id"]
+            for item in lifecycle["evidence_policies"]
+        }
+        policy_id_by_row = {
+            item["row_id"]: item["freshness_policy_id"]
+            for item in lifecycle["row_policies"]
+        }
+        for row in rows:
+            expected_policy_ids = {
+                policy_id_by_kind.get(kind)
+                for kind in row["required_evidence_kinds"]
+            }
+            if (
+                None in expected_policy_ids
+                or len(expected_policy_ids) != 1
+                or policy_id_by_row[row["row_id"]] not in expected_policy_ids
+            ):
+                raise ArmReadinessError(
+                    "readiness_row_registry_mismatch",
+                    f"R1 row {row['row_id']} does not match its evidence policy",
+                )
     profile_ids: list[str] = []
     for index, raw_profile in enumerate(profiles):
         profile = _require_exact_keys(raw_profile, PROFILE_KEYS, f"plan_profiles[{index}]")
@@ -1245,7 +1727,7 @@ def validate_registry(value: object) -> Mapping[str, Any]:
     return registry
 
 
-def validate_evidence_receipt(value: object) -> Mapping[str, Any]:
+def _validate_legacy_evidence_receipt(value: object) -> Mapping[str, Any]:
     receipt = _require_exact_keys(value, EVIDENCE_RECEIPT_KEYS, "evidence receipt")
     if receipt["schema_version"] != EVIDENCE_RECEIPT_SCHEMA:
         raise ArmReadinessError(
@@ -1315,6 +1797,139 @@ def validate_evidence_receipt(value: object) -> Mapping[str, Any]:
         )
     _validate_assurance(receipt["assurance"])
     return receipt
+
+
+def _validate_r1_evidence_receipt_common(
+    value: object, *, execution_bound: bool
+) -> Mapping[str, Any]:
+    keys = (
+        EXECUTION_EVIDENCE_RECEIPT_KEYS
+        if execution_bound
+        else CONTENT_EVIDENCE_RECEIPT_KEYS
+    )
+    where = "execution evidence receipt" if execution_bound else "content evidence receipt"
+    receipt = _require_exact_keys(value, keys, where)
+    expected_schema = (
+        EXECUTION_EVIDENCE_RECEIPT_SCHEMA
+        if execution_bound
+        else CONTENT_EVIDENCE_RECEIPT_SCHEMA
+    )
+    expected_class = "EXECUTION_BOUND" if execution_bound else "RE_DERIVABLE"
+    if receipt["schema_version"] != expected_schema:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} schema is invalid"
+        )
+    if receipt["freshness_class"] != expected_class:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} freshness class is invalid"
+        )
+    for name in (
+        "evidence_id",
+        "kind",
+        "issued_at_utc",
+        "freshness_policy_id",
+    ):
+        _require_string(receipt[name], f"{where}.{name}")
+    _require_lower_git_oid(receipt["derivation_commit"], f"{where}.derivation_commit")
+    _require_lower_sha256(receipt["pack_sha256"], f"{where}.pack_sha256")
+    _require_lower_sha256(
+        receipt["dependency_manifest_sha256"],
+        f"{where}.dependency_manifest_sha256",
+    )
+    if execution_bound:
+        _require_boot_session_id(receipt["boot_session_id"], f"{where}.boot_session_id")
+        _require_int(
+            receipt["valid_until_monotonic_ns"],
+            f"{where}.valid_until_monotonic_ns",
+            minimum=1,
+        )
+        fingerprint = receipt["environment_fingerprint"]
+        if not isinstance(fingerprint, Mapping):
+            raise ArmReadinessError(
+                "readiness_schema_invalid", f"{where}.environment_fingerprint is invalid"
+            )
+        try:
+            render_json(fingerprint)
+        except (TypeError, ValueError) as exc:
+            raise ArmReadinessError(
+                "readiness_schema_invalid",
+                f"{where}.environment_fingerprint is not strict JSON",
+            ) from exc
+    if receipt["status"] not in RECEIPT_STATUSES:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} status is invalid"
+        )
+    facts = receipt["facts"]
+    checks = receipt["checks"]
+    reasons = receipt["reason_codes"]
+    if not isinstance(facts, list) or not isinstance(checks, list) or not isinstance(reasons, list):
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"{where} facts, checks, and reason_codes must be arrays",
+        )
+    for index, raw_fact in enumerate(facts):
+        fact = _require_exact_keys(raw_fact, FACT_KEYS, f"{where}.facts[{index}]")
+        _require_string(fact["fact_id"], f"{where}.facts[{index}].fact_id")
+        _require_string(fact["value_type"], f"{where}.facts[{index}].value_type")
+        if fact["source_kind"] not in SOURCE_KINDS:
+            raise ArmReadinessError(
+                "readiness_schema_invalid", f"{where}.facts[{index}].source_kind is invalid"
+            )
+        _require_relative_path(
+            fact["source_path"], f"{where}.facts[{index}].source_path"
+        )
+        _require_lower_sha256(
+            fact["source_sha256"], f"{where}.facts[{index}].source_sha256"
+        )
+        try:
+            render_json(fact["value"])
+        except (TypeError, ValueError) as exc:
+            raise ArmReadinessError(
+                "readiness_schema_invalid",
+                f"{where}.facts[{index}].value is not strict JSON",
+            ) from exc
+    for index, raw_check in enumerate(checks):
+        check = _require_exact_keys(raw_check, EVIDENCE_CHECK_KEYS, f"{where}.checks[{index}]")
+        _require_string(check["check_id"], f"{where}.checks[{index}].check_id")
+        if check["status"] not in RECEIPT_STATUSES:
+            raise ArmReadinessError(
+                "readiness_schema_invalid", f"{where}.checks[{index}].status is invalid"
+            )
+    if (
+        any(
+            not isinstance(reason, str)
+            or re.fullmatch(r"[a-z][a-z0-9_]*", reason) is None
+            for reason in reasons
+        )
+        or reasons != sorted(set(reasons))
+    ):
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"{where}.reason_codes must be sorted domain-code strings",
+        )
+    if (receipt["status"] == "PASS") == bool(reasons):
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} status and reason_codes disagree"
+        )
+    _validate_assurance(receipt["assurance"])
+    return receipt
+
+
+def validate_evidence_receipt(value: object) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ArmReadinessError(
+            "readiness_schema_invalid", "evidence receipt must be an object"
+        )
+    schema = value.get("schema_version")
+    if schema == EVIDENCE_RECEIPT_SCHEMA:
+        return _validate_legacy_evidence_receipt(value)
+    if schema == CONTENT_EVIDENCE_RECEIPT_SCHEMA:
+        return _validate_r1_evidence_receipt_common(value, execution_bound=False)
+    if schema == EXECUTION_EVIDENCE_RECEIPT_SCHEMA:
+        return _validate_r1_evidence_receipt_common(value, execution_bound=True)
+    raise ArmReadinessError(
+        "readiness_schema_invalid", "evidence receipt schema is invalid"
+    )
 
 
 def validate_freeze_receipt(value: object) -> Mapping[str, Any]:
@@ -1985,6 +2600,410 @@ def _git_blob_at_head(repository: Path, relative_path: str) -> bytes | None:
     if completed.returncode != 0:
         return None
     return completed.stdout
+
+
+def authenticate_r1_lifecycle_registry(
+    raw: bytes, expected_sha256: str
+) -> Mapping[str, Any]:
+    """Authenticate canonical registry bytes before any R1 policy lookup."""
+
+    _require_lower_sha256(expected_sha256, "R1 lifecycle registry sha256")
+    if sha256_bytes(raw) != expected_sha256:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 lifecycle registry digest differs from its governed pin",
+        )
+    value = parse_json_bytes(raw, require_canonical=True)
+    return validate_r1_lifecycle_registry(value)
+
+
+def _git_blob_at_commit(
+    repository: Path,
+    commit: str,
+    relative_path: str,
+    registry: Mapping[str, Any],
+) -> bytes:
+    try:
+        return _run_git(repository, "show", f"{commit}:{relative_path}")
+    except ArmReadinessError as exc:
+        raise EvidenceLifecycleError(
+            registry,
+            "DEPENDENCY_MANIFEST",
+            f"cannot authenticate dependency {relative_path!r} at {commit}: {exc}",
+        ) from exc
+
+
+def normalize_plan_tree_for_freeze_evidence(raw: bytes) -> bytes:
+    """Subtract only the two future freeze-receipt slot values.
+
+    The slot key itself and every other plan-tree byte remain semantically
+    represented.  No general-purpose canonicalization exception exists.
+    """
+
+    value = parse_json_bytes(raw)
+    if not isinstance(value, Mapping):
+        raise ArmReadinessError(
+            "readiness_schema_invalid", "plan-tree normalization input is not an object"
+        )
+    normalized = copy.deepcopy(dict(value))
+    attachments = normalized.get("arm_attachments")
+    readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
+    if not isinstance(readiness, dict) or "freeze_receipt" not in readiness:
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            "plan tree lacks the arm-readiness freeze-receipt slot",
+        )
+    slot = readiness["freeze_receipt"]
+    if slot is not None:
+        exact = _require_exact_keys(
+            slot,
+            {"path", "sha256"},
+            "arm_attachments.arm_readiness.freeze_receipt",
+        )
+        _require_relative_path(
+            exact["path"], "arm_attachments.arm_readiness.freeze_receipt.path"
+        )
+        _require_lower_sha256(
+            exact["sha256"], "arm_attachments.arm_readiness.freeze_receipt.sha256"
+        )
+    # Enumerated subtraction: these are the only two future values removed.
+    readiness["freeze_receipt"] = None
+    return render_json(normalized)
+
+
+def validate_terminal_review_head_tree(
+    source: Mapping[str, Any], reviewed_head_tree_oid: str
+) -> None:
+    """Enforce R1 clause 3 independently of every head-relaxation policy."""
+
+    _require_lower_git_oid(reviewed_head_tree_oid, "reviewed HEAD tree OID")
+    if source.get("head_tree_oid") != reviewed_head_tree_oid:
+        raise ArmReadinessError(
+            "readiness_terminal_review_missing",
+            "terminal review does not bind the reviewed HEAD tree",
+        )
+
+
+def _r1_changed_paths(
+    repository: Path,
+    derivation_commit: str,
+    current_head: str,
+    registry: Mapping[str, Any],
+) -> tuple[str, ...]:
+    try:
+        _run_git(
+            repository,
+            "merge-base",
+            "--is-ancestor",
+            derivation_commit,
+            current_head,
+        )
+    except ArmReadinessError as exc:
+        raise EvidenceLifecycleError(
+            registry,
+            "SUCCESSOR_CHAIN",
+            "evidence derivation commit is not an ancestor of the reviewed HEAD",
+        ) from exc
+    try:
+        raw = _run_git(
+            repository,
+            "diff",
+            "--name-only",
+            "-z",
+            f"{derivation_commit}..{current_head}",
+            "--",
+        )
+        decoded = raw.decode("utf-8", errors="strict")
+    except (ArmReadinessError, UnicodeDecodeError) as exc:
+        raise EvidenceLifecycleError(
+            registry,
+            "DEPENDENCY_CHANGED_SET",
+            f"cannot enumerate the complete changed set: {exc}",
+        ) from exc
+    paths = tuple(item for item in decoded.split("\0") if item)
+    if paths != tuple(sorted(set(paths))) or any(
+        Path(path).is_absolute()
+        or "\\" in path
+        or any(part in {"", ".", ".."} for part in PurePosixPath(path).parts)
+        for path in paths
+    ):
+        raise EvidenceLifecycleError(
+            registry,
+            "DEPENDENCY_CHANGED_SET",
+            "Git returned a noncanonical changed-path set",
+        )
+    return paths
+
+
+def _r1_manifest_dependencies(source: Mapping[str, Any]) -> list[dict[str, str]]:
+    dependencies: list[dict[str, str]] = []
+    primary = source.get("primary_artifacts")
+    checks = source.get("checks")
+    if not isinstance(primary, list) or not isinstance(checks, list):
+        return dependencies
+    for item in primary:
+        if isinstance(item, Mapping):
+            dependencies.append({"path": item.get("path"), "sha256": item.get("sha256")})
+    for check in checks:
+        evidence = check.get("evidence") if isinstance(check, Mapping) else None
+        executed = evidence.get("executed_files") if isinstance(evidence, Mapping) else None
+        if not isinstance(executed, list):
+            continue
+        for item in executed:
+            if isinstance(item, Mapping):
+                dependencies.append(
+                    {"path": item.get("path"), "sha256": item.get("sha256")}
+                )
+    by_path: dict[object, object] = {}
+    for item in dependencies:
+        path = item.get("path")
+        digest = item.get("sha256")
+        if path in by_path and by_path[path] != digest:
+            return dependencies
+        by_path[path] = digest
+    return [
+        {"path": path, "sha256": digest}
+        for path, digest in sorted(by_path.items(), key=lambda item: str(item[0]))
+    ]
+
+
+def validate_r1_evidence_lifecycle(
+    repository: Path | str,
+    receipt: Mapping[str, Any],
+    source: Mapping[str, Any],
+    registry: Mapping[str, Any],
+    *,
+    current_head: str,
+    expected_freshness_class: str,
+    plan_tree_path: str,
+) -> tuple[str, ...]:
+    """Apply R1's changed-set primary gate and manifest conjunct."""
+
+    root = Path(repository).resolve(strict=True)
+    governed = validate_r1_lifecycle_registry(registry)
+    validated_receipt = validate_evidence_receipt(receipt)
+    if validated_receipt["schema_version"] == EVIDENCE_RECEIPT_SCHEMA:
+        raise EvidenceLifecycleError(
+            governed,
+            "V1_GRANDFATHERING",
+            "legacy generic evidence may not enter the R1 lifecycle",
+            evidence_id=str(validated_receipt["evidence_id"]),
+        )
+    kind = str(validated_receipt["kind"])
+    policy = _r1_policy_for_kind(governed, kind)
+    if (
+        expected_freshness_class not in R1_FRESHNESS_CLASSES
+        or validated_receipt["freshness_class"] != expected_freshness_class
+        or policy["freshness_class"] != expected_freshness_class
+        or validated_receipt["freshness_policy_id"]
+        != policy["freshness_policy_id"]
+    ):
+        raise EvidenceLifecycleError(
+            governed,
+            "CLASS_MISMATCH",
+            f"registry, receipt, and code freshness classes disagree for {kind}",
+            evidence_id=str(validated_receipt["evidence_id"]),
+        )
+    derivation_commit = str(validated_receipt["derivation_commit"])
+    _require_lower_git_oid(current_head, "R1 current reviewed HEAD")
+    changed_paths = _r1_changed_paths(
+        root, derivation_commit, current_head, governed
+    )
+    allowlist = set(governed["irrelevant_path_allowlist"])
+    relevant = sorted(set(changed_paths) - allowlist)
+    if relevant:
+        raise EvidenceLifecycleError(
+            governed,
+            "DEPENDENCY_CHANGED_SET",
+            f"reviewed HEAD changed relevant path(s): {relevant!r}",
+            evidence_id=str(validated_receipt["evidence_id"]),
+        )
+
+    source_raw = render_json(source)
+    if (
+        sha256_bytes(source_raw) != validated_receipt["dependency_manifest_sha256"]
+        or any(
+            fact["source_sha256"] != validated_receipt["dependency_manifest_sha256"]
+            for fact in validated_receipt["facts"]
+        )
+        or source.get("kind") != kind
+        or source.get("derivation_commit", source.get("head_commit"))
+        != derivation_commit
+        or source.get("pack_sha256") != validated_receipt["pack_sha256"]
+    ):
+        raise EvidenceLifecycleError(
+            governed,
+            "DEPENDENCY_MANIFEST",
+            "evidence source and receipt dependency-manifest bindings disagree",
+            evidence_id=str(validated_receipt["evidence_id"]),
+        )
+
+    dependencies = _r1_manifest_dependencies(source)
+    if not dependencies:
+        raise EvidenceLifecycleError(
+            governed,
+            "DEPENDENCY_MANIFEST",
+            "evidence dependency manifest is empty",
+            evidence_id=str(validated_receipt["evidence_id"]),
+        )
+    pairs = [(item.get("path"), item.get("sha256")) for item in dependencies]
+    if any(
+        not isinstance(path, str)
+        or not isinstance(digest, str)
+        or _LOWER_SHA256_RE.fullmatch(digest) is None
+        for path, digest in pairs
+    ) or len([path for path, _digest in pairs]) != len(
+        {path for path, _digest in pairs}
+    ):
+        raise EvidenceLifecycleError(
+            governed,
+            "DEPENDENCY_MANIFEST",
+            "evidence dependency manifest contains malformed or duplicate entries",
+            evidence_id=str(validated_receipt["evidence_id"]),
+        )
+    for relative, recorded_digest in pairs:
+        assert isinstance(relative, str) and isinstance(recorded_digest, str)
+        derived_raw = _git_blob_at_commit(
+            root, derivation_commit, relative, governed
+        )
+        if sha256_bytes(derived_raw) != recorded_digest:
+            raise EvidenceLifecycleError(
+                governed,
+                "DEPENDENCY_MANIFEST",
+                f"recorded dependency differs at derivation commit: {relative}",
+                evidence_id=str(validated_receipt["evidence_id"]),
+            )
+        current_raw = _git_blob_at_commit(root, current_head, relative, governed)
+        try:
+            equal = (
+                normalize_plan_tree_for_freeze_evidence(derived_raw)
+                == normalize_plan_tree_for_freeze_evidence(current_raw)
+                if relative == plan_tree_path
+                else sha256_bytes(current_raw) == recorded_digest
+            )
+        except ArmReadinessError as exc:
+            raise EvidenceLifecycleError(
+                governed,
+                "DEPENDENCY_MANIFEST",
+                f"plan-tree subtraction refused: {exc}",
+                evidence_id=str(validated_receipt["evidence_id"]),
+            ) from exc
+        if not equal:
+            raise EvidenceLifecycleError(
+                governed,
+                "DEPENDENCY_MANIFEST",
+                f"current dependency differs from its derivation binding: {relative}",
+                evidence_id=str(validated_receipt["evidence_id"]),
+            )
+    return changed_paths
+
+
+def validate_r1_temporal_budget(
+    evidence_receipts: Iterable[Mapping[str, Any]],
+    registry: Mapping[str, Any],
+    *,
+    now_monotonic_ns: int,
+) -> int | None:
+    """Evaluate the TIME_BOUND T-0 set against the governed consume budget."""
+
+    governed = validate_r1_lifecycle_registry(registry)
+    budget = governed["arm_policy"]["arm_to_consume_budget_ns"]
+    if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 arm-to-consume budget remains unresolved",
+        )
+    by_kind = {
+        policy["kind"]: policy for policy in governed["evidence_policies"]
+    }
+    deadlines: list[int] = []
+    for receipt in evidence_receipts:
+        kind = receipt.get("kind")
+        policy = by_kind.get(kind)
+        if not isinstance(policy, Mapping) or policy.get("freshness_class") != "TIME_BOUND":
+            continue
+        deadline = receipt.get("valid_until_monotonic_ns")
+        if not isinstance(deadline, int) or isinstance(deadline, bool) or deadline <= 0:
+            raise EvidenceLifecycleError(
+                governed,
+                "TEMPORAL_BUDGET",
+                f"TIME_BOUND evidence {kind!r} lacks a valid deadline",
+                evidence_id=(
+                    str(receipt["evidence_id"])
+                    if isinstance(receipt.get("evidence_id"), str)
+                    else None
+                ),
+            )
+        deadlines.append(deadline)
+    if not deadlines:
+        return None
+    earliest = min(deadlines)
+    if earliest - now_monotonic_ns < budget:
+        raise EvidenceLifecycleError(
+            governed,
+            "TEMPORAL_BUDGET",
+            "T-0 evidence lifetime cannot cover the governed arm-to-consume budget",
+        )
+    return earliest
+
+
+def validate_r1_class_lifecycle(
+    receipt: Mapping[str, Any],
+    freshness_class: str,
+    *,
+    current_boot_session_id: str,
+    now_monotonic_ns: int,
+    semantic_state_valid: bool | None = None,
+    capability_consumed: bool | None = None,
+) -> None:
+    """Apply only the class-level invariants already fixed by R1.
+
+    Row-specific probes and comparison semantics remain registry-reserved;
+    callers must supply their already-derived semantic-state result.
+    """
+
+    if freshness_class not in R1_FRESHNESS_CLASSES:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch", "unknown R1 freshness class"
+        )
+    _require_boot_session_id(current_boot_session_id, "current boot session")
+    if freshness_class == "RE_DERIVABLE":
+        if "boot_session_id" in receipt or "valid_until_monotonic_ns" in receipt:
+            raise ArmReadinessError(
+                "readiness_schema_invalid",
+                "RE_DERIVABLE evidence may not store boot or deadline validity",
+            )
+        return
+    if freshness_class in {
+        "EXECUTION_BOUND",
+        "TIME_BOUND",
+        "TEMPORAL_CAPABILITY",
+    }:
+        if (
+            receipt.get("boot_session_id") != current_boot_session_id
+            or not isinstance(receipt.get("valid_until_monotonic_ns"), int)
+            or receipt["valid_until_monotonic_ns"] < now_monotonic_ns
+        ):
+            raise ArmReadinessError(
+                "readiness_record_expired",
+                f"{freshness_class} evidence is outside its boot/horizon binding",
+            )
+    if freshness_class == "SESSION_STATE_BOUND" and semantic_state_valid is not True:
+        raise ArmReadinessError(
+            "readiness_dependency_refused",
+            "SESSION_STATE_BOUND predicate did not semantically revalidate",
+        )
+    if freshness_class == "TEMPORAL_CAPABILITY":
+        if semantic_state_valid is not True:
+            raise ArmReadinessError(
+                "readiness_dependency_refused",
+                "TEMPORAL_CAPABILITY state did not semantically revalidate",
+            )
+        if capability_consumed is not False:
+            raise ArmReadinessError(
+                "readiness_record_consumed",
+                "TEMPORAL_CAPABILITY is consumed or its state is unknown",
+            )
 
 
 def scan_receipt_namespace(
@@ -2706,9 +3725,10 @@ def _authenticate_generic_evidence_item(
     expected_boot_session_id: str | None = None,
     now_monotonic_ns: int | None = None,
     launch_binding_cache: dict[Path, bytes] | None = None,
+    lifecycle_registry: Mapping[str, Any] | None = None,
 ) -> Mapping[str, Any]:
     _validate_evidence_item(item, "evidence item")
-    if item["schema_version"] != EVIDENCE_RECEIPT_SCHEMA:
+    if item["schema_version"] not in GENERIC_EVIDENCE_RECEIPT_SCHEMAS:
         raise ArmReadinessError(
             "readiness_evidence_reference_invalid",
             "generic evidence item names a non-generic schema",
@@ -2751,6 +3771,17 @@ def _authenticate_generic_evidence_item(
     receipt = validate_evidence_receipt(
         parse_json_bytes(raw, require_canonical=True)
     )
+    if (
+        lifecycle_registry is not None
+        and item["namespace"] == "PACK"
+        and receipt["schema_version"] == EVIDENCE_RECEIPT_SCHEMA
+    ):
+        raise EvidenceLifecycleError(
+            lifecycle_registry,
+            "V1_GRANDFATHERING",
+            "legacy generic freeze evidence may not enter the R1 lifecycle",
+            evidence_id=str(receipt["evidence_id"]),
+        )
     if receipt["kind"] in {"IDENTITY_PIN_PROJECTION", "DRY_RUN_REHEARSAL"}:
         raise ArmReadinessError(
             "readiness_evidence_reference_invalid",
@@ -2769,12 +3800,16 @@ def _authenticate_generic_evidence_item(
             "readiness_evidence_digest_mismatch",
             "evidence item metadata differs from authenticated bytes",
         )
+    receipt_head = receipt.get("head_commit", receipt.get("derivation_commit"))
     if (
+        receipt["schema_version"] == EVIDENCE_RECEIPT_SCHEMA
+        and
         expected_pack_sha256 is not None
         and receipt["pack_sha256"] != expected_pack_sha256
     ) or (
-        expected_head_commit is not None
-        and receipt["head_commit"] != expected_head_commit
+        receipt["schema_version"] == EVIDENCE_RECEIPT_SCHEMA
+        and expected_head_commit is not None
+        and receipt_head != expected_head_commit
     ):
         raise ArmReadinessError(
             "readiness_evidence_digest_mismatch",
@@ -2782,6 +3817,7 @@ def _authenticate_generic_evidence_item(
         )
     if (
         expected_boot_session_id is not None
+        and "boot_session_id" in receipt
         and receipt["boot_session_id"] != expected_boot_session_id
     ):
         raise ArmReadinessError(
@@ -2789,11 +3825,13 @@ def _authenticate_generic_evidence_item(
         )
     if (
         now_monotonic_ns is not None
+        and "valid_until_monotonic_ns" in receipt
         and receipt["valid_until_monotonic_ns"] < now_monotonic_ns
     ):
         raise ArmReadinessError(
             "readiness_record_expired", "evidence item expired"
         )
+    source_payloads: dict[str, tuple[bytes, Mapping[str, Any]]] = {}
     for fact in receipt["facts"]:
         source_path = _resolve_namespace_path(
             namespace_root,
@@ -2820,6 +3858,75 @@ def _authenticate_generic_evidence_item(
                 "readiness_evidence_digest_mismatch",
                 "evidence fact source digest mismatch",
             )
+        try:
+            source_value = parse_json_bytes(source_raw, require_canonical=True)
+        except ArmReadinessError as exc:
+            raise ArmReadinessError(
+                "readiness_evidence_digest_mismatch",
+                f"evidence fact source is invalid: {exc}",
+            ) from exc
+        if not isinstance(source_value, Mapping):
+            raise ArmReadinessError(
+                "readiness_evidence_digest_mismatch",
+                "evidence fact source is not an object",
+            )
+        source_payloads[fact["source_path"]] = (source_raw, source_value)
+    if receipt["schema_version"] != EVIDENCE_RECEIPT_SCHEMA:
+        if lifecycle_registry is None:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                "R1 evidence requires its governed lifecycle registry",
+            )
+        if len(source_payloads) != 1:
+            raise EvidenceLifecycleError(
+                lifecycle_registry,
+                "DEPENDENCY_MANIFEST",
+                "R1 evidence must bind exactly one dependency manifest",
+                evidence_id=str(receipt["evidence_id"]),
+            )
+        _source_raw, source = next(iter(source_payloads.values()))
+        from joulewise import arm_readiness_evidence as _evidence_author
+
+        expected_class = _evidence_author._DERIVER_FRESHNESS_CLASSES.get(
+            str(receipt["kind"])
+        )
+        if expected_class is None:
+            raise EvidenceLifecycleError(
+                lifecycle_registry,
+                "UNKNOWN_POLICY",
+                f"no code freshness class for {receipt['kind']!r}",
+                evidence_id=str(receipt["evidence_id"]),
+            )
+        repository, _pack_prefix, pack_relative = _repository_and_pack_relative(
+            pack_root
+        )
+        current_head = expected_head_commit or _git_text(repository, "rev-parse", "HEAD")
+        if current_head is None:
+            raise EvidenceLifecycleError(
+                lifecycle_registry,
+                "DEPENDENCY_CHANGED_SET",
+                "current reviewed HEAD is unavailable",
+                evidence_id=str(receipt["evidence_id"]),
+            )
+        validate_r1_evidence_lifecycle(
+            repository,
+            receipt,
+            source,
+            lifecycle_registry,
+            current_head=current_head,
+            expected_freshness_class=expected_class,
+            plan_tree_path=f"{pack_relative}/plan_tree.json",
+        )
+        if expected_class == "RE_DERIVABLE":
+            try:
+                _evidence_author._r1_rederive_at_arm(pack_root, receipt, source)
+            except (ValueError, _evidence_author.EvidenceAuthoringError) as exc:
+                raise EvidenceLifecycleError(
+                    lifecycle_registry,
+                    "DEPENDENCY_MANIFEST",
+                    f"ARM re-derivation refused: {exc}",
+                    evidence_id=str(receipt["evidence_id"]),
+                ) from exc
     return receipt
 
 
@@ -2833,6 +3940,7 @@ def _discover_evidence(
     now_monotonic_ns: int | None,
     include_pack: bool = True,
     launch_binding_cache: dict[Path, bytes] | None = None,
+    lifecycle_registry: Mapping[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]], list[dict[str, Any]]]:
     items: list[dict[str, Any]] = []
     receipts: dict[str, Mapping[str, Any]] = {}
@@ -2908,14 +4016,18 @@ def _discover_evidence(
                         "specialized evidence must use its governing receipt schema",
                     )
                 if (
-                    (pack_sha256 is not None and receipt["pack_sha256"] != pack_sha256)
-                    or (head_commit is not None and receipt["head_commit"] != head_commit)
+                    receipt["schema_version"] == EVIDENCE_RECEIPT_SCHEMA
+                    and (
+                        (pack_sha256 is not None and receipt["pack_sha256"] != pack_sha256)
+                        or (head_commit is not None and receipt["head_commit"] != head_commit)
+                    )
                 ):
                     raise ArmReadinessError(
                         "readiness_evidence_digest_mismatch", "evidence is stale for pack/HEAD"
                     )
                 if (
                     boot_session_id is not None
+                    and "boot_session_id" in receipt
                     and receipt["boot_session_id"] != boot_session_id
                 ):
                     raise ArmReadinessError(
@@ -2924,6 +4036,7 @@ def _discover_evidence(
                     )
                 if (
                     now_monotonic_ns is not None
+                    and "valid_until_monotonic_ns" in receipt
                     and receipt["valid_until_monotonic_ns"] < now_monotonic_ns
                 ):
                     raise ArmReadinessError(
@@ -2963,6 +4076,40 @@ def _discover_evidence(
                             "readiness_evidence_digest_mismatch",
                             "evidence fact source digest mismatch",
                         )
+                    if receipt["kind"] == "TERMINAL_REVIEW":
+                        terminal_source = parse_json_bytes(
+                            source_raw, require_canonical=True
+                        )
+                        if (
+                            not isinstance(terminal_source, Mapping)
+                            or terminal_source.get("schema_version")
+                            != _T0_EVIDENCE_SOURCE_SCHEMA
+                        ):
+                            # Historical synthetic fixtures predate the T-0
+                            # source schema. They are never production inputs;
+                            # the schema-bearing route below is unconditional.
+                            continue
+                        repository = _repo_for_pack(pack_root)
+                        reviewed_head = head_commit or _git_text(
+                            repository, "rev-parse", "HEAD"
+                        )
+                        reviewed_tree = (
+                            _git_text(
+                                repository,
+                                "rev-parse",
+                                f"{reviewed_head}^{{tree}}",
+                            )
+                            if reviewed_head is not None
+                            else None
+                        )
+                        if reviewed_tree is None:
+                            raise ArmReadinessError(
+                                "readiness_terminal_review_missing",
+                                "reviewed HEAD tree is unavailable",
+                            )
+                        validate_terminal_review_head_tree(
+                            terminal_source, reviewed_tree
+                        )
                 item = {
                     "evidence_id": receipt["evidence_id"],
                     "receipt_kind": receipt["kind"],
@@ -2972,8 +4119,20 @@ def _discover_evidence(
                     "schema_version": receipt["schema_version"],
                     "status": receipt["status"],
                 }
+                if namespace == "PACK" and lifecycle_registry is not None:
+                    receipt = _authenticate_generic_evidence_item(
+                        item,
+                        pack_root,
+                        custody_pack_root,
+                        expected_head_commit=head_commit,
+                        expected_boot_session_id=boot_session_id,
+                        now_monotonic_ns=now_monotonic_ns,
+                        lifecycle_registry=lifecycle_registry,
+                    )
                 items.append(item)
                 receipts[receipt["evidence_id"]] = receipt
+            except EvidenceLifecycleError as exc:
+                refusals.append(exc.refusal())
             except ArmReadinessError as exc:
                 refusals.append(
                     _receipt_refusal(
@@ -3239,10 +4398,15 @@ def _load_freeze_reference(
     semantic_receipts: dict[str, Mapping[str, Any]] = {}
     identity_reasons: list[str] = []
     boot_session_id = _current_boot_session_id()
+    lifecycle_registry = (
+        registry["freeze_evidence_lifecycle"]
+        if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
+        else None
+    )
     generic_items = [
         item
         for item in receipt["evidence"]
-        if item["schema_version"] == EVIDENCE_RECEIPT_SCHEMA
+        if item["schema_version"] in GENERIC_EVIDENCE_RECEIPT_SCHEMAS
     ]
     evidence_directory = pack_root / "arm_readiness.evidence"
     if evidence_directory.exists():
@@ -3282,6 +4446,12 @@ def _load_freeze_reference(
                 pack_root,
                 pack_root,
                 expected_boot_session_id=boot_session_id,
+                expected_head_commit=(
+                    reviewed_main(pack_root)["head_commit"]
+                    if lifecycle_registry is not None
+                    else None
+                ),
+                lifecycle_registry=lifecycle_registry,
             )
         )
     identity_items = [
@@ -3365,6 +4535,7 @@ def _freeze_evidence_for_arm(
     pack_root: Path,
     tree: Mapping[str, Any],
     freeze_receipt: Mapping[str, Any],
+    registry: Mapping[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]]]:
     items = copy.deepcopy(list(freeze_receipt["evidence"]))
     receipts: dict[str, Mapping[str, Any]] = {}
@@ -3372,13 +4543,26 @@ def _freeze_evidence_for_arm(
     plan_identity_item, plan_identity_receipt, _reasons = (
         _load_frozen_identity_evidence(pack_root, tree)
     )
+    lifecycle_registry = (
+        registry["freeze_evidence_lifecycle"]
+        if isinstance(registry, Mapping)
+        and registry.get("schema_version") == R1_ROW_REGISTRY_SCHEMA
+        else None
+    )
+    expected_head = (
+        reviewed_main(pack_root)["head_commit"]
+        if lifecycle_registry is not None
+        else None
+    )
     for item in items:
-        if item["schema_version"] == EVIDENCE_RECEIPT_SCHEMA:
+        if item["schema_version"] in GENERIC_EVIDENCE_RECEIPT_SCHEMAS:
             receipts[item["evidence_id"]] = _authenticate_generic_evidence_item(
                 item,
                 pack_root,
                 pack_root,
                 expected_boot_session_id=boot_session_id,
+                expected_head_commit=expected_head,
+                lifecycle_registry=lifecycle_registry,
             )
         elif item["schema_version"] == IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA:
             if item != plan_identity_item or plan_identity_receipt is None:
@@ -3446,6 +4630,11 @@ def generate_freeze_receipt(pack_root: Path | str) -> dict[str, Any]:
         head_commit=None,
         boot_session_id=boot_session_id,
         now_monotonic_ns=evaluated_at_monotonic_ns,
+        lifecycle_registry=(
+            registry["freeze_evidence_lifecycle"]
+            if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
+            else None
+        ),
     )
     identity_item, identity_receipt, identity_reasons = _load_frozen_identity_evidence(
         root, tree
@@ -4048,7 +5237,7 @@ def generate_arm_receipt(
         include_pack=False,
     )
     freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
-        root, tree, freeze_receipt
+        root, tree, freeze_receipt, registry
     )
     duplicate_ids = set(evidence_receipts).intersection(freeze_evidence_receipts)
     if duplicate_ids:
@@ -4059,6 +5248,20 @@ def generate_arm_receipt(
     evidence_items.extend(freeze_items)
     evidence_items.sort(key=lambda item: item["evidence_id"])
     evidence_receipts.update(freeze_evidence_receipts)
+    lifecycle_registry = (
+        registry["freeze_evidence_lifecycle"]
+        if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
+        else None
+    )
+    if lifecycle_registry is not None:
+        try:
+            validate_r1_temporal_budget(
+                evidence_receipts.values(),
+                lifecycle_registry,
+                now_monotonic_ns=evaluated_at_monotonic_ns,
+            )
+        except EvidenceLifecycleError as exc:
+            evidence_refusals.append(exc.refusal())
     identity_item, identity_receipt, identity_reasons = (
         _run_identity_arm_reverification(
             root, custody_root, str(context["bracket_session_id"])
@@ -4134,8 +5337,13 @@ def generate_arm_receipt(
         for item in evidence_receipts.values()
         if "valid_until_monotonic_ns" in item
     ]
+    arm_horizon_ns = (
+        int(lifecycle_registry["arm_policy"]["capability_horizon_ns"])
+        if lifecycle_registry is not None
+        else validity_ns
+    )
     valid_until = min(
-        [evaluated_at_monotonic_ns + validity_ns, *evidence_expirations]
+        [evaluated_at_monotonic_ns + arm_horizon_ns, *evidence_expirations]
     )
     receipt = {
         "schema_version": ARM_RECEIPT_SCHEMA,
@@ -4224,7 +5432,7 @@ def _derive_arm_semantics_for_verification(
         launch_binding_cache=launch_binding_cache,
     )
     freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
-        root, tree, freeze_receipt
+        root, tree, freeze_receipt, registry
     )
     if set(evidence_receipts).intersection(freeze_evidence_receipts):
         raise ArmReadinessError(
@@ -4234,6 +5442,20 @@ def _derive_arm_semantics_for_verification(
     evidence_items.extend(freeze_items)
     evidence_items.sort(key=lambda item: item["evidence_id"])
     evidence_receipts.update(freeze_evidence_receipts)
+    lifecycle_registry = (
+        registry["freeze_evidence_lifecycle"]
+        if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
+        else None
+    )
+    if lifecycle_registry is not None:
+        try:
+            validate_r1_temporal_budget(
+                evidence_receipts.values(),
+                lifecycle_registry,
+                now_monotonic_ns=time.monotonic_ns(),
+            )
+        except EvidenceLifecycleError as exc:
+            evidence_refusals.append(exc.refusal())
     identity_items = [
         item
         for item in receipt["evidence"]
@@ -6325,9 +7547,12 @@ __all__ = [
     "ARM_RECEIPT_SCHEMA",
     "ASSURANCE",
     "ArmReadinessError",
+    "CONTENT_EVIDENCE_RECEIPT_SCHEMA",
     "CONSUMPTION_RECEIPT_SCHEMA",
     "DRY_RUN_RECEIPT_SCHEMA",
     "EVIDENCE_RECEIPT_SCHEMA",
+    "EXECUTION_EVIDENCE_RECEIPT_SCHEMA",
+    "EvidenceLifecycleError",
     "FREEZE_RECEIPT_SCHEMA",
     "LAUNCH_COMPLETION_RECEIPT_SCHEMA",
     "LAUNCH_LINEAGE_LOCATOR_BASENAME",
@@ -6340,6 +7565,11 @@ __all__ = [
     "LaunchLineageError",
     "PACK_DIGEST_ALGORITHM",
     "READINESS_REASON_CODES",
+    "R1_FRESHNESS_CLASSES",
+    "R1_LIFECYCLE_REGISTRY_PLACEHOLDER",
+    "R1_LIFECYCLE_REGISTRY_SCHEMA",
+    "R1_REFUSAL_ROLES",
+    "R1_ROW_REGISTRY_SCHEMA",
     "ROW_REGISTRY_ID",
     "ROW_REGISTRY_SCHEMA",
     "SYNTHETIC_DOMAINS",
@@ -6347,6 +7577,7 @@ __all__ = [
     "authenticate_bundle_launch_lineage",
     "authenticate_campaign_launch_lineage",
     "authenticate_launch_lineage",
+    "authenticate_r1_lifecycle_registry",
     "committed_pack_tree_sha256",
     "generate_arm_receipt",
     "generate_dry_run_receipt",
@@ -6362,13 +7593,19 @@ __all__ = [
     "reviewed_main",
     "scan_receipt_namespace",
     "sha256_bytes",
+    "normalize_plan_tree_for_freeze_evidence",
     "validate_arm_context",
     "validate_arm_receipt",
     "validate_consumption_receipt",
     "validate_dry_run_receipt",
     "validate_evidence_receipt",
     "validate_freeze_receipt",
+    "validate_r1_class_lifecycle",
+    "validate_r1_evidence_lifecycle",
+    "validate_r1_lifecycle_registry",
+    "validate_r1_temporal_budget",
     "validate_registry",
+    "validate_terminal_review_head_tree",
     "verify_arm_receipt",
     "verify_consumed_launch",
     "verify_receipt",

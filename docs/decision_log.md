@@ -9126,6 +9126,74 @@ verification note correcting B2's premise).
    work orders under this ruling; every fix round carries C-028 delta
    re-audits.
 
+### R1 implementation amendment — 2026-08-17 (Phase-2 preparation only; no publication)
+
+This amendment executes the reversible schema/tooling tranche of the ruled
+R1 lifecycle.  It creates no successor pack, receipt, family marker, custody
+root, baseline successor, ARM authority, or publication event.
+
+1. **D-131 clause 4 — no grandfathering is machine-enforced.** A generic
+   `joulewise.arm_readiness_evidence_receipt.v1` presented to an R1-registry
+   path is a `V1_GRANDFATHERING` refusal role.  The 33 issued v1 receipts
+   remain historical bytes only; validation of their historical schema is
+   not revalidation, reinterpretation, or permission to consume them.
+2. **D-134 clauses 1/3/5/6/9/10 — split schemas and registry authority.**
+   `RE_DERIVABLE` uses the exact-key
+   `joulewise.arm_readiness_content_evidence_receipt.v1`, which carries
+   neither `boot_session_id` nor `valid_until_monotonic_ns`.
+   `EXECUTION_BOUND` uses the exact-key
+   `joulewise.arm_readiness_execution_evidence_receipt.v1`, retaining both
+   fields.  The five-class policy, per-kind and per-row policy IDs,
+   irrelevant-path allowlist, ARM horizon/budget, environment-comparison
+   policy, and refusal vocabulary have one exact-key lifecycle-registry
+   input embedded in the successor row registry.  DOCTRINE_PIN and
+   PACK_FAMILY are code-constant `RE_DERIVABLE`; every other generic
+   deriver is code-constant `EXECUTION_BOUND`; authoring refuses a
+   registry/code mismatch.
+3. **Staleness is conjunctive.** The primary gate enumerates every Git path
+   changed in `derivation_commit..reviewed_HEAD` and refuses any path absent
+   from the authenticated exact-path allowlist.  The additional dependency
+   conjunct replays every primary and executed-file binding against both the
+   derivation commit and reviewed HEAD.  The plan-tree exception normalizes
+   only `arm_attachments.arm_readiness.freeze_receipt.path` and `.sha256` by
+   returning that slot to `null`; an added key or any other field change
+   refuses.  A source-level release guard mechanically rejects direct
+   filesystem, Git, or process reads added to a deriver outside the recording
+   helpers.
+4. **R1 clause 3 remains unconditional.** A schema-bearing TERMINAL_REVIEW
+   source must bind the reviewed `head_tree_oid` exactly.  DRY_RUN_REHEARSAL
+   remains under D-134 clause 7's existing same-head rule; neither condition
+   is relaxed by a freshness policy.
+5. **D-137 is AMENDED, with zero reach over content receipts.** Boot-session
+   comparison continues for `EXECUTION_BOUND`, `TIME_BOUND`, and the ARM
+   temporal capability wherever their schemas carry monotonic validity.
+   The new content schema carries neither field, so D-137's boot/deadline
+   rule has zero reach over `RE_DERIVABLE` receipts.  This does not alter any
+   issued v1 byte.
+6. **D-078 lifecycle refusal registry is structurally complete before
+   issuance.** Its eight mandatory roles are `CLASS_MISMATCH`,
+   `DEPENDENCY_CHANGED_SET`, `DEPENDENCY_MANIFEST`, `FAMILY_PUBLICATION`,
+   `SUCCESSOR_CHAIN`, `TEMPORAL_BUDGET`, `UNKNOWN_POLICY`, and
+   `V1_GRANDFATHERING`.  Exact spellings and type labels remain Ed-reserved
+   under R1 clause 6 and therefore come only from that authenticated
+   registry.  The checked-in placeholder uses explicit `ED_RESERVED:`
+   values and refuses issuance/consumption; no placeholder is a reason code.
+7. **Reserved semantics remain fail-closed.** Per-row policies, generic
+   execution horizons, ARM capability horizon, arm-to-consume budget, and
+   execution-environment comparison semantics must all be resolved in the
+   single registry.  The six ruled probe/suite kinds record interpreter,
+   platform, non-repository `sys.path` descriptors/digests, and (for
+   PACK_AUTHENTICATION) inherited-environment value digests now.  Because Ed
+   has not ruled comparison semantics, the implementation comparison
+   allowlist is intentionally empty and an R1 author refuses before writing
+   any output through the registry's `UNKNOWN_POLICY` role.  The
+   temporal-budget gate explicitly evaluates the
+   `TIME_BOUND` T-0 set; session-state and execution deadlines are not
+   silently substituted for that set.  The same registry carries explicit
+   unresolved seams for the three successor pack IDs, cross-root freeze
+   numbering, the freeze-receipt-v2 predecessor-binding set, and the family
+   publication-marker schema; none has a code default or permits generation.
+
 ### WO-MARGIN-RECORDER-AUTHZ contract ADOPTED (magistrate, 2026-08-15; council Phase 0; Sol design consult adopted)
 
 Consult custodied: docs/process_traces/2026-08-15-recorder-authz-consult/

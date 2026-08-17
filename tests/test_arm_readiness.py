@@ -1444,5 +1444,125 @@ class LaunchPackConfigInventoryTests(unittest.TestCase):
         )
 
 
+class R1ArmLifecycleGateTests(unittest.TestCase):
+    def test_each_freshness_class_has_its_ruled_class_level_lifecycle(self) -> None:
+        now = 100
+        timed = {
+            "boot_session_id": TEST_BOOT_SESSION_ID,
+            "valid_until_monotonic_ns": 200,
+        }
+        readiness.validate_r1_class_lifecycle(
+            {},
+            "RE_DERIVABLE",
+            current_boot_session_id=TEST_BOOT_SESSION_ID,
+            now_monotonic_ns=now,
+        )
+        for freshness_class in ("EXECUTION_BOUND", "TIME_BOUND"):
+            with self.subTest(freshness_class=freshness_class):
+                readiness.validate_r1_class_lifecycle(
+                    timed,
+                    freshness_class,
+                    current_boot_session_id=TEST_BOOT_SESSION_ID,
+                    now_monotonic_ns=now,
+                )
+        readiness.validate_r1_class_lifecycle(
+            {},
+            "SESSION_STATE_BOUND",
+            current_boot_session_id=TEST_BOOT_SESSION_ID,
+            now_monotonic_ns=now,
+            semantic_state_valid=True,
+        )
+        readiness.validate_r1_class_lifecycle(
+            timed,
+            "TEMPORAL_CAPABILITY",
+            current_boot_session_id=TEST_BOOT_SESSION_ID,
+            now_monotonic_ns=now,
+            semantic_state_valid=True,
+            capability_consumed=False,
+        )
+        with self.assertRaises(readiness.ArmReadinessError) as expired:
+            readiness.validate_r1_class_lifecycle(
+                timed | {"valid_until_monotonic_ns": 99},
+                "TIME_BOUND",
+                current_boot_session_id=TEST_BOOT_SESSION_ID,
+                now_monotonic_ns=now,
+            )
+        self.assertEqual(expired.exception.reason_code, "readiness_record_expired")
+        with self.assertRaises(readiness.ArmReadinessError) as state:
+            readiness.validate_r1_class_lifecycle(
+                {},
+                "SESSION_STATE_BOUND",
+                current_boot_session_id=TEST_BOOT_SESSION_ID,
+                now_monotonic_ns=now,
+                semantic_state_valid=False,
+            )
+        self.assertEqual(state.exception.reason_code, "readiness_dependency_refused")
+        with self.assertRaises(readiness.ArmReadinessError) as consumed:
+            readiness.validate_r1_class_lifecycle(
+                timed,
+                "TEMPORAL_CAPABILITY",
+                current_boot_session_id=TEST_BOOT_SESSION_ID,
+                now_monotonic_ns=now,
+                semantic_state_valid=True,
+                capability_consumed=True,
+            )
+        self.assertEqual(consumed.exception.reason_code, "readiness_record_consumed")
+
+    def test_temporal_budget_evaluates_only_the_time_bound_t0_set(self) -> None:
+        from tests.test_arm_readiness_evidence import lifecycle_registry
+
+        policies = tuple(
+            {
+                "kind": kind,
+                "freshness_class": freshness_class,
+                "freshness_policy_id": f"test.{kind.lower()}.v1",
+                "horizon_ns": (None if freshness_class == "RE_DERIVABLE" else 1_000),
+                "environment_comparison": (
+                    "NOT_APPLICABLE"
+                    if freshness_class != "EXECUTION_BOUND"
+                    else "test-only"
+                ),
+            }
+            for kind, freshness_class in (
+                ("DOCTRINE_PIN", "RE_DERIVABLE"),
+                ("PACK_AUTHENTICATION", "EXECUTION_BOUND"),
+                ("CLOCK_PROBE", "TIME_BOUND"),
+                ("LEDGER_RESERVATION", "SESSION_STATE_BOUND"),
+                ("ARM_CAPABILITY", "TEMPORAL_CAPABILITY"),
+            )
+        )
+        registry = lifecycle_registry(policies=policies)
+        now = 1_000
+        receipts = [
+            {"kind": "CLOCK_PROBE", "evidence_id": "clock", "valid_until_monotonic_ns": now + 70_000_000_000},
+            {"kind": "LEDGER_RESERVATION", "evidence_id": "ledger", "valid_until_monotonic_ns": now + 1},
+            {"kind": "PACK_AUTHENTICATION", "evidence_id": "pack", "valid_until_monotonic_ns": now + 1},
+        ]
+        self.assertEqual(
+            readiness.validate_r1_temporal_budget(
+                receipts, registry, now_monotonic_ns=now
+            ),
+            now + 70_000_000_000,
+        )
+        receipts[0]["valid_until_monotonic_ns"] = now + 59_000_000_000
+        with self.assertRaises(readiness.EvidenceLifecycleError) as caught:
+            readiness.validate_r1_temporal_budget(
+                receipts, registry, now_monotonic_ns=now
+            )
+        self.assertEqual(caught.exception.role, "TEMPORAL_BUDGET")
+
+    def test_terminal_review_tree_binding_is_unconditional(self) -> None:
+        source = {
+            "schema_version": readiness._T0_EVIDENCE_SOURCE_SCHEMA,
+            "head_tree_oid": "a" * 40,
+        }
+        readiness.validate_terminal_review_head_tree(source, "a" * 40)
+        with self.assertRaises(readiness.ArmReadinessError) as caught:
+            readiness.validate_terminal_review_head_tree(source, "b" * 40)
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_terminal_review_missing"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

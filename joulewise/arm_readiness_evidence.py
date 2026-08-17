@@ -6,10 +6,12 @@ metadata, and boot identity are derived here; callers cannot supply them.
 
 from __future__ import annotations
 
+import ast as _ast
 import copy
 import inspect
 import json
 import os
+import platform as _platform
 import re
 import signal
 import shutil
@@ -32,6 +34,7 @@ from joulewise.receipt_oracle import (
 
 
 _SOURCE_SCHEMA = "joulewise.arm_readiness_evidence_source.v1"
+_R1_SOURCE_SCHEMA = "joulewise.arm_readiness_evidence_source.v2"
 _EVIDENCE_VALIDITY_NS = 86_400 * 1_000_000_000
 _SOURCE_DIRECTORY = "arm_readiness.sources"
 _EVIDENCE_DIRECTORY = "arm_readiness.evidence"
@@ -54,6 +57,12 @@ _SOURCE_KEYS = {
     "facts",
     "derivation",
 }
+_R1_SOURCE_KEYS = _SOURCE_KEYS | {
+    "derivation_commit",
+    "freshness_class",
+    "freshness_policy_id",
+    "environment_fingerprint",
+}
 _PRIMARY_KEYS = {"path", "sha256"}
 _SOURCE_FACT_KEYS = {"fact_id", "value"}
 _SOURCE_CHECK_KEYS = {"check_id", "status", "evidence"}
@@ -63,6 +72,58 @@ _SUITE_TIMEOUT_SECONDS = 900
 _AUTHORING_ARTIFACTS = (
     "joulewise/arm_readiness_evidence.py",
     "scripts/author_arm_readiness_evidence.py",
+)
+
+# R1 clause 1 and Opus S2: this mapping is author-owned code, not registry
+# input.  A successor registry must agree exactly or authoring refuses.
+_DERIVER_FRESHNESS_CLASSES = {
+    "ACCEPTANCE_OWNER": "EXECUTION_BOUND",
+    "ACCEPTANCE_SUCCESSOR": "EXECUTION_BOUND",
+    "DOCTRINE_PIN": "RE_DERIVABLE",
+    "ESTIMATOR_IDENTITY": "EXECUTION_BOUND",
+    "MINT_TRUST": "EXECUTION_BOUND",
+    "MULTICELL_MINT": "EXECUTION_BOUND",
+    "PACK_AUTHENTICATION": "EXECUTION_BOUND",
+    "PACK_FAMILY": "RE_DERIVABLE",
+    "REASON_CODE_COVERAGE": "EXECUTION_BOUND",
+    "RECEIPT_ORACLE": "EXECUTION_BOUND",
+    "RECOVERY_LEDGER_TEST": "EXECUTION_BOUND",
+    "THREE_WINDOW_REGRESSION": "EXECUTION_BOUND",
+}
+_ENVIRONMENT_FINGERPRINT_KINDS = frozenset(
+    {
+        "MINT_TRUST",
+        "MULTICELL_MINT",
+        "PACK_AUTHENTICATION",
+        "REASON_CODE_COVERAGE",
+        "RECOVERY_LEDGER_TEST",
+        "THREE_WINDOW_REGRESSION",
+    }
+)
+# Ed has not ruled the comparison semantics yet.  An empty implementation
+# allowlist is intentional: recording exists now; issuance stays fail closed.
+_SUPPORTED_ENVIRONMENT_COMPARISONS = frozenset()
+_DERIVER_DIRECT_READ_CALLS = frozenset(
+    {
+        "open",
+        "read_bytes",
+        "read_text",
+        "rglob",
+        "glob",
+        "iterdir",
+        "listdir",
+        "scandir",
+        "walk",
+        "_git_blob_at_head",
+        "_run_git",
+        "_git_text",
+        "resolve_frozen_plan",
+        "_acceptance_bound_from_authenticated_bytes",
+        "_validate_extraction_spec",
+        "_derive_bracket_session_receipt_oracle",
+        "run",
+        "Popen",
+    }
 )
 
 
@@ -190,6 +251,98 @@ def _pinned_artifact(
     return artifact, raw
 
 
+def _recorded_frozen_plan(
+    context: _DerivationContext, *, kind: str
+) -> tuple[Path, str, str, bytes, dict[str, str]]:
+    """Resolve a frozen plan and immediately add its committed-byte record."""
+
+    try:
+        path, pack_relative, plan_id, _resolved_raw = _readiness.resolve_frozen_plan(
+            context.pack_root, context.tree
+        )
+    except _readiness.ArmReadinessError as exc:
+        raise _underivable(kind, f"R2 frozen-plan reference is invalid: {exc}") from exc
+    relative = _repo_relative(context.repository, path)
+    artifact, raw = _committed_artifact(context.repository, relative, kind=kind)
+    return path, pack_relative, plan_id, raw, artifact
+
+
+def _recorded_pack_glob(
+    context: _DerivationContext, pattern: str, *, kind: str
+) -> tuple[Path, ...]:
+    """Route a pack namespace enumeration through one auditable helper."""
+
+    try:
+        paths = tuple(sorted(context.pack_root.rglob(pattern)))
+    except OSError as exc:
+        raise _underivable(kind, f"pack namespace enumeration failed: {exc}") from exc
+    for path in paths:
+        relative = _repo_relative(context.repository, path)
+        _committed_artifact(context.repository, relative, kind=kind)
+    return paths
+
+
+def _recorded_pack_family_plan_tree(
+    context: _DerivationContext, pack_name: str, *, kind: str
+) -> tuple[dict[str, str], bytes]:
+    relative = f"configs/campaigns/{pack_name}/plan_tree.json"
+    return _committed_artifact(context.repository, relative, kind=kind)
+
+
+def _recorded_acceptance_authentication(
+    context: _DerivationContext, raw: bytes, *, kind: str
+) -> Mapping[str, Any] | None:
+    _committed_artifact(
+        context.repository, "joulewise/calibration_bracketing.py", kind=kind
+    )
+    return _acceptance_bound_from_authenticated_bytes(raw)
+
+
+def _recorded_extraction_validation(
+    context: _DerivationContext, value: Mapping[str, Any], *, kind: str
+) -> list[str]:
+    _committed_artifact(context.repository, "joulewise/floor_extraction.py", kind=kind)
+    return _validate_extraction_spec(value)
+
+
+def _recorded_estimator_registry(
+    context: _DerivationContext, *, kind: str
+) -> tuple[set[str], dict[str, str], dict[str, str]]:
+    analysis_artifact, _ = _committed_artifact(
+        context.repository, "joulewise/analysis_manifest_v3.py", kind=kind
+    )
+    detection_artifact, _ = _committed_artifact(
+        context.repository, "joulewise/detection_floor.py", kind=kind
+    )
+    from joulewise import analysis_manifest_v3, detection_floor
+
+    admitted = {
+        detection_floor.METHOD_ID,
+        detection_floor.COMMON_MODE_ESTIMATOR_ID,
+        analysis_manifest_v3.ESTIMATOR_ID,
+    }
+    return admitted, analysis_artifact, detection_artifact
+
+
+def _recorded_receipt_oracle(
+    context: _DerivationContext, *, kind: str
+) -> tuple[Mapping[str, Any], tuple[dict[str, str], ...]]:
+    artifacts = tuple(
+        _committed_artifact(context.repository, relative, kind=kind)[0]
+        for relative in (
+            "joulewise/calibration_ledger.py",
+            "joulewise/receipt_oracle.py",
+        )
+    )
+    try:
+        derived = _derive_bracket_session_receipt_oracle()
+    except Exception as exc:
+        raise _underivable(
+            kind, f"production receipt oracle could not be derived: {exc}"
+        ) from exc
+    return derived, artifacts
+
+
 def _fact_source(
     context: _DerivationContext,
     derived: _DerivedKind,
@@ -200,6 +353,109 @@ def _fact_source(
             "kind": derived.kind,
             "head_commit": context.head_commit,
             "pack_sha256": context.pack_sha256,
+            "primary_artifacts": sorted(
+                (dict(item) for item in derived.primary_artifacts),
+                key=lambda item: item["path"],
+            ),
+            "checks": [dict(item) for item in derived.checks],
+            "facts": [
+                {"fact_id": fact_id, "value": copy.deepcopy(value)}
+                for fact_id, value in sorted(derived.facts.items())
+            ],
+            "derivation": copy.deepcopy(dict(derived.derivation)),
+        }
+    )
+
+
+def _path_environment_descriptor(path: Path) -> dict[str, Any]:
+    try:
+        resolved = path.resolve(strict=True)
+        status = resolved.stat()
+        descriptor = {
+            "path": str(resolved),
+            "kind": "directory" if resolved.is_dir() else "file",
+            "mode": status.st_mode,
+            "size": status.st_size,
+            "mtime_ns": status.st_mtime_ns,
+            "device": status.st_dev,
+            "inode": status.st_ino,
+        }
+    except OSError as exc:
+        descriptor = {
+            "path": str(path.resolve(strict=False)),
+            "kind": "unreadable",
+            "error_type": type(exc).__name__,
+        }
+    return {
+        "path": descriptor["path"],
+        "descriptor_sha256": _readiness.sha256_bytes(
+            _readiness.render_json(descriptor)
+        ),
+    }
+
+
+def _execution_environment_fingerprint(
+    context: _DerivationContext, kind: str
+) -> dict[str, Any]:
+    repository = context.repository.resolve(strict=True)
+    non_repository_paths: list[dict[str, Any]] = []
+    for raw in sys.path:
+        if not raw:
+            continue
+        candidate = Path(raw)
+        resolved = candidate.resolve(strict=False)
+        if resolved == repository or repository in resolved.parents:
+            continue
+        non_repository_paths.append(_path_environment_descriptor(candidate))
+    environment = (
+        [
+            {
+                "name": name,
+                "value_sha256": _readiness.sha256_bytes(
+                    os.environ[name].encode("utf-8", errors="surrogateescape")
+                ),
+            }
+            for name in sorted(os.environ)
+        ]
+        if kind == "PACK_AUTHENTICATION"
+        else []
+    )
+    fingerprint = {
+        "schema_version": "joulewise.arm_readiness_execution_environment.v1",
+        "amendment5_required_kind": kind in _ENVIRONMENT_FINGERPRINT_KINDS,
+        "interpreter": _path_environment_descriptor(Path(sys.executable)),
+        "implementation": sys.implementation.name,
+        "python_version": _platform.python_version(),
+        "platform_system": _platform.system(),
+        "platform_release": _platform.release(),
+        "platform_machine": _platform.machine(),
+        "non_repository_sys_path": sorted(
+            non_repository_paths, key=lambda item: item["path"]
+        ),
+        "inherited_environment": environment,
+    }
+    return {
+        "facts": fingerprint,
+        "sha256": _readiness.sha256_bytes(_readiness.render_json(fingerprint)),
+    }
+
+
+def _r1_fact_source(
+    context: _DerivationContext,
+    derived: _DerivedKind,
+    policy: Mapping[str, Any],
+    environment_fingerprint: Mapping[str, Any] | None,
+) -> bytes:
+    return _readiness.render_json(
+        {
+            "schema_version": _R1_SOURCE_SCHEMA,
+            "kind": derived.kind,
+            "head_commit": context.head_commit,
+            "derivation_commit": context.head_commit,
+            "pack_sha256": context.pack_sha256,
+            "freshness_class": policy["freshness_class"],
+            "freshness_policy_id": policy["freshness_policy_id"],
+            "environment_fingerprint": copy.deepcopy(environment_fingerprint),
             "primary_artifacts": sorted(
                 (dict(item) for item in derived.primary_artifacts),
                 key=lambda item: item["path"],
@@ -614,20 +870,24 @@ def _derive_acceptance_owner(context: _DerivationContext) -> _DerivedKind:
     artifact, raw = _pinned_artifact(
         context, normalized_pin, kind=kind, label="issued acceptance artifact"
     )
-    loaded = _acceptance_bound_from_authenticated_bytes(raw)
+    loaded = _recorded_acceptance_authentication(context, raw, kind=kind)
     if loaded is None:
         raise _underivable(kind, "issued acceptance bytes fail the production authenticator")
     copied_value = loaded.get("decimal_derivation", {}).get("ratified_operatives", {}).get(
         "bracket_screen_s"
     )
     copied_scalar_accepted = (
-        _acceptance_bound_from_authenticated_bytes(_readiness.render_json(copied_value))
+        _recorded_acceptance_authentication(
+            context, _readiness.render_json(copied_value), kind=kind
+        )
         is not None
     )
     mutated = copy.deepcopy(loaded)
     mutated["unknown_evidence_author_probe"] = True
     unknown_key_accepted = (
-        _acceptance_bound_from_authenticated_bytes(_readiness.render_json(mutated))
+        _recorded_acceptance_authentication(
+            context, _readiness.render_json(mutated), kind=kind
+        )
         is not None
     )
     owner_verified = (
@@ -679,20 +939,15 @@ def _derive_acceptance_successor(context: _DerivationContext) -> _DerivedKind:
 
 
 def _validate_manifests(context: _DerivationContext, *, kind: str) -> dict[str, Any]:
-    try:
-        plan_path, _plan_pack_relative, _plan_id, _resolved_raw = (
-            _readiness.resolve_frozen_plan(context.pack_root, context.tree)
-        )
-    except _readiness.ArmReadinessError as exc:
-        raise _underivable(kind, f"R2 frozen-plan reference is invalid: {exc}") from exc
-    plan_relative = _repo_relative(context.repository, plan_path)
-    plan_artifact, plan_raw = _committed_artifact(
-        context.repository, plan_relative, kind=kind
+    _plan_path, _plan_pack_relative, _plan_id, plan_raw, plan_artifact = (
+        _recorded_frozen_plan(context, kind=kind)
     )
     plan_sha = _readiness.sha256_bytes(plan_raw)
     manifests = sorted(
         path
-        for path in context.pack_root.rglob("order_manifest.json")
+        for path in _recorded_pack_glob(
+            context, "order_manifest.json", kind=kind
+        )
         if _SOURCE_DIRECTORY not in path.parts and _EVIDENCE_DIRECTORY not in path.parts
     )
     if not manifests:
@@ -744,7 +999,7 @@ def _validate_manifests(context: _DerivationContext, *, kind: str) -> dict[str, 
     }
 
 
-def _run_generator_check(
+def _recorded_generator_check(
     context: _DerivationContext, generator_path: str, *, kind: str
 ) -> dict[str, Any]:
     command = [sys.executable, str(context.repository / generator_path), "--check"]
@@ -775,7 +1030,7 @@ def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
     generator_artifact, _ = _pinned_artifact(
         context, generator, kind=kind, label="pack generator"
     )
-    generator_result = _run_generator_check(
+    generator_result = _recorded_generator_check(
         context, generator_artifact["path"], kind=kind
     )
     manifests = _validate_manifests(context, kind=kind)
@@ -792,7 +1047,9 @@ def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
             extraction_value = _readiness.parse_json_bytes(extraction_raw)
         except _readiness.ArmReadinessError as exc:
             raise _underivable(kind, "extraction specification is not JSON") from exc
-        errors = _validate_extraction_spec(extraction_value)
+        errors = _recorded_extraction_validation(
+            context, extraction_value, kind=kind
+        )
         if errors:
             raise _underivable(kind, f"extraction specification refused: {errors!r}")
     else:
@@ -872,15 +1129,8 @@ def _collect_named_values(value: object, names: frozenset[str]) -> list[str]:
 
 def _derive_estimator_identity(context: _DerivationContext) -> _DerivedKind:
     kind = "ESTIMATOR_IDENTITY"
-    try:
-        plan_path, _plan_pack_relative, _plan_id, _resolved_raw = (
-            _readiness.resolve_frozen_plan(context.pack_root, context.tree)
-        )
-    except _readiness.ArmReadinessError as exc:
-        raise _underivable(kind, f"R2 frozen-plan reference is invalid: {exc}") from exc
-    plan_relative = _repo_relative(context.repository, plan_path)
-    plan_artifact, plan_raw = _committed_artifact(
-        context.repository, plan_relative, kind=kind
+    _plan_path, _plan_pack_relative, _plan_id, plan_raw, plan_artifact = (
+        _recorded_frozen_plan(context, kind=kind)
     )
     try:
         plan_value = _readiness.parse_json_bytes(plan_raw)
@@ -891,13 +1141,9 @@ def _derive_estimator_identity(context: _DerivationContext) -> _DerivedKind:
     )
     if not estimator_ids:
         raise _underivable(kind, "no estimator identity is derivable from the frozen plan")
-    from joulewise import analysis_manifest_v3, detection_floor
-
-    admitted = {
-        detection_floor.METHOD_ID,
-        detection_floor.COMMON_MODE_ESTIMATOR_ID,
-        analysis_manifest_v3.ESTIMATOR_ID,
-    }
+    admitted, analysis_registry, detection_registry = _recorded_estimator_registry(
+        context, kind=kind
+    )
     if not set(estimator_ids).issubset(admitted):
         raise _underivable(kind, f"unregistered estimator IDs: {estimator_ids!r}")
     mint_source, mint_raw = _committed_artifact(
@@ -907,12 +1153,6 @@ def _derive_estimator_identity(context: _DerivationContext) -> _DerivedKind:
         raise _underivable(kind, "mint CLI accepts an operator estimator value")
     registry_source, _ = _committed_artifact(
         context.repository, "joulewise/floor_mint_estimator.py", kind=kind
-    )
-    analysis_registry, _ = _committed_artifact(
-        context.repository, "joulewise/analysis_manifest_v3.py", kind=kind
-    )
-    detection_registry, _ = _committed_artifact(
-        context.repository, "joulewise/detection_floor.py", kind=kind
     )
     value = {
         "admitted_by_mint_registry": True,
@@ -1067,13 +1307,12 @@ def _identity_map(tree: Mapping[str, Any], *, kind: str) -> dict[tuple[str, str]
 
 def _derive_pack_family(context: _DerivationContext) -> _DerivedKind:
     kind = "PACK_FAMILY"
-    campaigns = context.repository / "configs/campaigns"
     trees: dict[str, Mapping[str, Any]] = {}
     artifacts: list[dict[str, str]] = []
     for profile, pack_name in _PACKS_BY_PROFILE.items():
-        path = campaigns / pack_name / "plan_tree.json"
-        relative = _repo_relative(context.repository, path)
-        artifact, raw = _committed_artifact(context.repository, relative, kind=kind)
+        artifact, raw = _recorded_pack_family_plan_tree(
+            context, pack_name, kind=kind
+        )
         try:
             tree = _readiness.parse_json_bytes(raw)
         except _readiness.ArmReadinessError as exc:
@@ -1185,17 +1424,11 @@ def _derive_reason_code_coverage(context: _DerivationContext) -> _DerivedKind:
 
 def _derive_receipt_oracle(context: _DerivationContext) -> _DerivedKind:
     kind = "RECEIPT_ORACLE"
-    module, _ = _committed_artifact(
-        context.repository, "joulewise/receipt_oracle.py", kind=kind
-    )
+    derived, modules = _recorded_receipt_oracle(context, kind=kind)
     tree_relative = _repo_relative(context.repository, context.pack_root / "plan_tree.json")
     tree_artifact, _ = _committed_artifact(
         context.repository, tree_relative, kind=kind
     )
-    try:
-        derived = _derive_bracket_session_receipt_oracle()
-    except Exception as exc:
-        raise _underivable(kind, f"production receipt oracle could not be derived: {exc}") from exc
     actual = context.tree.get("arm_attachments", {}).get("receipt_oracle")
     if actual != derived:
         raise _underivable(kind, "pack receipt oracle differs from fresh production derivation")
@@ -1206,7 +1439,7 @@ def _derive_receipt_oracle(context: _DerivationContext) -> _DerivedKind:
     return _DerivedKind(
         kind,
         {"desk.receipt_oracle.v1": value},
-        (module, tree_artifact),
+        (*modules, tree_artifact),
         (
             _check(
                 "receipt_oracle_byte_equality",
@@ -1279,6 +1512,46 @@ _DERIVERS: dict[str, Callable[[_DerivationContext], _DerivedKind]] = {
 }
 
 
+def _unrouted_deriver_reads(source: str | None = None) -> tuple[str, ...]:
+    """Return direct filesystem/Git/process reads inside any deriver.
+
+    The mechanical release test calls this over the production module.  It
+    also accepts source text so the regression can prove that inserting a
+    direct ``Path.read_bytes`` into a deriver is caught rather than merely
+    asserting the current file happens to pass.
+    """
+
+    if source is None:
+        source = Path(__file__).read_text(encoding="utf-8")
+    tree = _ast.parse(source)
+    findings: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            continue
+        if not node.name.startswith("_derive_"):
+            continue
+        for child in _ast.walk(node):
+            if not isinstance(child, _ast.Call):
+                continue
+            called: str | None = None
+            if isinstance(child.func, _ast.Name):
+                called = child.func.id
+            elif isinstance(child.func, _ast.Attribute):
+                called = child.func.attr
+            if called in _DERIVER_DIRECT_READ_CALLS:
+                findings.append(f"{node.name}:{child.lineno}:{called}")
+    return tuple(sorted(findings))
+
+
+def _assert_deriver_read_routing() -> None:
+    findings = _unrouted_deriver_reads()
+    if findings:
+        raise AssertionError(f"unrouted deriver read(s): {findings!r}")
+
+
+_assert_deriver_read_routing()
+
+
 def _required_generic_rows(
     pack_root: Path, tree: Mapping[str, Any]
 ) -> tuple[list[Mapping[str, Any]], list[str]]:
@@ -1302,6 +1575,97 @@ def _required_generic_rows(
         }
     )
     return applicable, kinds
+
+
+def _r1_lifecycle_registry_for_pack(
+    pack_root: Path,
+) -> Mapping[str, Any] | None:
+    registry, _raw, _reference = _readiness._registry_reference(pack_root)
+    if registry["schema_version"] != _readiness.R1_ROW_REGISTRY_SCHEMA:
+        return None
+    return _readiness.validate_r1_lifecycle_registry(
+        registry["freeze_evidence_lifecycle"]
+    )
+
+
+def _r1_policies_for_kinds(
+    registry: Mapping[str, Any], kinds: Sequence[str]
+) -> dict[str, Mapping[str, Any]]:
+    try:
+        governed = _readiness.validate_r1_lifecycle_registry(registry)
+    except _readiness.ArmReadinessError as exc:
+        raise _refuse(
+            "AUTHORING_SET",
+            "evidence_author_lifecycle_registry_unresolved",
+            str(exc),
+        ) from exc
+    policies: dict[str, Mapping[str, Any]] = {}
+    for kind in kinds:
+        code_class = _DERIVER_FRESHNESS_CLASSES.get(kind)
+        matches = [
+            item for item in governed["evidence_policies"] if item["kind"] == kind
+        ]
+        if len(matches) != 1:
+            entry = _readiness._r1_refusal_entry(governed, "UNKNOWN_POLICY")
+            raise _refuse(
+                kind,
+                str(entry["code"]),
+                f"registry has no unique lifecycle policy for {kind}",
+            )
+        policy = matches[0]
+        if code_class is None or policy["freshness_class"] != code_class:
+            entry = _readiness._r1_refusal_entry(governed, "CLASS_MISMATCH")
+            raise _refuse(
+                kind,
+                str(entry["code"]),
+                f"registry class differs from the {kind} code constant",
+            )
+        if (
+            code_class == "EXECUTION_BOUND"
+            and policy["environment_comparison"]
+            not in _SUPPORTED_ENVIRONMENT_COMPARISONS
+        ):
+            entry = _readiness._r1_refusal_entry(governed, "UNKNOWN_POLICY")
+            raise _refuse(
+                kind,
+                str(entry["code"]),
+                "execution-environment comparison semantics remain Ed-reserved",
+            )
+        policies[kind] = policy
+    return policies
+
+
+def _r1_rederive_at_arm(
+    pack_root: Path,
+    receipt: Mapping[str, Any],
+    source: Mapping[str, Any],
+) -> None:
+    """Re-derive the two RE_DERIVABLE kinds and compare their semantics."""
+
+    kind = str(receipt["kind"])
+    if _DERIVER_FRESHNESS_CLASSES.get(kind) != "RE_DERIVABLE":
+        return
+    repository = _readiness._repo_for_pack(pack_root)
+    tree, _tree_raw = _readiness._plan_tree(pack_root)
+    context = _DerivationContext(
+        pack_root=pack_root,
+        repository=repository,
+        tree=tree,
+        pack_sha256=str(receipt["pack_sha256"]),
+        head_commit=str(receipt["derivation_commit"]),
+    )
+    derived = _DERIVERS[kind](context)
+    expected_facts = [
+        {"fact_id": fact_id, "value": copy.deepcopy(value)}
+        for fact_id, value in sorted(derived.facts.items())
+    ]
+    expected_checks = [dict(item) for item in derived.checks]
+    if (
+        source.get("facts") != expected_facts
+        or source.get("checks") != expected_checks
+        or source.get("derivation") != dict(derived.derivation)
+    ):
+        raise ValueError(f"{kind} ARM re-derivation differs from authored semantics")
 
 
 def _source_path(kind: str) -> str:
@@ -1368,15 +1732,124 @@ def _assemble_receipt(
     return receipt
 
 
+def _assemble_r1_receipt(
+    context: _DerivationContext,
+    derived: _DerivedKind,
+    source_raw: bytes,
+    policy: Mapping[str, Any],
+    *,
+    issued_at_utc: str,
+    boot_session_id: str,
+    now_monotonic_ns: int,
+    environment_fingerprint: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    source_digest = _readiness.sha256_bytes(source_raw)
+    freshness_class = str(policy["freshness_class"])
+    if freshness_class not in {"RE_DERIVABLE", "EXECUTION_BOUND"}:
+        raise _refuse(
+            derived.kind,
+            "evidence_author_lifecycle_registry_unresolved",
+            f"generic deriver cannot issue freshness class {freshness_class!r}",
+        )
+    receipt: dict[str, Any] = {
+        "schema_version": (
+            _readiness.CONTENT_EVIDENCE_RECEIPT_SCHEMA
+            if freshness_class == "RE_DERIVABLE"
+            else _readiness.EXECUTION_EVIDENCE_RECEIPT_SCHEMA
+        ),
+        "evidence_id": _evidence_id(derived.kind),
+        "kind": derived.kind,
+        "status": "PASS",
+        "issued_at_utc": issued_at_utc,
+        "freshness_class": freshness_class,
+        "freshness_policy_id": policy["freshness_policy_id"],
+        "pack_sha256": context.pack_sha256,
+        "derivation_commit": context.head_commit,
+        "dependency_manifest_sha256": source_digest,
+        "facts": [
+            {
+                "fact_id": fact_id,
+                "value_type": "OBJECT",
+                "value": copy.deepcopy(dict(value)),
+                "source_kind": (
+                    "PACK"
+                    if derived.kind
+                    in {
+                        "ACCEPTANCE_SUCCESSOR",
+                        "DOCTRINE_PIN",
+                        "ESTIMATOR_IDENTITY",
+                        "PACK_FAMILY",
+                    }
+                    else "PROBE"
+                ),
+                "source_path": _source_path(derived.kind),
+                "source_sha256": source_digest,
+            }
+            for fact_id, value in sorted(derived.facts.items())
+        ],
+        "checks": [
+            {"check_id": item["check_id"], "status": item["status"]}
+            for item in derived.checks
+        ],
+        "reason_codes": [],
+        "assurance": copy.deepcopy(_readiness.ASSURANCE),
+    }
+    if freshness_class == "EXECUTION_BOUND":
+        horizon = policy["horizon_ns"]
+        if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon <= 0:
+            raise _refuse(
+                derived.kind,
+                "evidence_author_lifecycle_registry_unresolved",
+                "execution-bound horizon is not an Ed-resolved positive integer",
+            )
+        if not isinstance(environment_fingerprint, Mapping):
+            raise _refuse(
+                derived.kind,
+                "evidence_author_lifecycle_registry_unresolved",
+                "execution-bound environment fingerprint is absent",
+            )
+        receipt.update(
+            {
+                "boot_session_id": boot_session_id,
+                "valid_until_monotonic_ns": now_monotonic_ns + horizon,
+                "environment_fingerprint": copy.deepcopy(
+                    dict(environment_fingerprint)
+                ),
+            }
+        )
+    _readiness.validate_evidence_receipt(receipt)
+    return receipt
+
+
 def _validate_source(value: object, *, expected_kind: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping) or set(value) != _SOURCE_KEYS:
+    if not isinstance(value, Mapping):
+        raise ValueError("evidence source is not an object")
+    schema = value.get("schema_version")
+    expected_keys = _R1_SOURCE_KEYS if schema == _R1_SOURCE_SCHEMA else _SOURCE_KEYS
+    if set(value) != expected_keys:
         raise ValueError("evidence source has unknown or missing keys")
-    if value["schema_version"] != _SOURCE_SCHEMA or value["kind"] != expected_kind:
+    if schema not in {_SOURCE_SCHEMA, _R1_SOURCE_SCHEMA} or value["kind"] != expected_kind:
         raise ValueError("evidence source schema/kind is invalid")
     if not isinstance(value["head_commit"], str) or not _GIT_RE.fullmatch(value["head_commit"]):
         raise ValueError("evidence source HEAD is invalid")
     if not isinstance(value["pack_sha256"], str) or not _SHA_RE.fullmatch(value["pack_sha256"]):
         raise ValueError("evidence source pack digest is invalid")
+    if schema == _R1_SOURCE_SCHEMA:
+        if (
+            value["derivation_commit"] != value["head_commit"]
+            or value["freshness_class"] not in {"RE_DERIVABLE", "EXECUTION_BOUND"}
+            or not isinstance(value["freshness_policy_id"], str)
+            or not value["freshness_policy_id"]
+            or (
+                value["freshness_class"] == "RE_DERIVABLE"
+                and value["environment_fingerprint"] is not None
+            )
+            or (
+                value["freshness_class"] == "EXECUTION_BOUND"
+                and not isinstance(value["environment_fingerprint"], Mapping)
+            )
+        ):
+            raise ValueError("R1 evidence source lifecycle binding is invalid")
     primary = value["primary_artifacts"]
     facts = value["facts"]
     checks = value["checks"]
@@ -1577,6 +2050,125 @@ def _authenticate_existing(
     }
 
 
+def _authenticate_existing_r1(
+    pack_root: Path,
+    repository: Path,
+    tree: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    kinds: Sequence[str],
+    lifecycle_registry: Mapping[str, Any],
+    policies: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    source_dir = pack_root / _SOURCE_DIRECTORY
+    evidence_dir = pack_root / _EVIDENCE_DIRECTORY
+    expected_sources = {f"{_slug(kind)}.json" for kind in kinds}
+    expected_evidence = {
+        name
+        for kind in kinds
+        for name in (_receipt_name(kind), f"{_receipt_name(kind)}.sha256")
+    }
+    try:
+        observed_sources = {path.name for path in source_dir.iterdir()}
+        observed_evidence = {path.name for path in evidence_dir.iterdir()}
+    except OSError as exc:
+        raise _refuse(
+            "AUTHORING_SET",
+            "evidence_author_existing_invalid",
+            f"R1 evidence namespace is unreadable: {exc}",
+        ) from exc
+    if observed_sources != expected_sources or observed_evidence != expected_evidence:
+        raise _refuse(
+            "AUTHORING_SET",
+            "evidence_author_output_collision",
+            "existing R1 evidence namespace differs from the governed set",
+        )
+    current_head = _readiness.reviewed_main(pack_root)["head_commit"]
+    _repository, _prefix, pack_relative = _readiness._repository_and_pack_relative(
+        pack_root
+    )
+    receipts: dict[str, Mapping[str, Any]] = {}
+    paths: list[str] = []
+    for kind in kinds:
+        source_path = source_dir / f"{_slug(kind)}.json"
+        receipt_path = evidence_dir / _receipt_name(kind)
+        try:
+            source_raw = source_path.read_bytes()
+            receipt_raw = receipt_path.read_bytes()
+            sidecar = receipt_path.with_name(f"{receipt_path.name}.sha256").read_bytes()
+            source = _validate_source(
+                _readiness.parse_json_bytes(source_raw, require_canonical=True),
+                expected_kind=kind,
+            )
+            receipt = _readiness.validate_evidence_receipt(
+                _readiness.parse_json_bytes(receipt_raw, require_canonical=True)
+            )
+        except (OSError, ValueError, _readiness.ArmReadinessError) as exc:
+            raise _refuse(
+                kind,
+                "evidence_author_existing_invalid",
+                f"existing R1 evidence is invalid: {exc}",
+            ) from exc
+        digest = _readiness.sha256_bytes(receipt_raw)
+        if sidecar != _readiness.gnu_sidecar(digest, receipt_path.name):
+            raise _refuse(
+                kind, "evidence_author_existing_invalid", "existing sidecar differs"
+            )
+        try:
+            _readiness.validate_r1_evidence_lifecycle(
+                repository,
+                receipt,
+                source,
+                lifecycle_registry,
+                current_head=current_head,
+                expected_freshness_class=str(policies[kind]["freshness_class"]),
+                plan_tree_path=f"{pack_relative}/plan_tree.json",
+            )
+            if receipt["freshness_class"] == "RE_DERIVABLE":
+                _r1_rederive_at_arm(pack_root, receipt, source)
+        except _readiness.EvidenceLifecycleError as exc:
+            raise _refuse(kind, exc.reason_code, str(exc)) from exc
+        except ValueError as exc:
+            entry = _readiness._r1_refusal_entry(
+                lifecycle_registry, "DEPENDENCY_MANIFEST"
+            )
+            raise _refuse(kind, str(entry["code"]), str(exc)) from exc
+        if (
+            receipt["evidence_id"] != _evidence_id(kind)
+            or receipt["kind"] != kind
+            or _readiness.sha256_bytes(source_raw)
+            != receipt["dependency_manifest_sha256"]
+        ):
+            raise _refuse(
+                kind,
+                "evidence_author_existing_invalid",
+                "existing R1 receipt metadata differs",
+            )
+        receipts[receipt["evidence_id"]] = receipt
+        paths.append(str(receipt_path))
+    for row in rows:
+        if any(kind in kinds for kind in row["required_evidence_kinds"]):
+            matching = [
+                receipt
+                for receipt in receipts.values()
+                if receipt["kind"] in row["required_evidence_kinds"]
+            ]
+            if not any(
+                _readiness._predicate_passes(item, row["predicate_id"])
+                for item in matching
+            ):
+                raise _refuse(
+                    str(row["required_evidence_kinds"][0]),
+                    "evidence_author_existing_invalid",
+                    f"existing R1 evidence does not satisfy {row['predicate_id']}",
+                )
+    return {
+        "status": "PASS",
+        "authored_kinds": list(kinds),
+        "receipt_paths": paths,
+        "mutated": False,
+    }
+
+
 def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
     """Author every applicable generic FREEZE_AND_ARM evidence receipt.
 
@@ -1588,6 +2180,12 @@ def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
     repository = _readiness._repo_for_pack(root)
     tree, _tree_raw = _readiness._plan_tree(root)
     rows, kinds = _required_generic_rows(root, tree)
+    lifecycle_registry = _r1_lifecycle_registry_for_pack(root)
+    r1_policies = (
+        _r1_policies_for_kinds(lifecycle_registry, kinds)
+        if lifecycle_registry is not None
+        else None
+    )
     unsupported = sorted(set(kinds) - set(_DERIVERS))
     if unsupported:
         raise _refuse(
@@ -1598,6 +2196,16 @@ def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
     source_dir = root / _SOURCE_DIRECTORY
     evidence_dir = root / _EVIDENCE_DIRECTORY
     if source_dir.exists() or evidence_dir.exists():
+        if lifecycle_registry is not None and r1_policies is not None:
+            return _authenticate_existing_r1(
+                root,
+                repository,
+                tree,
+                rows,
+                kinds,
+                lifecycle_registry,
+                r1_policies,
+            )
         return _authenticate_existing(
             root,
             repository,
@@ -1646,20 +2254,49 @@ def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
 
     issued_at = _readiness._utc_now()
     boot_session_id = _readiness._current_boot_session_id()
-    valid_until = time.monotonic_ns() + _EVIDENCE_VALIDITY_NS
+    evaluated_at_monotonic_ns = time.monotonic_ns()
+    valid_until = evaluated_at_monotonic_ns + _EVIDENCE_VALIDITY_NS
     source_bytes: dict[str, bytes] = {}
     receipt_bytes: dict[str, bytes] = {}
     semantic_receipts: dict[str, Mapping[str, Any]] = {}
     for item in derived:
-        source_raw = _fact_source(context, item)
+        policy = r1_policies[item.kind] if r1_policies is not None else None
+        environment_fingerprint = (
+            _execution_environment_fingerprint(context, item.kind)
+            if policy is not None and policy["freshness_class"] == "EXECUTION_BOUND"
+            else None
+        )
+        source_raw = (
+            _r1_fact_source(
+                context,
+                item,
+                policy,
+                environment_fingerprint,
+            )
+            if policy is not None
+            else _fact_source(context, item)
+        )
         source_bytes[f"{_slug(item.kind)}.json"] = source_raw
-        receipt = _assemble_receipt(
-            context,
-            item,
-            source_raw,
-            issued_at_utc=issued_at,
-            boot_session_id=boot_session_id,
-            valid_until_monotonic_ns=valid_until,
+        receipt = (
+            _assemble_r1_receipt(
+                context,
+                item,
+                source_raw,
+                policy,
+                issued_at_utc=issued_at,
+                boot_session_id=boot_session_id,
+                now_monotonic_ns=evaluated_at_monotonic_ns,
+                environment_fingerprint=environment_fingerprint,
+            )
+            if policy is not None
+            else _assemble_receipt(
+                context,
+                item,
+                source_raw,
+                issued_at_utc=issued_at,
+                boot_session_id=boot_session_id,
+                valid_until_monotonic_ns=valid_until,
+            )
         )
         raw = _readiness.render_json(receipt)
         name = _receipt_name(item.kind)
@@ -1738,6 +2375,7 @@ def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
             head_commit=head,
             boot_session_id=boot_session_id,
             now_monotonic_ns=time.monotonic_ns(),
+            lifecycle_registry=lifecycle_registry,
         )
         if refusals or set(discovered) != set(semantic_receipts):
             raise _refuse(
