@@ -7,12 +7,15 @@ import argparse
 import hashlib
 import json
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACK_REL = Path("configs/campaigns/d117_floor_qwen25_7b_v1")
+CALIBRATION_PLAN_REFERENCE = "calibration_plan.json"
+CURRENT_FAMILY_SUFFIX = "_v1"
 SPEC_REL = Path("configs/floor_mint/d117_qwen25_7b_extraction_spec.json")
 SOURCE_GENERATOR = Path(__file__).resolve()
 if str(REPO_ROOT) not in sys.path:
@@ -249,6 +252,137 @@ PRESERVE_CURRENT_FROZEN_BYTES = (
     and _FREEZE_REFERENCE.get("sha256") == CURRENT_FROZEN_RECEIPT_SHA256
 )
 PACK_STATUS = freeze_aware_status(_FREEZE_REFERENCE)
+
+
+class GenerationIdentity:
+    def __init__(
+        self,
+        pack_id: str = PACK_REL.name,
+        family_suffix: str = CURRENT_FAMILY_SUFFIX,
+        preserve_current_frozen_bytes: bool = PRESERVE_CURRENT_FROZEN_BYTES,
+    ) -> None:
+        self.pack_id = pack_id
+        self.family_suffix = family_suffix
+        self.preserve_current_frozen_bytes = preserve_current_frozen_bytes
+        if not self.family_suffix.startswith("_v") or not self.family_suffix[2:].isdigit():
+            raise ValueError("family suffix must use the _v<positive integer> form")
+        expected_pack_id = (
+            PACK_REL.name.removesuffix(CURRENT_FAMILY_SUFFIX) + self.family_suffix
+        )
+        if self.pack_id != expected_pack_id:
+            raise ValueError(
+                f"pack id must equal {expected_pack_id!r} for {self.family_suffix}"
+            )
+        is_current = (
+            self.pack_id == PACK_REL.name
+            and self.family_suffix == CURRENT_FAMILY_SUFFIX
+        )
+        if self.preserve_current_frozen_bytes != is_current:
+            raise ValueError(
+                "preserve mode requires the current identity and successor identities "
+                "require preserve mode off"
+            )
+
+    @property
+    def pack_rel(self) -> Path:
+        return PACK_REL.with_name(self.pack_id)
+
+
+_ACTIVE_GENERATION: GenerationIdentity | None = None
+_SUCCESSOR_IDENTITY_TOKENS = (
+    "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+    "evidence-d117-floor-qwen25-7b-v1",
+    "plan-set-d117-qwen25-1p5b-7b-phase-floor-v1",
+    "d117-qwen25-phase-floor-set-v1",
+    "d117-qwen25-7b-phase-floor-component-v1",
+    "d117-qwen25-7b-prefill-p256-floor-v1",
+    "d117-qwen25-7b-prefill-p128-floor-v1",
+    "d117-qwen25-7b-decode-floor-v1",
+    "tg-d117-qwen25-7b-prefill-p256-v1",
+    "tg-d117-qwen25-7b-prefill-p128-v1",
+    "tg-d117-qwen25-7b-decode-v1",
+    "d117_contrast_qwen25_1p5b_vs_7b_v1",
+    "d117_floor_qwen25_7b_v1",
+    "d117-floor-qwen25-7b-v1",
+)
+
+
+def active_generation() -> GenerationIdentity:
+    return _ACTIVE_GENERATION or GenerationIdentity()
+
+
+@contextmanager
+def generation_context(identity: GenerationIdentity):
+    global _ACTIVE_GENERATION
+    previous = _ACTIVE_GENERATION
+    _ACTIVE_GENERATION = identity
+    try:
+        yield
+    finally:
+        _ACTIVE_GENERATION = previous
+
+
+def _successor_token(token: str, identity: GenerationIdentity) -> str:
+    if token == PACK_REL.name:
+        return identity.pack_id
+    version = identity.family_suffix.removeprefix("_")
+    if token.endswith("-v1"):
+        return token[:-3] + f"-{version}"
+    if token.endswith("_v1"):
+        return token[:-3] + identity.family_suffix
+    raise ValueError(f"successor identity token has no version suffix: {token}")
+
+
+def thread_generation_identity(value: Any) -> Any:
+    identity = active_generation()
+    if identity.preserve_current_frozen_bytes:
+        return value
+    if isinstance(value, str):
+        for token in _SUCCESSOR_IDENTITY_TOKENS:
+            value = value.replace(token, _successor_token(token, identity))
+        return value
+    if isinstance(value, dict):
+        return {
+            thread_generation_identity(key): thread_generation_identity(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [thread_generation_identity(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(thread_generation_identity(item) for item in value)
+    return value
+
+
+def generated_relative_path(relative: Path) -> Path:
+    identity = active_generation()
+    try:
+        inside_pack = relative.relative_to(PACK_REL)
+    except ValueError:
+        return relative
+    return identity.pack_rel / inside_pack
+
+
+def emitted_plan_reference() -> str:
+    if active_generation().preserve_current_frozen_bytes:
+        return (PACK_REL / CALIBRATION_PLAN_REFERENCE).as_posix()
+    return CALIBRATION_PLAN_REFERENCE
+
+
+def emitted_plan_sidecar_reference() -> str:
+    if active_generation().preserve_current_frozen_bytes:
+        return (PACK_REL / "calibration_plan.sha256").as_posix()
+    return "calibration_plan.sha256"
+
+
+def generation_arm_readiness_attachment() -> dict[str, Any]:
+    identity = active_generation()
+    if identity.preserve_current_frozen_bytes:
+        return ARM_READINESS_ATTACHMENT
+    return plan_arm_readiness_attachment(
+        REPO_ROOT / identity.pack_rel,
+        "BETA",
+        REPO_ROOT,
+    )
 SUCCESSOR_REGENERATION_RULE = (
     LEGACY_SUCCESSOR_REGENERATION_RULE
     if PACK_STATUS == DRAFT_STATUS
@@ -258,7 +392,7 @@ SUCCESSOR_REGENERATION_RULE = (
 
 
 def freeze_aware_projection(generated: dict[str, Any]) -> dict[str, Any]:
-    if not PRESERVE_CURRENT_FROZEN_BYTES:
+    if not active_generation().preserve_current_frozen_bytes:
         return generated
     current = json.loads(
         (REPO_ROOT / PACK_REL / "producer_contract.json").read_text(
@@ -269,12 +403,15 @@ def freeze_aware_projection(generated: dict[str, Any]) -> dict[str, Any]:
 
 
 def render_json(value: Any) -> bytes:
-    return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    return (
+        json.dumps(thread_generation_identity(value), indent=2, ensure_ascii=False)
+        + "\n"
+    ).encode("utf-8")
 
 
 def canonical_sha256(value: Any) -> str:
     raw = json.dumps(
-        value,
+        thread_generation_identity(value),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -539,6 +676,17 @@ def config_for(
         if family_id == P256_FAMILY_ID
         else WORKLOAD
     )
+    tags = [
+        "phase2",
+        CAMPAIGN_TAG,
+        "production-window",
+        "floor-calibration",
+        f"df-condition={family_id}",
+        f"calibration-plan-sha256={plan_sha256}",
+        *run["collection_tags"],
+    ]
+    if not active_generation().preserve_current_frozen_bytes:
+        tags.append("launch_lineage_required")
     return {
         "schema_version": "0.1",
         "run_id": run["run_id"],
@@ -551,15 +699,7 @@ def config_for(
         "run_metadata": {
             "project": "capstone-joulewise",
             "operator": "lead",
-            "tags": [
-                "phase2",
-                CAMPAIGN_TAG,
-                "production-window",
-                "floor-calibration",
-                f"df-condition={family_id}",
-                f"calibration-plan-sha256={plan_sha256}",
-                *run["collection_tags"],
-            ],
+            "tags": tags,
         },
     }
 
@@ -905,7 +1045,7 @@ def producer_contract(
         "cell_composition_rule": "componentwise_max_never_sum.v1",
         "consumer_floor_rule": "cross_stack_armwise_max.v1",
         "plan": {
-            "path": f"{PACK_REL.as_posix()}/calibration_plan.json",
+            "path": emitted_plan_reference(),
             "plan_id": PLAN_ID,
             "sha256": plan_sha256,
             "sidecar_sha256": plan_sidecar_sha256,
@@ -994,7 +1134,7 @@ def producer_contract(
                     "identity_unit_id": "beta",
                     "producer_plan_reference": {
                         "plan_id": PLAN_ID,
-                        "path": f"{PACK_REL.as_posix()}/calibration_plan.json",
+                        "path": emitted_plan_reference(),
                     },
                     "consumer_bindings": [
                         {
@@ -1033,7 +1173,7 @@ def producer_contract(
                     "identity_unit_id": "beta/prefill_p256",
                     "producer_plan_reference": {
                         "plan_id": PLAN_ID,
-                        "path": f"{PACK_REL.as_posix()}/calibration_plan.json",
+                        "path": emitted_plan_reference(),
                     },
                     "consumer_bindings": [
                         {
@@ -1137,12 +1277,18 @@ def collection_arguments(config_path: str, runs_binding: str) -> list[dict[str, 
 
 def freeze_aware_reservation_plan_arguments(
     preserve_current: bool,
+    *,
+    pack_rel: Path | None = None,
+    plan_reference: str = CALIBRATION_PLAN_REFERENCE,
 ) -> list[dict[str, str]]:
     if preserve_current:
         return []
+    if plan_reference != CALIBRATION_PLAN_REFERENCE:
+        raise ValueError("reservation plan must use the canonical pack-relative reference")
+    resolved_pack_rel = pack_rel or active_generation().pack_rel
     return [
         token("literal", "--plan"),
-        token("repo_path", (PACK_REL / "calibration_plan.json").as_posix()),
+        token("repo_path", (resolved_pack_rel / plan_reference).as_posix()),
     ]
 
 
@@ -1169,7 +1315,9 @@ def stage_graph(
                     token("literal", "--head-pin"),
                     token("repo_path", LEDGER_HEAD_REL.as_posix()),
                     *freeze_aware_reservation_plan_arguments(
-                        PRESERVE_CURRENT_FROZEN_BYTES
+                        active_generation().preserve_current_frozen_bytes,
+                        pack_rel=active_generation().pack_rel,
+                        plan_reference=CALIBRATION_PLAN_REFERENCE,
                     ),
                     token("literal", "--session-id"),
                     token("binding", "bracket_session_id"),
@@ -1570,11 +1718,11 @@ def plan_tree(
         # The D-134 plan-tree sidecar pins this artifact by SHA.
         "draft_status": DRAFT_STATUS,
         "plan": {
-            "path": f"{PACK_REL.as_posix()}/calibration_plan.json",
+            "path": emitted_plan_reference(),
             "plan_id": PLAN_ID,
             "actual_sha256": plan_sha256,
             "declared_sha256": plan_sha256,
-            "sidecar_path": f"{PACK_REL.as_posix()}/calibration_plan.sha256",
+            "sidecar_path": emitted_plan_sidecar_reference(),
             "sidecar_sha256": plan_sidecar_sha256,
         },
         "generator": {
@@ -1645,7 +1793,7 @@ def plan_tree(
             "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing",
         },
         "arm_attachments": {
-            "arm_readiness": ARM_READINESS_ATTACHMENT,
+            "arm_readiness": generation_arm_readiness_attachment(),
             "launch": {
                 "schema_version": "joulewise.stage_launch_bindings.v1",
                 "bindings": [
@@ -1836,7 +1984,14 @@ def expected_pack_files() -> list[Path]:
     return paths
 
 
-def build_artifacts() -> dict[Path, bytes]:
+def build_artifacts(
+    identity: GenerationIdentity | None = None,
+) -> dict[Path, bytes]:
+    with generation_context(identity or GenerationIdentity()):
+        return _build_artifacts()
+
+
+def _build_artifacts() -> dict[Path, bytes]:
     verify_external_inputs()
     (
         decode,
@@ -2184,10 +2339,10 @@ def build_artifacts() -> dict[Path, bytes]:
     )
     producer_bytes = (
         (REPO_ROOT / PACK_REL / "producer_contract.json").read_bytes()
-        if PRESERVE_CURRENT_FROZEN_BYTES
+        if active_generation().preserve_current_frozen_bytes
         else render_json(producer)
     )
-    if PRESERVE_CURRENT_FROZEN_BYTES:
+    if active_generation().preserve_current_frozen_bytes:
         producer = json.loads(producer_bytes)
     producer_sha = sha256_bytes(producer_bytes)
     artifacts[PACK_REL / "producer_contract.json"] = producer_bytes
@@ -2249,7 +2404,7 @@ def build_artifacts() -> dict[Path, bytes]:
     tree = plan_tree(
         generator_sha256=(
             CURRENT_FROZEN_GENERATOR_SHA256
-            if PRESERVE_CURRENT_FROZEN_BYTES
+            if active_generation().preserve_current_frozen_bytes
             else sha256_file(SOURCE_GENERATOR)
         ),
         plan_sha256=plan_sha,
@@ -2265,17 +2420,20 @@ def build_artifacts() -> dict[Path, bytes]:
     )
     tree_bytes = (
         (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
-        if PRESERVE_CURRENT_FROZEN_BYTES
+        if active_generation().preserve_current_frozen_bytes
         else render_json(tree)
     )
     tree_sha = sha256_bytes(tree_bytes)
     artifacts[PACK_REL / "plan_tree.json"] = tree_bytes
     artifacts[PACK_REL / "plan_tree.sha256"] = (
         (REPO_ROOT / PACK_REL / "plan_tree.sha256").read_bytes()
-        if PRESERVE_CURRENT_FROZEN_BYTES
+        if active_generation().preserve_current_frozen_bytes
         else sidecar_bytes(tree_sha, "plan_tree.json")
     )
-    return artifacts
+    return {
+        generated_relative_path(relative): content
+        for relative, content in artifacts.items()
+    }
 
 
 def write_artifacts(output_root: Path, artifacts: Mapping[Path, bytes]) -> None:
@@ -2308,11 +2466,16 @@ def compare_artifacts(output_root: Path, artifacts: Mapping[Path, bytes]) -> Non
         raise ValueError("generated draft check failed: " + "; ".join(problems))
 
 
-def check_inventory(output_root: Path, artifacts: Mapping[Path, bytes]) -> None:
-    pack_root = output_root / PACK_REL
+def check_inventory(
+    output_root: Path,
+    artifacts: Mapping[Path, bytes],
+    identity: GenerationIdentity,
+) -> None:
+    pack_rel = identity.pack_rel
+    pack_root = output_root / pack_rel
     expected = set(expected_pack_files())
     generated_tree = json.loads(
-        artifacts[PACK_REL / "plan_tree.json"].decode("utf-8")
+        artifacts[pack_rel / "plan_tree.json"].decode("utf-8")
     )
     freeze_reference = generated_tree["arm_attachments"]["arm_readiness"][
         "freeze_receipt"
@@ -2324,7 +2487,7 @@ def check_inventory(output_root: Path, artifacts: Mapping[Path, bytes]) -> None:
             freeze_path.with_name(f"{freeze_path.name}.sha256"),
         }
         freeze_receipt = json.loads(
-            (output_root / PACK_REL / freeze_path).read_text(encoding="utf-8")
+            (output_root / pack_rel / freeze_path).read_text(encoding="utf-8")
         )
         for item in freeze_receipt["evidence"]:
             evidence_path = Path(item["path"])
@@ -2335,7 +2498,7 @@ def check_inventory(output_root: Path, artifacts: Mapping[Path, bytes]) -> None:
             )
             expected |= {evidence_path, evidence_sidecar}
             evidence_receipt = json.loads(
-                (output_root / PACK_REL / evidence_path).read_text(
+                (output_root / pack_rel / evidence_path).read_text(
                     encoding="utf-8"
                 )
             )
@@ -2369,26 +2532,42 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--output-root", type=Path)
+    parser.add_argument("--pack-id", default=PACK_REL.name)
+    parser.add_argument("--family-suffix", default=CURRENT_FAMILY_SUFFIX)
+    parser.add_argument(
+        "--preserve-current-frozen-bytes",
+        action=argparse.BooleanOptionalAction,
+        default=PRESERVE_CURRENT_FROZEN_BYTES,
+    )
     args = parser.parse_args()
     return args
 
 
 def main() -> int:
     args = parse_args()
-    artifacts = build_artifacts()
+    identity = GenerationIdentity(
+        pack_id=args.pack_id,
+        family_suffix=args.family_suffix,
+        preserve_current_frozen_bytes=args.preserve_current_frozen_bytes,
+    )
+    artifacts = build_artifacts(identity)
     if args.check:
         check_root = args.output_root.resolve() if args.output_root else REPO_ROOT
-        check_inventory(check_root, artifacts)
+        check_inventory(check_root, artifacts, identity)
         compare_artifacts(check_root, artifacts)
+        status = PACK_STATUS if identity.preserve_current_frozen_bytes else DRAFT_STATUS
+        identity_label = (
+            "" if identity.preserve_current_frozen_bytes else f"{identity.pack_id} "
+        )
         print(
-            f"{PACK_STATUS.replace('_', ' ')} check passed: "
+            f"{identity_label}{status.replace('_', ' ')} check passed: "
             "100 science configs, 6 floor cells, "
             "3 reporting cells"
         )
         return 0
     output_root = args.output_root.resolve() if args.output_root else REPO_ROOT
     write_artifacts(output_root, artifacts)
-    pack_count = sum(1 for path in artifacts if PACK_REL in path.parents)
+    pack_count = sum(1 for path in artifacts if identity.pack_rel in path.parents)
     print(
         f"generated {pack_count} pack files and {SPEC_REL.as_posix()}; "
         "science_configs=100"

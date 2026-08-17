@@ -65,9 +65,9 @@ from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
 FROZEN_GENERATOR_SHA256 = "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06"
-EXPECTED_PACK_SHA256 = "a0f05bd38fad325b4caa143123c5942b52b6295ec56716c8020b7d02e0a2322e"
+EXPECTED_PACK_SHA256 = "9eea490be9f68946ff6b23428f229493a50a94bb23e8c3024e263496f06b3f65"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "2a4d8ef92663014f27c760e0e49badfa68de316246bbc9a793908548e6ab10ba",
+    "generate_configs.py": "0ecc0fd67bba13098829509f2302bd4904013f046b146bb1a6bed634bc08099c",
     "calibration_plan.json": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d",
     "calibration_plan.sha256": "707712fb1152ed41b6d48432932bacf16e6856c8432dafb699e951b077e09312",
     "order_manifest.json": "5c5bd84579ff6bcfe4c0e3c800550f35bd4a04a5cd0061e105c9c3e4775f9fff",
@@ -271,7 +271,12 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
 
     def test_two_regenerations_are_byte_identical_and_check_passes(self) -> None:
         checked = subprocess.run(
-            [sys.executable, str(GENERATOR), "--check"],
+            [
+                sys.executable,
+                str(GENERATOR),
+                "--check",
+                "--preserve-current-frozen-bytes",
+            ],
             cwd=ROOT,
             check=False,
             capture_output=True,
@@ -287,6 +292,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                         str(GENERATOR),
                         "--output-root",
                         output_root,
+                        "--preserve-current-frozen-bytes",
                     ],
                     cwd=ROOT,
                     check=False,
@@ -334,6 +340,82 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             future_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
         self.assertIn("frozen by D-134 receipt", future_readme)
         self.assertIn("freeze-aware", future_readme)
+
+    def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
+        successor_id = "d117_floor_qwen25_1p5b_v2"
+        successor_rel = PACK_REL.with_name(successor_id)
+        with tempfile.TemporaryDirectory(prefix="d117-alpha-v2-") as temp:
+            output_root = Path(temp)
+            command = [
+                sys.executable,
+                str(GENERATOR),
+                "--output-root",
+                str(output_root),
+                "--pack-id",
+                successor_id,
+                "--family-suffix",
+                "_v2",
+                "--no-preserve-current-frozen-bytes",
+            ]
+            generated = subprocess.run(
+                command,
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            checked = subprocess.run(
+                [*command, "--check"],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+
+            pack_root = output_root / successor_rel
+            tree = load_json(pack_root / "plan_tree.json")
+            producer = load_json(pack_root / "producer_contract.json")
+            self.assertEqual(tree["plan"]["path"], "calibration_plan.json")
+            self.assertEqual(tree["plan"]["sidecar_path"], "calibration_plan.sha256")
+            self.assertEqual(producer["plan"]["path"], tree["plan"]["path"])
+            self.assertEqual(tree["plan"]["plan_id"], PLAN_ID.removesuffix("v1") + "v2")
+            self.assertEqual(
+                tree["window_identity"]["evidence_root_id"],
+                EVIDENCE_ROOT_ID.removesuffix("v1") + "v2",
+            )
+            reservation = next(
+                stage
+                for stage in tree["stage_graph"]
+                if stage["kind"] == "bracket_reservation"
+            )
+            arguments = reservation["launch"]["commands"][0]["argv_template"][
+                "arguments"
+            ]
+            plan_index = next(
+                index
+                for index, token in enumerate(arguments)
+                if token == {"kind": "literal", "value": "--plan"}
+            )
+            plan_token = arguments[plan_index + 1]
+            expected_plan = (successor_rel / tree["plan"]["path"]).as_posix()
+            self.assertEqual(plan_token, {"kind": "repo_path", "value": expected_plan})
+            self.assertEqual(
+                output_root / plan_token["value"],
+                pack_root / tree["plan"]["path"],
+            )
+            for row in tree["science"]:
+                config = load_json(output_root / row["config_path"])
+                self.assertIn(
+                    "launch_lineage_required", config["run_metadata"]["tags"]
+                )
+
+        for row in self.tree["science"]:
+            current = load_json(ROOT / row["config_path"])
+            self.assertNotIn(
+                "launch_lineage_required", current["run_metadata"]["tags"]
+            )
 
     def test_generator_check_rejects_extra_pack_file(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-alpha-inventory-") as temp:

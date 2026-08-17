@@ -8,12 +8,15 @@ import hashlib
 import json
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACK_REL = Path("configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1")
+CALIBRATION_PLAN_REFERENCE = "calibration_plan.json"
+CURRENT_FAMILY_SUFFIX = "_v1"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -82,6 +85,113 @@ PRESERVE_CURRENT_FROZEN_BYTES = (
     and _FREEZE_REFERENCE.get("sha256") == CURRENT_FROZEN_RECEIPT_SHA256
 )
 PACK_STATUS = freeze_aware_status(_FREEZE_REFERENCE)
+
+
+class GenerationIdentity:
+    def __init__(
+        self,
+        pack_id: str = PACK_REL.name,
+        family_suffix: str = CURRENT_FAMILY_SUFFIX,
+        preserve_current_frozen_bytes: bool = PRESERVE_CURRENT_FROZEN_BYTES,
+    ) -> None:
+        self.pack_id = pack_id
+        self.family_suffix = family_suffix
+        self.preserve_current_frozen_bytes = preserve_current_frozen_bytes
+        if not self.family_suffix.startswith("_v") or not self.family_suffix[2:].isdigit():
+            raise ValueError("family suffix must use the _v<positive integer> form")
+        expected_pack_id = (
+            PACK_REL.name.removesuffix(CURRENT_FAMILY_SUFFIX) + self.family_suffix
+        )
+        if self.pack_id != expected_pack_id:
+            raise ValueError(
+                f"pack id must equal {expected_pack_id!r} for {self.family_suffix}"
+            )
+        is_current = (
+            self.pack_id == PACK_REL.name
+            and self.family_suffix == CURRENT_FAMILY_SUFFIX
+        )
+        if self.preserve_current_frozen_bytes != is_current:
+            raise ValueError(
+                "preserve mode requires the current identity and successor identities "
+                "require preserve mode off"
+            )
+
+    @property
+    def pack_rel(self) -> Path:
+        return PACK_REL.with_name(self.pack_id)
+
+
+_ACTIVE_GENERATION: GenerationIdentity | None = None
+_SUCCESSOR_IDENTITY_TOKENS = (
+    "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v1",
+    "evidence-d117-contrast-qwen25-1p5b-vs-7b-v1",
+    "d117-qwen25-1p5b-vs-7b-gamma-consumer-v1",
+    "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+    "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1",
+    "d117-qwen25-1p5b-decode-floor-v1",
+    "d117-qwen25-7b-decode-floor-v1",
+    "d117_floor_qwen25_1p5b_v1",
+    "d117_floor_qwen25_7b_v1",
+    "d117_contrast_qwen25_1p5b_vs_7b_v1",
+    "d117-contrast-qwen25-1p5b-vs-7b-v1",
+)
+
+
+def active_generation() -> GenerationIdentity:
+    return _ACTIVE_GENERATION or GenerationIdentity()
+
+
+@contextmanager
+def generation_context(identity: GenerationIdentity):
+    global _ACTIVE_GENERATION
+    previous = _ACTIVE_GENERATION
+    _ACTIVE_GENERATION = identity
+    try:
+        yield
+    finally:
+        _ACTIVE_GENERATION = previous
+
+
+def _successor_token(token: str, identity: GenerationIdentity) -> str:
+    if token == PACK_REL.name:
+        return identity.pack_id
+    version = identity.family_suffix.removeprefix("_")
+    if token.endswith("-v1"):
+        return token[:-3] + f"-{version}"
+    if token.endswith("_v1"):
+        return token[:-3] + identity.family_suffix
+    raise ValueError(f"successor identity token has no version suffix: {token}")
+
+
+def thread_generation_identity(value: Any) -> Any:
+    identity = active_generation()
+    if identity.preserve_current_frozen_bytes:
+        return value
+    if isinstance(value, str):
+        for token in _SUCCESSOR_IDENTITY_TOKENS:
+            value = value.replace(token, _successor_token(token, identity))
+        return value
+    if isinstance(value, dict):
+        return {
+            thread_generation_identity(key): thread_generation_identity(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [thread_generation_identity(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(thread_generation_identity(item) for item in value)
+    return value
+
+
+def generation_arm_readiness_attachment() -> dict[str, Any]:
+    identity = active_generation()
+    if identity.preserve_current_frozen_bytes:
+        return ARM_READINESS_ATTACHMENT
+    return plan_arm_readiness_attachment(
+        REPO_ROOT / identity.pack_rel,
+        "GAMMA",
+        REPO_ROOT,
+    )
 
 MODEL_A = {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
@@ -214,7 +324,10 @@ END_REF_MANIFEST_PATH = Path(
 
 
 def render_json(value: Any) -> bytes:
-    return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    return (
+        json.dumps(thread_generation_identity(value), indent=2, ensure_ascii=False)
+        + "\n"
+    ).encode("utf-8")
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -643,6 +756,21 @@ def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
         if run["measurement_arm"] == "prefill_p256"
         else []
     )
+    tags = [
+        "phase2",
+        "d117-contrast-qwen25-1p5b-vs-7b-v1",
+        "production-window",
+        "comparative-contrast",
+        f"measurement-arm={run['measurement_arm']}",
+        f"df-condition={run['condition_family_id']}",
+        f"calibration-plan-sha256={plan_sha256}",
+        f"calibration-abba-block-id={run['block_id']}",
+        f"calibration-abba-label={run['arm']}",
+        f"calibration-abba-sequence-index={run['position_in_block']}",
+        *prompt_tags,
+    ]
+    if not active_generation().preserve_current_frozen_bytes:
+        tags.append("launch_lineage_required")
     return {
         "schema_version": "0.1",
         "run_id": run["run_id"],
@@ -655,19 +783,7 @@ def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
         "run_metadata": {
             "project": "capstone-joulewise",
             "operator": "lead",
-            "tags": [
-                "phase2",
-                "d117-contrast-qwen25-1p5b-vs-7b-v1",
-                "production-window",
-                "comparative-contrast",
-                f"measurement-arm={run['measurement_arm']}",
-                f"df-condition={run['condition_family_id']}",
-                f"calibration-plan-sha256={plan_sha256}",
-                f"calibration-abba-block-id={run['block_id']}",
-                f"calibration-abba-label={run['arm']}",
-                f"calibration-abba-sequence-index={run['position_in_block']}",
-                *prompt_tags,
-            ],
+            "tags": tags,
         },
     }
 
@@ -810,12 +926,18 @@ def stage_row(
 
 def freeze_aware_reservation_plan_arguments(
     preserve_current: bool,
+    *,
+    pack_rel: Path | None = None,
+    plan_reference: str = CALIBRATION_PLAN_REFERENCE,
 ) -> list[dict[str, Any]]:
     if preserve_current:
         return []
+    if plan_reference != CALIBRATION_PLAN_REFERENCE:
+        raise ValueError("reservation plan must use the canonical pack-relative reference")
+    resolved_pack_rel = pack_rel or active_generation().pack_rel
     return [
         literal("--plan"),
-        repo_path((PACK_REL / "calibration_plan.json").as_posix()),
+        repo_path((resolved_pack_rel / plan_reference).as_posix()),
     ]
 
 
@@ -837,7 +959,9 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
                         literal("--ledger"), binding("ledger_path"),
                         literal("--head-pin"), repo_path("configs/calibration/calibration_ledger_head.json"),
                         *freeze_aware_reservation_plan_arguments(
-                            PRESERVE_CURRENT_FROZEN_BYTES
+                            active_generation().preserve_current_frozen_bytes,
+                            pack_rel=active_generation().pack_rel,
+                            plan_reference=CALIBRATION_PLAN_REFERENCE,
                         ),
                         literal("--session-id"), binding("bracket_session_id"),
                         literal("--window-id"), tree_pointer("/window_identity/window_id"),
@@ -1356,7 +1480,7 @@ def build_tree(
             "retry_commands_present": False,
         },
         "arm_attachments": {
-            "arm_readiness": ARM_READINESS_ATTACHMENT,
+            "arm_readiness": generation_arm_readiness_attachment(),
             "launch": {
                 "schema_version": "joulewise.stage_launch_bindings.v1",
                 "closed_bindings": {
@@ -1500,15 +1624,25 @@ python3 -m unittest tests.test_d117_decode_contrast_plan
 """.encode("utf-8")
 
 
-def generate(output_repo_root: Path) -> dict[str, str]:
-    out = output_repo_root / PACK_REL
+def generate(
+    output_repo_root: Path,
+    identity: GenerationIdentity | None = None,
+) -> dict[str, str]:
+    with generation_context(identity or GenerationIdentity()):
+        return _generate(output_repo_root)
+
+
+def _generate(output_repo_root: Path) -> dict[str, str]:
+    out = output_repo_root / active_generation().pack_rel
     out.mkdir(parents=True, exist_ok=True)
     generator_bytes = (REPO_ROOT / PACK_REL / "generate_configs.py").read_bytes()
     generator_sha = (
         CURRENT_FROZEN_GENERATOR_SHA256
-        if PRESERVE_CURRENT_FROZEN_BYTES
+        if active_generation().preserve_current_frozen_bytes
         else sha256_bytes(generator_bytes)
     )
+    if not active_generation().preserve_current_frozen_bytes:
+        write_bytes(out / "generate_configs.py", generator_bytes)
 
     family_bytes, domain_hashes = build_condition_families()
     for key, data in family_bytes.items():
@@ -1682,7 +1816,7 @@ def generate(output_repo_root: Path) -> dict[str, str]:
     )
     tree_bytes = (
         (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
-        if PRESERVE_CURRENT_FROZEN_BYTES
+        if active_generation().preserve_current_frozen_bytes
         else render_json(tree)
     )
     tree_sha = sha256_bytes(tree_bytes)
@@ -1691,7 +1825,7 @@ def generate(output_repo_root: Path) -> dict[str, str]:
         out / "plan_tree.sha256",
         (
             (REPO_ROOT / PACK_REL / "plan_tree.sha256").read_bytes()
-            if PRESERVE_CURRENT_FROZEN_BYTES
+            if active_generation().preserve_current_frozen_bytes
             else sidecar_bytes(tree_sha, "plan_tree.json")
         ),
     )
@@ -1714,12 +1848,16 @@ def actual_pack_paths(pack_root: Path) -> set[Path]:
     }
 
 
-def check(check_root: Path = REPO_ROOT) -> dict[str, str]:
+def check(
+    check_root: Path = REPO_ROOT,
+    identity: GenerationIdentity | None = None,
+) -> dict[str, str]:
+    selected_identity = identity or GenerationIdentity()
     with tempfile.TemporaryDirectory(prefix="d117-gamma-check-") as temporary:
         temp_root = Path(temporary)
-        hashes = generate(temp_root)
-        generated = temp_root / PACK_REL
-        pack_root = check_root / PACK_REL
+        hashes = generate(temp_root, selected_identity)
+        generated = temp_root / selected_identity.pack_rel
+        pack_root = check_root / selected_identity.pack_rel
         expected_paths = set(expected_pack_paths())
         generated_tree = json.loads(
             (generated / "plan_tree.json").read_text(encoding="utf-8")
@@ -1774,7 +1912,7 @@ def check(check_root: Path = REPO_ROOT) -> dict[str, str]:
             raise ValueError("pack inventory differs: " + "; ".join(detail))
         for relative in expected_pack_paths(include_generator=False):
             expected_path = generated / relative
-            actual_path = check_root / PACK_REL / relative
+            actual_path = pack_root / relative
             if not expected_path.is_file():
                 raise ValueError(f"generated expected path missing: {relative}")
             if not actual_path.is_file():
@@ -1790,19 +1928,40 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--output-root", type=Path)
+    parser.add_argument("--pack-id", default=PACK_REL.name)
+    parser.add_argument("--family-suffix", default=CURRENT_FAMILY_SUFFIX)
+    parser.add_argument(
+        "--preserve-current-frozen-bytes",
+        action=argparse.BooleanOptionalAction,
+        default=PRESERVE_CURRENT_FROZEN_BYTES,
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    identity = GenerationIdentity(
+        pack_id=args.pack_id,
+        family_suffix=args.family_suffix,
+        preserve_current_frozen_bytes=args.preserve_current_frozen_bytes,
+    )
     hashes = (
-        check(args.output_root.resolve() if args.output_root else REPO_ROOT)
+        check(
+            args.output_root.resolve() if args.output_root else REPO_ROOT,
+            identity,
+        )
         if args.check
-        else generate(args.output_root or REPO_ROOT)
+        else generate(args.output_root or REPO_ROOT, identity)
     )
     mode = "checked" if args.check else "generated"
+    status = PACK_STATUS if identity.preserve_current_frozen_bytes else DRAFT_STATUS
+    identity_label = (
+        status.replace("_", " ")
+        if identity.preserve_current_frozen_bytes
+        else identity.pack_id
+    )
     print(
-        f"{mode} D-117 gamma {PACK_STATUS.replace('_', ' ')}: "
+        f"{mode} D-117 gamma {identity_label}: "
         f"decode_members={MEMBERS_PER_ARM} prefill_p256_members={MEMBERS_PER_ARM} "
         f"plan_sha256={hashes['plan_sha256']} tree_sha256={hashes['tree_sha256']}"
     )
