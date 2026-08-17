@@ -57,9 +57,13 @@ custody docs/process_traces/2026-08-16-launch-f3-coldgate/, self-contained).
    ALPHA/BETA --plan reconciliation, launch_lineage_required successor flag.
    Then Phase 3 manifest SUPERSESSION + focused re-audit w/ adversarial
    coverage re-enumeration; Phase 4 READY-candidate sitting, fresh cold pair.
-4. **ED-OWED (ONE batched session; sitting-ready packet:
-   docs/process/ed-batch-packet.md — decisions A1-A4 + hardware batch B):**
-   unchanged from T8 (qualification script, dress
+4. **ED-OWED — A1/A2/A3-defaults RULED 2026-08-17 (D-139): adversary family
+   closed, gamma stats adopted (Holm m=2), p256 dedicated floor, Phase-2
+   defaults approved, SHAKEDOWN-FIRST directive (first post-READY quiet
+   consumption = minimal instrument-verification runs, claims after).
+   REMAINING Ed items: hardware batch B, A4 marker ruling, environment-
+   fingerprint semantics, final exact-byte publication confirmation.** Packet:
+   docs/process/ed-batch-packet.md. Otherwise unchanged from T8 (qualification script, dress
    rehearsal, sampler checklist, rail probe, backlight rows, ED-Q-L9-3
    EARLY, a9/a10 desk replay, ED-QUAL-L4-1) PLUS the three risk-appetite
    calls now explicitly ONE FAMILY (recorder race, T-0 capture provenance,
