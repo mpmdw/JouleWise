@@ -1,5 +1,15 @@
 # Claims Status
 
+Terms used here: a *measurement window* is one uninterrupted, calibrated
+collection session; a *pack* is the frozen campaign plan and its authenticated
+supporting files; a *detection floor* is the largest false difference the
+admitted measurement system can produce; a *mint* is the governed process that
+issues a floor artifact; an *arm* is one pre-registered workload or comparison
+track; a *verdict* is the final governed decision to admit or refuse evidence;
+and a *refusal* is a recorded decision not to issue a result when a required
+gate or piece of evidence fails. *Claim consumption* means using admitted
+evidence to support a scientific statement.
+
 **The single standing home for "what can we actually claim right now."**
 Every scientific number the project can publish, is holding, or must not
 repeat — with its exact validity state and blocker. Refresh this file
@@ -8,20 +18,22 @@ D-095 chain, an adjudication); quote verdicts as issued, never
 reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 `WINDOW_STATUS.md` (machine state), `docs/decision_log.md` (policy).
 
-Last updated: **2026-08-16** (T9 close). Since the 2026-08-07 entry below:
-all three D-117 packs were **frozen** (2026-08-13, receipts PASS ×3) with the
+Last updated: **2026-08-16** (T9 close). Since the 2026-08-07 entry below, all
+three D-117 packs were **frozen** (2026-08-13, receipts PASS ×3) with the
 tighter pre-registered floor selector (`d124_two_shared_edge_common_mode.v1`,
-1.869502 J on the retained contrast cell — issued results this cycle remain
+1.869502 J on the retained contrast cell). Issued results in this cycle remain
 under the conservative 8.611855 J composition until the first post-freeze
-mint); the **readiness council ruled NOT-READY 0/11** (2026-08-15) — no window
-may be armed before a READY-candidate verdict, so every prospective claim
-remains BLOCKED on the repair program, whose Phase-1 code is now **merged**
-(five PRs, 2026-08-16) with the claim-consumption edge in place: analysis
-accepts only an authenticated finalized manifest, and refusals are first-class
-results. No claim-bearing number changed; the paper's characterization prose
-was provenance-corrected (council L11) without altering any value. Next
-claim-state change: the Phase-2 re-freeze → re-audit → READY-candidate
-council → the alpha/beta/gamma windows.
+mint.
+
+The **readiness council ruled NOT-READY 0/11** (2026-08-15). No window may be
+armed before a READY-candidate verdict, so every prospective claim remains
+BLOCKED on the repair program. The program's Phase-1 code is now **merged**
+(five PRs, 2026-08-16), including the claim-consumption gate: analysis accepts
+only an authenticated, finalized manifest, and it preserves refusals as
+reportable results. No claim-bearing number changed. Council L11 corrected the
+paper's characterization provenance without altering any value. The next
+claim-state change follows this sequence: the Phase-2 re-freeze → re-audit →
+READY-candidate council → the alpha/beta/gamma windows.
 
 Previous entry — Last updated: **2026-08-07** (D-117: the historical re-mint path is
 SUPERSEDED — structurally closed at main after the D-116 issuance
@@ -45,12 +57,12 @@ byte-identical; report: `docs/run_reports/2026-08-03-16h-runway.md`.
 
 **NONE at this checkpoint.** D-110 (2026-08-03, sweep finding RT-1)
 made mint #1 and every number derived from it retroactively
-non-claim-bearing: its floors embed a never-zero allowance of ZERO
-where D-102 pin 3 mandates +max(drift, 0.010818 s) (~+43% on the a10
-operative bound). The previously-listed values (operative 7.377086 J;
+non-claim-bearing. Its floors embed a never-zero allowance of ZERO where D-102
+pin 3 mandates +max(drift, 0.010818 s) (~+43% on the a10 operative bound).
+The previously listed values (operative 7.377086 J;
 a10 components 3.823787 / 3.592138 J; window C comparative 7.377086 J)
-move to §5 until the re-mint. The DERIVATION toolchain itself is
-proven honest: the full pinned replay (2026-08-03) reproduced both
+moved to §5 until the re-mint. The derivation toolchain itself is proven
+honest: the full pinned replay (2026-08-03) reproduced both
 extraction reports, the artifact, and the statement BYTE-IDENTICAL
 (`docs/process_traces/2026-08-03-q1-remint-bytecompare/`). The taint is
 semantic (the selector the era used), not derivational.
@@ -85,9 +97,10 @@ instrument-tightening program.
 
 ## 3. COLLECTED — verdicts FAILED as-issued; adjudication RULED (D-100, 2026-08-01)
 
-The machinery adjudication is complete (MET-VERDICT-ADJ-01 → D-100 cold-
-gate synthesis). Both verdicts **stand as issued, permanently by
-construction**: any licensed re-evaluation appends a NEW row under
+The machinery adjudication is complete (`MET-VERDICT-ADJ-01`). D-100 records
+the resulting cold-gate synthesis, meaning the independent adjudication that
+followed repeated failures of the same defect class. Both verdicts **stand as
+issued, permanently by construction**. Any licensed re-evaluation appends a NEW row under
 `consumption_semantics_id: salvage_dangler_exclusion_v1` with a new
 pinned basis; the original FAILED rows are never edited and govern
 default consumption. Outcomes per window:
@@ -98,35 +111,39 @@ default consumption. Outcomes per window:
   form. C1 re-collects in a future window.
 - **Window B: TERMINALLY CLAIM-RETIRED (D-113, Ed ruling 2026-08-05):
   RETAINED_IMMUTABLE / PERMANENTLY_NON_CLAIM_BEARING.** Ed chose
-  abandonment over salvage ("soundness and quality of the project and
-  claims above all"): no re-evaluation or claim consumption will ever
-  occur; the WB-specific D-100/D-106/D-108 license chain is retired
-  (general machinery survives for other windows);
-  `WINB-R06-DISPOSITION-01` closes ABANDONED_FOR_FRESH_COLLECTION;
-  labelled read-only forensic/diagnostic use remains permitted ("Window
-  B, original verdict FAILED, D-113 claim-retired, non-claim
-  evidence"). Every still-desired WB claim component re-collects fresh
-  beginning Window C — no WB member enters a replacement claim basis.
-  The F7 scope question is ANSWERED: whole-window voiding is affirmed
-  as the current semantics (a cell-scoped alternative only via the
-  D-083 cold gate; not built). Historical record of the 2026-08-03
-  attempt below. The whole chain executed: D-108 ruled
-  (clause (c) retired), row `D100-BII-BINDING-01` CLOSED (PR #99 +
-  clause-(d) three-occurrence digest-bound re-record), closure +
-  membership-binding artifacts authored and dry-authorized, D-093 scan
-  clean 1/1, frozen corpus verified byte-identical (210+4 files, zero
-  mismatches). The governed re-evaluation then REFUSED pre-verdict:
-  survivor consumption failed on `mtadd-p2048o0128-r06`'s
-  collection-time clock-anchor failure (`native_intersection_empty`) —
-  the cold gate ruled this CORRECT fail-closed machinery (classification
-  (i), convergent instruments; record
-  `docs/process_traces/2026-08-03-winB-reeval-stop/`). No licensed
-  channel removes r06 (exclusion cap spent on r08; not a dangler;
-  waivers forbidden), and the NEG-8 drift bound expired 2026-08-02, so
-  no PASS path exists under the license as drawn. Original FAILED
-  verdict untouched. The WB NEG-8 bound re-mint obligation is MOOT
-  under D-113; the near-run-time freshness rule continues to bind
-  every future window (runbook + D-078, by cross-reference).
+  abandonment over salvage ("soundness and quality of the project and claims
+  above all"). No re-evaluation or claim consumption will ever occur. The
+  Window-B-specific D-100/D-106/D-108 license chain is retired, although the
+  general machinery survives for other windows. The disposition record
+  `WINB-R06-DISPOSITION-01` closes ABANDONED_FOR_FRESH_COLLECTION. Labelled,
+  read-only forensic or diagnostic use remains permitted ("Window B, original
+  verdict FAILED, D-113 claim-retired, non-claim evidence").
+
+  Every still-desired Window B claim component will be collected again,
+  beginning with Window C; no Window B member enters a replacement claim
+  basis. The F7 scope question is ANSWERED: whole-window voiding is the current
+  rule. A cell-scoped alternative would require the D-083 cold gate and has not
+  been built.
+
+  The historical 2026-08-03 attempt remains part of the record. The whole
+  chain executed: D-108 ruled (clause (c) retired); row
+  `D100-BII-BINDING-01` CLOSED (PR #99 plus the clause-(d) three-occurrence,
+  digest-bound re-record); closure and membership-binding artifacts were
+  authored and dry-authorized; the D-093 scan was clean 1/1; and the frozen
+  corpus was verified byte-identical (210+4 files, zero mismatches).
+
+  The governed re-evaluation then REFUSED before issuing a verdict. Survivor
+  consumption failed because member `mtadd-p2048o0128-r06` has a
+  collection-time clock-anchor failure (`native_intersection_empty`). The cold
+  gate ruled that this was CORRECT fail-closed machinery (classification (i),
+  convergent instruments; record
+  `docs/process_traces/2026-08-03-winB-reeval-stop/`). No licensed channel can
+  remove r06: the exclusion cap was spent on r08, it is not a dangling
+  occurrence, and waivers are forbidden. The NEG-8 drift bound also expired
+  2026-08-02, so no PASS path exists under the license as drawn. The original
+  FAILED verdict remains untouched. The Window B NEG-8 bound re-mint obligation
+  is MOOT under D-113. The near-run-time freshness rule continues to bind every
+  future window (runbook + D-078, by cross-reference).
 
 | Paper claim | Campaign | Collected | Current state (D-113/D-117) |
 |---|---|---|---|
