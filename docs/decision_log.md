@@ -9712,6 +9712,35 @@ Authority context: R-t9-4 (docs/run_reports/2026-08-16-t9-session.md), the
 2026-08-15 D-078 registry amendment on the staged branch, and the council's
 Phase-2 re-freeze ruling.
 
+### D-138 implementation note — 2026-08-17: authenticated D-079 successor-candidate tooling (nothing issued)
+
+`scripts/reissue_calibration_acceptance.py` now prepares, but cannot issue, a
+D-079 successor candidate.  It authenticates the exact issued predecessor
+through the production byte-pinned loader; reopens all 19 ruled corpus members;
+checks each manifest SHA-256, instrument-evidence SHA-256, source decimal
+`b_fiducial_s` lexeme, and valid prior-observation link; then reconstructs the
+candidate with the production protocol digest, all four D-138 estimator-source
+digests, and the production D-102/D-109 derivation validator.  The tool contains
+no second implementation of the acceptance arithmetic.
+
+Every output is conspicuously marked `"candidate_not_issued": true`.  The
+production exact-byte acceptance loader refuses those marked bytes, and the
+later governed issuance transaction must remove the marker, assign the ruled
+successor identity, and establish the new external byte pin.  The F3 stop rule
+is executable: a member-set, threshold, or any other non-pin/science-facing
+delta prints `VERDICT=STOP` and returns a nonzero status; only a pure
+protocol/estimator-pin delta prints `VERDICT=PROCEED`.  `PROCEED` authorizes only
+continued private transaction preparation, never issuance or publication.
+
+The real-corpus replay at the integrated head `e22e658` authenticated 19/19.
+The member set, all member values, thresholds, and every science-facing field
+were identical.  The protocol digest and three estimator-source digests were
+unchanged; only `joulewise/powermetrics_fiducial.py` rotated, from
+`21ec17c7b2119e5971e6bcf39d9291d907db347ab6aa63996b13a83630e437a3` to
+`501bfdaf44f2768af73f112a703e9da3ab055c03e5b9d493e0dc2eadad82f71b`.
+No acceptance artifact, successor ID, extraction spec, or dependent pin was
+issued or changed by this preparation step.
+
 ### WO-LAUNCH-BINDING stage 3 downstream-authentication checkpoint — 2026-08-16
 
 The authorized downstream implementation keeps D-138's D-079 estimator-input
