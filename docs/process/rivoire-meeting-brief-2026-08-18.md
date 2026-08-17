@@ -26,13 +26,17 @@ by placing samples at the phase boundary.
 ## What changed in the last two weeks
 
 The readiness audit returned NOT-READY, so no measurement window was spent.
-The resulting repair program has now been executed: the night-of-measurement
+The repair program's code wave has been executed and merged (the program
+itself closes only with the re-freeze, re-audit, and READY-candidate council
+below): the night-of-measurement
 capture contract was corrected, arming and launch were bound into one
 authenticated step, and claim analysis was changed to accept only a complete,
 authenticated, finalized result. Missing lineage, incomplete custody, stale
 inputs, or an unproved derivation now produces a recorded refusal from
-collection through claim analysis. The successor-pack re-freeze is in progress;
-it precedes the focused re-audit and the next READY-candidate council.
+collection through claim analysis. Preparation for the successor-pack
+re-freeze is underway — its inputs are built and under adversarial review —
+and the atomic re-freeze executes next, before the focused re-audit and the
+READY-candidate council.
 
 ## What the first campaign answers and how it runs
 
