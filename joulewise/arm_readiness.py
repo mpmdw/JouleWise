@@ -230,8 +230,13 @@ _PROFILE_BY_PACK = {
     "d117_floor_qwen25_7b_v1": "BETA",
     "d117_contrast_qwen25_1p5b_vs_7b_v1": "GAMMA",
 }
-# R1 clause 6: successor pack IDs are Ed-reserved.  They are intentionally
-# absent, so a candidate successor refuses profile routing until that ruling.
+_SUCCESSOR_PROFILE_PATTERNS = {
+    "ALPHA": re.compile(r"^d117_floor_qwen25_1p5b_v(?:[2-9]|[1-9][0-9]+)$"),
+    "BETA": re.compile(r"^d117_floor_qwen25_7b_v(?:[2-9]|[1-9][0-9]+)$"),
+    "GAMMA": re.compile(
+        r"^d117_contrast_qwen25_1p5b_vs_7b_v(?:[2-9]|[1-9][0-9]+)$"
+    ),
+}
 
 REGISTRY_KEYS = {"schema_version", "registry_id", "plan_profiles", "rows"}
 R1_ROW_REGISTRY_KEYS = REGISTRY_KEYS | {"freeze_evidence_lifecycle"}
@@ -621,6 +626,48 @@ _EVIDENCE_SOURCE_KINDS = {
     "TERMINAL_REVIEW": frozenset({"GIT", "PROBE"}),
     "THREE_WINDOW_REGRESSION": frozenset({"PROBE"}),
 }
+
+# R1 S2: this is the sole freshness-class authority.  Registries name policy
+# IDs and class-specific parameters, but can neither introduce an evidence
+# kind nor choose its class.  ARM_CAPABILITY is not an evidence-policy row;
+# it is included so the same production lifecycle dispatcher owns the fifth
+# class as well.
+R1_EVIDENCE_FRESHNESS_CLASSES = {
+    "ACCEPTANCE_OWNER": "EXECUTION_BOUND",
+    "ACCEPTANCE_SUCCESSOR": "EXECUTION_BOUND",
+    "BACKUP_PREFLIGHT": "TIME_BOUND",
+    "CLOCK_ATTESTATION": "TIME_BOUND",
+    "CLOCK_PROBE": "TIME_BOUND",
+    "DOCTRINE_PIN": "RE_DERIVABLE",
+    "DRY_RUN_REHEARSAL": "EXECUTION_BOUND",
+    "ESTIMATOR_IDENTITY": "EXECUTION_BOUND",
+    "GIT_CHECKOUT": "EXECUTION_BOUND",
+    "IDENTITY_PIN_PROJECTION": "EXECUTION_BOUND",
+    "LAUNCH_RECIPE": "SESSION_STATE_BOUND",
+    "LEDGER_RESERVATION": "SESSION_STATE_BOUND",
+    "MACHINE_PREFLIGHT": "TIME_BOUND",
+    "MAINTENANCE_CENSUS": "TIME_BOUND",
+    "MINT_TRUST": "EXECUTION_BOUND",
+    "MULTICELL_MINT": "EXECUTION_BOUND",
+    "OFFLINE_INPUT_INVENTORY": "EXECUTION_BOUND",
+    "PACK_AUTHENTICATION": "EXECUTION_BOUND",
+    "PACK_FAMILY": "RE_DERIVABLE",
+    "POWERMETRICS_PROBE": "TIME_BOUND",
+    "POWER_PREFLIGHT": "TIME_BOUND",
+    "PRIVILEGE_INSTALLATION": "EXECUTION_BOUND",
+    "PROCESS_CENSUS": "TIME_BOUND",
+    "REASON_CODE_COVERAGE": "EXECUTION_BOUND",
+    "RECEIPT_ORACLE": "EXECUTION_BOUND",
+    "RECOVERY_LEDGER_TEST": "EXECUTION_BOUND",
+    "ROOT_PREFLIGHT": "SESSION_STATE_BOUND",
+    "TERMINAL_REVIEW": "EXECUTION_BOUND",
+    "THREE_WINDOW_REGRESSION": "EXECUTION_BOUND",
+    "ARM_CAPABILITY": "TEMPORAL_CAPABILITY",
+}
+if set(R1_EVIDENCE_FRESHNESS_CLASSES) - {"ARM_CAPABILITY"} != set(
+    _EVIDENCE_SOURCE_KINDS
+):
+    raise AssertionError("every evidence kind needs exactly one code freshness class")
 
 _LOWER_SHA256_CONTENT = object()
 _PREDICATE_CONTENT_REQUIREMENTS: dict[str, Mapping[str, Any]] = {
@@ -1386,6 +1433,8 @@ def validate_r1_lifecycle_registry(
         )
     policy_kinds: list[str] = []
     policy_ids: list[str] = []
+    class_mismatches: list[str] = []
+    contradictory_policies: list[str] = []
     for index, raw_policy in enumerate(raw_policies):
         policy = _require_exact_keys(
             raw_policy, _R1_EVIDENCE_POLICY_KEYS, f"R1 evidence_policies[{index}]"
@@ -1397,10 +1446,16 @@ def validate_r1_lifecycle_registry(
         )
         policy_kinds.append(kind)
         policy_ids.append(policy_id)
-        if policy["freshness_class"] not in R1_FRESHNESS_CLASSES:
+        claimed_class = policy["freshness_class"]
+        if claimed_class not in R1_FRESHNESS_CLASSES:
             raise ArmReadinessError(
                 "readiness_row_registry_mismatch",
                 f"R1 evidence_policies[{index}].freshness_class is invalid",
+            )
+        code_class = R1_EVIDENCE_FRESHNESS_CLASSES.get(kind)
+        if code_class is None or claimed_class != code_class:
+            class_mismatches.append(
+                f"{kind!r}: registry={claimed_class!r}, code={code_class!r}"
             )
         horizon = policy["horizon_ns"]
         if not (
@@ -1415,10 +1470,41 @@ def validate_r1_lifecycle_registry(
                 "readiness_row_registry_mismatch",
                 f"R1 evidence_policies[{index}].horizon_ns is invalid",
             )
-        _require_string(
+        environment_comparison = _require_string(
             policy["environment_comparison"],
             f"R1 evidence_policies[{index}].environment_comparison",
         )
+        positive_or_reserved_horizon = (
+            isinstance(horizon, int)
+            and not isinstance(horizon, bool)
+            and horizon > 0
+        ) or (
+            isinstance(horizon, str)
+            and horizon.startswith(_R1_ED_RESERVED_PREFIX)
+        )
+        if code_class == "RE_DERIVABLE" and (
+            horizon is not None or environment_comparison != "NOT_APPLICABLE"
+        ):
+            contradictory_policies.append(
+                f"{kind!r} RE_DERIVABLE must have horizon_ns=null and "
+                "environment_comparison=NOT_APPLICABLE"
+            )
+        elif code_class in {"TIME_BOUND", "SESSION_STATE_BOUND"} and (
+            not positive_or_reserved_horizon
+            or environment_comparison != "NOT_APPLICABLE"
+        ):
+            contradictory_policies.append(
+                f"{kind!r} {code_class} must have a positive horizon and "
+                "environment_comparison=NOT_APPLICABLE"
+            )
+        elif code_class == "EXECUTION_BOUND" and (
+            not positive_or_reserved_horizon
+            or environment_comparison == "NOT_APPLICABLE"
+        ):
+            contradictory_policies.append(
+                f"{kind!r} EXECUTION_BOUND must have a positive horizon and "
+                "an applicable environment comparison"
+            )
     if policy_kinds != sorted(set(policy_kinds)):
         raise ArmReadinessError(
             "readiness_row_registry_mismatch",
@@ -1491,16 +1577,16 @@ def validate_r1_lifecycle_registry(
     if not (
         (isinstance(pack_ids, str) and pack_ids.startswith(_R1_ED_RESERVED_PREFIX))
         or (
-            isinstance(pack_ids, list)
-            and len(pack_ids) == 3
-            and pack_ids == sorted(set(pack_ids))
+            isinstance(pack_ids, Mapping)
+            and set(pack_ids) == set(_SUCCESSOR_PROFILE_PATTERNS)
             and all(
                 isinstance(pack_id, str)
                 and pack_id
                 and "/" not in pack_id
                 and "\\" not in pack_id
-                for pack_id in pack_ids
+                for pack_id in pack_ids.values()
             )
+            and len(set(pack_ids.values())) == 3
         )
     ):
         raise ArmReadinessError(
@@ -1572,6 +1658,16 @@ def validate_r1_lifecycle_registry(
         raise ArmReadinessError(
             "readiness_row_registry_mismatch",
             "R1 refusal vocabulary must register every role exactly once",
+        )
+    if class_mismatches:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            f"CLASS_MISMATCH: registry cannot override code classes: {class_mismatches!r}",
+        )
+    if contradictory_policies:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            f"UNKNOWN_POLICY: contradictory lifecycle fields: {contradictory_policies!r}",
         )
     if require_resolved and (
         _r1_contains_reserved(registry)
@@ -2435,13 +2531,55 @@ def committed_pack_tree_sha256(pack_root: Path | str) -> str:
     return sha256_bytes(bytes(framed))
 
 
-def _plan_profile(pack_root: Path) -> str:
-    try:
-        return _PROFILE_BY_PACK[pack_root.name]
-    except KeyError as exc:
-        raise ArmReadinessError(
-            "readiness_row_registry_mismatch", f"no D-134 profile for {pack_root.name}"
-        ) from exc
+def _plan_profile(
+    pack_root: Path, registry: Mapping[str, Any] | None = None
+) -> str:
+    """Resolve a pack role without a successor-ID code allowlist.
+
+    Historical v1 identities retain their immutable mapping.  An R1 registry
+    installs successor identities by role; the code validates only the three
+    D-139-approved uniform successor name shapes.
+    """
+
+    historical = _PROFILE_BY_PACK.get(pack_root.name)
+    if historical is not None:
+        return historical
+    if registry is not None and registry.get("schema_version") == R1_ROW_REGISTRY_SCHEMA:
+        lifecycle = validate_r1_lifecycle_registry(
+            registry["freeze_evidence_lifecycle"]
+        )
+        installed = lifecycle["successor_policy"]["successor_pack_ids"]
+        if isinstance(installed, Mapping):
+            matches = [
+                profile
+                for profile, pack_id in installed.items()
+                if pack_id == pack_root.name
+            ]
+            if len(matches) == 1:
+                profile = matches[0]
+                pattern = _SUCCESSOR_PROFILE_PATTERNS.get(profile)
+                if pattern is not None and pattern.fullmatch(pack_root.name):
+                    return profile
+                raise ArmReadinessError(
+                    "readiness_row_registry_mismatch",
+                    f"registry-installed {profile} successor ID has an unapproved shape",
+                )
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                f"successor ID {pack_root.name!r} is not installed by the R1 registry",
+            )
+    # The shape-only route supports construction tools before a registry is
+    # loaded; production admission above still requires the registry mapping.
+    shaped = [
+        profile
+        for profile, pattern in _SUCCESSOR_PROFILE_PATTERNS.items()
+        if pattern.fullmatch(pack_root.name)
+    ]
+    if len(shaped) == 1:
+        return shaped[0]
+    raise ArmReadinessError(
+        "readiness_row_registry_mismatch", f"no D-134 profile for {pack_root.name}"
+    )
 
 
 def _plan_tree(pack_root: Path) -> tuple[dict[str, Any], bytes]:
@@ -2488,7 +2626,7 @@ def _registry_reference(pack_root: Path) -> tuple[Mapping[str, Any], bytes, dict
             "readiness_row_registry_mismatch",
             "row registry bytes are not the committed HEAD bytes",
         )
-    profile = _plan_profile(pack_root)
+    profile = _plan_profile(pack_root, registry)
     reference = {
         "registry_id": registry["registry_id"],
         "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
@@ -2633,6 +2771,73 @@ def _git_blob_at_commit(
         ) from exc
 
 
+def _json_member_value_span(text: str, target: tuple[str, ...]) -> tuple[int, int]:
+    """Locate one object-member value while preserving every source character."""
+
+    decoder = json.JSONDecoder()
+    matches: list[tuple[int, int]] = []
+
+    def whitespace(index: int) -> int:
+        while index < len(text) and text[index] in " \t\r\n":
+            index += 1
+        return index
+
+    def value(index: int, path: tuple[str, ...]) -> int:
+        index = whitespace(index)
+        if index >= len(text):
+            raise ValueError("truncated JSON value")
+        if text[index] == "{":
+            cursor = whitespace(index + 1)
+            if cursor < len(text) and text[cursor] == "}":
+                return cursor + 1
+            while True:
+                key, key_end = decoder.raw_decode(text, cursor)
+                if not isinstance(key, str):
+                    raise ValueError("JSON object key is not a string")
+                cursor = whitespace(key_end)
+                if cursor >= len(text) or text[cursor] != ":":
+                    raise ValueError("JSON object member lacks a colon")
+                member_start = whitespace(cursor + 1)
+                member_path = (*path, key)
+                member_end = value(member_start, member_path)
+                if member_path == target:
+                    matches.append((member_start, member_end))
+                cursor = whitespace(member_end)
+                if cursor < len(text) and text[cursor] == ",":
+                    cursor = whitespace(cursor + 1)
+                    continue
+                if cursor < len(text) and text[cursor] == "}":
+                    return cursor + 1
+                raise ValueError("JSON object member is not terminated")
+        if text[index] == "[":
+            cursor = whitespace(index + 1)
+            if cursor < len(text) and text[cursor] == "]":
+                return cursor + 1
+            while True:
+                cursor = whitespace(value(cursor, path))
+                if cursor < len(text) and text[cursor] == ",":
+                    cursor = whitespace(cursor + 1)
+                    continue
+                if cursor < len(text) and text[cursor] == "]":
+                    return cursor + 1
+                raise ValueError("JSON array item is not terminated")
+        _item, end = decoder.raw_decode(text, index)
+        return end
+
+    try:
+        end = whitespace(value(0, ()))
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"cannot locate plan-tree freeze slot: {exc}"
+        ) from exc
+    if end != len(text) or len(matches) != 1:
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            "plan tree must contain exactly one arm-readiness freeze-receipt slot",
+        )
+    return matches[0]
+
+
 def normalize_plan_tree_for_freeze_evidence(raw: bytes) -> bytes:
     """Subtract only the two future freeze-receipt slot values.
 
@@ -2645,8 +2850,7 @@ def normalize_plan_tree_for_freeze_evidence(raw: bytes) -> bytes:
         raise ArmReadinessError(
             "readiness_schema_invalid", "plan-tree normalization input is not an object"
         )
-    normalized = copy.deepcopy(dict(value))
-    attachments = normalized.get("arm_attachments")
+    attachments = value.get("arm_attachments")
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
     if not isinstance(readiness, dict) or "freeze_receipt" not in readiness:
         raise ArmReadinessError(
@@ -2666,9 +2870,18 @@ def normalize_plan_tree_for_freeze_evidence(raw: bytes) -> bytes:
         _require_lower_sha256(
             exact["sha256"], "arm_attachments.arm_readiness.freeze_receipt.sha256"
         )
-    # Enumerated subtraction: these are the only two future values removed.
-    readiness["freeze_receipt"] = None
-    return render_json(normalized)
+    try:
+        text = raw.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", "plan-tree normalization input is not UTF-8"
+        ) from exc
+    start, end = _json_member_value_span(
+        text, ("arm_attachments", "arm_readiness", "freeze_receipt")
+    )
+    # Enumerated subtraction: replace only the slot value token.  Prefix,
+    # suffix, whitespace, ordering, and every non-slot byte remain identical.
+    return f"{text[:start]}null{text[end:]}".encode("utf-8")
 
 
 def validate_terminal_review_head_tree(
@@ -2913,14 +3126,10 @@ def validate_r1_temporal_budget(
             "readiness_row_registry_mismatch",
             "R1 arm-to-consume budget remains unresolved",
         )
-    by_kind = {
-        policy["kind"]: policy for policy in governed["evidence_policies"]
-    }
     deadlines: list[int] = []
     for receipt in evidence_receipts:
         kind = receipt.get("kind")
-        policy = by_kind.get(kind)
-        if not isinstance(policy, Mapping) or policy.get("freshness_class") != "TIME_BOUND":
+        if R1_EVIDENCE_FRESHNESS_CLASSES.get(kind) != "TIME_BOUND":
             continue
         deadline = receipt.get("valid_until_monotonic_ns")
         if not isinstance(deadline, int) or isinstance(deadline, bool) or deadline <= 0:
@@ -2949,7 +3158,7 @@ def validate_r1_temporal_budget(
 
 def validate_r1_class_lifecycle(
     receipt: Mapping[str, Any],
-    freshness_class: str,
+    evidence_kind: str,
     *,
     current_boot_session_id: str,
     now_monotonic_ns: int,
@@ -2962,9 +3171,11 @@ def validate_r1_class_lifecycle(
     callers must supply their already-derived semantic-state result.
     """
 
-    if freshness_class not in R1_FRESHNESS_CLASSES:
+    freshness_class = R1_EVIDENCE_FRESHNESS_CLASSES.get(evidence_kind)
+    if freshness_class is None:
         raise ArmReadinessError(
-            "readiness_row_registry_mismatch", "unknown R1 freshness class"
+            "readiness_row_registry_mismatch",
+            f"no code freshness class for evidence kind {evidence_kind!r}",
         )
     _require_boot_session_id(current_boot_session_id, "current boot session")
     if freshness_class == "RE_DERIVABLE":
@@ -2977,6 +3188,7 @@ def validate_r1_class_lifecycle(
     if freshness_class in {
         "EXECUTION_BOUND",
         "TIME_BOUND",
+        "SESSION_STATE_BOUND",
         "TEMPORAL_CAPABILITY",
     }:
         if (
@@ -3002,7 +3214,7 @@ def validate_r1_class_lifecycle(
         if capability_consumed is not False:
             raise ArmReadinessError(
                 "readiness_record_consumed",
-                "TEMPORAL_CAPABILITY is consumed or its state is unknown",
+                "TEMPORAL_CAPABILITY is already consumed or its state is unknown",
             )
 
 
@@ -3942,6 +4154,11 @@ def _discover_evidence(
     launch_binding_cache: dict[Path, bytes] | None = None,
     lifecycle_registry: Mapping[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]], list[dict[str, Any]]]:
+    governed_lifecycle = (
+        validate_r1_lifecycle_registry(lifecycle_registry)
+        if lifecycle_registry is not None
+        else None
+    )
     items: list[dict[str, Any]] = []
     receipts: dict[str, Mapping[str, Any]] = {}
     refusals: list[dict[str, Any]] = []
@@ -4026,6 +4243,8 @@ def _discover_evidence(
                         "readiness_evidence_digest_mismatch", "evidence is stale for pack/HEAD"
                     )
                 if (
+                    governed_lifecycle is None
+                    and
                     boot_session_id is not None
                     and "boot_session_id" in receipt
                     and receipt["boot_session_id"] != boot_session_id
@@ -4035,6 +4254,8 @@ def _discover_evidence(
                         "evidence receipt belongs to a prior boot session",
                     )
                 if (
+                    governed_lifecycle is None
+                    and
                     now_monotonic_ns is not None
                     and "valid_until_monotonic_ns" in receipt
                     and receipt["valid_until_monotonic_ns"] < now_monotonic_ns
@@ -4110,6 +4331,31 @@ def _discover_evidence(
                         validate_terminal_review_head_tree(
                             terminal_source, reviewed_tree
                         )
+                if governed_lifecycle is not None:
+                    kind = str(receipt["kind"])
+                    policy = _r1_policy_for_kind(governed_lifecycle, kind)
+                    code_class = R1_EVIDENCE_FRESHNESS_CLASSES.get(kind)
+                    if code_class is None or policy["freshness_class"] != code_class:
+                        raise EvidenceLifecycleError(
+                            governed_lifecycle,
+                            "CLASS_MISMATCH",
+                            f"registry cannot override the code class for {kind}",
+                            evidence_id=str(receipt["evidence_id"]),
+                        )
+                    if boot_session_id is None or now_monotonic_ns is None:
+                        raise EvidenceLifecycleError(
+                            governed_lifecycle,
+                            "UNKNOWN_POLICY",
+                            "R1 production evidence validation lacks boot/time context",
+                            evidence_id=str(receipt["evidence_id"]),
+                        )
+                    validate_r1_class_lifecycle(
+                        receipt,
+                        kind,
+                        current_boot_session_id=boot_session_id,
+                        now_monotonic_ns=now_monotonic_ns,
+                        semantic_state_valid=(receipt["status"] == "PASS"),
+                    )
                 item = {
                     "evidence_id": receipt["evidence_id"],
                     "receipt_kind": receipt["kind"],
@@ -5227,6 +5473,11 @@ def generate_arm_receipt(
     number = max((item["number"] for item in existing), default=0) + 1
     evaluated_at_monotonic_ns = time.monotonic_ns()
     boot_session_id = _current_boot_session_id()
+    lifecycle_registry = (
+        registry["freeze_evidence_lifecycle"]
+        if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
+        else None
+    )
     evidence_items, evidence_receipts, evidence_refusals = _discover_evidence(
         root,
         custody_pack_root,
@@ -5235,6 +5486,7 @@ def generate_arm_receipt(
         boot_session_id=boot_session_id,
         now_monotonic_ns=evaluated_at_monotonic_ns,
         include_pack=False,
+        lifecycle_registry=lifecycle_registry,
     )
     freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
         root, tree, freeze_receipt, registry
@@ -5248,11 +5500,6 @@ def generate_arm_receipt(
     evidence_items.extend(freeze_items)
     evidence_items.sort(key=lambda item: item["evidence_id"])
     evidence_receipts.update(freeze_evidence_receipts)
-    lifecycle_registry = (
-        registry["freeze_evidence_lifecycle"]
-        if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
-        else None
-    )
     if lifecycle_registry is not None:
         try:
             validate_r1_temporal_budget(
@@ -5430,6 +5677,11 @@ def _derive_arm_semantics_for_verification(
         now_monotonic_ns=time.monotonic_ns(),
         include_pack=False,
         launch_binding_cache=launch_binding_cache,
+        lifecycle_registry=(
+            registry["freeze_evidence_lifecycle"]
+            if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
+            else None
+        ),
     )
     freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
         root, tree, freeze_receipt, registry
@@ -5643,6 +5895,16 @@ def _verify_arm_receipt(
         custody_pack_root
         / "arm_readiness.consumptions"
         / f"{receipt['receipt_id']}.consumed.json"
+    )
+    validate_r1_class_lifecycle(
+        receipt,
+        "ARM_CAPABILITY",
+        current_boot_session_id=_current_boot_session_id(),
+        now_monotonic_ns=time.monotonic_ns(),
+        semantic_state_valid=True,
+        capability_consumed=(
+            consumption_path.exists() or consumption_path.is_symlink()
+        ),
     )
     if require_unconsumed and (
         consumption_path.exists() or consumption_path.is_symlink()

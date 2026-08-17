@@ -9194,6 +9194,56 @@ root, baseline successor, ARM authority, or publication event.
    numbering, the freeze-receipt-v2 predecessor-binding set, and the family
    publication-marker schema; none has a code default or permits generation.
 
+### R1 implementation amendment — FIX ROUND 1 lifecycle enforcement (2026-08-17)
+
+The first contract/execution lens pair rejected the preparation tranche at
+`8fd29f7`; this amendment records the converged cures without authorizing a
+successor publication.
+
+1. **Freshness class is code-only for the complete evidence vocabulary.** One
+   exhaustive table assigns all 29 D-134 evidence kinds plus the ARM capability.
+   `DOCTRINE_PIN` and `PACK_FAMILY` are `RE_DERIVABLE`; the ten other generic
+   derivers plus `DRY_RUN_REHEARSAL`, `GIT_CHECKOUT`,
+   `IDENTITY_PIN_PROJECTION`, `OFFLINE_INPUT_INVENTORY`,
+   `PRIVILEGE_INSTALLATION`, and `TERMINAL_REVIEW` are `EXECUTION_BOUND`;
+   `BACKUP_PREFLIGHT`, `CLOCK_ATTESTATION`, `CLOCK_PROBE`,
+   `MACHINE_PREFLIGHT`, `MAINTENANCE_CENSUS`, `POWERMETRICS_PROBE`,
+   `POWER_PREFLIGHT`, and `PROCESS_CENSUS` are `TIME_BOUND`;
+   `LAUNCH_RECIPE`, `LEDGER_RESERVATION`, and `ROOT_PREFLIGHT` are
+   `SESSION_STATE_BOUND`; the ARM receipt is `TEMPORAL_CAPABILITY`.  A registry
+   supplies policy IDs and ruled parameters but validates against this table;
+   it cannot define, omit, or override a class.  Temporal-budget selection also
+   uses the code table, so relabelling `CLOCK_PROBE` cannot remove it from the
+   budget gate.  Production evidence discovery dispatches TIME/SESSION class
+   validation, while ARM verification dispatches the single-use temporal-
+   capability validation.
+2. **Resolved policy shapes are class-specific.** `RE_DERIVABLE` carries no
+   horizon and only `NOT_APPLICABLE` environment comparison; TIME/SESSION
+   policies carry a positive horizon and `NOT_APPLICABLE`; EXECUTION carries a
+   positive horizon and an applicable comparison.  Contradictory resolved
+   fields refuse instead of being silently ignored.  The implementation's
+   execution-comparison allowlist remains empty, so the outstanding Ed ruling
+   still blocks authoring through the registered `UNKNOWN_POLICY` role.
+3. **Read routing is transitive.** The import-time release guard starts at every
+   deriver and walks every reachable local helper until one of the explicit
+   recording-boundary helpers.  Filesystem, Git, or process IO in any other
+   transitive helper refuses module import; moving `Path.read_bytes()` one hop
+   out of a deriver no longer bypasses the guard.
+4. **Plan-tree subtraction preserves all non-slot bytes.** Normalization locates
+   the unique `arm_attachments.arm_readiness.freeze_receipt` value token and
+   replaces only that token with `null`.  It does not parse-and-reserialize the
+   surrounding document; whitespace, ordering, and every byte outside the
+   enumerated slot remain identity-bound.
+5. **D-139 A3 successor IDs install through the registry.** The R1 registry's
+   successor field is an exact `ALPHA`/`BETA`/`GAMMA` role map.  Production
+   profile routing admits only the ID installed for that role and validates
+   the D-139-approved uniform successor shapes.  The approved initial values
+   are `d117_floor_qwen25_1p5b_v2`, `d117_floor_qwen25_7b_v2`, and
+   `d117_contrast_qwen25_1p5b_vs_7b_v2`; a later shape-conforming generation
+   can be installed by registry bytes alone, without editing an ID allowlist in
+   Python.  Exact-byte family publication remains reserved and no successor
+   bytes are created by this amendment.
+
 ### WO-MARGIN-RECORDER-AUTHZ contract ADOPTED (magistrate, 2026-08-15; council Phase 0; Sol design consult adopted)
 
 Consult custodied: docs/process_traces/2026-08-15-recorder-authz-consult/

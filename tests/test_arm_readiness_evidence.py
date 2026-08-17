@@ -61,7 +61,11 @@ def lifecycle_registry(
             "arm_to_consume_budget_ns": 60_000_000_000,
         },
         "successor_policy": {
-            "successor_pack_ids": ["test-alpha-v2", "test-beta-v2", "test-gamma-v2"],
+            "successor_pack_ids": {
+                "ALPHA": "d117_floor_qwen25_1p5b_v2",
+                "BETA": "d117_floor_qwen25_7b_v2",
+                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+            },
             "cross_chain_numbering": "test.freeze-0002.v1",
             "freeze_receipt_v2_predecessor_bindings": [
                 "evidence_set_root",
@@ -81,6 +85,51 @@ def lifecycle_registry(
             for role in sorted(readiness.R1_REFUSAL_ROLES)
         ],
     }
+
+
+def resolved_r1_row_registry() -> dict:
+    registry = json.loads(
+        (ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_text(encoding="utf-8")
+    )
+    registry["schema_version"] = readiness.R1_ROW_REGISTRY_SCHEMA
+    registry["registry_id"] = "test-r1-row-registry-v2"
+    policies = []
+    for kind, freshness_class in sorted(
+        readiness.R1_EVIDENCE_FRESHNESS_CLASSES.items()
+    ):
+        if kind == "ARM_CAPABILITY":
+            continue
+        policies.append(
+            {
+                "kind": kind,
+                "freshness_class": freshness_class,
+                "freshness_policy_id": f"test.{freshness_class.lower()}.v1",
+                "horizon_ns": (
+                    None if freshness_class == "RE_DERIVABLE" else 1_200_000_000_000
+                ),
+                "environment_comparison": (
+                    "test-only"
+                    if freshness_class == "EXECUTION_BOUND"
+                    else "NOT_APPLICABLE"
+                ),
+            }
+        )
+    policy_by_kind = {
+        item["kind"]: item["freshness_policy_id"] for item in policies
+    }
+    registry["freeze_evidence_lifecycle"] = lifecycle_registry(
+        policies=tuple(policies)
+    )
+    registry["freeze_evidence_lifecycle"]["row_policies"] = [
+        {
+            "row_id": row["row_id"],
+            "freshness_policy_id": policy_by_kind[
+                row["required_evidence_kinds"][0]
+            ],
+        }
+        for row in registry["rows"]
+    ]
+    return registry
 
 
 def plan_tree(*, frozen: bool, marker: str = "stable") -> bytes:
@@ -174,6 +223,10 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
 
     def test_taxonomy_is_code_constant_and_registry_mismatch_refuses(self) -> None:
         self.assertEqual(
+            set(readiness.R1_EVIDENCE_FRESHNESS_CLASSES) - {"ARM_CAPABILITY"},
+            set(readiness._EVIDENCE_SOURCE_KINDS),
+        )
+        self.assertEqual(
             {
                 kind
                 for kind, freshness_class in evidence._DERIVER_FRESHNESS_CLASSES.items()
@@ -198,6 +251,24 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
             evidence._r1_policies_for_kinds(mismatch, ["DOCTRINE_PIN"])
         self.assertEqual(caught.exception.reason_code, "test_r1_class_mismatch")
+
+        clock_override = lifecycle_registry(
+            policies=(
+                {
+                    "kind": "CLOCK_PROBE",
+                    "freshness_class": "EXECUTION_BOUND",
+                    "freshness_policy_id": "test.clock.wrong.v1",
+                    "horizon_ns": 1,
+                    "environment_comparison": "ED_RESERVED:comparison",
+                },
+            )
+        )
+        with self.assertRaises(readiness.ArmReadinessError) as clock_mismatch:
+            readiness.validate_r1_lifecycle_registry(clock_override)
+        self.assertEqual(
+            clock_mismatch.exception.reason_code, "readiness_row_registry_mismatch"
+        )
+        self.assertIn("CLASS_MISMATCH", str(clock_mismatch.exception))
 
     def test_content_schema_has_no_boot_or_deadline_keys(self) -> None:
         temporary, repository, head = self.make_repository()
@@ -286,6 +357,22 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
             readiness.normalize_plan_tree_for_freeze_evidence(
                 readiness.render_json(injected)
             )
+        non_slot_whitespace_a = (
+            b'{"arm_attachments":{"arm_readiness":{"freeze_receipt":null}},"x":1}'
+        )
+        non_slot_whitespace_b = (
+            b'{"arm_attachments": {"arm_readiness":{"freeze_receipt":null}},"x":1}'
+        )
+        self.assertNotEqual(
+            readiness.normalize_plan_tree_for_freeze_evidence(non_slot_whitespace_a),
+            readiness.normalize_plan_tree_for_freeze_evidence(non_slot_whitespace_b),
+        )
+        self.assertEqual(
+            readiness.normalize_plan_tree_for_freeze_evidence(
+                non_slot_whitespace_a
+            ),
+            non_slot_whitespace_a,
+        )
 
         temporary, repository, derivation = self.make_repository()
         self.addCleanup(temporary.cleanup)
@@ -331,7 +418,7 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
             readiness.authenticate_r1_lifecycle_registry(tampered, digest)
         self.assertEqual(caught.exception.reason_code, "readiness_row_registry_mismatch")
 
-    def test_reserved_registry_and_environment_semantics_refuse_issuance(self) -> None:
+    def test_reserved_and_unimplemented_environment_policies_refuse_authoring(self) -> None:
         self.assertEqual(
             evidence._ENVIRONMENT_FINGERPRINT_KINDS,
             {
@@ -375,6 +462,76 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
             "test_r1_unknown_policy",
         )
 
+    def test_contradictory_resolved_policy_fields_refuse(self) -> None:
+        contradictory = lifecycle_registry()
+        contradictory["evidence_policies"][0]["horizon_ns"] = 123
+        contradictory["evidence_policies"][0]["environment_comparison"] = (
+            "contradictory-but-resolved"
+        )
+        with self.assertRaises(readiness.ArmReadinessError) as caught:
+            readiness.validate_r1_lifecycle_registry(contradictory)
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_row_registry_mismatch"
+        )
+        self.assertIn("UNKNOWN_POLICY", str(caught.exception))
+
+    def test_successor_profile_ids_install_from_registry_roles(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        lifecycle = lifecycle_registry()
+        row_registry = {
+            "schema_version": readiness.R1_ROW_REGISTRY_SCHEMA,
+            "freeze_evidence_lifecycle": lifecycle,
+        }
+        expected = {
+            "d117_floor_qwen25_1p5b_v2": "ALPHA",
+            "d117_floor_qwen25_7b_v2": "BETA",
+            "d117_contrast_qwen25_1p5b_vs_7b_v2": "GAMMA",
+        }
+        for pack_id, profile in expected.items():
+            pack = root / pack_id
+            pack.mkdir()
+            self.assertEqual(readiness._plan_profile(pack, row_registry), profile)
+
+        not_installed = root / "d117_floor_qwen25_1p5b_v3"
+        not_installed.mkdir()
+        with self.assertRaises(readiness.ArmReadinessError) as refused:
+            readiness._plan_profile(not_installed, row_registry)
+        self.assertEqual(
+            refused.exception.reason_code, "readiness_row_registry_mismatch"
+        )
+        lifecycle["successor_policy"]["successor_pack_ids"]["ALPHA"] = (
+            not_installed.name
+        )
+        self.assertEqual(
+            readiness._plan_profile(not_installed, row_registry), "ALPHA"
+        )
+
+        repository = root / "registry-copy"
+        registry_path = repository / readiness.ROW_REGISTRY_RELATIVE_PATH
+        registry_path.parent.mkdir(parents=True)
+        installed_registry = resolved_r1_row_registry()
+        registry_path.write_bytes(readiness.render_json(installed_registry))
+        installed_pack = (
+            repository
+            / "configs/campaigns"
+            / "d117_floor_qwen25_1p5b_v2"
+        )
+        installed_pack.mkdir(parents=True)
+        (installed_pack / "copy-marker.txt").write_text("temporary registry copy\n")
+        git(repository, "init", "-q")
+        git(repository, "config", "user.email", "test@example.invalid")
+        git(repository, "config", "user.name", "R1 Test")
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "install successor registry")
+        loaded, _raw, reference = readiness._registry_reference(installed_pack)
+        self.assertEqual(reference["plan_profile"], "ALPHA")
+        rows, kinds = evidence._required_generic_rows(installed_pack, {})
+        self.assertTrue(rows)
+        self.assertTrue(kinds)
+        self.assertEqual(loaded["schema_version"], readiness.R1_ROW_REGISTRY_SCHEMA)
+
     def test_v1_receipt_is_never_grandfathered_and_fixture_bytes_are_neutral(self) -> None:
         pack_names = (
             "d117_floor_qwen25_1p5b_v1",
@@ -414,7 +571,7 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "test_r1_v1_grandfathering")
         self.assertEqual({path: path.read_bytes() for path in paths}, before_all)
 
-    def test_deriver_read_routing_guard_detects_a_direct_read_mutation(self) -> None:
+    def test_deriver_read_routing_guard_detects_direct_and_helper_reads(self) -> None:
         self.assertEqual(evidence._unrouted_deriver_reads(), ())
         source = Path(evidence.__file__).read_text(encoding="utf-8")
         source += (
@@ -423,6 +580,20 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         )
         findings = evidence._unrouted_deriver_reads(source)
         self.assertTrue(any(item.endswith(":read_bytes") for item in findings))
+        helper_source = (
+            "def _unrecorded_helper(context):\n"
+            "    return context.pack_root.joinpath('probe').read_bytes()\n\n"
+            "def _derive_probe(context):\n"
+            "    return _unrecorded_helper(context)\n"
+        )
+        helper_findings = evidence._unrouted_deriver_reads(helper_source)
+        self.assertTrue(
+            any(
+                item.startswith("_unrecorded_helper:")
+                and item.endswith(":read_bytes")
+                for item in helper_findings
+            )
+        )
 
 
 if __name__ == "__main__":

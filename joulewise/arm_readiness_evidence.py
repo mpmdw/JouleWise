@@ -74,21 +74,25 @@ _AUTHORING_ARTIFACTS = (
     "scripts/author_arm_readiness_evidence.py",
 )
 
-# R1 clause 1 and Opus S2: this mapping is author-owned code, not registry
-# input.  A successor registry must agree exactly or authoring refuses.
+# R1 clause 1 and Opus S2: the shared code table is the only class
+# authority.  This projection exists only to enumerate the generic derivers.
+_GENERIC_DERIVER_KINDS = (
+    "ACCEPTANCE_OWNER",
+    "ACCEPTANCE_SUCCESSOR",
+    "DOCTRINE_PIN",
+    "ESTIMATOR_IDENTITY",
+    "MINT_TRUST",
+    "MULTICELL_MINT",
+    "PACK_AUTHENTICATION",
+    "PACK_FAMILY",
+    "REASON_CODE_COVERAGE",
+    "RECEIPT_ORACLE",
+    "RECOVERY_LEDGER_TEST",
+    "THREE_WINDOW_REGRESSION",
+)
 _DERIVER_FRESHNESS_CLASSES = {
-    "ACCEPTANCE_OWNER": "EXECUTION_BOUND",
-    "ACCEPTANCE_SUCCESSOR": "EXECUTION_BOUND",
-    "DOCTRINE_PIN": "RE_DERIVABLE",
-    "ESTIMATOR_IDENTITY": "EXECUTION_BOUND",
-    "MINT_TRUST": "EXECUTION_BOUND",
-    "MULTICELL_MINT": "EXECUTION_BOUND",
-    "PACK_AUTHENTICATION": "EXECUTION_BOUND",
-    "PACK_FAMILY": "RE_DERIVABLE",
-    "REASON_CODE_COVERAGE": "EXECUTION_BOUND",
-    "RECEIPT_ORACLE": "EXECUTION_BOUND",
-    "RECOVERY_LEDGER_TEST": "EXECUTION_BOUND",
-    "THREE_WINDOW_REGRESSION": "EXECUTION_BOUND",
+    kind: _readiness.R1_EVIDENCE_FRESHNESS_CLASSES[kind]
+    for kind in _GENERIC_DERIVER_KINDS
 }
 _ENVIRONMENT_FINGERPRINT_KINDS = frozenset(
     {
@@ -123,6 +127,23 @@ _DERIVER_DIRECT_READ_CALLS = frozenset(
         "_derive_bracket_session_receipt_oracle",
         "run",
         "Popen",
+    }
+)
+# These functions are the IO boundary: each either records the complete read
+# identity itself or calls the base committed-artifact recorder.  The release
+# guard traverses every other local helper reachable from a deriver.
+_DERIVER_RECORDED_READ_BOUNDARIES = frozenset(
+    {
+        "_committed_artifact",
+        "_recorded_acceptance_authentication",
+        "_recorded_estimator_registry",
+        "_recorded_extraction_validation",
+        "_recorded_frozen_plan",
+        "_recorded_generator_check",
+        "_recorded_pack_family_plan_tree",
+        "_recorded_pack_glob",
+        "_recorded_receipt_oracle",
+        "_run_suite",
     }
 )
 
@@ -1513,23 +1534,25 @@ _DERIVERS: dict[str, Callable[[_DerivationContext], _DerivedKind]] = {
 
 
 def _unrouted_deriver_reads(source: str | None = None) -> tuple[str, ...]:
-    """Return direct filesystem/Git/process reads inside any deriver.
-
-    The mechanical release test calls this over the production module.  It
-    also accepts source text so the regression can prove that inserting a
-    direct ``Path.read_bytes`` into a deriver is caught rather than merely
-    asserting the current file happens to pass.
-    """
+    """Return IO calls in the transitive local call graph of every deriver."""
 
     if source is None:
         source = Path(__file__).read_text(encoding="utf-8")
     tree = _ast.parse(source)
+    definitions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef))
+    }
+    pending = sorted(name for name in definitions if name.startswith("_derive_"))
+    visited: set[str] = set()
     findings: list[str] = []
-    for node in tree.body:
-        if not isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+    while pending:
+        function_name = pending.pop()
+        if function_name in visited:
             continue
-        if not node.name.startswith("_derive_"):
-            continue
+        visited.add(function_name)
+        node = definitions[function_name]
         for child in _ast.walk(node):
             if not isinstance(child, _ast.Call):
                 continue
@@ -1539,7 +1562,14 @@ def _unrouted_deriver_reads(source: str | None = None) -> tuple[str, ...]:
             elif isinstance(child.func, _ast.Attribute):
                 called = child.func.attr
             if called in _DERIVER_DIRECT_READ_CALLS:
-                findings.append(f"{node.name}:{child.lineno}:{called}")
+                findings.append(f"{function_name}:{child.lineno}:{called}")
+            if (
+                isinstance(child.func, _ast.Name)
+                and child.func.id in definitions
+                and child.func.id not in _DERIVER_RECORDED_READ_BOUNDARIES
+                and child.func.id not in visited
+            ):
+                pending.append(child.func.id)
     return tuple(sorted(findings))
 
 
@@ -1591,6 +1621,36 @@ def _r1_lifecycle_registry_for_pack(
 def _r1_policies_for_kinds(
     registry: Mapping[str, Any], kinds: Sequence[str]
 ) -> dict[str, Mapping[str, Any]]:
+    # Preserve the registry-owned refusal spelling while refusing before the
+    # general registry validator can collapse a class override into a schema
+    # error.  This inspection grants no policy authority: the expected value
+    # comes only from the code table.
+    raw_policies = registry.get("evidence_policies")
+    raw_refusals = registry.get("refusal_vocabulary")
+    if isinstance(raw_policies, list) and isinstance(raw_refusals, list):
+        class_entries = [
+            item
+            for item in raw_refusals
+            if isinstance(item, Mapping) and item.get("role") == "CLASS_MISMATCH"
+        ]
+        if len(class_entries) == 1 and isinstance(class_entries[0].get("code"), str):
+            for kind in kinds:
+                matches = [
+                    item
+                    for item in raw_policies
+                    if isinstance(item, Mapping) and item.get("kind") == kind
+                ]
+                code_class = _readiness.R1_EVIDENCE_FRESHNESS_CLASSES.get(kind)
+                if (
+                    len(matches) == 1
+                    and code_class is not None
+                    and matches[0].get("freshness_class") != code_class
+                ):
+                    raise _refuse(
+                        kind,
+                        str(class_entries[0]["code"]),
+                        f"registry class differs from the {kind} code constant",
+                    )
     try:
         governed = _readiness.validate_r1_lifecycle_registry(registry)
     except _readiness.ArmReadinessError as exc:

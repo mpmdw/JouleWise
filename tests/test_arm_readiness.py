@@ -9,7 +9,11 @@ from pathlib import Path
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
-from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID, sample_arm
+from tests.test_arm_readiness_schemas import (
+    TEST_BOOT_SESSION_ID,
+    sample_arm,
+    sample_evidence,
+)
 
 
 class LaunchConsumptionV2Tests(unittest.TestCase):
@@ -1445,7 +1449,88 @@ class LaunchPackConfigInventoryTests(unittest.TestCase):
 
 
 class R1ArmLifecycleGateTests(unittest.TestCase):
-    def test_each_freshness_class_has_its_ruled_class_level_lifecycle(self) -> None:
+    def _discover_one_r1_receipt(
+        self, kind: str, freshness_class: str, *, status: str, deadline: int
+    ) -> tuple[list[dict], dict[str, dict], list[dict]]:
+        from tests.test_arm_readiness_evidence import lifecycle_registry
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        pack = root / "pack"
+        pack.mkdir()
+        custody_pack = root / "custody" / pack.name
+        evidence_dir = custody_pack / "arm_readiness.evidence"
+        evidence_dir.mkdir(parents=True)
+        source_raw = b"production-boundary-source\n"
+        (custody_pack / "source.json").write_bytes(source_raw)
+        receipt = sample_evidence()
+        receipt.update(
+            {
+                "evidence_id": f"test-{kind.lower()}",
+                "kind": kind,
+                "status": status,
+                "boot_session_id": TEST_BOOT_SESSION_ID,
+                "valid_until_monotonic_ns": deadline,
+                "reason_codes": (
+                    [] if status == "PASS" else ["readiness_dependency_refused"]
+                ),
+            }
+        )
+        receipt["facts"][0].update(
+            {
+                "fact_id": "test.production-boundary.v1",
+                "source_kind": "PROBE",
+                "source_path": "source.json",
+                "source_sha256": hashlib.sha256(source_raw).hexdigest(),
+            }
+        )
+        raw = readiness.render_json(receipt)
+        receipt_path = evidence_dir / "evidence-test.json"
+        receipt_path.write_bytes(raw)
+        receipt_path.with_name(f"{receipt_path.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(hashlib.sha256(raw).hexdigest(), receipt_path.name)
+        )
+        registry = lifecycle_registry(
+            policies=(
+                {
+                    "kind": kind,
+                    "freshness_class": freshness_class,
+                    "freshness_policy_id": f"test.{kind.lower()}.v1",
+                    "horizon_ns": 1_000,
+                    "environment_comparison": "NOT_APPLICABLE",
+                },
+            )
+        )
+        return readiness._discover_evidence(
+            pack,
+            custody_pack,
+            pack_sha256=None,
+            head_commit=None,
+            boot_session_id=TEST_BOOT_SESSION_ID,
+            now_monotonic_ns=100,
+            lifecycle_registry=registry,
+        )
+
+    def test_production_discovery_enforces_time_and_session_lifecycles(self) -> None:
+        _items, _receipts, time_refusals = self._discover_one_r1_receipt(
+            "CLOCK_PROBE", "TIME_BOUND", status="PASS", deadline=99
+        )
+        self.assertEqual(
+            [item["code"] for item in time_refusals], ["readiness_record_expired"]
+        )
+        _items, _receipts, session_refusals = self._discover_one_r1_receipt(
+            "LEDGER_RESERVATION",
+            "SESSION_STATE_BOUND",
+            status="REFUSE",
+            deadline=200,
+        )
+        self.assertEqual(
+            [item["code"] for item in session_refusals],
+            ["readiness_dependency_refused"],
+        )
+
+    def test_code_class_dispatcher_applies_each_ruled_lifecycle(self) -> None:
         now = 100
         timed = {
             "boot_session_id": TEST_BOOT_SESSION_ID,
@@ -1453,28 +1538,28 @@ class R1ArmLifecycleGateTests(unittest.TestCase):
         }
         readiness.validate_r1_class_lifecycle(
             {},
-            "RE_DERIVABLE",
+            "DOCTRINE_PIN",
             current_boot_session_id=TEST_BOOT_SESSION_ID,
             now_monotonic_ns=now,
         )
-        for freshness_class in ("EXECUTION_BOUND", "TIME_BOUND"):
-            with self.subTest(freshness_class=freshness_class):
+        for kind in ("PACK_AUTHENTICATION", "CLOCK_PROBE"):
+            with self.subTest(kind=kind):
                 readiness.validate_r1_class_lifecycle(
                     timed,
-                    freshness_class,
+                    kind,
                     current_boot_session_id=TEST_BOOT_SESSION_ID,
                     now_monotonic_ns=now,
                 )
         readiness.validate_r1_class_lifecycle(
-            {},
-            "SESSION_STATE_BOUND",
+            timed,
+            "LEDGER_RESERVATION",
             current_boot_session_id=TEST_BOOT_SESSION_ID,
             now_monotonic_ns=now,
             semantic_state_valid=True,
         )
         readiness.validate_r1_class_lifecycle(
             timed,
-            "TEMPORAL_CAPABILITY",
+            "ARM_CAPABILITY",
             current_boot_session_id=TEST_BOOT_SESSION_ID,
             now_monotonic_ns=now,
             semantic_state_valid=True,
@@ -1483,15 +1568,15 @@ class R1ArmLifecycleGateTests(unittest.TestCase):
         with self.assertRaises(readiness.ArmReadinessError) as expired:
             readiness.validate_r1_class_lifecycle(
                 timed | {"valid_until_monotonic_ns": 99},
-                "TIME_BOUND",
+                "CLOCK_PROBE",
                 current_boot_session_id=TEST_BOOT_SESSION_ID,
                 now_monotonic_ns=now,
             )
         self.assertEqual(expired.exception.reason_code, "readiness_record_expired")
         with self.assertRaises(readiness.ArmReadinessError) as state:
             readiness.validate_r1_class_lifecycle(
-                {},
-                "SESSION_STATE_BOUND",
+                timed,
+                "LEDGER_RESERVATION",
                 current_boot_session_id=TEST_BOOT_SESSION_ID,
                 now_monotonic_ns=now,
                 semantic_state_valid=False,
@@ -1500,7 +1585,7 @@ class R1ArmLifecycleGateTests(unittest.TestCase):
         with self.assertRaises(readiness.ArmReadinessError) as consumed:
             readiness.validate_r1_class_lifecycle(
                 timed,
-                "TEMPORAL_CAPABILITY",
+                "ARM_CAPABILITY",
                 current_boot_session_id=TEST_BOOT_SESSION_ID,
                 now_monotonic_ns=now,
                 semantic_state_valid=True,
@@ -1525,10 +1610,8 @@ class R1ArmLifecycleGateTests(unittest.TestCase):
             }
             for kind, freshness_class in (
                 ("DOCTRINE_PIN", "RE_DERIVABLE"),
-                ("PACK_AUTHENTICATION", "EXECUTION_BOUND"),
                 ("CLOCK_PROBE", "TIME_BOUND"),
                 ("LEDGER_RESERVATION", "SESSION_STATE_BOUND"),
-                ("ARM_CAPABILITY", "TEMPORAL_CAPABILITY"),
             )
         )
         registry = lifecycle_registry(policies=policies)
@@ -1550,6 +1633,26 @@ class R1ArmLifecycleGateTests(unittest.TestCase):
                 receipts, registry, now_monotonic_ns=now
             )
         self.assertEqual(caught.exception.role, "TEMPORAL_BUDGET")
+
+        wrong_class = lifecycle_registry(
+            policies=(
+                {
+                    "kind": "CLOCK_PROBE",
+                    "freshness_class": "EXECUTION_BOUND",
+                    "freshness_policy_id": "test.clock.override.v1",
+                    "horizon_ns": 1_000,
+                    "environment_comparison": "ED_RESERVED:comparison",
+                },
+            )
+        )
+        with self.assertRaises(readiness.ArmReadinessError) as override:
+            readiness.validate_r1_temporal_budget(
+                receipts, wrong_class, now_monotonic_ns=now
+            )
+        self.assertEqual(
+            override.exception.reason_code, "readiness_row_registry_mismatch"
+        )
+        self.assertIn("CLASS_MISMATCH", str(override.exception))
 
     def test_terminal_review_tree_binding_is_unconditional(self) -> None:
         source = {
