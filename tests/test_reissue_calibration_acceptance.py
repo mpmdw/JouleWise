@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from decimal import Decimal
 import hashlib
 import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from joulewise.calibration_bracketing import (
     _canonical_sha256,
@@ -77,6 +79,25 @@ class ReissueCalibrationAcceptanceTests(unittest.TestCase):
             self.artifact, corpus_root=self.corpus_root
         )
 
+    def _assert_science_stop(
+        self,
+        report: dict[str, object],
+        *,
+        named_path: str,
+        threshold_changed: bool,
+    ) -> None:
+        self.assertEqual(report["verdict"], "STOP")
+        self.assertEqual(report["thresholds"]["identical"], not threshold_changed)
+        self.assertEqual(report["science_facing"]["identical"], False)
+        self.assertIn("science_facing_values_changed", report["stop_reasons"])
+        self.assertIn(
+            named_path,
+            {
+                difference["path"]
+                for difference in report["science_facing"]["differences"]
+            },
+        )
+
     def test_corpus_authentication_catches_tampered_member_copy(self) -> None:
         member = self.artifact["derivation_corpus"]["members"][7]
         evidence_path = (
@@ -98,21 +119,149 @@ class ReissueCalibrationAcceptanceTests(unittest.TestCase):
         )
         self.assertFalse(tampered["authenticated"])
 
-    def test_threshold_delta_forces_stop_verdict(self) -> None:
-        candidate = reissue.derive_candidate_artifact(
-            self.artifact, self._authenticate()
+    def test_upstream_member_science_delta_forces_stop_verdict(self) -> None:
+        issued = deepcopy(self.artifact)
+        member_index = 7
+        member = self.artifact["derivation_corpus"]["members"][member_index]
+        member["b_fiducial_s"] = format(
+            Decimal(member["b_fiducial_s"])
+            + Decimal("0.00000000000000000001"),
+            "f",
         )
-        changed = deepcopy(candidate)
+        evidence = (
+            json.dumps(
+                {"b_fiducial_s": member["b_fiducial_s"]},
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode()
+        evidence_path = (
+            self.corpus_root
+            / member["source_directory"]
+            / "instrument_evidence.json"
+        )
+        evidence_path.write_bytes(evidence)
+        member["instrument_evidence_sha256"] = hashlib.sha256(evidence).hexdigest()
+        prior = next(
+            row
+            for row in self.artifact["prior_observation_set"]["observations"]
+            if row["attempt_id"] == member["member_id"]
+        )
+        prior["content_id"] = content_id_from_artifact_hashes(
+            {
+                "manifest.json": member["manifest_sha256"],
+                "instrument_evidence.json": member[
+                    "instrument_evidence_sha256"
+                ],
+            }
+        )
+        self.artifact["derivation_sha256"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in self.artifact.items()
+                if key != "derivation_sha256"
+            }
+        )
+        authentication = self._authenticate()
+        self.assertTrue(authentication.all_authenticated)
+        candidate = reissue.derive_candidate_artifact(
+            self.artifact, authentication
+        )
+        named_path = (
+            f"$.derivation_corpus.members[{member_index}].b_fiducial_s"
+        )
+
+        report = reissue.build_member_delta_report(issued, candidate)
+        self._assert_science_stop(
+            report,
+            named_path=named_path,
+            threshold_changed=False,
+        )
+
+        with patch.object(reissue, "_recursive_differences", return_value=[]):
+            neutered = reissue.build_member_delta_report(issued, candidate)
+        with self.assertRaises(AssertionError):
+            self._assert_science_stop(
+                neutered,
+                named_path=named_path,
+                threshold_changed=False,
+            )
+
+    def test_threshold_delta_forces_stop_verdict(self) -> None:
+        changed = deepcopy(self.artifact)
         changed["decimal_derivation"]["ratified_operatives"][
             "bracket_screen_s"
         ] = "0.010819"
+        changed["derivation_sha256"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in changed.items()
+                if key != "derivation_sha256"
+            }
+        )
+        named_path = (
+            "$.decimal_derivation.ratified_operatives.bracket_screen_s"
+        )
+
+        report = reissue.build_member_delta_report(self.artifact, changed)
+        self._assert_science_stop(
+            report,
+            named_path=named_path,
+            threshold_changed=True,
+        )
+        self.assertIn("thresholds_changed", report["stop_reasons"])
+
+        with patch.object(reissue, "_recursive_differences", return_value=[]):
+            neutered = reissue.build_member_delta_report(self.artifact, changed)
+        with self.assertRaises(AssertionError):
+            self._assert_science_stop(
+                neutered,
+                named_path=named_path,
+                threshold_changed=True,
+            )
+
+    def test_estimator_pin_only_delta_proceeds_without_science_delta(self) -> None:
+        changed = deepcopy(self.artifact)
+        relative = "joulewise/powermetrics_fiducial.py"
+        issued_pin = changed["prospective_rederivation"][
+            "estimator_code_sha256"
+        ][relative]
+        candidate_pin = hashlib.sha256(b"mutated-estimator-pin").hexdigest()
+        self.assertNotEqual(issued_pin, candidate_pin)
+        changed["prospective_rederivation"]["estimator_code_sha256"][
+            relative
+        ] = candidate_pin
+        changed["derivation_sha256"] = _canonical_sha256(
+            {
+                key: value
+                for key, value in changed.items()
+                if key != "derivation_sha256"
+            }
+        )
 
         report = reissue.build_member_delta_report(self.artifact, changed)
 
-        self.assertEqual(report["verdict"], "STOP")
-        self.assertFalse(report["thresholds"]["identical"])
-        self.assertIn("thresholds_changed", report["stop_reasons"])
-        self.assertIn("science_facing_values_changed", report["stop_reasons"])
+        self.assertEqual(report["verdict"], "PROCEED")
+        self.assertEqual(report["stop_reasons"], [])
+        self.assertEqual(report["changed_pin_count"], 1)
+        self.assertEqual(report["science_facing"]["differences"], [])
+        self.assertTrue(report["science_facing"]["identical"])
+        self.assertEqual(report["thresholds"]["differences"], [])
+        changed_pins = [pin for pin in report["pin_values"] if pin["changed"]]
+        self.assertEqual(
+            changed_pins,
+            [
+                {
+                    "path": (
+                        "$.prospective_rederivation.estimator_code_sha256."
+                        + relative
+                    ),
+                    "issued": issued_pin,
+                    "candidate": candidate_pin,
+                    "changed": True,
+                }
+            ],
+        )
 
     def test_candidate_marker_refuses_at_acceptance_loader_boundary(self) -> None:
         # Change only the marker and its covering whole-core digest.  This
