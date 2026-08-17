@@ -9224,11 +9224,22 @@ successor publication.
    fields refuse instead of being silently ignored.  The implementation's
    execution-comparison allowlist remains empty, so the outstanding Ed ruling
    still blocks authoring through the registered `UNKNOWN_POLICY` role.
-3. **Read routing is transitive.** The import-time release guard starts at every
-   deriver and walks every reachable local helper until one of the explicit
-   recording-boundary helpers.  Filesystem, Git, or process IO in any other
-   transitive helper refuses module import; moving `Path.read_bytes()` one hop
-   out of a deriver no longer bypasses the guard.
+3. **Read routing has a best-effort developer-error guard under D-139.** The
+   import-time release lint starts at every deriver and walks ordinary direct
+   or simply aliased calls to reachable top-level local helpers until an
+   explicit recording boundary.  It catches the recognized direct filesystem,
+   Git, and process-read spellings in derivers, the same spellings in those
+   transitive helpers, and simple acquired-callable aliases such as
+   `reader = __import__("builtins").open`,
+   `reader = importlib.import_module("builtins").open`, `reader = os.open`,
+   imported-function aliases, and fixed-point aliases of those readers or
+   helpers.  These checks catch accidental unrecorded reads; they are not a
+   complete Python data-flow analysis or an in-process security boundary.
+   **HONEST REGISTERED LIMITATION:** deliberate same-interpreter circumvention
+   is outside D-139.  Python code in the same interpreter can construct a more
+   dynamic alias, alter module state, or invoke an unmodelled read mechanism.
+   Stronger protection would require a separately ruled OS trust boundary;
+   this guard makes no claim that no read can escape.
 4. **Plan-tree subtraction preserves all non-slot bytes.** Normalization locates
    the unique `arm_attachments.arm_readiness.freeze_receipt` value token and
    replaces only that token with `null`.  It does not parse-and-reserialize the

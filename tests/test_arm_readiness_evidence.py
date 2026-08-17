@@ -373,6 +373,20 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
             ),
             non_slot_whitespace_a,
         )
+        slot_start, slot_end = readiness._json_member_value_span(
+            after.decode("utf-8"),
+            ("arm_attachments", "arm_readiness", "freeze_receipt"),
+        )
+        normalized_after = readiness.normalize_plan_tree_for_freeze_evidence(after)
+        self.assertEqual(normalized_after[slot_start : slot_start + 4], b"null")
+        self.assertEqual(
+            hashlib.sha256(
+                after[:slot_start] + after[slot_end:]
+            ).hexdigest(),
+            hashlib.sha256(
+                normalized_after[:slot_start] + normalized_after[slot_start + 4 :]
+            ).hexdigest(),
+        )
 
         temporary, repository, derivation = self.make_repository()
         self.addCleanup(temporary.cleanup)
@@ -531,6 +545,46 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         self.assertTrue(rows)
         self.assertTrue(kinds)
         self.assertEqual(loaded["schema_version"], readiness.R1_ROW_REGISTRY_SCHEMA)
+        installed_lifecycle = readiness.validate_r1_lifecycle_registry(
+            loaded["freeze_evidence_lifecycle"]
+        )
+        self.assertTrue(
+            all(
+                policy["horizon_ns"] == 1_200_000_000_000
+                for policy in installed_lifecycle["evidence_policies"]
+                if policy["freshness_class"] != "RE_DERIVABLE"
+            )
+        )
+        self.assertEqual(
+            set(evidence._r1_policies_for_kinds(installed_lifecycle, ["DOCTRINE_PIN"])),
+            {"DOCTRINE_PIN"},
+        )
+
+        missing_horizon = copy.deepcopy(installed_lifecycle)
+        next(
+            policy
+            for policy in missing_horizon["evidence_policies"]
+            if policy["freshness_class"] == "TIME_BOUND"
+        )["horizon_ns"] = None
+        with self.assertRaises(readiness.ArmReadinessError) as horizon_refused:
+            readiness.validate_r1_lifecycle_registry(missing_horizon)
+        self.assertEqual(
+            horizon_refused.exception.reason_code, "readiness_row_registry_mismatch"
+        )
+
+        removed_id = copy.deepcopy(installed_lifecycle)
+        removed_id["successor_policy"]["successor_pack_ids"].pop("ALPHA")
+        with self.assertRaises(readiness.ArmReadinessError) as id_refused:
+            readiness._plan_profile(
+                installed_pack,
+                {
+                    "schema_version": readiness.R1_ROW_REGISTRY_SCHEMA,
+                    "freeze_evidence_lifecycle": removed_id,
+                },
+            )
+        self.assertEqual(
+            id_refused.exception.reason_code, "readiness_row_registry_mismatch"
+        )
 
     def test_v1_receipt_is_never_grandfathered_and_fixture_bytes_are_neutral(self) -> None:
         pack_names = (
@@ -571,7 +625,22 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "test_r1_v1_grandfathering")
         self.assertEqual({path: path.read_bytes() for path in paths}, before_all)
 
-    def test_deriver_read_routing_guard_detects_direct_and_helper_reads(self) -> None:
+    def test_r1_lifecycle_is_dormant_for_historical_v1_registry_and_profile(self) -> None:
+        pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v1"
+        registry, registry_raw, reference = readiness._registry_reference(pack)
+        before_digest = hashlib.sha256(registry_raw).hexdigest()
+        self.assertEqual(registry["schema_version"], readiness.ROW_REGISTRY_SCHEMA)
+        self.assertIsNone(evidence._r1_lifecycle_registry_for_pack(pack))
+        self.assertEqual(readiness._plan_profile(pack, registry), "ALPHA")
+        self.assertEqual(
+            hashlib.sha256(
+                (ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes()
+            ).hexdigest(),
+            before_digest,
+        )
+        self.assertEqual(reference["plan_profile"], "ALPHA")
+
+    def test_deriver_read_routing_guard_detects_direct_helper_and_alias_reads(self) -> None:
         self.assertEqual(evidence._unrouted_deriver_reads(), ())
         source = Path(evidence.__file__).read_text(encoding="utf-8")
         source += (
@@ -594,6 +663,47 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
                 for item in helper_findings
             )
         )
+        alias_sources = {
+            "builtins_import": (
+                "def _unrecorded_helper(path):\n"
+                "    reader = __import__('builtins').open\n"
+                "    return reader(path, 'rb').read()\n\n"
+                "def _derive_probe(context):\n"
+                "    return _unrecorded_helper(context.pack_root / 'probe')\n"
+            ),
+            "importlib": (
+                "import importlib\n\n"
+                "def _unrecorded_helper(path):\n"
+                "    reader = importlib.import_module('builtins').open\n"
+                "    return reader(path, 'rb').read()\n\n"
+                "def _derive_probe(context):\n"
+                "    return _unrecorded_helper(context.pack_root / 'probe')\n"
+            ),
+            "os_attribute": (
+                "import os\n\n"
+                "def _unrecorded_helper(path):\n"
+                "    reader = os.open\n"
+                "    return reader(path, os.O_RDONLY)\n\n"
+                "def _derive_probe(context):\n"
+                "    helper = _unrecorded_helper\n"
+                "    return helper(context.pack_root / 'probe')\n"
+            ),
+            "imported_alias": (
+                "from os import open as raw_open\n\n"
+                "def _derive_probe(context):\n"
+                "    return raw_open(context.pack_root / 'probe', 0)\n"
+            ),
+        }
+        for label, alias_source in alias_sources.items():
+            with self.subTest(label=label):
+                alias_findings = evidence._unrouted_deriver_reads(alias_source)
+                self.assertTrue(
+                    any(
+                        item.endswith(":reader") or item.endswith(":raw_open")
+                        for item in alias_findings
+                    ),
+                    alias_findings,
+                )
 
 
 if __name__ == "__main__":

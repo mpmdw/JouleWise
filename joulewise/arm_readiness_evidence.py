@@ -131,7 +131,8 @@ _DERIVER_DIRECT_READ_CALLS = frozenset(
 )
 # These functions are the IO boundary: each either records the complete read
 # identity itself or calls the base committed-artifact recorder.  The release
-# guard traverses every other local helper reachable from a deriver.
+# guard is a best-effort developer-error lint; it traverses ordinary local
+# helper calls and their simple aliases, but is not an in-process sandbox.
 _DERIVER_RECORDED_READ_BOUNDARIES = frozenset(
     {
         "_committed_artifact",
@@ -1534,7 +1535,15 @@ _DERIVERS: dict[str, Callable[[_DerivationContext], _DerivedKind]] = {
 
 
 def _unrouted_deriver_reads(source: str | None = None) -> tuple[str, ...]:
-    """Return IO calls in the transitive local call graph of every deriver."""
+    """Return ordinary unrecorded IO calls reachable from a deriver.
+
+    This developer-error lint catches recognized direct call spellings, the
+    same calls in reachable top-level helpers, and simple callable aliases
+    acquired from those spellings (including ``builtins``/``importlib``/``os``
+    module expressions).  Deliberate same-interpreter circumvention is outside
+    D-139 and this function is not a security boundary or complete data-flow
+    analysis.
+    """
 
     if source is None:
         source = Path(__file__).read_text(encoding="utf-8")
@@ -1543,6 +1552,13 @@ def _unrouted_deriver_reads(source: str | None = None) -> tuple[str, ...]:
         node.name: node
         for node in tree.body
         if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef))
+    }
+    imported_raw_aliases = {
+        imported.asname or imported.name
+        for node in tree.body
+        if isinstance(node, _ast.ImportFrom)
+        for imported in node.names
+        if imported.name in _DERIVER_DIRECT_READ_CALLS
     }
     pending = sorted(name for name in definitions if name.startswith("_derive_"))
     visited: set[str] = set()
@@ -1553,6 +1569,75 @@ def _unrouted_deriver_reads(source: str | None = None) -> tuple[str, ...]:
             continue
         visited.add(function_name)
         node = definitions[function_name]
+        raw_aliases: set[str] = set(imported_raw_aliases)
+        helper_aliases: dict[str, str] = {}
+
+        def assigned_names(target: _ast.expr) -> tuple[str, ...]:
+            if isinstance(target, _ast.Name):
+                return (target.id,)
+            if isinstance(target, (_ast.Tuple, _ast.List)):
+                return tuple(
+                    name for item in target.elts for name in assigned_names(item)
+                )
+            return ()
+
+        def terminal_name(value: _ast.expr) -> str | None:
+            if isinstance(value, _ast.Name):
+                return value.id
+            if isinstance(value, _ast.Attribute):
+                return value.attr
+            if (
+                isinstance(value, _ast.Call)
+                and isinstance(value.func, _ast.Name)
+                and value.func.id == "getattr"
+                and len(value.args) >= 2
+                and isinstance(value.args[1], _ast.Constant)
+                and isinstance(value.args[1].value, str)
+            ):
+                return value.args[1].value
+            return None
+
+        # Resolve the cheap, local aliases that commonly arise while moving a
+        # read into a helper.  Attribute acquisition is keyed by the terminal
+        # operation name, so these include ``os.open``,
+        # ``__import__('builtins').open``, and
+        # ``importlib.import_module('builtins').open``.  Fixed-point propagation
+        # also catches ``reader2 = reader`` and ``call = local_helper``.
+        assignments: list[tuple[tuple[str, ...], _ast.expr]] = []
+        for child in _ast.walk(node):
+            if isinstance(child, _ast.Assign):
+                names = tuple(
+                    name
+                    for target in child.targets
+                    for name in assigned_names(target)
+                )
+                assignments.append((names, child.value))
+            elif isinstance(child, _ast.AnnAssign):
+                if child.value is not None:
+                    assignments.append((assigned_names(child.target), child.value))
+            elif isinstance(child, _ast.ImportFrom):
+                for imported in child.names:
+                    local_name = imported.asname or imported.name
+                    if imported.name in _DERIVER_DIRECT_READ_CALLS:
+                        raw_aliases.add(local_name)
+                    elif imported.name in definitions:
+                        helper_aliases[local_name] = imported.name
+        changed = True
+        while changed:
+            changed = False
+            for names, value in assignments:
+                acquired = terminal_name(value)
+                if acquired in _DERIVER_DIRECT_READ_CALLS or acquired in raw_aliases:
+                    for name in names:
+                        if name not in raw_aliases:
+                            raw_aliases.add(name)
+                            changed = True
+                helper = helper_aliases.get(acquired or "", acquired)
+                if helper in definitions:
+                    for name in names:
+                        if helper_aliases.get(name) != helper:
+                            helper_aliases[name] = helper
+                            changed = True
         for child in _ast.walk(node):
             if not isinstance(child, _ast.Call):
                 continue
@@ -1561,15 +1646,16 @@ def _unrouted_deriver_reads(source: str | None = None) -> tuple[str, ...]:
                 called = child.func.id
             elif isinstance(child.func, _ast.Attribute):
                 called = child.func.attr
-            if called in _DERIVER_DIRECT_READ_CALLS:
+            if called in _DERIVER_DIRECT_READ_CALLS or called in raw_aliases:
                 findings.append(f"{function_name}:{child.lineno}:{called}")
-            if (
-                isinstance(child.func, _ast.Name)
-                and child.func.id in definitions
-                and child.func.id not in _DERIVER_RECORDED_READ_BOUNDARIES
-                and child.func.id not in visited
-            ):
-                pending.append(child.func.id)
+            if isinstance(child.func, _ast.Name):
+                helper = helper_aliases.get(child.func.id, child.func.id)
+                if (
+                    helper in definitions
+                    and helper not in _DERIVER_RECORDED_READ_BOUNDARIES
+                    and helper not in visited
+                ):
+                    pending.append(helper)
     return tuple(sorted(findings))
 
 
