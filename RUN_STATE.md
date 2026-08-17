@@ -3660,7 +3660,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-16). Latest report: [T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED](docs/run_reports/2026-08-16-t9-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-17). Latest report: [T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED](docs/run_reports/2026-08-16-t9-session.md).
 
 ### [ED-EXTERNAL]
 

@@ -33,7 +33,9 @@ EXPECTED_IDS = {
     "WO-LAUNCH-BINDING", "WO-CONSUMPTION-EDGE",
     "WO-CENSUS-SEMANTICS",
     "WO-DETECT-PULSES-BUDGET",
-    "WO-RECORDER-GRANT-IDENTITY", "WO-PROOF-RUNNABILITY-REPAIR",
+    # (WO-RECORDER-GRANT-IDENTITY retired 2026-08-17 by D-139 A1 —
+    # in-process adversary ruled out of model; registered limitation stands.)
+    "WO-PROOF-RUNNABILITY-REPAIR",
     "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
     "P2-047A", "P2-048", "P2-050", "TOOL-01",
@@ -278,9 +280,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # WO-T0-PRODUCER (#152) and WO-MARGIN-RECORDER-AUTHZ (#151) and adds
         # WO-RECORDER-GRANT-IDENTITY and (2026-08-16) the proof-runnability
         # repair (74 - 2 + 2 = 74); the T9 close retires delivered
-        # WO-L2-REAUDIT: 74 - 1 = 73 exact live records.
+        # WO-L2-REAUDIT (73); D-139 A1 retires WO-RECORDER-GRANT-IDENTITY:
+        # 73 - 1 = 72 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 73)
+        self.assertEqual(len(self.tasks), 72)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

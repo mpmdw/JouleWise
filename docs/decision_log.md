@@ -9680,3 +9680,49 @@ source pins are therefore **superseded-pending-refreeze**: the Phase-2 atomic
 successor re-freeze transaction re-derives every T-0 source at the successor
 head.  Editing them here is sanctioned for main and is **not** a live-invariant
 break, unlike D-138's issued D-079 estimator-input pins.
+
+### D-139 — Ed's batched rulings A1-A3 (Ed, 2026-08-17, in-session; packet docs/process/ed-batch-packet.md)
+
+**A1 — In-process adversary RULED OUT OF MODEL (registered limitation,
+family-wide).** Ed: "no adversarial programs affecting the measurement can be
+assumed." Consequences, effective immediately: (1) WO-RECORDER-GRANT-IDENTITY
+is RETIRED to the registered check-to-grant limitation — no implementation, no
+cold gate (the design consult remains custodied at
+docs/process_traces/2026-08-16-grant-identity-consult/ should the appetite
+ever change); (2) the T-0 trusted-operator limitation v1 is FINAL for the MVP
+claim (option-(a) attested capture stays closed); (3) the launch-binding
+forged-complete-context residual is FINAL as registered. The paper states the
+assumption once, plainly.
+
+**A2 — Gamma scientific rulings.** (1)+(2) Ed DELEGATED to the
+magistrate/Sol; the consumption-edge consult's recommendation is ADOPTED
+verbatim: ONE primary Holm family, alpha=0.05, m=2, containing the decode and
+prefill_p256 contrasts, two-sided tests with pre-registered positive
+scientific directions; a missing/non-estimable member stays in the frozen
+m=2; the frozen cross-arm block-strata mapping (block numbers 1-10 across
+both arms) carries the family (mechanism merged in #155). These values enter
+the gamma prospective manifest's families block at the production freeze.
+(3) p256 floor: DEDICATED ARTIFACT (no p128→p256 transport rule) — Ed's
+preference, at zero extra collection cost: the funded fixed-256-token prefill
+floor cells are already in the frozen packs (#138). The consumption edge's
+analysis_manifest_transport_ruling_pending branch remains permanently
+refusing (dormant), as designed.
+
+**A3 — Phase-2 reserved approvals: recommended defaults APPROVED** (uniform
+`_v2` successor pack IDs; chain-monotonic `freeze-0002` with explicit
+predecessor bindings; the existing operational horizons — 20-minute volatile
+/ six-hour procedural — carry forward as the approved freshness defaults).
+The environment-fingerprint comparison semantics remain an open Ed ruling
+(the R1 fail-closed seam stands). RESERVED STILL: the final exact-byte
+publication confirmation at the transaction's irreversible point — Ed
+confirms when the bytes exist.
+
+**SHAKEDOWN-FIRST SEQUENCING DIRECTIVE (Ed, same message):** "focus first on
+doing the minimal verifying runs to make sure the instrument is proper and
+not being polluted by any other signal." The first quiet-machine consumption
+after a READY-candidate verdict is MINIMAL INSTRUMENT VERIFICATION — the
+ED-Q-L9-3 quiet-state baseline and calibration-only shakedown runs proving
+signal purity — BEFORE any claim window. Exact workload consistency is
+explicitly subordinate to instrument-purity verification for these first
+runs. The claim windows (alpha/beta/gamma) follow only after the shakedown
+evidence is clean.

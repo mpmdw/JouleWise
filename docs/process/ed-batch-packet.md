@@ -1,4 +1,9 @@
-# Ed's batched session — the decision packet (assembled 2026-08-16, T9 close)
+# Ed's batched session — the decision packet (assembled 2026-08-16; A1-A3 DECIDED 2026-08-17 → D-139)
+
+> **STATUS: decisions A1, A2, and A3-defaults are RULED (D-139,
+> docs/decision_log.md). Remaining: the B hardware batch, the A4 marker
+> ruling, the environment-fingerprint semantics, and the final exact-byte
+> publication confirmation at the transaction's irreversible point.**
 
 One sitting, two kinds of items: **decisions only you can make** and **hands-on
 qualification only you can run**. Everything here is a pointer to its ONE home;
