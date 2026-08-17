@@ -39,13 +39,25 @@ custody docs/process_traces/2026-08-16-launch-f3-coldgate/, self-contained).
    whose full plan is custodied (2026-08-16-phase2-plan-consult). WO-RECORDER-GRANT-IDENTITY (own cold gate) and
    WO-PROOF-RUNNABILITY-REPAIR (proof-semantics trust gauntlet; restores the
    proof-matrix automatic triggers) are queued kernel rows.
-2. **Phase 2 (the ruled order, council-verdict.md):** ONE atomic
+2. **Phase-2 PREP is the successor session's OPENING PROGRAM** — the plan
+   consult's F4 list (docs/process_traces/2026-08-16-phase2-plan-consult/,
+   consult.md §F4) enumerates what is preparable BEFORE Ed's GO: D-079
+   reissue tooling + corpus authentication (off the staged head e22e658 —
+   F3's stop-condition binds: any change to the accepted 19-member set is a
+   cold review, not a pin refresh), R1 schema/tooling/refusal implementation,
+   AXI descriptor + release-gate tests, merge simulation, generator repairs +
+   successor templates, dry-run roots + packet templates. Calibration
+   stage-2 (the first F4 item) is DONE + delta-ACCEPTED this session.
+   Deliberately HELD at T9 close (deep-context magistrate; claim-adjacent
+   material deserves fresh context — the motion-vs-progress rule applied to
+   the lead itself).
+3. **Phase 2 EXECUTION (the ruled order, council-verdict.md):** ONE atomic
    successor-family re-freeze, LAST — folds the D-079 acceptance re-issue
    (unblocks merging impl/wo-detect-pulses-budget), M-2 retirement, the
    ALPHA/BETA --plan reconciliation, launch_lineage_required successor flag.
    Then Phase 3 manifest SUPERSESSION + focused re-audit w/ adversarial
    coverage re-enumeration; Phase 4 READY-candidate sitting, fresh cold pair.
-3. **ED-OWED (ONE batched session; sitting-ready packet:
+4. **ED-OWED (ONE batched session; sitting-ready packet:
    docs/process/ed-batch-packet.md — decisions A1-A4 + hardware batch B):**
    unchanged from T8 (qualification script, dress
    rehearsal, sampler checklist, rail probe, backlight rows, ED-Q-L9-3
@@ -57,7 +69,7 @@ custody docs/process_traces/2026-08-16-launch-f3-coldgate/, self-contained).
    (prefill test/direction, multiplicity family/m, p256 floor-or-transport,
    production freeze + production-pack L10 replay) are RULING-REQUIRED
    before gamma's edge can close.
-4. **Desk debt:** none carried — T9 report landed same-session; queue/kernel
+5. **Desk debt:** none carried — T9 report landed same-session; queue/kernel
    closures and the consistency sweep landed at T9 close (this commit).
 
 **Standing cautions (T9 additions):** local-date convention bit three times
