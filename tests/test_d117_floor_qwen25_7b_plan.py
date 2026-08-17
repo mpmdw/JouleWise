@@ -72,7 +72,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p256_qwen25_7b.json"
     ): "d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252",
     "generate_configs.py": (
-        "bc4ee0862ad1e04c7823b623f4499aec7085fdedc06a6805746e58f996b0089f"
+        "eff640e193b867477e1b77ede2edac97145ce26bd81464fa011fb2d473044762"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "36a5fae72b37643550ecb4471b4566db30331a4089abc3f4827593632407bba2"
@@ -244,6 +244,27 @@ def observed_manifest_block_order(rows: list[dict]) -> list[tuple[int, str, int]
     ]
 
 
+def link_successor_self_check_inputs(output_root: Path) -> None:
+    (output_root / "joulewise").symlink_to(
+        REPO_ROOT / "joulewise", target_is_directory=True
+    )
+    for source_dir in (
+        REPO_ROOT / "configs",
+        REPO_ROOT / "configs/campaigns",
+        REPO_ROOT / "configs/floor_mint",
+    ):
+        target_dir = output_root / source_dir.relative_to(REPO_ROOT)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for source in source_dir.iterdir():
+            target = target_dir / source.name
+            if not target.exists():
+                target.symlink_to(source, target_is_directory=source.is_dir())
+    successor_contrast = (
+        output_root / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
+    )
+    successor_contrast.symlink_to(CONTRAST_PACK, target_is_directory=True)
+
+
 class D117Qwen25SevenBPlanTests(unittest.TestCase):
     maxDiff = None
 
@@ -409,6 +430,45 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 self.assertIn(
                     "launch_lineage_required", config["run_metadata"]["tags"]
                 )
+
+            self_referential = {
+                name: (pack_root / name).read_text(encoding="utf-8")
+                for name in ("README.md", "generate_configs.py")
+            }
+            predecessor_markers = {
+                *GENERATOR_MODULE._SUCCESSOR_IDENTITY_TOKENS,
+                'CURRENT_FAMILY_SUFFIX = "_v1"',
+            }
+            for name, content in self_referential.items():
+                with self.subTest(self_referential=name):
+                    for marker in predecessor_markers:
+                        self.assertNotIn(marker, content)
+                    self.assertIn(successor_id, content)
+            self.assertIn(
+                'CURRENT_FAMILY_SUFFIX = "_v2"',
+                self_referential["generate_configs.py"],
+            )
+            self.assertIn(
+                f"python3 {successor_rel.as_posix()}/generate_configs.py --check",
+                self_referential["README.md"],
+            )
+
+            link_successor_self_check_inputs(output_root)
+            embedded_check = subprocess.run(
+                [
+                    sys.executable,
+                    str(pack_root / "generate_configs.py"),
+                    "--check",
+                    "--output-root",
+                    str(output_root),
+                ],
+                cwd=output_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(embedded_check.returncode, 0, embedded_check.stderr)
+            self.assertIn(successor_id, embedded_check.stdout)
 
         current_tree = load_json(PACK / "plan_tree.json")
         for row in current_tree["science"]:

@@ -110,11 +110,17 @@ class GenerationIdentity:
             self.pack_id == PACK_REL.name
             and self.family_suffix == CURRENT_FAMILY_SUFFIX
         )
-        if self.preserve_current_frozen_bytes != is_current:
+        if self.preserve_current_frozen_bytes and not is_current:
             raise ValueError(
                 "preserve mode requires the current identity and successor identities "
                 "require preserve mode off"
             )
+        if (
+            not self.preserve_current_frozen_bytes
+            and is_current
+            and PRESERVE_CURRENT_FROZEN_BYTES
+        ):
+            raise ValueError("the current frozen identity requires preserve mode")
 
     @property
     def pack_rel(self) -> Path:
@@ -155,11 +161,13 @@ def generation_context(identity: GenerationIdentity):
 def _successor_token(token: str, identity: GenerationIdentity) -> str:
     if token == PACK_REL.name:
         return identity.pack_id
+    current_version = CURRENT_FAMILY_SUFFIX.removeprefix("_")
     version = identity.family_suffix.removeprefix("_")
-    if token.endswith("-v1"):
-        return token[:-3] + f"-{version}"
-    if token.endswith("_v1"):
-        return token[:-3] + identity.family_suffix
+    hyphen_suffix = f"-{current_version}"
+    if token.endswith(hyphen_suffix):
+        return token[: -len(hyphen_suffix)] + f"-{version}"
+    if token.endswith(CURRENT_FAMILY_SUFFIX):
+        return token[: -len(CURRENT_FAMILY_SUFFIX)] + identity.family_suffix
     raise ValueError(f"successor identity token has no version suffix: {token}")
 
 
@@ -181,6 +189,21 @@ def thread_generation_identity(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(thread_generation_identity(item) for item in value)
     return value
+
+
+def embedded_generator_bytes() -> bytes:
+    source = (REPO_ROOT / PACK_REL / "generate_configs.py").read_text(
+        encoding="utf-8"
+    )
+    identity = active_generation()
+    if identity.preserve_current_frozen_bytes:
+        return source.encode("utf-8")
+    source = thread_generation_identity(source)
+    current_declaration = f'CURRENT_FAMILY_SUFFIX = "{CURRENT_FAMILY_SUFFIX}"'
+    successor_declaration = f'CURRENT_FAMILY_SUFFIX = "{identity.family_suffix}"'
+    if source.count(current_declaration) != 1:
+        raise ValueError("generator family-suffix declaration is not unique")
+    return source.replace(current_declaration, successor_declaration).encode("utf-8")
 
 
 def generation_arm_readiness_attachment() -> dict[str, Any]:
@@ -1570,18 +1593,27 @@ def build_tree(
 
 def readme_bytes() -> bytes:
     oracle = derive_bracket_session_receipt_oracle()
-    if PACK_STATUS != DRAFT_STATUS:
-        return f"""# D-117 gamma contrast pack v1 — frozen by D-134 receipt
+    identity = active_generation()
+    status = PACK_STATUS if identity.preserve_current_frozen_bytes else DRAFT_STATUS
+    version = identity.family_suffix.removeprefix("_")
+    identity_statement = (
+        ""
+        if identity.preserve_current_frozen_bytes
+        else f"Pack identity: `{identity.pack_id}` (`{identity.family_suffix}`).\n\n"
+    )
+    if status != DRAFT_STATUS:
+        content = f"""# D-117 gamma contrast pack {version} — frozen by D-134 receipt
 
-This generated description is freeze-aware. The D-134 freeze receipt and
+{identity_statement}This generated description is freeze-aware. The D-134 freeze receipt and
 plan-tree pin are authoritative for frozen state; an external unexpired
 PASS/GO arm receipt is still required before launch.
 
 Receipt-oracle source: `{oracle['source']['module']}`.
-""".encode("utf-8")
-    return f"""# D-117 gamma contrast pack v1 — unfrozen draft
+"""
+        return thread_generation_identity(content).encode("utf-8")
+    content = f"""# D-117 gamma contrast pack {version} — unfrozen draft
 
-This pack stages both prospectively required gamma arms: a 40-member decode
+{identity_statement}This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It is
 not armable and makes no data, verdict, receipt, or artifact-byte claim.
 
@@ -1621,7 +1653,8 @@ python3 configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py
 python3 configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py --check
 python3 -m unittest tests.test_d117_decode_contrast_plan
 ```
-""".encode("utf-8")
+"""
+    return thread_generation_identity(content).encode("utf-8")
 
 
 def generate(
@@ -1635,7 +1668,7 @@ def generate(
 def _generate(output_repo_root: Path) -> dict[str, str]:
     out = output_repo_root / active_generation().pack_rel
     out.mkdir(parents=True, exist_ok=True)
-    generator_bytes = (REPO_ROOT / PACK_REL / "generate_configs.py").read_bytes()
+    generator_bytes = embedded_generator_bytes()
     generator_sha = (
         CURRENT_FROZEN_GENERATOR_SHA256
         if active_generation().preserve_current_frozen_bytes

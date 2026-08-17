@@ -31,7 +31,7 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
-    "generate_configs.py": "766ac024aaa3c5d88723f1266f6f5fa638c7f6768688e3efa4e00413925172fa",
+    "generate_configs.py": "0371ccd839e6c66be79a9d02ad3b6c736ca7b268ac8419efb0fdecfda8a26148",
     "calibration_plan.json": "4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218",
     "plan_tree.json": "8c53a834d78c81145b8f35b25f8d50182d596dc82c171e815f8a160117ab525d",
     "analysis_manifest_v3.json": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
@@ -98,6 +98,17 @@ def governed_frozen_attachment_paths(pack_root: Path) -> set[Path]:
         projection_path = Path(projection_reference["path"])
         expected |= {projection_path, projection_path.with_suffix(".sha256")}
     return expected
+
+
+def link_successor_self_check_inputs(output_root: Path) -> None:
+    (output_root / "joulewise").symlink_to(ROOT / "joulewise", target_is_directory=True)
+    for source_dir in (ROOT / "configs", ROOT / "configs/campaigns"):
+        target_dir = output_root / source_dir.relative_to(ROOT)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for source in source_dir.iterdir():
+            target = target_dir / source.name
+            if not target.exists():
+                target.symlink_to(source, target_is_directory=source.is_dir())
 
 
 class D117GammaPlanTest(unittest.TestCase):
@@ -273,6 +284,45 @@ class D117GammaPlanTest(unittest.TestCase):
                 self.assertIn(
                     "launch_lineage_required", config["run_metadata"]["tags"]
                 )
+
+            self_referential = {
+                name: (pack_root / name).read_text(encoding="utf-8")
+                for name in ("README.md", "generate_configs.py")
+            }
+            predecessor_markers = {
+                *GENERATOR_MODULE._SUCCESSOR_IDENTITY_TOKENS,
+                'CURRENT_FAMILY_SUFFIX = "_v1"',
+            }
+            for name, content in self_referential.items():
+                with self.subTest(self_referential=name):
+                    for marker in predecessor_markers:
+                        self.assertNotIn(marker, content)
+                    self.assertIn(successor_id, content)
+            self.assertIn(
+                'CURRENT_FAMILY_SUFFIX = "_v2"',
+                self_referential["generate_configs.py"],
+            )
+            self.assertIn(
+                f"python3 {successor_rel.as_posix()}/generate_configs.py --check",
+                self_referential["README.md"],
+            )
+
+            link_successor_self_check_inputs(output_root)
+            embedded_check = subprocess.run(
+                [
+                    sys.executable,
+                    str(pack_root / "generate_configs.py"),
+                    "--check",
+                    "--output-root",
+                    str(output_root),
+                ],
+                cwd=output_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(embedded_check.returncode, 0, embedded_check.stderr)
+            self.assertIn(successor_id, embedded_check.stdout)
 
         for row in self.tree["science"]:
             current = read_json(PACK / row["config_path"])
