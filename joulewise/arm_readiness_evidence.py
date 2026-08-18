@@ -39,10 +39,13 @@ _SPECIALIZED_EVIDENCE_KINDS = frozenset(
     {"IDENTITY_PIN_PROJECTION", "DRY_RUN_REHEARSAL"}
 )
 
+# D-138/D-139: the inverse of arm_readiness._PROFILE_BY_PACK.  The regenerated
+# ``_v2`` packs SUPERSEDE the v1 campaign packs, so PACK_FAMILY evidence is
+# derived from the _v2 family only.
 _PACKS_BY_PROFILE = {
-    "ALPHA": "d117_floor_qwen25_1p5b_v1",
-    "BETA": "d117_floor_qwen25_7b_v1",
-    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v1",
+    "ALPHA": "d117_floor_qwen25_1p5b_v2",
+    "BETA": "d117_floor_qwen25_7b_v2",
+    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
 }
 _SOURCE_KEYS = {
     "schema_version",

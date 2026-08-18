@@ -232,10 +232,16 @@ _RECEIPT_NAME_RE = {
 # A pack ID's trailing ``_v<N>`` is its family generation.  Generation 1 packs
 # open a chain; every later generation must present an authenticated predecessor.
 _PACK_GENERATION_RE = re.compile(r"_v([0-9]+)$")
+# D-138/D-139: the regenerated ``_v2`` packs SUPERSEDE the v1 campaign packs.
+# The v1 IDs are deliberately absent, so freeze, dry-run, arm, verification,
+# and evidence authoring all refuse a superseded pack with
+# ``readiness_row_registry_mismatch``.  v1 packs remain authentic historical
+# records and are still authenticated as freeze predecessors, which reads
+# their recorded receipt bindings rather than this map.
 _PROFILE_BY_PACK = {
-    "d117_floor_qwen25_1p5b_v1": "ALPHA",
-    "d117_floor_qwen25_7b_v1": "BETA",
-    "d117_contrast_qwen25_1p5b_vs_7b_v1": "GAMMA",
+    "d117_floor_qwen25_1p5b_v2": "ALPHA",
+    "d117_floor_qwen25_7b_v2": "BETA",
+    "d117_contrast_qwen25_1p5b_vs_7b_v2": "GAMMA",
 }
 
 REGISTRY_KEYS = {"schema_version", "registry_id", "plan_profiles", "rows"}

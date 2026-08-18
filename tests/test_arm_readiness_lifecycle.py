@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
+import joulewise.arm_readiness_evidence as evidence_module
 from joulewise.arm_readiness import (
     ArmReadinessError,
     _pack_record,
@@ -45,7 +46,8 @@ from tests.test_arm_readiness_schemas import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PACK_NAME = "d117_floor_qwen25_1p5b_v1"
+PACK_NAME = "d117_floor_qwen25_1p5b_v2"
+SUPERSEDED_PACK_NAME = "d117_floor_qwen25_1p5b_v1"
 LAUNCH_WINDOW_SPEC = importlib.util.spec_from_file_location(
     "arm_readiness_lifecycle_launch_window",
     ROOT / "scripts/launch_window.py",
@@ -435,9 +437,10 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             validate_freeze_receipt(receipt)
 
     def test_freeze_generation_is_byte_idempotent_and_sidecar_exact(self) -> None:
-        temporary, _repo, pack, _custody, _arm_path = make_go_fixture()
+        temporary, repo, pack, _custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
-        first = generate_freeze_receipt(pack)
+        predecessor = predecessor_pack_root(repo, PACK_NAME)
+        first = generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
         path = Path(first["receipt_path"])
         raw_before = path.read_bytes()
         sidecar_before = path.with_name(f"{path.name}.sha256").read_bytes()
@@ -448,7 +451,7 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 "joulewise.arm_readiness", fromlist=["_render_plan_tree"]
             )._render_plan_tree(json.loads(tree_raw)),
         )
-        second = generate_freeze_receipt(pack)
+        second = generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
         self.assertFalse(second["mutated"])
         self.assertEqual(path.read_bytes(), raw_before)
         self.assertEqual(
@@ -1486,12 +1489,130 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         )
 
     def test_first_generation_packs_reject_a_predecessor_input(self) -> None:
-        temporary, repo, pack, _custody, _arm = make_go_fixture()
+        # A generation-1 pack opens a chain; the guard is about generation, so
+        # the superseded ID is mapped back in for this unit only.
+        temporary, repo, pack, _custody, _arm = make_go_fixture(
+            SUPERSEDED_PACK_NAME, "ALPHA"
+        )
         self.addCleanup(temporary.cleanup)
+        patched = mock.patch.dict(
+            readiness._PROFILE_BY_PACK, {SUPERSEDED_PACK_NAME: "ALPHA"}
+        )
+        patched.start()
+        self.addCleanup(patched.stop)
         with self.assertRaises(ArmReadinessError) as caught:
             generate_freeze_receipt(pack, predecessor_pack_root=pack)
         self.assertEqual(caught.exception.reason_code, "readiness_usage_invalid")
         self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
+
+
+class SupersededPackRefusalTests(unittest.TestCase):
+    """D-138: the v1 campaign packs are superseded by the ``_v2`` family.
+
+    Every governed entry point the pack/profile map feeds must refuse a v1
+    pack ID with the established registry-mismatch code.  That refusal IS the
+    supersession; the v1 packs stay authentic historical records and are still
+    authenticatable as freeze predecessors.
+    """
+
+    def setUp(self) -> None:
+        patcher = mock.patch.object(
+            readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def superseded_fixture(self, profile: str = "ALPHA") -> tuple[Path, Path, Path]:
+        pack_name = predecessor_pack_name(SUCCESSOR_PACKS[profile])
+        temporary, repo, pack, custody, _arm_path = make_go_fixture(
+            pack_name, profile
+        )
+        self.addCleanup(temporary.cleanup)
+        return repo, pack, custody
+
+    def test_live_map_carries_only_the_v2_family(self) -> None:
+        self.assertEqual(
+            readiness._PROFILE_BY_PACK,
+            {
+                "d117_floor_qwen25_1p5b_v2": "ALPHA",
+                "d117_floor_qwen25_7b_v2": "BETA",
+                "d117_contrast_qwen25_1p5b_vs_7b_v2": "GAMMA",
+            },
+        )
+        self.assertEqual(
+            evidence_module._PACKS_BY_PROFILE,
+            {
+                profile: pack_name
+                for pack_name, profile in readiness._PROFILE_BY_PACK.items()
+            },
+        )
+
+    def test_row_registry_is_profile_keyed_and_needs_no_change(self) -> None:
+        raw = (
+            ROOT / "configs/arm_readiness/d117_row_registry_v1.json"
+        ).read_text(encoding="utf-8")
+        for pack_name in (
+            "d117_floor_qwen25_1p5b_v1",
+            "d117_floor_qwen25_7b_v1",
+            "d117_contrast_qwen25_1p5b_vs_7b_v1",
+            *readiness._PROFILE_BY_PACK,
+        ):
+            self.assertNotIn(pack_name, raw)
+        registry, _raw = readiness.load_registry(ROOT)
+        self.assertEqual(
+            [profile["profile_id"] for profile in registry["plan_profiles"]],
+            ["ALPHA", "BETA", "GAMMA"],
+        )
+
+    def test_every_governed_entry_point_refuses_a_superseded_pack(self) -> None:
+        repo, pack, custody = self.superseded_fixture()
+        context = sample_arm(Path(repo).parent / "context")["arm_context"]
+        entry_points = {
+            "profile lookup": lambda: readiness._plan_profile(pack),
+            "registry reference": lambda: readiness._registry_reference(pack),
+            "freeze": lambda: generate_freeze_receipt(pack),
+            "dry-run": lambda: generate_dry_run_receipt(
+                pack, custody, "rehearsal-1", Path(repo).parent / "synthetic"
+            ),
+            "arm": lambda: generate_arm_receipt(pack, context, custody),
+            "required generic rows": lambda: evidence_module._required_generic_rows(
+                pack, readiness._plan_tree(pack)[0]
+            ),
+        }
+        for name, entry_point in entry_points.items():
+            with self.subTest(entry_point=name):
+                with self.assertRaises(ArmReadinessError) as caught:
+                    entry_point()
+                self.assertEqual(
+                    caught.exception.reason_code, "readiness_row_registry_mismatch"
+                )
+
+    def test_superseded_pack_refusal_is_not_a_freeze_chain_refusal(self) -> None:
+        """The map refuses before generation/ancestry is ever considered."""
+
+        repo, pack, _custody = self.superseded_fixture()
+        with self.assertRaises(ArmReadinessError) as caught:
+            generate_freeze_receipt(pack)
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_row_registry_mismatch"
+        )
+        self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
+
+    def test_superseded_packs_remain_authenticatable_predecessors(self) -> None:
+        """Supersession must not orphan the historical v1 receipts."""
+
+        temporary, repo, pack, _custody, _arm = make_go_fixture(PACK_NAME, "ALPHA")
+        self.addCleanup(temporary.cleanup)
+        predecessor = predecessor_pack_root(repo, PACK_NAME)
+        self.assertNotIn(predecessor.name, readiness._PROFILE_BY_PACK)
+        with self.assertRaises(ArmReadinessError):
+            readiness._plan_profile(predecessor)
+        result = generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+        receipt = json.loads(
+            Path(result["receipt_path"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(receipt["receipt_id"], "freeze-0002")
+        self.assertEqual(receipt["predecessor"]["pack_id"], predecessor.name)
 
 
 if __name__ == "__main__":
