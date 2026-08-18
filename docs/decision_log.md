@@ -8780,6 +8780,59 @@ D-134 consult under
 `docs/process_traces/2026-08-11-5c-readiness-contract/consult.md`. That consult
 is preserved historical evidence and is not edited; this later decision is
 the authority for the amended v1 schema.
+## D-138: D-079-pinned estimator-input changes merge-stage into the atomic re-freeze
+
+**Adopted 2026-08-15 (magistrate; promoted from session ruling R-t9-4 at the
+T9 close).** Any change to the four governed estimator inputs
+(`joulewise/powermetrics_fiducial.py`, `joulewise/uncertainty_evidence.py`,
+`joulewise/adapters/powermetrics.py`, `joulewise/reduce.py`) stages on the
+Phase-2 transaction branch and lands only inside the ONE atomic
+successor-family re-freeze that folds the D-079 acceptance re-issue.
+Follow-on changes ride the same branch (inheritance corollary). Detail and
+implementation notes: the `### D-138` sections later in this file.
+
+## D-139: Ed's batched rulings A1-A3 (threat model, statistics, Phase-2 defaults)
+
+**Adopted 2026-08-17 (Ed, in-session; packet `docs/process/ed-batch-packet.md`).**
+A1: no in-process adversarial programs are assumed (registered limitation,
+family-wide). A2: Holm alpha=0.05 m=2 family (decode + prefill_p256,
+two-sided); dedicated p256 floor. A3: Phase-2 reserved defaults approved —
+uniform `_v2` successor pack IDs, chain-monotonic `freeze-0002` with
+explicit predecessor bindings, existing operational horizons; the
+acceptance-artifact identity, family-marker particulars, and exact-byte
+publication remain Ed-reserved; shakedown-first sequencing. Detail: the
+`### D-139` section later in this file.
+
+## D-140: Freeze-status byte semantics — successor extension
+
+**Adopted 2026-08-18 (three-seat cold gate; composed verdict at
+`docs/process_traces/2026-08-18-freeze-semantics-coldgate/14-composed-verdict.md`,
+the ONE home).** Receipts govern over descriptive bytes for ALL successor
+packs by this decision's own authority (M-2 clause (d) bars precedent
+citation beyond the three 2026-08-13 receipt hashes). The draft-to-frozen
+transition IS the minting and committing of the D-134 freeze receipt and
+plan-tree attachment; bytes inside the receipt's pack_identity transitive
+closure never change post-mint; remaining descriptive bytes are never
+repaired. "Freeze-aware" status = dynamic `target_status` + the fail-closed
+non-preserve guard + freeze-neutral emitted wording. The first structural
+consult's SS-B3 transition sentences, D-6, and R-7 are superseded per the
+composed verdict's amendment language. Index row above carries the operative
+summary.
+
+## D-141: Generator write-boundary and freeze-loader registered residuals
+
+**Adopted 2026-08-18 (cold-gate ratification + delta-8 ratification).**
+(i) Post-validation symlink substitution at the generators' check-then-write
+boundary: registered residual on desk-time single-operator grounds (D-139 A1
+cited by analogy), 16-case refuse-before-any-write coverage closes the
+accidental class; reopening trigger = threat-model revision admitting
+concurrent adversarial local processes or multi-operator generation.
+(ii) `_load_freeze_reference` accepting a hand-authored v1-schema receipt in
+a `_v2` pack: registered residual under trusted-operator (no crash or
+tooling path produces the state). Registered as R-019/R-020 in
+`docs/risk_register.md`. Index row above carries the operative summary.
+
+
 ### D-133 cl.4 execution ratification + Q8 budget ratification — 2026-08-12 (Ed, T6 session start)
 
 Three Ed rulings taken at the T6 session's first interactive exchange

@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -212,6 +213,9 @@ def governed_frozen_attachment_paths(pack_root: Path) -> set[Path]:
     return expected
 
 
+_SUCCESSOR_GENERATION_NAME = re.compile(r"_v[2-9]\d*(_extraction_spec\.json)?$")
+
+
 def link_successor_self_check_inputs(output_root: Path) -> None:
     if not (output_root / "joulewise").exists():
         (output_root / "joulewise").symlink_to(ROOT / "joulewise", target_is_directory=True)
@@ -219,6 +223,12 @@ def link_successor_self_check_inputs(output_root: Path) -> None:
         target_dir = output_root / source_dir.relative_to(ROOT)
         target_dir.mkdir(parents=True, exist_ok=True)
         for source in source_dir.iterdir():
+            # Never import committed successor-generation artifacts as
+            # symlinks: they sit at exactly the paths successor generation
+            # writes, and the round-4 write boundary refuses symlinked
+            # targets/ancestors. Each test generates its own successors.
+            if _SUCCESSOR_GENERATION_NAME.search(source.name):
+                continue
             target = target_dir / source.name
             if not target.exists():
                 target.symlink_to(source, target_is_directory=source.is_dir())

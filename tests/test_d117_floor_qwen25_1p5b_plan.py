@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -360,6 +361,12 @@ def link_successor_self_check_inputs(output_root: Path) -> None:
         target_dir = output_root / source_dir.relative_to(ROOT)
         target_dir.mkdir(parents=True, exist_ok=True)
         for source in source_dir.iterdir():
+            # Never import committed successor-generation artifacts as
+            # symlinks: they sit at exactly the paths successor generation
+            # writes, and the round-4 write boundary refuses symlinked
+            # targets/ancestors. Each test generates its own successors.
+            if re.search(r"_v[2-9]\d*(_extraction_spec\.json)?$", source.name):
+                continue
             target = target_dir / source.name
             if not target.exists():
                 target.symlink_to(source, target_is_directory=source.is_dir())
