@@ -99,6 +99,8 @@ class GenerationIdentity:
         self.preserve_current_frozen_bytes = preserve_current_frozen_bytes
         if not self.family_suffix.startswith("_v") or not self.family_suffix[2:].isdigit():
             raise ValueError("family suffix must use the _v<positive integer> form")
+        if int(self.family_suffix[2:]) < 1:
+            raise ValueError("family suffix ordinal must be positive")
         expected_pack_id = (
             PACK_REL.name.removesuffix(CURRENT_FAMILY_SUFFIX) + self.family_suffix
         )
@@ -106,25 +108,42 @@ class GenerationIdentity:
             raise ValueError(
                 f"pack id must equal {expected_pack_id!r} for {self.family_suffix}"
             )
-        is_current = (
-            self.pack_id == PACK_REL.name
-            and self.family_suffix == CURRENT_FAMILY_SUFFIX
-        )
-        if self.preserve_current_frozen_bytes and not is_current:
+        if self.preserve_current_frozen_bytes and not self.target_is_current:
             raise ValueError(
-                "preserve mode requires the current identity and successor identities "
-                "require preserve mode off"
+                "preserve mode requires the current target identity"
             )
         if (
             not self.preserve_current_frozen_bytes
-            and is_current
-            and PRESERVE_CURRENT_FROZEN_BYTES
+            and self.target_is_current
+            and (PRESERVE_CURRENT_FROZEN_BYTES or self.target_status == FROZEN_STATUS)
         ):
             raise ValueError("the current frozen identity requires preserve mode")
 
     @property
     def pack_rel(self) -> Path:
         return PACK_REL.with_name(self.pack_id)
+
+    @property
+    def current_ordinal(self) -> int:
+        return int(CURRENT_FAMILY_SUFFIX[2:])
+
+    @property
+    def target_ordinal(self) -> int:
+        return int(self.family_suffix[2:])
+
+    @property
+    def target_is_current(self) -> bool:
+        return self.pack_id == PACK_REL.name and self.target_ordinal == self.current_ordinal
+
+    @property
+    def target_is_successor_family(self) -> bool:
+        return self.target_ordinal >= 2
+
+    @property
+    def target_status(self) -> str:
+        if not self.target_is_current:
+            return DRAFT_STATUS
+        return freeze_aware_status(ARM_READINESS_ATTACHMENT["freeze_receipt"])
 
 
 _ACTIVE_GENERATION: GenerationIdentity | None = None
@@ -173,7 +192,7 @@ def _successor_token(token: str, identity: GenerationIdentity) -> str:
 
 def thread_generation_identity(value: Any) -> Any:
     identity = active_generation()
-    if identity.preserve_current_frozen_bytes:
+    if identity.target_is_current:
         return value
     if isinstance(value, str):
         for token in _SUCCESSOR_IDENTITY_TOKENS:
@@ -196,7 +215,7 @@ def embedded_generator_bytes() -> bytes:
         encoding="utf-8"
     )
     identity = active_generation()
-    if identity.preserve_current_frozen_bytes:
+    if identity.target_is_current:
         return source.encode("utf-8")
     source = thread_generation_identity(source)
     current_declaration = f'CURRENT_FAMILY_SUFFIX = "{CURRENT_FAMILY_SUFFIX}"'
@@ -208,13 +227,20 @@ def embedded_generator_bytes() -> bytes:
 
 def generation_arm_readiness_attachment() -> dict[str, Any]:
     identity = active_generation()
-    if identity.preserve_current_frozen_bytes:
-        return ARM_READINESS_ATTACHMENT
     return plan_arm_readiness_attachment(
         REPO_ROOT / identity.pack_rel,
         "GAMMA",
         REPO_ROOT,
     )
+
+
+def preserved_generator_sha256() -> str:
+    tree = json.loads(
+        (REPO_ROOT / active_generation().pack_rel / "plan_tree.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    return tree["generator"]["sha256"]
 
 MODEL_A = {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
@@ -241,9 +267,16 @@ HARDWARE = {
     "device_kind": "apple_silicon_unified_memory",
     "notes": (
         "D-117 gamma Qwen2.5 1.5B-versus-7B contrast on the current M3 Max; "
-        f"normal powermetrics sampler set only; pack status {PACK_STATUS}."
+        "normal powermetrics sampler set only"
     ),
 }
+
+
+def generation_hardware() -> dict[str, Any]:
+    return {
+        **HARDWARE,
+        "notes": f"{HARDWARE['notes']}; pack status {active_generation().target_status}.",
+    }
 SAMPLING = {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0}
 
 DECODE_FAMILIES = {
@@ -362,6 +395,13 @@ def file_sha256(path: Path) -> str:
 
 
 def write_bytes(path: Path, data: bytes) -> None:
+    allowed = validate_generation_output_inventory(active_generation())
+    if not any(
+        len(path.parts) >= len(relative.parts)
+        and path.parts[-len(relative.parts):] == relative.parts
+        for relative in allowed
+    ):
+        raise ValueError(f"output path is outside the closed inventory: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
 
@@ -418,6 +458,15 @@ def expected_pack_paths(*, include_generator: bool = True) -> tuple[Path, ...]:
             for position in ("a1", "b1", "b2", "a2"):
                 paths.append(Path(stage_id) / f"{run_id(stage['measurement_arm'], block, position)}.json")
     return tuple(paths)
+
+
+def validate_generation_output_inventory(identity: GenerationIdentity) -> set[Path]:
+    outputs = {identity.pack_rel / path for path in expected_pack_paths()}
+    if len(outputs) != len(expected_pack_paths()) or any(
+        identity.pack_rel not in path.parents for path in outputs
+    ):
+        raise ValueError("generation output inventory escapes the target pack")
+    return outputs
 
 
 def block_id(measurement_arm: str, block: int) -> str:
@@ -514,7 +563,7 @@ def prompt_candidate() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_prompt_candidate.v1",
         # Q1 pins the p256 prompt artifact bytes and token-ID identity.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": active_generation().target_status,
         "candidate_status": PROMPT_STATUS,
         "authority": {
             "prompt_length": "D-122 clause 1",
@@ -540,7 +589,7 @@ def consumer_declaration() -> dict[str, Any]:
     return {
         "schema_version": "joulewise.d117_consumer_family_declaration.v1",
         # The frozen gamma plan test pins this declaration's exact SHA.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": active_generation().target_status,
         "declaration_kind": "consumer_family_declaration",
         "binding_mode": "declaration_only",
         "byte_binding_pinset": False,
@@ -656,7 +705,7 @@ def build_plan(
     return {
         "schema_version": PLAN_SCHEMA,
         # The D-134 freeze receipt pins calibration_plan.json by SHA.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": active_generation().target_status,
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N_BLOCKS,
@@ -792,14 +841,14 @@ def config_for(run: dict[str, Any], plan_sha256: str) -> dict[str, Any]:
         f"calibration-abba-sequence-index={run['position_in_block']}",
         *prompt_tags,
     ]
-    if not active_generation().preserve_current_frozen_bytes:
+    if active_generation().target_is_successor_family:
         tags.append("launch_lineage_required")
     return {
         "schema_version": "0.1",
         "run_id": run["run_id"],
         "model": MODELS[run["arm"]],
         "quantization": QUANTIZATION,
-        "hardware_target": HARDWARE,
+        "hardware_target": generation_hardware(),
         "workload_profile": workload_for(run["measurement_arm"]),
         "interconnect": {"name": "local"},
         "sampling": SAMPLING,
@@ -948,16 +997,17 @@ def stage_row(
 
 
 def freeze_aware_reservation_plan_arguments(
-    preserve_current: bool,
+    identity: GenerationIdentity | None = None,
     *,
     pack_rel: Path | None = None,
     plan_reference: str = CALIBRATION_PLAN_REFERENCE,
 ) -> list[dict[str, Any]]:
-    if preserve_current:
+    selected = identity or active_generation()
+    if selected.target_ordinal == 1:
         return []
     if plan_reference != CALIBRATION_PLAN_REFERENCE:
         raise ValueError("reservation plan must use the canonical pack-relative reference")
-    resolved_pack_rel = pack_rel or active_generation().pack_rel
+    resolved_pack_rel = pack_rel or selected.pack_rel
     return [
         literal("--plan"),
         repo_path((resolved_pack_rel / plan_reference).as_posix()),
@@ -982,7 +1032,7 @@ def build_stage_graph(stage_manifests: dict[str, dict[str, Any]]) -> list[dict[s
                         literal("--ledger"), binding("ledger_path"),
                         literal("--head-pin"), repo_path("configs/calibration/calibration_ledger_head.json"),
                         *freeze_aware_reservation_plan_arguments(
-                            active_generation().preserve_current_frozen_bytes,
+                            active_generation(),
                             pack_rel=active_generation().pack_rel,
                             plan_reference=CALIBRATION_PLAN_REFERENCE,
                         ),
@@ -1318,7 +1368,7 @@ def build_analysis_manifest(
     return {
         "schema_version": "joulewise.analysis_manifest.v3.prospective",
         # The frozen gamma plan tree pins this analysis manifest by SHA.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": active_generation().target_status,
         "plan": {
             "plan_id": PLAN_ID,
             "path": "calibration_plan.json",
@@ -1445,7 +1495,7 @@ def build_tree(
     return {
         "schema_version": TREE_SCHEMA,
         # The D-134 plan-tree sidecar pins this artifact by SHA.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": active_generation().target_status,
         "plan": {
             "path": "calibration_plan.json",
             "plan_id": PLAN_ID,
@@ -1561,7 +1611,7 @@ def build_tree(
         },
         "runtime_budget": {
             # The D-134 plan-tree sidecar pins this nested field by SHA.
-            "draft_status": DRAFT_STATUS,
+            "draft_status": active_generation().target_status,
             "decode": {
                 "members": MEMBERS_PER_ARM,
                 "minutes_with_margin": 168.0,
@@ -1594,11 +1644,11 @@ def build_tree(
 def readme_bytes() -> bytes:
     oracle = derive_bracket_session_receipt_oracle()
     identity = active_generation()
-    status = PACK_STATUS if identity.preserve_current_frozen_bytes else DRAFT_STATUS
+    status = identity.target_status
     version = identity.family_suffix.removeprefix("_")
     identity_statement = (
         ""
-        if identity.preserve_current_frozen_bytes
+        if identity.target_ordinal == 1
         else f"Pack identity: `{identity.pack_id}` (`{identity.family_suffix}`).\n\n"
     )
     if status != DRAFT_STATUS:
@@ -1666,11 +1716,12 @@ def generate(
 
 
 def _generate(output_repo_root: Path) -> dict[str, str]:
+    validate_generation_output_inventory(active_generation())
     out = output_repo_root / active_generation().pack_rel
     out.mkdir(parents=True, exist_ok=True)
     generator_bytes = embedded_generator_bytes()
     generator_sha = (
-        CURRENT_FROZEN_GENERATOR_SHA256
+        preserved_generator_sha256()
         if active_generation().preserve_current_frozen_bytes
         else sha256_bytes(generator_bytes)
     )
@@ -1715,7 +1766,7 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
             # The frozen plan-tree manifest reference pins these bytes by SHA.
-            "draft_status": DRAFT_STATUS,
+            "draft_status": active_generation().target_status,
             "manifest_id": f"d117-gamma-{stage_id.replace('_', '-')}-order-v1",
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha,
@@ -1753,7 +1804,7 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
         # The frozen gamma analysis manifest pins the root manifest by SHA.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": active_generation().target_status,
         "manifest_id": "d117-gamma-qwen25-1p5b-vs-7b-order-v1",
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha,
@@ -1987,10 +2038,10 @@ def main(argv: list[str] | None = None) -> int:
         else generate(args.output_root or REPO_ROOT, identity)
     )
     mode = "checked" if args.check else "generated"
-    status = PACK_STATUS if identity.preserve_current_frozen_bytes else DRAFT_STATUS
+    status = identity.target_status
     identity_label = (
         status.replace("_", " ")
-        if identity.preserve_current_frozen_bytes
+        if identity.target_ordinal == 1
         else identity.pack_id
     )
     print(
