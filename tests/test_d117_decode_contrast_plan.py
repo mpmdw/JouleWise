@@ -213,6 +213,83 @@ def governed_frozen_attachment_paths(pack_root: Path) -> set[Path]:
     return expected
 
 
+# Namespaces a pack acquires AFTER generation, from the separate governed
+# tools: the D-134 freeze-receipt mint (`arm_readiness.freeze.receipts/`), the
+# readiness evidence authors (`arm_readiness.evidence/`) together with the
+# source facts those authors pin (`arm_readiness.sources/`), and the
+# identity-pin projection minter (`identity_pin_projection.receipts/`) -- each
+# JSON accompanied by its `.sha256` sidecar, which is why whole namespaces
+# rather than individual files are named here.
+#
+# Derivation: this tuple is exactly the directory set of
+# (files in the committed pack) - (the generator's own `expected_pack_paths()`)
+# for every frozen D-117 pack in the family. `generate_configs.py` emits none
+# of them, and the successor test re-derives that emptiness half of the
+# subtraction at run time against the freshly generated pack, so the exclusion
+# can never silently absorb a file generation actually owns.
+GOVERNED_POST_GENERATION_NAMESPACES = (
+    "arm_readiness.evidence",
+    "arm_readiness.freeze.receipts",
+    "arm_readiness.sources",
+    "identity_pin_projection.receipts",
+)
+
+
+def governed_post_generation_files(pack_root: Path) -> set[Path]:
+    """Return pack-relative files under the governed post-generation namespaces."""
+
+    found: set[Path] = set()
+    for namespace in GOVERNED_POST_GENERATION_NAMESPACES:
+        directory = pack_root / namespace
+        if not directory.is_dir():
+            continue
+        found |= {
+            path.relative_to(pack_root)
+            for path in directory.rglob("*")
+            if path.is_file() and "__pycache__" not in path.parts
+        }
+    return found
+
+
+def minted_successor_pack_rels() -> list[Path]:
+    """Return the successor family packs this repository has already minted."""
+
+    current_rel = GENERATOR_MODULE.PACK_REL
+    family_stem = current_rel.name.removesuffix(
+        GENERATOR_MODULE.CURRENT_FAMILY_SUFFIX
+    )
+    minted: list[Path] = []
+    ordinal = 2
+    while True:
+        candidate = current_rel.with_name(f"{family_stem}_v{ordinal}")
+        if not (ROOT / candidate).is_dir():
+            return minted
+        minted.append(candidate)
+        ordinal += 1
+
+
+def unminted_successor_family_suffix() -> str:
+    """Return the first successor family ordinal the repository has not minted.
+
+    Successor generation is freeze-aware by design: the generator derives its
+    arm-readiness attachment from the TARGET pack's committed state, so
+    regenerating an ALREADY-minted family threads that family's D-134 freeze
+    receipt into the emitted plan tree -- a receipt the emitted checkout cannot
+    carry, because the governed post-generation tools mint it and
+    `generate_configs.py` never does. The emitted pack would then reference a
+    receipt that is not in its own inventory, and the emitted generator's own
+    `--check` would refuse the frozen identity outright.
+
+    This test is about emitting a BRAND-NEW successor family, so it always
+    targets the first ordinal that has not been minted yet: `_v2` before the
+    family migration, `_v3` once the `_v2` packs are committed, and so on. What
+    the test exercises is therefore independent of how much of the family is
+    already committed, and of whether the committed part is frozen.
+    """
+
+    return f"_v{len(minted_successor_pack_rels()) + 2}"
+
+
 _SUCCESSOR_GENERATION_NAME = re.compile(r"_v[2-9]\d*(_extraction_spec\.json)?$")
 
 
@@ -759,9 +836,15 @@ class D117GammaPlanTest(unittest.TestCase):
                 self.assertEqual(list(escape_root.iterdir()), [])
 
     def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
-        successor_id = "d117_contrast_qwen25_1p5b_vs_7b_v2"
+        successor_suffix = unminted_successor_family_suffix()
+        successor_token = successor_suffix.removeprefix("_")
+        successor_id = GENERATOR_MODULE.PACK_REL.name.removesuffix(
+            GENERATOR_MODULE.CURRENT_FAMILY_SUFFIX
+        ) + successor_suffix
         successor_rel = GENERATOR_MODULE.PACK_REL.with_name(successor_id)
-        with tempfile.TemporaryDirectory(prefix="d117-gamma-v2-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix=f"d117-gamma{successor_suffix}-"
+        ) as temp:
             output_root = Path(temp)
             tracked = initialize_git_tracked_checkout(
                 output_root,
@@ -804,7 +887,7 @@ class D117GammaPlanTest(unittest.TestCase):
                 "--pack-id",
                 successor_id,
                 "--family-suffix",
-                "_v2",
+                successor_suffix,
                 "--no-preserve-current-frozen-bytes",
             ]
             generated = subprocess.run(
@@ -838,6 +921,38 @@ class D117GammaPlanTest(unittest.TestCase):
                 },
                 v1_spec_hashes,
             )
+            # Generation owns the GENERATED layer and nothing else. The
+            # governed post-generation namespaces are minted afterwards by the
+            # separate governed tools, so the emitted successor carries none of
+            # them -- which is exactly why the generated-vs-committed file-set
+            # comparison must exclude them.
+            generated_layer = {
+                Path(relative)
+                for relative in GENERATOR_MODULE.expected_pack_paths()
+            }
+            self.assertEqual(
+                governed_post_generation_files(output_root / successor_rel), set()
+            )
+            for minted_rel in minted_successor_pack_rels():
+                with self.subTest(minted_successor=minted_rel.name):
+                    committed_governed = governed_post_generation_files(
+                        ROOT / minted_rel
+                    )
+                    # Principled exclusion, not a blind filter: the excluded
+                    # namespaces never overlap the generated layer, and a
+                    # committed pack that has been frozen really does carry
+                    # every one of them.
+                    self.assertEqual(committed_governed & generated_layer, set())
+                    if (
+                        ROOT / minted_rel / "arm_readiness.freeze.receipts"
+                    ).is_dir():
+                        self.assertEqual(
+                            {
+                                relative.parts[0]
+                                for relative in committed_governed
+                            },
+                            set(GOVERNED_POST_GENERATION_NAMESPACES),
+                        )
             checked = subprocess.run(
                 [*command, "--check"],
                 cwd=ROOT,
@@ -852,11 +967,12 @@ class D117GammaPlanTest(unittest.TestCase):
             self.assertEqual(tree["plan"]["path"], "calibration_plan.json")
             self.assertEqual(
                 tree["plan"]["plan_id"],
-                GENERATOR_MODULE.PLAN_ID.removesuffix("v1") + "v2",
+                GENERATOR_MODULE.PLAN_ID.removesuffix("v1") + successor_token,
             )
             self.assertEqual(
                 tree["window_identity"]["evidence_root_id"],
-                GENERATOR_MODULE.EVIDENCE_ROOT_ID.removesuffix("v1") + "v2",
+                GENERATOR_MODULE.EVIDENCE_ROOT_ID.removesuffix("v1")
+                + successor_token,
             )
             reservation = next(
                 stage
@@ -898,7 +1014,7 @@ class D117GammaPlanTest(unittest.TestCase):
                         self.assertNotIn(marker, content)
                     self.assertIn(successor_id, content)
             self.assertIn(
-                'CURRENT_FAMILY_SUFFIX = "_v2"',
+                f'CURRENT_FAMILY_SUFFIX = "{successor_suffix}"',
                 self_referential["generate_configs.py"],
             )
             self.assertIn(
@@ -923,7 +1039,7 @@ class D117GammaPlanTest(unittest.TestCase):
             self.assertEqual(embedded_check.returncode, 0, embedded_check.stderr)
             self.assertIn(successor_id, embedded_check.stdout)
 
-            commit_fixture(output_root, "track emitted gamma v2")
+            commit_fixture(output_root, f"track emitted gamma {successor_token}")
             preserve_command = [
                 sys.executable,
                 str(pack_root / "generate_configs.py"),
