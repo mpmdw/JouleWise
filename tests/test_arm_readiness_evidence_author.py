@@ -100,8 +100,22 @@ def _identity_unit(arm: str, model: str) -> dict:
     }
 
 
-def make_author_fixture():
-    temporary, repository, pack, custody, arm_path = make_go_fixture()
+def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
+    """Build an ALPHA authoring pack plus its two family siblings.
+
+    PACK_FAMILY derivation reads the family named by
+    ``evidence._PACKS_BY_PROFILE``, which is the IMMUTABLE HISTORICAL family, so
+    the default fixture is that family's generation-1 ALPHA member and the
+    siblings match its generation.  A caller may ask for a later generation to
+    exercise successor-chain behaviour; it must then supply the family route for
+    that generation (today: by patching ``_PACKS_BY_PROFILE``, which stands in
+    for the registry-driven successor family route that does not exist yet).
+    """
+
+    generation_suffix = pack_name[pack_name.rindex("_v") :]
+    temporary, repository, pack, custody, arm_path = make_go_fixture(
+        pack_name, "ALPHA"
+    )
 
     for relative in (
         "configs/calibration/calibration_acceptance_d079_v2.json",
@@ -262,11 +276,12 @@ def make_author_fixture():
     )
 
     beta_identity = _identity_unit("B", "beta-model")
-    # D-138: PACK_FAMILY derives from the live _v2 family, so the fixture's
-    # BETA/GAMMA siblings carry the superseding pack IDs.
     sibling_trees = {
-        "d117_floor_qwen25_7b_v2": [beta_identity],
-        "d117_contrast_qwen25_1p5b_vs_7b_v2": [alpha_identity, beta_identity],
+        f"d117_floor_qwen25_7b{generation_suffix}": [beta_identity],
+        f"d117_contrast_qwen25_1p5b_vs_7b{generation_suffix}": [
+            alpha_identity,
+            beta_identity,
+        ],
     }
     for pack_name, units in sibling_trees.items():
         sibling = repository / "configs/campaigns" / pack_name
@@ -1037,22 +1052,30 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         self.assertFalse((pack / evidence._SOURCE_DIRECTORY).exists())
         self.assertFalse((pack / evidence._EVIDENCE_DIRECTORY).exists())
 
-    def test_superseded_pack_is_refused_by_the_public_evidence_author(self) -> None:
-        """D-138: a v1 campaign pack ID no longer authors freeze evidence."""
+    def test_historical_pack_is_not_refused_by_the_author_registry_site(
+        self,
+    ) -> None:
+        """The author's registry site resolves a historical v1 identity.
+
+        The pack/profile map is immutable history, so this site must NEVER be
+        the thing that refuses a v1 pack; prevention is layered onto the later
+        governed gates (R2 frozen-plan resolution, freeze-receipt
+        authentication, the R1 lifecycle once a registry installs it).
+        """
 
         temporary, _repository, pack, _custody, _arm_path = make_go_fixture(
             "d117_floor_qwen25_1p5b_v1", "ALPHA"
         )
         self.addCleanup(temporary.cleanup)
-        with self.assertRaises(readiness.ArmReadinessError) as caught:
-            author_arm_readiness_evidence(pack)
-        self.assertEqual(
-            caught.exception.reason_code, "readiness_row_registry_mismatch"
-        )
-        self.assertFalse((pack / evidence._SOURCE_DIRECTORY).exists())
-        self.assertFalse((pack / evidence._EVIDENCE_DIRECTORY).exists())
+        tree, _raw = readiness._plan_tree(pack)
+        rows, kinds = evidence._required_generic_rows(pack, tree)
+        self.assertTrue(rows)
+        self.assertIn("PACK_FAMILY", kinds)
+        self.assertEqual(readiness._plan_profile(pack), "ALPHA")
 
-    def test_pack_family_evidence_binds_the_v2_family_only(self) -> None:
+    def test_pack_family_evidence_binds_the_immutable_historical_family(
+        self,
+    ) -> None:
         temporary, _repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         tree, _raw = readiness._plan_tree(pack)
@@ -1071,15 +1094,38 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 for pack_name in evidence._PACKS_BY_PROFILE.values()
             ],
         )
-        self.assertTrue(
-            all(
-                "_v1/" not in artifact["path"]
-                for artifact in derived.primary_artifacts
-            )
+        # The bound family is the historical one.  A registry-driven successor
+        # route for PACK_FAMILY derivation does not exist yet: a _v2 pack would
+        # still bind these three v1 plan trees.  Reported to the magistrate with
+        # the R1 registry install rather than patched here.
+        self.assertEqual(
+            [artifact["path"] for artifact in derived.primary_artifacts],
+            [
+                "configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.json",
+                "configs/campaigns/d117_floor_qwen25_7b_v1/plan_tree.json",
+                "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/plan_tree.json",
+            ],
         )
 
     def test_authored_evidence_makes_synthetic_pack_freeze_pass(self) -> None:
-        temporary, repository, pack, _custody, _arm_path = make_author_fixture()
+        # This one exercises the SUCCESSOR world end to end (freeze-0002 with a
+        # predecessor root), so it needs the successor family route.  Patching
+        # _PACKS_BY_PROFILE stands in for the registry-driven successor family
+        # route that is not built yet: the code map itself is immutable history
+        # and must not be edited to follow a supersession.
+        family = mock.patch.dict(
+            evidence._PACKS_BY_PROFILE,
+            {
+                "ALPHA": "d117_floor_qwen25_1p5b_v2",
+                "BETA": "d117_floor_qwen25_7b_v2",
+                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+            },
+        )
+        family.start()
+        self.addCleanup(family.stop)
+        temporary, repository, pack, _custody, _arm_path = make_author_fixture(
+            "d117_floor_qwen25_1p5b_v2"
+        )
         self.addCleanup(temporary.cleanup)
         author_output = io.BytesIO()
         author_stdout = _cli_stdout(author_output)

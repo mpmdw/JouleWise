@@ -47,7 +47,10 @@ from tests.test_arm_readiness_schemas import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PACK_NAME = "d117_floor_qwen25_1p5b_v2"
-SUPERSEDED_PACK_NAME = "d117_floor_qwen25_1p5b_v1"
+# The generation-1 ALPHA identity.  It is a historical record, NOT a superseded
+# entry that leaves the code: ``_PROFILE_BY_PACK`` keeps it forever (see the
+# ``_plan_profile`` docstring and PostSupersessionLayeringTests below).
+HISTORICAL_PACK_NAME = "d117_floor_qwen25_1p5b_v1"
 LAUNCH_WINDOW_SPEC = importlib.util.spec_from_file_location(
     "arm_readiness_lifecycle_launch_window",
     ROOT / "scripts/launch_window.py",
@@ -1647,30 +1650,39 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         )
 
     def test_first_generation_packs_reject_a_predecessor_input(self) -> None:
-        # A generation-1 pack opens a chain; the guard is about generation, so
-        # the superseded ID is mapped back in for this unit only.
+        # A generation-1 pack opens a chain.  The historical v1 identity keeps
+        # its immutable map entry, so no patching is needed to resolve it.
         temporary, repo, pack, _custody, _arm = make_go_fixture(
-            SUPERSEDED_PACK_NAME, "ALPHA"
+            HISTORICAL_PACK_NAME, "ALPHA"
         )
         self.addCleanup(temporary.cleanup)
-        patched = mock.patch.dict(
-            readiness._PROFILE_BY_PACK, {SUPERSEDED_PACK_NAME: "ALPHA"}
-        )
-        patched.start()
-        self.addCleanup(patched.stop)
         with self.assertRaises(ArmReadinessError) as caught:
             generate_freeze_receipt(pack, predecessor_pack_root=pack)
         self.assertEqual(caught.exception.reason_code, "readiness_usage_invalid")
         self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
 
 
-class SupersededPackRefusalTests(unittest.TestCase):
-    """D-138: the v1 campaign packs are superseded by the ``_v2`` family.
+class PostSupersessionLayeringTests(unittest.TestCase):
+    """The pack/profile map is IMMUTABLE HISTORY, not live vocabulary.
 
-    Every governed entry point the pack/profile map feeds must refuse a v1
-    pack ID with the established registry-mismatch code.  That refusal IS the
-    supersession; the v1 packs stay authentic historical records and are still
-    authenticatable as freeze predecessors.
+    A supersession never deletes a v1 identity from ``_PROFILE_BY_PACK``: the
+    committed v1 receipts, evidence, and freeze chains were minted against that
+    mapping and must stay authenticatable forever (see the ``_plan_profile``
+    docstring, the R1 lane's ONE home for this design).  Successor identities
+    install BY ROLE through the R1 registry's
+    ``successor_policy.successor_pack_ids``, validated against the three
+    D-139-approved uniform name shapes.
+
+    Post-supersession refusal of a v1 pack is therefore LAYERED across the
+    governed gates, not concentrated in a map lookup.  Measured against the
+    committed campaign packs at this head: ALPHA/BETA v1 refuse freeze,
+    dry-run, and arm at R2 frozen-plan resolution
+    (``readiness_pack_unreadable``); GAMMA v1 refuses all three at freeze-
+    receipt authentication (``readiness_freeze_receipt_mismatch``); all three
+    refuse evidence authoring (``evidence_author_existing_stale``).  Those
+    end-to-end paths are exercised by the R2 and freeze-authentication
+    regressions in their own ONE homes; the units here pin the map design
+    itself.
     """
 
     def setUp(self) -> None:
@@ -1680,7 +1692,7 @@ class SupersededPackRefusalTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def superseded_fixture(self, profile: str = "ALPHA") -> tuple[Path, Path, Path]:
+    def historical_fixture(self, profile: str = "ALPHA") -> tuple[Path, Path, Path]:
         pack_name = predecessor_pack_name(SUCCESSOR_PACKS[profile])
         temporary, repo, pack, custody, _arm_path = make_go_fixture(
             pack_name, profile
@@ -1688,13 +1700,13 @@ class SupersededPackRefusalTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         return repo, pack, custody
 
-    def test_live_map_carries_only_the_v2_family(self) -> None:
+    def test_historical_map_is_immutable_and_successors_are_absent(self) -> None:
         self.assertEqual(
             readiness._PROFILE_BY_PACK,
             {
-                "d117_floor_qwen25_1p5b_v2": "ALPHA",
-                "d117_floor_qwen25_7b_v2": "BETA",
-                "d117_contrast_qwen25_1p5b_vs_7b_v2": "GAMMA",
+                "d117_floor_qwen25_1p5b_v1": "ALPHA",
+                "d117_floor_qwen25_7b_v1": "BETA",
+                "d117_contrast_qwen25_1p5b_vs_7b_v1": "GAMMA",
             },
         )
         self.assertEqual(
@@ -1704,16 +1716,29 @@ class SupersededPackRefusalTests(unittest.TestCase):
                 for pack_name, profile in readiness._PROFILE_BY_PACK.items()
             },
         )
+        # No successor ID is ever hardcoded here; only the approved shapes are
+        # code constants, and installation is the registry's job.
+        for pack_name in SUCCESSOR_PACKS.values():
+            self.assertNotIn(pack_name, readiness._PROFILE_BY_PACK)
+        for profile, pack_name in SUCCESSOR_PACKS.items():
+            self.assertTrue(
+                readiness._SUCCESSOR_PROFILE_PATTERNS[profile].fullmatch(pack_name)
+            )
+        for pack_name in readiness._PROFILE_BY_PACK:
+            self.assertFalse(
+                any(
+                    pattern.fullmatch(pack_name)
+                    for pattern in readiness._SUCCESSOR_PROFILE_PATTERNS.values()
+                )
+            )
 
     def test_row_registry_is_profile_keyed_and_needs_no_change(self) -> None:
         raw = (
             ROOT / "configs/arm_readiness/d117_row_registry_v1.json"
         ).read_text(encoding="utf-8")
         for pack_name in (
-            "d117_floor_qwen25_1p5b_v1",
-            "d117_floor_qwen25_7b_v1",
-            "d117_contrast_qwen25_1p5b_vs_7b_v1",
             *readiness._PROFILE_BY_PACK,
+            *SUCCESSOR_PACKS.values(),
         ):
             self.assertNotIn(pack_name, raw)
         registry, _raw = readiness.load_registry(ROOT)
@@ -1722,49 +1747,38 @@ class SupersededPackRefusalTests(unittest.TestCase):
             ["ALPHA", "BETA", "GAMMA"],
         )
 
-    def test_every_governed_entry_point_refuses_a_superseded_pack(self) -> None:
-        repo, pack, custody = self.superseded_fixture()
-        context = sample_arm(Path(repo).parent / "context")["arm_context"]
-        entry_points = {
-            "profile lookup": lambda: readiness._plan_profile(pack),
-            "registry reference": lambda: readiness._registry_reference(pack),
-            "freeze": lambda: generate_freeze_receipt(pack),
-            "dry-run": lambda: generate_dry_run_receipt(
-                pack, custody, "rehearsal-1", Path(repo).parent / "synthetic"
-            ),
-            "arm": lambda: generate_arm_receipt(pack, context, custody),
-            "required generic rows": lambda: evidence_module._required_generic_rows(
-                pack, readiness._plan_tree(pack)[0]
-            ),
-        }
-        for name, entry_point in entry_points.items():
-            with self.subTest(entry_point=name):
-                with self.assertRaises(ArmReadinessError) as caught:
-                    entry_point()
-                self.assertEqual(
-                    caught.exception.reason_code, "readiness_row_registry_mismatch"
+    def test_every_map_fed_entry_point_still_resolves_a_historical_pack(
+        self,
+    ) -> None:
+        """The inverse regression: history must never stop resolving.
+
+        Deleting a v1 identity from the map would orphan its own committed
+        receipts, so every site the map feeds keeps resolving it.  Whatever
+        prevents a v1 pack from arming is a LATER gate, never this lookup.
+        """
+
+        for profile in ("ALPHA", "BETA", "GAMMA"):
+            with self.subTest(profile=profile):
+                _repo, pack, _custody = self.historical_fixture(profile)
+                self.assertEqual(readiness._plan_profile(pack), profile)
+                _registry, _raw, reference = readiness._registry_reference(pack)
+                self.assertEqual(reference["plan_profile"], profile)
+                rows, kinds = evidence_module._required_generic_rows(
+                    pack, readiness._plan_tree(pack)[0]
                 )
+                self.assertTrue(rows)
+                self.assertTrue(kinds)
 
-    def test_superseded_pack_refusal_is_not_a_freeze_chain_refusal(self) -> None:
-        """The map refuses before generation/ancestry is ever considered."""
-
-        repo, pack, _custody = self.superseded_fixture()
-        with self.assertRaises(ArmReadinessError) as caught:
-            generate_freeze_receipt(pack)
-        self.assertEqual(
-            caught.exception.reason_code, "readiness_row_registry_mismatch"
-        )
-        self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
-
-    def test_superseded_packs_remain_authenticatable_predecessors(self) -> None:
-        """Supersession must not orphan the historical v1 receipts."""
+    def test_historical_predecessor_resolves_and_still_anchors_the_chain(
+        self,
+    ) -> None:
+        """Retaining history must not disturb D-139 chain authentication."""
 
         temporary, repo, pack, _custody, _arm = make_go_fixture(PACK_NAME, "ALPHA")
         self.addCleanup(temporary.cleanup)
         predecessor = predecessor_pack_root(repo, PACK_NAME)
-        self.assertNotIn(predecessor.name, readiness._PROFILE_BY_PACK)
-        with self.assertRaises(ArmReadinessError):
-            readiness._plan_profile(predecessor)
+        self.assertIn(predecessor.name, readiness._PROFILE_BY_PACK)
+        self.assertEqual(readiness._plan_profile(predecessor), "ALPHA")
         result = generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
         receipt = json.loads(
             Path(result["receipt_path"]).read_text(encoding="utf-8")

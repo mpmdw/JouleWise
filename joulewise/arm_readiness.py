@@ -242,16 +242,20 @@ _RECEIPT_NAME_RE = {
 # A pack ID's trailing ``_v<N>`` is its family generation.  Generation 1 packs
 # open a chain; every later generation must present an authenticated predecessor.
 _PACK_GENERATION_RE = re.compile(r"_v([0-9]+)$")
-# D-138/D-139: the regenerated ``_v2`` packs SUPERSEDE the v1 campaign packs.
-# The v1 IDs are deliberately absent, so freeze, dry-run, arm, verification,
-# and evidence authoring all refuse a superseded pack with
-# ``readiness_row_registry_mismatch``.  v1 packs remain authentic historical
-# records and are still authenticated as freeze predecessors, which reads
-# their recorded receipt bindings rather than this map.
+# The IMMUTABLE HISTORICAL v1 mapping (R1 design; see ``_plan_profile``).  This
+# map is never edited to follow a supersession: the v1 campaign packs keep their
+# role forever, because their committed receipts, evidence, and freeze chains
+# were minted against it and must stay authenticatable.  Successor (``_v<N>``)
+# identities are NOT listed here — they install BY ROLE through the R1 registry
+# (``freeze_evidence_lifecycle.successor_policy.successor_pack_ids``), and the
+# code validates only the three D-139-approved uniform successor name shapes
+# below.  Post-supersession refusal of a v1 pack is the job of the layered
+# governed gates (R2 plan resolution, V1_GRANDFATHERING, the freeze chain), not
+# of deleting history from this table.
 _PROFILE_BY_PACK = {
-    "d117_floor_qwen25_1p5b_v2": "ALPHA",
-    "d117_floor_qwen25_7b_v2": "BETA",
-    "d117_contrast_qwen25_1p5b_vs_7b_v2": "GAMMA",
+    "d117_floor_qwen25_1p5b_v1": "ALPHA",
+    "d117_floor_qwen25_7b_v1": "BETA",
+    "d117_contrast_qwen25_1p5b_vs_7b_v1": "GAMMA",
 }
 _SUCCESSOR_PROFILE_PATTERNS = {
     "ALPHA": re.compile(r"^d117_floor_qwen25_1p5b_v(?:[2-9]|[1-9][0-9]+)$"),

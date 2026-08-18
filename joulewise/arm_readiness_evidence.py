@@ -42,13 +42,16 @@ _SPECIALIZED_EVIDENCE_KINDS = frozenset(
     {"IDENTITY_PIN_PROJECTION", "DRY_RUN_REHEARSAL"}
 )
 
-# D-138/D-139: the inverse of arm_readiness._PROFILE_BY_PACK.  The regenerated
-# ``_v2`` packs SUPERSEDE the v1 campaign packs, so PACK_FAMILY evidence is
-# derived from the _v2 family only.
+# The inverse of arm_readiness._PROFILE_BY_PACK, and immutable for the same
+# reason: it is the HISTORICAL v1 family, and the committed v1 PACK_FAMILY
+# evidence was derived against exactly these three plan trees.  Successor
+# families do not edit this table; a registry-driven successor route for
+# PACK_FAMILY derivation is NOT yet built (reported to the magistrate with the
+# R1 registry install).
 _PACKS_BY_PROFILE = {
-    "ALPHA": "d117_floor_qwen25_1p5b_v2",
-    "BETA": "d117_floor_qwen25_7b_v2",
-    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+    "ALPHA": "d117_floor_qwen25_1p5b_v1",
+    "BETA": "d117_floor_qwen25_7b_v1",
+    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v1",
 }
 _SOURCE_KEYS = {
     "schema_version",
