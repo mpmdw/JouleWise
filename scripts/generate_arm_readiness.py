@@ -31,6 +31,10 @@ def _parser() -> argparse.ArgumentParser:
 
     freeze = subparsers.add_parser("freeze")
     freeze.add_argument("--pack-root", type=Path, required=True)
+    # D-139: a successor pack's freeze receipt binds an authenticated
+    # predecessor pack.  The command accepts a path only; every recorded ID,
+    # digest, and ordinal is derived from that pack's committed bytes.
+    freeze.add_argument("--predecessor-pack-root", type=Path, default=None)
 
     dry_run = subparsers.add_parser("dry-run")
     dry_run.add_argument("--pack-root", type=Path, required=True)
@@ -90,7 +94,10 @@ def main(argv: list[str] | None = None) -> int:
         if read_only:
             before = _pack_snapshot(args.pack_root)
         if args.command == "freeze":
-            result = generate_freeze_receipt(args.pack_root)
+            result = generate_freeze_receipt(
+                args.pack_root,
+                predecessor_pack_root=args.predecessor_pack_root,
+            )
         elif args.command == "dry-run":
             result = generate_dry_run_receipt(
                 args.pack_root,

@@ -44,6 +44,14 @@ PACK_DIGEST_DOMAIN = b"joulewise.committed_pack_tree_sha256.v1\n"
 ROW_REGISTRY_SCHEMA = "joulewise.arm_readiness_row_registry.v1"
 ROW_REGISTRY_ID = "d117-row-registry-v1"
 FREEZE_RECEIPT_SCHEMA = "joulewise.arm_readiness_freeze_receipt.v1"
+# D-139's chain-monotonic successor receipt.  ``FREEZE_RECEIPT_SCHEMA`` remains
+# the v1 constant so every committed v1 receipt keeps verifying byte-identically;
+# v2 replaces ``supersedes`` with an authenticated ``predecessor`` binding.
+FREEZE_RECEIPT_V1_SCHEMA = FREEZE_RECEIPT_SCHEMA
+FREEZE_RECEIPT_V2_SCHEMA = "joulewise.arm_readiness_freeze_receipt.v2"
+FREEZE_PREDECESSOR_EVIDENCE_SET_DOMAIN = (
+    b"joulewise.arm_readiness_freeze_predecessor_evidence_set.v1\n"
+)
 ARM_RECEIPT_SCHEMA = "joulewise.arm_readiness_receipt.v1"
 DRY_RUN_RECEIPT_SCHEMA = "joulewise.arm_readiness_dry_run_receipt.v1"
 EVIDENCE_RECEIPT_SCHEMA = "joulewise.arm_readiness_evidence_receipt.v1"
@@ -156,6 +164,10 @@ POLICY_REASON_CODES = frozenset(
 ENVIRONMENT_REASON_CODES = frozenset(
     {"readiness_io_error", "readiness_internal_error"}
 )
+# D-139 freeze-chain refusals.  They are raised before any successor write and
+# are never minted into a receipt: an unauthenticated ancestry record is not a
+# legitimate chain member, so it must not become a REFUSE receipt either.
+SUCCESSOR_CHAIN_REASON_CODES = frozenset({"readiness_successor_chain_invalid"})
 LAUNCH_LINEAGE_REASON_CODES = frozenset(
     {
         "launch_consumption_missing",
@@ -175,6 +187,7 @@ READINESS_REASON_CODES = frozenset().union(
     POLICY_REASON_CODES,
     IDENTITY_PIN_PROJECTION_REASON_CODES,
     ENVIRONMENT_REASON_CODES,
+    SUCCESSOR_CHAIN_REASON_CODES,
 )
 REASON_TYPE_BY_CODE = {
     **{code: "STRUCTURE" for code in STRUCTURE_REASON_CODES},
@@ -184,6 +197,7 @@ REASON_TYPE_BY_CODE = {
     **{code: "POLICY" for code in POLICY_REASON_CODES},
     **{code: "IDENTITY" for code in IDENTITY_PIN_PROJECTION_REASON_CODES},
     **{code: "ENVIRONMENT" for code in ENVIRONMENT_REASON_CODES},
+    **{code: "SUCCESSOR_CHAIN" for code in SUCCESSOR_CHAIN_REASON_CODES},
 }
 
 WINDOW_KINDS = frozenset({"ALPHA", "BETA", "GAMMA"})
@@ -215,6 +229,9 @@ _RECEIPT_NAME_RE = {
     "arm": re.compile(r"^arm-([0-9]{4,})\.json$"),
     "dry-run": re.compile(r"^dry-run-([0-9]{4,})\.json$"),
 }
+# A pack ID's trailing ``_v<N>`` is its family generation.  Generation 1 packs
+# open a chain; every later generation must present an authenticated predecessor.
+_PACK_GENERATION_RE = re.compile(r"_v([0-9]+)$")
 _PROFILE_BY_PACK = {
     "d117_floor_qwen25_1p5b_v1": "ALPHA",
     "d117_floor_qwen25_7b_v1": "BETA",
@@ -332,6 +349,20 @@ FREEZE_RECEIPT_KEYS = {
     "supersedes",
     "assurance",
 }
+FREEZE_RECEIPT_V1_KEYS = FREEZE_RECEIPT_KEYS
+FREEZE_PREDECESSOR_RECEIPT_KEYS = {"receipt_id", "path", "sha256"}
+FREEZE_PREDECESSOR_KEYS = {
+    "pack_id",
+    "pack_path",
+    "pack_digest_algorithm",
+    "pack_sha256",
+    "plan_id",
+    "plan_sha256",
+    "freeze_receipt",
+    "identity_receipt",
+    "evidence_set_sha256",
+}
+FREEZE_RECEIPT_V2_KEYS = (FREEZE_RECEIPT_KEYS - {"supersedes"}) | {"predecessor"}
 ARM_RECEIPT_KEYS = {
     "schema_version",
     "receipt_kind",
@@ -1023,6 +1054,81 @@ def _validate_supersedes(value: object, where: str = "supersedes") -> None:
         _require_lower_sha256(item[name], f"{where}.{name}")
 
 
+def _freeze_receipt_ordinal(value: object, where: str) -> int:
+    """Parse a governed ``freeze-<4+ digits>`` receipt ID into its ordinal."""
+
+    receipt_id = _require_string(value, where)
+    match = _RECEIPT_NAME_RE["freeze"].fullmatch(f"{receipt_id}.json")
+    if match is None:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} is not a governed freeze receipt ID"
+        )
+    number = int(match.group(1))
+    if number < 1:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where} ordinal must be positive"
+        )
+    return number
+
+
+def _pack_generation(pack_id: str) -> int:
+    """Return the family generation encoded by a pack ID's ``_v<N>`` suffix."""
+
+    match = _PACK_GENERATION_RE.search(pack_id)
+    return int(match.group(1)) if match is not None else 1
+
+
+def _validate_freeze_predecessor(
+    value: object, where: str = "freeze receipt.predecessor"
+) -> int:
+    """Exact-key structural validation of D-139's predecessor binding.
+
+    This is byte-level shape only.  Filesystem authentication of the referenced
+    predecessor pack lives in ``_authenticate_freeze_predecessor``.
+    """
+
+    item = _require_exact_keys(value, FREEZE_PREDECESSOR_KEYS, where)
+    _require_path_component(item["pack_id"], f"{where}.pack_id")
+    pack_path = _require_relative_path(item["pack_path"], f"{where}.pack_path")
+    if PurePosixPath(pack_path).name != item["pack_id"]:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where}.pack_path must end in pack_id"
+        )
+    if item["pack_digest_algorithm"] != PACK_DIGEST_ALGORITHM:
+        raise ArmReadinessError(
+            "readiness_schema_invalid", f"{where}.pack_digest_algorithm is invalid"
+        )
+    for name in ("pack_sha256", "plan_sha256", "evidence_set_sha256"):
+        _require_lower_sha256(item[name], f"{where}.{name}")
+    _require_string(item["plan_id"], f"{where}.plan_id")
+    freeze = _require_exact_keys(
+        item["freeze_receipt"],
+        FREEZE_PREDECESSOR_RECEIPT_KEYS,
+        f"{where}.freeze_receipt",
+    )
+    ordinal = _freeze_receipt_ordinal(
+        freeze["receipt_id"], f"{where}.freeze_receipt.receipt_id"
+    )
+    freeze_path = _require_relative_path(
+        freeze["path"], f"{where}.freeze_receipt.path"
+    )
+    _require_lower_sha256(freeze["sha256"], f"{where}.freeze_receipt.sha256")
+    if PurePosixPath(freeze_path).name != f"{freeze['receipt_id']}.json":
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"{where}.freeze_receipt path and receipt_id disagree",
+        )
+    identity = _require_exact_keys(
+        item["identity_receipt"],
+        FREEZE_PREDECESSOR_RECEIPT_KEYS,
+        f"{where}.identity_receipt",
+    )
+    _require_string(identity["receipt_id"], f"{where}.identity_receipt.receipt_id")
+    _require_relative_path(identity["path"], f"{where}.identity_receipt.path")
+    _require_lower_sha256(identity["sha256"], f"{where}.identity_receipt.sha256")
+    return ordinal
+
+
 def _validate_row_registry_reference(value: object, where: str) -> None:
     item = _require_exact_keys(value, ROW_REGISTRY_REFERENCE_KEYS, where)
     _require_string(item["registry_id"], f"{where}.registry_id")
@@ -1318,8 +1424,19 @@ def validate_evidence_receipt(value: object) -> Mapping[str, Any]:
 
 
 def validate_freeze_receipt(value: object) -> Mapping[str, Any]:
-    receipt = _require_exact_keys(value, FREEZE_RECEIPT_KEYS, "freeze receipt")
-    if receipt["schema_version"] != FREEZE_RECEIPT_SCHEMA:
+    """Validate a v1 or v2 freeze receipt under its own exact-key vocabulary."""
+
+    declared = value.get("schema_version") if isinstance(value, Mapping) else None
+    successor = declared == FREEZE_RECEIPT_V2_SCHEMA
+    receipt = _require_exact_keys(
+        value,
+        FREEZE_RECEIPT_V2_KEYS if successor else FREEZE_RECEIPT_V1_KEYS,
+        "freeze receipt",
+    )
+    if receipt["schema_version"] not in {
+        FREEZE_RECEIPT_V1_SCHEMA,
+        FREEZE_RECEIPT_V2_SCHEMA,
+    }:
         raise ArmReadinessError(
             "readiness_schema_invalid", "freeze receipt schema is invalid"
         )
@@ -1344,7 +1461,18 @@ def validate_freeze_receipt(value: object) -> Mapping[str, Any]:
         raise ArmReadinessError(
             "readiness_schema_invalid", "freeze status and refusals disagree"
         )
-    _validate_supersedes(receipt["supersedes"])
+    if successor:
+        predecessor_ordinal = _validate_freeze_predecessor(receipt["predecessor"])
+        ordinal = _freeze_receipt_ordinal(
+            receipt["receipt_id"], "freeze receipt.receipt_id"
+        )
+        if ordinal != predecessor_ordinal + 1:
+            raise ArmReadinessError(
+                "readiness_schema_invalid",
+                "freeze receipt ordinal is not the predecessor ordinal plus one",
+            )
+    else:
+        _validate_supersedes(receipt["supersedes"])
     _validate_assurance(receipt["assurance"])
     return receipt
 
@@ -1909,6 +2037,32 @@ def _valid_plan_attachment(value: object, expected: Mapping[str, Any]) -> None:
         _require_lower_sha256(freeze["sha256"], "plan freeze_receipt.sha256")
 
 
+def _existing_plan_freeze_pin(pack_root: Path) -> dict[str, str] | None:
+    """Return the freeze receipt the pack's plan tree already pins, if any."""
+
+    path = pack_root / "plan_tree.json"
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    try:
+        tree = parse_json_bytes(raw)
+    except ArmReadinessError:
+        return None
+    attachments = tree.get("arm_attachments") if isinstance(tree, Mapping) else None
+    declaration = (
+        attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
+    )
+    pin = (
+        declaration.get("freeze_receipt")
+        if isinstance(declaration, Mapping)
+        else None
+    )
+    if not isinstance(pin, Mapping) or set(pin) != {"path", "sha256"}:
+        return None
+    return {"path": str(pin["path"]), "sha256": str(pin["sha256"])}
+
+
 def plan_arm_readiness_attachment(
     pack_root: Path | str,
     plan_profile: str,
@@ -1949,11 +2103,24 @@ def plan_arm_readiness_attachment(
                 )
             committed_receipts.append(item)
     if committed_receipts:
-        latest = committed_receipts[-1]
+        # A highest filename confers no authority.  The pack must present one
+        # committed candidate, and it must be the one the plan already pins.
+        if len(committed_receipts) != 1:
+            raise ArmReadinessError(
+                "readiness_freeze_receipt_mismatch",
+                "pack presents multiple committed freeze receipts; no unique selection",
+            )
+        selected = committed_receipts[0]
         freeze_reference = {
-            "path": f"arm_readiness.freeze.receipts/{latest['path'].name}",
-            "sha256": latest["sha256"],
+            "path": f"arm_readiness.freeze.receipts/{selected['path'].name}",
+            "sha256": selected["sha256"],
         }
+        pinned = _existing_plan_freeze_pin(Path(pack_root))
+        if pinned is not None and pinned != freeze_reference:
+            raise ArmReadinessError(
+                "readiness_freeze_receipt_mismatch",
+                "committed freeze receipt is not the receipt the plan pins",
+            )
     return {
         "contract_id": CONTRACT_ID,
         "required_before_arm": True,
@@ -2092,6 +2259,19 @@ def scan_receipt_namespace(
             }
         )
     result.sort(key=lambda item: item["number"])
+    if kind == "freeze":
+        for item in result:
+            if item["receipt"]["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA:
+                continue
+            predecessor_ordinal = _freeze_receipt_ordinal(
+                item["receipt"]["predecessor"]["freeze_receipt"]["receipt_id"],
+                "predecessor freeze receipt_id",
+            )
+            if item["number"] < 2 or item["number"] != predecessor_ordinal + 1:
+                raise ArmReadinessError(
+                    "readiness_receipt_namespace_anomalous",
+                    "successor freeze receipt ordinal is not the predecessor ordinal plus one",
+                )
     if kind == "arm":
         for prior, successor in zip(result, result[1:]):
             expected_supersedes = {
@@ -3187,6 +3367,329 @@ def _evaluate_rows(
     return rows, refusals
 
 
+def _successor_chain_refusal(detail: str) -> ArmReadinessError:
+    return ArmReadinessError("readiness_successor_chain_invalid", detail)
+
+
+def _read_predecessor_file(pack_root: Path, relative: str, where: str) -> bytes:
+    """Read one predecessor-pack file without following a symlink out of it."""
+
+    try:
+        resolved_root = pack_root.resolve(strict=True)
+        current = pack_root
+        for component in PurePosixPath(relative).parts:
+            current = current / component
+            if stat.S_ISLNK(current.lstat().st_mode):
+                raise OSError(f"{where} traverses a symlink")
+        if not stat.S_ISREG(current.lstat().st_mode):
+            raise OSError(f"{where} is not a regular file")
+        current.resolve(strict=True).relative_to(resolved_root)
+        return current.read_bytes()
+    except (OSError, ValueError) as exc:
+        raise _successor_chain_refusal(
+            f"{where} is missing, unreadable, or outside the predecessor pack: {relative}"
+        ) from exc
+
+
+def _predecessor_evidence_set_sha256(evidence: Sequence[Mapping[str, Any]]) -> str:
+    """Domain-separated canonical hash of a freeze receipt's evidence array."""
+
+    return sha256_bytes(
+        FREEZE_PREDECESSOR_EVIDENCE_SET_DOMAIN + render_json(list(evidence))
+    )
+
+
+def _predecessor_pinned_receipt(
+    predecessor_root: Path,
+) -> tuple[Mapping[str, Any], dict[str, str], Mapping[str, Any]]:
+    """Return the predecessor's plan-pinned freeze receipt, pin, and identity item.
+
+    Every value here comes from the predecessor pack's OWN committed bytes.  The
+    current R2 plan resolver and the live pack/profile map are deliberately not
+    consulted: a superseded pack is a historical record whose plan spelling and
+    pack ID are no longer live vocabulary, and re-deriving them would make the
+    committed v1 packs permanently unauthenticatable.
+    """
+
+    try:
+        tree, _tree_raw = _plan_tree(predecessor_root)
+    except ArmReadinessError as exc:
+        raise _successor_chain_refusal(
+            f"predecessor plan tree is unreadable: {exc}"
+        ) from exc
+    attachments = tree.get("arm_attachments")
+    declaration = (
+        attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
+    )
+    pin = (
+        declaration.get("freeze_receipt")
+        if isinstance(declaration, Mapping)
+        else None
+    )
+    if not isinstance(pin, Mapping) or set(pin) != {"path", "sha256"}:
+        raise _successor_chain_refusal(
+            "predecessor plan tree does not pin exactly one freeze receipt"
+        )
+    try:
+        receipts = scan_receipt_namespace(
+            predecessor_root / "arm_readiness.freeze.receipts", "freeze"
+        )
+    except ArmReadinessError as exc:
+        raise _successor_chain_refusal(
+            f"predecessor freeze namespace is anomalous: {exc}"
+        ) from exc
+    matches = [
+        item
+        for item in receipts
+        if f"arm_readiness.freeze.receipts/{item['path'].name}" == pin["path"]
+        and item["sha256"] == pin["sha256"]
+    ]
+    if len(matches) != 1:
+        raise _successor_chain_refusal(
+            "the plan-pinned predecessor freeze receipt does not exist exactly once"
+        )
+    receipt = matches[0]["receipt"]
+    identity_items = [
+        item
+        for item in receipt["evidence"]
+        if item["schema_version"] == IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA
+    ]
+    if len(identity_items) != 1:
+        raise _successor_chain_refusal(
+            "predecessor freeze receipt does not bind exactly one identity receipt"
+        )
+    return (
+        receipt,
+        {"path": str(pin["path"]), "sha256": str(pin["sha256"])},
+        identity_items[0],
+    )
+
+
+def _predecessor_identity_receipt(
+    predecessor_root: Path, item: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    """Authenticate the predecessor's identity projection receipt bytes."""
+
+    relative = _require_relative_path(item["path"], "predecessor identity receipt path")
+    raw = _read_predecessor_file(
+        predecessor_root, relative, "predecessor identity projection receipt"
+    )
+    digest = sha256_bytes(raw)
+    if digest != item["sha256"]:
+        raise _successor_chain_refusal(
+            "predecessor identity projection receipt digest differs from its binding"
+        )
+    sidecar_relative = PurePosixPath(relative).with_suffix(".sha256").as_posix()
+    sidecar = _read_predecessor_file(
+        predecessor_root,
+        sidecar_relative,
+        "predecessor identity projection sidecar",
+    )
+    if sidecar != gnu_sidecar(digest, PurePosixPath(relative).name):
+        raise _successor_chain_refusal(
+            "predecessor identity projection sidecar does not authenticate its bytes"
+        )
+    try:
+        return validate_projection_receipt(
+            parse_json_bytes(raw, require_canonical=True)
+        )
+    except (IdentityPinProjectionError, ArmReadinessError) as exc:
+        raise _successor_chain_refusal(
+            f"predecessor identity projection receipt is invalid: {exc}"
+        ) from exc
+
+
+def _resolve_predecessor_root(pack_root: Path, candidate: Path) -> tuple[Path, Path, str]:
+    """Resolve a predecessor pack root inside the successor's repository."""
+
+    try:
+        successor_root = Path(pack_root).resolve(strict=True)
+    except OSError as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable", f"pack root is unreadable: {exc}"
+        ) from exc
+    repository = _repo_for_pack(successor_root)
+    try:
+        resolved = Path(candidate).resolve(strict=True)
+        relative = resolved.relative_to(repository).as_posix()
+        if not resolved.is_dir() or Path(candidate).is_symlink():
+            raise OSError("predecessor pack root is not a real directory")
+    except (OSError, ValueError) as exc:
+        raise _successor_chain_refusal(
+            "predecessor pack is absent, unreadable, or outside the successor repository"
+        ) from exc
+    if resolved == successor_root:
+        raise _successor_chain_refusal("a pack cannot be its own freeze predecessor")
+    return successor_root, resolved, relative
+
+
+def _authenticate_freeze_predecessor(
+    pack_root: Path,
+    predecessor: Mapping[str, Any],
+    *,
+    successor_receipt_id: str,
+    successor_profile: str,
+) -> Mapping[str, Any]:
+    """Authenticate D-139's freeze chain before any successor write or use.
+
+    Absent, unreadable, uncommitted, malformed, digest-divergent, profile
+    mismatched, REFUSE-status, and ordinal-violating ancestries all refuse with
+    the governed ``readiness_successor_chain_invalid`` code.  An invalid
+    ancestry never mints a REFUSE receipt.
+    """
+
+    try:
+        _validate_freeze_predecessor(predecessor)
+    except ArmReadinessError as exc:
+        raise _successor_chain_refusal(
+            f"predecessor binding is malformed: {exc}"
+        ) from exc
+    try:
+        successor_root = Path(pack_root).resolve(strict=True)
+    except OSError as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable", f"pack root is unreadable: {exc}"
+        ) from exc
+    repository = _repo_for_pack(successor_root)
+    candidate = repository.joinpath(
+        *PurePosixPath(str(predecessor["pack_path"])).parts
+    )
+    successor_root, predecessor_root, relative = _resolve_predecessor_root(
+        successor_root, candidate
+    )
+    if relative != predecessor["pack_path"]:
+        raise _successor_chain_refusal(
+            "predecessor pack path does not resolve to its recorded repository location"
+        )
+    if predecessor_root.name != predecessor["pack_id"]:
+        raise _successor_chain_refusal("predecessor pack_path does not name pack_id")
+    if successor_root.name == predecessor["pack_id"]:
+        raise _successor_chain_refusal("a pack cannot be its own freeze predecessor")
+    if predecessor["pack_digest_algorithm"] != PACK_DIGEST_ALGORITHM:
+        raise _successor_chain_refusal(
+            "predecessor pack digest algorithm is not the D-134 algorithm"
+        )
+    try:
+        observed_pack_sha256 = committed_pack_tree_sha256(predecessor_root)
+    except ArmReadinessError as exc:
+        raise _successor_chain_refusal(
+            f"predecessor pack bytes are not authentically committed: {exc}"
+        ) from exc
+    if observed_pack_sha256 != predecessor["pack_sha256"]:
+        raise _successor_chain_refusal(
+            "predecessor committed pack digest differs from the recorded binding"
+        )
+    receipt, pin, identity_item = _predecessor_pinned_receipt(predecessor_root)
+    recorded_freeze = predecessor["freeze_receipt"]
+    if (
+        pin["path"] != recorded_freeze["path"]
+        or pin["sha256"] != recorded_freeze["sha256"]
+        or receipt["receipt_id"] != recorded_freeze["receipt_id"]
+    ):
+        raise _successor_chain_refusal(
+            "predecessor freeze receipt binding differs from the recorded values"
+        )
+    if receipt["status"] != "PASS":
+        raise _successor_chain_refusal(
+            "predecessor freeze receipt did not record PASS"
+        )
+    identity = receipt["pack_identity"]
+    if (
+        identity["pack_id"] != predecessor["pack_id"]
+        or identity["plan_id"] != predecessor["plan_id"]
+        or identity["plan_sha256"] != predecessor["plan_sha256"]
+    ):
+        raise _successor_chain_refusal(
+            "predecessor pack identity differs from the recorded bindings"
+        )
+    plan_raw = _read_predecessor_file(
+        predecessor_root,
+        _require_relative_path(identity["plan_path"], "predecessor plan_path"),
+        "predecessor frozen plan",
+    )
+    if sha256_bytes(plan_raw) != predecessor["plan_sha256"]:
+        raise _successor_chain_refusal(
+            "predecessor frozen-plan bytes differ from the recorded plan digest"
+        )
+    recorded_identity = predecessor["identity_receipt"]
+    if (
+        identity_item["path"] != recorded_identity["path"]
+        or identity_item["sha256"] != recorded_identity["sha256"]
+    ):
+        raise _successor_chain_refusal(
+            "recorded identity receipt differs from the predecessor freeze binding"
+        )
+    identity_receipt = _predecessor_identity_receipt(predecessor_root, identity_item)
+    if identity_receipt["receipt_id"] != recorded_identity["receipt_id"]:
+        raise _successor_chain_refusal(
+            "predecessor identity projection receipt ID differs from the recorded binding"
+        )
+    if identity_receipt["status"] != "PASS":
+        raise _successor_chain_refusal(
+            "predecessor identity projection receipt did not record PASS"
+        )
+    if (
+        _predecessor_evidence_set_sha256(receipt["evidence"])
+        != predecessor["evidence_set_sha256"]
+    ):
+        raise _successor_chain_refusal(
+            "predecessor evidence-set digest differs from the recorded binding"
+        )
+    if receipt["row_registry"]["plan_profile"] != successor_profile:
+        raise _successor_chain_refusal(
+            "predecessor freeze receipt binds a different plan profile"
+        )
+    predecessor_ordinal = _freeze_receipt_ordinal(
+        receipt["receipt_id"], "predecessor freeze receipt_id"
+    )
+    successor_ordinal = _freeze_receipt_ordinal(
+        successor_receipt_id, "successor freeze receipt_id"
+    )
+    if successor_ordinal != predecessor_ordinal + 1:
+        raise _successor_chain_refusal(
+            "successor ordinal is not the predecessor ordinal plus one"
+        )
+    return receipt
+
+
+def _derive_freeze_predecessor(
+    pack_root: Path, predecessor_pack_root: Path
+) -> dict[str, Any]:
+    """Derive the serialized predecessor object from committed paths only."""
+
+    _successor_root, predecessor_root, relative = _resolve_predecessor_root(
+        Path(pack_root), Path(predecessor_pack_root)
+    )
+    receipt, pin, identity_item = _predecessor_pinned_receipt(predecessor_root)
+    identity_receipt = _predecessor_identity_receipt(predecessor_root, identity_item)
+    try:
+        pack_sha256 = committed_pack_tree_sha256(predecessor_root)
+    except ArmReadinessError as exc:
+        raise _successor_chain_refusal(
+            f"predecessor pack bytes are not authentically committed: {exc}"
+        ) from exc
+    identity = receipt["pack_identity"]
+    return {
+        "pack_id": predecessor_root.name,
+        "pack_path": relative,
+        "pack_digest_algorithm": PACK_DIGEST_ALGORITHM,
+        "pack_sha256": pack_sha256,
+        "plan_id": str(identity["plan_id"]),
+        "plan_sha256": str(identity["plan_sha256"]),
+        "freeze_receipt": {
+            "receipt_id": str(receipt["receipt_id"]),
+            "path": pin["path"],
+            "sha256": pin["sha256"],
+        },
+        "identity_receipt": {
+            "receipt_id": str(identity_receipt["receipt_id"]),
+            "path": str(identity_item["path"]),
+            "sha256": str(identity_item["sha256"]),
+        },
+        "evidence_set_sha256": _predecessor_evidence_set_sha256(receipt["evidence"]),
+    }
+
+
 def _load_freeze_reference(
     pack_root: Path,
     tree: Mapping[str, Any],
@@ -3226,6 +3729,13 @@ def _load_freeze_reference(
         raise ArmReadinessError(
             "readiness_freeze_receipt_mismatch",
             "freeze receipt pack identity differs from committed pack bytes",
+        )
+    if receipt["schema_version"] == FREEZE_RECEIPT_V2_SCHEMA:
+        _authenticate_freeze_predecessor(
+            pack_root,
+            receipt["predecessor"],
+            successor_receipt_id=str(receipt["receipt_id"]),
+            successor_profile=str(registry_reference["plan_profile"]),
         )
     definitions = _profile_rows(
         registry, str(registry_reference["plan_profile"]), phase="freeze"
@@ -3395,8 +3905,18 @@ def _freeze_evidence_for_arm(
     return items, receipts
 
 
-def generate_freeze_receipt(pack_root: Path | str) -> dict[str, Any]:
-    """Write or idempotently authenticate the pack's non-authorizing receipt."""
+def generate_freeze_receipt(
+    pack_root: Path | str,
+    *,
+    predecessor_pack_root: Path | str | None = None,
+) -> dict[str, Any]:
+    """Write or idempotently authenticate the pack's non-authorizing receipt.
+
+    A successor pack (family generation two or later) must present the path of
+    its predecessor pack.  Every ID, digest, ordinal, and conclusion in the
+    resulting ``predecessor`` binding is derived here from committed bytes; the
+    caller supplies paths only.
+    """
 
     root = Path(pack_root).resolve(strict=True)
     tree, _tree_raw = _plan_tree(root)
@@ -3404,18 +3924,47 @@ def generate_freeze_receipt(pack_root: Path | str) -> dict[str, Any]:
     attachments = tree.get("arm_attachments")
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
     _valid_plan_attachment(readiness, registry_reference)
+    generation = _pack_generation(root.name)
+    if generation > 1 and predecessor_pack_root is None:
+        raise _successor_chain_refusal(
+            "a successor pack requires an authenticated predecessor pack root"
+        )
+    if generation == 1 and predecessor_pack_root is not None:
+        raise ArmReadinessError(
+            "readiness_usage_invalid",
+            "a first-generation pack cannot carry a freeze predecessor",
+        )
     namespace = root / "arm_readiness.freeze.receipts"
     existing = scan_receipt_namespace(namespace, "freeze", allow_absent=True)
     if existing and readiness["freeze_receipt"] is not None:
-        latest = existing[-1]
-        expected = {
-            "path": f"arm_readiness.freeze.receipts/{latest['path'].name}",
-            "sha256": latest["sha256"],
-        }
-        if readiness["freeze_receipt"] != expected:
+        pinned = [
+            item
+            for item in existing
+            if {
+                "path": f"arm_readiness.freeze.receipts/{item['path'].name}",
+                "sha256": item["sha256"],
+            }
+            == readiness["freeze_receipt"]
+        ]
+        if len(pinned) != 1:
             raise ArmReadinessError(
                 "readiness_freeze_receipt_mismatch", "existing freeze receipt is not plan-pinned"
             )
+        latest = pinned[0]
+        if latest["receipt"]["schema_version"] == FREEZE_RECEIPT_V2_SCHEMA:
+            # Idempotent replay is still an active use of the chain.
+            _authenticate_freeze_predecessor(
+                root,
+                latest["receipt"]["predecessor"],
+                successor_receipt_id=str(latest["receipt"]["receipt_id"]),
+                successor_profile=str(registry_reference["plan_profile"]),
+            )
+            if predecessor_pack_root is not None and _derive_freeze_predecessor(
+                root, Path(predecessor_pack_root)
+            ) != dict(latest["receipt"]["predecessor"]):
+                raise _successor_chain_refusal(
+                    "replayed predecessor derivation differs from the recorded binding"
+                )
         return {
             "status": latest["receipt"]["status"],
             "arm_disposition": "NOT_APPLICABLE",
@@ -3429,6 +3978,24 @@ def generate_freeze_receipt(pack_root: Path | str) -> dict[str, Any]:
     if existing:
         raise ArmReadinessError(
             "readiness_freeze_receipt_mismatch", "unreferenced freeze receipt exists"
+        )
+    # Chain authentication precedes every write and every derived conclusion.
+    predecessor: dict[str, Any] | None = None
+    number = 1
+    if generation > 1:
+        predecessor = _derive_freeze_predecessor(root, Path(predecessor_pack_root))
+        number = (
+            _freeze_receipt_ordinal(
+                predecessor["freeze_receipt"]["receipt_id"],
+                "predecessor freeze receipt_id",
+            )
+            + 1
+        )
+        _authenticate_freeze_predecessor(
+            root,
+            predecessor,
+            successor_receipt_id=f"freeze-{number:04d}",
+            successor_profile=str(registry_reference["plan_profile"]),
         )
     # The pre-freeze pack must be an exact committed tree.  The writes below
     # intentionally make it dirty until the lead commits the final frozen pack.
@@ -3469,10 +4036,11 @@ def generate_freeze_receipt(pack_root: Path | str) -> dict[str, Any]:
         key=lambda item: (item["code"], item["row_id"] or "", item["evidence_id"] or ""),
     )
     status = "REFUSE" if refusals else "PASS"
-    number = 1
     receipt_name = f"freeze-{number:04d}.json"
     receipt = {
-        "schema_version": FREEZE_RECEIPT_SCHEMA,
+        "schema_version": (
+            FREEZE_RECEIPT_V2_SCHEMA if predecessor is not None else FREEZE_RECEIPT_SCHEMA
+        ),
         "receipt_kind": "freeze",
         "receipt_id": receipt_name.removesuffix(".json"),
         "status": status,
@@ -3483,9 +4051,12 @@ def generate_freeze_receipt(pack_root: Path | str) -> dict[str, Any]:
         "evidence": evidence_items,
         "rows": rows,
         "refusals": refusals,
-        "supersedes": None,
         "assurance": copy.deepcopy(ASSURANCE),
     }
+    if predecessor is not None:
+        receipt["predecessor"] = copy.deepcopy(predecessor)
+    else:
+        receipt["supersedes"] = None
     validate_freeze_receipt(receipt)
     raw = render_json(receipt)
     digest = sha256_bytes(raw)
@@ -6307,8 +6878,15 @@ def verify_receipt(
         raise ArmReadinessError(
             "readiness_dry_run_used_as_arm_record", "dry-run cannot verify as arm authority"
         )
-    if schema == FREEZE_RECEIPT_SCHEMA:
+    if schema in {FREEZE_RECEIPT_V1_SCHEMA, FREEZE_RECEIPT_V2_SCHEMA}:
         receipt = validate_freeze_receipt(value)
+        if schema == FREEZE_RECEIPT_V2_SCHEMA:
+            _authenticate_freeze_predecessor(
+                Path(pack_root),
+                receipt["predecessor"],
+                successor_receipt_id=str(receipt["receipt_id"]),
+                successor_profile=str(receipt["row_registry"]["plan_profile"]),
+            )
         return {
             "status": receipt["status"],
             "arm_disposition": "NOT_APPLICABLE",
@@ -6329,6 +6907,8 @@ __all__ = [
     "DRY_RUN_RECEIPT_SCHEMA",
     "EVIDENCE_RECEIPT_SCHEMA",
     "FREEZE_RECEIPT_SCHEMA",
+    "FREEZE_RECEIPT_V1_SCHEMA",
+    "FREEZE_RECEIPT_V2_SCHEMA",
     "LAUNCH_COMPLETION_RECEIPT_SCHEMA",
     "LAUNCH_LINEAGE_LOCATOR_BASENAME",
     "LAUNCH_LINEAGE_LOCATOR_SCHEMA",
