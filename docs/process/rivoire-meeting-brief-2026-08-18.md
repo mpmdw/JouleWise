@@ -38,6 +38,39 @@ re-freeze is underway — its inputs are built and under adversarial review —
 and the atomic re-freeze executes next, before the focused re-audit and the
 READY-candidate council.
 
+## Overnight update (2026-08-18, morning of the meeting)
+
+The successor-pack re-freeze executed overnight, through its confirmation
+point (publication awaits an explicit final sign-off). And the
+shakedown-first sequence produced its first results:
+
+- **Quiet-state baseline:** a ten-minute idle capture on the fenced quiet
+  machine; GPU rail essentially silent (mean 0.34 mW, 95.8% of samples
+  exactly zero), thermal state nominal throughout — the machine's quiet
+  state is as quiet as the protocol assumes.
+- **First calibration capture, and a safety mechanism proving itself:**
+  the fixed-work pulse calibration ran overnight. The capture itself was
+  strong (pulse signal-to-noise at the same level as the issued
+  calibration corpus). The newly added detection-budget check — a cap on
+  how much search the pulse detector may spend before declaring itself
+  unable to converge — refused the capture: the cap had been set below
+  what real traces need, something no repository test could reveal
+  because the raw calibration traces live outside the repository. The
+  cause was isolated with a discriminating experiment (issued corpus
+  members hit the same cap; the previous detector and a raised cap both
+  converge on the same data), the cap was recalibrated from a complete
+  sweep of all 34 retained raw calibration traces (maximum observed
+  demand 137,189 search cells; cap set to 165,000, ~20% above the
+  maximum — derived from the corpus, not tuned until the night passed),
+  and the same overnight capture then re-derived cleanly:
+  **timing-attribution bound b_fiducial = 0.0309 s, inside the issued
+  corpus band [0.0227, 0.0336]**.
+
+The instrument is verified on real overnight data, and the episode is the
+methodology working as designed: a conservative gate refused first, the
+refusal was diagnosed rather than retried, and the correction came from
+the complete evidence base.
+
 ## What the first campaign answers and how it runs
 
 The first claim campaign asks whether the named stack can resolve the difference

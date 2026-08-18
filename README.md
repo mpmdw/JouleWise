@@ -18,78 +18,33 @@ result when a required gate or piece of evidence fails.
 > [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
 > [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
 
-## Current activity (refreshed each work block; last: 2026-08-16)
+## Current activity (refreshed each work block; last: 2026-08-18 morning)
 
-**Just completed:** the readiness council's Phase 1 code wave. Its four
-mergeable work orders are all merged: the should-fix documentation batch; the
-honest night-of-measurement capture contract; the comparison window's
-claim-analysis admission path, whose validator and outcome-blind finalizer let
-only authenticated, frozen results reach claim analysis; and the launch
-binding, which makes arming and launching one atomic, authenticated step.
-Reviewers broke and repaired three design formulations before the launch
-binding passed an independent cold review, meaning a review performed without
-the authors' framing. A detection-time budget fix is built and staged for the
-next re-freeze, which will issue the successor family of frozen packs. An
-independent re-audit verified the calibration test universe end to end.
+**Just completed (overnight 2026-08-17→18):** the entire Phase 2 successor
+re-freeze, executed to its confirmation point. The three successor packs
+(the "v2 family") are generated, evidence-authored, and frozen with
+receipts that cryptographically chain to their predecessors; the
+calibration acceptance was reissued science-neutrally after the audited
+estimator change (all 19 corpus members byte-identical, exactly one code
+pin changed); and the instrument produced its **first-light verification
+data**: a fixed-work calibration capture ran overnight on the quiet
+machine, the new detection-budget safety check correctly refused an
+undersized search budget on first contact with real data, the budget was
+recalibrated from a complete 34-bundle sweep of every retained calibration
+trace (not tuned to pass), and the same capture then re-derived cleanly
+**inside the issued calibration band**. Separately, the operator
+qualification checklist completed end to end, catching and fixing three
+real defects along the way. The full test suite (3,688 tests) is green at
+the confirmation head.
 
-**Working on now:** the remaining Phase 1 items — the later launch-binding
-stages and the two queued repairs — ahead of the Phase 2 re-freeze.
+**Working on now:** the final read-and-reply items that publish the frozen
+family (an exact-byte confirmation and two reserved rulings), the
+operator's dress rehearsal, and a newcomer-facing instrument guide.
 
-**Queued next:** (1) the remaining launch-binding stages and two queued
-repairs: binding the recorder's permission grant to its verified identity and
-repairing drift in the continuous-integration proof fixture; (2) one batched
-operator session for privileged installs, a dress rehearsal, and the recorded
-risk-appetite decisions surfaced by the gates (see `RUN_STATE.md`'s Ed-owed
-list); (3) the Phase 2-4 sequence of one successor-family re-freeze, manifest
-supersession, focused re-audit, and a fresh readiness council; (4) the alpha,
-beta, and gamma measurement windows only after that council says go; and (5)
-completion of the paper as governed results arrive.
-
-JouleWise is an extensible measurement harness for energy-wise LLM inference
-across heterogeneous local hardware. The benchmark layered on that harness is
-the frozen workload suite, run rules, and strict validator. The name is a
-deliberate nod to JouleSort and Splitwise: energy measurement as the spine,
-split inference as the first major research application.
-
-The harness is designed around three stable ideas:
-
-- Typed experiment configs define what should run.
-- Runtime and telemetry adapters define how each hardware target is exercised
-  and measured.
-- Run bundles preserve raw traces, events, metadata, logs, and summary metrics
-  for later audit and analysis.
-
-**Status:** research prototype. The Mac (Apple M3 Max) measurement harness has
-completed its instrument repair (D-078 phase 0) and the repaired path has
-collected 229 strict members across four bracketed windows, a5-a8. Those
-windows are non-claim-bearing diagnostic, instrument-proving evidence, not
-published floors. The SCREEN+BUDGET screening-and-uncertainty rules are ratified and merged
-(D-078 clause 10; council C-045):
-they screen gross and idle-subtracted energy separately, retain a nonzero
-drift allowance for each family, require a fresh 24-hour bound, reject
-fallback-clock members from floor cells, and bar mock evidence from claims.
-Five pre-genesis quiet-machine windows passed under those rules (C, D, a10,
-the 7B floor window, and the contrast window), but they are now diagnostic
-or rule-establishing evidence rather than the prospective claim path.
-**2026-08-07 supersession (D-117): the historical a10/re-mint and old C/D
-plan are retired. Claim authority can now arise only from the prospective
-alpha, beta, and gamma windows; the separately named Window C
-characterization night remains Ed ruling #1.** The a8 re-verdict path is
-closed. The
-project's framing is now metrology-centric (D-091): the measurement
-instrument itself is the product, and model comparisons are demonstrations
-of what it can resolve.
-
-The post-audit architectural verdicts remain deliberately bounded: AXI-SB is
-`supported` for native static-batch runtime feasibility with request-scoped
-observability, while AXI-SC is `unsupported_for_joulewise` on the pinned
-runtime because the required speculative-decode/MTP observability or execution
-surface is absent. Neither is energy evidence. This summary does not select
-work: the generated state-kernel regions in `RUN_STATE.md` and `TASK_QUEUE.md`
-own live gates and next-task state. Quiet-machine execution still requires the
-lead-controlled hardware lane with Ed. The verified end-user quickstart remains
-a Phase 5 deliverable.
-
+**Queued next:** (1) publication of the successor family on explicit
+confirmation; (2) the focused re-audit and a fresh readiness council;
+(3) the alpha, beta, and gamma measurement windows only after that
+council says go.
 ## Current State
 
 Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete
