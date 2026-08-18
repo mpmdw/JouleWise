@@ -475,6 +475,74 @@ class DetectorTests(unittest.TestCase):
             "fixture must expose an accepted off-axis excursion missed by axes/diagonals",
         )
 
+    # D-138 parameter ruling, 2026-08-18.  The retired 100,000-cell budget was
+    # calibrated from the 17,505-cell synthetic acceptance trace and is
+    # exhausted by every real corpus-grade capture: the complete retained
+    # unique protocol-v3 corpus (n=34 full 59-pulse convergences) spans
+    # 112,205..137,189 evaluated cells.  These two constants are the ruled
+    # basis; a silent revert of the production default must fail here.
+    RULED_DETECTION_CELL_BUDGET = 165_000
+    RETIRED_DETECTION_CELL_BUDGET = 100_000
+    OBSERVED_CORPUS_MAX_CELLS = 137_189
+
+    def test_detection_cell_budget_is_the_ruled_corpus_calibrated_value(
+        self,
+    ) -> None:
+        self.assertEqual(
+            DETECTION_PROJECTION_CELL_BUDGET,
+            self.RULED_DETECTION_CELL_BUDGET,
+            "the D-138 detection budget ruling pins 165,000 cells; changing it "
+            "rotates the estimator pin and requires a D-079 reissue plus the "
+            "atomic _v2 successor-family re-freeze",
+        )
+        # The retired budget sits below the observed corpus maximum, so it
+        # could never have admitted a corpus-grade trace.
+        self.assertLess(
+            self.RETIRED_DETECTION_CELL_BUDGET,
+            self.OBSERVED_CORPUS_MAX_CELLS,
+        )
+        # The ruled budget clears the observed maximum by more than the entire
+        # observed min-to-max spread (24,984 cells).
+        self.assertGreater(
+            DETECTION_PROJECTION_CELL_BUDGET - self.OBSERVED_CORPUS_MAX_CELLS,
+            24_984,
+        )
+
+    def test_production_default_budget_spends_past_the_retired_ceiling(
+        self,
+    ) -> None:
+        # Behavioural kill evidence for the ruling: with no injected budget the
+        # production default must keep evaluating past the retired 100,000-cell
+        # ceiling and stop exactly at the ruled bound, still fail-closed.
+        trace, pulses = self.make_case(shift_s=0.0, count=1)
+        with patch.object(
+            fiducial_module,
+            "_pulse_loss_cell_lower_bound",
+            return_value=0.0,
+        ):
+            detection = detect_pulses(trace, pulses)
+        self.assertGreater(
+            detection.projection_evaluated_cell_count,
+            self.RETIRED_DETECTION_CELL_BUDGET,
+        )
+        self.assertEqual(
+            detection.projection_evaluated_cell_count,
+            DETECTION_PROJECTION_CELL_BUDGET,
+        )
+        self.assertEqual(
+            detection.projection_evaluated_cell_budget,
+            DETECTION_PROJECTION_CELL_BUDGET,
+        )
+        self.assertEqual(
+            detection.projection_budget_trigger,
+            "evaluated_cell_budget",
+        )
+        # Fail-closed behaviour is retained at the raised budget.
+        self.assertFalse(detection.all_pulses_detected)
+        self.assertIsNone(detection.b_fiducial_s)
+        self.assertEqual(detection.fits, ())
+        self.assertEqual(detection.reasons, (DETECTION_NONCONVERGENT,))
+
     def test_flat_loss_projection_exhausts_deterministic_cell_budget(self) -> None:
         # A zero lower bound prevents every branch-and-bound prune. Without a
         # work limit this one-pulse analog expands toward the full 2^28 leaf
@@ -1386,7 +1454,7 @@ class FrozenProtocolTests(unittest.TestCase):
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+            "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e",
         )
         artifact = json.loads(raw)
         derivation = artifact["decimal_derivation"]

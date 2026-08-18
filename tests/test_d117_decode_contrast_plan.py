@@ -47,7 +47,7 @@ V1_SPEC_RELS = (
 ROW_REGISTRY_REL = Path("configs/arm_readiness/d117_row_registry_v1.json")
 
 EXACT_SHAS = {
-    "generate_configs.py": "21b9178102e399d84744e838bc11d9c0ff9f6279b566d1f7d728a13a79474440",
+    "generate_configs.py": "e6a0ac14ab601b57f1116fef762b108c5850769ccec279f8cd72dbe35cbb9d52",
     "calibration_plan.json": "4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218",
     "plan_tree.json": "8c53a834d78c81145b8f35b25f8d50182d596dc82c171e815f8a160117ab525d",
     "analysis_manifest_v3.json": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",

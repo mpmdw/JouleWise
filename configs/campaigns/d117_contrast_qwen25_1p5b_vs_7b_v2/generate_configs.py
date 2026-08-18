@@ -351,10 +351,10 @@ SUCCESSOR_ACCEPTANCE = {
     "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
     "rel": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
     "artifact_sha256": (
-        "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52"
+        "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e"
     ),
     "derivation_sha256": (
-        "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b"
+        "6b9f622ffd9aca3f627274db1b6516237d012b26e25118a36419d917f2bc6095"
     ),
 }
 

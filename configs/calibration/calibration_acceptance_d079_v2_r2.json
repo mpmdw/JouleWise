@@ -37,7 +37,7 @@
     ],
     "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
     "estimator_code_sha256": {
-      "joulewise/powermetrics_fiducial.py": "501bfdaf44f2768af73f112a703e9da3ab055c03e5b9d493e0dc2eadad82f71b",
+      "joulewise/powermetrics_fiducial.py": "1824bc4a93152630cecc9580ee42203bddabf18959e0450b7a11fdad813ce95d",
       "joulewise/uncertainty_evidence.py": "77412d194bb43c7ffc37339131591e12170371d83d60449ecbd1a3e879c988c7",
       "joulewise/adapters/powermetrics.py": "7380eea85fed2c51034acdbf71bdaa474c8dc4053fc2a1b86a84c05b301947ca",
       "joulewise/reduce.py": "5118849dda9dcb36b4f3c5fa66f017676c6c416bc40622a2fd63052f31114615"
@@ -497,5 +497,5 @@
       "embedding_count": 1
     }
   },
-  "derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b"
+  "derivation_sha256": "6b9f622ffd9aca3f627274db1b6516237d012b26e25118a36419d917f2bc6095"
 }

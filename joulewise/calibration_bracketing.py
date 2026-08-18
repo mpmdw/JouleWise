@@ -69,7 +69,7 @@ SUCCESSOR_ACCEPTANCE_BOUND_PATH = (
 )
 SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19_r2"
 SUCCESSOR_ACCEPTANCE_BOUND_SHA256 = (
-    "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52"
+    "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e"
 )
 # Dual-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under the

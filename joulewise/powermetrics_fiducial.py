@@ -74,11 +74,17 @@ FIT_COARSE_STEP_S = 0.005
 FIT_FINE_STEP_S = 0.0005
 REGION_COVERAGE_RESOLUTION_S = 0.0001
 # FROZEN operational work bound for the complete multi-pulse projection.
-# The measured 59-pulse synthetic acceptance trace evaluates 17,505 cells;
-# 100,000 preserves about 5.7x headroom while making a flat lower-bound surface
-# stop after finite reproducible work instead of exploring hundreds of
-# millions of cells per pulse.
-DETECTION_PROJECTION_CELL_BUDGET = 100_000
+# Recalibrated 2026-08-18 (D-138 parameter ruling) from the complete retained
+# unique protocol-v3 corpus: n=34 full 59-pulse convergences, min 112,205,
+# median 122,044, p95 135,513, max 137,189 evaluated cells.  The prior 100,000
+# was set from the 17,505-cell synthetic acceptance trace and is exhausted by
+# every real corpus-grade capture.  165,000 clears the observed maximum by
+# 27,811 cells (20.3%) -- more than the entire observed 24,984-cell spread --
+# while still making a flat lower-bound surface stop after finite reproducible
+# work instead of exploring hundreds of millions of cells per pulse.
+# Budget exhaustion remains fail-closed: it yields registered invalid evidence,
+# never a partial fit.
+DETECTION_PROJECTION_CELL_BUDGET = 165_000
 # FROZEN supplementary host-safety deadline.  The evaluated-cell budget above
 # is the primary reproducible mechanism; this deadline only catches unexpected
 # per-cell cost or host pathologies that a cell count cannot bound.
