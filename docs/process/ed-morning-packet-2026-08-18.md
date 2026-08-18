@@ -4,7 +4,36 @@ Everything below is read-and-reply; no hands-on machine work except the
 dress rehearsal (item 4). Rulings in priority order — item 1 gates the
 whole chain.
 
-## 1. RULING NEEDED FIRST: D-079 reissue identity (one word unblocks everything)
+## 0. OVERNIGHT UPDATE (read this first — most of item 1's chain already executed)
+
+You ruled "B, keep" and licensed the night. Executed since: the D-079
+successor ISSUED as `d079_calibration_acceptance_v2_n19_r2` with the full
+live-pin migration (one commit, zero science delta, staleness fan-out all
+green); the `_v2` family FROZEN — three `freeze-0002` receipts, PASS,
+minted in the durable measurement checkout `/Users/edr/JouleWise-measurement-20260818`
+after a path-binding catch (receipts authenticate their absolute pack_root;
+the first mints were scratchpad-bound and were reverted on-record); the
+dress-rehearsal card committed (`docs/process/rehearsal-operator-card.md` —
+run it at that measurement checkout); the R1 registry install correctly
+BLOCKED on your reserved environment-comparison semantics (five-item
+NEEDS_RULING recorded, joins your list below).
+
+**SHAKEDOWN FIRST-LIGHT (D-139):** the quiet-state baseline captured clean
+(600×1s idle; GPU mean 0.34 mW, 95.8% zero samples, thermal nominal). The
+first calibration bundle CAPTURED corpus-grade (SNR ~43k, no gaps) but the
+NEW detect-pulses budget fail-closed: `detection_nonconvergent` at exactly
+100,000 cells. Root-caused with an executed discriminator: three issued
+corpus members ALSO exhaust that budget under the new detector (real
+workload ~122-124k; a 130k override completes all 59 fits) — the budget
+was set below the real corpus workload and no audit could see it (raw
+corpus traces live outside the repo). The instrument and the night were
+both sound; the fail-closed behavior worked. A full-corpus sweep is
+running to ground the corrected budget value + margin; the parameter
+change is D-138-class and rides this same transaction (fresh reissue of
+the acceptance candidate pre-publication — mechanical, the tooling is
+proven). Your morning rulings below.
+
+## 1. RULED ("B, keep") — EXECUTED. Retained for the record: D-079 reissue identity
 
 The estimator change (detect-pulses, audited) requires reissuing the D-079
 calibration acceptance. The reissue tool ran clean: **19/19 corpus members
