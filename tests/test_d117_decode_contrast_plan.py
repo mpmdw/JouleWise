@@ -31,7 +31,7 @@ GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
 GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
 
 EXACT_SHAS = {
-    "generate_configs.py": "96779261eaf610c447894edfd01dc3cb53ebab69caa5dc405b72b4e82472d730",
+    "generate_configs.py": "0371ccd839e6c66be79a9d02ad3b6c736ca7b268ac8419efb0fdecfda8a26148",
     "calibration_plan.json": "4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218",
     "plan_tree.json": "8c53a834d78c81145b8f35b25f8d50182d596dc82c171e815f8a160117ab525d",
     "analysis_manifest_v3.json": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
@@ -100,6 +100,17 @@ def governed_frozen_attachment_paths(pack_root: Path) -> set[Path]:
     return expected
 
 
+def link_successor_self_check_inputs(output_root: Path) -> None:
+    (output_root / "joulewise").symlink_to(ROOT / "joulewise", target_is_directory=True)
+    for source_dir in (ROOT / "configs", ROOT / "configs/campaigns"):
+        target_dir = output_root / source_dir.relative_to(ROOT)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for source in source_dir.iterdir():
+            target = target_dir / source.name
+            if not target.exists():
+                target.symlink_to(source, target_is_directory=source.is_dir())
+
+
 class D117GammaPlanTest(unittest.TestCase):
     maxDiff = None
 
@@ -131,7 +142,13 @@ class D117GammaPlanTest(unittest.TestCase):
                 outputs = []
                 for output_root in (first, second):
                     completed = subprocess.run(
-                        [sys.executable, str(GENERATOR), "--output-root", output_root],
+                        [
+                            sys.executable,
+                            str(GENERATOR),
+                            "--output-root",
+                            output_root,
+                            "--preserve-current-frozen-bytes",
+                        ],
                         cwd=ROOT,
                         check=False,
                         capture_output=True,
@@ -157,7 +174,12 @@ class D117GammaPlanTest(unittest.TestCase):
                     )
 
         checked = subprocess.run(
-            [sys.executable, str(GENERATOR), "--check"],
+            [
+                sys.executable,
+                str(GENERATOR),
+                "--check",
+                "--preserve-current-frozen-bytes",
+            ],
             cwd=ROOT,
             check=False,
             capture_output=True,
@@ -192,6 +214,121 @@ class D117GammaPlanTest(unittest.TestCase):
             future_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
         self.assertIn("frozen by D-134 receipt", future_readme)
         self.assertIn("freeze-aware", future_readme)
+
+    def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
+        successor_id = "d117_contrast_qwen25_1p5b_vs_7b_v2"
+        successor_rel = GENERATOR_MODULE.PACK_REL.with_name(successor_id)
+        with tempfile.TemporaryDirectory(prefix="d117-gamma-v2-") as temp:
+            output_root = Path(temp)
+            command = [
+                sys.executable,
+                str(GENERATOR),
+                "--output-root",
+                str(output_root),
+                "--pack-id",
+                successor_id,
+                "--family-suffix",
+                "_v2",
+                "--no-preserve-current-frozen-bytes",
+            ]
+            generated = subprocess.run(
+                command,
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            checked = subprocess.run(
+                [*command, "--check"],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+
+            pack_root = output_root / successor_rel
+            tree = read_json(pack_root / "plan_tree.json")
+            self.assertEqual(tree["plan"]["path"], "calibration_plan.json")
+            self.assertEqual(
+                tree["plan"]["plan_id"],
+                GENERATOR_MODULE.PLAN_ID.removesuffix("v1") + "v2",
+            )
+            self.assertEqual(
+                tree["window_identity"]["evidence_root_id"],
+                GENERATOR_MODULE.EVIDENCE_ROOT_ID.removesuffix("v1") + "v2",
+            )
+            reservation = next(
+                stage
+                for stage in tree["stage_graph"]
+                if stage["kind"] == "bracket_reservation"
+            )
+            arguments = reservation["launch"]["commands"][0]["argv_template"][
+                "arguments"
+            ]
+            plan_index = next(
+                index
+                for index, token in enumerate(arguments)
+                if token == {"kind": "literal", "value": "--plan"}
+            )
+            plan_token = arguments[plan_index + 1]
+            expected_plan = (successor_rel / tree["plan"]["path"]).as_posix()
+            self.assertEqual(plan_token, {"kind": "repo_path", "value": expected_plan})
+            self.assertEqual(
+                output_root / plan_token["value"],
+                pack_root / tree["plan"]["path"],
+            )
+            for row in tree["science"]:
+                config = read_json(pack_root / row["config_path"])
+                self.assertIn(
+                    "launch_lineage_required", config["run_metadata"]["tags"]
+                )
+
+            self_referential = {
+                name: (pack_root / name).read_text(encoding="utf-8")
+                for name in ("README.md", "generate_configs.py")
+            }
+            predecessor_markers = {
+                *GENERATOR_MODULE._SUCCESSOR_IDENTITY_TOKENS,
+                'CURRENT_FAMILY_SUFFIX = "_v1"',
+            }
+            for name, content in self_referential.items():
+                with self.subTest(self_referential=name):
+                    for marker in predecessor_markers:
+                        self.assertNotIn(marker, content)
+                    self.assertIn(successor_id, content)
+            self.assertIn(
+                'CURRENT_FAMILY_SUFFIX = "_v2"',
+                self_referential["generate_configs.py"],
+            )
+            self.assertIn(
+                f"python3 {successor_rel.as_posix()}/generate_configs.py --check",
+                self_referential["README.md"],
+            )
+
+            link_successor_self_check_inputs(output_root)
+            embedded_check = subprocess.run(
+                [
+                    sys.executable,
+                    str(pack_root / "generate_configs.py"),
+                    "--check",
+                    "--output-root",
+                    str(output_root),
+                ],
+                cwd=output_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(embedded_check.returncode, 0, embedded_check.stderr)
+            self.assertIn(successor_id, embedded_check.stdout)
+
+        for row in self.tree["science"]:
+            current = read_json(PACK / row["config_path"])
+            self.assertNotIn(
+                "launch_lineage_required", current["run_metadata"]["tags"]
+            )
 
     def test_generator_check_rejects_extra_pack_file(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-gamma-inventory-") as temp:

@@ -9855,3 +9855,33 @@ signal purity — BEFORE any claim window. Exact workload consistency is
 explicitly subordinate to instrument-purity verification for these first
 runs. The claim windows (alpha/beta/gamma) follow only after the shakedown
 evidence is clean.
+
+### R2/M-2 successor-generator preparation — 2026-08-17 implementation record (no successor publication)
+
+The option-C follow-up recorded under WO-T0-PRODUCER is PREPARED, not
+activated.  Each D-117 generator now accepts an explicit pack ID, family
+suffix, and preserve-current-frozen-bytes mode.  The default remains the
+current `_v1` identity with preserve mode on; the only permitted non-preserve
+shape is the matching successor identity (for D-139 A3, `_v2`).  Thus a
+mistyped mixed v1/v2 or preserve/successor invocation refuses before writing.
+
+Outside preserve mode, alpha and beta store the R2 plan reference and sidecar
+as pack-relative `calibration_plan.json` and `calibration_plan.sha256`.
+All three generators derive the reservation `--plan` repo-path token from
+that same stored plan reference plus the selected pack root; gamma's stored
+reference already conformed, but its independent reservation derivation
+shared the defect and is now unified.  Successor identity threading rotates
+the pack directory, pack/family plan and evidence IDs, producer/consumer
+family IDs, roots, and campaign tags.  Every successor science collection
+config adds `launch_lineage_required`; preserve-mode configs never add it.
+The successor ARM attachment begins without a predecessor freeze receipt so
+the Phase-2 transaction can author the ruled `freeze-0002` rather than copying
+or revalidating `freeze-0001`.
+
+No current generated artifact is regenerated to new semantics: preserve-mode
+generation continues to reproduce the checked-in v1 plan, config, manifest,
+contract, sidecar, and readiness bytes exactly.  The generator-source edits
+retain the historical frozen generator SHA inside each preserved plan tree.
+This preparation does not satisfy R1 publication, the stage-4/AXI release
+gate, D-079 reissuance, fresh evidence authoring, marker construction, Ed's
+exact-byte confirmation, or the irreversible successor-family publication.

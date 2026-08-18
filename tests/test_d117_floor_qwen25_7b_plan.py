@@ -72,7 +72,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p256_qwen25_7b.json"
     ): "d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252",
     "generate_configs.py": (
-        "85fe60951895bb4d963cdd9824f7253acbda647a7292d882641bbb6ad1bfa5a9"
+        "eff640e193b867477e1b77ede2edac97145ce26bd81464fa011fb2d473044762"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "36a5fae72b37643550ecb4471b4566db30331a4089abc3f4827593632407bba2"
@@ -244,6 +244,27 @@ def observed_manifest_block_order(rows: list[dict]) -> list[tuple[int, str, int]
     ]
 
 
+def link_successor_self_check_inputs(output_root: Path) -> None:
+    (output_root / "joulewise").symlink_to(
+        REPO_ROOT / "joulewise", target_is_directory=True
+    )
+    for source_dir in (
+        REPO_ROOT / "configs",
+        REPO_ROOT / "configs/campaigns",
+        REPO_ROOT / "configs/floor_mint",
+    ):
+        target_dir = output_root / source_dir.relative_to(REPO_ROOT)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for source in source_dir.iterdir():
+            target = target_dir / source.name
+            if not target.exists():
+                target.symlink_to(source, target_is_directory=source.is_dir())
+    successor_contrast = (
+        output_root / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
+    )
+    successor_contrast.symlink_to(CONTRAST_PACK, target_is_directory=True)
+
+
 class D117Qwen25SevenBPlanTests(unittest.TestCase):
     maxDiff = None
 
@@ -277,7 +298,13 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             outputs = [temp_root / "one", temp_root / "two"]
             for output in outputs:
                 result = subprocess.run(
-                    [sys.executable, str(GENERATOR), "--output-root", str(output)],
+                    [
+                        sys.executable,
+                        str(GENERATOR),
+                        "--output-root",
+                        str(output),
+                        "--preserve-current-frozen-bytes",
+                    ],
                     cwd=REPO_ROOT,
                     text=True,
                     capture_output=True,
@@ -334,9 +361,130 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         self.assertIn("frozen by D-134 receipt", future_readme)
         self.assertIn("freeze-aware", future_readme)
 
+    def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
+        successor_id = "d117_floor_qwen25_7b_v2"
+        successor_rel = PACK.relative_to(REPO_ROOT).with_name(successor_id)
+        with tempfile.TemporaryDirectory(prefix="d117-beta-v2-") as temp:
+            output_root = Path(temp)
+            command = [
+                sys.executable,
+                str(GENERATOR),
+                "--output-root",
+                str(output_root),
+                "--pack-id",
+                successor_id,
+                "--family-suffix",
+                "_v2",
+                "--no-preserve-current-frozen-bytes",
+            ]
+            generated = subprocess.run(
+                command,
+                cwd=REPO_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            checked = subprocess.run(
+                [*command, "--check"],
+                cwd=REPO_ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+
+            pack_root = output_root / successor_rel
+            tree = load_json(pack_root / "plan_tree.json")
+            producer = load_json(pack_root / "producer_contract.json")
+            self.assertEqual(tree["plan"]["path"], "calibration_plan.json")
+            self.assertEqual(tree["plan"]["sidecar_path"], "calibration_plan.sha256")
+            self.assertEqual(producer["plan"]["path"], tree["plan"]["path"])
+            self.assertEqual(tree["plan"]["plan_id"], PLAN_ID.removesuffix("v1") + "v2")
+            self.assertEqual(
+                tree["window_identity"]["evidence_root_id"],
+                EVIDENCE_ROOT_ID.removesuffix("v1") + "v2",
+            )
+            reservation = next(
+                stage
+                for stage in tree["stage_graph"]
+                if stage["kind"] == "bracket_reservation"
+            )
+            arguments = reservation["launch"]["commands"][0]["argv_template"][
+                "arguments"
+            ]
+            plan_index = next(
+                index
+                for index, token in enumerate(arguments)
+                if token == {"kind": "literal", "value": "--plan"}
+            )
+            plan_token = arguments[plan_index + 1]
+            expected_plan = (successor_rel / tree["plan"]["path"]).as_posix()
+            self.assertEqual(plan_token, {"kind": "repo_path", "value": expected_plan})
+            self.assertEqual(
+                output_root / plan_token["value"],
+                pack_root / tree["plan"]["path"],
+            )
+            for row in tree["science"]:
+                config = load_json(output_root / row["config_path"])
+                self.assertIn(
+                    "launch_lineage_required", config["run_metadata"]["tags"]
+                )
+
+            self_referential = {
+                name: (pack_root / name).read_text(encoding="utf-8")
+                for name in ("README.md", "generate_configs.py")
+            }
+            predecessor_markers = {
+                *GENERATOR_MODULE._SUCCESSOR_IDENTITY_TOKENS,
+                'CURRENT_FAMILY_SUFFIX = "_v1"',
+            }
+            for name, content in self_referential.items():
+                with self.subTest(self_referential=name):
+                    for marker in predecessor_markers:
+                        self.assertNotIn(marker, content)
+                    self.assertIn(successor_id, content)
+            self.assertIn(
+                'CURRENT_FAMILY_SUFFIX = "_v2"',
+                self_referential["generate_configs.py"],
+            )
+            self.assertIn(
+                f"python3 {successor_rel.as_posix()}/generate_configs.py --check",
+                self_referential["README.md"],
+            )
+
+            link_successor_self_check_inputs(output_root)
+            embedded_check = subprocess.run(
+                [
+                    sys.executable,
+                    str(pack_root / "generate_configs.py"),
+                    "--check",
+                    "--output-root",
+                    str(output_root),
+                ],
+                cwd=output_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(embedded_check.returncode, 0, embedded_check.stderr)
+            self.assertIn(successor_id, embedded_check.stdout)
+
+        current_tree = load_json(PACK / "plan_tree.json")
+        for row in current_tree["science"]:
+            current = load_json(REPO_ROOT / row["config_path"])
+            self.assertNotIn(
+                "launch_lineage_required", current["run_metadata"]["tags"]
+            )
+
     def test_generator_check_mode(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(GENERATOR), "--check"],
+            [
+                sys.executable,
+                str(GENERATOR),
+                "--check",
+                "--preserve-current-frozen-bytes",
+            ],
             cwd=REPO_ROOT,
             text=True,
             capture_output=True,
