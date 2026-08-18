@@ -233,12 +233,17 @@ def make_go_fixture(
     *,
     predecessor_status: str = "PASS",
     predecessor_plan_path_spelling: str | None = None,
+    identity_status: str = "PASS",
 ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path]:
     """Build a committed one-pack repository.
 
     A successor pack ID (``_v2`` or later) additionally gets its committed
     previous-generation pack, so D-139 chain authentication has real bytes to
     authenticate.  ``predecessor_pack_root`` recovers that path.
+
+    ``identity_status`` authors THIS pack's own identity-projection receipt as a
+    schema-valid REFUSE, which is the only lawful way to mint a freeze receipt
+    whose recorded REFUSE was caused by a refusing dependency.
     """
 
     temporary = tempfile.TemporaryDirectory()
@@ -258,7 +263,12 @@ def make_go_fixture(
         else (profile.lower(),)
     )
     identity_receipt = sample_identity_receipt(
-        pack_id=pack_name, identity_unit_ids=identity_ids
+        pack_id=pack_name,
+        identity_unit_ids=identity_ids,
+        status=identity_status,
+        reason_codes=(
+            [] if identity_status == "PASS" else ["readiness_identity_environment_dirty"]
+        ),
     )
     identity_raw = render_json(identity_receipt)
     identity_sha = hashlib.sha256(identity_raw).hexdigest()
@@ -1301,6 +1311,119 @@ class FreezeSuccessorChainTests(unittest.TestCase):
                     restored["receipt_sha256"], first["receipt_sha256"]
                 )
                 self.assertEqual(restored["status"], first["status"])
+
+    # delta-10 F1 -----------------------------------------------------------
+    @staticmethod
+    def identity_row(receipt: dict) -> dict:
+        return next(
+            row
+            for row in receipt["rows"]
+            if row["row_id"] == "desk.identity_pin_projection"
+        )
+
+    def test_refuse_identity_projection_replays_as_its_recorded_refuse(self) -> None:
+        """Replay returns the recorded conclusion; it does not re-adjudicate it.
+
+        A schema-valid REFUSE identity projection lawfully mints a REFUSE
+        freeze-0002.  Replaying that receipt authenticates every byte it binds
+        and must then return the REFUSE it recorded.  Before this was fixed the
+        loader compared the recorded refusals against a freshly derived list in
+        ROW-DEFINITION order while every mint writes them in canonical
+        (code, row_id, evidence_id) order, so the identity refusal -- whose code
+        sorts away from its row-definition slot -- made a perfectly authentic
+        receipt raise ``readiness_dependency_refused`` on replay.
+        """
+
+        repo, pack, predecessor = self.successor_fixture(identity_status="REFUSE")
+        first = self.mint(pack, predecessor)
+        self.assertTrue(first["mutated"])
+        self.assertEqual(first["status"], "REFUSE")
+        recorded = self.read_receipt(first["receipt_path"])
+        self.assertEqual(self.identity_row(recorded)["verdict"], "REFUSE")
+        self.assertIn("readiness_identity_environment_dirty", first["reason_codes"])
+
+        replayed = self.mint(pack, predecessor)
+        self.assertFalse(replayed["mutated"])
+        self.assertEqual(replayed["status"], "REFUSE")
+        self.assertEqual(replayed["receipt_sha256"], first["receipt_sha256"])
+        self.assertEqual(replayed["reason_codes"], first["reason_codes"])
+        # The bytes are untouched by a replay that returns a recorded REFUSE.
+        self.assertEqual(self.read_receipt(first["receipt_path"]), recorded)
+        # The loader itself replays it, which is what every consumer path uses.
+        tree, _raw = readiness._plan_tree(pack)
+        registry, _registry_raw, reference = readiness._registry_reference(pack)
+        loaded, _loaded_reference = readiness._load_freeze_reference(
+            pack, tree, reference, registry, require_pass=False
+        )
+        self.assertEqual(loaded["status"], "REFUSE")
+        # ``require_pass`` remains the ONE gate that decides whether a caller
+        # may USE a REFUSE -- replay tolerance never leaks into enforcement.
+        with self.assertRaises(ArmReadinessError) as caught:
+            readiness._load_freeze_reference(pack, tree, reference, registry)
+        self.assertEqual(caught.exception.reason_code, "readiness_dependency_refused")
+
+    def test_replay_refuses_a_tampered_refuse_identity_projection(self) -> None:
+        """A recorded REFUSE replays; a tampered dependency still refuses.
+
+        Replay tolerance is about the recorded CONCLUSION, never about the
+        bytes: one appended byte on the identity-projection receipt the REFUSE
+        was derived from must refuse, and the untouched fixture must replay
+        again afterwards.
+        """
+
+        repo, pack, predecessor = self.successor_fixture(identity_status="REFUSE")
+        first = self.mint(pack, predecessor)
+        target = pack / "identity_pin_projection.receipts/projection-0001.json"
+        original = target.read_bytes()
+        target.write_bytes(original + b"\n")
+        try:
+            with self.assertRaises(ArmReadinessError) as caught:
+                self.mint(pack, predecessor)
+            self.assertEqual(
+                caught.exception.reason_code, "readiness_dependency_refused"
+            )
+        finally:
+            target.write_bytes(original)
+        restored = self.mint(pack, predecessor)
+        self.assertFalse(restored["mutated"])
+        self.assertEqual(restored["receipt_sha256"], first["receipt_sha256"])
+        self.assertEqual(restored["status"], first["status"])
+
+    def test_identity_verdict_replays_as_recorded_pass_or_refuse(self) -> None:
+        """PASS replays PASS and REFUSE replays REFUSE, row for row.
+
+        No fixture in this suite can mint a whole-receipt PASS -- the freeze
+        phase also requires desk evidence these packs do not carry -- so the
+        PASS side of "the recorded conclusion is what replays" is pinned at the
+        row the defect turned on.
+        """
+
+        conclusions = {}
+        for identity_status in ("PASS", "REFUSE"):
+            with self.subTest(identity_status=identity_status):
+                _repo, pack, predecessor = self.successor_fixture(
+                    identity_status=identity_status
+                )
+                minted = self.mint(pack, predecessor)
+                recorded = self.read_receipt(minted["receipt_path"])
+                self.assertEqual(
+                    self.identity_row(recorded)["verdict"], identity_status
+                )
+                replayed = self.mint(pack, predecessor)
+                self.assertFalse(replayed["mutated"])
+                self.assertEqual(replayed["status"], minted["status"])
+                self.assertEqual(replayed["reason_codes"], minted["reason_codes"])
+                self.assertEqual(
+                    self.read_receipt(replayed["receipt_path"]), recorded
+                )
+                conclusions[identity_status] = minted["reason_codes"]
+        # The two fixtures differ by exactly the identity refusal, so the
+        # replayed conclusions are genuinely distinct records.
+        self.assertEqual(
+            set(conclusions["REFUSE"]) - set(conclusions["PASS"]),
+            {"readiness_identity_environment_dirty"},
+        )
+        self.assertEqual(set(conclusions["PASS"]) - set(conclusions["REFUSE"]), set())
 
     # R-9 -------------------------------------------------------------------
     def test_committed_v1_freeze_receipts_remain_authentic_historical_records(

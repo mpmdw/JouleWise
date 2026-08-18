@@ -2364,6 +2364,27 @@ def _atomic_replace(path: Path, raw: bytes) -> None:
             pass
 
 
+def _refusal_sort_key(item: Mapping[str, Any]) -> tuple[str, str, str]:
+    """The ONE canonical refusal ordering every minted receipt is written in."""
+
+    return (item["code"], item["row_id"] or "", item["evidence_id"] or "")
+
+
+def _canonical_refusals(
+    refusals: Iterable[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    """Return ``refusals`` in the canonical order receipts record them in.
+
+    Refusal ORDER carries no conclusion: two refusal lists that differ only in
+    order record the same verdict.  Every mint site writes this order, so any
+    replay that compares a recorded list against a freshly derived one must
+    canonicalize BOTH sides -- otherwise a receipt authenticates against its own
+    evidence and still fails an ordering comparison.
+    """
+
+    return sorted(refusals, key=_refusal_sort_key)
+
+
 def _receipt_refusal(
     code: str, *, row_id: str | None = None, evidence_id: str | None = None
 ) -> dict[str, Any]:
@@ -3869,7 +3890,24 @@ def _load_freeze_reference(
             "desk.identity_pin_projection": identity_reasons
         },
     )
-    if receipt["rows"] != expected_rows or receipt["refusals"] != expected_refusals:
+    # Loading a freeze receipt is BYTE AUTHENTICATION plus RECORDED-CONCLUSION
+    # RETURN, never a re-adjudication of the conclusion itself.  Everything the
+    # receipt binds has already been authenticated above -- the plan-pinned
+    # receipt and its sidecar, ``pack_identity`` against committed pack bytes,
+    # every referenced evidence digest including the identity-projection
+    # receipt, and (for v2) the predecessor chain -- so this comparison exists
+    # only to prove the recorded rows and refusals still DERIVE from those
+    # authenticated bytes.  Refusal ORDER is not part of that derivation: mint
+    # writes the canonical order while ``_evaluate_rows`` returns row-definition
+    # order, so both sides are canonicalized before comparison.  Without this a
+    # validly minted REFUSE -- e.g. one caused by a REFUSE identity projection,
+    # whose refusal sorts by code away from its row-definition slot -- would
+    # authenticate perfectly and still raise instead of replaying as the REFUSE
+    # it is.  The recorded conclusion replays, PASS or REFUSE alike; only the
+    # ``require_pass`` gate below decides whether a caller may USE a REFUSE.
+    if receipt["rows"] != expected_rows or _canonical_refusals(
+        receipt["refusals"]
+    ) != _canonical_refusals(expected_refusals):
         raise ArmReadinessError(
             "readiness_dependency_refused",
             "freeze receipt conclusions do not replay from authenticated evidence",
@@ -4054,7 +4092,7 @@ def generate_freeze_receipt(
     )
     refusals = sorted(
         evidence_refusals + refusals,
-        key=lambda item: (item["code"], item["row_id"] or "", item["evidence_id"] or ""),
+        key=_refusal_sort_key,
     )
     status = "REFUSE" if refusals else "PASS"
     receipt_name = f"freeze-{number:04d}.json"
@@ -4367,7 +4405,7 @@ def generate_dry_run_receipt(
         "omitted_live_domains": list(SYNTHETIC_DOMAINS),
         "refusals": sorted(
             refusals,
-            key=lambda item: (item["code"], item["row_id"] or "", item["evidence_id"] or ""),
+            key=_refusal_sort_key,
         ),
         "assurance": copy.deepcopy(ASSURANCE),
     }
@@ -4707,7 +4745,7 @@ def generate_arm_receipt(
     }
     refusals = sorted(
         unique.values(),
-        key=lambda item: (item["code"], item["row_id"] or "", item["evidence_id"] or ""),
+        key=_refusal_sort_key,
     )
     status = "REFUSE" if refusals else "PASS"
     receipt_name = f"arm-{number:04d}.json"
@@ -4915,11 +4953,7 @@ def _derive_arm_semantics_for_verification(
     }
     refusals = sorted(
         unique.values(),
-        key=lambda item: (
-            item["code"],
-            item["row_id"] or "",
-            item["evidence_id"] or "",
-        ),
+        key=_refusal_sort_key,
     )
     _validate_profile_rows(
         receipt,
