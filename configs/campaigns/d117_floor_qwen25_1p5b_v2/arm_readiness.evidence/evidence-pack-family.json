@@ -1,0 +1,40 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "pack_family_identity_projection",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-pack-family-v1",
+  "facts": [
+    {
+      "fact_id": "desk.pack_family.v1",
+      "source_kind": "PACK",
+      "source_path": "arm_readiness.sources/pack-family.json",
+      "source_sha256": "917a5892309a175632f2ce92afeff7c97a6880b84d531b1a5cb86c209dc5c626",
+      "value": {
+        "floor_transport_identities_consistent": true,
+        "pack_receipts": [
+          "ALPHA",
+          "BETA",
+          "GAMMA"
+        ],
+        "same_reviewed_head": true
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "3e780a1584652d593e1c4e5dde9304cc2901916f",
+  "issued_at_utc": "2026-08-18T10:48:29.757044Z",
+  "kind": "PACK_FAMILY",
+  "pack_sha256": "f73fc1354089736e9de96b40755124a651d31bd8ee277e67a077f89b3d0a8b16",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 2360558768791875
+}

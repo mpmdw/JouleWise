@@ -1,0 +1,36 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "multicell_mint_focused_integration",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-multicell-mint-v1",
+  "facts": [
+    {
+      "fact_id": "desk.multicell_mint.v1",
+      "source_kind": "PROBE",
+      "source_path": "arm_readiness.sources/multicell-mint.json",
+      "source_sha256": "e16037ad3bbffc6372a28ffcbd3f7a04cb0973679296dbd05e084c234669ae5c",
+      "value": {
+        "focused_integration_status": "PASS",
+        "mint_schemas_match_committed_sources": true,
+        "pinsets_match_committed_sources": true
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "3e780a1584652d593e1c4e5dde9304cc2901916f",
+  "issued_at_utc": "2026-08-18T10:48:29.757044Z",
+  "kind": "MULTICELL_MINT",
+  "pack_sha256": "f73fc1354089736e9de96b40755124a651d31bd8ee277e67a077f89b3d0a8b16",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 2360558768791875
+}

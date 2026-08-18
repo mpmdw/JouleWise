@@ -1,0 +1,356 @@
+{
+  "checks": [
+    {
+      "check_id": "multicell_mint_focused_integration",
+      "evidence": {
+        "errors": 0,
+        "executed_files": [
+          {
+            "module": "joulewise",
+            "path": "joulewise/__init__.py",
+            "sha256": "df98d6ea46fd21ec24bb8fc4c208e4e01f5167e6c7f2af36490781779d5710cc"
+          },
+          {
+            "module": "joulewise.adapters",
+            "path": "joulewise/adapters/__init__.py",
+            "sha256": "ccc3710fba6346c4e61e7610cab91de92de68c74d09d66b590ff51aa7a3a9db5"
+          },
+          {
+            "module": "joulewise.adapters.local_transport",
+            "path": "joulewise/adapters/local_transport.py",
+            "sha256": "e371c9cc048eaa85b4b6d9d1f17347afe14aee66933ad506ccaab90b7f28560a"
+          },
+          {
+            "module": "joulewise.adapters.mock_runtime",
+            "path": "joulewise/adapters/mock_runtime.py",
+            "sha256": "2180340a78dd6869521d7808c2fb57886408ee46f751ce29fe8604af0b78f3f1"
+          },
+          {
+            "module": "joulewise.adapters.mock_spec_runtime",
+            "path": "joulewise/adapters/mock_spec_runtime.py",
+            "sha256": "0b7dd1ffa6c0038ae4197d5ab9f62f117b0cd909fe6bab81f5fa1a460ae9dd04"
+          },
+          {
+            "module": "joulewise.adapters.mock_telemetry",
+            "path": "joulewise/adapters/mock_telemetry.py",
+            "sha256": "647e58b8397068887051244f31b5427f27f420c69950da47826bd3294590262a"
+          },
+          {
+            "module": "joulewise.adapters.powermetrics",
+            "path": "joulewise/adapters/powermetrics.py",
+            "sha256": "7380eea85fed2c51034acdbf71bdaa474c8dc4053fc2a1b86a84c05b301947ca"
+          },
+          {
+            "module": "joulewise.adapters.suite_control",
+            "path": "joulewise/adapters/suite_control.py",
+            "sha256": "7beb52f73346bdc1614227c7bb2e89f96846bd58c6a1f90e1831157e4157064b"
+          },
+          {
+            "module": "joulewise.aggregate",
+            "path": "joulewise/aggregate.py",
+            "sha256": "16cbe1a91a4b9e6cf85dd324ff49eabbc46887d8704b23f270be44e9a3a95d7e"
+          },
+          {
+            "module": "joulewise.analysis_engine",
+            "path": "joulewise/analysis_engine/__init__.py",
+            "sha256": "290589ff8f96e5596d19f44a6f383f4aa2d0f5b40904aab99c52de47f0608843"
+          },
+          {
+            "module": "joulewise.analysis_engine.artifact",
+            "path": "joulewise/analysis_engine/artifact.py",
+            "sha256": "ffc09cef68f714fa2e035fcb487cc9d5f44ef7f8c0fc9ad52764fc3868a07cf1"
+          },
+          {
+            "module": "joulewise.analysis_engine.claims",
+            "path": "joulewise/analysis_engine/claims.py",
+            "sha256": "76016e8045d9ce8fcfee0c3ce83ca11079faf8546cdb0d57b1126b5998c821ab"
+          },
+          {
+            "module": "joulewise.analysis_engine.distributions",
+            "path": "joulewise/analysis_engine/distributions.py",
+            "sha256": "1648fe6a4c680b87fc32ce213db00d03231c8126ba0ddfa900a671126c9b4c15"
+          },
+          {
+            "module": "joulewise.analysis_engine.estimators",
+            "path": "joulewise/analysis_engine/estimators.py",
+            "sha256": "444ae805609b9328ab3ce245204f010091f4ebc3a2a302f1808c162be4e736ec"
+          },
+          {
+            "module": "joulewise.analysis_engine.inputs",
+            "path": "joulewise/analysis_engine/inputs.py",
+            "sha256": "dbc1f10f749568836664f0f120de76d08a3745254c88991bd9830b879d664f59"
+          },
+          {
+            "module": "joulewise.analysis_engine.multiplicity",
+            "path": "joulewise/analysis_engine/multiplicity.py",
+            "sha256": "b365ab449a86b5ea2092f7e20e8a83a92a2cd2f30f15ec55861264a00d857db4"
+          },
+          {
+            "module": "joulewise.analysis_engine.ratio",
+            "path": "joulewise/analysis_engine/ratio.py",
+            "sha256": "43e6d2b94af238c3376234502aa6c0d742758948c42cc0adcd4fb6893e89e0c1"
+          },
+          {
+            "module": "joulewise.analysis_engine.registry",
+            "path": "joulewise/analysis_engine/registry.py",
+            "sha256": "eed9450781b5070e1042a56be675aff5e95d0828f52d6183458a707846556175"
+          },
+          {
+            "module": "joulewise.analysis_engine.sensitivity",
+            "path": "joulewise/analysis_engine/sensitivity.py",
+            "sha256": "c3d2d01d088f7b7c5e4cea71c0541aac46f4b82b6374149c0aa8e925734c00b2"
+          },
+          {
+            "module": "joulewise.analysis_manifest",
+            "path": "joulewise/analysis_manifest.py",
+            "sha256": "5b4ba3ff4962bb9941c64a7f7acad98e6128119c5b4b93ad686e104a746e8cc9"
+          },
+          {
+            "module": "joulewise.analysis_manifest_v3",
+            "path": "joulewise/analysis_manifest_v3.py",
+            "sha256": "75f5f6b992bb72e87c0795e04b5128048a4782a408b95763a41109320099b46b"
+          },
+          {
+            "module": "joulewise.arm_readiness",
+            "path": "joulewise/arm_readiness.py",
+            "sha256": "cc3ef94c31374c153fbe467990d555f4379986562d860a72a1d722f2c2ede634"
+          },
+          {
+            "module": "joulewise.authentication_io",
+            "path": "joulewise/authentication_io.py",
+            "sha256": "5b099cb4504ee090699bd09da7f454816d270df921625745bd051e351a53c99e"
+          },
+          {
+            "module": "joulewise.axi_decode_config",
+            "path": "joulewise/axi_decode_config.py",
+            "sha256": "fab53ea66a636458bb8c36f0c5f5f3f014478db8351e246746c9b6bc7c62dd93"
+          },
+          {
+            "module": "joulewise.bundle",
+            "path": "joulewise/bundle.py",
+            "sha256": "283cf8a58424b62d489402d7eaf4f841cd8de7c4baf81e9e14c1ebaacc7fcf9f"
+          },
+          {
+            "module": "joulewise.bundle_read",
+            "path": "joulewise/bundle_read.py",
+            "sha256": "82d4ef714147cf7c1cd43298f598e6c149bc8ca7a69c2b7038d47cf018f0803c"
+          },
+          {
+            "module": "joulewise.calibration_bracketing",
+            "path": "joulewise/calibration_bracketing.py",
+            "sha256": "e19461066c536a8756b52733db6b6cf4d72454cf96105f0697518773a5be07f3"
+          },
+          {
+            "module": "joulewise.calibration_exits",
+            "path": "joulewise/calibration_exits.py",
+            "sha256": "b7b9d5ac41b4e315dc3660941a04e7d5f65ca030c9d171ef157b845896c2daa6"
+          },
+          {
+            "module": "joulewise.calibration_ledger",
+            "path": "joulewise/calibration_ledger.py",
+            "sha256": "e53a4ef7c36cd06f990bc45a5c977d65d2ad854ba2a0ca38e398af0facb746c0"
+          },
+          {
+            "module": "joulewise.campaign_provenance",
+            "path": "joulewise/campaign_provenance.py",
+            "sha256": "59a04c91574ae0ce0e1c644479f28670e0deb3df43790e84428809e40a157d6d"
+          },
+          {
+            "module": "joulewise.clock",
+            "path": "joulewise/clock.py",
+            "sha256": "410d75dbc2d9b3ef50f02dde79a1feb9645c9705faf0f17217bdb11416f85734"
+          },
+          {
+            "module": "joulewise.controller",
+            "path": "joulewise/controller.py",
+            "sha256": "b0b84b1086b53ab13e2bc38592daf494afb61fbf531c68c015cea723367a26a4"
+          },
+          {
+            "module": "joulewise.cooldown",
+            "path": "joulewise/cooldown.py",
+            "sha256": "f1ac5de2e51d81cd0a8c97893bac09aebca810ff279726a8def4ac32694cafa8"
+          },
+          {
+            "module": "joulewise.cooldown_anchor",
+            "path": "joulewise/cooldown_anchor.py",
+            "sha256": "fbcc30dcfd3e31b2785927fc5cbee8ed9a1e2abf817a10d5b960ed283b64783d"
+          },
+          {
+            "module": "joulewise.detection_floor",
+            "path": "joulewise/detection_floor.py",
+            "sha256": "8153a587a45e9d05e5e6e46a7a48793c1049c7d74f7d40ef6cd6db9fa907fba6"
+          },
+          {
+            "module": "joulewise.environment",
+            "path": "joulewise/environment.py",
+            "sha256": "10d4654e2f88e8e182b115db87294cf3da22ea5fedfcdb7004c164acfcbb70de"
+          },
+          {
+            "module": "joulewise.environment_admission",
+            "path": "joulewise/environment_admission.py",
+            "sha256": "0a67155cd8d229c1b8a4a60bc9485b71e1dc78f779e76a630ab0eec66c1896f1"
+          },
+          {
+            "module": "joulewise.floor_extraction",
+            "path": "joulewise/floor_extraction.py",
+            "sha256": "2f8a686c09ac6517ba1a6ebb1b0ffb32e7526e8ffa08d79be3b4b9b503c86932"
+          },
+          {
+            "module": "joulewise.floor_mint_estimator",
+            "path": "joulewise/floor_mint_estimator.py",
+            "sha256": "52bf97ca2e8d943a3c86c97b1854d43f38ce66e4b49b7be85add44735892f89a"
+          },
+          {
+            "module": "joulewise.identity_pins",
+            "path": "joulewise/identity_pins.py",
+            "sha256": "bb654e7fa88026e20b40123e33025379414b75adc7c4006c18aabf197b9f85f7"
+          },
+          {
+            "module": "joulewise.idle_admission",
+            "path": "joulewise/idle_admission.py",
+            "sha256": "9dc6b5d45c1dc138a13195b64cd1ca23eac0427c864063f26e274775b5a5a79e"
+          },
+          {
+            "module": "joulewise.idle_dependence",
+            "path": "joulewise/idle_dependence.py",
+            "sha256": "7ff69939f1507f1fa4f7817b774242495b15337a6a20a517e8df1a5718f86c9c"
+          },
+          {
+            "module": "joulewise.interfaces",
+            "path": "joulewise/interfaces.py",
+            "sha256": "f943494294d271e832acfb30d23e25d15dabb96df4fbaa80349320a3d4386c3c"
+          },
+          {
+            "module": "joulewise.powermetrics_fiducial",
+            "path": "joulewise/powermetrics_fiducial.py",
+            "sha256": "501bfdaf44f2768af73f112a703e9da3ab055c03e5b9d493e0dc2eadad82f71b"
+          },
+          {
+            "module": "joulewise.provenance",
+            "path": "joulewise/provenance.py",
+            "sha256": "d9323ee6e902b8aea09db2a04276b5260c3865989b146a09f00d68fc857bc67f"
+          },
+          {
+            "module": "joulewise.publication_privacy",
+            "path": "joulewise/publication_privacy.py",
+            "sha256": "00feaf4eb7b45db8dc274a9162655acda7ece2f5f8000c261c3166b76e1b788a"
+          },
+          {
+            "module": "joulewise.reduce",
+            "path": "joulewise/reduce.py",
+            "sha256": "5118849dda9dcb36b4f3c5fa66f017676c6c416bc40622a2fd63052f31114615"
+          },
+          {
+            "module": "joulewise.salvage_dangler",
+            "path": "joulewise/salvage_dangler.py",
+            "sha256": "7e76aecde9a0ead20d68d67c7acf43408e6aa1e41e4b5ee556419c969c696193"
+          },
+          {
+            "module": "joulewise.schemas",
+            "path": "joulewise/schemas.py",
+            "sha256": "f4a2830e983e78f1a1aa97f9900377a04e03336b5978a395e7e730a552692b66"
+          },
+          {
+            "module": "joulewise.suite",
+            "path": "joulewise/suite.py",
+            "sha256": "99ec44749ff306d76fd506222fc3325ef913b33cdad55fdf90d576f87e398b63"
+          },
+          {
+            "module": "joulewise.uncertainty_evidence",
+            "path": "joulewise/uncertainty_evidence.py",
+            "sha256": "77412d194bb43c7ffc37339131591e12170371d83d60449ecbd1a3e879c988c7"
+          },
+          {
+            "module": "joulewise.validation",
+            "path": "joulewise/validation.py",
+            "sha256": "82bb03f3aed626446298d186e845b7fe75b3371ca6cbabd7160946bd8e7bfcfd"
+          },
+          {
+            "module": "joulewise.whole_window",
+            "path": "joulewise/whole_window.py",
+            "sha256": "47f3511b1e6db8b3374612cf984fc7bb094b0a3d4102dd42ba714b52f22cb57f"
+          },
+          {
+            "module": "scripts.mint_floor_artifact",
+            "path": "scripts/mint_floor_artifact.py",
+            "sha256": "cc1362ce0aac6642fe2ceafd99d47ebefc5358ab7b01338c946b7711f94052e3"
+          },
+          {
+            "module": "scripts.mint_floor_artifact_generalized",
+            "path": "scripts/mint_floor_artifact_generalized.py",
+            "sha256": "9c440cb9acf2bf91e85faff341f9999d2b53a31217a5635e2ecc1a76f0010f67"
+          },
+          {
+            "module": "tests.test_mint_floor_artifact",
+            "path": "tests/test_mint_floor_artifact.py",
+            "sha256": "9e3dc55f19dbf0fddfca76f0f80dbcb348f2a06fbfc1f6e0ea3f533801f13016"
+          },
+          {
+            "module": "tests.test_mint_floor_artifact_generalized",
+            "path": "tests/test_mint_floor_artifact_generalized.py",
+            "sha256": "c873e814f5a50913076acaa4421e1a00d9a3d578edfa7269c9bd845b1e87ee76"
+          }
+        ],
+        "execution_isolated_to_discovered_repository": true,
+        "expected_failures": 0,
+        "failures": 0,
+        "skipped": 0,
+        "test_ids": [
+          "tests.test_mint_floor_artifact_generalized.V2PinsetAndMintTests.test_synthetic_two_plan_four_cell_mint_passes",
+          "tests.test_mint_floor_artifact_generalized.V2PinsetAndMintTests.test_mixed_four_cell_full_mint_is_cell_local_and_bound",
+          "tests.test_mint_floor_artifact_generalized.GeneralizedMintTests.test_7b_shaped_gate_build_and_validator_path_passes"
+        ],
+        "tests_run": 3,
+        "unexpected_successes": 0
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "authenticated_pin_count": 7
+  },
+  "facts": [
+    {
+      "fact_id": "desk.multicell_mint.v1",
+      "value": {
+        "focused_integration_status": "PASS",
+        "mint_schemas_match_committed_sources": true,
+        "pinsets_match_committed_sources": true
+      }
+    }
+  ],
+  "head_commit": "3e780a1584652d593e1c4e5dde9304cc2901916f",
+  "kind": "MULTICELL_MINT",
+  "pack_sha256": "4269180e1bc048ccecea0dffaa1fdf4ee4d4b3233af2c11ff40d39aed66eeb67",
+  "primary_artifacts": [
+    {
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/analysis_manifest_v3.json",
+      "sha256": "1ddcf0ad94a60ad5ba8d580f9649d6f15d71cea80a30f634ad349cbbbeda9009"
+    },
+    {
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/consumer_family_declaration.json",
+      "sha256": "2208844071b163c56a41db627c7c9cf98672cd869d6f2c45a9b3ed04b22d4c1b"
+    },
+    {
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/generate_configs.py",
+      "sha256": "2ecec791ce2c4a136ac6c333a3eee0c4fc82ed749ba4eaefe73ef060f20635ec"
+    },
+    {
+      "path": "joulewise/floor_mint_estimator.py",
+      "sha256": "52bf97ca2e8d943a3c86c97b1854d43f38ce66e4b49b7be85add44735892f89a"
+    },
+    {
+      "path": "scripts/floor_mint_pinsets/schema_v2.json",
+      "sha256": "b87eaa3e85bcb958fe188054d0a01d6f68cd1498dc1d1f90cee6ae8fd6757069"
+    },
+    {
+      "path": "scripts/mint_floor_artifact_generalized.py",
+      "sha256": "9c440cb9acf2bf91e85faff341f9999d2b53a31217a5635e2ecc1a76f0010f67"
+    },
+    {
+      "path": "tests/test_mint_floor_artifact_generalized.py",
+      "sha256": "c873e814f5a50913076acaa4421e1a00d9a3d578edfa7269c9bd845b1e87ee76"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_evidence_source.v1"
+}

@@ -1,0 +1,293 @@
+{
+  "checks": [
+    {
+      "check_id": "recovery_ledger_focused_suite",
+      "evidence": {
+        "errors": 0,
+        "executed_files": [
+          {
+            "module": "joulewise",
+            "path": "joulewise/__init__.py",
+            "sha256": "df98d6ea46fd21ec24bb8fc4c208e4e01f5167e6c7f2af36490781779d5710cc"
+          },
+          {
+            "module": "joulewise.adapters",
+            "path": "joulewise/adapters/__init__.py",
+            "sha256": "ccc3710fba6346c4e61e7610cab91de92de68c74d09d66b590ff51aa7a3a9db5"
+          },
+          {
+            "module": "joulewise.adapters.local_transport",
+            "path": "joulewise/adapters/local_transport.py",
+            "sha256": "e371c9cc048eaa85b4b6d9d1f17347afe14aee66933ad506ccaab90b7f28560a"
+          },
+          {
+            "module": "joulewise.adapters.mock_runtime",
+            "path": "joulewise/adapters/mock_runtime.py",
+            "sha256": "2180340a78dd6869521d7808c2fb57886408ee46f751ce29fe8604af0b78f3f1"
+          },
+          {
+            "module": "joulewise.adapters.mock_spec_runtime",
+            "path": "joulewise/adapters/mock_spec_runtime.py",
+            "sha256": "0b7dd1ffa6c0038ae4197d5ab9f62f117b0cd909fe6bab81f5fa1a460ae9dd04"
+          },
+          {
+            "module": "joulewise.adapters.mock_telemetry",
+            "path": "joulewise/adapters/mock_telemetry.py",
+            "sha256": "647e58b8397068887051244f31b5427f27f420c69950da47826bd3294590262a"
+          },
+          {
+            "module": "joulewise.adapters.powermetrics",
+            "path": "joulewise/adapters/powermetrics.py",
+            "sha256": "7380eea85fed2c51034acdbf71bdaa474c8dc4053fc2a1b86a84c05b301947ca"
+          },
+          {
+            "module": "joulewise.adapters.suite_control",
+            "path": "joulewise/adapters/suite_control.py",
+            "sha256": "7beb52f73346bdc1614227c7bb2e89f96846bd58c6a1f90e1831157e4157064b"
+          },
+          {
+            "module": "joulewise.arm_readiness",
+            "path": "joulewise/arm_readiness.py",
+            "sha256": "cc3ef94c31374c153fbe467990d555f4379986562d860a72a1d722f2c2ede634"
+          },
+          {
+            "module": "joulewise.authentication_io",
+            "path": "joulewise/authentication_io.py",
+            "sha256": "5b099cb4504ee090699bd09da7f454816d270df921625745bd051e351a53c99e"
+          },
+          {
+            "module": "joulewise.axi_decode_config",
+            "path": "joulewise/axi_decode_config.py",
+            "sha256": "fab53ea66a636458bb8c36f0c5f5f3f014478db8351e246746c9b6bc7c62dd93"
+          },
+          {
+            "module": "joulewise.bundle",
+            "path": "joulewise/bundle.py",
+            "sha256": "283cf8a58424b62d489402d7eaf4f841cd8de7c4baf81e9e14c1ebaacc7fcf9f"
+          },
+          {
+            "module": "joulewise.bundle_read",
+            "path": "joulewise/bundle_read.py",
+            "sha256": "82d4ef714147cf7c1cd43298f598e6c149bc8ca7a69c2b7038d47cf018f0803c"
+          },
+          {
+            "module": "joulewise.calibration_bracketing",
+            "path": "joulewise/calibration_bracketing.py",
+            "sha256": "e19461066c536a8756b52733db6b6cf4d72454cf96105f0697518773a5be07f3"
+          },
+          {
+            "module": "joulewise.calibration_exits",
+            "path": "joulewise/calibration_exits.py",
+            "sha256": "b7b9d5ac41b4e315dc3660941a04e7d5f65ca030c9d171ef157b845896c2daa6"
+          },
+          {
+            "module": "joulewise.calibration_ledger",
+            "path": "joulewise/calibration_ledger.py",
+            "sha256": "e53a4ef7c36cd06f990bc45a5c977d65d2ad854ba2a0ca38e398af0facb746c0"
+          },
+          {
+            "module": "joulewise.clock",
+            "path": "joulewise/clock.py",
+            "sha256": "410d75dbc2d9b3ef50f02dde79a1feb9645c9705faf0f17217bdb11416f85734"
+          },
+          {
+            "module": "joulewise.cooldown_anchor",
+            "path": "joulewise/cooldown_anchor.py",
+            "sha256": "fbcc30dcfd3e31b2785927fc5cbee8ed9a1e2abf817a10d5b960ed283b64783d"
+          },
+          {
+            "module": "joulewise.identity_pins",
+            "path": "joulewise/identity_pins.py",
+            "sha256": "bb654e7fa88026e20b40123e33025379414b75adc7c4006c18aabf197b9f85f7"
+          },
+          {
+            "module": "joulewise.idle_admission",
+            "path": "joulewise/idle_admission.py",
+            "sha256": "9dc6b5d45c1dc138a13195b64cd1ca23eac0427c864063f26e274775b5a5a79e"
+          },
+          {
+            "module": "joulewise.interfaces",
+            "path": "joulewise/interfaces.py",
+            "sha256": "f943494294d271e832acfb30d23e25d15dabb96df4fbaa80349320a3d4386c3c"
+          },
+          {
+            "module": "joulewise.powermetrics_fiducial",
+            "path": "joulewise/powermetrics_fiducial.py",
+            "sha256": "501bfdaf44f2768af73f112a703e9da3ab055c03e5b9d493e0dc2eadad82f71b"
+          },
+          {
+            "module": "joulewise.provenance",
+            "path": "joulewise/provenance.py",
+            "sha256": "d9323ee6e902b8aea09db2a04276b5260c3865989b146a09f00d68fc857bc67f"
+          },
+          {
+            "module": "joulewise.schemas",
+            "path": "joulewise/schemas.py",
+            "sha256": "f4a2830e983e78f1a1aa97f9900377a04e03336b5978a395e7e730a552692b66"
+          },
+          {
+            "module": "joulewise.suite",
+            "path": "joulewise/suite.py",
+            "sha256": "99ec44749ff306d76fd506222fc3325ef913b33cdad55fdf90d576f87e398b63"
+          },
+          {
+            "module": "joulewise.uncertainty_evidence",
+            "path": "joulewise/uncertainty_evidence.py",
+            "sha256": "77412d194bb43c7ffc37339131591e12170371d83d60449ecbd1a3e879c988c7"
+          },
+          {
+            "module": "joulewise.validation",
+            "path": "joulewise/validation.py",
+            "sha256": "82bb03f3aed626446298d186e845b7fe75b3371ca6cbabd7160946bd8e7bfcfd"
+          },
+          {
+            "module": "scripts.calibration_ledger_bootstrap",
+            "path": "scripts/calibration_ledger_bootstrap.py",
+            "sha256": "1ad46d0fe8b3f50b69e362d3d4b1fcfded21f2fe20f6c00da6ea82f497cea39c"
+          },
+          {
+            "module": "scripts.recover_calibration_ledger",
+            "path": "scripts/recover_calibration_ledger.py",
+            "sha256": "6f6caa8e6b81b8b15896b0c7a5bad61abde93e31cb5ddbffa7fe6c3bce5b0924"
+          },
+          {
+            "module": "scripts.reserve_calibration_window_bracket",
+            "path": "scripts/reserve_calibration_window_bracket.py",
+            "sha256": "30cf357310b9fc9d207c0287251b5b2d4dcc89ae4e319ffd582cb89b9f1d3fe5"
+          },
+          {
+            "module": "scripts.validate_powermetrics_fiducial",
+            "path": "scripts/validate_powermetrics_fiducial.py",
+            "sha256": "9ca2a026d18b7b74da2bb1803c60799f453b406dded40d007d361a60020ab844"
+          },
+          {
+            "module": "tests.receipt_corpus",
+            "path": "tests/receipt_corpus.py",
+            "sha256": "eb05a78bd0e7c7c47cd83e8dc1c5234e7307dcc7671cfbd39976c8290f4d7c7d"
+          },
+          {
+            "module": "tests.test_calibration_bracketing",
+            "path": "tests/test_calibration_bracketing.py",
+            "sha256": "46a39ea72e903566b2c4916dce10d692be3f8b16670e6bfa7e46e5b5e63b85b3"
+          },
+          {
+            "module": "tests.test_calibration_ledger",
+            "path": "tests/test_calibration_ledger.py",
+            "sha256": "15d66191eb1e6412180abaa0abd6359e364a08dde59e30013e2e94207f8f9dfc"
+          }
+        ],
+        "execution_isolated_to_discovered_repository": true,
+        "expected_failures": 0,
+        "failures": 0,
+        "skipped": 1,
+        "test_ids": [
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_aborted_systematic_pre_remains_in_r2_universe_and_fires_trigger",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_bare_business_pair_after_protocol_activation_is_named_refusal",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_baseline_must_be_exact_member_of_current_chain",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_bracket_reservation_cli_dry_run_and_execute_share_malformed_input_refusal",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_bracket_reservation_cli_is_explicit_and_machine_readable",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_bracket_session_happy_path_reserves_two_slots_under_one_pin",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_bracket_session_open_requires_exact_committed_physical_head",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_bracket_session_refuses_reordered_duplicate_and_conflicting_slots",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_closure_regression_same_head_foreign_prefix_never_admitted",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_conflicting_session_identity_and_session_fork_refuse",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_content_bearing_abandoned_receipt_is_unresolved_evidence",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_crash_between_reservation_and_finalization_refuses",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_d079_issued_artifact_mode_is_deterministic_and_write_explicit",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_distinct_ledgers_and_release_reacquire_remain_available",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_durability_uncertain_cli_emits_full_summary_and_distinct_exit",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_enforcing_post_readiness_refuses_deleted_finalized_pre_custody",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_execute_invalid_artifact_source_refuses_without_ledger_write",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_execute_reauthenticates_all_artifacts_after_lock",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_finalization_is_single_transition",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_first_idempotent_confirm_fsync_failure_is_uncertain",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_first_publication_directory_fsync_failure_is_uncertain",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_generic_head_pin_refuses_session_open_and_pre_receipts",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_guarded_terminal_pin_advancement_reaches_terminal_readiness",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_hard_link_alias_cannot_acquire_a_second_writer_lease",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_cli_dry_run_is_byte_stable_and_writes_nothing",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_fsync_failure_keeps_visible_ledger_empty",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_io_failure_rolls_back_partial_append",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_manifest_pins_head_and_subset_roots_refuse",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_marker_is_not_a_post_cutoff_live_observation",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_refuses_nonempty_ledger_and_nongenesis_pin",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_refuses_nonimportable_disposition",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_refuses_symlinked_pinned_custody",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_import_refuses_tampered_evidence_bytes",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_historical_input_digest_pair_changes_committed_chain",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_hostile_lock_identity_refuses_and_ordinary_lockfile_proceeds",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_intent_commitment_mutation_and_operator_crossing_fail_closed",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_issued_artifact_mid_write_failure_preserves_destination",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_issued_artifact_rejects_self_consistent_unpinned_template",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_issued_shape_76_receipt_prefix_authenticates_without_controls",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_legacy_journal_is_hashed_archived_and_never_replayed",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_live_capture_finalization_cannot_carry_import_marker",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_missing_ledger_slot_contention_and_locked_genesis_upgrade",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_missing_or_changed_custody_bytes_refuse",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_open_session_refuses_until_governed_abort_and_never_deletes_partial",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_operator_abandonment_refuses_same_sequence_sibling_of_pin",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_operator_abandons_junk_and_orphaned_finalization_as_one_residue",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_parent_replacement_refuses_genesis_without_publishing_into_replacement",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_phase_readiness_requires_under_lease_gate_and_disposes_custody",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_post_replace_dir_fsync_fault_is_committed_and_retry_confirms",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_production_writer_reserves_or_validates_before_capture_state_or_sampler",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_proper_prefix_of_pinned_head_refuses_as_rollback",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_recovery_and_completed_operation_retry_are_idempotent",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_recovery_cli_has_no_payload_source_and_governs_operator_tail",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_reformatted_table_cannot_confirm_or_execute_existing_chain",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_replacement_in_place_is_refused_until_original_lease_releases",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_reservation_requires_complete_epoch_and_full_t1",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_same_operation_key_with_different_target_fails_closed",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_session_snapshot_loader_refuses_rollback_against_committed_terminal_pin",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_sessionless_pin_advancement_refuses_pending_business_head",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_sigkill_at_all_six_append_points_converges_without_deletion",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_sigkill_mid_import_leaves_retryable_genesis",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_stable_slot_lock_refuses_replacement_against_held_writer",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_symlink_alias_cannot_acquire_a_second_writer_lease",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_tampered_nonempty_ledger_never_enters_confirm_path",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_terminal_pin_includes_authenticated_trailing_abandonment",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_terminal_session_head_refuses_rollback_and_nonterminal_extension",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_terminal_session_pin_classifies_nonadmitted_residue",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_terminal_session_pin_refuses_complete_unresolved_intent",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_three_member_historical_import_has_hand_computed_head",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_true_sibling_fork_refuses_on_predecessor_conflict",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_unpinned_physical_extension_refuses_stale_head",
+          "tests.test_calibration_ledger.CalibrationLedgerTests.test_unresolved_session_intent_refuses_terminal_read_then_repairs_append_only"
+        ],
+        "tests_run": 72,
+        "unexpected_successes": 0
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "bound_head": "3e780a1584652d593e1c4e5dde9304cc2901916f"
+  },
+  "facts": [
+    {
+      "fact_id": "desk.recovery_ledger_path.v1",
+      "value": {
+        "bound_head": true,
+        "recovery_ledger_focused_suite_status": "PASS"
+      }
+    }
+  ],
+  "head_commit": "3e780a1584652d593e1c4e5dde9304cc2901916f",
+  "kind": "RECOVERY_LEDGER_TEST",
+  "pack_sha256": "f73fc1354089736e9de96b40755124a651d31bd8ee277e67a077f89b3d0a8b16",
+  "primary_artifacts": [
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "sha256": "e53a4ef7c36cd06f990bc45a5c977d65d2ad854ba2a0ca38e398af0facb746c0"
+    },
+    {
+      "path": "scripts/recover_calibration_ledger.py",
+      "sha256": "6f6caa8e6b81b8b15896b0c7a5bad61abde93e31cb5ddbffa7fe6c3bce5b0924"
+    },
+    {
+      "path": "tests/test_calibration_ledger.py",
+      "sha256": "15d66191eb1e6412180abaa0abd6359e364a08dde59e30013e2e94207f8f9dfc"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_evidence_source.v1"
+}

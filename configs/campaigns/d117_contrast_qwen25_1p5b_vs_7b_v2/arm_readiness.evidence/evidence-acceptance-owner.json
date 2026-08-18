@@ -1,0 +1,38 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "acceptance_domain_owner_probe",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-acceptance-owner-v1",
+  "facts": [
+    {
+      "fact_id": "desk.acceptance_owner.v1",
+      "source_kind": "PROBE",
+      "source_path": "arm_readiness.sources/acceptance-owner.json",
+      "source_sha256": "680bbd12e25f982feac213fcaabf1b3f2d7be7c3786380cff064aee9f02b993a",
+      "value": {
+        "active_acceptance_artifact_authenticated": true,
+        "copied_scalar_accepted": false,
+        "domain_owner_verified": true,
+        "unknown_key_accepted": false,
+        "writer_test_status": "PASS"
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "3e780a1584652d593e1c4e5dde9304cc2901916f",
+  "issued_at_utc": "2026-08-18T10:49:19.067902Z",
+  "kind": "ACCEPTANCE_OWNER",
+  "pack_sha256": "4269180e1bc048ccecea0dffaa1fdf4ee4d4b3233af2c11ff40d39aed66eeb67",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 2360608079065875
+}
