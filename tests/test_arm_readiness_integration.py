@@ -40,10 +40,12 @@ from tests.test_arm_readiness_schemas import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+# D-138: the end-to-end fixtures exercise the live pack/profile map, so they
+# name the _v2 family that superseded the v1 campaign packs.
 PACKS = {
-    "ALPHA": "d117_floor_qwen25_1p5b_v1",
-    "BETA": "d117_floor_qwen25_7b_v1",
-    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v1",
+    "ALPHA": "d117_floor_qwen25_1p5b_v2",
+    "BETA": "d117_floor_qwen25_7b_v2",
+    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
 }
 
 

@@ -30,7 +30,7 @@ RESULT="$RUN_ROOT/rail-probe-results.json"
 if [ "${ED_SESSION_TEE_ACTIVE:-0}" -ne 1 ]; then
   set +e
   ED_SESSION_TEE_ACTIVE=1 ED_SESSION_STAMP="$STAMP" \
-    /bin/bash "$0" "${ORIGINAL_ARGS[@]}" 2>&1 | /usr/bin/tee -a "$LOG"
+    /bin/bash "$0" ${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"} 2>&1 | /usr/bin/tee -a "$LOG"
   status="${PIPESTATUS[0]}"
   exit "$status"
 fi
@@ -72,7 +72,7 @@ else
     echo "REFUSE: /usr/bin/sudo is missing; install/restore sudo before qualification." >&2
     exit 1
   fi
-  if ! /usr/bin/sudo -n /usr/bin/true; then
+  if ! /usr/bin/sudo -n -l /usr/bin/powermetrics >/dev/null 2>&1; then
     echo "REFUSE: sudo -n is unavailable. Fix the governed passwordless powermetrics sudoers entry; do not enter a password inside this script." >&2
     exit 1
   fi

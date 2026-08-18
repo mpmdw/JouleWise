@@ -38,6 +38,7 @@ from joulewise.analysis_engine.registry import (
 from joulewise.bundle_read import BundleReader
 from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
+    STACK_IDENTITY_DOMAIN,
     canonical_domain_sha256,
     complete_bundle_sha256,
 )
@@ -4972,7 +4973,7 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
     producer["model_runtime_config"] = {
         "model_artifact_sha256": seed_stack["model_artifact_sha256"],
         "runtime_identity_sha256": canonical_domain_sha256(
-            mint1.STACK_IDENTITY_DOMAIN, seed_stack
+            STACK_IDENTITY_DOMAIN, seed_stack
         ),
         "config_set_sha256": hashlib.sha256(
             json.dumps(

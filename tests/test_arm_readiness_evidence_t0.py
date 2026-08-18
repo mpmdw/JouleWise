@@ -14,6 +14,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
@@ -684,6 +685,21 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
 
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     maxDiff = None
+
+    def test_superseded_pack_refuses_the_t0_row_census_site(self) -> None:
+        """D-138: the T-0 author's registry site refuses a v1 campaign pack."""
+
+        temporary, _repository, pack, _custody, _arm_path = make_go_fixture(
+            "d117_floor_qwen25_1p5b_v1", "ALPHA"
+        )
+        self.addCleanup(temporary.cleanup)
+        tree, _raw = readiness._plan_tree(pack)
+        context = SimpleNamespace(pack_root=pack, tree=tree)
+        with self.assertRaises(readiness.ArmReadinessError) as caught:
+            t0._required_rows(context)
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_row_registry_mismatch"
+        )
 
     def test_alpha_beta_repo_relative_plan_refuses_both_generic_r2_sites(self) -> None:
         for profile, pack_name in (
