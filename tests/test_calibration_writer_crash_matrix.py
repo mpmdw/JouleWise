@@ -16,6 +16,9 @@ import unittest
 from unittest import mock
 
 from joulewise.calibration_ledger import (
+    BRACKET_SESSION_ABORT_EVENT,
+    BRACKET_SESSION_FINALIZATION_EVENT,
+    BRACKET_SESSION_SCHEMA,
     GENESIS_DIGEST,
     GOVERNED_ARTIFACTS,
     LEDGER_SCHEMA,
@@ -102,7 +105,85 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             REPO_ROOT / "configs" / "calibration" / "calibration_acceptance_d079_v2.json",
             cls.repo / "configs" / "calibration" / "calibration_acceptance_d079_v2.json",
         )
+        # This private synthetic repository must authenticate the estimator
+        # bytes it actually copied. Production's issued artifact intentionally
+        # remains stale until the council's lead-owned atomic Phase-2 re-freeze;
+        # this fixture re-key is test custody, never an issuance or live claim.
+        acceptance_path = (
+            cls.repo
+            / "configs"
+            / "calibration"
+            / "calibration_acceptance_d079_v2.json"
+        )
+        acceptance = json.loads(acceptance_path.read_text(encoding="utf-8"))
+        estimator_paths = tuple(
+            acceptance["prospective_rederivation"][
+                "estimator_code_sha256"
+            ]
+        )
+        acceptance["prospective_rederivation"]["estimator_code_sha256"] = {
+            relative: hashlib.sha256((cls.repo / relative).read_bytes()).hexdigest()
+            for relative in estimator_paths
+        }
+        acceptance_core = {
+            key: value
+            for key, value in acceptance.items()
+            if key != "derivation_sha256"
+        }
+        acceptance["derivation_sha256"] = hashlib.sha256(
+            json.dumps(
+                acceptance_core,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        acceptance_path.write_text(
+            json.dumps(acceptance, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        old_acceptance_sha256 = hashlib.sha256(
+            (
+                REPO_ROOT
+                / "configs"
+                / "calibration"
+                / "calibration_acceptance_d079_v2.json"
+            ).read_bytes()
+        ).hexdigest()
+        new_acceptance_sha256 = hashlib.sha256(
+            acceptance_path.read_bytes()
+        ).hexdigest()
+        bracketing_path = cls.repo / "joulewise" / "calibration_bracketing.py"
+        bracketing_source = bracketing_path.read_text(encoding="utf-8")
+        if bracketing_source.count(old_acceptance_sha256) != 1:
+            raise AssertionError("issued acceptance digest pin shape changed")
+        bracketing_path.write_text(
+            bracketing_source.replace(
+                old_acceptance_sha256,
+                new_acceptance_sha256,
+                1,
+            ),
+            encoding="utf-8",
+        )
         cls.fake_sampler = _install_fake_writer_dependencies(cls.repo)
+        sampler_source = cls.fake_sampler.read_text(encoding="utf-8")
+        sampler_anchor_expression = (
+            "str(origin + ((time.time() - origin) / time_scale)),"
+        )
+        if sampler_source.count(sampler_anchor_expression) != 1:
+            raise AssertionError("fake sampler anchor expression changed")
+        cls.fake_sampler.write_text(
+            sampler_source.replace(
+                sampler_anchor_expression,
+                (
+                    "str(origin + ((time.time() - origin) / time_scale) + "
+                    "float(os.environ.get('JW_FAKE_INITIAL_OFFSET_S', '0'))),"
+                ),
+                1,
+            ),
+            encoding="utf-8",
+        )
         subprocess.run(["git", "init", "-q"], cwd=cls.repo, check=True)
         subprocess.run(
             ["git", "config", "user.email", "tests@joulewise.invalid"],
@@ -354,6 +435,8 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
         crash_stage: WriterStage,
         sampler_mode: str = "normal",
         authorize_crash: bool = True,
+        projection_cell_budget: int | None = None,
+        sampler_initial_offset_s: float | None = None,
     ) -> OwnedProcessResult:
         identity = custody.parent / f"{session_id}-identity.json"
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -367,37 +450,49 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             "JW_FAKE_TIME_SCALE": "0.001",
             "JW_FAKE_TIME_ORIGIN": str(time.time()),
         }
+        if sampler_initial_offset_s is not None:
+            environment["JW_FAKE_INITIAL_OFFSET_S"] = str(
+                sampler_initial_offset_s
+            )
+        command = [
+            sys.executable,
+            str(self.repo / "scripts" / "validate_powermetrics_fiducial.py"),
+            "--allow-live",
+            "--power-policy",
+            "ac_high_power",
+            "--ledger",
+            str(ledger),
+            "--head-pin",
+            str(pin),
+            "--session-id",
+            session_id,
+            "--slot",
+            slot,
+            "--attempt-id",
+            f"{session_id}-{slot}",
+            "--output-root",
+            str(custody.parent),
+            "--sampler-binary",
+            str(self.fake_sampler),
+            "--sampler-direct-for-test",
+            "--time-scale-for-test",
+            "0.001",
+            "--sampler-ready-timeout-s",
+            "1.0",
+            "--rollover-timeout-s",
+            "1.0",
+            "--identity-epoch-json-for-test",
+            str(identity),
+        ]
+        if projection_cell_budget is not None:
+            command.extend(
+                [
+                    "--projection-cell-budget-for-test",
+                    str(projection_cell_budget),
+                ]
+            )
         return self.runner.run(
-            [
-                sys.executable,
-                str(self.repo / "scripts" / "validate_powermetrics_fiducial.py"),
-                "--allow-live",
-                "--power-policy",
-                "ac_high_power",
-                "--ledger",
-                str(ledger),
-                "--head-pin",
-                str(pin),
-                "--session-id",
-                session_id,
-                "--slot",
-                slot,
-                "--attempt-id",
-                f"{session_id}-{slot}",
-                "--output-root",
-                str(custody.parent),
-                "--sampler-binary",
-                str(self.fake_sampler),
-                "--sampler-direct-for-test",
-                "--time-scale-for-test",
-                "0.001",
-                "--sampler-ready-timeout-s",
-                "1.0",
-                "--rollover-timeout-s",
-                "1.0",
-                "--identity-epoch-json-for-test",
-                str(identity),
-            ],
+            command,
             cwd=self.repo,
             env=environment,
             crash_stage=crash_stage.value,
@@ -1144,6 +1239,194 @@ print(json.dumps(output, sort_keys=True))
                 }
             ],
         )
+
+    def test_detection_budget_refuses_with_terminal_custody_and_released_lease(
+        self,
+    ) -> None:
+        _root, ledger, pin, plan, session_id, custody = self._case(
+            "detection-budget-terminal"
+        )
+        completed = self._writer_cli(
+            ledger=ledger,
+            pin=pin,
+            session_id=session_id,
+            slot="pre",
+            custody=custody["pre"],
+            crash_stage=WriterStage.BEFORE_WRITER_LEASE,
+            authorize_crash=False,
+            projection_cell_budget=1,
+            sampler_initial_offset_s=0.4,
+        )
+        self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
+        output = self._payload(completed)
+        self.assertEqual(
+            output["invalid_evidence_disposition"],
+            "detection_nonconvergent",
+        )
+        self.assertEqual(
+            output["detection_projection"]["diagnostics"][
+                "evaluated_cell_count"
+            ],
+            1,
+        )
+        self.assertEqual(
+            output["detection_projection"]["cell_budget"],
+            1,
+        )
+        self.assertEqual(
+            output["detection_projection"]["diagnostics"],
+            {
+                "reproducible": True,
+                "evaluated_cell_count": 1,
+                "trigger": "evaluated_cell_budget",
+            },
+        )
+
+        evidence_path = custody["pre"] / "instrument_evidence.json"
+        self.assertTrue(evidence_path.is_file())
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        self.assertEqual(evidence["status"], "invalid")
+        self.assertIn("detection_nonconvergent", evidence["reasons"])
+        self.assertIsNone(evidence["b_fiducial_s"])
+        self.assertEqual(evidence["pulses"], [])
+        self.assertEqual(
+            evidence["detection_projection"],
+            output["detection_projection"],
+        )
+
+        receipts = [
+            json.loads(line)
+            for line in ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        business = [
+            receipt
+            for receipt in receipts
+            if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA
+        ]
+        finalizations = [
+            receipt
+            for receipt in business
+            if receipt.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
+        ]
+        aborts = [
+            receipt
+            for receipt in business
+            if receipt.get("event") == BRACKET_SESSION_ABORT_EVENT
+        ]
+        self.assertEqual(len(finalizations), 1)
+        self.assertEqual(finalizations[0]["disposition"], "ordinary-invalid")
+        self.assertEqual(
+            finalizations[0]["artifact_sha256"]["instrument_evidence.json"],
+            hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(len(aborts), 1)
+        self.assertEqual(aborts[0]["reason"], "detection_nonconvergent")
+        self.assertEqual(business[-1], aborts[0])
+        status = self._cli(
+            ledger,
+            pin,
+            "session-status",
+            "--session-id",
+            session_id,
+            "--plan",
+            str(plan),
+        )
+        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+        self.assertEqual(self._payload(status)["session_state"], "aborted")
+        with fiducial_validator.CalibrationWriterLease(ledger):
+            pass
+
+    def test_post_detection_budget_has_terminal_custody_and_released_lease(
+        self,
+    ) -> None:
+        _root, ledger, pin, plan, session_id, custody = self._case(
+            "post-detection-budget-terminal",
+            prefinalize=True,
+        )
+        completed = self._writer_cli(
+            ledger=ledger,
+            pin=pin,
+            session_id=session_id,
+            slot="post",
+            custody=custody["post"],
+            crash_stage=WriterStage.BEFORE_WRITER_LEASE,
+            authorize_crash=False,
+            projection_cell_budget=1,
+            sampler_initial_offset_s=0.4,
+        )
+        self.assertEqual(
+            completed.returncode,
+            1,
+            completed.stdout + completed.stderr,
+        )
+        output = self._payload(completed)
+        self.assertEqual(
+            output["invalid_evidence_disposition"],
+            "detection_nonconvergent",
+        )
+        self.assertEqual(
+            output["detection_projection"]["diagnostics"],
+            {
+                "reproducible": True,
+                "evaluated_cell_count": 1,
+                "trigger": "evaluated_cell_budget",
+            },
+        )
+        self.assertEqual(output["detection_projection"]["cell_budget"], 1)
+
+        evidence_path = custody["post"] / "instrument_evidence.json"
+        self.assertTrue(evidence_path.is_file())
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        self.assertEqual(evidence["status"], "invalid")
+        self.assertIsNone(evidence["b_fiducial_s"])
+        self.assertEqual(evidence["pulses"], [])
+        self.assertEqual(
+            evidence["detection_projection"],
+            output["detection_projection"],
+        )
+
+        receipts = [
+            json.loads(line)
+            for line in ledger.read_text(encoding="utf-8").splitlines()
+        ]
+        business = [
+            receipt
+            for receipt in receipts
+            if receipt.get("schema_version") == BRACKET_SESSION_SCHEMA
+        ]
+        post_finalizations = [
+            receipt
+            for receipt in business
+            if receipt.get("event") == BRACKET_SESSION_FINALIZATION_EVENT
+            and receipt.get("slot") == "post"
+        ]
+        self.assertEqual(len(post_finalizations), 1)
+        terminal = post_finalizations[0]
+        self.assertEqual(terminal["disposition"], "ordinary-invalid")
+        self.assertEqual(
+            terminal["artifact_sha256"]["instrument_evidence.json"],
+            hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(business[-1], terminal)
+        self.assertFalse(
+            any(
+                receipt.get("event") == BRACKET_SESSION_ABORT_EVENT
+                for receipt in business
+            )
+        )
+        status = self._cli(
+            ledger,
+            pin,
+            "session-status",
+            "--session-id",
+            session_id,
+            "--plan",
+            str(plan),
+        )
+        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+        self.assertEqual(self._payload(status)["session_state"], "finalized")
+        with fiducial_validator.CalibrationWriterLease(ledger):
+            pass
 
     def test_two_process_lease_contention_then_fresh_resume(self) -> None:
         _root, ledger, pin, plan, session_id, custody = self._case("lease-contention")

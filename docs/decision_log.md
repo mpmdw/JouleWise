@@ -9595,6 +9595,88 @@ packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
 
+### D-078 registry amendment — 2026-08-16: calibration-writer launch binding
+
+The calibration writer consumes the stage-1 lineage locator before any
+calibration custody directory, writer lease, ledger reservation, or bracket
+slot claim. For a marker-bearing acceptance input, it first requires the
+literal `--output-root` basename `instrument_validation`, then derives the
+only admissible locator as
+`resolve(--output-root).parent/.joulewise-launch-lineage.json`. No receipt
+path, handoff token, or lineage value is accepted through argv or environment.
+The writer authenticates the locator/sidecar and sibling-root agreement, the
+consumption/arm/pack/HEAD/launch-recipe chain, start and settle predecessors,
+current boot, selected acceptance bytes, authenticated root, bracket session,
+and exact pre/post attempt slot. The selected acceptance must be either an
+authenticated pack inventory member or the external issued-acceptance path
+and raw artifact digest pinned by authenticated `plan_tree.json` bytes.
+
+The writer reopens the same inputs immediately before evidence serialization.
+A valid-but-different locator, full lineage, selected config path, or selected
+config digest is `launch_lineage_conflict`. The authenticated full
+`joulewise.launch_lineage.v1` object is stamped at
+`instrument_evidence.json -> launch_lineage`; the manifest hashes those
+evidence bytes and the calibration ledger's artifact hashes preserve that
+binding. Writer authentication intentionally verifies that consumption
+occurred within the arm horizon but does not reapply the short T-0 expiration
+at collection time.
+
+The closed calibration boundary uses the six D-078 codes
+`launch_consumption_missing`, `launch_consumption_invalid`,
+`launch_binding_mismatch`, `launch_lineage_conflict`,
+`launch_lifecycle_incomplete`, and `launch_handoff_invalid`. A non-marker
+legacy acceptance leaves the mechanism dormant, omits `launch_lineage`, and
+preserves the pre-amendment serialized evidence bytes. Marker rollout remains
+part of the lead-owned successor-family transaction; frozen predecessors are
+not edited in place.
+
+### D-078 registry amendment — 2026-08-15: bounded pulse-detection projection
+
+The instrument-evidence diagnostic vocabulary adds
+`detection_nonconvergent`. It means the joint-loss projection exhausted its
+governed evaluation budget or the supplementary wall deadline. The diagnostic
+always makes the evidence `invalid`, clears the fitted bound, discards every
+partial fit, and exits nonzero; it can never license partial-valid evidence,
+an operator override, ARM, launch, or a claim. `clock_anchor_unresolved`
+remains the already-registered causal refusal: because that condition has
+already invalidated the capture, pulse fitting and the full-resolution
+projection are skipped with zero evaluated cells rather than spending work on
+diagnostics that cannot restore admissibility.
+
+The frozen detector budgets are 100,000 evaluated projection cells across the
+complete multi-pulse attempt and a supplementary 120-second monotonic wall
+deadline. The evaluated-cell count is the primary deterministic mechanism;
+the deadline is only a host-safety backstop. The reproducible projection
+receipt content is the disposition, cell budget, and wall budget. Trigger and
+evaluated-cell count live in a separate diagnostics object: cell-budget
+exhaustion marks those diagnostics reproducible and remains identical for
+identical input, while `wall_deadline` marks them `reproducible: false` because
+host speed determines both values. A wall-trigger record is a host-pathology
+diagnostic, not a reproducible measurement. The flat-loss witness cost was
+approximately 2.7 microseconds per cell, so 100,000 cells cost approximately
+0.27 seconds; the 120-second backstop represents about 440x per-cell slowdown
+(approximately 2.65 decimal orders of magnitude) before it can preempt the
+cell cap. The evidence serializer refuses, rather than silently repairing, any
+object that combines a projection disposition with a fitted bound, a detected
+pulse set, or per-pulse fits. The `clock_anchor_unresolved` zero-cell bypass is
+admissible only when `trace_anchor_bound_s` is zero; a nonzero resolved-anchor
+bound combined with that bypass is an API error. The normal ledger taxonomy
+is unchanged:
+post-capture nonconvergence is a completed `ordinary-invalid` observation,
+not a `calibration_exits` preflight refusal. Its slot-finalization receipt
+hash-binds the complete custody artifacts; for an invalid pre slot the
+terminal bracket-abort receipt carries the exact registered reason
+`detection_nonconvergent` (or `clock_anchor_unresolved`) and the normal
+finalizer releases the writer lease.
+
+Because `joulewise/powermetrics_fiducial.py` is an authenticated estimator
+input, this amendment deliberately makes the currently issued D-079
+acceptance artifact stale. No live writer may cross preflight on the branch.
+Re-issuance and every dependent pin update remain lead-owned inside the
+council's one atomic Phase-2 re-freeze; tests may re-key only a private
+synthetic repository to its own copied bytes and that fixture is never an
+issuance or live evidence.
+
 ### D-130 closure recorded — 2026-08-15
 
 WO-CI-RESTRUCTURE is **CLOSED**. PR #129 (`7a76a29`) landed the
@@ -9758,6 +9840,35 @@ inside the re-freeze; tests may re-key only private synthetic fixtures.
 Authority context: R-t9-4 (docs/run_reports/2026-08-16-t9-session.md), the
 2026-08-15 D-078 registry amendment on the staged branch, and the council's
 Phase-2 re-freeze ruling.
+
+### D-138 implementation note — 2026-08-17: authenticated D-079 successor-candidate tooling (nothing issued)
+
+`scripts/reissue_calibration_acceptance.py` now prepares, but cannot issue, a
+D-079 successor candidate.  It authenticates the exact issued predecessor
+through the production byte-pinned loader; reopens all 19 ruled corpus members;
+checks each manifest SHA-256, instrument-evidence SHA-256, source decimal
+`b_fiducial_s` lexeme, and valid prior-observation link; then reconstructs the
+candidate with the production protocol digest, all four D-138 estimator-source
+digests, and the production D-102/D-109 derivation validator.  The tool contains
+no second implementation of the acceptance arithmetic.
+
+Every output is conspicuously marked `"candidate_not_issued": true`.  The
+production exact-byte acceptance loader refuses those marked bytes, and the
+later governed issuance transaction must remove the marker, assign the ruled
+successor identity, and establish the new external byte pin.  The F3 stop rule
+is executable: a member-set, threshold, or any other non-pin/science-facing
+delta prints `VERDICT=STOP` and returns a nonzero status; only a pure
+protocol/estimator-pin delta prints `VERDICT=PROCEED`.  `PROCEED` authorizes only
+continued private transaction preparation, never issuance or publication.
+
+The real-corpus replay at the integrated head `e22e658` authenticated 19/19.
+The member set, all member values, thresholds, and every science-facing field
+were identical.  The protocol digest and three estimator-source digests were
+unchanged; only `joulewise/powermetrics_fiducial.py` rotated, from
+`21ec17c7b2119e5971e6bcf39d9291d907db347ab6aa63996b13a83630e437a3` to
+`501bfdaf44f2768af73f112a703e9da3ab055c03e5b9d493e0dc2eadad82f71b`.
+No acceptance artifact, successor ID, extraction spec, or dependent pin was
+issued or changed by this preparation step.
 
 ### WO-LAUNCH-BINDING stage 3 downstream-authentication checkpoint — 2026-08-16
 
