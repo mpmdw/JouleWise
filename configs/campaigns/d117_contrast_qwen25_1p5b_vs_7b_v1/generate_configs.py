@@ -411,6 +411,15 @@ def validate_generation_write_boundary(
 ) -> None:
     """Refuse link traversal or anomalous existing nodes before any write."""
 
+    # Registered residual (lead disposition, D-139 A1): this boundary is
+    # check-then-write. A concurrent process could substitute a validated
+    # ancestor or write target with a symlink after this function returns and
+    # before the bytes land. Winning that race requires an adversarial program
+    # running against the measurement, which the ratified D-139 A1 threat model
+    # ("no adversarial programs affecting the measurement can be assumed") and
+    # single-operator discipline exclude. No dirfd/O_NOFOLLOW hardening is
+    # attempted here; the residual is registered, not closed.
+
     root = output_root.absolute()
 
     def refuse(path: Path, reason: str) -> None:
