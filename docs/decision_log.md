@@ -9126,6 +9126,135 @@ verification note correcting B2's premise).
    work orders under this ruling; every fix round carries C-028 delta
    re-audits.
 
+### R1 implementation amendment — 2026-08-17 (Phase-2 preparation only; no publication)
+
+This amendment executes the reversible schema/tooling tranche of the ruled
+R1 lifecycle.  It creates no successor pack, receipt, family marker, custody
+root, baseline successor, ARM authority, or publication event.
+
+1. **D-131 clause 4 — no grandfathering is machine-enforced.** A generic
+   `joulewise.arm_readiness_evidence_receipt.v1` presented to an R1-registry
+   path is a `V1_GRANDFATHERING` refusal role.  The 33 issued v1 receipts
+   remain historical bytes only; validation of their historical schema is
+   not revalidation, reinterpretation, or permission to consume them.
+2. **D-134 clauses 1/3/5/6/9/10 — split schemas and registry authority.**
+   `RE_DERIVABLE` uses the exact-key
+   `joulewise.arm_readiness_content_evidence_receipt.v1`, which carries
+   neither `boot_session_id` nor `valid_until_monotonic_ns`.
+   `EXECUTION_BOUND` uses the exact-key
+   `joulewise.arm_readiness_execution_evidence_receipt.v1`, retaining both
+   fields.  The five-class policy, per-kind and per-row policy IDs,
+   irrelevant-path allowlist, ARM horizon/budget, environment-comparison
+   policy, and refusal vocabulary have one exact-key lifecycle-registry
+   input embedded in the successor row registry.  DOCTRINE_PIN and
+   PACK_FAMILY are code-constant `RE_DERIVABLE`; every other generic
+   deriver is code-constant `EXECUTION_BOUND`; authoring refuses a
+   registry/code mismatch.
+3. **Staleness is conjunctive.** The primary gate enumerates every Git path
+   changed in `derivation_commit..reviewed_HEAD` and refuses any path absent
+   from the authenticated exact-path allowlist.  The additional dependency
+   conjunct replays every primary and executed-file binding against both the
+   derivation commit and reviewed HEAD.  The plan-tree exception normalizes
+   only `arm_attachments.arm_readiness.freeze_receipt.path` and `.sha256` by
+   returning that slot to `null`; an added key or any other field change
+   refuses.  A source-level release guard mechanically rejects direct
+   filesystem, Git, or process reads added to a deriver outside the recording
+   helpers.
+4. **R1 clause 3 remains unconditional.** A schema-bearing TERMINAL_REVIEW
+   source must bind the reviewed `head_tree_oid` exactly.  DRY_RUN_REHEARSAL
+   remains under D-134 clause 7's existing same-head rule; neither condition
+   is relaxed by a freshness policy.
+5. **D-137 is AMENDED, with zero reach over content receipts.** Boot-session
+   comparison continues for `EXECUTION_BOUND`, `TIME_BOUND`, and the ARM
+   temporal capability wherever their schemas carry monotonic validity.
+   The new content schema carries neither field, so D-137's boot/deadline
+   rule has zero reach over `RE_DERIVABLE` receipts.  This does not alter any
+   issued v1 byte.
+6. **D-078 lifecycle refusal registry is structurally complete before
+   issuance.** Its eight mandatory roles are `CLASS_MISMATCH`,
+   `DEPENDENCY_CHANGED_SET`, `DEPENDENCY_MANIFEST`, `FAMILY_PUBLICATION`,
+   `SUCCESSOR_CHAIN`, `TEMPORAL_BUDGET`, `UNKNOWN_POLICY`, and
+   `V1_GRANDFATHERING`.  Exact spellings and type labels remain Ed-reserved
+   under R1 clause 6 and therefore come only from that authenticated
+   registry.  The checked-in placeholder uses explicit `ED_RESERVED:`
+   values and refuses issuance/consumption; no placeholder is a reason code.
+7. **Reserved semantics remain fail-closed.** Per-row policies, generic
+   execution horizons, ARM capability horizon, arm-to-consume budget, and
+   execution-environment comparison semantics must all be resolved in the
+   single registry.  The six ruled probe/suite kinds record interpreter,
+   platform, non-repository `sys.path` descriptors/digests, and (for
+   PACK_AUTHENTICATION) inherited-environment value digests now.  Because Ed
+   has not ruled comparison semantics, the implementation comparison
+   allowlist is intentionally empty and an R1 author refuses before writing
+   any output through the registry's `UNKNOWN_POLICY` role.  The
+   temporal-budget gate explicitly evaluates the
+   `TIME_BOUND` T-0 set; session-state and execution deadlines are not
+   silently substituted for that set.  The same registry carries explicit
+   unresolved seams for the three successor pack IDs, cross-root freeze
+   numbering, the freeze-receipt-v2 predecessor-binding set, and the family
+   publication-marker schema; none has a code default or permits generation.
+
+### R1 implementation amendment — FIX ROUND 1 lifecycle enforcement (2026-08-17)
+
+The first contract/execution lens pair rejected the preparation tranche at
+`8fd29f7`; this amendment records the converged cures without authorizing a
+successor publication.
+
+1. **Freshness class is code-only for the complete evidence vocabulary.** One
+   exhaustive table assigns all 29 D-134 evidence kinds plus the ARM capability.
+   `DOCTRINE_PIN` and `PACK_FAMILY` are `RE_DERIVABLE`; the ten other generic
+   derivers plus `DRY_RUN_REHEARSAL`, `GIT_CHECKOUT`,
+   `IDENTITY_PIN_PROJECTION`, `OFFLINE_INPUT_INVENTORY`,
+   `PRIVILEGE_INSTALLATION`, and `TERMINAL_REVIEW` are `EXECUTION_BOUND`;
+   `BACKUP_PREFLIGHT`, `CLOCK_ATTESTATION`, `CLOCK_PROBE`,
+   `MACHINE_PREFLIGHT`, `MAINTENANCE_CENSUS`, `POWERMETRICS_PROBE`,
+   `POWER_PREFLIGHT`, and `PROCESS_CENSUS` are `TIME_BOUND`;
+   `LAUNCH_RECIPE`, `LEDGER_RESERVATION`, and `ROOT_PREFLIGHT` are
+   `SESSION_STATE_BOUND`; the ARM receipt is `TEMPORAL_CAPABILITY`.  A registry
+   supplies policy IDs and ruled parameters but validates against this table;
+   it cannot define, omit, or override a class.  Temporal-budget selection also
+   uses the code table, so relabelling `CLOCK_PROBE` cannot remove it from the
+   budget gate.  Production evidence discovery dispatches TIME/SESSION class
+   validation, while ARM verification dispatches the single-use temporal-
+   capability validation.
+2. **Resolved policy shapes are class-specific.** `RE_DERIVABLE` carries no
+   horizon and only `NOT_APPLICABLE` environment comparison; TIME/SESSION
+   policies carry a positive horizon and `NOT_APPLICABLE`; EXECUTION carries a
+   positive horizon and an applicable comparison.  Contradictory resolved
+   fields refuse instead of being silently ignored.  The implementation's
+   execution-comparison allowlist remains empty, so the outstanding Ed ruling
+   still blocks authoring through the registered `UNKNOWN_POLICY` role.
+3. **Read routing has a best-effort developer-error guard under D-139.** The
+   import-time release lint starts at every deriver and walks ordinary direct
+   or simply aliased calls to reachable top-level local helpers until an
+   explicit recording boundary.  It catches the recognized direct filesystem,
+   Git, and process-read spellings in derivers, the same spellings in those
+   transitive helpers, and simple acquired-callable aliases such as
+   `reader = __import__("builtins").open`,
+   `reader = importlib.import_module("builtins").open`, `reader = os.open`,
+   imported-function aliases, and fixed-point aliases of those readers or
+   helpers.  These checks catch accidental unrecorded reads; they are not a
+   complete Python data-flow analysis or an in-process security boundary.
+   **HONEST REGISTERED LIMITATION:** deliberate same-interpreter circumvention
+   is outside D-139.  Python code in the same interpreter can construct a more
+   dynamic alias, alter module state, or invoke an unmodelled read mechanism.
+   Stronger protection would require a separately ruled OS trust boundary;
+   this guard makes no claim that no read can escape.
+4. **Plan-tree subtraction preserves all non-slot bytes.** Normalization locates
+   the unique `arm_attachments.arm_readiness.freeze_receipt` value token and
+   replaces only that token with `null`.  It does not parse-and-reserialize the
+   surrounding document; whitespace, ordering, and every byte outside the
+   enumerated slot remain identity-bound.
+5. **D-139 A3 successor IDs install through the registry.** The R1 registry's
+   successor field is an exact `ALPHA`/`BETA`/`GAMMA` role map.  Production
+   profile routing admits only the ID installed for that role and validates
+   the D-139-approved uniform successor shapes.  The approved initial values
+   are `d117_floor_qwen25_1p5b_v2`, `d117_floor_qwen25_7b_v2`, and
+   `d117_contrast_qwen25_1p5b_vs_7b_v2`; a later shape-conforming generation
+   can be installed by registry bytes alone, without editing an ID allowlist in
+   Python.  Exact-byte family publication remains reserved and no successor
+   bytes are created by this amendment.
+
 ### WO-MARGIN-RECORDER-AUTHZ contract ADOPTED (magistrate, 2026-08-15; council Phase 0; Sol design consult adopted)
 
 Consult custodied: docs/process_traces/2026-08-15-recorder-authz-consult/
