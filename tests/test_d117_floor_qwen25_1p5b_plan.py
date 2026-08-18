@@ -26,6 +26,10 @@ PACK_REL = Path("configs/campaigns/d117_floor_qwen25_1p5b_v1")
 PACK_ROOT = ROOT / PACK_REL
 SPEC_REL = Path("configs/floor_mint/d117_qwen25_1p5b_extraction_spec.json")
 SPEC_PATH = ROOT / SPEC_REL
+V1_SPEC_RELS = (
+    SPEC_REL,
+    Path("configs/floor_mint/d117_qwen25_7b_extraction_spec.json"),
+)
 GENERATOR = PACK_ROOT / "generate_configs.py"
 GENERATOR_SPEC = importlib.util.spec_from_file_location(
     "d117_alpha_generator", GENERATOR
@@ -65,9 +69,9 @@ from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
 FROZEN_GENERATOR_SHA256 = "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06"
-EXPECTED_PACK_SHA256 = "784c0a009dbe914fe32d237754ea3a471978d4fa3d506fe6f8416a53256bdb3c"
+EXPECTED_PACK_SHA256 = "484c615173df89176a2b4a5d83287c718b857a52d46386f54f225875c509e102"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "1355d824e1606f24ee7ceb354778c3769885168a7633b33d81562bc54c74ea2d",
+    "generate_configs.py": "dbfcc9ccfc748729c6622ccdc4411341613bcab55388d18679a599c396017f22",
     "calibration_plan.json": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d",
     "calibration_plan.sha256": "707712fb1152ed41b6d48432932bacf16e6856c8432dafb699e951b077e09312",
     "order_manifest.json": "5c5bd84579ff6bcfe4c0e3c800550f35bd4a04a5cd0061e105c9c3e4775f9fff",
@@ -122,6 +126,92 @@ def sha256_bytes(raw: bytes) -> str:
 
 def sha256_file(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
+
+
+def checkout_inventory(root: Path) -> set[Path]:
+    return {
+        path.relative_to(root)
+        for path in root.rglob("*")
+        if path.is_file()
+        and ".git" not in path.parts
+        and "__pycache__" not in path.parts
+    }
+
+
+def initialize_git_tracked_checkout(
+    checkout_root: Path, pathspecs: Iterable[Path]
+) -> set[Path]:
+    listed = subprocess.run(
+        ["git", "ls-files", "--", *(path.as_posix() for path in pathspecs)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    tracked = {Path(line) for line in listed.stdout.splitlines() if line}
+    if not tracked:
+        raise AssertionError("real-checkout fixture has no git-tracked inputs")
+    for relative in tracked:
+        target = checkout_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative, target)
+    subprocess.run(
+        ["git", "init", "-q"],
+        cwd=checkout_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "add", "--", *(path.as_posix() for path in sorted(tracked))],
+        cwd=checkout_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=D117 fixture",
+            "-c",
+            "user.email=d117-fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            "git-tracked D117 checkout fixture",
+        ],
+        cwd=checkout_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return tracked
+
+
+def git_status(checkout_root: Path) -> str:
+    return subprocess.run(
+        ["git", "status", "--short"],
+        cwd=checkout_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
+def commit_fixture(checkout_root: Path, message: str) -> None:
+    subprocess.run(["git", "add", "-f", "."], cwd=checkout_root, check=True)
+    subprocess.run(
+        [
+            "git", "-c", "user.name=D117 fixture",
+            "-c", "user.email=d117-fixture@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "-q", "-m", message,
+        ],
+        cwd=checkout_root,
+        check=True,
+    )
 
 
 def canonical_sha256(value: Any) -> str:
@@ -228,7 +318,15 @@ def expected_pack_paths() -> set[str]:
 
 
 def pack_digest(pack_root: Path) -> str:
-    paths = sorted(path for path in pack_root.rglob("*") if path.is_file())
+    # Exclude interpreter byte-code caches: importing generate_configs.py
+    # (which this suite does) drops __pycache__ into the pack, so an
+    # unfiltered digest passes on a fresh checkout and fails on every later
+    # run. Aligned with the gamma generator/suite filter (cold-gate C5).
+    paths = sorted(
+        path
+        for path in pack_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    )
     digest = hashlib.sha256()
     for path in paths:
         relative = path.relative_to(pack_root).as_posix()
@@ -247,7 +345,8 @@ def floor_reference_ids(cell: dict[str, Any]) -> list[str]:
 
 
 def link_successor_self_check_inputs(output_root: Path) -> None:
-    (output_root / "joulewise").symlink_to(ROOT / "joulewise", target_is_directory=True)
+    if not (output_root / "joulewise").exists():
+        (output_root / "joulewise").symlink_to(ROOT / "joulewise", target_is_directory=True)
     for source_dir in (ROOT / "configs", ROOT / "configs/campaigns", ROOT / "configs/floor_mint"):
         target_dir = output_root / source_dir.relative_to(ROOT)
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -258,7 +357,8 @@ def link_successor_self_check_inputs(output_root: Path) -> None:
     successor_contrast = (
         output_root / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
     )
-    successor_contrast.symlink_to(CONTRAST_PACK, target_is_directory=True)
+    if not successor_contrast.exists():
+        successor_contrast.symlink_to(CONTRAST_PACK, target_is_directory=True)
 
 
 class D117FloorQwen251p5BPlanTests(unittest.TestCase):
@@ -274,7 +374,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         actual = {
             path.relative_to(PACK_ROOT).as_posix()
             for path in PACK_ROOT.rglob("*")
-            if path.is_file()
+            if path.is_file() and "__pycache__" not in path.parts
         }
         self.assertEqual(actual, expected_pack_paths())
         self.assertEqual(len(actual), 154)
@@ -342,25 +442,194 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             "frozen_by_d134_receipt",
         )
         self.assertEqual(
-            GENERATOR_MODULE.freeze_aware_reservation_plan_arguments(True), []
+            GENERATOR_MODULE.freeze_aware_reservation_plan_arguments(
+                GENERATOR_MODULE.GenerationIdentity()
+            ),
+            [],
         )
-        future = GENERATOR_MODULE.freeze_aware_reservation_plan_arguments(False)
+        future_identity = GENERATOR_MODULE.GenerationIdentity(
+            pack_id="d117_floor_qwen25_1p5b_v2",
+            family_suffix="_v2",
+            preserve_current_frozen_bytes=False,
+        )
+        future = GENERATOR_MODULE.freeze_aware_reservation_plan_arguments(
+            future_identity
+        )
         self.assertEqual(
             [token["value"] for token in future],
-            ["--plan", (PACK_REL / "calibration_plan.json").as_posix()],
+            ["--plan", (future_identity.pack_rel / "calibration_plan.json").as_posix()],
         )
+        # Holding 6 of the 2026-08-18 cold-gate verdict: the frozen-status
+        # README branch is REMOVED, not merely unreachable. A frozen dynamic
+        # status must leave the emitted description exactly as committed, and
+        # the successor description must be freeze-neutral -- true on both
+        # sides of its own D-134 receipt, naming the receipt and its plan-tree
+        # attachment as the status authority, asserting nothing about
+        # armability or unfrozenness.
         with mock.patch.object(
-            GENERATOR_MODULE, "PACK_STATUS", GENERATOR_MODULE.FROZEN_STATUS
+            GENERATOR_MODULE,
+            "ARM_READINESS_ATTACHMENT",
+            {"freeze_receipt": {"sha256": "0" * 64}},
         ):
-            future_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
-        self.assertIn("frozen by D-134 receipt", future_readme)
-        self.assertIn("freeze-aware", future_readme)
+            frozen_state_readme = GENERATOR_MODULE.readme_bytes()
+        self.assertEqual(frozen_state_readme, (PACK_ROOT / "README.md").read_bytes())
+        with GENERATOR_MODULE.generation_context(future_identity):
+            successor_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
+        self.assertIn(
+            "The committed D-134 freeze receipt and its plan-tree attachment "
+            "are authoritative",
+            " ".join(successor_readme.split()),
+        )
+        for denial in ("unfrozen draft", "unfrozen_draft", "not armable"):
+            self.assertNotIn(denial, successor_readme)
+        self.assertNotIn(
+            "frozen by D-134 receipt", GENERATOR.read_text(encoding="utf-8")
+        )
+
+    def test_target_status_inventory_and_invalid_modes_are_fail_closed(self) -> None:
+        successor = GENERATOR_MODULE.GenerationIdentity(
+            pack_id="d117_floor_qwen25_1p5b_v2",
+            family_suffix="_v2",
+            preserve_current_frozen_bytes=False,
+        )
+        self.assertEqual(successor.current_ordinal, 1)
+        self.assertEqual(successor.target_ordinal, 2)
+        self.assertFalse(successor.target_is_current)
+        self.assertTrue(successor.target_is_successor_family)
+        self.assertEqual(successor.target_status, "unfrozen_draft")
+        with mock.patch.object(
+            GENERATOR_MODULE,
+            "ARM_READINESS_ATTACHMENT",
+            {"freeze_receipt": {"sha256": "0" * 64}},
+        ):
+            current = GENERATOR_MODULE.GenerationIdentity()
+            self.assertEqual(current.target_status, "frozen_by_d134_receipt")
+        source = GENERATOR.read_text(encoding="utf-8")
+        self.assertEqual(
+            source.count('"draft_status": emitted_draft_status()'), 6
+        )
+        expected = {
+            successor.pack_rel / path
+            for path in GENERATOR_MODULE.expected_pack_paths()
+        } | {GENERATOR_MODULE.extraction_spec_rel(successor)}
+        self.assertEqual(
+            GENERATOR_MODULE.validate_generation_output_inventory(successor), expected
+        )
+        for pack_id, suffix, preserve in (
+            ("d117_floor_qwen25_1p5b_v0", "_v0", False),
+            ("d117_floor_qwen25_1p5b_v2", "_v2", True),
+        ):
+            with self.subTest(pack_id=pack_id), tempfile.TemporaryDirectory() as temp:
+                output_root = Path(temp)
+                rejected = subprocess.run(
+                    [
+                        sys.executable, str(GENERATOR), "--output-root", str(output_root),
+                        "--pack-id", pack_id, "--family-suffix", suffix,
+                        "--preserve-current-frozen-bytes"
+                        if preserve else "--no-preserve-current-frozen-bytes",
+                    ],
+                    cwd=ROOT, check=False, capture_output=True, text=True,
+                )
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertEqual(checkout_inventory(output_root), set())
+
+    def test_generation_refuses_symlinked_write_inventory_before_any_write(self) -> None:
+        successor = GENERATOR_MODULE.GenerationIdentity(
+            pack_id="d117_floor_qwen25_1p5b_v2",
+            family_suffix="_v2",
+            preserve_current_frozen_bytes=False,
+        )
+        cases = {
+            "pack_directory": (successor.pack_rel, True),
+            "pack_file": (successor.pack_rel / "README.md", False),
+            "extraction_spec": (
+                GENERATOR_MODULE.extraction_spec_rel(successor),
+                False,
+            ),
+            "sidecar": (
+                successor.pack_rel / "calibration_plan.sha256",
+                False,
+            ),
+        }
+        for name, (relative, is_directory) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory(
+                prefix="d117-alpha-symlink-root-"
+            ) as temp, tempfile.TemporaryDirectory(
+                prefix="d117-alpha-symlink-escape-"
+            ) as escape:
+                output_root = Path(temp)
+                escape_root = Path(escape)
+                target = output_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                destination = (
+                    escape_root if is_directory else escape_root / f"{name}.escaped"
+                )
+                target.symlink_to(destination, target_is_directory=is_directory)
+                before = checkout_inventory(output_root)
+                rejected = subprocess.run(
+                    [
+                        sys.executable,
+                        str(GENERATOR),
+                        "--output-root",
+                        str(output_root),
+                        "--pack-id",
+                        successor.pack_id,
+                        "--family-suffix",
+                        successor.family_suffix,
+                        "--no-preserve-current-frozen-bytes",
+                    ],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn("refusing generation", rejected.stderr)
+                self.assertIn(str(target), rejected.stderr)
+                self.assertIn(str(destination.resolve(strict=False)), rejected.stderr)
+                self.assertEqual(checkout_inventory(output_root), before)
+                self.assertEqual(list(escape_root.iterdir()), [])
 
     def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
         successor_id = "d117_floor_qwen25_1p5b_v2"
         successor_rel = PACK_REL.with_name(successor_id)
+        successor_spec_rel = Path(
+            "configs/floor_mint/d117_qwen25_1p5b_v2_extraction_spec.json"
+        )
         with tempfile.TemporaryDirectory(prefix="d117-alpha-v2-") as temp:
             output_root = Path(temp)
+            tracked = initialize_git_tracked_checkout(
+                output_root, (PACK_REL, *V1_SPEC_RELS)
+            )
+            self.assertTrue(set(V1_SPEC_RELS) <= tracked)
+            baseline_inventory = checkout_inventory(output_root)
+            v1_spec_hashes = {
+                relative: sha256_file(output_root / relative)
+                for relative in V1_SPEC_RELS
+            }
+            preserved = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    "--output-root",
+                    str(output_root),
+                    "--preserve-current-frozen-bytes",
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(preserved.returncode, 0, preserved.stderr)
+            self.assertEqual(git_status(output_root), "")
+            self.assertEqual(checkout_inventory(output_root), baseline_inventory)
+            self.assertEqual(
+                {
+                    relative: sha256_file(output_root / relative)
+                    for relative in V1_SPEC_RELS
+                },
+                v1_spec_hashes,
+            )
             command = [
                 sys.executable,
                 str(GENERATOR),
@@ -380,6 +649,29 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(generated.returncode, 0, generated.stderr)
+            expected_writes = {
+                successor_rel / relative
+                for relative in GENERATOR_MODULE.expected_pack_paths()
+            } | {successor_spec_rel}
+            self.assertEqual(
+                checkout_inventory(output_root) - baseline_inventory,
+                expected_writes,
+            )
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "diff", "--quiet"],
+                    cwd=output_root,
+                    check=False,
+                ).returncode,
+                0,
+            )
+            self.assertEqual(
+                {
+                    relative: sha256_file(output_root / relative)
+                    for relative in V1_SPEC_RELS
+                },
+                v1_spec_hashes,
+            )
             checked = subprocess.run(
                 [*command, "--check"],
                 cwd=ROOT,
@@ -392,6 +684,9 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             pack_root = output_root / successor_rel
             tree = load_json(pack_root / "plan_tree.json")
             producer = load_json(pack_root / "producer_contract.json")
+            successor_spec = load_json(output_root / successor_spec_rel)
+            root_manifest = load_json(pack_root / "order_manifest.json")
+            root_manifest_sha256 = sha256_file(pack_root / "order_manifest.json")
             self.assertEqual(tree["plan"]["path"], "calibration_plan.json")
             self.assertEqual(tree["plan"]["sidecar_path"], "calibration_plan.sha256")
             self.assertEqual(producer["plan"]["path"], tree["plan"]["path"])
@@ -400,6 +695,48 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 tree["window_identity"]["evidence_root_id"],
                 EVIDENCE_ROOT_ID.removesuffix("v1") + "v2",
             )
+            self.assertEqual(
+                tree["downstream_contract"]["extraction_spec"]["path"],
+                successor_spec_rel.as_posix(),
+            )
+            self.assertEqual(
+                producer["extraction_spec"]["path"], successor_spec_rel.as_posix()
+            )
+            self.assertEqual(
+                tree["downstream_contract"]["extraction_spec"]["sha256"],
+                sha256_file(output_root / successor_spec_rel),
+            )
+            self.assertEqual(
+                producer["extraction_spec"]["sha256"],
+                sha256_file(output_root / successor_spec_rel),
+            )
+            root_configs = {
+                row["run_id"]: row["config_sha256"]
+                for row in root_manifest["executed_order"]
+            }
+            for cell in successor_spec["cells"]:
+                self.assertEqual(
+                    cell["order_manifest"],
+                    {
+                        "path": (successor_rel / "order_manifest.json").as_posix(),
+                        "manifest_id": root_manifest["manifest_id"],
+                        "sha256": root_manifest_sha256,
+                    },
+                )
+                self.assertEqual(
+                    cell["evidence_root_id"],
+                    EVIDENCE_ROOT_ID.removesuffix("v1") + "v2",
+                )
+                self.assertEqual(
+                    cell["member_config_sha256"],
+                    [
+                        {
+                            "bundle_id": row["bundle_id"],
+                            "config_sha256": root_configs[row["bundle_id"]],
+                        }
+                        for row in cell["member_config_sha256"]
+                    ],
+                )
             reservation = next(
                 stage
                 for stage in tree["stage_graph"]
@@ -464,6 +801,50 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             )
             self.assertEqual(embedded_check.returncode, 0, embedded_check.stderr)
             self.assertIn(successor_id, embedded_check.stdout)
+
+            commit_fixture(output_root, "track emitted alpha v2")
+            tracked_spec_hashes = {
+                relative: sha256_file(output_root / relative)
+                for relative in (*V1_SPEC_RELS, successor_spec_rel)
+            }
+            preserve_command = [
+                sys.executable,
+                str(pack_root / "generate_configs.py"),
+                "--output-root",
+                str(output_root),
+                "--preserve-current-frozen-bytes",
+            ]
+            preserve_check = subprocess.run(
+                [*preserve_command, "--check"],
+                cwd=output_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(preserve_check.returncode, 0, preserve_check.stderr)
+            preserve_generate = subprocess.run(
+                preserve_command,
+                cwd=output_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(preserve_generate.returncode, 0, preserve_generate.stderr)
+            self.assertEqual(git_status(output_root), "")
+            self.assertEqual(
+                {
+                    relative: sha256_file(output_root / relative)
+                    for relative in (*V1_SPEC_RELS, successor_spec_rel)
+                },
+                tracked_spec_hashes,
+            )
+            self.assertFalse(
+                (output_root / "configs/floor_mint/d117_qwen25_1p5b_v3_extraction_spec.json").exists()
+            )
+            preserved_tree = load_json(pack_root / "plan_tree.json")
+            for row in preserved_tree["science"]:
+                config = load_json(output_root / row["config_path"])
+                self.assertIn("launch_lineage_required", config["run_metadata"]["tags"])
 
         for row in self.tree["science"]:
             current = load_json(ROOT / row["config_path"])
@@ -1083,7 +1464,9 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK_ROOT.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md", ".py", ".sha256"}
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and path.suffix in {".json", ".md", ".py", ".sha256"}
         )
         self.assertNotIn(stale_marker, generated_text)
 
@@ -1091,7 +1474,9 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK_ROOT.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md", ".sha256"}
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and path.suffix in {".json", ".md", ".sha256"}
         )
         for forbidden in (
             "runs_window_d_20260726",
