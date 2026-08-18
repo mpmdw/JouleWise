@@ -37,7 +37,7 @@ V1_SPEC_RELS = (
 ROW_REGISTRY_REL = Path("configs/arm_readiness/d117_row_registry_v1.json")
 
 EXACT_SHAS = {
-    "generate_configs.py": "595f142f70362d20360e63779fe3496a8b776e5058768f0a5d2129d2bd5f9ed3",
+    "generate_configs.py": "f8822b5f670c9c29c2e6a9069b1ef9a0a1532f9b2cc2b26ab62e91ab4e8e7b2b",
     "calibration_plan.json": "4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218",
     "plan_tree.json": "8c53a834d78c81145b8f35b25f8d50182d596dc82c171e815f8a160117ab525d",
     "analysis_manifest_v3.json": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
@@ -388,10 +388,63 @@ def authenticate_freeze_reference(output_root: Path, pack_rel: Path) -> dict[str
     return json.loads(completed.stdout)
 
 
-def serialized_status_sites(pack_root: Path) -> dict[Path, str]:
-    """Map every JSON artifact carrying a top-level ``draft_status`` to its value."""
+# Every serialized field whose value describes the pack's position relative to
+# its own D-134 freeze receipt. Delta-7 F3: the collector used to know only
+# about ``draft_status``, so gamma's three ``freeze_ratification`` fields --
+# the identical defect, in the identical bytes -- went uninventoried, and so
+# did the NESTED ``draft_status`` under ``runtime_budget``. Adding a name here
+# is what puts a new status field under the C1 regression; the phrase scan
+# below is the independent net for wording that never becomes a field.
+FREEZE_VARIANT_FIELD_NAMES = ("draft_status", "freeze_ratification")
 
-    sites: dict[Path, str] = {}
+# Wording that asserts a freeze state, or its negation, in emitted bytes. Under
+# holding 1 of the 2026-08-18 cold-gate verdict the receipt pins those bytes,
+# so any of these phrases is a claim that becomes unrepairable at mint.
+FORBIDDEN_FREEZE_VARIANT_PHRASES = (
+    "unfrozen draft",
+    "unfrozen_draft",
+    "not armable",
+    "frozen by D-134 receipt",
+    "frozen_by_d134_receipt",
+)
+
+# The ONE classified exemption, ruled in round 7 rather than left silent
+# (delta-7 residual risk). ``PROPOSED-PENDING-LEAD-RATIFICATION`` is the p256
+# prompt CANDIDATE's status. Its subject is the authority of the prompt TEXT,
+# not the pack's freeze state: the ratifying act is a named lead ruling (Q1,
+# docs/strategy/2026-08-09-pack-freeze-plan.md) gated on the artifact's own
+# recorded precondition ``lead_rerun_required_before_ratification``, and
+# minting the pack's D-134 receipt neither performs that rerun nor pins the
+# text's authority. Its truth therefore does not turn on the receipt, so it is
+# freeze-NEUTRAL as-is and stays byte-identical to the v1 artifact the alpha
+# and beta packs cross-reference by SHA. It is enumerated, not allow-listed by
+# substring accident: any occurrence of the bare phrase WITHOUT this prefix --
+# gamma's former ``freeze_ratification`` value, for one -- still fails.
+CLASSIFIED_PROMPT_CANDIDATE_STATUS = "PROPOSED-PENDING-LEAD-RATIFICATION"
+BARE_RATIFICATION_PHRASE = "PENDING-LEAD-RATIFICATION"
+
+
+def serialized_status_sites(pack_root: Path) -> dict[str, str]:
+    """Map every serialized freeze-variant field in a pack to its value.
+
+    Walks each JSON artifact in full, not just its top level, and keys sites by
+    ``<relative path>#<json pointer>`` so a field that moves, multiplies, or
+    hides inside a nested object is still inventoried by name.
+    """
+
+    sites: dict[str, str] = {}
+
+    def walk(value: Any, pointer: str, relative: Path) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                child = f"{pointer}/{key}"
+                if key in FREEZE_VARIANT_FIELD_NAMES and isinstance(item, str):
+                    sites[f"{relative.as_posix()}#{child}"] = item
+                walk(item, child, relative)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                walk(item, f"{pointer}/{index}", relative)
+
     for path in sorted(pack_root.rglob("*")):
         if not path.is_file() or path.suffix != ".json":
             continue
@@ -401,9 +454,34 @@ def serialized_status_sites(pack_root: Path) -> dict[Path, str]:
             value = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             continue
-        if isinstance(value, dict) and isinstance(value.get("draft_status"), str):
-            sites[path.relative_to(pack_root)] = value["draft_status"]
+        walk(value, "", path.relative_to(pack_root))
     return sites
+
+
+def freeze_variant_wording_hits(paths: Iterable[Path]) -> dict[str, list[str]]:
+    """Report freeze-variant wording found in emitted artifact bytes.
+
+    ``generate_configs.py`` is excluded by its callers: an emitted successor
+    generator still CARRIES the ordinal-1 literals it needs to describe the
+    2026-08-13 packs, and after the delta-7 F2 downgrade guard those branches
+    are unreachable by design. Every phrase it could emit reaches this scan
+    anyway, through the README and JSON artifacts it writes.
+    """
+
+    hits: dict[str, list[str]] = {}
+    for path in sorted(paths):
+        if not path.is_file() or "__pycache__" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        found = [phrase for phrase in FORBIDDEN_FREEZE_VARIANT_PHRASES if phrase in text]
+        bare = text.count(BARE_RATIFICATION_PHRASE) - text.count(
+            CLASSIFIED_PROMPT_CANDIDATE_STATUS
+        )
+        if bare:
+            found.append(f"{bare}x unclassified {BARE_RATIFICATION_PHRASE}")
+        if found:
+            hits[path.as_posix()] = found
+    return hits
 
 
 def probe_generator_status(generator: Path, cwd: Path) -> str:
@@ -1050,7 +1128,7 @@ class D117GammaPlanTest(unittest.TestCase):
             v2_packs: list[Path] = []
             preserve_commands: list[list[str]] = []
             draft_hashes: list[dict[Path, str]] = []
-            draft_status_sites: list[dict[Path, str]] = []
+            draft_status_sites: list[dict[str, str]] = []
             draft_freeze_states: list[dict[str, str]] = []
             for generator, _module, v1_rel, _status_site_count in generators:
                 v2_rel = v1_rel.with_name(v1_rel.name.removesuffix("_v1") + "_v2")
@@ -1116,9 +1194,35 @@ class D117GammaPlanTest(unittest.TestCase):
                 )
                 sites = serialized_status_sites(output_root / v2_rel)
                 self.assertTrue(sites)
+                # Delta-7 F3: the inventory now covers every freeze-variant
+                # field name, nested included, so gamma's three
+                # freeze_ratification sites are inside the regression rather
+                # than beside it. Both permitted values are freeze-neutral --
+                # they describe WHEN the bytes were generated and WHICH
+                # artifact carries the pack's freeze state, and neither
+                # changes truth value when the receipt is minted.
                 self.assertEqual(
-                    sorted(set(sites.values())), ["as_generated_pre_d134_freeze"]
+                    set(sites.values()) - {"as_generated_pre_d134_freeze"},
+                    {GENERATOR_MODULE.SUCCESSOR_FREEZE_RATIFICATION}
+                    if v1_rel == GENERATOR_MODULE.PACK_REL
+                    else set(),
                 )
+                self.assertIn("as_generated_pre_d134_freeze", set(sites.values()))
+                if v1_rel == GENERATOR_MODULE.PACK_REL:
+                    self.assertEqual(
+                        sorted(
+                            key
+                            for key, value in sites.items()
+                            if value == GENERATOR_MODULE.SUCCESSOR_FREEZE_RATIFICATION
+                        ),
+                        [
+                            "order_manifest.json#/reference_cadence/"
+                            "freeze_ratification",
+                            "plan_tree.json#/reference_cadence/freeze_ratification",
+                            "plan_tree.json#/runtime_budget/"
+                            "interior_reference_augmentation/freeze_ratification",
+                        ],
+                    )
                 readme_text = (output_root / v2_rel / "README.md").read_text(
                     encoding="utf-8"
                 )
@@ -1129,6 +1233,17 @@ class D117GammaPlanTest(unittest.TestCase):
                 )
                 for denial in ("unfrozen draft", "unfrozen_draft", "not armable"):
                     self.assertNotIn(denial, readme_text)
+                # The phrase net over the whole emitted pack, not just the
+                # README: wording drift now fails a named assertion instead of
+                # waiting for an auditor to read the bytes.
+                self.assertEqual(
+                    freeze_variant_wording_hits(
+                        path
+                        for path in (output_root / v2_rel).rglob("*")
+                        if path.name != "generate_configs.py"
+                    ),
+                    {},
+                )
                 draft_hashes.append(hash_inventory(output_root, (v2_rel,)))
                 draft_status_sites.append(sites)
                 draft_freeze_states.append(pre_freeze_state)
@@ -1273,6 +1388,18 @@ class D117GammaPlanTest(unittest.TestCase):
                     frozen_state["readme_sha256"], draft_state["readme_sha256"]
                 )
                 self.assertEqual(serialized_status_sites(pack_root), draft_sites)
+                # Same phrase net over the same generator-emitted files, read
+                # AFTER the receipt was minted. The file set is the pre-freeze
+                # one on purpose: the receipt's own artifacts are the freeze
+                # transaction's bytes, not the generator's emission.
+                self.assertEqual(
+                    freeze_variant_wording_hits(
+                        output_root / relative
+                        for relative in draft_inventory
+                        if relative.name != "generate_configs.py"
+                    ),
+                    {},
+                )
                 post_freeze_inventory = hash_inventory(output_root, (v2_rel,))
                 # The freeze transaction is allowed to rewrite exactly one
                 # pre-existing artifact -- the plan-tree carrier that records
@@ -1334,6 +1461,230 @@ class D117GammaPlanTest(unittest.TestCase):
                 #      checkout is clean (asserted below).
                 self.assertEqual(hash_inventory(output_root, (v2_rel,)), frozen_bytes)
                 self.assertEqual(git_status(output_root), "")
+
+    def test_emitted_successor_generator_refuses_downgrade_targets(self) -> None:
+        """Delta-7 F2: a later family never rewrites an earlier family's bytes.
+
+        Executed reproduction of the audited hole: in a committed checkout, an
+        emitted _v2 generator accepted ``--pack-id <family>_v1 --family-suffix
+        _v1 --no-preserve-current-frozen-bytes``, exited 0, and rewrote the
+        tracked v1 ``plan_tree.json``, ``plan_tree.sha256`` and
+        ``producer_contract.json`` -- selecting the ordinal-1 branch of every
+        emitted_* helper on the way, so the overwrite was byte-plausible and
+        silent. All three families, and every mode, must refuse before any
+        write.
+        """
+
+        from tests import test_d117_floor_qwen25_1p5b_plan as alpha_tests
+        from tests import test_d117_floor_qwen25_7b_plan as beta_tests
+
+        generators = (
+            (GENERATOR, GENERATOR_MODULE.PACK_REL),
+            (alpha_tests.GENERATOR, alpha_tests.PACK_REL),
+            (beta_tests.GENERATOR, beta_tests.PACK.relative_to(ROOT)),
+        )
+        v1_roots = tuple(item[1] for item in generators)
+        with tempfile.TemporaryDirectory(prefix="d117-downgrade-guard-") as temp:
+            output_root = Path(temp)
+            initialize_git_tracked_checkout(
+                output_root, (*v1_roots, *V1_SPEC_RELS, ROW_REGISTRY_REL)
+            )
+            link_successor_self_check_inputs(output_root)
+            alpha_tests.link_successor_self_check_inputs(output_root)
+            compatibility_link = (
+                output_root / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
+            )
+            self.assertTrue(compatibility_link.is_symlink())
+            compatibility_link.unlink()
+
+            v2_packs: list[Path] = []
+            for generator, v1_rel in generators:
+                v2_rel = v1_rel.with_name(v1_rel.name.removesuffix("_v1") + "_v2")
+                generated = subprocess.run(
+                    [
+                        sys.executable,
+                        str(generator),
+                        "--output-root",
+                        str(output_root),
+                        "--pack-id",
+                        v2_rel.name,
+                        "--family-suffix",
+                        "_v2",
+                        "--no-preserve-current-frozen-bytes",
+                    ],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(generated.returncode, 0, generated.stderr)
+                v2_packs.append(v2_rel)
+
+            commit_fixture(output_root, "track v1 families and emitted v2 families")
+            self.assertEqual(git_status(output_root), "")
+            committed_v1 = hash_inventory(output_root, v1_roots)
+            committed_inventory = checkout_inventory(output_root)
+
+            for (_generator, v1_rel), v2_rel in zip(generators, v2_packs):
+                emitted = output_root / v2_rel / "generate_configs.py"
+                for mode, extra in (
+                    ("generate", ["--no-preserve-current-frozen-bytes"]),
+                    ("generate_preserve", ["--preserve-current-frozen-bytes"]),
+                    ("check", ["--no-preserve-current-frozen-bytes", "--check"]),
+                ):
+                    with self.subTest(family=v1_rel.name, mode=mode):
+                        refused = subprocess.run(
+                            [
+                                sys.executable,
+                                str(emitted),
+                                "--output-root",
+                                str(output_root),
+                                "--pack-id",
+                                v1_rel.name,
+                                "--family-suffix",
+                                "_v1",
+                                *extra,
+                            ],
+                            cwd=output_root,
+                            check=False,
+                            capture_output=True,
+                            text=True,
+                        )
+                        self.assertNotEqual(refused.returncode, 0)
+                        message = refused.stdout + refused.stderr
+                        self.assertIn(
+                            "generator family ordinal 2 refuses the downgrade "
+                            f"target '{v1_rel.name}' (family ordinal 1)",
+                            message,
+                        )
+                        # Pre-write, not rolled back: the tracked predecessor
+                        # bytes, the emitted v2 bytes, and the file inventory
+                        # are all exactly as committed.
+                        self.assertEqual(git_status(output_root), "")
+                        self.assertEqual(
+                            hash_inventory(output_root, v1_roots), committed_v1
+                        )
+                        self.assertEqual(
+                            checkout_inventory(output_root), committed_inventory
+                        )
+
+            # Forward generation is untouched: the same guarded generators
+            # still emit the next ordinal. (Same-ordinal N -> N draft and
+            # preserve behaviour is proven by the transaction and authenticated
+            # freeze regressions.)
+            for (_generator, v1_rel), v2_rel in zip(generators, v2_packs):
+                v3_name = v2_rel.name.removesuffix("_v2") + "_v3"
+                with self.subTest(family=v1_rel.name, target=v3_name):
+                    accepted = subprocess.run(
+                        [
+                            sys.executable,
+                            str(output_root / v2_rel / "generate_configs.py"),
+                            "--output-root",
+                            str(output_root),
+                            "--pack-id",
+                            v3_name,
+                            "--family-suffix",
+                            "_v3",
+                            "--no-preserve-current-frozen-bytes",
+                        ],
+                        cwd=output_root,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            self.assertEqual(hash_inventory(output_root, v1_roots), committed_v1)
+
+    def test_emitted_successor_pack_bytes_carry_no_freeze_variant_wording(self) -> None:
+        """Delta-7 F3: freeze-variant WORDING fails a named test, not an eye.
+
+        The C1 regression proves that what a successor pack serializes does not
+        move across its own freeze receipt. This proves the separate thing
+        option (d) demands: that what it serializes was freeze-neutral to begin
+        with. A phrase scan catches the class of drift a field inventory cannot
+        -- prose, new keys, values that never carried a status field name.
+        """
+
+        from tests import test_d117_floor_qwen25_1p5b_plan as alpha_tests
+        from tests import test_d117_floor_qwen25_7b_plan as beta_tests
+
+        generators = (
+            (GENERATOR, GENERATOR_MODULE.PACK_REL),
+            (alpha_tests.GENERATOR, alpha_tests.PACK_REL),
+            (beta_tests.GENERATOR, beta_tests.PACK.relative_to(ROOT)),
+        )
+        with tempfile.TemporaryDirectory(prefix="d117-freeze-wording-") as temp:
+            output_root = Path(temp)
+            for generator, v1_rel in generators:
+                v2_rel = v1_rel.with_name(v1_rel.name.removesuffix("_v1") + "_v2")
+                generated = subprocess.run(
+                    [
+                        sys.executable,
+                        str(generator),
+                        "--output-root",
+                        str(output_root),
+                        "--pack-id",
+                        v2_rel.name,
+                        "--family-suffix",
+                        "_v2",
+                        "--no-preserve-current-frozen-bytes",
+                    ],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(generated.returncode, 0, generated.stderr)
+                pack_root = output_root / v2_rel
+                emitted_files = [
+                    path for path in pack_root.rglob("*") if path.is_file()
+                ]
+                self.assertTrue(emitted_files)
+                with self.subTest(family=v1_rel.name):
+                    self.assertEqual(
+                        freeze_variant_wording_hits(
+                            path
+                            for path in emitted_files
+                            if path.name != "generate_configs.py"
+                        ),
+                        {},
+                    )
+                    # Self-check on the scan itself: it is only a net if the
+                    # phrases it hunts are ones these packs could actually
+                    # emit. The generator carries every one of them.
+                    carrier = freeze_variant_wording_hits(
+                        [pack_root / "generate_configs.py"]
+                    )
+                    self.assertEqual(len(carrier), 1)
+                    self.assertTrue(
+                        {
+                            "unfrozen draft",
+                            "unfrozen_draft",
+                            "not armable",
+                            "frozen_by_d134_receipt",
+                        }
+                        <= set(next(iter(carrier.values()))),
+                        carrier,
+                    )
+            # The one classified exemption is present, enumerated, and unchanged
+            # from the v1 artifact the alpha and beta packs cross-reference.
+            gamma_v2 = (
+                output_root / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
+            )
+            candidate = read_json(gamma_v2 / "prefill_prompt_candidate.json")
+            self.assertEqual(
+                candidate["candidate_status"], CLASSIFIED_PROMPT_CANDIDATE_STATUS
+            )
+            self.assertEqual(
+                candidate["prompt_text"],
+                read_json(PACK / "prefill_prompt_candidate.json")["prompt_text"],
+            )
+            self.assertEqual(
+                freeze_variant_wording_hits(
+                    [gamma_v2 / "prefill_prompt_candidate.json"]
+                ),
+                {},
+            )
 
     def test_generator_check_rejects_extra_pack_file(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-gamma-inventory-") as temp:

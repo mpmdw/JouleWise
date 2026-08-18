@@ -59,6 +59,21 @@ FROZEN_STATUS = "frozen_by_d134_receipt"
 # The 2026-08-13 ordinal-1 packs keep their frozen wording verbatim; their
 # committed bytes are never repaired (M-2 core).
 SUCCESSOR_EMITTED_STATUS = "as_generated_pre_d134_freeze"
+# The reference-cadence ratification field has the same freeze-variance defect
+# the option-(d) treatment cures for ``draft_status``: the 2026-08-13 literal
+# below asserts that ratification has NOT happened yet, and the event that
+# makes it false is precisely the minting of this pack's own D-134 freeze
+# receipt -- which pins calibration_plan.json (and, through the plan-tree
+# sidecar, the tree and order manifest carrying it) by SHA, so the byte can
+# never transition. Successor packs therefore serialize the ratification
+# AUTHORITY, which is true on both sides of the receipt, instead of a
+# ratification STATE that flips at it.
+LEGACY_FREEZE_RATIFICATION = "PENDING-LEAD-RATIFICATION"
+SUCCESSOR_FREEZE_RATIFICATION = (
+    "as_generated_pre_d134_freeze; the committed D-134 freeze receipt and its "
+    "plan-tree attachment are the ratification authority for this "
+    "reference-cadence declaration"
+)
 CURRENT_FROZEN_RECEIPT_SHA256 = (
     "2ef73bf042f2f0e43d4e65fa4658f82c242269478cf68de05494456ba3d3106f"
 )
@@ -106,8 +121,28 @@ def emitted_draft_status() -> str:
     if identity.target_is_successor_family:
         return SUCCESSOR_EMITTED_STATUS
     # Ordinal-1 packs were frozen on 2026-08-13 with this literal serialized;
-    # preserve-mode replay reproduces those committed bytes verbatim.
+    # preserve-mode replay reproduces those committed bytes verbatim. In an
+    # EMITTED successor generator this branch is unreachable by design: its own
+    # family ordinal is >= 2 and the downgrade guard in GenerationIdentity
+    # refuses every target below it before any write.
     return DRAFT_STATUS
+
+
+def emitted_freeze_ratification() -> str:
+    """Return the reference-cadence ratification byte for the target generation.
+
+    Same contract as ``emitted_draft_status``: the ordinal-1 literal is the one
+    the 2026-08-13 freeze receipt pins and is never repaired, and successors get
+    wording whose truth does not turn on their own D-134 receipt. Nothing in
+    production reads this field -- it is advisor-visible description only (the
+    only in-tree readers are this generator and
+    ``tests/test_d117_decode_contrast_plan.py``) -- which is exactly why a
+    stale-on-mint literal would survive unnoticed.
+    """
+
+    if active_generation().target_is_successor_family:
+        return SUCCESSOR_FREEZE_RATIFICATION
+    return LEGACY_FREEZE_RATIFICATION
 
 
 ARM_READINESS_ATTACHMENT = plan_arm_readiness_attachment(
@@ -143,6 +178,26 @@ class GenerationIdentity:
         if self.pack_id != expected_pack_id:
             raise ValueError(
                 f"pack id must equal {expected_pack_id!r} for {self.family_suffix}"
+            )
+        # Downgrade guard (delta-7 F2). A generator whose own family ordinal is
+        # N must refuse every target below N, in EVERY mode -- generate,
+        # --check, preserve and no-preserve alike. Without it an emitted _v2
+        # generator accepts `--pack-id <family>_v1 --family-suffix _v1
+        # --no-preserve-current-frozen-bytes` and rewrites the predecessor's
+        # tracked, frozen plan_tree.json / plan_tree.sha256 /
+        # producer_contract.json: the ordinal-1 branches of every emitted_*
+        # helper are selected, so the rewrite is silent and byte-plausible.
+        # M-2's frozen-bytes-never-repaired doctrine bars that outright. This
+        # runs in the constructor, which every mode builds before it opens a
+        # single output path, so refusal is always pre-write. Same-ordinal
+        # (N -> N) draft/preserve behaviour and successor (N -> N+1)
+        # generation are untouched.
+        if self.target_ordinal < self.current_ordinal:
+            raise ValueError(
+                f"generator family ordinal {self.current_ordinal} refuses the "
+                f"downgrade target {self.pack_id!r} (family ordinal "
+                f"{self.target_ordinal}): an earlier family's committed bytes "
+                "are never rewritten by a later generator, in any mode"
             )
         if self.preserve_current_frozen_bytes and not self.target_is_current:
             raise ValueError(
@@ -1616,7 +1671,7 @@ def build_tree(
                 "one midpoint reference between two 20-member halves of each ABBA arm"
             ),
             "two_arm_interpretation": "arm_midpoints_plus_arm_boundary",
-            "freeze_ratification": "PENDING-LEAD-RATIFICATION",
+            "freeze_ratification": emitted_freeze_ratification(),
         },
         "campaign_policy": {
             "path": POLICY_PATH.as_posix(),
@@ -1732,7 +1787,7 @@ def build_tree(
                     "after_prefill_member_20_arm_midpoint",
                 ],
                 "authority": REFERENCE_CADENCE_AUTHORITY,
-                "freeze_ratification": "PENDING-LEAD-RATIFICATION",
+                "freeze_ratification": emitted_freeze_ratification(),
             },
             "combined_minutes_with_margin": 310.0,
             "combined_derivation": "168.0 + 130.0 + 12.0",
@@ -1757,6 +1812,13 @@ def readme_bytes() -> bytes:
     # a frozen pack's README is the one committed before the receipt was
     # minted, so a second variant could only ever be emitted into bytes the
     # receipt already pins.
+    #
+    # The ordinal-1 literal below is retained because THIS generator, at
+    # ordinal 1, must replay the 2026-08-13 committed bytes verbatim. In an
+    # EMITTED successor generator it is unreachable by design (Opus F8): that
+    # generator's family ordinal is >= 2 and GenerationIdentity refuses every
+    # lower-ordinal target before any write, so its legacy "unfrozen draft" /
+    # "not armable" wording can never reach emitted bytes.
     if identity.target_is_successor_family:
         content = f"""# D-117 gamma contrast pack {version} — status governed by the D-134 freeze receipt
 
@@ -1780,8 +1842,8 @@ The binding 40-member cadence is
 implementation session”: one midpoint between two 20-member ABBA halves. It
 does not settle a mixed two-arm 80-member interpretation. This pack therefore
 places references after science members 20, 40, and 60: both arm midpoints
-plus the decode/prefill boundary; the freeze transaction is where the lead
-ratifies that reading.
+plus the decode/prefill boundary; the committed D-134 freeze receipt and its
+plan-tree attachment are the ratification authority for that reading.
 
 The prefill prompt text is a labelled
 `PROPOSED-PENDING-LEAD-RATIFICATION` candidate. The pack records the exact
@@ -1982,7 +2044,7 @@ def _generate(output_repo_root: Path) -> dict[str, str]:
                 "one midpoint reference between two 20-member halves of each ABBA arm"
             ),
             "two_arm_interpretation": "arm_midpoints_plus_arm_boundary",
-            "freeze_ratification": "PENDING-LEAD-RATIFICATION",
+            "freeze_ratification": emitted_freeze_ratification(),
         },
         "interior_reference_stages": [
             {

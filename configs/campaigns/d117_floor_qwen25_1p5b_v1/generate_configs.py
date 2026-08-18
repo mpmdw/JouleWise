@@ -229,6 +229,26 @@ class GenerationIdentity:
             raise ValueError(
                 f"pack id must equal {expected_pack_id!r} for {self.family_suffix}"
             )
+        # Downgrade guard (delta-7 F2). A generator whose own family ordinal is
+        # N must refuse every target below N, in EVERY mode -- generate,
+        # --check, preserve and no-preserve alike. Without it an emitted _v2
+        # generator accepts `--pack-id <family>_v1 --family-suffix _v1
+        # --no-preserve-current-frozen-bytes` and rewrites the predecessor's
+        # tracked, frozen plan_tree.json / plan_tree.sha256 /
+        # producer_contract.json: the ordinal-1 branches of every emitted_*
+        # helper are selected, so the rewrite is silent and byte-plausible.
+        # M-2's frozen-bytes-never-repaired doctrine bars that outright. This
+        # runs in the constructor, which every mode builds before it opens a
+        # single output path, so refusal is always pre-write. Same-ordinal
+        # (N -> N) draft/preserve behaviour and successor (N -> N+1)
+        # generation are untouched.
+        if self.target_ordinal < self.current_ordinal:
+            raise ValueError(
+                f"generator family ordinal {self.current_ordinal} refuses the "
+                f"downgrade target {self.pack_id!r} (family ordinal "
+                f"{self.target_ordinal}): an earlier family's committed bytes "
+                "are never rewritten by a later generator, in any mode"
+            )
         if self.preserve_current_frozen_bytes and not self.target_is_current:
             raise ValueError(
                 "preserve mode requires the current target identity"
@@ -1797,6 +1817,13 @@ def readme_bytes() -> bytes:
     # a frozen pack's README is the one committed before the receipt was
     # minted, so a second variant could only ever be emitted into bytes the
     # receipt already pins.
+    #
+    # The ordinal-1 literal below is retained because THIS generator, at
+    # ordinal 1, must replay the 2026-08-13 committed bytes verbatim. In an
+    # EMITTED successor generator it is unreachable by design (Opus F8): that
+    # generator's family ordinal is >= 2 and GenerationIdentity refuses every
+    # lower-ordinal target before any write, so its legacy "unfrozen draft" /
+    # "not armable" wording can never reach emitted bytes.
     if identity.target_is_successor_family:
         content = (
             "# D-117 Qwen2.5-1.5B floor campaign — status governed by the "
