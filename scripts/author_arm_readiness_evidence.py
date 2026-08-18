@@ -44,12 +44,34 @@ def main(argv: list[str] | None = None) -> int:
         pack_relative = root.relative_to(cli_repository).as_posix()
         source_path = f"{pack_relative}/{_SOURCE_DIRECTORY}"
         evidence_path = f"{pack_relative}/{_EVIDENCE_DIRECTORY}"
+        freeze_command = (
+            "python3 scripts/generate_arm_readiness.py freeze "
+            f"--pack-root {pack_relative}"
+        )
+        # D-139: a successor pack refuses to freeze without an authenticated
+        # predecessor, so the emitted sequence must carry the flag or it
+        # deadlocks the operator.  The predecessor of `<family>_v<N>` is its
+        # sibling `<family>_v<N-1>` under the same campaigns root; that is a
+        # mechanical derivation from the pack ID, so it is done here rather
+        # than typed by hand at 2am.  A first-generation pack opens the chain
+        # and must NOT carry the flag.
+        generation = readiness._PACK_GENERATION_RE.search(root.name)
+        if generation is not None and int(generation.group(1)) > 1:
+            predecessor_name = (
+                f"{root.name[: generation.start()]}_v{int(generation.group(1)) - 1}"
+            )
+            predecessor_relative = (
+                (root.parent / predecessor_name)
+                .relative_to(cli_repository)
+                .as_posix()
+            )
+            freeze_command += f" --predecessor-pack-root {predecessor_relative}"
         result["post_authoring"] = {
             "sequence": [
                 f"git add -- {source_path} {evidence_path}",
                 "git commit",
                 "git push origin HEAD:main",
-                f"python3 scripts/generate_arm_readiness.py freeze --pack-root {pack_relative}",
+                freeze_command,
             ],
             "recovery": (
                 "A reboot or HEAD change voids all twelve receipts; run "

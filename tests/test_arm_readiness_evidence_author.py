@@ -6,6 +6,7 @@ import io
 import inspect
 import json
 import os
+import shlex
 import shutil
 import time
 import unittest
@@ -1095,6 +1096,11 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         pack_relative = pack.relative_to(repository).as_posix()
         source_relative = f"{pack_relative}/{evidence._SOURCE_DIRECTORY}"
         evidence_relative = f"{pack_relative}/{evidence._EVIDENCE_DIRECTORY}"
+        # D-139/F2: the fixture pack is a successor, so the emitted sequence
+        # must carry the mechanically derived predecessor root or the operator
+        # deadlocks on a command that always refuses.
+        predecessor = predecessor_pack_root(repository, pack.name)
+        predecessor_relative = predecessor.relative_to(repository).as_posix()
         self.assertEqual(
             authored["post_authoring"],
             {
@@ -1104,7 +1110,8 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                     "git push origin HEAD:main",
                     (
                         "python3 scripts/generate_arm_readiness.py freeze "
-                        f"--pack-root {pack_relative}"
+                        f"--pack-root {pack_relative} "
+                        f"--predecessor-pack-root {predecessor_relative}"
                     ),
                 ],
                 "recovery": (
@@ -1119,19 +1126,20 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         output = io.BytesIO()
         stdout = _cli_stdout(output)
-        # The fixture pack is a D-138 successor, so D-139 chain authentication
-        # requires its committed predecessor pack root.
-        predecessor = predecessor_pack_root(repository, pack.name)
-        with mock.patch.object(arm_readiness_cli.sys, "stdout", stdout):
-            return_code = arm_readiness_cli.main(
-                [
-                    "freeze",
-                    "--pack-root",
-                    str(pack),
-                    "--predecessor-pack-root",
-                    str(predecessor),
-                ]
-            )
+        # Run the EMITTED command itself, from the repository root, so the
+        # operator sequence is the thing under test rather than a hand-built
+        # argv that happens to work.
+        emitted = shlex.split(authored["post_authoring"]["sequence"][3])
+        self.assertEqual(
+            emitted[:2], ["python3", "scripts/generate_arm_readiness.py"]
+        )
+        previous_directory = Path.cwd()
+        os.chdir(repository)
+        try:
+            with mock.patch.object(arm_readiness_cli.sys, "stdout", stdout):
+                return_code = arm_readiness_cli.main(emitted[2:])
+        finally:
+            os.chdir(previous_directory)
         self.assertEqual(return_code, 0)
         result = readiness.parse_json_bytes(
             output.getvalue(), require_canonical=True
@@ -1156,6 +1164,51 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             ),
             1,
         )
+        self.assertEqual(receipt["receipt_id"], "freeze-0002")
+        # F1 (delta-8): idempotent replay must re-authenticate the CURRENT
+        # successor in full, not only its ancestry.  One appended byte in any
+        # binding the receipt names must refuse instead of replaying PASS with
+        # mutated: false; restoring the bytes must replay PASS again.
+        receipt_path = Path(result["receipt_path"])
+        replay = readiness.generate_freeze_receipt(
+            pack, predecessor_pack_root=predecessor
+        )
+        self.assertEqual(
+            (replay["status"], replay["mutated"], replay["receipt_sha256"]),
+            ("PASS", False, result["receipt_sha256"]),
+        )
+        for label, target in (
+            (
+                "identity projection evidence",
+                pack / "identity_pin_projection.receipts/projection-0001.json",
+            ),
+            ("freeze receipt", receipt_path),
+            (
+                "freeze receipt sidecar",
+                receipt_path.with_name(f"{receipt_path.name}.sha256"),
+            ),
+        ):
+            with self.subTest(tampered=label):
+                original = target.read_bytes()
+                target.write_bytes(original + b"\n")
+                try:
+                    with self.assertRaises(readiness.ArmReadinessError):
+                        readiness.generate_freeze_receipt(
+                            pack, predecessor_pack_root=predecessor
+                        )
+                finally:
+                    target.write_bytes(original)
+                restored = readiness.generate_freeze_receipt(
+                    pack, predecessor_pack_root=predecessor
+                )
+                self.assertEqual(
+                    (
+                        restored["status"],
+                        restored["mutated"],
+                        restored["receipt_sha256"],
+                    ),
+                    ("PASS", False, result["receipt_sha256"]),
+                )
 
 
 if __name__ == "__main__":

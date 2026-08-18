@@ -1078,7 +1078,15 @@ def _freeze_receipt_ordinal(value: object, where: str) -> int:
 
 
 def _pack_generation(pack_id: str) -> int:
-    """Return the family generation encoded by a pack ID's ``_v<N>`` suffix."""
+    """Return the family generation encoded by a pack ID's ``_v<N>`` suffix.
+
+    This generalizes to arbitrary ``_v<N>``, not only the v2 family the D-139
+    consult licensed.  The lead ACCEPTED that generalization (delta-8 F4) as
+    consistent with the generational-induction design: nothing is unlocked by
+    parsing a higher generation, because a future ``_v3`` pack still has to be
+    admitted by the live ``_PROFILE_BY_PACK`` map and the row registry before
+    any freeze, dry-run, arm, or evidence path will look at it at all.
+    """
 
     match = _PACK_GENERATION_RE.search(pack_id)
     return int(match.group(1)) if match is not None else 1
@@ -3957,20 +3965,27 @@ def generate_freeze_receipt(
                 "readiness_freeze_receipt_mismatch", "existing freeze receipt is not plan-pinned"
             )
         latest = pinned[0]
-        if latest["receipt"]["schema_version"] == FREEZE_RECEIPT_V2_SCHEMA:
-            # Idempotent replay is still an active use of the chain.
-            _authenticate_freeze_predecessor(
-                root,
-                latest["receipt"]["predecessor"],
-                successor_receipt_id=str(latest["receipt"]["receipt_id"]),
-                successor_profile=str(registry_reference["plan_profile"]),
+        # Idempotent replay is an active use of the receipt, not a namespace
+        # lookup.  Re-authenticate the CURRENT successor in full before any
+        # ``mutated: false`` conclusion: the plan-pinned receipt and sidecar,
+        # ``pack_identity`` against the committed pack bytes, and every
+        # referenced evidence digest including the identity-projection receipt.
+        # For a v2 receipt this loader also authenticates the recorded
+        # predecessor chain, so ancestry is never the only thing checked.
+        # ``require_pass`` stays False because a recorded REFUSE must replay as
+        # the REFUSE it is rather than raise.
+        _load_freeze_reference(
+            root, tree, registry_reference, registry, require_pass=False
+        )
+        if (
+            latest["receipt"]["schema_version"] == FREEZE_RECEIPT_V2_SCHEMA
+            and predecessor_pack_root is not None
+            and _derive_freeze_predecessor(root, Path(predecessor_pack_root))
+            != dict(latest["receipt"]["predecessor"])
+        ):
+            raise _successor_chain_refusal(
+                "replayed predecessor derivation differs from the recorded binding"
             )
-            if predecessor_pack_root is not None and _derive_freeze_predecessor(
-                root, Path(predecessor_pack_root)
-            ) != dict(latest["receipt"]["predecessor"]):
-                raise _successor_chain_refusal(
-                    "replayed predecessor derivation differs from the recorded binding"
-                )
         return {
             "status": latest["receipt"]["status"],
             "arm_disposition": "NOT_APPLICABLE",

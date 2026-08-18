@@ -1267,6 +1267,41 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         )
         self.assertEqual(path.read_bytes(), raw_before)
 
+    # R-8 / delta-8 F1 ------------------------------------------------------
+    def test_replay_refuses_tampered_current_successor_bytes(self) -> None:
+        """Replay authenticates the CURRENT receipt, not just its ancestry.
+
+        Before this was fixed, a byte appended to the successor's own identity
+        projection still replayed as ``mutated: false`` with the recorded
+        status, because only the predecessor chain was re-authenticated.
+        """
+
+        repo, pack, predecessor = self.successor_fixture()
+        first = self.mint(pack, predecessor)
+        path = Path(first["receipt_path"])
+        for label, target in (
+            (
+                "identity projection evidence",
+                pack / "identity_pin_projection.receipts/projection-0001.json",
+            ),
+            ("freeze receipt", path),
+            ("freeze receipt sidecar", path.with_name(f"{path.name}.sha256")),
+        ):
+            with self.subTest(tampered=label):
+                original = target.read_bytes()
+                target.write_bytes(original + b"\n")
+                try:
+                    with self.assertRaises(ArmReadinessError):
+                        self.mint(pack, predecessor)
+                finally:
+                    target.write_bytes(original)
+                restored = self.mint(pack, predecessor)
+                self.assertFalse(restored["mutated"])
+                self.assertEqual(
+                    restored["receipt_sha256"], first["receipt_sha256"]
+                )
+                self.assertEqual(restored["status"], first["status"])
+
     # R-9 -------------------------------------------------------------------
     def test_committed_v1_freeze_receipts_remain_authentic_historical_records(
         self,

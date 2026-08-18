@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -575,6 +576,39 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertIn('clean_elapsed=$((now - clean_since))', source)
         self.assertIn('clean_since=-1', source)
         self.assertNotIn("SETTLE_CHECKS", source)
+
+    def test_prewindow_runs_prefixes_track_the_live_pack_family(self) -> None:
+        """D-138: the operator gate must name the governed generation.
+
+        The runs-root prefix is ``runs_<pack_id>``, so the three --window
+        prefixes are derived from the live profile map rather than typed.
+        """
+
+        source = (
+            Path(__file__).resolve().parents[1] / "scripts/prewindow_check.sh"
+        ).read_text(encoding="utf-8")
+        observed = dict(
+            re.findall(
+                r"^\s*(alpha|beta|gamma)\) WINDOW_RUNS_PREFIX=(\S+) ;;$",
+                source,
+                re.MULTILINE,
+            )
+        )
+        pack_by_profile = {
+            profile: pack_id
+            for pack_id, profile in readiness._PROFILE_BY_PACK.items()
+        }
+        self.assertEqual(
+            observed,
+            {
+                window: f"runs_{pack_by_profile[profile]}"
+                for window, profile in (
+                    ("alpha", "ALPHA"),
+                    ("beta", "BETA"),
+                    ("gamma", "GAMMA"),
+                )
+            },
+        )
 
     def test_cli_usage_error_is_a_registered_json_refusal(self) -> None:
         completed = subprocess.run(

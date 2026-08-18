@@ -271,8 +271,15 @@ Freeze readiness only with the implemented command:
 
 ```sh
 python3 scripts/generate_arm_readiness.py freeze \
-  --pack-root "$PACK_ROOT"
+  --pack-root "$PACK_ROOT" \
+  --predecessor-pack-root "$PREDECESSOR_PACK_ROOT"
 ```
+
+`PREDECESSOR_PACK_ROOT` is the previous-generation sibling pack — for a pack
+ID ending `_v<N>`, the `_v<N-1>` directory beside it under the same campaigns
+root — and every successor pack refuses to freeze without it; a
+first-generation (`_v1`) pack opens its own chain, so it omits the flag
+entirely and is refused if it passes one.
 
 The command writes the pack's no-clobber freeze receipt (initially
 `freeze-0001.json`) and GNU-style SHA-256 sidecar under the governed
