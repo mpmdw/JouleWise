@@ -53,6 +53,22 @@ BOUND_ROOT_LEAF = "runs_d117_floor_qwen25_1p5b_v1_bound"
 CAMPAIGN_TAG = "d117-floor-qwen25-1p5b-v1"
 DRAFT_STATUS = "unfrozen_draft"
 FROZEN_STATUS = "frozen_by_d134_receipt"
+# Freeze-neutral serialized status for successor (_v2 and later) packs.
+#
+# Cold-gate verdict of 2026-08-18 (composed; adopts option (a) as narrowed and
+# option (d) as a gate condition -- holdings 1 and 6): the committed D-134
+# freeze receipt plus its plan-tree attachment IS the draft->frozen transition,
+# and the receipt's pack_identity pins calibration_plan.json -- which carries a
+# serialized status site -- by SHA. A post-mint serialized transition therefore
+# invalidates the receipt at the dry-run/arm/verify gates, and no re-mint path
+# exists. Every status-bearing byte a successor pack emits must consequently be
+# true on BOTH sides of the receipt: it states when the bytes were generated,
+# never that the pack is unfrozen or unarmable. The dynamic authority remains
+# GenerationIdentity.target_status, read from the authenticated attachment.
+#
+# The 2026-08-13 ordinal-1 packs keep their frozen wording verbatim; their
+# committed bytes are never repaired (M-2 core).
+SUCCESSOR_EMITTED_STATUS = "as_generated_pre_d134_freeze"
 CURRENT_FROZEN_RECEIPT_SHA256 = (
     "ddbbb40974c1b747516f403b3d319079519269892ee48e052a028d9f16b1e738"
 )
@@ -159,6 +175,26 @@ def freeze_aware_status(freeze_reference: object) -> str:
     return FROZEN_STATUS
 
 
+def emitted_draft_status() -> str:
+    """Return the descriptive status byte written into generated artifacts.
+
+    This is deliberately NOT ``GenerationIdentity.target_status``. That
+    property is the dynamic, authenticated freeze state and remains the
+    authority a reader should consult; this function returns the generation-
+    time description that gets serialized into bytes the D-134 receipt pins.
+    Under the 2026-08-18 cold-gate verdict (holding 6) those bytes must never
+    transition, so the value they carry is freeze-neutral by construction and
+    ``FROZEN_STATUS`` is unreachable from every serialization site by design.
+    """
+
+    identity = active_generation()
+    if identity.target_is_successor_family:
+        return SUCCESSOR_EMITTED_STATUS
+    # Ordinal-1 packs were frozen on 2026-08-13 with this literal serialized;
+    # preserve-mode replay reproduces those committed bytes verbatim.
+    return DRAFT_STATUS
+
+
 ARM_READINESS_ATTACHMENT = plan_arm_readiness_attachment(
     REPO_ROOT / PACK_REL,
     "ALPHA",
@@ -244,7 +280,17 @@ _SUCCESSOR_IDENTITY_TOKENS = (
     "tg-d117-qwen25-1p5b-prefill-p256-v1",
     "tg-d117-qwen25-1p5b-prefill-p128-v1",
     "tg-d117-qwen25-1p5b-decode-v1",
-    "d117_contrast_qwen25_1p5b_vs_7b_v1",
+    # NOTE (round 6, 2026-08-18 cold-gate verdict holding 6): the gamma pack
+    # name is deliberately NOT a threaded successor-identity token here. The
+    # only thing this generator references inside that pack is the D-122
+    # Q1-ratified p256 prompt ARTIFACT, an external ratified input pinned by
+    # byte SHA -- the same treatment DECODE_TEMPLATE_REL/POLICY_REL get, and
+    # they keep their committed v1 paths in successor generations too.
+    # Threading it would point a successor floor pack at a sibling artifact
+    # whose bytes this generator cannot read or pin: successor gamma packs now
+    # carry a generation-specific freeze-neutral status value, so the threaded
+    # reference and the pinned SHA would disagree, and the emitted
+    # prompt_artifact_sha256 would be a false claim.
     "d117_floor_qwen25_1p5b_v1",
     "d117-floor-qwen25-1p5b-v1",
 )
@@ -374,14 +420,32 @@ def preserved_generator_sha256() -> str:
     return tree["generator"]["sha256"]
 
 
-SUCCESSOR_REGENERATION_RULE = (
+LEGACY_SUCCESSOR_REGENERATION_RULE = (
     "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
     "(packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded "
     "as a freeze-time lead decision)."
-    if PACK_STATUS == DRAFT_STATUS
-    else "A successor acceptance artifact issuing before arm REQUIRES a newly "
-    "generated and newly frozen pack; the D-134 freeze receipt is authoritative."
 )
+FREEZE_NEUTRAL_SUCCESSOR_REGENERATION_RULE = (
+    "A successor acceptance artifact issuing before arm REQUIRES a newly generated "
+    "pack; the committed D-134 freeze receipt and its plan-tree attachment are "
+    "authoritative for this pack's freeze state (the D-125 lineage-envelope "
+    "alternative is recorded as a freeze-time lead decision)."
+)
+
+
+def successor_regeneration_rule() -> str:
+    """Return the acceptance-artifact policy text for the target generation.
+
+    Formerly a module constant keyed on the module-level ``PACK_STATUS``, which
+    made a frozen-status string a live emission path (holding 6 of the
+    2026-08-18 cold-gate verdict bars that). The ordinal-1 literal is the one
+    the 2026-08-13 freeze receipts pin; successors get wording that is true on
+    both sides of their own receipt.
+    """
+
+    if active_generation().target_is_successor_family:
+        return FREEZE_NEUTRAL_SUCCESSOR_REGENERATION_RULE
+    return LEGACY_SUCCESSOR_REGENERATION_RULE
 
 MODEL = {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
@@ -486,14 +550,33 @@ def validate_generation_write_boundary(
 ) -> None:
     """Refuse link traversal or anomalous existing nodes before any write."""
 
-    # Registered residual (lead disposition, D-139 A1): this boundary is
-    # check-then-write. A concurrent process could substitute a validated
-    # ancestor or write target with a symlink after this function returns and
-    # before the bytes land. Winning that race requires an adversarial program
-    # running against the measurement, which the ratified D-139 A1 threat model
-    # ("no adversarial programs affecting the measurement can be assumed") and
-    # single-operator discipline exclude. No dirfd/O_NOFOLLOW hardening is
-    # attempted here; the residual is registered, not closed.
+    # Registered residual (lead disposition; registration lives in
+    # docs/risk_register.md -- this comment is not the registration). This
+    # boundary is check-then-write: a concurrent process could substitute a
+    # validated ancestor or write target with a symlink after this function
+    # returns and before the bytes land.
+    #
+    # The disposition rests on DESK-TIME SINGLE-OPERATOR GENERATION, not on the
+    # measurement threat model. Pack generation is hand-run by one operator at
+    # the desk, outside any measurement window, against a repository checkout
+    # the operator controls; nothing else is scheduled to write into the pack
+    # path while it runs. The non-adversarial concurrency that genuinely occurs
+    # here -- editors, backup and sync daemons, the parallel worktree fleet --
+    # clobbers or duplicates files; none of it substitutes an ancestor
+    # directory with a symlink in the microseconds after validation. Winning
+    # this race requires a local program acting adversarially and with
+    # knowledge of the boundary, which single-operator desk discipline
+    # excludes. D-139 A1 ("no adversarial programs affecting the measurement
+    # can be assumed") is cited BY ANALOGY only: its own scope is the
+    # measurement environment, not this generator's desk-time write boundary.
+    #
+    # The accidental class IS closed: pre-existing links anywhere in the pack
+    # path, spec, sidecar, or ancestors refuse before any write. The residual
+    # reopens if the threat model is revised to admit concurrent adversarial
+    # local processes, or if generation moves to multi-operator/shared-machine
+    # use (cold-gate conditions C-B1a and C-B1b, 2026-08-18; C-B1b formally
+    # supersedes delta-4's F2 dirfd remedy demand). No dirfd/O_NOFOLLOW
+    # hardening is attempted here; the residual is registered, not closed.
 
     root = output_root.absolute()
 
@@ -1465,8 +1548,8 @@ def build_extraction_spec(
     spec = {
         "schema_version": "joulewise.detection_floor_extraction_spec.v1",
         # The frozen plan test pins the extraction-spec artifact SHA.
-        "draft_status": active_generation().target_status,
-        "successor_acceptance_artifact_policy": SUCCESSOR_REGENERATION_RULE,
+        "draft_status": emitted_draft_status(),
+        "successor_acceptance_artifact_policy": successor_regeneration_rule(),
         "cells": cells,
         "reported_energy_cells": reported_cells,
         "reported_energy_registration": {
@@ -1552,7 +1635,7 @@ def build_producer_contract(
     return {
         "schema_version": "joulewise.d117_floor_producer_contract.v1",
         # The frozen plan test pins the producer-contract artifact SHA.
-        "draft_status": active_generation().target_status,
+        "draft_status": emitted_draft_status(),
         "plan_set_id": "plan-set-d117-qwen25-1p5b-7b-phase-floor-v1",
         "aggregate_artifact_id": "d117-qwen25-phase-floor-set-v1",
         "producer_index": 1,
@@ -1702,20 +1785,52 @@ def build_producer_contract(
 def readme_bytes() -> bytes:
     oracle = derive_bracket_session_receipt_oracle()
     identity = active_generation()
-    status = identity.target_status
     identity_statement = (
         ""
         if identity.target_ordinal == 1
         else f"Pack identity: `{identity.pack_id}` (`{identity.family_suffix}`).\n\n"
     )
-    if status != DRAFT_STATUS:
+    # Holding 6 of the 2026-08-18 cold-gate verdict: the successor README is
+    # selected by target GENERATION, never by freeze status, and its wording is
+    # true on both sides of the pack's own D-134 receipt. The former
+    # frozen-status branch is removed, not merely unreachable: under option (a)
+    # a frozen pack's README is the one committed before the receipt was
+    # minted, so a second variant could only ever be emitted into bytes the
+    # receipt already pins.
+    if identity.target_is_successor_family:
         content = (
-            "# D-117 Qwen2.5-1.5B floor campaign — frozen by D-134 receipt\n\n"
+            "# D-117 Qwen2.5-1.5B floor campaign — status governed by the "
+            "D-134 freeze receipt\n\n"
             f"{identity_statement}"
-            "This generated description is freeze-aware. The D-134 freeze receipt "
-            "and plan-tree pin are authoritative for frozen state; an external "
-            "unexpired PASS/GO arm receipt is still required before launch.\n\n"
-            f"{SUCCESSOR_REGENERATION_RULE}\n"
+            "This description does not carry freeze status. The committed D-134 "
+            "freeze receipt and its plan-tree attachment are authoritative for "
+            "this pack's frozen state; the receipt pins `calibration_plan.json` "
+            "by SHA, so this text and every serialized `draft_status` field stay "
+            "exactly as generated on both sides of the freeze. An external "
+            "unexpired PASS/GO arm receipt is required before launch.\n\n"
+            "This pack pre-registers the alpha window's 10 absolute decode members, "
+            "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
+            "rider over the same 50 physical bundles. It also carries a dedicated "
+            "Q8 p256 prefill domain with 10 absolute members and ten null A/B/B/A "
+            "blocks (50 additional members), plus three D-123 reported phase-energy "
+            "means. The p256 workload name remains `df_ph_prefill_p256_candidate` "
+            "for byte identity with the gamma consumer even though Q1 has frozen its "
+            "prompt.\n\n"
+            "Its receipt oracle is replay-derived from "
+            f"`{oracle['source']['module']}`: {oracle['receipt_count']} physical "
+            f"receipts for {oracle['logical_operation_count']} logical operations per "
+            "finalized pre/post bracket session. Actual receipt bytes and the absolute "
+            "terminal sequence remain arm-time evidence. Arm-time identities require "
+            "U11 projection, "
+            "and lead review must complete before any later release step.\n\n"
+            f"{successor_regeneration_rule()}\n\n"
+            "Generate or verify with:\n\n"
+            "```text\n"
+            "python3 configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py\n"
+            "python3 configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py --check\n"
+            "```\n\n"
+            "Integrity SHA-256 values in this pack detect drift; they do not mark "
+            "release.\n"
         )
         return thread_generation_identity(content).encode("utf-8")
     content = (
@@ -1736,7 +1851,7 @@ def readme_bytes() -> bytes:
         "terminal sequence remain arm-time evidence. Arm-time identities require "
         "U11 projection, "
         "and lead review must complete before any later release step.\n\n"
-        f"{SUCCESSOR_REGENERATION_RULE}\n\n"
+        f"{successor_regeneration_rule()}\n\n"
         "Generate or verify with:\n\n"
         "```text\n"
         "python3 configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py\n"
@@ -1832,8 +1947,11 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
     canonical_blocks = calibration_plan_blocks(blocks)
     plan = {
         "schema_version": PLAN_SCHEMA,
-        # The D-134 freeze receipt pins calibration_plan.json by SHA.
-        "draft_status": active_generation().target_status,
+        # The D-134 freeze receipt pins calibration_plan.json by SHA, so this
+        # serialized status can never transition after the receipt is minted --
+        # the committed receipt IS the freeze state (cold-gate verdict
+        # 2026-08-18, holdings 1 and 6). Do not make this field freeze-reactive.
+        "draft_status": emitted_draft_status(),
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
@@ -1991,7 +2109,7 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
             # The frozen plan-tree manifest reference pins these bytes by SHA.
-            "draft_status": active_generation().target_status,
+            "draft_status": emitted_draft_status(),
             "manifest_id": manifest_id,
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha256,
@@ -2011,7 +2129,7 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
         # The frozen producer contract pins the root manifest by SHA.
-        "draft_status": active_generation().target_status,
+        "draft_status": emitted_draft_status(),
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha256,
@@ -2102,7 +2220,7 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
     tree = {
         "schema_version": TREE_SCHEMA,
         # The D-134 plan-tree sidecar pins this artifact by SHA.
-        "draft_status": active_generation().target_status,
+        "draft_status": emitted_draft_status(),
         "plan": {
             "path": emitted_plan_reference(),
             "plan_id": PLAN_ID,

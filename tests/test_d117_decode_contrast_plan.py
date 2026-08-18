@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -36,7 +37,7 @@ V1_SPEC_RELS = (
 ROW_REGISTRY_REL = Path("configs/arm_readiness/d117_row_registry_v1.json")
 
 EXACT_SHAS = {
-    "generate_configs.py": "8e2d3076bc2af238f4425229806071eb5a92abc0766ff2eeb95685c6767c9a95",
+    "generate_configs.py": "595f142f70362d20360e63779fe3496a8b776e5058768f0a5d2129d2bd5f9ed3",
     "calibration_plan.json": "4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218",
     "plan_tree.json": "8c53a834d78c81145b8f35b25f8d50182d596dc82c171e815f8a160117ab525d",
     "analysis_manifest_v3.json": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
@@ -260,6 +261,151 @@ def remove_v2_freeze_fixture_runtime(output_root: Path) -> None:
     shutil.rmtree(output_root / "scripts")
 
 
+NO_BYTECODE_ENV = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+
+_FREEZE_STATE_PROBE = """
+import hashlib
+import importlib.util
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("freeze_state_probe", path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+identity = module.GenerationIdentity(preserve_current_frozen_bytes=True)
+render_readme = getattr(module, "readme_bytes", None) or module.readme
+with module.generation_context(identity):
+    payload = {
+        "target_status": identity.target_status,
+        "emitted_draft_status": module.emitted_draft_status(),
+        "readme_sha256": hashlib.sha256(render_readme()).hexdigest(),
+    }
+print(json.dumps(payload))
+"""
+
+_FREEZE_AUTHENTICATION_PROBE = """
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path.cwd()))
+from joulewise.arm_readiness import (
+    ArmReadinessError,
+    _load_freeze_reference,
+    _pack_identity,
+    _plan_tree,
+    _registry_reference,
+    scan_receipt_namespace,
+)
+
+root = pathlib.Path(sys.argv[1]).resolve()
+tree, _tree_raw = _plan_tree(root)
+registry, _registry_raw, registry_reference = _registry_reference(root)
+reference = tree["arm_attachments"]["arm_readiness"]["freeze_receipt"]
+matches = [
+    item
+    for item in scan_receipt_namespace(
+        root / "arm_readiness.freeze.receipts", "freeze"
+    )
+    if f"arm_readiness.freeze.receipts/{item['path'].name}" == reference["path"]
+    and item["sha256"] == reference["sha256"]
+]
+receipt = matches[0]["receipt"] if len(matches) == 1 else None
+payload = {
+    "receipt_resolved": receipt is not None,
+    "receipt_sha256": reference["sha256"],
+    "status": receipt["status"] if receipt else None,
+    "identity_matches_committed_bytes": (
+        receipt["pack_identity"] == _pack_identity(root, tree) if receipt else False
+    ),
+    "plan_sha256": receipt["pack_identity"]["plan_sha256"] if receipt else None,
+}
+try:
+    _load_freeze_reference(
+        root, tree, registry_reference, registry, require_pass=False
+    )
+except ArmReadinessError as exc:
+    payload["gate_reason_code"] = exc.refusal()["code"]
+else:
+    payload["gate_reason_code"] = None
+print(json.dumps(payload))
+"""
+
+
+def probe_generator_freeze_state(generator: Path, cwd: Path) -> dict[str, str]:
+    """Report what a pack's own generator says about its freeze state.
+
+    Keeps apart the two things the 2026-08-18 cold-gate verdict keeps apart:
+    ``target_status``, the DYNAMIC state read from the authenticated freeze
+    attachment, which must report frozen once a genuine receipt is committed;
+    and the SERIALIZED status the generator would write into pack bytes, which
+    must not transition, because the receipt's ``pack_identity`` pins the plan
+    bytes that carry it.
+    """
+
+    completed = subprocess.run(
+        [sys.executable, "-c", _FREEZE_STATE_PROBE, str(generator)],
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=NO_BYTECODE_ENV,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(completed.stderr)
+    return json.loads(completed.stdout)
+
+
+def authenticate_freeze_reference(output_root: Path, pack_rel: Path) -> dict[str, Any]:
+    """Run the production ``_load_freeze_reference`` gate check on a frozen pack.
+
+    The D-134 profile map and boot-session id are unavailable for fixture packs,
+    so the same modeled runtime the freeze itself used is reinstalled for the
+    duration of the check and removed again, leaving the checkout clean.
+    """
+
+    install_v2_freeze_fixture_runtime(output_root)
+    try:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _FREEZE_AUTHENTICATION_PROBE,
+                str(output_root / pack_rel),
+            ],
+            cwd=output_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=NO_BYTECODE_ENV,
+        )
+    finally:
+        remove_v2_freeze_fixture_runtime(output_root)
+    if completed.returncode != 0:
+        raise AssertionError(completed.stdout + completed.stderr)
+    return json.loads(completed.stdout)
+
+
+def serialized_status_sites(pack_root: Path) -> dict[Path, str]:
+    """Map every JSON artifact carrying a top-level ``draft_status`` to its value."""
+
+    sites: dict[Path, str] = {}
+    for path in sorted(pack_root.rglob("*")):
+        if not path.is_file() or path.suffix != ".json":
+            continue
+        if "__pycache__" in path.parts:
+            continue
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and isinstance(value.get("draft_status"), str):
+            sites[path.relative_to(pack_root)] = value["draft_status"]
+    return sites
+
+
 def probe_generator_status(generator: Path, cwd: Path) -> str:
     code = (
         "import importlib.util, pathlib, sys; "
@@ -275,6 +421,7 @@ def probe_generator_status(generator: Path, cwd: Path) -> str:
         check=False,
         capture_output=True,
         text=True,
+        env=NO_BYTECODE_ENV,
     )
     if completed.returncode != 0:
         raise AssertionError(completed.stderr)
@@ -386,14 +533,32 @@ class D117GammaPlanTest(unittest.TestCase):
             [argument["value"] for argument in future],
             ["--plan", (future_identity.pack_rel / "calibration_plan.json").as_posix()],
         )
+        # Holding 6 of the 2026-08-18 cold-gate verdict: the frozen-status
+        # README branch is REMOVED, not merely unreachable. A frozen dynamic
+        # status must leave the emitted description exactly as committed, and
+        # the successor description must be freeze-neutral -- true on both
+        # sides of its own D-134 receipt, naming the receipt and its plan-tree
+        # attachment as the status authority, asserting nothing about
+        # armability or unfrozenness.
         with mock.patch.object(
             GENERATOR_MODULE,
             "ARM_READINESS_ATTACHMENT",
             {"freeze_receipt": {"sha256": "0" * 64}},
         ):
-            future_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
-        self.assertIn("frozen by D-134 receipt", future_readme)
-        self.assertIn("freeze-aware", future_readme)
+            frozen_state_readme = GENERATOR_MODULE.readme_bytes()
+        self.assertEqual(frozen_state_readme, (PACK / "README.md").read_bytes())
+        with GENERATOR_MODULE.generation_context(future_identity):
+            successor_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
+        self.assertIn(
+            "The committed D-134 freeze receipt and its plan-tree attachment "
+            "are authoritative",
+            " ".join(successor_readme.split()),
+        )
+        for denial in ("unfrozen draft", "unfrozen_draft", "not armable"):
+            self.assertNotIn(denial, successor_readme)
+        self.assertNotIn(
+            "frozen by D-134 receipt", GENERATOR.read_text(encoding="utf-8")
+        )
 
     def test_target_status_inventory_and_invalid_modes_are_fail_closed(self) -> None:
         successor = GENERATOR_MODULE.GenerationIdentity(
@@ -415,7 +580,7 @@ class D117GammaPlanTest(unittest.TestCase):
             self.assertEqual(current.target_status, "frozen_by_d134_receipt")
         source = GENERATOR.read_text(encoding="utf-8")
         self.assertEqual(
-            source.count('"draft_status": active_generation().target_status'), 8
+            source.count('"draft_status": emitted_draft_status()'), 8
         )
         self.assertNotIn("pack status {PACK_STATUS}", source)
         expected = {
@@ -884,6 +1049,9 @@ class D117GammaPlanTest(unittest.TestCase):
 
             v2_packs: list[Path] = []
             preserve_commands: list[list[str]] = []
+            draft_hashes: list[dict[Path, str]] = []
+            draft_status_sites: list[dict[Path, str]] = []
+            draft_freeze_states: list[dict[str, str]] = []
             for generator, _module, v1_rel, _status_site_count in generators:
                 v2_rel = v1_rel.with_name(v1_rel.name.removesuffix("_v1") + "_v2")
                 generated = subprocess.run(
@@ -933,6 +1101,37 @@ class D117GammaPlanTest(unittest.TestCase):
                 )
                 self.assertEqual(hash_inventory(output_root, (v2_rel,)), before)
                 preserve_commands.append(preserve)
+                # Option (d) shape (cold-gate verdict 2026-08-18, holding 6):
+                # what a successor pack serializes before freeze must already be
+                # freeze-neutral, because these are the bytes the receipt pins
+                # and they never transition. Capture them so the post-freeze leg
+                # can compare against the exact pre-freeze committed bytes.
+                pre_freeze_state = probe_generator_freeze_state(
+                    output_root / v2_rel / "generate_configs.py", output_root
+                )
+                self.assertEqual(pre_freeze_state["target_status"], "unfrozen_draft")
+                self.assertEqual(
+                    pre_freeze_state["emitted_draft_status"],
+                    "as_generated_pre_d134_freeze",
+                )
+                sites = serialized_status_sites(output_root / v2_rel)
+                self.assertTrue(sites)
+                self.assertEqual(
+                    sorted(set(sites.values())), ["as_generated_pre_d134_freeze"]
+                )
+                readme_text = (output_root / v2_rel / "README.md").read_text(
+                    encoding="utf-8"
+                )
+                self.assertIn(
+                    "The committed D-134 freeze receipt and its plan-tree "
+                    "attachment are authoritative",
+                    " ".join(readme_text.split()),
+                )
+                for denial in ("unfrozen draft", "unfrozen_draft", "not armable"):
+                    self.assertNotIn(denial, readme_text)
+                draft_hashes.append(hash_inventory(output_root, (v2_rel,)))
+                draft_status_sites.append(sites)
+                draft_freeze_states.append(pre_freeze_state)
 
             commit_fixture(output_root, "track emitted draft v2 families")
             unmodeled = subprocess.run(
@@ -987,7 +1186,19 @@ class D117GammaPlanTest(unittest.TestCase):
                 v2_rel,
                 preserve,
                 freeze_result,
-            ) in zip(generators, v2_packs, preserve_commands, freeze_results, strict=True):
+                draft_inventory,
+                draft_sites,
+                draft_state,
+            ) in zip(
+                generators,
+                v2_packs,
+                preserve_commands,
+                freeze_results,
+                draft_hashes,
+                draft_status_sites,
+                draft_freeze_states,
+                strict=True,
+            ):
                 pack_root = output_root / v2_rel
                 tree = read_json(pack_root / "plan_tree.json")
                 attachment = tree["arm_attachments"]["arm_readiness"][
@@ -1001,7 +1212,7 @@ class D117GammaPlanTest(unittest.TestCase):
                     encoding="utf-8"
                 )
                 self.assertEqual(
-                    source.count('"draft_status": active_generation().target_status'),
+                    source.count('"draft_status": emitted_draft_status()'),
                     status_site_count,
                 )
                 frozen_bytes = hash_inventory(output_root, (v2_rel,))
@@ -1029,6 +1240,98 @@ class D117GammaPlanTest(unittest.TestCase):
                     probe_generator_status(pack_root / "generate_configs.py", output_root),
                     "frozen_by_d134_receipt",
                 )
+                self.assertEqual(hash_inventory(output_root, (v2_rel,)), frozen_bytes)
+
+                # ---- C1, the INVERTED freeze regression -------------------
+                # Cold-gate verdict 2026-08-18, condition C1. Before this
+                # round the regression only checked that DYNAMIC status
+                # reports frozen; it never pinned what the frozen pack's bytes
+                # say. Under option (a) the committed receipt IS the
+                # transition, so the correct assertion is the opposite of the
+                # superseded consult R-7: nothing serialized may move.
+                #
+                # (i) dynamic status reports frozen (asserted above via
+                #     probe_generator_status, and again in the richer probe).
+                frozen_state = probe_generator_freeze_state(
+                    pack_root / "generate_configs.py", output_root
+                )
+                self.assertEqual(frozen_state["target_status"], "frozen_by_d134_receipt")
+
+                # (ii) every serialized status site and the README are
+                #      byte-identical to the pre-freeze committed bytes -- the
+                #      option-(d)-shaped bytes -- and the generator would still
+                #      emit exactly those, not a frozen transition.
+                self.assertEqual(
+                    frozen_state["emitted_draft_status"],
+                    draft_state["emitted_draft_status"],
+                )
+                self.assertEqual(
+                    frozen_state["emitted_draft_status"],
+                    "as_generated_pre_d134_freeze",
+                )
+                self.assertEqual(
+                    frozen_state["readme_sha256"], draft_state["readme_sha256"]
+                )
+                self.assertEqual(serialized_status_sites(pack_root), draft_sites)
+                post_freeze_inventory = hash_inventory(output_root, (v2_rel,))
+                # The freeze transaction is allowed to rewrite exactly one
+                # pre-existing artifact -- the plan-tree carrier that records
+                # the receipt attachment, plus its sidecar -- and that rewrite
+                # happens AFTER pack_identity is computed, so it is outside the
+                # pin. Nothing else may move, and the pinned plan and the
+                # advisor-visible README must be byte-identical.
+                moved = {
+                    relative
+                    for relative, digest in draft_inventory.items()
+                    if post_freeze_inventory.get(relative) != digest
+                }
+                self.assertEqual(
+                    moved,
+                    {v2_rel / "plan_tree.json", v2_rel / "plan_tree.sha256"},
+                )
+                for name in (
+                    "README.md",
+                    "calibration_plan.json",
+                    "calibration_plan.sha256",
+                    "generate_configs.py",
+                ):
+                    with self.subTest(pack=v2_rel.name, path=name):
+                        self.assertEqual(
+                            post_freeze_inventory[v2_rel / name],
+                            draft_inventory[v2_rel / name],
+                        )
+
+                # (iii) the receipt still authenticates against the committed
+                #       pack bytes: its pack_identity -- the plan SHA the pin
+                #       is built on -- still matches, so the unconditional
+                #       identity check at the dry-run/arm/verify gates does NOT
+                #       refuse with readiness_freeze_receipt_mismatch. The
+                #       fixture receipts are genuine REFUSE receipts (the
+                #       unavailable desk evidence is modeled, not the verdict),
+                #       so the residual gate refusal is the pre-existing
+                #       readiness_dependency_refused. This asserts receipt
+                #       IDENTITY preservation, never PASS/GO armability.
+                authentication = authenticate_freeze_reference(output_root, v2_rel)
+                self.assertTrue(authentication["receipt_resolved"])
+                self.assertTrue(authentication["identity_matches_committed_bytes"])
+                self.assertEqual(
+                    authentication["receipt_sha256"], freeze_result["receipt_sha256"]
+                )
+                self.assertEqual(authentication["status"], "REFUSE")
+                self.assertNotEqual(
+                    authentication["gate_reason_code"],
+                    "readiness_freeze_receipt_mismatch",
+                )
+                self.assertEqual(
+                    authentication["gate_reason_code"], "readiness_dependency_refused"
+                )
+                self.assertEqual(
+                    authentication["plan_sha256"],
+                    sha256(pack_root / "calibration_plan.json"),
+                )
+
+                # (iv) preserve regeneration remains byte-stable and the
+                #      checkout is clean (asserted below).
                 self.assertEqual(hash_inventory(output_root, (v2_rel,)), frozen_bytes)
                 self.assertEqual(git_status(output_root), "")
 

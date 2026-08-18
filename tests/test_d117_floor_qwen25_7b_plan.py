@@ -77,7 +77,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p256_qwen25_7b.json"
     ): "d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252",
     "generate_configs.py": (
-        "ed0e4642bc8fff85a1080dfce0c10826114427c4e8820cfc4067c93520d125b5"
+        "33e326484095d1970d509bfefe3483a2859aec3185625cb650d921ce2c9262fe"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "36a5fae72b37643550ecb4471b4566db30331a4089abc3f4827593632407bba2"
@@ -362,10 +362,15 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
     maxDiff = None
 
     def test_exact_inventory_hashes_and_sidecars(self) -> None:
+        # Exclude interpreter byte-code caches: importing
+        # generate_configs.py (which this suite does) drops __pycache__
+        # into the pack, so an unfiltered inventory passes on a fresh
+        # checkout and fails on every later run. Aligned with the gamma
+        # generator/suite filter (cold-gate C5).
         actual = {
             path.relative_to(PACK).as_posix()
             for path in PACK.rglob("*")
-            if path.is_file()
+            if path.is_file() and "__pycache__" not in path.parts
         }
         self.assertEqual(actual, expected_pack_paths())
         self.assertEqual(len(actual), 154)
@@ -457,14 +462,32 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             [argument["value"] for argument in future],
             ["--plan", (future_identity.pack_rel / "calibration_plan.json").as_posix()],
         )
+        # Holding 6 of the 2026-08-18 cold-gate verdict: the frozen-status
+        # README branch is REMOVED, not merely unreachable. A frozen dynamic
+        # status must leave the emitted description exactly as committed, and
+        # the successor description must be freeze-neutral -- true on both
+        # sides of its own D-134 receipt, naming the receipt and its plan-tree
+        # attachment as the status authority, asserting nothing about
+        # armability or unfrozenness.
         with mock.patch.object(
             GENERATOR_MODULE,
             "ARM_READINESS_ATTACHMENT",
             {"freeze_receipt": {"sha256": "0" * 64}},
         ):
-            future_readme = GENERATOR_MODULE.readme().decode("utf-8")
-        self.assertIn("frozen by D-134 receipt", future_readme)
-        self.assertIn("freeze-aware", future_readme)
+            frozen_state_readme = GENERATOR_MODULE.readme()
+        self.assertEqual(frozen_state_readme, (PACK / "README.md").read_bytes())
+        with GENERATOR_MODULE.generation_context(future_identity):
+            successor_readme = GENERATOR_MODULE.readme().decode("utf-8")
+        self.assertIn(
+            "The committed D-134 freeze receipt and its plan-tree attachment "
+            "are authoritative",
+            " ".join(successor_readme.split()),
+        )
+        for denial in ("unfrozen draft", "unfrozen_draft", "not armable"):
+            self.assertNotIn(denial, successor_readme)
+        self.assertNotIn(
+            "frozen by D-134 receipt", GENERATOR.read_text(encoding="utf-8")
+        )
 
     def test_target_status_inventory_and_invalid_modes_are_fail_closed(self) -> None:
         successor = GENERATOR_MODULE.GenerationIdentity(
@@ -486,7 +509,7 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
             self.assertEqual(current.target_status, "frozen_by_d134_receipt")
         source = GENERATOR.read_text(encoding="utf-8")
         self.assertEqual(
-            source.count('"draft_status": active_generation().target_status'), 6
+            source.count('"draft_status": emitted_draft_status()'), 6
         )
         artifacts = GENERATOR_MODULE.build_artifacts(successor)
         expected = {
@@ -1409,7 +1432,9 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md", ".py", ".sha256"}
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and path.suffix in {".json", ".md", ".py", ".sha256"}
         )
         self.assertNotIn(stale_marker, generated_text)
 
@@ -1498,7 +1523,9 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md", ".sha256"}
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and path.suffix in {".json", ".md", ".sha256"}
         )
         for diagnostic in ("6." + "294380", "13." + "998036"):
             self.assertNotIn(diagnostic, generated_text)

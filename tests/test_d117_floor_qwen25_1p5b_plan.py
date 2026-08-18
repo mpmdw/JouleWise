@@ -69,9 +69,9 @@ from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
 FROZEN_GENERATOR_SHA256 = "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06"
-EXPECTED_PACK_SHA256 = "549d4fb1db5239c901b3a90f58d3ffa626d071663fc6a5f60888cac785f30a71"
+EXPECTED_PACK_SHA256 = "1df037cb2c7ed7912662ed5da16a77bd052bb785ae5d8c455937d9928b0213b0"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "ffaa3d364989642db871fb01e1448f239568827af57bf2cde04a887edde8b66a",
+    "generate_configs.py": "78bca73c48d79ca392f2d8892db07a1268ad01d7e81bc9d0db99fb47ba41aa4a",
     "calibration_plan.json": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d",
     "calibration_plan.sha256": "707712fb1152ed41b6d48432932bacf16e6856c8432dafb699e951b077e09312",
     "order_manifest.json": "5c5bd84579ff6bcfe4c0e3c800550f35bd4a04a5cd0061e105c9c3e4775f9fff",
@@ -318,7 +318,15 @@ def expected_pack_paths() -> set[str]:
 
 
 def pack_digest(pack_root: Path) -> str:
-    paths = sorted(path for path in pack_root.rglob("*") if path.is_file())
+    # Exclude interpreter byte-code caches: importing generate_configs.py
+    # (which this suite does) drops __pycache__ into the pack, so an
+    # unfiltered digest passes on a fresh checkout and fails on every later
+    # run. Aligned with the gamma generator/suite filter (cold-gate C5).
+    paths = sorted(
+        path
+        for path in pack_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    )
     digest = hashlib.sha256()
     for path in paths:
         relative = path.relative_to(pack_root).as_posix()
@@ -366,7 +374,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         actual = {
             path.relative_to(PACK_ROOT).as_posix()
             for path in PACK_ROOT.rglob("*")
-            if path.is_file()
+            if path.is_file() and "__pycache__" not in path.parts
         }
         self.assertEqual(actual, expected_pack_paths())
         self.assertEqual(len(actual), 154)
@@ -451,14 +459,32 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             [token["value"] for token in future],
             ["--plan", (future_identity.pack_rel / "calibration_plan.json").as_posix()],
         )
+        # Holding 6 of the 2026-08-18 cold-gate verdict: the frozen-status
+        # README branch is REMOVED, not merely unreachable. A frozen dynamic
+        # status must leave the emitted description exactly as committed, and
+        # the successor description must be freeze-neutral -- true on both
+        # sides of its own D-134 receipt, naming the receipt and its plan-tree
+        # attachment as the status authority, asserting nothing about
+        # armability or unfrozenness.
         with mock.patch.object(
             GENERATOR_MODULE,
             "ARM_READINESS_ATTACHMENT",
             {"freeze_receipt": {"sha256": "0" * 64}},
         ):
-            future_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
-        self.assertIn("frozen by D-134 receipt", future_readme)
-        self.assertIn("freeze-aware", future_readme)
+            frozen_state_readme = GENERATOR_MODULE.readme_bytes()
+        self.assertEqual(frozen_state_readme, (PACK_ROOT / "README.md").read_bytes())
+        with GENERATOR_MODULE.generation_context(future_identity):
+            successor_readme = GENERATOR_MODULE.readme_bytes().decode("utf-8")
+        self.assertIn(
+            "The committed D-134 freeze receipt and its plan-tree attachment "
+            "are authoritative",
+            " ".join(successor_readme.split()),
+        )
+        for denial in ("unfrozen draft", "unfrozen_draft", "not armable"):
+            self.assertNotIn(denial, successor_readme)
+        self.assertNotIn(
+            "frozen by D-134 receipt", GENERATOR.read_text(encoding="utf-8")
+        )
 
     def test_target_status_inventory_and_invalid_modes_are_fail_closed(self) -> None:
         successor = GENERATOR_MODULE.GenerationIdentity(
@@ -480,7 +506,7 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
             self.assertEqual(current.target_status, "frozen_by_d134_receipt")
         source = GENERATOR.read_text(encoding="utf-8")
         self.assertEqual(
-            source.count('"draft_status": active_generation().target_status'), 6
+            source.count('"draft_status": emitted_draft_status()'), 6
         )
         expected = {
             successor.pack_rel / path
@@ -1438,7 +1464,9 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK_ROOT.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md", ".py", ".sha256"}
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and path.suffix in {".json", ".md", ".py", ".sha256"}
         )
         self.assertNotIn(stale_marker, generated_text)
 
@@ -1446,7 +1474,9 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
         generated_text = "\n".join(
             path.read_text(encoding="utf-8")
             for path in sorted(PACK_ROOT.rglob("*"))
-            if path.is_file() and path.suffix in {".json", ".md", ".sha256"}
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and path.suffix in {".json", ".md", ".sha256"}
         )
         for forbidden in (
             "runs_window_d_20260726",
