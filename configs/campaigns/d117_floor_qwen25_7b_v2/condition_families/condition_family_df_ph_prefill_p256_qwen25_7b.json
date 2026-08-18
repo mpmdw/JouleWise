@@ -1,0 +1,17 @@
+{
+  "schema_version": "joulewise.condition_family_definition.v1",
+  "condition_family_id": "df-ph-prefill-p256-qwen25-7b",
+  "workload_profile": {
+    "name": "df_ph_prefill_p256_candidate",
+    "prompt_tokens": 256,
+    "output_tokens": 512,
+    "repetitions": 1,
+    "warmup_runs": 1
+  },
+  "measurement_target": {
+    "metric": "phase_energy_j.prefill",
+    "window_class": "phase"
+  },
+  "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+  "abba_alias_relation": "A_equals_B"
+}

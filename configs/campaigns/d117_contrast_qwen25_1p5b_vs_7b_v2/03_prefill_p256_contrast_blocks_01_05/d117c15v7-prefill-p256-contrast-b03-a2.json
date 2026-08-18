@@ -1,0 +1,59 @@
+{
+  "schema_version": "0.1",
+  "run_id": "d117c15v7-prefill-p256-contrast-b03-a2",
+  "model": {
+    "name": "Qwen2.5-1.5B-Instruct-4bit",
+    "family": "qwen2.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "weight_format": "mlx",
+    "context_window": 32768
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "D-117 gamma Qwen2.5 1.5B-versus-7B contrast on the current M3 Max; normal powermetrics sampler set only; pack status as_generated_pre_d134_freeze."
+  },
+  "workload_profile": {
+    "name": "df_ph_prefill_p256_candidate",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "output_tokens": 512,
+    "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review."
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "d117-contrast-qwen25-1p5b-vs-7b-v2",
+      "production-window",
+      "comparative-contrast",
+      "measurement-arm=prefill_p256",
+      "df-condition=sw-prefill-p256-a-qwen25-1p5b",
+      "calibration-plan-sha256=cf0fe853088fe3d8c21c59359fcf3824dd2d10e539fbeba1162e00de6c297b51",
+      "calibration-abba-block-id=d117-prefill-p256-contrast-b03",
+      "calibration-abba-label=A",
+      "calibration-abba-sequence-index=4",
+      "prompt-tokens=256",
+      "prompt-text-sha256=f149dddcb4b9d27b3d68b0455c5f774e56e37bfc04430b53e139a4c08f044faf",
+      "prompt-status=PROPOSED-PENDING-LEAD-RATIFICATION",
+      "launch_lineage_required"
+    ]
+  }
+}

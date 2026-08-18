@@ -1,0 +1,969 @@
+{
+  "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+  "draft_status": "as_generated_pre_d134_freeze",
+  "plan_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v2",
+  "calibration_scope": "production_window",
+  "fixed_n": 10,
+  "authorities": [
+    "D-117",
+    "D-122",
+    "D-123",
+    "D-124",
+    "D-125"
+  ],
+  "stack_scope": {
+    "hardware_target": "macbook_m3_max",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "quantization": "int4",
+    "sampling": {
+      "power_hz": 10.0,
+      "idle_seconds": 30.0,
+      "warmup_seconds": 5.0
+    },
+    "measurement_arms": {
+      "decode": {
+        "arms": {
+          "A": {
+            "condition_family_id": "sw-decode-a-qwen25-1p5b",
+            "condition_family_byte_sha256": "3ff3a801d7f74ca3d3bd74d961aadde304e7fd1adc7940a39cf47ff0c40943cf",
+            "condition_family_domain_sha256": "c13a3ebf5461ed9a442a8e67555f70301848d56a55ab766570d46ca067934f12",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_family": "qwen2.5",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "weight_format": "mlx",
+            "model_tag": "qwen25-1p5b-mlx"
+          },
+          "B": {
+            "condition_family_id": "sw-decode-b-qwen25-7b",
+            "condition_family_byte_sha256": "c153b8dcbae5761e1d39404e55415d0ed95072151fb98fe75bce3e2740d54b9e",
+            "condition_family_domain_sha256": "5149a8552600341883439a73fa135caa0e6ba292544c7c6fe2e69674318df4e3",
+            "model_name": "Qwen2.5-7B-Instruct-4bit",
+            "model_family": "qwen2.5",
+            "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            "weight_format": "mlx",
+            "model_tag": "qwen25-7b-mlx"
+          }
+        },
+        "workload": {
+          "name": "df_ph_decode",
+          "repetitions": 1,
+          "warmup_runs": 1,
+          "prompt_tokens": 128,
+          "output_tokens": 512
+        }
+      },
+      "prefill_p256": {
+        "arms": {
+          "A": {
+            "condition_family_id": "sw-prefill-p256-a-qwen25-1p5b",
+            "condition_family_byte_sha256": "26615cfd30111cb95ca7470ad8eb69c883d6d554c95a87bc580583beb8b5e401",
+            "condition_family_domain_sha256": "cc018c316cc50cb95e818f3ee483e98585bd29b00d7d91afd821faa9437a9367",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_family": "qwen2.5",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "weight_format": "mlx",
+            "model_tag": "qwen25-1p5b-mlx"
+          },
+          "B": {
+            "condition_family_id": "sw-prefill-p256-b-qwen25-7b",
+            "condition_family_byte_sha256": "21646fa1da7fd08ad03b3f066c7ec19a8370bd2b72ec00948c1e27478d47eb0d",
+            "condition_family_domain_sha256": "26b4acec3ed967046085a2aec6f774aef889d1d6ecd30e57f485182d13e573c2",
+            "model_name": "Qwen2.5-7B-Instruct-4bit",
+            "model_family": "qwen2.5",
+            "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            "weight_format": "mlx",
+            "model_tag": "qwen25-7b-mlx"
+          }
+        },
+        "workload": {
+          "name": "df_ph_prefill_p256_candidate",
+          "repetitions": 1,
+          "warmup_runs": 1,
+          "output_tokens": 512,
+          "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review."
+        }
+      }
+    }
+  },
+  "replacement_rule": {
+    "policy": "abort_window_on_any_required_member_failure",
+    "predeclared_before_data": true,
+    "calibration_retries": 0,
+    "science_member_replacements": 0,
+    "outcome_dependent_top_up": "forbidden",
+    "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing"
+  },
+  "floor_cells": [
+    {
+      "cell_id": "d117-sw-decode-contrast-qwen25-1p5b-vs-7b",
+      "measurement_arm": "decode",
+      "kind": "comparative_contrast",
+      "minimum_claim_n_blocks": 10,
+      "metric": "phase_energy_j.decode",
+      "target_precheck_path": [
+        "phase",
+        "decode"
+      ],
+      "difference_orientation": "condition_b_minus_condition_a",
+      "point_estimator": "abba_block_arm_mean_difference_t_v1",
+      "floor_estimator_registration": {
+        "estimator_id": "d124_two_shared_edge_common_mode.v1",
+        "version": "v1",
+        "parameter_sha256": "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
+        "status": "registered_candidate",
+        "transfer_assumption": {
+          "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+          "statement": "Within one authenticated ABBA calibration bracket, onset and offset fiducial terms are shared edges while bundle-specific residual terms remain adversarial.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+        },
+        "stationarity_transfer_assumption": {
+          "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+          "statement": "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+          "evidentiary_limit": "The historical corpus records bounds, not realized member-level boundary errors."
+        },
+        "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "calibration_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "consuming_contrast_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "identical_covariance_treatment_required": true,
+        "allowance": {
+          "rule": "max(observed_drift_s,bracket_screen_s)",
+          "embedding_count": 1,
+          "embedded_in": "shared_operative_bound_s"
+        },
+        "issued_acceptance_artifact_reopened": false,
+        "raw_calibration_corpus_voided": false
+      },
+      "test": "two_sided",
+      "scientific_hypothesis_direction": "positive",
+      "family_alpha": 0.05,
+      "multiplicity": "Holm",
+      "family_m": 1,
+      "multiplicity_note": "family_m=1 is contingent on unresolved decode/prefill family-cardinality ratification; see the prefill_p256 cell's multiplicity TODO.",
+      "equivalence_margin": null,
+      "mde": null,
+      "ordered_blocks": [
+        {
+          "block_id": "d117-decode-contrast-b01",
+          "block_number": 1,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b02",
+          "block_number": 2,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b03",
+          "block_number": 3,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b04",
+          "block_number": 4,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b05",
+          "block_number": 5,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b06",
+          "block_number": 6,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b07",
+          "block_number": 7,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b08",
+          "block_number": 8,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b09",
+          "block_number": 9,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-decode-contrast-b10",
+          "block_number": 10,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-decode-contrast-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-decode-contrast-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-decode-contrast-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-decode-contrast-b10-a2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell_id": "d117-sw-prefill-p256-contrast-qwen25-1p5b-vs-7b",
+      "measurement_arm": "prefill_p256",
+      "kind": "comparative_contrast",
+      "minimum_claim_n_blocks": 10,
+      "metric": "phase_energy_j.prefill",
+      "target_precheck_path": [
+        "phase",
+        "prefill"
+      ],
+      "difference_orientation": "condition_b_minus_condition_a",
+      "point_estimator": "abba_block_arm_mean_difference_t_v1",
+      "floor_estimator_registration": {
+        "estimator_id": "d124_two_shared_edge_common_mode.v1",
+        "version": "v1",
+        "parameter_sha256": "dd61d38811ddadb2aecb8df4a533b715c8ca74bb031896d09688c9b76b69ed38",
+        "status": "registered_candidate",
+        "transfer_assumption": {
+          "assumption_id": "d124_block_bracket_edges_shared_within_abba.v1",
+          "statement": "Within one authenticated ABBA calibration bracket, onset and offset fiducial terms are shared edges while bundle-specific residual terms remain adversarial.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md"
+        },
+        "stationarity_transfer_assumption": {
+          "assumption_id": "d124_block_timescale_shared_edges_stationarity_transfer_v1",
+          "statement": "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale.",
+          "evidence_reference": "docs/process_traces/2026-08-08-attribution-debate/COMMONMODE-REPLAY.md",
+          "evidentiary_limit": "The historical corpus records bounds, not realized member-level boundary errors."
+        },
+        "covariance_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "calibration_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "consuming_contrast_treatment": "two_shared_edges_plus_bundle_specific_adversarial_terms",
+        "identical_covariance_treatment_required": true,
+        "allowance": {
+          "rule": "max(observed_drift_s,bracket_screen_s)",
+          "embedding_count": 1,
+          "embedded_in": "shared_operative_bound_s"
+        },
+        "issued_acceptance_artifact_reopened": false,
+        "raw_calibration_corpus_voided": false
+      },
+      "prompt_candidate": {
+        "path": "prefill_prompt_candidate.json",
+        "sha256": "15f7a9b6a4e87a6fac5ebc4b0ba16fe101d98c974f5fb18bb44cf45a7c65f444",
+        "status": "PROPOSED-PENDING-LEAD-RATIFICATION"
+      },
+      "test": {
+        "status": "EMPTY",
+        "value": "",
+        "todo": "TODO(lead authority): D-122 requires the arm but does not pin the prefill inferential test"
+      },
+      "family_alpha": {
+        "status": "EMPTY",
+        "value": "",
+        "todo": "TODO(lead authority): ratify the prefill contrast family alpha"
+      },
+      "multiplicity": {
+        "status": "EMPTY",
+        "value": "",
+        "todo": "TODO(lead authority): ratify whether decode and prefill share a family"
+      },
+      "family_m": {
+        "status": "EMPTY",
+        "value": "",
+        "todo": "TODO(lead authority): ratify multiplicity cardinality"
+      },
+      "equivalence_margin": null,
+      "mde": null,
+      "ordered_blocks": [
+        {
+          "block_id": "d117-prefill-p256-contrast-b01",
+          "block_number": 1,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b02",
+          "block_number": 2,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b03",
+          "block_number": 3,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b04",
+          "block_number": 4,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b05",
+          "block_number": 5,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b06",
+          "block_number": 6,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b07",
+          "block_number": 7,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b08",
+          "block_number": 8,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b09",
+          "block_number": 9,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-prefill-p256-contrast-b10",
+          "block_number": 10,
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117c15v7-prefill-p256-contrast-b10-a2"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "reported_energy_cells": [],
+  "execution_mode": {
+    "ordered_science_stage_ids": [
+      "01_decode_contrast_blocks_01_05",
+      "02_decode_contrast_blocks_06_10",
+      "03_prefill_p256_contrast_blocks_01_05",
+      "04_prefill_p256_contrast_blocks_06_10"
+    ],
+    "planned_science_bundles": 80,
+    "planned_bound_bundles": 12,
+    "planned_reference_bundles": 9,
+    "planned_calibration_observations": 2
+  },
+  "roots": {
+    "claim_root_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2",
+    "bound_root_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2_bound"
+  },
+  "runs_dir": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2",
+  "order_manifest": "order_manifest.json",
+  "campaign_log": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2/campaign_log.jsonl",
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+  }
+}
