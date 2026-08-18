@@ -187,13 +187,13 @@ then freeze the resulting bytes:
 
 ```sh
 MEASUREMENT_REPO=/Users/edr/JouleWise-measurement-20260813
-WINDOW_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1
+WINDOW_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2
 BRACKET_SESSION_ID=d117-alpha-YYYYMMDD-calibration
-FROZEN_PLAN=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json
-PACK_ROOT=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v1
-PACK_ID=d117_floor_qwen25_1p5b_v1
-PLAN_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1
-EVIDENCE_ROOT_ID=evidence-d117-floor-qwen25-1p5b-v1
+FROZEN_PLAN=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v2/calibration_plan.json
+PACK_ROOT=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v2
+PACK_ID=d117_floor_qwen25_1p5b_v2
+PLAN_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2
+EVIDENCE_ROOT_ID=evidence-d117-floor-qwen25-1p5b-v2
 IDENTITY_EPOCH_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/identity-epoch.json
 T1_BINDINGS_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/t1-bindings.json
 PRE_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-pre
@@ -231,11 +231,13 @@ distinct. Place `WINDOW_PLAN_ROOT` at
 containing `window.env` and `window-chain.zsh` to remain inside the D-134
 custody root.
 
-The currently frozen ALPHA and BETA `plan_tree.json` bytes still carry the
-superseded repository-relative spelling. The shared R2 resolver refuses those
-packs; do not basename-repair them in an operator file. Their successor
-freeze must emit `plan.path: "calibration_plan.json"` before either profile
-can pass this example. GAMMA already has the ruled storage shape.
+The v1 ALPHA and BETA `plan_tree.json` bytes carry the superseded
+repository-relative spelling; the shared R2 resolver refuses those packs, and
+they are never basename-repaired in an operator file. The `_v2` successor
+family (amended 2026-08-18) emits the ruled `plan.path:
+"calibration_plan.json"` shape in all three profiles, so this example binds
+the `_v2` packs; the v1 packs remain historical records behind their
+committed freeze-0001 receipts.
 
 Before quiet time:
 
