@@ -84,11 +84,21 @@ digest — self-hash cycle). If you approve that shape, say where it lives
 (suggestion: `configs/arm_readiness/d117_v2_family_marker.json`) or defer
 to my judgment on path+schema with the binding set as consulted.
 
-## 3. CONFIRMATION (the irreversible point — after 1 lands and the freeze runs)
+## 3. CONFIRMATION (the irreversible point) — THE EXACT-BYTE SUMMARY, ready for your yes
 
-You'll get a short exact-byte summary: three pack tree hashes, three
-freeze-0002 receipt hashes, the marker bytes. Publication happens only on
-your explicit yes. Until then everything is revertible.
+Confirmation head: `d3aa15f` on `integration/phase2-transaction`
+(canonical suite 3,688 tests FULL GREEN; all three freeze receipts
+live-authenticated at the measurement checkout by the lead).
+
+| Pack | committed_pack_tree_sha256 | freeze-0002 receipt sha256 |
+|---|---|---|
+| d117_floor_qwen25_1p5b_v2 | `95f7c51ca4f2833a69d2767e9a35fcbf028365332edeb36d1b43d73b6eea31b9` | `1277103b42090f3ce41df0e030a2a5f2a3998598efec12fef812ca5b36b89666` |
+| d117_floor_qwen25_7b_v2 | `e5ec0f74df3a61daff3ffdb8c6521c2ae69dae25ac6b6490394ee64d89015968` | `decd8cdc6a589397e28240b33b97e1b38575be860490a2c6de31be51611842d0` |
+| d117_contrast_qwen25_1p5b_vs_7b_v2 | `2fe51b037ad063f932c29445ef60cde24479f76d465d5f013810e0287274e540` | `18855647c38ec8cf521167fcaae62a06914a8ab7087aeded96835cb418f9607e` |
+
+The family-marker bytes await your item-2 ruling (the marker is created
+after your confirmation, binding exactly these digests). Your explicit yes
+publishes (merge to main + marker); until then everything is revertible.
 
 ## 4. Dress rehearsal (~30-40 min at the machine)
 
