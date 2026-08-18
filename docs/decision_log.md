@@ -160,6 +160,8 @@ be re-derived by a future agent gets an entry here.
 | D-135 | SITE BUDGETS ADVISORY (Ed, in-thread 2026-08-12): conservative capsule/page/shard byte budgets and pagination margins WARN, never fail builds/tests/PR gates; the ONLY failing site-size condition is the physical Lakebed 1,048,576-byte cap under the real validator (deploys physically fail past it); content is never trimmed/split/archived to satisfy an advisory budget; SITE-CAPSULE-BUDGET-01 superseded | adopted (Ed, in-thread; transcribed) |
 | D-136 | SITE LANE RETIRED FROM PROCESSES (Ed, in-thread 2026-08-12): no session spends tokens on Lakebed/capsule size, packing, deploy failures, or site-chain diagnosis — the site is a status doc, not a workstream; the site workflow runs on manual dispatch only (never push/pull_request) and its results never gate anything or prompt session work; extends D-135 and D-101 addendum II | adopted (Ed, in-thread; transcribed) |
 | D-137 | ARM-READINESS V1 BOOT-SESSION AMENDMENT (magistrate-ratified, 2026-08-12): every v1 arm or generic evidence receipt carrying `valid_until_monotonic_ns` also carries a derived, never-operator-entered `boot_session_id`; verification and atomic consumption refuse a boot-session mismatch as `readiness_record_expired`; composes with D-120/D-134 and deliberately supersedes the preserved D-134 consult's literal key lists before any production receipt issuance | adopted (magistrate-ratified v1 schema amendment) |
+| D-140 | FREEZE-STATUS BYTE SEMANTICS, SUCCESSOR EXTENSION (cold gate 2026-08-18, composed verdict: `docs/process_traces/2026-08-18-freeze-semantics-coldgate/14-composed-verdict.md`, three seats concurring — cold Fable adjudicator, Opus contract refuter, gpt-5.6-luna execution refuter): the receipts-govern-over-descriptive-bytes core is EXTENDED to ALL successor packs by this entry's own authority (M-2's clause (d) bars citing the 2026-08-13 override beyond its three receipt hashes — this is a fresh extension, not a precedent citation). The draft→frozen transition IS the minting+committing of the D-134 freeze receipt and plan-tree attachment; bytes inside the receipt's `pack_identity` transitive closure (`calibration_plan.json` and everything hashed into it) never change post-mint, and remaining pack descriptive bytes are never repaired (M-2 core). "Freeze-aware" status = dynamic `target_status` from the authenticated attachment + the fail-closed non-preserve guard + option-(d) freeze-neutral emitted wording (round 6/7: `as_generated_pre_d134_freeze` + authority-naming fields). Executed basis: the round-5 circularity proof (a serialized transition renders every successor pack permanently unarmable — `readiness_freeze_receipt_mismatch` at dry-run/arm/verify, no re-mint path). The first structural consult's §B3 transition sentences, D-6, and R-7 are SUPERSEDED per the composed verdict's amendment language. Options (b) receipt-supersession-for-freeze and (c) README-only transition REJECTED (new gate-engine machinery for cosmetics; frozen-byte repair + split-brain) | adopted (cold gate, 3-seat concurrence; magistrate-composed) |
+| D-141 | GENERATOR WRITE-BOUNDARY + FREEZE-LOADER REGISTERED RESIDUALS (cold gate 2026-08-18 ratification + delta-8 ratification): (i) post-validation symlink substitution in the pack generators' check-then-write boundary is a REGISTERED RESIDUAL — requires a concurrent process racing the desk-time generation, excluded by single-operator generation discipline (D-139 A1 cited by ANALOGY; its own scope is the measurement environment). The accidental class is CLOSED (16-case refuse-before-any-write coverage). REOPENING TRIGGER: any threat-model revision admitting concurrent adversarial local processes, or multi-operator/shared-machine generation. Delta-4's dirfd/`O_NOFOLLOW` remedy demand is formally SUPERSEDED. (ii) `_load_freeze_reference` accepts a hand-authored v1-schema receipt inside a `_v2` pack (chain auth keys on schema) — REGISTERED RESIDUAL under trusted-operator; delta-8 attacked and ratified: no crash or current-tooling path produces that state (mint selects v2 pre-write; plan-tree updates atomic). Both registered in `docs/risk_register.md` (R-019, R-020) | adopted |
 
 ---
 
@@ -9996,3 +9998,38 @@ retain the historical frozen generator SHA inside each preserved plan tree.
 This preparation does not satisfy R1 publication, the stage-4/AXI release
 gate, D-079 reissuance, fresh evidence authoring, marker construction, Ed's
 exact-byte confirmation, or the irreversible successor-family publication.
+
+### R2/M-2 successor-generator preparation amendment — 2026-08-18: first-structural-consult corrections (freeze-semantics cold gate)
+
+The 2026-08-17 record above stands unedited as the historical implementation
+account.  Three corrections from the freeze-semantics cold gate bind over it
+(record `docs/process_traces/2026-08-18-freeze-semantics-coldgate/`; composed
+verdict `14-composed-verdict.md`; adopted as D-140 and D-141):
+
+1. **D-5 correction (cold-gate ruling D-5).**  In the sentence "Every
+   successor science collection config adds `launch_lineage_required`;
+   preserve-mode configs never add it", the second half is an
+   implementation-description error and must not be read as policy.
+   `launch_lineage_required` is successor-FAMILY policy in EVERY mode; the
+   preserve-mode behaviour described is only what the current generators do
+   while reproducing the checked-in `_v1` bytes byte-for-byte, and it confers
+   no mode-conditional exemption.  The owning authority is unchanged
+   (`docs/process_traces/2026-08-15-launch-lineage-consult/consult.md`, which
+   requires the flag in every successor collection config; stage-3 consumers
+   are intentionally dormant without it).
+
+2. **§B3 / D-6 / R-7 SUPERSEDED per D-140.**  The first structural consult's
+   §B3 transition sentences, its D-6 (the status/README freeze transition
+   finalized inside the freeze transaction), and its R-7 status-transition
+   test obligation are superseded.  This is recorded as a REVERSAL on
+   executed evidence, not a re-reading: §B3/R-7 commanded a serialized
+   transition unambiguously, and the round-5 circularity proof shows that a
+   serialized transition renders every successor pack permanently unarmable
+   (`readiness_freeze_receipt_mismatch` at dry-run/arm/verify, with no re-mint
+   path).  The governing doctrine is D-140.
+
+3. **Defect-class rule (composed verdict holding 3).**  A consult ruling on a
+   transaction must resolve the transaction's own module; anchor-completeness
+   claims cover ONLY what was actually opened.  Recorded defect: the first
+   structural consult's D-7 claimed its anchors resolved while never opening
+   `joulewise/arm_readiness.py`.

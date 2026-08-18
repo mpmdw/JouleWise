@@ -36,6 +36,8 @@ Conventions:
 | R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | mitigated (2026-07-10: iCloud Drive destination live, fresh restore test passed; re-verify before each window — eviction caveat) |
 | R-017 | Repo on iCloud-synced Desktop (EPERM lock recurrence) | all | low | medium | mitigated (repo moved 2026-07-05; residual: session launch paths) |
 | R-018 | Agent-loop self-expansion consumes calendar without grader-facing output | all | medium | high | mitigated-in-policy (D-060 RATIFIED 2026-07-10; enforcement = queue discipline + spend guardrails, WO-022/R2, `docs/orchestration.md` §Spend guardrails) |
+| R-019 | Pack-generator check-then-write boundary admits post-validation symlink substitution | 2+ | low | high | registered residual (D-141(i), cold gate 2026-08-18) |
+| R-020 | Freeze loader accepts a hand-authored v1-schema receipt inside a `_v2` pack | 2+ | low | medium | registered residual (D-141(ii), delta-8 ratified 2026-08-18) |
 
 ## R-001: Supervisor approval delayed or scope shifts
 
@@ -360,3 +362,48 @@ Conventions:
   breadth work.
 - Owner: lead (queue discipline + guardrail checkpoints), Ed (HARD
   bands and structure).
+
+## R-019: Pack-generator check-then-write boundary admits post-validation symlink substitution
+
+- Phase: 2+. Likelihood: low. Impact: high (a substituted write target could
+  place generated pack bytes outside the intended pack root).
+- Status: **REGISTERED RESIDUAL (2026-08-18)**, ratified at the
+  freeze-semantics cold gate (D-141(i); composed verdict holding 5, record
+  `docs/process_traces/2026-08-18-freeze-semantics-coldgate/`). Exploiting it
+  requires a concurrent process racing the desk-time generation, which is
+  excluded by single-operator generation discipline — D-139 A1 is cited **by
+  analogy** here; A1's own scope is the measurement environment, not the
+  generation desk. The *accidental* class is CLOSED: 16-case
+  refuse-before-any-write coverage. Code comments are not registration; this
+  row is.
+- Trigger (reopening, cold ruling C-B1a): any threat-model revision admitting
+  concurrent adversarial local processes, or multi-operator / shared-machine
+  pack generation.
+- Mitigation: single-operator desk-time generation discipline; the
+  refuse-before-any-write validation set; the generators' preserve-mode
+  default plus the successor-identity-only non-preserve shape.
+- Fallback: implement the dirfd / `O_NOFOLLOW` write boundary (delta-4's F2
+  remedy demand, formally SUPERSEDED at this gate per C-B1b) and regenerate;
+  no published evidence depends on the current boundary.
+- Owner: agent (boundary code + reopening watch), Ed (threat-model scope).
+
+## R-020: Freeze loader accepts a hand-authored v1-schema receipt inside a `_v2` pack
+
+- Phase: 2+. Likelihood: low. Impact: medium (chain authentication keys on
+  the receipt schema, so a v1-schema receipt inside a successor pack would
+  bypass the predecessor binding).
+- Status: **REGISTERED RESIDUAL (2026-08-18)** under the trusted-operator
+  model (D-141(ii)). Delta-8 attacked and ratified it: no crash path and no
+  current-tooling path produces that state — mint selects the v2 schema
+  before writing, and plan-tree updates are atomic. Reaching it requires a
+  hand-authored receipt placed by the operator.
+- Trigger: any tooling path that can emit or leave behind a v1-schema freeze
+  receipt in a `_v2` (or later) pack; or a threat model that stops trusting
+  the operator with pack-root contents.
+- Mitigation: `_load_freeze_reference`'s schema-keyed chain authentication is
+  reached only after the receipt is authenticated against the plan-tree pin;
+  mint is v2-selecting pre-write; plan-tree attachment updates are atomic.
+- Fallback: key the chain check on the pack generation (pack ID suffix)
+  rather than the receipt schema, and re-verify the family's receipts; no
+  published receipt is affected.
+- Owner: agent.

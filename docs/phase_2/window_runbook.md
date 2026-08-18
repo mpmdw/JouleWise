@@ -198,8 +198,8 @@ IDENTITY_EPOCH_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/iden
 T1_BINDINGS_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/t1-bindings.json
 PRE_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-pre
 POST_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-post
-RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v1
-BOUND_RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v1_bound
+RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v2
+BOUND_RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v2_bound
 CALIBRATION_LEDGER=/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
 LEDGER_HEAD_PIN=/Users/edr/JouleWise-measurement-20260813/configs/calibration/calibration_ledger_head.json
 ARM_READINESS_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness
@@ -281,8 +281,10 @@ root — and every successor pack refuses to freeze without it; a
 first-generation (`_v1`) pack opens its own chain, so it omits the flag
 entirely and is refused if it passes one.
 
-The command writes the pack's no-clobber freeze receipt (initially
-`freeze-0001.json`) and GNU-style SHA-256 sidecar under the governed
+The command writes the pack's no-clobber freeze receipt — a first-generation
+pack opens its own chain and mints `freeze-0001.json`; a successor generation
+`_v<N>` mints `freeze-000<N>.json` and must pass `--predecessor-pack-root` —
+and a GNU-style SHA-256 sidecar under the governed
 `PACK_ROOT/arm_readiness.freeze.receipts/freeze-NNNN.json` namespace. A freeze receipt
 contains only freeze-evaluable rows and always has
 `arm_disposition: NOT_APPLICABLE`; even a `PASS` freeze receipt cannot license

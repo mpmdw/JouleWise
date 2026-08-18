@@ -1,0 +1,11 @@
+rendering would make the matching pack generator's post-freeze
+`generate_configs.py --check` disagree with the frozen bytes. Do not “tidy”
+that serialization.
+
+For the three packs frozen on 2026-08-13, the committed D-134 freeze receipt
+and its plan-tree pin are authoritative over the legacy `unfrozen_draft`
+wording that remains byte-frozen in `draft_status` and `README.md`. Do not
+repair those committed bytes. The 2026-08-14 M-2 ruling in
+`docs/decision_log.md` requires the generators to emit freeze-aware status and
+README text only for future regenerated packs while preserving current-pack
+`--check` byte identity.
