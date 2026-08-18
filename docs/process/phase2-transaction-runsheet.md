@@ -7,6 +7,13 @@ pinned heads below. The executor follows this order; any deviation, failed
 verification, or science-facing delta STOPS the transaction (F3
 stop-condition → cold review).
 
+**EXECUTION STATUS (2026-08-18 morning):** steps 1-3 and 5 EXECUTED
+(twice for 3/5: the D-143 budget correction re-ran the reissue and
+re-froze the family — receipts at the measurement checkout, confirmation
+head d3aa15f); step 4 (R1 registry install) NEEDS_RULING on Ed-reserved
+values (five items, see the morning packet); step 6 = the packet's
+exact-byte table awaiting Ed; step 7 pending publication.
+
 **Amended 2026-08-18** — freeze-semantics cold gate (D-140/D-141; record
 `docs/process_traces/2026-08-18-freeze-semantics-coldgate/`, composed verdict
 `14-composed-verdict.md`). This is a living operational document, so the steps

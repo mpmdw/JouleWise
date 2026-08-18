@@ -10,7 +10,19 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-16 (T9 close — Phase-1 code complete)
+Last updated: 2026-08-18 morning (T10 overnight complete — confirmation head ready)
+
+## ▶▶ T10 CHECKPOINT (2026-08-18) — READ docs/process/ed-morning-packet-2026-08-18.md FIRST
+
+The Phase-2 transaction is EXECUTED to its confirmation head (canonical
+3,688 green; family frozen with freeze-0002 chains, live-authenticated at
+/Users/edr/JouleWise-measurement-20260818; D-079 r2 issued incl. the D-143
+budget correction; first-light shakedown b_fiducial IN-BAND). Ed's morning
+packet carries the exact-byte confirmation table and the reserved rulings
+(family marker; R1 registry values). Session record:
+docs/run_reports/2026-08-18-t10-session.md. This checkpoint supersedes the
+branch's earlier stale top (B-2 in the T10 report); main's own T10
+checkpoint (62c6a06) is consistent with this one.
 
 ## ▶▶ T9 CHECKPOINT (2026-08-16) — PHASE 1 CODE COMPLETE; A NEW SESSION STARTS HERE
 
