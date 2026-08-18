@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import math
@@ -19,6 +20,7 @@ import zlib
 from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
+    ESTIMATOR_CODE_PATHS,
     ISSUED_ACCEPTANCE_BOUND_SHA256,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
@@ -177,9 +179,113 @@ def _unissued_acceptance_fixture_bytes() -> bytes:
 
 
 def _unissued_acceptance_fixture() -> dict:
+    """Return the fixture EXACTLY as its bytes encode it.
+
+    Only the byte-pinned issuance path (which re-authenticates the artifact
+    against these same bytes) may consume this view.  Evaluation tests consume
+    one of the estimator-insulated views below instead; see the note there.
+    """
+
     artifact = json.loads(_unissued_acceptance_fixture_bytes())
     assert _valid_acceptance_bound(artifact)
     return artifact
+
+
+# --- D-138-class estimator-pin insulation -------------------------------
+#
+# The genesis fixture's `prospective_rederivation.estimator_code_sha256` map
+# pins the four estimator modules as they stood when the fixture bytes were
+# minted.  Any later edit to one of those modules -- the D-138
+# powermetrics_fiducial.py migration being the instance that motivated this --
+# makes the evaluator observe an incidental `protocol_or_estimator_byte_change`
+# rederivation trigger in EVERY fixture-driven test, staling the acceptance
+# artifact and short-circuiting evaluation before the test's actual subject is
+# reached.  That is repo drift leaking into test outcomes, not a defect the
+# tests exist to catch: the live issued artifact carries its own current pins
+# and is re-keyed by the migration, so the fan-out reached the tests through
+# the retained fixture alone.
+#
+# Tests therefore never consume the raw fixture pins.  Two insulated views:
+#
+#   _current_estimator_acceptance_fixture()
+#       Fixture pins re-keyed to the estimator digests of THIS checkout.  The
+#       digests are computed here, directly from the files, rather than through
+#       joulewise's `_current_estimator_code_sha256`, so a test that
+#       deliberately patches that helper (e.g.
+#       test_estimator_module_byte_change_stales_artifact_at_load) still
+#       observes a real byte change against the fixture.  Future estimator
+#       edits move both sides together, so no such edit can re-redden these.
+#
+#   _hermetic_estimator_pins()
+#       For tests whose SUBJECT is a rederivation trigger or acceptance
+#       staleness.  It pins the fixture AND the evaluator's "current" estimator
+#       view to the SAME synthetic digests, so the artifact is entirely
+#       independent of the tree and the only triggers a test can observe are
+#       the ones its own mutations introduce.
+#
+# The fixture bytes, the fixture sha256 pin, and the checked-in artifacts are
+# untouched by any of this; the re-key is in-memory only.
+_SYNTHETIC_ESTIMATOR_CODE_SHA256 = MappingProxyType(
+    {
+        relative: hashlib.sha256(
+            f"hermetic-estimator-pin::{relative}".encode()
+        ).hexdigest()
+        for relative in ESTIMATOR_CODE_PATHS
+    }
+)
+
+
+def _checkout_estimator_code_sha256() -> dict[str, str]:
+    """Digest the estimator closure from this checkout, unpatchably."""
+
+    root = Path(__file__).resolve().parents[1]
+    return {
+        relative: hashlib.sha256((root / relative).read_bytes()).hexdigest()
+        for relative in ESTIMATOR_CODE_PATHS
+    }
+
+
+def _acceptance_fixture_with_estimator_pins(pins: dict[str, str]) -> dict:
+    """Re-key the genesis fixture's in-memory estimator pins."""
+
+    artifact = _unissued_acceptance_fixture()
+    artifact["prospective_rederivation"]["estimator_code_sha256"] = dict(pins)
+    artifact["derivation_sha256"] = _canonical_sha256(
+        {
+            key: value
+            for key, value in artifact.items()
+            if key != "derivation_sha256"
+        }
+    )
+    assert _valid_acceptance_bound(artifact)
+    return artifact
+
+
+def _current_estimator_acceptance_fixture() -> dict:
+    return _acceptance_fixture_with_estimator_pins(
+        _checkout_estimator_code_sha256()
+    )
+
+
+def _hermetic_estimator_acceptance_fixture() -> dict:
+    return _acceptance_fixture_with_estimator_pins(
+        dict(_SYNTHETIC_ESTIMATOR_CODE_SHA256)
+    )
+
+
+@contextlib.contextmanager
+def _hermetic_estimator_pins():
+    """Pin fixture and live estimator view to identical synthetic digests.
+
+    Yields the fixture factory to use inside the block, so a trigger-subject
+    test observes exactly the triggers its own mutations introduce.
+    """
+
+    with patch(
+        "joulewise.calibration_bracketing._current_estimator_code_sha256",
+        return_value=dict(_SYNTHETIC_ESTIMATOR_CODE_SHA256),
+    ):
+        yield _hermetic_estimator_acceptance_fixture
 
 
 def _synthetic_issued_artifact() -> dict:
@@ -368,23 +474,34 @@ def _fixture_snapshot(
 
 def _evaluate_with_unissued_acceptance(
     candidates: list[CalibrationCandidate] | tuple[CalibrationCandidate, ...],
+    *,
+    acceptance_fixture=_current_estimator_acceptance_fixture,
     **kwargs: object,
 ) -> tuple[dict, tuple[str, ...]]:
-    """Evaluate against the exact genesis fixture, never the live anchor."""
+    """Evaluate against the genesis fixture, never the live anchor.
+
+    `acceptance_fixture` selects the estimator-pin view (see the insulation
+    note above); trigger-subject tests pass the factory yielded by
+    `_hermetic_estimator_pins()`.
+    """
 
     with patch(
         "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-        return_value=_unissued_acceptance_fixture(),
+        return_value=acceptance_fixture(),
     ):
         return _evaluate_calibration_bracket(candidates, **kwargs)
 
 
 def evaluate_calibration_bracket(
-    candidates: list[CalibrationCandidate], **kwargs: object
+    candidates: list[CalibrationCandidate],
+    *,
+    acceptance_fixture=_current_estimator_acceptance_fixture,
+    **kwargs: object,
 ) -> tuple[dict, tuple[str, ...]]:
     snapshot, normalized = _fixture_snapshot(list(candidates))
     return _evaluate_with_unissued_acceptance(
         normalized,
+        acceptance_fixture=acceptance_fixture,
         ledger_snapshot=snapshot,
         _allow_unissued_fixture=True,
         **kwargs,
@@ -419,7 +536,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
         with patch(
             "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-            return_value=_unissued_acceptance_fixture(),
+            return_value=_current_estimator_acceptance_fixture(),
         ):
             result, reasons = _evaluate_calibration_bracket(
                 candidates,
@@ -822,15 +939,20 @@ class CalibrationBracketingTests(unittest.TestCase):
             [call.args[0].attempt_id for call in authenticate.call_args_list],
         )
 
-        result, reasons = _evaluate_with_unissued_acceptance(
-            discovered,
-            window_start_s=100.0,
-            window_end_s=110.0,
-            bindings=self.bindings,
-            policy=self.policy,
-            ledger_snapshot=snapshot,
-            _allow_unissued_fixture=True,
-        )
+        # Trigger-subject: the observed-trigger list is the assertion, so pin
+        # the fixture and the live estimator view to identical synthetic
+        # digests.  Only the import-marked observation can move the list.
+        with _hermetic_estimator_pins() as acceptance_fixture:
+            result, reasons = _evaluate_with_unissued_acceptance(
+                discovered,
+                acceptance_fixture=acceptance_fixture,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
         self.assertEqual(reasons, ())
         self.assertNotIn(
             "new_valid_same_identity_capture_expands_observed_range",
@@ -838,7 +960,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_acceptance_prior_set_must_equal_import_marked_cutoff_prefix(self) -> None:
-        artifact = _unissued_acceptance_fixture()
+        artifact = _current_estimator_acceptance_fixture()
         snapshot, registered = _fixture_snapshot(
             [
                 self.candidate("pre", 99.0, "0.025"),
@@ -1167,7 +1289,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertIsNotNone(resolved)
         with patch(
             "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-            return_value=_unissued_acceptance_fixture(),
+            return_value=_current_estimator_acceptance_fixture(),
         ):
             result, reasons = _evaluate_calibration_bracket(
                 candidates,
@@ -1204,7 +1326,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         supplied = [*candidates[:-1], later_other_root]
         with patch(
             "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-            return_value=_unissued_acceptance_fixture(),
+            return_value=_current_estimator_acceptance_fixture(),
         ):
             _result, reasons = _evaluate_calibration_bracket(
                 supplied,
@@ -1225,7 +1347,7 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         with patch(
             "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-            return_value=_unissued_acceptance_fixture(),
+            return_value=_current_estimator_acceptance_fixture(),
         ):
             _result, reasons = _evaluate_calibration_bracket(
                 candidates,
@@ -1251,7 +1373,7 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertIsNone(validate_calibration_bracket_binding(binding, snapshot))
         with patch(
             "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-            return_value=_unissued_acceptance_fixture(),
+            return_value=_current_estimator_acceptance_fixture(),
         ):
             _result, reasons = _evaluate_calibration_bracket(
                 candidates,
@@ -1346,7 +1468,7 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         with patch(
             "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-            return_value=_unissued_acceptance_fixture(),
+            return_value=_current_estimator_acceptance_fixture(),
         ):
             result, reasons = _evaluate_calibration_bracket(
                 candidates,
@@ -1402,7 +1524,7 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         with patch(
             "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-            return_value=_unissued_acceptance_fixture(),
+            return_value=_current_estimator_acceptance_fixture(),
         ):
             result, reasons = _evaluate_calibration_bracket(
                 candidates,
@@ -1766,13 +1888,21 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_systematic_preflight_level_failure_is_never_budgeted(self) -> None:
-        result, reasons = evaluate_calibration_bracket(
-            [self.candidate("pre", 99.0, 0.034), self.candidate("post", 111.0, 0.023)],
-            window_start_s=100.0,
-            window_end_s=110.0,
-            bindings=self.bindings,
-            policy=self.policy,
-        )
+        # Trigger-subject: only the systematic preflight failure this test
+        # constructs may appear in observed_triggers, so the estimator view is
+        # pinned hermetically on both sides.
+        with _hermetic_estimator_pins() as acceptance_fixture:
+            result, reasons = evaluate_calibration_bracket(
+                [
+                    self.candidate("pre", 99.0, 0.034),
+                    self.candidate("post", 111.0, 0.023),
+                ],
+                acceptance_fixture=acceptance_fixture,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+            )
         self.assertEqual(result["status"], "failed")
         self.assertEqual(reasons, ("instrument_calibration_mismatch",))
         self.assertEqual(result["acceptance"]["preflight"]["status"], "failed")
@@ -1789,20 +1919,26 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertIsNone(result["calibration_drift_allowance_s"])
 
     def test_window_b_systematic_failure_precedes_rederivation_staleness(self) -> None:
-        result, reasons = evaluate_calibration_bracket(
-            [
-                self.candidate(
-                    "window-b-new-systematic-pre",
-                    99.0,
-                    "0.035435840879704805",
-                ),
-                self.candidate("window-b-post", 111.0, "0.023"),
-            ],
-            window_start_s=100.0,
-            window_end_s=110.0,
-            bindings=self.bindings,
-            policy=self.policy,
-        )
+        # Trigger-subject: the ORDER and membership of observed_triggers is the
+        # assertion.  Both estimator views are pinned to the same synthetic
+        # digests so the two triggers below are exactly the ones the Window-B
+        # candidates introduce.
+        with _hermetic_estimator_pins() as acceptance_fixture:
+            result, reasons = evaluate_calibration_bracket(
+                [
+                    self.candidate(
+                        "window-b-new-systematic-pre",
+                        99.0,
+                        "0.035435840879704805",
+                    ),
+                    self.candidate("window-b-post", 111.0, "0.023"),
+                ],
+                acceptance_fixture=acceptance_fixture,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+            )
         self.assertEqual(result["status"], "failed")
         self.assertEqual(reasons, ("instrument_calibration_mismatch",))
         self.assertEqual(result["acceptance"]["preflight"]["status"], "failed")
@@ -1840,7 +1976,11 @@ class CalibrationBracketingTests(unittest.TestCase):
         def discover(source: object) -> tuple[CalibrationCandidate, ...]:
             return tuple(registered) if source is snapshot else ()
 
+        # Trigger-subject: staleness here must come from the unselected
+        # same-identity range expander alone, so the estimator view is pinned
+        # hermetically on both sides.
         with (
+            _hermetic_estimator_pins() as acceptance_fixture,
             patch(
                 "joulewise.calibration_bracketing.BundleReader",
                 return_value=reader,
@@ -1851,7 +1991,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             ),
             patch(
                 "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
-                return_value=_unissued_acceptance_fixture(),
+                return_value=acceptance_fixture(),
             ),
         ):
             result, reasons = calibration_bracket_for_bundles(
@@ -1927,16 +2067,21 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
 
     def test_prior_set_subtraction_does_not_treat_known_holdout_as_new(self) -> None:
-        result, reasons = evaluate_calibration_bracket(
-            [
-                self.candidate("pre", 99.0, "0.020"),
-                self.candidate("post", 111.0, "0.020"),
-            ],
-            window_start_s=100.0,
-            window_end_s=110.0,
-            bindings=self.bindings,
-            policy=self.policy,
-        )
+        # Trigger-subject (negative): the assertion is that NO trigger fires,
+        # so the estimator view is pinned hermetically on both sides and the
+        # empty list can only be broken by a real prior-set subtraction defect.
+        with _hermetic_estimator_pins() as acceptance_fixture:
+            result, reasons = evaluate_calibration_bracket(
+                [
+                    self.candidate("pre", 99.0, "0.020"),
+                    self.candidate("post", 111.0, "0.020"),
+                ],
+                acceptance_fixture=acceptance_fixture,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+            )
         self.assertEqual(reasons, ())
         self.assertEqual(result["status"], "passed")
         self.assertEqual(
@@ -1980,15 +2125,19 @@ class CalibrationBracketingTests(unittest.TestCase):
                 )
             )
         snapshot, registered = _fixture_snapshot(candidates)
-        result, reasons = _evaluate_with_unissued_acceptance(
-            registered,
-            window_start_s=100.0,
-            window_end_s=110.0,
-            bindings=self.bindings,
-            policy=self.policy,
-            ledger_snapshot=snapshot,
-            _allow_unissued_fixture=True,
-        )
+        # Trigger-subject: corpus doubling must be the ONLY observed trigger,
+        # so the estimator view is pinned hermetically on both sides.
+        with _hermetic_estimator_pins() as acceptance_fixture:
+            result, reasons = _evaluate_with_unissued_acceptance(
+                registered,
+                acceptance_fixture=acceptance_fixture,
+                window_start_s=100.0,
+                window_end_s=110.0,
+                bindings=self.bindings,
+                policy=self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
         self.assertEqual(reasons, ("calibration_acceptance_bound_stale",))
         self.assertEqual(
             result["acceptance"]["prospective_rederivation"][

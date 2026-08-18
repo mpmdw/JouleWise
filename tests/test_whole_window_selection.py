@@ -63,8 +63,8 @@ from joulewise.analysis_engine.registry import (
 )
 from joulewise.schemas import CalibrationBracketingPolicy
 from tests.test_calibration_bracketing import (
+    _current_estimator_acceptance_fixture,
     _fixture_snapshot,
-    _unissued_acceptance_fixture,
 )
 from tests.test_axi_analysis_manifest import AXI_VALID_BUNDLE, evidence_for
 from tests.test_run_campaign import (
@@ -76,12 +76,20 @@ from tests.test_run_campaign import (
 
 
 def _install_synthetic_calibration_defaults(test: unittest.TestCase) -> None:
-    """Keep synthetic consumption sessions independent of the live anchor."""
+    """Keep synthetic consumption sessions independent of the live anchor.
+
+    The genesis fixture is consumed through the estimator-insulated view (see
+    tests/test_calibration_bracketing.py): its checked-in estimator digests are
+    those of the day it was minted, so without the in-memory re-key every
+    session here would observe an incidental
+    `protocol_or_estimator_byte_change` rederivation trigger and refuse with
+    `calibration_acceptance_bound_stale` after any estimator-module edit.
+    """
 
     snapshot, _candidates = _fixture_snapshot([])
     acceptance = patch(
         "joulewise.whole_window.load_calibration_acceptance_bound",
-        return_value=_unissued_acceptance_fixture(),
+        return_value=_current_estimator_acceptance_fixture(),
     )
     ledger = patch(
         "joulewise.whole_window.load_calibration_ledger_snapshot",
@@ -2299,7 +2307,7 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 patch(
                     "joulewise.calibration_bracketing."
                     "load_calibration_acceptance_bound",
-                    return_value=_unissued_acceptance_fixture(),
+                    return_value=_current_estimator_acceptance_fixture(),
                 ),
             ):
                 minted = reduce_bundle(
