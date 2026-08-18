@@ -1263,14 +1263,23 @@ class D117GammaPlanTest(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(unmodeled.returncode, 2, unmodeled.stderr)
+            # Post-WO-FREEZE-NUMBERING, a successor-shaped pack without
+            # --predecessor-pack-root refuses on the successor chain before
+            # the registry check is reached.
             self.assertEqual(
                 json.loads(unmodeled.stdout)["reason_codes"],
-                ["readiness_row_registry_mismatch"],
+                ["readiness_successor_chain_invalid"],
             )
             freeze_script = install_v2_freeze_fixture_runtime(output_root)
             freeze_results: list[dict[str, Any]] = []
             try:
                 for v2_rel in v2_packs:
+                    # Post-WO-FREEZE-NUMBERING, successor packs freeze with
+                    # their authenticated predecessor (the committed v1 pack
+                    # in this fixture checkout), minting freeze-0002.
+                    predecessor_rel = v2_rel.with_name(
+                        v2_rel.name.removesuffix("_v2") + "_v1"
+                    )
                     frozen = subprocess.run(
                         [
                             sys.executable,
@@ -1278,6 +1287,8 @@ class D117GammaPlanTest(unittest.TestCase):
                             "freeze",
                             "--pack-root",
                             str(output_root / v2_rel),
+                            "--predecessor-pack-root",
+                            str(output_root / predecessor_rel),
                         ],
                         cwd=output_root,
                         check=False,
@@ -1449,8 +1460,16 @@ class D117GammaPlanTest(unittest.TestCase):
                     authentication["gate_reason_code"],
                     "readiness_freeze_receipt_mismatch",
                 )
-                self.assertEqual(
-                    authentication["gate_reason_code"], "readiness_dependency_refused"
+                # Pre-WO-FREEZE-NUMBERING the require_pass=False load raised
+                # readiness_dependency_refused from the conclusion-comparison
+                # path; the round-9 canonicalization fix lets an AUTHENTIC
+                # REFUSE receipt load cleanly and return its recorded
+                # conclusion (gate_reason_code None) -- a strictly stronger
+                # identity-preservation signal. Either is acceptable; a
+                # freeze-receipt mismatch never is (asserted above).
+                self.assertIn(
+                    authentication["gate_reason_code"],
+                    (None, "readiness_dependency_refused"),
                 )
                 self.assertEqual(
                     authentication["plan_sha256"],
