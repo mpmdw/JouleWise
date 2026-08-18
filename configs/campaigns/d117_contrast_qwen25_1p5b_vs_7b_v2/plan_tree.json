@@ -1,0 +1,3529 @@
+{
+  "acceptance_policy": {
+    "arming_dependencies": [
+      "impl/d117-postcollection-trust landed and mint bar lifted",
+      "U2 successor registry available",
+      "reason-code unit resolved",
+      "U11 identity-pin projection receipt available",
+      "U8 readiness validation passed",
+      "U10 aggregate floor artifact available for decode declaration binding"
+    ],
+    "issued_artifact_id": "d079_calibration_acceptance_v2_n19_r2",
+    "issued_artifact_reopened": false,
+    "issued_artifact_sha256": "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e",
+    "issued_derivation_sha256": "6b9f622ffd9aca3f627274db1b6516237d012b26e25118a36419d917f2bc6095",
+    "selection": "issued_d116_artifact_only"
+  },
+  "arm_attachments": {
+    "absolute_roots": {
+      "status": "EMPTY",
+      "todo": "TODO(U8): materialize fresh absolute roots at arm",
+      "value": ""
+    },
+    "aggregate_floor_artifact_sha256": {
+      "status": "EMPTY",
+      "todo": "TODO(U10/U8): validate and attach exact aggregate artifact bytes at arm",
+      "value": ""
+    },
+    "arm_readiness": {
+      "arm_receipt_namespace": "arm_readiness.receipts/arm-<4+ digits>.json",
+      "contract_id": "D-134",
+      "freeze_receipt": {
+        "path": "arm_readiness.freeze.receipts/freeze-0002.json",
+        "sha256": "18855647c38ec8cf521167fcaae62a06914a8ab7087aeded96835cb418f9607e"
+      },
+      "pack_digest_algorithm": "joulewise.committed_pack_tree_sha256.v1",
+      "required_before_arm": true,
+      "row_registry": {
+        "path": "configs/arm_readiness/d117_row_registry_v1.json",
+        "plan_profile": "GAMMA",
+        "registry_id": "d117-row-registry-v1",
+        "sha256": "d248fdc521cb904b7ad8f1c4ecb834f7810a1d8f39697b462591f2feac39a2e5"
+      }
+    },
+    "identity_pin_projection": {
+      "derivation_contract": "joulewise.identity_pin_derivation.v1",
+      "identity_units": [
+        {
+          "config_inventory": [
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a1.json",
+              "sha256": "a44675726812e07e460c446c0290271f6b1134778c4d5841a3d6e2c564eff78d"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a2.json",
+              "sha256": "0ad439a7e3fd4770449db0c9d4f36de75fda3242667a2766159dc1a9ca3d02fc"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a1.json",
+              "sha256": "68ff9cc0b481947cd80f38b0426c9a024e31b864bd88a4ab37eca5c70bc2b067"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a2.json",
+              "sha256": "9f06729baf6a1404bb8f9293b623989521fa65e2501f3f1726ea959bb3ba9224"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a1.json",
+              "sha256": "9c59b08005bb691e716793e548c593b7f7d811ceb9b0af018c725df846a0baa9"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a2.json",
+              "sha256": "5a5058cc3e02ba83e7678baa59f6f69240c7dca41e684847b407e0bc604a466b"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a1.json",
+              "sha256": "ed76600906d5ba29940d5fa751f546b11d353b8dd2cb3513db26cce1f3db5441"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a2.json",
+              "sha256": "d9f9b0037d9791c4aebdf3b02d38f291974e82f8af39b79db2c125c59f1df5c5"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a1.json",
+              "sha256": "4317b4e05f8a71c57cb90d138a3c5a75138fcbcc4129903d175e95da48e89ecb"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a2.json",
+              "sha256": "20a00a4a530a887b695036d46d1a52bdbd6dfe42959eeeef78ae8c35a3c4da1a"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a1.json",
+              "sha256": "735ba8b0ca16ad505f1ccddcef9d15b1cc12bec16fe2778fdf5ed5710d03f423"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a2.json",
+              "sha256": "f2712cbc12b157789811e2f525bf2f39893c308e0725f3b4f9a3425045c2ed7e"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a1.json",
+              "sha256": "48c9ab0aa732613482edda79be120c787f2f93cf62d2d8ca5c83e5b376f20249"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a2.json",
+              "sha256": "ebd0a3b0787b35db65a75c86b9f1991bee025a73ba5bdbedd2d6739f042b0995"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a1.json",
+              "sha256": "0adb7279694dc29266c10bc77c9a187289529344873f8f4979b6dc1f292ffe9a"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a2.json",
+              "sha256": "ae64de6bfcc81049cb31ea38031b6ac92ed1c0ddef2348436d8ff49fd61ea690"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a1.json",
+              "sha256": "310aa565bc4baf80a9e84f4cb49d25d6e0326120a39631cc8b90157901a49582"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a2.json",
+              "sha256": "11641d69c088e4e623a9a8af3072076429c8bc1785d47c4de60ea3ccbacb4b77"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a1.json",
+              "sha256": "4aa5d88d483d248501b5ea8faf230ccec7af3a9c285f87273f653c98a5a5016d"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a2.json",
+              "sha256": "1c8da0d3f1b1e046ac89eee56f64c575581699006f16072aed23ed4c14f9eb0d"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "A",
+              "family": "sw-decode-a-qwen25-1p5b",
+              "measurement_arm": "decode"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "quantization": {
+              "bits": 4,
+              "group_size": null,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "df_ph_decode",
+              "output_tokens": 512,
+              "prompt_text": null,
+              "prompt_tokens": 128,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "A/decode",
+          "model_runtime_config": {
+            "config_set_sha256": "bd2c583353df424f886766060c4af6a2b2bbe48f191ea4121cc4b29af8af7d6c",
+            "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+            "runtime_identity_sha256": "bfb30474cf184b6a23c9c0fcdbdb52a0d7e855c3c0b3cbc596f12a75435deb08"
+          },
+          "producer_plan_reference": {
+            "path": "../d117_floor_qwen25_1p5b_v2/calibration_plan.json",
+            "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2"
+          }
+        },
+        {
+          "config_inventory": [
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a1.json",
+              "sha256": "d9c7e2768740d4f692cecbfc39a60851c71196d32a830309997ce2a6e2053e91"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a2.json",
+              "sha256": "cb70b855f800c77950d4b72f737206f344d1912ff10bbeff1066e4fda61cf930"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a1.json",
+              "sha256": "bdd39b463927caeaa1e03f1bfa574bd4b2d29595ec4954e10ea242580b92905e"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a2.json",
+              "sha256": "32fe1cdc1bb8de92e605c3ba9312e0c023a05266cf355d79aa88db7aee3c2847"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a1.json",
+              "sha256": "b09f4212285e7920cb2c8a1707ca84cce730bac49da886a17426b39570c7e1b7"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a2.json",
+              "sha256": "c47b2ddb348c41405396c8beac735e7fdde207fc94038604cd33ad8ba7a42cf7"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a1.json",
+              "sha256": "9b2fdfb5132e54ab80ced706b3ff00b4ec9c6298a82c8ad2e6ff2a35f5bdc64f"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a2.json",
+              "sha256": "60ed042f05d31931070bfa1ea755799bfeb4c8efd839b0bfca4db48bd34da47c"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a1.json",
+              "sha256": "342828d66143948a2143cf76dd4e556893528f4f2d53ffcbbb4ab03328e4d9af"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a2.json",
+              "sha256": "c79fbeea758f6f6b7bab06e741dd7280b0db32b922c8d551a771f470f55b10c2"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a1.json",
+              "sha256": "b3210f45b1d96827476ae86dc5227345cdb12cae7b4d21d818e7002a7eec734b"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a2.json",
+              "sha256": "a86d104ecc35a57ec1c6581cf437ef5f08f95a4801d941828bdc3c06e2f3db6a"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a1.json",
+              "sha256": "6ec2e17673bb87e75c88d7f3cb7f7f957ab4fe2082b37d71ed84aa3ad740e9e9"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a2.json",
+              "sha256": "4f1f012d83eff107e3fdae08a90e2058068f06b8a9d332a2ce7ae53283e24037"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a1.json",
+              "sha256": "4bfe2cd79e29dcaca0ddf1109607d8a3ae043e762f5c68dd2a1858b12fec2e9d"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a2.json",
+              "sha256": "7fb876f3ee713d0159c85fb797ee842c87518efb278b3ae671cdac8f1f8e7278"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a1.json",
+              "sha256": "7ad74472d371a0084fca1df03d55a91784dd57767dfafe0dced50c41d9aba33e"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a2.json",
+              "sha256": "43c8ae9e6aad099edb782cc0e35c62b15c071c4fb0aab72471da5bf5f3004199"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a1.json",
+              "sha256": "84c77f898eead8e6e1f8bd35e897cda3c6973bf4cdad5be3fe425100619bbc22"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a2.json",
+              "sha256": "48ffe3a13211cdc6290ae9d5f7314a689228682f7b848a5a7627635043da8b9a"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "A",
+              "family": "sw-prefill-p256-a-qwen25-1p5b",
+              "measurement_arm": "prefill_p256"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+            "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            "quantization": {
+              "bits": 4,
+              "group_size": null,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "df_ph_prefill_p256_candidate",
+              "output_tokens": 512,
+              "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+              "prompt_tokens": null,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "A/prefill_p256",
+          "model_runtime_config": {
+            "config_set_sha256": "f973d220d92f9dcb3a2339edc9b89b7dbc42f33c20a9dd2c6810d40368239ba2",
+            "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+            "runtime_identity_sha256": "bfb30474cf184b6a23c9c0fcdbdb52a0d7e855c3c0b3cbc596f12a75435deb08"
+          },
+          "producer_plan_reference": {
+            "path": "../d117_floor_qwen25_1p5b_v2/calibration_plan.json",
+            "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2"
+          }
+        },
+        {
+          "config_inventory": [
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b1.json",
+              "sha256": "a4270091b6197e8a2a3eac865fc6aafece2f2aa9ac84ff27907ea2c21656c49c"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b2.json",
+              "sha256": "8d85b159f23bbe38228a418ad9a58aea15d7a0ac994b107142fdd1c0e1e2bf80"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b1.json",
+              "sha256": "cef3486b88aaeda86a02a69ad88d5dfd9128d464130c47d66e3f274aeb13443a"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b2.json",
+              "sha256": "7dc2317708d9710002d8c1110e360d76da3cac96abf958d313030e86f53ce0d0"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b1.json",
+              "sha256": "c67dcf41da8cab80990657b311c6a8e03e9e0c2b8fec2512d016c4d50e3eac08"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b2.json",
+              "sha256": "cccfd2054319b55174bee2fa7263da9be942c1a5c3f625ad32257a95ba3d7c22"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b1.json",
+              "sha256": "0e2005a20731d036f6e34c1159fe856a47fbe48d6a336c3de65aa5b184891e11"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b2.json",
+              "sha256": "1587db8f46ec1e762da92b4bc6bcd1a3e9b81871736b390393a8cdce6be336fe"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b1.json",
+              "sha256": "fa01c229840a7f8a2dbb34546ccf612c3b4ee6ff61343fc79b1335c8168fd8fc"
+            },
+            {
+              "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b2.json",
+              "sha256": "8636794d219abe954369182cab2f3b418438279e8c282f574ad3a049f2d8aeb2"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b1.json",
+              "sha256": "b2819c468fa00c279a7b149865c33e63f1685d9b3ab3bef859ebf35789444bda"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b2.json",
+              "sha256": "261faa47c582327af7161ea4d39e3a48d5530026dbe476e96905ffe22a621f9f"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b1.json",
+              "sha256": "6c622528e7d3e15bf6795280aca061484d271eca22054ff50ee3c92a923efe85"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b2.json",
+              "sha256": "2a54579e13e3d9a25016a7cf39d4ca0dcd177c279a22ad10acd77db72abd07d0"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b1.json",
+              "sha256": "209b2839d5b9c07ddcb81e77557481188a25b37a4b56b37477889e7380463029"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b2.json",
+              "sha256": "193aa82fe5067a30d208eea6232ca1ada3cf6601245bfe93a8867d8bf52af554"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b1.json",
+              "sha256": "ea3cb0d98f524a8cb885f40b309749283fc5d25a823564e4b9e1c70fd8f15789"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b2.json",
+              "sha256": "ab995e2dfa9c1ba2c454a10d2cdfc8918ddf9c4a0cf0bcf1a134667b2176d292"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b1.json",
+              "sha256": "bcdc903662ecc2d84c7b50a2080f8dc0b0eea2a47b9da5d5bd504edb74e2a4a7"
+            },
+            {
+              "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b2.json",
+              "sha256": "7fb49a4e46ce352bcfe1e1df4b4b10c45ac85845d6ce926d184ca76e457fac42"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "B",
+              "family": "sw-decode-b-qwen25-7b",
+              "measurement_arm": "decode"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen2.5-7B-Instruct-4bit",
+            "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            "quantization": {
+              "bits": 4,
+              "group_size": null,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "df_ph_decode",
+              "output_tokens": 512,
+              "prompt_text": null,
+              "prompt_tokens": 128,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "B/decode",
+          "model_runtime_config": {
+            "config_set_sha256": "17bd6f1280d220cb1854e46c7dd4d3fe787aeb28f26ffb35026fdeae4ba24a37",
+            "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+            "runtime_identity_sha256": "72f0cb16455f764c3abb5d24f2cb990d46b315a966366dc1927cfd318b2509f4"
+          },
+          "producer_plan_reference": {
+            "path": "../d117_floor_qwen25_7b_v2/calibration_plan.json",
+            "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v2"
+          }
+        },
+        {
+          "config_inventory": [
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b1.json",
+              "sha256": "8575b521cb323c01ba0876c35ae0f48e77465315f832d3876292cf1804a230bf"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b2.json",
+              "sha256": "6a2ab37d757951a627c1db2cfeef17c9671acc4a73f0b8e2e23b790bb3ffb81b"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b1.json",
+              "sha256": "46f8953fb4021e6cb702e3c7ef558a6a9d9887638363bd7a7b9edf6c11bf9aab"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b2.json",
+              "sha256": "10be1403ef9cb00acdc10b72e28a8e53233414c002c1fe9b413d428480488c2b"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b1.json",
+              "sha256": "b90e927bc376c164db029a5a1326e1ffa8056b887fb15469c9e7688d0b109cdb"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b2.json",
+              "sha256": "bc18eab4324b32764e49973906f5a2372ef0ee0d30ad67f67fd5c06095dd6533"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b1.json",
+              "sha256": "0654f5232d30030087b5914a16d7f330b8ecb20b388dfdcab0ae8b67ab1cb876"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b2.json",
+              "sha256": "ee257c30073cba1ce1b656aaf23b1f3cf8083a15da7cc14af6a944153dd96139"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b1.json",
+              "sha256": "ab53c78993eed9b823dedc5e7da279bbb4687c0b31d6ff13e85c01c386f793c3"
+            },
+            {
+              "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b2.json",
+              "sha256": "042bc5297af1b167e286f6bda3b2a0470bd43c646cd4b18d92b76d77db350e00"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b1.json",
+              "sha256": "9de85753ace6ac42c6ed12b7e6deb99849314a0f9d7cc88c7cd230fdfba9e994"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b2.json",
+              "sha256": "45d0d948b3c0f0e6a91975d834195357e5b6996a264c94340b04f7730a3a09e9"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b1.json",
+              "sha256": "db2792630dd90ad00eb0f48f08d7a5ff3c08c8f009c955aa8cb2cec1ac0a429d"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b2.json",
+              "sha256": "0dccce621f6ee84de959f847d7157c24b83b1dced6db09ec7fa9011ea8d7ea4f"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b1.json",
+              "sha256": "fd4feff77c1b65ed7abe7cdc67840f0ea0e67104cb6cc8671e1a294991afea10"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b2.json",
+              "sha256": "574052eb0756c82d3dc8be7308ec789e06d785b0a287315a214f13369a22be77"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b1.json",
+              "sha256": "ccb22e7556b27968f8413f89c3ab11d6167c9722319503a9657b0330b954dc9c"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b2.json",
+              "sha256": "69e7d2dd9c05f7f6ba94ed21c93e8ace3573eca755cf5de6dbeae572cd70766c"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b1.json",
+              "sha256": "ac6f54f5c40fff9f40dab3bd3190addb8aba53b8f31a1b4163bfd9775042e5a9"
+            },
+            {
+              "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b2.json",
+              "sha256": "efaeb4e56ffbc308f4d5ff30bd3cdd96f2934383ce45f8b6171f116255f88e0a"
+            }
+          ],
+          "consumer_bindings": [
+            {
+              "arm": "B",
+              "family": "sw-prefill-p256-b-qwen25-7b",
+              "measurement_arm": "prefill_p256"
+            }
+          ],
+          "declared_identity": {
+            "hardware_target": "macbook_m3_max",
+            "model_name": "Qwen2.5-7B-Instruct-4bit",
+            "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+            "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            "quantization": {
+              "bits": 4,
+              "group_size": null,
+              "name": "int4"
+            },
+            "runtime_backend": "mlx",
+            "telemetry_backend": "powermetrics",
+            "workload_profile": {
+              "dataset_ref": null,
+              "name": "df_ph_prefill_p256_candidate",
+              "output_tokens": 512,
+              "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+              "prompt_tokens": null,
+              "repetitions": 1,
+              "warmup_runs": 1
+            }
+          },
+          "identity_unit_id": "B/prefill_p256",
+          "model_runtime_config": {
+            "config_set_sha256": "cb4ed431aa7423ccb0b739fd5100a785f540b47b7f76d53742d12429444f24da",
+            "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+            "runtime_identity_sha256": "72f0cb16455f764c3abb5d24f2cb990d46b315a966366dc1927cfd318b2509f4"
+          },
+          "producer_plan_reference": {
+            "path": "../d117_floor_qwen25_7b_v2/calibration_plan.json",
+            "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v2"
+          }
+        }
+      ],
+      "mode": "derive_never_operator_enter",
+      "projection_receipt": {
+        "path": "identity_pin_projection.receipts/projection-0001.json",
+        "sha256": "5ada2efa208b942897505114e537ea46f3d24c55626dd60e5d44fa4fea3be868"
+      },
+      "required_before_arm": true,
+      "state": "frozen",
+      "supersedes": [],
+      "work_order": "D117-U11-IDPIN-PROJECTION"
+    },
+    "launch": {
+      "calibration_directory_relation": {
+        "post": "claim_runs_root/instrument_validation/post_attempt_id",
+        "pre": "claim_runs_root/instrument_validation/pre_attempt_id"
+      },
+      "closed_bindings": {
+        "bound_backup_destination": "absolute_path",
+        "bound_runs_root": "fresh_absolute_directory_with_declared_leaf",
+        "bracket_session_id": "non_path_string",
+        "claim_backup_destination": "absolute_path",
+        "claim_runs_root": "fresh_absolute_directory_with_declared_leaf",
+        "identity_epoch_json": "authenticated_absolute_file",
+        "ledger_path": "existing_absolute_file",
+        "operator_log_root": "absolute_directory",
+        "post_attempt_id": "non_path_string",
+        "post_calibration_dir": "absolute_directory",
+        "pre_attempt_id": "non_path_string",
+        "pre_calibration_dir": "absolute_directory",
+        "repo_root": "existing_absolute_directory",
+        "t1_bindings_json": "authenticated_absolute_file"
+      },
+      "schema_version": "joulewise.stage_launch_bindings.v1"
+    },
+    "prefill_phase_recording_proof": {
+      "status": "EMPTY",
+      "todo": "TODO(lead): re-run the plan-factory amendment-5 desk proof from custodied 1.5B and 7B bundles before ratification",
+      "value": ""
+    },
+    "readiness_record": {
+      "status": "EMPTY",
+      "todo": "TODO(U8): validate the exact draft after all gates land",
+      "value": ""
+    },
+    "receipt_oracle": {
+      "arm_time_receipts": [],
+      "logical_operation_count": 5,
+      "physical_receipt_shape": [
+        {
+          "event": "append-intent",
+          "relative_sequence": 1,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": null,
+          "target_event": "bracket-session-open",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-open",
+          "relative_sequence": 2,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": null,
+          "target_event": null,
+          "target_schema_version": null
+        },
+        {
+          "event": "append-intent",
+          "relative_sequence": 3,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": "pre",
+          "target_event": "bracket-session-slot-claim",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-slot-claim",
+          "relative_sequence": 4,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": "pre",
+          "target_event": null,
+          "target_schema_version": null
+        },
+        {
+          "event": "append-intent",
+          "relative_sequence": 5,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": "pre",
+          "target_event": "bracket-session-slot-finalization",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-slot-finalization",
+          "relative_sequence": 6,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": "pre",
+          "target_event": null,
+          "target_schema_version": null
+        },
+        {
+          "event": "append-intent",
+          "relative_sequence": 7,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": "post",
+          "target_event": "bracket-session-slot-claim",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-slot-claim",
+          "relative_sequence": 8,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": "post",
+          "target_event": null,
+          "target_schema_version": null
+        },
+        {
+          "event": "append-intent",
+          "relative_sequence": 9,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": "post",
+          "target_event": "bracket-session-slot-finalization",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-slot-finalization",
+          "relative_sequence": 10,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": "post",
+          "target_event": null,
+          "target_schema_version": null
+        }
+      ],
+      "receipt_count": 10,
+      "schema_version": "joulewise.bracket_session_receipt_oracle.v1",
+      "session_terminal_state": "finalized",
+      "source": {
+        "append_policy_revision": "d117-ledger-resident-v1",
+        "claim_policy_revision": "d117-stable-claim-v1",
+        "module": "joulewise.calibration_ledger",
+        "operation_functions": [
+          "append_bracket_session_receipt",
+          "claim_bracket_session_slot",
+          "finalize_bracket_session_slot"
+        ]
+      },
+      "status": "derived_from_production_model",
+      "terminal_sequence": null,
+      "terminal_sequence_rule": {
+        "applicability": "clean_path_no_recovery_control_rows",
+        "base": "authenticated_arm_head_sequence",
+        "delta": 10,
+        "recovery_note": "Authenticated recovery control rows (for example an abandon-tail repair between an intent and its reconstructed target) may lawfully extend the terminal sequence beyond base+delta. Arm-time verification must validate the business-receipt cadence separately from authenticated control rows rather than requiring base+delta exactly."
+      }
+    },
+    "selected_acceptance": {
+      "status": "EMPTY",
+      "todo": "TODO(U2/U8): select authenticated acceptance at arm",
+      "value": ""
+    }
+  },
+  "attempt_policy": {
+    "calibration_retries": 0,
+    "failure_semantics": "abort_window_and_demote_to_non_claim_bearing",
+    "outcome_dependent_top_up": "forbidden",
+    "retry_commands_present": false,
+    "science_member_replacements": 0
+  },
+  "campaign_policy": {
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+  },
+  "closeout_attachments": {
+    "bound_backup_receipt": {
+      "status": "EMPTY",
+      "todo": "TODO(postcollection): verified backup receipt",
+      "value": ""
+    },
+    "bracket_binding_sha256": {
+      "status": "EMPTY",
+      "todo": "TODO(postcollection): populate from the completed bracket session",
+      "value": ""
+    },
+    "claim_backup_receipt": {
+      "status": "EMPTY",
+      "todo": "TODO(postcollection): verified backup receipt",
+      "value": ""
+    },
+    "evaluation_basis_sha256": {
+      "status": "EMPTY",
+      "todo": "TODO(postcollection): derive exact 80-member basis",
+      "value": ""
+    },
+    "terminal_committed_head": {
+      "status": "EMPTY",
+      "todo": "TODO(postcollection): populate from the committed terminal head",
+      "value": ""
+    },
+    "whole_window_verdict_sha256": {
+      "status": "EMPTY",
+      "todo": "TODO(postcollection): issue only after collection",
+      "value": ""
+    }
+  },
+  "condition_families": [
+    {
+      "arm": "A",
+      "canonical_domain_sha256": "c13a3ebf5461ed9a442a8e67555f70301848d56a55ab766570d46ca067934f12",
+      "condition_family_id": "sw-decode-a-qwen25-1p5b",
+      "measurement_arm": "decode",
+      "path": "condition_families/condition_family_sw_decode_a_qwen25_1p5b.json",
+      "sha256": "3ff3a801d7f74ca3d3bd74d961aadde304e7fd1adc7940a39cf47ff0c40943cf"
+    },
+    {
+      "arm": "B",
+      "canonical_domain_sha256": "5149a8552600341883439a73fa135caa0e6ba292544c7c6fe2e69674318df4e3",
+      "condition_family_id": "sw-decode-b-qwen25-7b",
+      "measurement_arm": "decode",
+      "path": "condition_families/condition_family_sw_decode_b_qwen25_7b.json",
+      "sha256": "c153b8dcbae5761e1d39404e55415d0ed95072151fb98fe75bce3e2740d54b9e"
+    },
+    {
+      "arm": "A",
+      "canonical_domain_sha256": "cc018c316cc50cb95e818f3ee483e98585bd29b00d7d91afd821faa9437a9367",
+      "condition_family_id": "sw-prefill-p256-a-qwen25-1p5b",
+      "measurement_arm": "prefill_p256",
+      "path": "condition_families/condition_family_sw_prefill_p256_a_qwen25_1p5b.json",
+      "sha256": "26615cfd30111cb95ca7470ad8eb69c883d6d554c95a87bc580583beb8b5e401"
+    },
+    {
+      "arm": "B",
+      "canonical_domain_sha256": "26b4acec3ed967046085a2aec6f774aef889d1d6ecd30e57f485182d13e573c2",
+      "condition_family_id": "sw-prefill-p256-b-qwen25-7b",
+      "measurement_arm": "prefill_p256",
+      "path": "condition_families/condition_family_sw_prefill_p256_b_qwen25_7b.json",
+      "sha256": "21646fa1da7fd08ad03b3f066c7ec19a8370bd2b72ec00948c1e27478d47eb0d"
+    }
+  ],
+  "downstream_contract": {
+    "analysis_manifest_path": "analysis_manifest_v3.json",
+    "analysis_manifest_sha256": "1ddcf0ad94a60ad5ba8d580f9649d6f15d71cea80a30f634ad349cbbbeda9009",
+    "binding_mode": "declaration_only",
+    "consumer_family_declaration_path": "consumer_family_declaration.json",
+    "consumer_family_declaration_sha256": "2208844071b163c56a41db627c7c9cf98672cd869d6f2c45a9b3ed04b22d4c1b"
+  },
+  "draft_status": "as_generated_pre_d134_freeze",
+  "external_inputs": [
+    {
+      "expected_count": 12,
+      "input_id": "neg8_bound_corpus",
+      "manifest_id": "neg8-reference-corpus-order-v1",
+      "manifest_path": "configs/campaigns/neg8_reference_corpus/order_manifest.json",
+      "manifest_sha256": "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f",
+      "members": [
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r01.json",
+          "run_id": "neg8-refcorpus-r01",
+          "sha256": "08ad3cf5b1f39339cc1c226856b92e17d8d03b72397c9b366f4f56418161ef0e"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r02.json",
+          "run_id": "neg8-refcorpus-r02",
+          "sha256": "418641328b0d66a013ec083198665d0090893b624ea120cb1f981cb779f34a23"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r03.json",
+          "run_id": "neg8-refcorpus-r03",
+          "sha256": "3eda26dc2009f040d93d6dabb158a0135555f4d2cc8a679e9ca04988dd085482"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r04.json",
+          "run_id": "neg8-refcorpus-r04",
+          "sha256": "c450c0f5555d607df1ca42569f05521771b7e9dd1504c04630cde0496ec01f7b"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r05.json",
+          "run_id": "neg8-refcorpus-r05",
+          "sha256": "c494f0715302d1d18ac74bf064c38350c36e55463be0eb6af31f781a70fe84ae"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r06.json",
+          "run_id": "neg8-refcorpus-r06",
+          "sha256": "e4dc2a282e853430f1355453460c9ca7a2ae99c05d1afb45fc83f78d534a21b3"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r07.json",
+          "run_id": "neg8-refcorpus-r07",
+          "sha256": "4d4ef567e41e61bda368502fb87b3a3dda0ea18ac72db71b72709e5b2922eb86"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r08.json",
+          "run_id": "neg8-refcorpus-r08",
+          "sha256": "d11124bf2ab266236ad4eaa6bc18e10e20a08f6a1f8176ea7486a4d96397f903"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r09.json",
+          "run_id": "neg8-refcorpus-r09",
+          "sha256": "0c45014316cb95b439c846eba0ac2b0734a2e38bb80b48a422e8aab74808c902"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r10.json",
+          "run_id": "neg8-refcorpus-r10",
+          "sha256": "74c207c32bda7be6869045f72f33c358e927ce21009670daf50ed3c01ba57312"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r11.json",
+          "run_id": "neg8-refcorpus-r11",
+          "sha256": "16e2d75e12174336a896632af278c3aef7f8685bca85c8d9b71053acec9d0553"
+        },
+        {
+          "path": "configs/campaigns/neg8_reference_corpus/neg8-refcorpus-r12.json",
+          "run_id": "neg8-refcorpus-r12",
+          "sha256": "fd00f4ab3d16fcbe18ead64acffdded0c1b3ea7b196f41f7d39d3399f0d39b31"
+        }
+      ]
+    },
+    {
+      "input_id": "neg8_settled_corpus",
+      "path": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json",
+      "sha256": "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688"
+    },
+    {
+      "expected_count": 3,
+      "input_id": "start_references",
+      "manifest_id": "neg8-window-reference-start-triplet-v1",
+      "manifest_path": "configs/campaigns/window_references/start_triplet/order_manifest.json",
+      "manifest_sha256": "9cac197255bdc9a0a1a0b8ee8ceb587ba3c8cabc20b976b2543dc3a400d37cb0",
+      "members": [
+        {
+          "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r1.json",
+          "run_id": "neg8-window-start-r1",
+          "sha256": "e0c63accf536d026ed9dec4ef4a1cdbf9c795e4708025f85f48f56ac5cbbb704"
+        },
+        {
+          "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r2.json",
+          "run_id": "neg8-window-start-r2",
+          "sha256": "85065db3e71d3cf6693e80723d54feacaf24abdd4f4af1e8b726f912e568db4f"
+        },
+        {
+          "path": "configs/campaigns/window_references/start_triplet/neg8-window-start-r3.json",
+          "run_id": "neg8-window-start-r3",
+          "sha256": "96c3fafdf6327afc3d23c9d40c54983df6613423a68e72dfb69565d9b432abfd"
+        }
+      ]
+    },
+    {
+      "expected_count": 1,
+      "input_id": "midpoint_reference",
+      "manifest_id": "neg8-window-reference-midpoint-v1",
+      "manifest_path": "configs/campaigns/window_references/midpoint/order_manifest.json",
+      "manifest_sha256": "9ccedd91307985ba5641e791f4ac89f4e250fca414a4ba713cc7977ced6abb21",
+      "members": [
+        {
+          "path": "configs/campaigns/window_references/midpoint/neg8-window-midpoint.json",
+          "run_id": "neg8-window-midpoint",
+          "sha256": "321b96d8580eac8e338575a95c4db26ee2e4b24d2f27effc6fee107da32fe9ff"
+        }
+      ]
+    },
+    {
+      "expected_count": 3,
+      "input_id": "end_references",
+      "manifest_id": "neg8-window-reference-end-triplet-v1",
+      "manifest_path": "configs/campaigns/window_references/end_triplet/order_manifest.json",
+      "manifest_sha256": "8e65a4347aafa0722a60a2bd58c7e8061b860db66fa06f6acec24d1a1ade5c67",
+      "members": [
+        {
+          "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r1.json",
+          "run_id": "neg8-window-end-r1",
+          "sha256": "fd7b43938b6aa13bea4c949d3ab61266b3282530db7869d56c622bf2392507b0"
+        },
+        {
+          "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r2.json",
+          "run_id": "neg8-window-end-r2",
+          "sha256": "72593d4ba2382591ae3f0b01e70673ae0cc605546471e00254cea01eac4a3204"
+        },
+        {
+          "path": "configs/campaigns/window_references/end_triplet/neg8-window-end-r3.json",
+          "run_id": "neg8-window-end-r3",
+          "sha256": "c7720a668409eb62cecd22dbbcd4d972cc7d87d83bf9ccf4ede0bcf1b9b451be"
+        }
+      ]
+    }
+  ],
+  "generator": {
+    "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/generate_configs.py",
+    "sha256": "8b3afb5e7415e02338635f25a370b9affb8e18cdc581868dae56cd00868dcfb1"
+  },
+  "plan": {
+    "actual_sha256": "cf0fe853088fe3d8c21c59359fcf3824dd2d10e539fbeba1162e00de6c297b51",
+    "declared_sha256": "cf0fe853088fe3d8c21c59359fcf3824dd2d10e539fbeba1162e00de6c297b51",
+    "path": "calibration_plan.json",
+    "plan_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v2",
+    "sidecar_path": "calibration_plan.sha256",
+    "sidecar_sha256": "2ee00fb8048f00b6d4a7e4335be094f27d78b2666ced4b3a44cb8cb7c5549efb"
+  },
+  "reference_cadence": {
+    "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session",
+    "binding_40_member_rule": "one midpoint reference between two 20-member halves of each ABBA arm",
+    "freeze_ratification": "as_generated_pre_d134_freeze; the committed D-134 freeze receipt and its plan-tree attachment are the ratification authority for this reference-cadence declaration",
+    "two_arm_interpretation": "arm_midpoints_plus_arm_boundary"
+  },
+  "roots": {
+    "bound_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2_bound",
+    "claim_leaf": "runs_d117_contrast_qwen25_1p5b_vs_7b_v2"
+  },
+  "runtime_budget": {
+    "combined_derivation": "168.0 + 130.0 + 12.0",
+    "combined_minutes_with_margin": 310.0,
+    "decode": {
+      "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session",
+      "members": 40,
+      "minutes_with_margin": 168.0
+    },
+    "draft_status": "as_generated_pre_d134_freeze",
+    "interior_reference_augmentation": {
+      "additional_references": 2,
+      "authority": "docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md §6 U7 gamma implementation session",
+      "core_minutes_before_margin": 10.0,
+      "freeze_ratification": "as_generated_pre_d134_freeze; the committed D-134 freeze receipt and its plan-tree attachment are the ratification authority for this reference-cadence declaration",
+      "minutes_with_20_percent_margin": 12.0,
+      "placement": [
+        "after_decode_member_40_arm_boundary",
+        "after_prefill_member_20_arm_midpoint"
+      ]
+    },
+    "member_replacement_authority": false,
+    "prefill_p256": {
+      "authority": "D-122 sizing scout rough ABBA arm and runtime",
+      "core_minutes_before_margin": 110.0,
+      "members": 40,
+      "minutes_with_20_percent_margin": 130.0
+    }
+  },
+  "schema_version": "joulewise.d117_plan_tree.v1",
+  "science": [
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b01",
+      "block_index": 1,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a1.json",
+      "config_sha256": "a44675726812e07e460c446c0290271f6b1134778c4d5841a3d6e2c564eff78d",
+      "measurement_arm": "decode",
+      "ordinal": 1,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b01-a1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b01",
+      "block_index": 1,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b1.json",
+      "config_sha256": "a4270091b6197e8a2a3eac865fc6aafece2f2aa9ac84ff27907ea2c21656c49c",
+      "measurement_arm": "decode",
+      "ordinal": 2,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b01-b1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b01",
+      "block_index": 1,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b2.json",
+      "config_sha256": "8d85b159f23bbe38228a418ad9a58aea15d7a0ac994b107142fdd1c0e1e2bf80",
+      "measurement_arm": "decode",
+      "ordinal": 3,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b01-b2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b01",
+      "block_index": 1,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a2.json",
+      "config_sha256": "0ad439a7e3fd4770449db0c9d4f36de75fda3242667a2766159dc1a9ca3d02fc",
+      "measurement_arm": "decode",
+      "ordinal": 4,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b01-a2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b02",
+      "block_index": 2,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a1.json",
+      "config_sha256": "68ff9cc0b481947cd80f38b0426c9a024e31b864bd88a4ab37eca5c70bc2b067",
+      "measurement_arm": "decode",
+      "ordinal": 5,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b02-a1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b02",
+      "block_index": 2,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b1.json",
+      "config_sha256": "cef3486b88aaeda86a02a69ad88d5dfd9128d464130c47d66e3f274aeb13443a",
+      "measurement_arm": "decode",
+      "ordinal": 6,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b02-b1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b02",
+      "block_index": 2,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b2.json",
+      "config_sha256": "7dc2317708d9710002d8c1110e360d76da3cac96abf958d313030e86f53ce0d0",
+      "measurement_arm": "decode",
+      "ordinal": 7,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b02-b2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b02",
+      "block_index": 2,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a2.json",
+      "config_sha256": "9f06729baf6a1404bb8f9293b623989521fa65e2501f3f1726ea959bb3ba9224",
+      "measurement_arm": "decode",
+      "ordinal": 8,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b02-a2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b03",
+      "block_index": 3,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a1.json",
+      "config_sha256": "9c59b08005bb691e716793e548c593b7f7d811ceb9b0af018c725df846a0baa9",
+      "measurement_arm": "decode",
+      "ordinal": 9,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b03-a1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b03",
+      "block_index": 3,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b1.json",
+      "config_sha256": "c67dcf41da8cab80990657b311c6a8e03e9e0c2b8fec2512d016c4d50e3eac08",
+      "measurement_arm": "decode",
+      "ordinal": 10,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b03-b1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b03",
+      "block_index": 3,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b2.json",
+      "config_sha256": "cccfd2054319b55174bee2fa7263da9be942c1a5c3f625ad32257a95ba3d7c22",
+      "measurement_arm": "decode",
+      "ordinal": 11,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b03-b2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b03",
+      "block_index": 3,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a2.json",
+      "config_sha256": "5a5058cc3e02ba83e7678baa59f6f69240c7dca41e684847b407e0bc604a466b",
+      "measurement_arm": "decode",
+      "ordinal": 12,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b03-a2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b04",
+      "block_index": 4,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a1.json",
+      "config_sha256": "ed76600906d5ba29940d5fa751f546b11d353b8dd2cb3513db26cce1f3db5441",
+      "measurement_arm": "decode",
+      "ordinal": 13,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b04-a1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b04",
+      "block_index": 4,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b1.json",
+      "config_sha256": "0e2005a20731d036f6e34c1159fe856a47fbe48d6a336c3de65aa5b184891e11",
+      "measurement_arm": "decode",
+      "ordinal": 14,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b04-b1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b04",
+      "block_index": 4,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b2.json",
+      "config_sha256": "1587db8f46ec1e762da92b4bc6bcd1a3e9b81871736b390393a8cdce6be336fe",
+      "measurement_arm": "decode",
+      "ordinal": 15,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b04-b2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b04",
+      "block_index": 4,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a2.json",
+      "config_sha256": "d9f9b0037d9791c4aebdf3b02d38f291974e82f8af39b79db2c125c59f1df5c5",
+      "measurement_arm": "decode",
+      "ordinal": 16,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b04-a2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b05",
+      "block_index": 5,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a1.json",
+      "config_sha256": "4317b4e05f8a71c57cb90d138a3c5a75138fcbcc4129903d175e95da48e89ecb",
+      "measurement_arm": "decode",
+      "ordinal": 17,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b05-a1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b05",
+      "block_index": 5,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b1.json",
+      "config_sha256": "fa01c229840a7f8a2dbb34546ccf612c3b4ee6ff61343fc79b1335c8168fd8fc",
+      "measurement_arm": "decode",
+      "ordinal": 18,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b05-b1",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b05",
+      "block_index": 5,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b2.json",
+      "config_sha256": "8636794d219abe954369182cab2f3b418438279e8c282f574ad3a049f2d8aeb2",
+      "measurement_arm": "decode",
+      "ordinal": 19,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b05-b2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b05",
+      "block_index": 5,
+      "config_path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a2.json",
+      "config_sha256": "20a00a4a530a887b695036d46d1a52bdbd6dfe42959eeeef78ae8c35a3c4da1a",
+      "measurement_arm": "decode",
+      "ordinal": 20,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b05-a2",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b06",
+      "block_index": 6,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a1.json",
+      "config_sha256": "735ba8b0ca16ad505f1ccddcef9d15b1cc12bec16fe2778fdf5ed5710d03f423",
+      "measurement_arm": "decode",
+      "ordinal": 21,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b06-a1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b06",
+      "block_index": 6,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b1.json",
+      "config_sha256": "b2819c468fa00c279a7b149865c33e63f1685d9b3ab3bef859ebf35789444bda",
+      "measurement_arm": "decode",
+      "ordinal": 22,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b06-b1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b06",
+      "block_index": 6,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b2.json",
+      "config_sha256": "261faa47c582327af7161ea4d39e3a48d5530026dbe476e96905ffe22a621f9f",
+      "measurement_arm": "decode",
+      "ordinal": 23,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b06-b2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b06",
+      "block_index": 6,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a2.json",
+      "config_sha256": "f2712cbc12b157789811e2f525bf2f39893c308e0725f3b4f9a3425045c2ed7e",
+      "measurement_arm": "decode",
+      "ordinal": 24,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b06-a2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b07",
+      "block_index": 7,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a1.json",
+      "config_sha256": "48c9ab0aa732613482edda79be120c787f2f93cf62d2d8ca5c83e5b376f20249",
+      "measurement_arm": "decode",
+      "ordinal": 25,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b07-a1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b07",
+      "block_index": 7,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b1.json",
+      "config_sha256": "6c622528e7d3e15bf6795280aca061484d271eca22054ff50ee3c92a923efe85",
+      "measurement_arm": "decode",
+      "ordinal": 26,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b07-b1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b07",
+      "block_index": 7,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b2.json",
+      "config_sha256": "2a54579e13e3d9a25016a7cf39d4ca0dcd177c279a22ad10acd77db72abd07d0",
+      "measurement_arm": "decode",
+      "ordinal": 27,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b07-b2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b07",
+      "block_index": 7,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a2.json",
+      "config_sha256": "ebd0a3b0787b35db65a75c86b9f1991bee025a73ba5bdbedd2d6739f042b0995",
+      "measurement_arm": "decode",
+      "ordinal": 28,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b07-a2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b08",
+      "block_index": 8,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a1.json",
+      "config_sha256": "0adb7279694dc29266c10bc77c9a187289529344873f8f4979b6dc1f292ffe9a",
+      "measurement_arm": "decode",
+      "ordinal": 29,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b08-a1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b08",
+      "block_index": 8,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b1.json",
+      "config_sha256": "209b2839d5b9c07ddcb81e77557481188a25b37a4b56b37477889e7380463029",
+      "measurement_arm": "decode",
+      "ordinal": 30,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b08-b1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b08",
+      "block_index": 8,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b2.json",
+      "config_sha256": "193aa82fe5067a30d208eea6232ca1ada3cf6601245bfe93a8867d8bf52af554",
+      "measurement_arm": "decode",
+      "ordinal": 31,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b08-b2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b08",
+      "block_index": 8,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a2.json",
+      "config_sha256": "ae64de6bfcc81049cb31ea38031b6ac92ed1c0ddef2348436d8ff49fd61ea690",
+      "measurement_arm": "decode",
+      "ordinal": 32,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b08-a2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b09",
+      "block_index": 9,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a1.json",
+      "config_sha256": "310aa565bc4baf80a9e84f4cb49d25d6e0326120a39631cc8b90157901a49582",
+      "measurement_arm": "decode",
+      "ordinal": 33,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b09-a1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b09",
+      "block_index": 9,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b1.json",
+      "config_sha256": "ea3cb0d98f524a8cb885f40b309749283fc5d25a823564e4b9e1c70fd8f15789",
+      "measurement_arm": "decode",
+      "ordinal": 34,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b09-b1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b09",
+      "block_index": 9,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b2.json",
+      "config_sha256": "ab995e2dfa9c1ba2c454a10d2cdfc8918ddf9c4a0cf0bcf1a134667b2176d292",
+      "measurement_arm": "decode",
+      "ordinal": 35,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b09-b2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b09",
+      "block_index": 9,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a2.json",
+      "config_sha256": "11641d69c088e4e623a9a8af3072076429c8bc1785d47c4de60ea3ccbacb4b77",
+      "measurement_arm": "decode",
+      "ordinal": 36,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b09-a2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b10",
+      "block_index": 10,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a1.json",
+      "config_sha256": "4aa5d88d483d248501b5ea8faf230ccec7af3a9c285f87273f653c98a5a5016d",
+      "measurement_arm": "decode",
+      "ordinal": 37,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b10-a1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b10",
+      "block_index": 10,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b1.json",
+      "config_sha256": "bcdc903662ecc2d84c7b50a2080f8dc0b0eea2a47b9da5d5bd504edb74e2a4a7",
+      "measurement_arm": "decode",
+      "ordinal": 38,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b10-b1",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-decode-contrast-b10",
+      "block_index": 10,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b2.json",
+      "config_sha256": "7fb49a4e46ce352bcfe1e1df4b4b10c45ac85845d6ce926d184ca76e457fac42",
+      "measurement_arm": "decode",
+      "ordinal": 39,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b10-b2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-decode-contrast-b10",
+      "block_index": 10,
+      "config_path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a2.json",
+      "config_sha256": "1c8da0d3f1b1e046ac89eee56f64c575581699006f16072aed23ed4c14f9eb0d",
+      "measurement_arm": "decode",
+      "ordinal": 40,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-decode-contrast-b10-a2",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b01",
+      "block_index": 1,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a1.json",
+      "config_sha256": "d9c7e2768740d4f692cecbfc39a60851c71196d32a830309997ce2a6e2053e91",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 41,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b01-a1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b01",
+      "block_index": 1,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b1.json",
+      "config_sha256": "8575b521cb323c01ba0876c35ae0f48e77465315f832d3876292cf1804a230bf",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 42,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b01-b1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b01",
+      "block_index": 1,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b2.json",
+      "config_sha256": "6a2ab37d757951a627c1db2cfeef17c9671acc4a73f0b8e2e23b790bb3ffb81b",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 43,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b01-b2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b01",
+      "block_index": 1,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a2.json",
+      "config_sha256": "cb70b855f800c77950d4b72f737206f344d1912ff10bbeff1066e4fda61cf930",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 44,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b01-a2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b02",
+      "block_index": 2,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a1.json",
+      "config_sha256": "bdd39b463927caeaa1e03f1bfa574bd4b2d29595ec4954e10ea242580b92905e",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 45,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b02-a1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b02",
+      "block_index": 2,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b1.json",
+      "config_sha256": "46f8953fb4021e6cb702e3c7ef558a6a9d9887638363bd7a7b9edf6c11bf9aab",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 46,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b02-b1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b02",
+      "block_index": 2,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b2.json",
+      "config_sha256": "10be1403ef9cb00acdc10b72e28a8e53233414c002c1fe9b413d428480488c2b",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 47,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b02-b2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b02",
+      "block_index": 2,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a2.json",
+      "config_sha256": "32fe1cdc1bb8de92e605c3ba9312e0c023a05266cf355d79aa88db7aee3c2847",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 48,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b02-a2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b03",
+      "block_index": 3,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a1.json",
+      "config_sha256": "b09f4212285e7920cb2c8a1707ca84cce730bac49da886a17426b39570c7e1b7",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 49,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b03-a1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b03",
+      "block_index": 3,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b1.json",
+      "config_sha256": "b90e927bc376c164db029a5a1326e1ffa8056b887fb15469c9e7688d0b109cdb",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 50,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b03-b1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b03",
+      "block_index": 3,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b2.json",
+      "config_sha256": "bc18eab4324b32764e49973906f5a2372ef0ee0d30ad67f67fd5c06095dd6533",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 51,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b03-b2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b03",
+      "block_index": 3,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a2.json",
+      "config_sha256": "c47b2ddb348c41405396c8beac735e7fdde207fc94038604cd33ad8ba7a42cf7",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 52,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b03-a2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b04",
+      "block_index": 4,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a1.json",
+      "config_sha256": "9b2fdfb5132e54ab80ced706b3ff00b4ec9c6298a82c8ad2e6ff2a35f5bdc64f",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 53,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b04-a1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b04",
+      "block_index": 4,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b1.json",
+      "config_sha256": "0654f5232d30030087b5914a16d7f330b8ecb20b388dfdcab0ae8b67ab1cb876",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 54,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b04-b1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b04",
+      "block_index": 4,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b2.json",
+      "config_sha256": "ee257c30073cba1ce1b656aaf23b1f3cf8083a15da7cc14af6a944153dd96139",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 55,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b04-b2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b04",
+      "block_index": 4,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a2.json",
+      "config_sha256": "60ed042f05d31931070bfa1ea755799bfeb4c8efd839b0bfca4db48bd34da47c",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 56,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b04-a2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b05",
+      "block_index": 5,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a1.json",
+      "config_sha256": "342828d66143948a2143cf76dd4e556893528f4f2d53ffcbbb4ab03328e4d9af",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 57,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b05-a1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b05",
+      "block_index": 5,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b1.json",
+      "config_sha256": "ab53c78993eed9b823dedc5e7da279bbb4687c0b31d6ff13e85c01c386f793c3",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 58,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b05-b1",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b05",
+      "block_index": 5,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b2.json",
+      "config_sha256": "042bc5297af1b167e286f6bda3b2a0470bd43c646cd4b18d92b76d77db350e00",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 59,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b05-b2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b05",
+      "block_index": 5,
+      "config_path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a2.json",
+      "config_sha256": "c79fbeea758f6f6b7bab06e741dd7280b0db32b922c8d551a771f470f55b10c2",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 60,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b05-a2",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b06",
+      "block_index": 6,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a1.json",
+      "config_sha256": "b3210f45b1d96827476ae86dc5227345cdb12cae7b4d21d818e7002a7eec734b",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 61,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b06-a1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b06",
+      "block_index": 6,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b1.json",
+      "config_sha256": "9de85753ace6ac42c6ed12b7e6deb99849314a0f9d7cc88c7cd230fdfba9e994",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 62,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b06-b1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b06",
+      "block_index": 6,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b2.json",
+      "config_sha256": "45d0d948b3c0f0e6a91975d834195357e5b6996a264c94340b04f7730a3a09e9",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 63,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b06-b2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b06",
+      "block_index": 6,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a2.json",
+      "config_sha256": "a86d104ecc35a57ec1c6581cf437ef5f08f95a4801d941828bdc3c06e2f3db6a",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 64,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b06-a2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b07",
+      "block_index": 7,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a1.json",
+      "config_sha256": "6ec2e17673bb87e75c88d7f3cb7f7f957ab4fe2082b37d71ed84aa3ad740e9e9",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 65,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b07-a1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b07",
+      "block_index": 7,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b1.json",
+      "config_sha256": "db2792630dd90ad00eb0f48f08d7a5ff3c08c8f009c955aa8cb2cec1ac0a429d",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 66,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b07-b1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b07",
+      "block_index": 7,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b2.json",
+      "config_sha256": "0dccce621f6ee84de959f847d7157c24b83b1dced6db09ec7fa9011ea8d7ea4f",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 67,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b07-b2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b07",
+      "block_index": 7,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a2.json",
+      "config_sha256": "4f1f012d83eff107e3fdae08a90e2058068f06b8a9d332a2ce7ae53283e24037",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 68,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b07-a2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b08",
+      "block_index": 8,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a1.json",
+      "config_sha256": "4bfe2cd79e29dcaca0ddf1109607d8a3ae043e762f5c68dd2a1858b12fec2e9d",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 69,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b08-a1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b08",
+      "block_index": 8,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b1.json",
+      "config_sha256": "fd4feff77c1b65ed7abe7cdc67840f0ea0e67104cb6cc8671e1a294991afea10",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 70,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b08-b1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b08",
+      "block_index": 8,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b2.json",
+      "config_sha256": "574052eb0756c82d3dc8be7308ec789e06d785b0a287315a214f13369a22be77",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 71,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b08-b2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b08",
+      "block_index": 8,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a2.json",
+      "config_sha256": "7fb876f3ee713d0159c85fb797ee842c87518efb278b3ae671cdac8f1f8e7278",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 72,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b08-a2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b09",
+      "block_index": 9,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a1.json",
+      "config_sha256": "7ad74472d371a0084fca1df03d55a91784dd57767dfafe0dced50c41d9aba33e",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 73,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b09-a1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b09",
+      "block_index": 9,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b1.json",
+      "config_sha256": "ccb22e7556b27968f8413f89c3ab11d6167c9722319503a9657b0330b954dc9c",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 74,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b09-b1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b09",
+      "block_index": 9,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b2.json",
+      "config_sha256": "69e7d2dd9c05f7f6ba94ed21c93e8ace3573eca755cf5de6dbeae572cd70766c",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 75,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b09-b2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b09",
+      "block_index": 9,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a2.json",
+      "config_sha256": "43c8ae9e6aad099edb782cc0e35c62b15c071c4fb0aab72471da5bf5f3004199",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 76,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b09-a2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b10",
+      "block_index": 10,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a1.json",
+      "config_sha256": "84c77f898eead8e6e1f8bd35e897cda3c6973bf4cdad5be3fe425100619bbc22",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 77,
+      "position": "A1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b10-a1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b10",
+      "block_index": 10,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b1.json",
+      "config_sha256": "ac6f54f5c40fff9f40dab3bd3190addb8aba53b8f31a1b4163bfd9775042e5a9",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 78,
+      "position": "B1",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b10-b1",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "B",
+      "block_id": "d117-prefill-p256-contrast-b10",
+      "block_index": 10,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b2.json",
+      "config_sha256": "efaeb4e56ffbc308f4d5ff30bd3cdd96f2934383ce45f8b6171f116255f88e0a",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 79,
+      "position": "B2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b10-b2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "arm": "A",
+      "block_id": "d117-prefill-p256-contrast-b10",
+      "block_index": 10,
+      "config_path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a2.json",
+      "config_sha256": "48ffe3a13211cdc6290ae9d5f7314a689228682f7b848a5a7627635043da8b9a",
+      "measurement_arm": "prefill_p256",
+      "ordinal": 80,
+      "position": "A2",
+      "role": "comparative_contrast_member",
+      "run_id": "d117c15v7-prefill-p256-contrast-b10-a2",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    }
+  ],
+  "stage_graph": [
+    {
+      "expected_count": 0,
+      "input_ref": {
+        "kind": "plan_tree"
+      },
+      "kind": "bracket_reservation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--ledger"
+                },
+                {
+                  "kind": "binding",
+                  "value": "ledger_path"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--head-pin"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/calibration/calibration_ledger_head.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/calibration_plan.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--window-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/window_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/plan_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--plan-sha256"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/plan/actual_sha256"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--evidence-root-id"
+                },
+                {
+                  "kind": "tree_pointer",
+                  "value": "/window_identity/evidence_root_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--pre-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--post-custody-locator"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--identity-epoch-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "identity_epoch_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--t1-bindings-json"
+                },
+                {
+                  "kind": "binding",
+                  "value": "t1_bindings_json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--execute"
+                }
+              ],
+              "interface_id": "joulewise.calibration_window_bracket_reservation.cli.v1",
+              "tool_id": "bracket_reserver"
+            },
+            "command_id": "gamma-bracket-reservation.reserve",
+            "command_kind": "bracket_reservation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 1,
+      "predecessor": null,
+      "stage_id": "gamma-bracket-reservation",
+      "successor": "gamma-calibration-pre"
+    },
+    {
+      "expected_count": 1,
+      "input_ref": {
+        "kind": "arm_attachment",
+        "slot": "pre_attempt_id"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "pre"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "gamma-calibration-pre.capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 2,
+      "predecessor": "gamma-bracket-reservation",
+      "stage_id": "gamma-calibration-pre",
+      "successor": "gamma-bound-collection"
+    },
+    {
+      "expected_count": 12,
+      "input_ref": {
+        "input_id": "neg8_bound_corpus",
+        "kind": "external_input"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-bound-collection.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 3,
+      "predecessor": "gamma-calibration-pre",
+      "stage_id": "gamma-bound-collection",
+      "successor": "gamma-bound-derivation"
+    },
+    {
+      "expected_count": 0,
+      "input_ref": {
+        "input_id": "neg8_settled_corpus",
+        "kind": "external_input"
+      },
+      "kind": "bound_derivation",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--derive-neg8-drift-bound"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/neg8_reference_corpus/derivation/settled_corpus.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound-output"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-bound-derivation.derive",
+            "command_kind": "bound_derivation",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 4,
+      "predecessor": "gamma-bound-collection",
+      "stage_id": "gamma-bound-derivation",
+      "successor": "gamma-reference-start"
+    },
+    {
+      "expected_count": 3,
+      "input_ref": {
+        "input_id": "start_references",
+        "kind": "external_input"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/start_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-reference-start.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 5,
+      "predecessor": "gamma-bound-derivation",
+      "stage_id": "gamma-reference-start",
+      "successor": "gamma-science-01-decode-contrast-blocks-01-05"
+    },
+    {
+      "expected_count": 20,
+      "input_ref": {
+        "kind": "pack_manifest",
+        "manifest_id": "d117-gamma-01-decode-contrast-blocks-01-05-order-v1",
+        "path": "01_decode_contrast_blocks_01_05/order_manifest.json",
+        "sha256": "8c43ed9ce5fc1d53dfe390cdfa866d8589a0a09c036eed0b11ea7bea1681fe6f"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/01_decode_contrast_blocks_01_05"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-science-01-decode-contrast-blocks-01-05.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 6,
+      "predecessor": "gamma-reference-start",
+      "stage_id": "gamma-science-01-decode-contrast-blocks-01-05",
+      "successor": "gamma-reference-decode-midpoint"
+    },
+    {
+      "expected_count": 1,
+      "input_ref": {
+        "input_id": "midpoint_reference",
+        "kind": "external_input"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-reference-decode-midpoint.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 7,
+      "predecessor": "gamma-science-01-decode-contrast-blocks-01-05",
+      "stage_id": "gamma-reference-decode-midpoint",
+      "successor": "gamma-science-02-decode-contrast-blocks-06-10"
+    },
+    {
+      "expected_count": 20,
+      "input_ref": {
+        "kind": "pack_manifest",
+        "manifest_id": "d117-gamma-02-decode-contrast-blocks-06-10-order-v1",
+        "path": "02_decode_contrast_blocks_06_10/order_manifest.json",
+        "sha256": "959c1dec1f52d0c79c0f5919733faacb0dafa42fdafc23c51647708f04614235"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/02_decode_contrast_blocks_06_10"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-science-02-decode-contrast-blocks-06-10.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 8,
+      "predecessor": "gamma-reference-decode-midpoint",
+      "stage_id": "gamma-science-02-decode-contrast-blocks-06-10",
+      "successor": "gamma-reference-arm-boundary"
+    },
+    {
+      "expected_count": 1,
+      "input_ref": {
+        "input_id": "midpoint_reference",
+        "kind": "external_input"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-reference-arm-boundary.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 9,
+      "predecessor": "gamma-science-02-decode-contrast-blocks-06-10",
+      "stage_id": "gamma-reference-arm-boundary",
+      "successor": "gamma-science-03-prefill-p256-contrast-blocks-01-05"
+    },
+    {
+      "expected_count": 20,
+      "input_ref": {
+        "kind": "pack_manifest",
+        "manifest_id": "d117-gamma-03-prefill-p256-contrast-blocks-01-05-order-v1",
+        "path": "03_prefill_p256_contrast_blocks_01_05/order_manifest.json",
+        "sha256": "27995082048445b00844eb033bd66a1f0123215941cc38b9e9ee7228ab9e90f9"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/03_prefill_p256_contrast_blocks_01_05"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 10,
+      "predecessor": "gamma-reference-arm-boundary",
+      "stage_id": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
+      "successor": "gamma-reference-prefill-midpoint"
+    },
+    {
+      "expected_count": 1,
+      "input_ref": {
+        "input_id": "midpoint_reference",
+        "kind": "external_input"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/midpoint"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-reference-prefill-midpoint.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 11,
+      "predecessor": "gamma-science-03-prefill-p256-contrast-blocks-01-05",
+      "stage_id": "gamma-reference-prefill-midpoint",
+      "successor": "gamma-science-04-prefill-p256-contrast-blocks-06-10"
+    },
+    {
+      "expected_count": 20,
+      "input_ref": {
+        "kind": "pack_manifest",
+        "manifest_id": "d117-gamma-04-prefill-p256-contrast-blocks-06-10-order-v1",
+        "path": "04_prefill_p256_contrast_blocks_06_10/order_manifest.json",
+        "sha256": "cb8b731f561ea5ce4bf99666c1bee163d9fc66ff7b5ad724d4b64860b44ac359"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/04_prefill_p256_contrast_blocks_06_10"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 12,
+      "predecessor": "gamma-reference-prefill-midpoint",
+      "stage_id": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
+      "successor": "gamma-reference-end"
+    },
+    {
+      "expected_count": 3,
+      "input_ref": {
+        "input_id": "end_references",
+        "kind": "external_input"
+      },
+      "kind": "campaign_collection",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaigns/window_references/end_triplet"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-calibration-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "pre_calibration_dir"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--instrument-power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-quiet-mode"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--arm-countdown-s"
+                },
+                {
+                  "kind": "literal",
+                  "value": "20"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--max-failures"
+                },
+                {
+                  "kind": "literal",
+                  "value": "1"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-reference-end.collect",
+            "command_kind": "campaign_collection",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 13,
+      "predecessor": "gamma-science-04-prefill-p256-contrast-blocks-06-10",
+      "stage_id": "gamma-reference-end",
+      "successor": "gamma-calibration-post"
+    },
+    {
+      "expected_count": 1,
+      "input_ref": {
+        "kind": "arm_attachment",
+        "slot": "post_attempt_id"
+      },
+      "kind": "calibration_capture",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--allow-live"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--output-root"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "instrument_validation",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--session-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bracket_session_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--slot"
+                },
+                {
+                  "kind": "literal",
+                  "value": "post"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--attempt-id"
+                },
+                {
+                  "kind": "binding",
+                  "value": "post_attempt_id"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--power-policy"
+                },
+                {
+                  "kind": "literal",
+                  "value": "ac_high_power"
+                }
+              ],
+              "interface_id": "joulewise.powermetrics_fiducial.cli.v1",
+              "tool_id": "fiducial_capture"
+            },
+            "command_id": "gamma-calibration-post.capture",
+            "command_kind": "calibration_capture",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 14,
+      "predecessor": "gamma-reference-end",
+      "stage_id": "gamma-calibration-post",
+      "successor": "gamma-whole-window-verdict"
+    },
+    {
+      "expected_count": 0,
+      "input_ref": {
+        "from": "claim_runs_root",
+        "kind": "derived"
+      },
+      "kind": "whole_window_verdict",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "literal",
+                  "value": "--whole-window-verdict"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--runs-dir"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--log"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "campaign_log.jsonl",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--campaign-policy"
+                },
+                {
+                  "kind": "repo_path",
+                  "value": "configs/campaign_policies/quiet_mac_p2_production.json"
+                },
+                {
+                  "kind": "literal",
+                  "value": "--neg8-drift-bound"
+                },
+                {
+                  "kind": "binding_path",
+                  "relative": "neg8-drift-bound.json",
+                  "value": "bound_runs_root"
+                }
+              ],
+              "interface_id": "joulewise.run_campaign.cli.v1",
+              "tool_id": "campaign_runner"
+            },
+            "command_id": "gamma-whole-window-verdict.issue",
+            "command_kind": "whole_window_verdict",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 15,
+      "predecessor": "gamma-calibration-post",
+      "stage_id": "gamma-whole-window-verdict",
+      "successor": "gamma-backup"
+    },
+    {
+      "expected_count": 0,
+      "input_ref": {
+        "kind": "arm_attachment",
+        "slot": "backup_destinations"
+      },
+      "kind": "backup",
+      "launch": {
+        "commands": [
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "claim_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "claim_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "gamma-backup.claim",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          },
+          {
+            "argv_template": {
+              "arguments": [
+                {
+                  "kind": "binding",
+                  "value": "bound_runs_root"
+                },
+                {
+                  "kind": "binding",
+                  "value": "bound_backup_destination"
+                }
+              ],
+              "interface_id": "joulewise.backup_runs.cli.v1",
+              "tool_id": "backup_runs"
+            },
+            "command_id": "gamma-backup.bound",
+            "command_kind": "backup",
+            "cwd": {
+              "kind": "binding",
+              "value": "repo_root"
+            },
+            "success_exit_codes": [
+              0
+            ]
+          }
+        ],
+        "schema_version": "joulewise.stage_launch.v1"
+      },
+      "ordinal": 16,
+      "predecessor": "gamma-whole-window-verdict",
+      "stage_id": "gamma-backup",
+      "successor": null
+    }
+  ],
+  "window_identity": {
+    "evidence_root_id": "evidence-d117-contrast-qwen25-1p5b-vs-7b-v2",
+    "window_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v2"
+  }
+}

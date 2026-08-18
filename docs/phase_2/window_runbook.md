@@ -187,19 +187,19 @@ then freeze the resulting bytes:
 
 ```sh
 MEASUREMENT_REPO=/Users/edr/JouleWise-measurement-20260813
-WINDOW_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1
+WINDOW_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2
 BRACKET_SESSION_ID=d117-alpha-YYYYMMDD-calibration
-FROZEN_PLAN=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json
-PACK_ROOT=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v1
-PACK_ID=d117_floor_qwen25_1p5b_v1
-PLAN_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1
-EVIDENCE_ROOT_ID=evidence-d117-floor-qwen25-1p5b-v1
+FROZEN_PLAN=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v2/calibration_plan.json
+PACK_ROOT=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v2
+PACK_ID=d117_floor_qwen25_1p5b_v2
+PLAN_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2
+EVIDENCE_ROOT_ID=evidence-d117-floor-qwen25-1p5b-v2
 IDENTITY_EPOCH_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/identity-epoch.json
 T1_BINDINGS_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/t1-bindings.json
 PRE_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-pre
 POST_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-post
-RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v1
-BOUND_RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v1_bound
+RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v2
+BOUND_RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v2_bound
 CALIBRATION_LEDGER=/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
 LEDGER_HEAD_PIN=/Users/edr/JouleWise-measurement-20260813/configs/calibration/calibration_ledger_head.json
 ARM_READINESS_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness
@@ -231,11 +231,13 @@ distinct. Place `WINDOW_PLAN_ROOT` at
 containing `window.env` and `window-chain.zsh` to remain inside the D-134
 custody root.
 
-The currently frozen ALPHA and BETA `plan_tree.json` bytes still carry the
-superseded repository-relative spelling. The shared R2 resolver refuses those
-packs; do not basename-repair them in an operator file. Their successor
-freeze must emit `plan.path: "calibration_plan.json"` before either profile
-can pass this example. GAMMA already has the ruled storage shape.
+The v1 ALPHA and BETA `plan_tree.json` bytes carry the superseded
+repository-relative spelling; the shared R2 resolver refuses those packs, and
+they are never basename-repaired in an operator file. The `_v2` successor
+family (amended 2026-08-18) emits the ruled `plan.path:
+"calibration_plan.json"` shape in all three profiles, so this example binds
+the `_v2` packs; the v1 packs remain historical records behind their
+committed freeze-0001 receipts.
 
 Before quiet time:
 
@@ -271,11 +273,20 @@ Freeze readiness only with the implemented command:
 
 ```sh
 python3 scripts/generate_arm_readiness.py freeze \
-  --pack-root "$PACK_ROOT"
+  --pack-root "$PACK_ROOT" \
+  --predecessor-pack-root "$PREDECESSOR_PACK_ROOT"
 ```
 
-The command writes the pack's no-clobber freeze receipt (initially
-`freeze-0001.json`) and GNU-style SHA-256 sidecar under the governed
+`PREDECESSOR_PACK_ROOT` is the previous-generation sibling pack — for a pack
+ID ending `_v<N>`, the `_v<N-1>` directory beside it under the same campaigns
+root — and every successor pack refuses to freeze without it; a
+first-generation (`_v1`) pack opens its own chain, so it omits the flag
+entirely and is refused if it passes one.
+
+The command writes the pack's no-clobber freeze receipt — a first-generation
+pack opens its own chain and mints `freeze-0001.json`; a successor generation
+`_v<N>` mints `freeze-000<N>.json` and must pass `--predecessor-pack-root` —
+and a GNU-style SHA-256 sidecar under the governed
 `PACK_ROOT/arm_readiness.freeze.receipts/freeze-NNNN.json` namespace. A freeze receipt
 contains only freeze-evaluable rows and always has
 `arm_disposition: NOT_APPLICABLE`; even a `PASS` freeze receipt cannot license

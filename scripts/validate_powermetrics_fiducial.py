@@ -52,6 +52,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise.calibration_exits import RefusalCode, emit_refusal  # noqa: E402
+from joulewise import arm_readiness as arm_readiness_module  # noqa: E402
 from joulewise.adapters.powermetrics import (  # noqa: E402
     POWER_METRICS,
     SAMPLERS,
@@ -89,6 +90,9 @@ from joulewise.calibration_ledger import (  # noqa: E402
 )
 from joulewise.powermetrics_fiducial import (  # noqa: E402
     BASELINE_S,
+    CLOCK_ANCHOR_UNRESOLVED,
+    DETECTION_NONCONVERGENT,
+    DETECTION_PROJECTION_CELL_BUDGET,
     LEGACY_PROTOCOL_ID,
     PROTOCOL_ID,
     PROTOCOL_V2_ID,
@@ -132,50 +136,157 @@ TEST_WRITER_CRASH_AUTHORIZATION_SCHEMA = (
 TEST_WRITER_CRASH_CAPABILITY_ROOT_ENV = (
     "JOULEWISE_TEST_WRITER_CRASH_CAPABILITY_ROOT"
 )
+TEST_LOGICAL_SAMPLER_ACK_ENV = "JW_FAKE_SAMPLER_ACK_PATH"
+TEST_LOGICAL_CLOCK_ORIGIN_ENV = "JW_FAKE_LOGICAL_CLOCK_ORIGIN"
+TEST_LOGICAL_ACK_SCHEMA = "joulewise.test_sampler_ack.v1"
+TEST_LOGICAL_READY_EVENT = "sampler_ready"
+TEST_LOGICAL_READY_SEQUENCE = 0
+TEST_LOGICAL_PROTOCOL_EVENTS = frozenset(
+    {
+        "sampling_started",
+        "warmup_command_on",
+        "warmup_command_off",
+        "pulse_command_on",
+        "pulse_command_off",
+        "sampling_stopped",
+    }
+)
 _AUTHORIZED_WRITER_CRASH_STAGE: str | None = None
 _CRASH_HOOK_DIAGNOSTIC_EMITTED = False
+_LAUNCH_LINEAGE_LOCATOR_BASENAME = ".joulewise-launch-lineage.json"
+_CALIBRATION_OUTPUT_ROOT_BASENAME = "instrument_validation"
+_CALIBRATION_LAUNCH_REASON_CODES = frozenset(
+    {
+        "launch_consumption_missing",
+        "launch_consumption_invalid",
+        "launch_binding_mismatch",
+        "launch_lineage_conflict",
+        "launch_lifecycle_incomplete",
+        "launch_handoff_invalid",
+    }
+)
 
 
-class _AcceleratedSystemClock:
-    """Expose test-scaled real time without bypassing the production clock seam."""
+class _CalibrationLaunchLineageError(ValueError):
+    """Fallback D-078 refusal while the staged branch awaits stage-1 sync."""
 
-    def __init__(self, scale: float, *, epoch_origin_s: float | None = None) -> None:
-        self._scale = scale
-        self._clock = SystemClock()
-        self._origin = self._clock.stamp()
-        self._epoch_origin_s = (
-            self._origin.epoch_s if epoch_origin_s is None else epoch_origin_s
-        )
-        self._monotonic_origin_s = (
-            self._origin.monotonic_before_s
-            + self._origin.monotonic_after_s
-        ) / 2.0
-        self._accelerated_epoch_origin_s = self._scaled(
-            self._origin.epoch_s,
-            self._epoch_origin_s,
-        )
-        self._wall_minus_monotonic_s = (
-            self._accelerated_epoch_origin_s - self._monotonic_origin_s
-        )
+    def __init__(self, reason_code: str, message: str) -> None:
+        if reason_code not in _CALIBRATION_LAUNCH_REASON_CODES:
+            raise ValueError(f"unregistered calibration launch code {reason_code!r}")
+        super().__init__(message)
+        self.reason_code = reason_code
 
-    def _scaled(self, value: float, origin: float) -> float:
-        return origin + ((value - origin) / self._scale)
+
+class _LogicalTestClock:
+    """Test-only clock advanced solely by synthetic protocol transitions."""
+
+    def __init__(self, epoch_origin_s: float) -> None:
+        if not math.isfinite(epoch_origin_s):
+            raise ValueError("test logical clock origin must be finite")
+        self._now_s = float(epoch_origin_s)
 
     def now(self) -> float:
-        return self._scaled(time.time(), self._epoch_origin_s)
+        return self._now_s
 
     def stamp(self) -> ClockStamp:
-        epoch_s = self.now()
-        accelerated_monotonic_s = epoch_s - self._wall_minus_monotonic_s
         return ClockStamp(
-            epoch_s=epoch_s,
-            monotonic_before_s=accelerated_monotonic_s,
-            monotonic_after_s=accelerated_monotonic_s,
-            wall_resolution_s=self._origin.wall_resolution_s / self._scale,
-            monotonic_resolution_s=(
-                self._origin.monotonic_resolution_s / self._scale
-            ),
+            epoch_s=self._now_s,
+            monotonic_before_s=self._now_s,
+            monotonic_after_s=self._now_s,
+            wall_resolution_s=0.0,
+            monotonic_resolution_s=0.0,
         )
+
+    def advance(self, seconds: float) -> None:
+        if not math.isfinite(seconds) or seconds < 0.0:
+            raise ValueError("test logical clock advance must be finite and nonnegative")
+        self._now_s += seconds
+
+    def advance_to(self, epoch_s: float) -> None:
+        if not math.isfinite(epoch_s) or epoch_s < self._now_s:
+            raise ValueError("test logical clock cannot move backward")
+        self._now_s = float(epoch_s)
+
+
+class _LogicalTestPulseDriver:
+    """Synchronize each test command transition with a durable sampler ack."""
+
+    def __init__(
+        self,
+        clock: _LogicalTestClock,
+        acknowledgement_path: Path,
+        *,
+        timeout_s: float,
+    ) -> None:
+        self.clock = clock
+        self.acknowledgement_path = acknowledgement_path
+        self.timeout_s = timeout_s
+        self._next_sequence = TEST_LOGICAL_READY_SEQUENCE + 1
+
+    def next_sequence(self, event_type: str) -> int:
+        if event_type not in TEST_LOGICAL_PROTOCOL_EVENTS:
+            raise ValueError("test logical pulse event is not registered")
+        sequence = self._next_sequence
+        self._next_sequence += 1
+        return sequence
+
+    def await_acknowledgement(
+        self,
+        process: subprocess.Popen,
+        *,
+        sequence: int,
+        event_type: str,
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + self.timeout_s
+        while time.monotonic() < deadline:
+            try:
+                lines = self.acknowledgement_path.read_text(
+                    encoding="utf-8"
+                ).splitlines()
+            except (OSError, UnicodeDecodeError):
+                lines = []
+            for line in lines:
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    isinstance(row, Mapping)
+                    and row.get("schema") == TEST_LOGICAL_ACK_SCHEMA
+                    and row.get("sequence") == sequence
+                ):
+                    if row.get("event_type") != event_type:
+                        raise RuntimeError("test sampler acknowledgement event mismatch")
+                    return dict(row)
+            if process.poll() is not None:
+                raise RuntimeError("test sampler exited before acknowledgement")
+            time.sleep(min(0.001, self.timeout_s / 4))
+        raise RuntimeError(
+            f"test sampler acknowledgement timeout: {event_type}:{sequence}"
+        )
+
+    def await_ready(self, process: subprocess.Popen) -> None:
+        row = self.await_acknowledgement(
+            process,
+            sequence=TEST_LOGICAL_READY_SEQUENCE,
+            event_type=TEST_LOGICAL_READY_EVENT,
+        )
+        ready_epoch_s = row.get("logical_epoch_s")
+        if isinstance(ready_epoch_s, bool) or not isinstance(
+            ready_epoch_s, int | float
+        ):
+            raise RuntimeError("test sampler ready acknowledgement lacks logical time")
+        self.clock.advance_to(float(ready_epoch_s))
+
+    def drive_fenced_pulse(self, buffers: Any) -> int:
+        """Issue fixed logical work; pulse duration advances only by protocol."""
+
+        import mlx.core as mx  # noqa: PLC0415 - synthetic writer dependency
+
+        left, right = buffers
+        product = mx.matmul(left, right)
+        mx.eval(product)
+        return 1
 
 
 class _AcceptancePreflightError(ValueError):
@@ -456,6 +567,257 @@ def sha256_path(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _raise_calibration_launch_lineage(
+    reason_code: str, detail: str
+) -> None:
+    error_type = getattr(
+        arm_readiness_module,
+        "LaunchLineageError",
+        _CalibrationLaunchLineageError,
+    )
+    raise error_type(reason_code, detail)
+
+
+def _calibration_launch_reason_code(exc: BaseException) -> str | None:
+    reason_code = getattr(exc, "reason_code", None)
+    return (
+        reason_code
+        if isinstance(reason_code, str)
+        and reason_code in _CALIBRATION_LAUNCH_REASON_CODES
+        else None
+    )
+
+
+def _emit_calibration_launch_refusal(exc: BaseException) -> int:
+    reason_code = _calibration_launch_reason_code(exc)
+    if reason_code is None:
+        raise exc
+    print(f"error: {reason_code}: {exc}", file=sys.stderr)
+    return 2
+
+
+def _launch_lineage_required(config: object) -> bool:
+    predicate = getattr(arm_readiness_module, "launch_lineage_required", None)
+    if callable(predicate):
+        return bool(predicate(config))
+    if not isinstance(config, Mapping):
+        return False
+    metadata = config.get("run_metadata")
+    tags = metadata.get("tags") if isinstance(metadata, Mapping) else None
+    return isinstance(tags, list) and "launch_lineage_required" in tags
+
+
+def _load_calibration_source_config(
+    config_path: Path,
+) -> tuple[Mapping[str, Any] | None, bytes | None, Path | None]:
+    """Read the existing acceptance input without perturbing legacy failures."""
+
+    try:
+        if config_path.is_symlink():
+            return None, None, None
+        resolved = config_path.resolve(strict=True)
+        raw = resolved.read_bytes()
+        parsed = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, None, None
+    return (
+        (parsed if isinstance(parsed, Mapping) else None),
+        raw,
+        resolved,
+    )
+
+
+def _authenticate_calibration_source_config(
+    authentication: Mapping[str, Any],
+    *,
+    config_path: Path,
+    config_raw: bytes,
+) -> None:
+    """Bind the acceptance input as a pack member or pack-pinned artifact."""
+
+    try:
+        pack_root = Path(str(authentication["pack_root"])).resolve(strict=True)
+        config_resolved = config_path.resolve(strict=True)
+    except (KeyError, OSError) as exc:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            f"authenticated calibration config root is unavailable: {exc}",
+        )
+    config_sha256 = hashlib.sha256(config_raw).hexdigest()
+    try:
+        relative = config_resolved.relative_to(pack_root).as_posix()
+    except ValueError:
+        relative = None
+    inventory = authentication.get("config_inventory")
+    if (
+        relative is not None
+        and isinstance(inventory, Mapping)
+        and inventory.get(relative) == config_sha256
+    ):
+        return
+
+    try:
+        plan = json.loads((pack_root / "plan_tree.json").read_bytes())
+        policy = plan["acceptance_policy"]
+        reference = policy["issued_acceptance"]
+        reference_path = reference["path"]
+        reference_sha256 = reference["artifact_sha256"]
+        if not isinstance(reference_path, str) or not reference_path:
+            raise ValueError("issued acceptance path is invalid")
+        expected_path = Path(reference_path)
+        if not expected_path.is_absolute():
+            expected_path = REPO_ROOT / expected_path
+        expected_path = expected_path.resolve(strict=True)
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            f"authenticated pack omits the selected calibration config: {exc}",
+        )
+    if expected_path != config_resolved or reference_sha256 != config_sha256:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            "selected calibration config is not bound by authenticated pack bytes",
+        )
+
+
+def authenticate_calibration_writer_launch_lineage(
+    output_root: Path,
+    *,
+    session_id: str | None,
+    slot: str | None,
+    attempt_id: str | None,
+    source_config_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Authenticate the fixed calibration locator before any custody claim."""
+
+    selected_config_path = (
+        DEFAULT_ACCEPTANCE_BOUND_PATH
+        if source_config_path is None
+        else Path(source_config_path)
+    )
+    config, config_raw, config_resolved = _load_calibration_source_config(
+        selected_config_path
+    )
+    if not _launch_lineage_required(config):
+        return None
+    if Path(output_root).name != _CALIBRATION_OUTPUT_ROOT_BASENAME:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            "calibration --output-root must end in instrument_validation",
+        )
+    if session_id is None or slot not in BRACKET_SESSION_SLOTS or attempt_id is None:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            "marker-bearing calibration requires an exact bracket session and slot",
+        )
+    assert config_raw is not None and config_resolved is not None
+    try:
+        resolved_output_root = Path(output_root).resolve(strict=False)
+        selected_root = resolved_output_root.parent.resolve(strict=True)
+    except OSError as exc:
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            f"calibration output parent is unavailable: {exc}",
+        )
+    locator_basename = getattr(
+        arm_readiness_module,
+        "LAUNCH_LINEAGE_LOCATOR_BASENAME",
+        _LAUNCH_LINEAGE_LOCATOR_BASENAME,
+    )
+    locator_path = selected_root / locator_basename
+    if not locator_path.exists() or not locator_path.with_name(
+        f"{locator_path.name}.sha256"
+    ).exists():
+        _raise_calibration_launch_lineage(
+            "launch_consumption_missing",
+            "marker-bearing calibration launch-lineage locator is absent",
+        )
+    authenticate_campaign = getattr(
+        arm_readiness_module,
+        "authenticate_campaign_launch_lineage",
+        None,
+    )
+    authenticate_lineage = getattr(
+        arm_readiness_module,
+        "authenticate_launch_lineage",
+        None,
+    )
+    if not callable(authenticate_campaign) or not callable(authenticate_lineage):
+        _raise_calibration_launch_lineage(
+            "launch_consumption_invalid",
+            "launch-lineage authenticator is unavailable in this checkout",
+        )
+    authentication = authenticate_campaign(selected_root)
+    _authenticate_calibration_source_config(
+        authentication,
+        config_path=config_resolved,
+        config_raw=config_raw,
+    )
+    direct = authenticate_lineage(
+        authentication["launch_lineage"],
+        require_completion=False,
+        expected_pack_root=authentication["pack_root"],
+        require_current_boot=True,
+        require_completion_absent=True,
+    )
+    arm_context = direct.get("arm_context")
+    attempt_key = f"{slot}_attempt_id"
+    if (
+        not isinstance(arm_context, Mapping)
+        or arm_context.get("bracket_session_id") != session_id
+        or arm_context.get(attempt_key) != attempt_id
+    ):
+        _raise_calibration_launch_lineage(
+            "launch_binding_mismatch",
+            "calibration bracket session/attempt differs from authenticated arm context",
+        )
+    return {
+        "launch_lineage": authentication["launch_lineage"],
+        "locator_sha256": authentication["locator_sha256"],
+        "selected_config_path": str(config_resolved),
+        "selected_config_sha256": hashlib.sha256(config_raw).hexdigest(),
+    }
+
+
+def reconcile_calibration_writer_launch_lineage(
+    outer: Mapping[str, Any],
+    output_root: Path,
+    *,
+    session_id: str | None,
+    slot: str | None,
+    attempt_id: str | None,
+    source_config_path: Path | None = None,
+) -> dict[str, Any]:
+    """Reopen writer inputs and reject any outer/inner lineage swap."""
+
+    inner = authenticate_calibration_writer_launch_lineage(
+        output_root,
+        session_id=session_id,
+        slot=slot,
+        attempt_id=attempt_id,
+        source_config_path=source_config_path,
+    )
+    compared_fields = (
+        "launch_lineage",
+        "locator_sha256",
+        "selected_config_path",
+        "selected_config_sha256",
+    )
+    if inner is None or any(inner.get(name) != outer.get(name) for name in compared_fields):
+        _raise_calibration_launch_lineage(
+            "launch_lineage_conflict",
+            "calibration launch lineage/config changed during writer execution",
+        )
+    return inner
+
+
 def _sysctl_identity(name: str) -> str:
     """Read a reservation-time macOS identity before capture begins."""
 
@@ -560,14 +922,23 @@ def _sampler_lifetime(
     command: list[str],
     *,
     event_reporter=None,
+    environment: Mapping[str, str] | None = None,
 ):
     """Join the direct sampler child on every exit path, then census."""
 
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    if environment is None:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=environment,
+        )
     try:
         yield process
     finally:
@@ -965,12 +1336,21 @@ class _CaptureLedgerLifecycle:
             self.writer_lease.release()
 
     def finalize(
-        self, disposition: str
+        self,
+        disposition: str,
+        *,
+        invalid_evidence_disposition: str | None = None,
     ) -> tuple[Mapping[str, Any], dict[str, Any] | None]:
         """Finalize the exact attempt and return any terminal head candidate."""
 
         if not self.begun or self.closed:
             raise CalibrationLedgerError(RefusalCode.SESSION_NOT_OPEN)
+        if invalid_evidence_disposition not in (
+            None,
+            CLOCK_ANCHOR_UNRESOLVED,
+            DETECTION_NONCONVERGENT,
+        ):
+            raise ValueError("invalid evidence disposition is not registered")
         try:
             artifacts = ledger_artifact_hashes(Path(self.custody_locator))
             if self.is_bracket_session:
@@ -1000,7 +1380,10 @@ class _CaptureLedgerLifecycle:
                     receipt = abort_bracket_session(
                         self.ledger_path,
                         session_id=self.session_id,
-                        reason=f"pre_capture_{disposition}",
+                        reason=(
+                            invalid_evidence_disposition
+                            or f"pre_capture_{disposition}"
+                        ),
                     )
                 self.closed = True
                 _writer_stage(WriterStage.AFTER_CLOSED_BEFORE_HANDLER_UNREGISTER)
@@ -1082,6 +1465,11 @@ def main(argv: list[str] | None = None) -> int:
         "--time-scale-for-test", type=float, default=1.0, help=argparse.SUPPRESS
     )
     parser.add_argument(
+        "--projection-cell-budget-for-test",
+        type=int,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
         "--identity-epoch-json-for-test",
         type=Path,
         help=argparse.SUPPRESS,
@@ -1155,6 +1543,17 @@ def main(argv: list[str] | None = None) -> int:
             RefusalCode.OUTPUT_REQUIRES_REDERIVE,
             stream=sys.stderr,
         )
+    try:
+        launch_authentication = authenticate_calibration_writer_launch_lineage(
+            args.output_root,
+            session_id=args.session_id,
+            slot=args.slot,
+            attempt_id=args.attempt_id,
+        )
+    except ValueError as exc:
+        if _calibration_launch_reason_code(exc) is None:
+            raise
+        return _emit_calibration_launch_refusal(exc)
     if not args.allow_live:
         return emit_refusal(
             RefusalCode.QUIET_MAC_AUTH_REQUIRED,
@@ -1169,6 +1568,22 @@ def main(argv: list[str] | None = None) -> int:
         return emit_refusal(
             RefusalCode.WRITER_BRACKET_ARGUMENTS,
             context={"detail": "test time scale must be in (0, 1]"},
+            stream=sys.stderr,
+        )
+    if args.projection_cell_budget_for_test is not None and (
+        not args.sampler_direct_for_test
+        or args.time_scale_for_test == 1
+        or args.identity_epoch_json_for_test is None
+        or args.projection_cell_budget_for_test <= 0
+        or args.projection_cell_budget_for_test
+        > DETECTION_PROJECTION_CELL_BUDGET
+    ):
+        # Tests may only tighten the production budget inside the existing
+        # accelerated synthetic seam. There is no live operator override that
+        # can raise, disable, or recover from the frozen fail-closed bound.
+        return emit_refusal(
+            RefusalCode.WRITER_BRACKET_ARGUMENTS,
+            context={"detail": "invalid test-only projection budget"},
             stream=sys.stderr,
         )
 
@@ -1206,18 +1621,14 @@ def main(argv: list[str] | None = None) -> int:
 
     import mlx.core as mx  # noqa: PLC0415
 
-    clock = (
-        SystemClock()
+    logical_test_clock = (
+        None
         if args.time_scale_for_test == 1
-        else _AcceleratedSystemClock(
-            args.time_scale_for_test,
-            epoch_origin_s=(
-                float(os.environ["JW_FAKE_TIME_ORIGIN"])
-                if "JW_FAKE_TIME_ORIGIN" in os.environ
-                else None
-            ),
+        else _LogicalTestClock(
+            float(os.environ.get("JW_FAKE_TIME_ORIGIN", time.time()))
         )
     )
+    clock = SystemClock() if logical_test_clock is None else logical_test_clock
     validation_id = (
         args.attempt_id
         if bracket_mode
@@ -1309,22 +1720,46 @@ def main(argv: list[str] | None = None) -> int:
     events_path = out_dir / "events.jsonl"
     events = events_path.open("w", encoding="utf-8")
     _writer_stage(WriterStage.AFTER_EVENT_STREAM_OPEN)
+    logical_driver = (
+        None
+        if logical_test_clock is None
+        else _LogicalTestPulseDriver(
+            logical_test_clock,
+            out_dir / ".test-sampler-acks.jsonl",
+            timeout_s=args.sampler_ready_timeout_s,
+        )
+    )
+    active_sampler: subprocess.Popen | None = None
 
     def emit(event_type: str, metadata: dict) -> None:
+        sequence = (
+            logical_driver.next_sequence(event_type)
+            if logical_driver is not None
+            and event_type in TEST_LOGICAL_PROTOCOL_EVENTS
+            else None
+        )
+        row = {
+            "timestamp_s": clock.now(),
+            "event_type": event_type,
+            "phase": "instrument_validation",
+            "message": event_type,
+            "metadata": metadata,
+        }
+        if sequence is not None:
+            row["test_protocol_sequence"] = sequence
         events.write(
-            json.dumps(
-                {
-                    "timestamp_s": clock.now(),
-                    "event_type": event_type,
-                    "phase": "instrument_validation",
-                    "message": event_type,
-                    "metadata": metadata,
-                },
-                sort_keys=True,
-            )
-            + "\n"
+            json.dumps(row, sort_keys=True) + "\n"
         )
         events.flush()
+        if sequence is not None:
+            os.fsync(events.fileno())
+            if active_sampler is None:
+                raise RuntimeError("test sampler is unavailable for acknowledgement")
+            logical_driver.await_acknowledgement(
+                active_sampler,
+                sequence=sequence,
+                event_type=event_type,
+            )
 
     buffers = allocate_matmul_buffers()
     command = ([] if args.sampler_direct_for_test else ["sudo", "-n"]) + [
@@ -1340,11 +1775,20 @@ def main(argv: list[str] | None = None) -> int:
         "-o",
         str(capture_path),
     ]
+    sampler_environment = None
+    if logical_driver is not None:
+        sampler_environment = os.environ.copy()
+        sampler_environment[TEST_LOGICAL_SAMPLER_ACK_ENV] = str(
+            logical_driver.acknowledgement_path
+        )
+        sampler_environment[TEST_LOGICAL_CLOCK_ORIGIN_ENV] = repr(clock.now())
     pre_spawn = clock.stamp()
     with _sampler_lifetime(
         command,
         event_reporter=emit,
+        environment=sampler_environment,
     ) as process:
+        active_sampler = process
         _writer_stage(WriterStage.AFTER_SAMPLER_SPAWN)
         first_parse = None
         deadline = time.monotonic() + args.sampler_ready_timeout_s
@@ -1357,6 +1801,8 @@ def main(argv: list[str] | None = None) -> int:
                     except ValueError:
                         pass
                     else:
+                        if logical_driver is not None:
+                            logical_driver.await_ready(process)
                         first_parse = clock.stamp()
                         break
             time.sleep(
@@ -1393,7 +1839,10 @@ def main(argv: list[str] | None = None) -> int:
         sampling_started = clock.stamp()
         emit("sampling_started", {})
 
-        time.sleep(BASELINE_S * args.time_scale_for_test)
+        if logical_driver is None:
+            time.sleep(BASELINE_S * args.time_scale_for_test)
+        else:
+            logical_test_clock.advance(BASELINE_S)
         warmups: list[CommandedPulse] = []
         for warmup_index in range(WARMUP_PULSE_COUNT):
             on_stamp = clock.stamp()
@@ -1401,7 +1850,14 @@ def main(argv: list[str] | None = None) -> int:
                 "warmup_command_on",
                 {"warmup_index": warmup_index, "clock_stamp": asdict(on_stamp)},
             )
-            run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
+            if logical_driver is None:
+                run_matmul_pulse(
+                    PULSE_DURATION_S * args.time_scale_for_test,
+                    buffers,
+                )
+            else:
+                logical_driver.drive_fenced_pulse(buffers)
+                logical_test_clock.advance(PULSE_DURATION_S)
             off_stamp = clock.stamp()
             emit(
                 "warmup_command_off",
@@ -1415,21 +1871,38 @@ def main(argv: list[str] | None = None) -> int:
                     off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
                 )
             )
-            time.sleep(1.5 * args.time_scale_for_test)
-        time.sleep(BASELINE_S * args.time_scale_for_test)
+            if logical_driver is None:
+                time.sleep(1.5 * args.time_scale_for_test)
+            else:
+                logical_test_clock.advance(1.5)
+        if logical_driver is None:
+            time.sleep(BASELINE_S * args.time_scale_for_test)
+        else:
+            logical_test_clock.advance(BASELINE_S)
 
         # Van der Corput spacing is schedule-relative (offsets start at 0 for the
         # first pulse), so the loop cursor MUST be measured from the pulse-loop
         # start, not from sampling-start (which precedes it by the baseline +
         # warmup + baseline preamble). Measuring elapsed against sampling_started
         # made every gap negative and collapsed the pulses back-to-back.
-        pulse_loop_mono0 = time.monotonic()
+        pulse_loop_mono0 = (
+            time.monotonic() if logical_driver is None else None
+        )
+        pulse_loop_epoch0 = clock.now() if logical_driver is not None else None
         pulses: list[CommandedPulse] = []
         for raw_on_offset_s, raw_off_offset_s in pulse_schedule(args.pulse_count):
-            on_offset_s = raw_on_offset_s * args.time_scale_for_test
-            off_offset_s = raw_off_offset_s * args.time_scale_for_test
+            if logical_driver is None:
+                on_offset_s = raw_on_offset_s * args.time_scale_for_test
+                off_offset_s = raw_off_offset_s * args.time_scale_for_test
+            else:
+                on_offset_s = raw_on_offset_s
+                off_offset_s = raw_off_offset_s
             _writer_stage(WriterStage.DURING_CAPTURE)
-            if pulses:
+            if logical_driver is not None:
+                assert pulse_loop_epoch0 is not None
+                logical_test_clock.advance_to(pulse_loop_epoch0 + on_offset_s)
+            elif pulses:
+                assert pulse_loop_mono0 is not None
                 elapsed_s = time.monotonic() - pulse_loop_mono0
                 time.sleep(max(0.0, on_offset_s - elapsed_s))
             on_stamp = clock.stamp()
@@ -1437,7 +1910,14 @@ def main(argv: list[str] | None = None) -> int:
                 "pulse_command_on",
                 {"clock_stamp": asdict(on_stamp), "planned_on_offset_s": on_offset_s},
             )
-            run_matmul_pulse(PULSE_DURATION_S * args.time_scale_for_test, buffers)
+            if logical_driver is None:
+                run_matmul_pulse(
+                    PULSE_DURATION_S * args.time_scale_for_test,
+                    buffers,
+                )
+            else:
+                logical_driver.drive_fenced_pulse(buffers)
+                logical_test_clock.advance_to(pulse_loop_epoch0 + off_offset_s)
             off_stamp = clock.stamp()
             emit(
                 "pulse_command_off",
@@ -1451,12 +1931,19 @@ def main(argv: list[str] | None = None) -> int:
                     off_uncertainty_s=clock_stamp_half_width_s(off_stamp),
                 )
             )
-        time.sleep(BASELINE_S * args.time_scale_for_test)
+        if logical_driver is None:
+            time.sleep(BASELINE_S * args.time_scale_for_test)
+        else:
+            logical_test_clock.advance(BASELINE_S)
         sampling_stopped = clock.stamp()
         emit("sampling_stopped", {})
         _terminate_powermetrics(process)
         _writer_stage(WriterStage.AFTER_SAMPLER_TEARDOWN)
         post_parse = clock.stamp()
+        active_sampler = None
+
+    if logical_driver is not None:
+        logical_driver.acknowledgement_path.unlink(missing_ok=True)
 
     data = capture_path.read_bytes()
     _writer_stage(WriterStage.DURING_RAW_EVENTS_ARTIFACT)
@@ -1477,10 +1964,9 @@ def main(argv: list[str] | None = None) -> int:
             "clock_anchor_unresolved: calibration capture cannot be anchored",
             file=sys.stderr,
         )
-        # Fail closed: an unanchored capture can never be a valid calibration.
-        # Detection still runs against the 1 s-quantized native stamps so the
-        # diagnostic artifact records why, but the evidence is forced invalid
-        # and the script exits nonzero below.
+        # Fail closed: an unanchored capture can never be valid. Native records
+        # remain in custody, but the expensive full-resolution projection is
+        # skipped and the explicit causal linkage is serialized below.
         anchored = native_records
     else:
         anchored = parse_powermetrics_records(
@@ -1514,8 +2000,32 @@ def main(argv: list[str] | None = None) -> int:
             if anchor_resolved
             else 0.0
         ),
+        projection_cell_budget=(
+            args.projection_cell_budget_for_test
+            if args.projection_cell_budget_for_test is not None
+            else DETECTION_PROJECTION_CELL_BUDGET
+        ),
+        projection_bypass_reason=(
+            None if anchor_resolved else CLOCK_ANCHOR_UNRESOLVED
+        ),
     )
     events.close()
+
+    if launch_authentication is not None:
+        try:
+            launch_authentication = reconcile_calibration_writer_launch_lineage(
+                launch_authentication,
+                args.output_root,
+                session_id=args.session_id,
+                slot=args.slot,
+                attempt_id=args.attempt_id,
+            )
+        except ValueError as exc:
+            if _calibration_launch_reason_code(exc) is None:
+                raise
+            finalize_abandoned(_calibration_launch_reason_code(exc) or "")
+            atexit.unregister(finalize_abandoned)
+            return _emit_calibration_launch_refusal(exc)
 
     device_meta = native_records[0].metadata if native_records else {}
     bindings = {
@@ -1553,6 +2063,11 @@ def main(argv: list[str] | None = None) -> int:
             "power_trace.csv": sha256_path(trace_path),
         },
         capture_wall_time_s=sampling_started.epoch_s,
+        launch_lineage=(
+            launch_authentication["launch_lineage"]
+            if launch_authentication is not None
+            else None
+        ),
     )
     evidence_payload["clock_anchor"] = evidence["clock_anchor"]
     evidence_payload["clock_anchor_resolved"] = anchor_resolved
@@ -1605,7 +2120,10 @@ def main(argv: list[str] | None = None) -> int:
             else "valid"
         )
     try:
-        _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(disposition)
+        _final_receipt, head_pin_candidate = ledger_lifecycle.finalize(
+            disposition,
+            invalid_evidence_disposition=detection.projection_disposition,
+        )
     except CalibrationLedgerError as exc:
         if exc.code == RefusalCode.FINALIZATION_BINDING_CONFLICT:
             # Binding conflict is corruption evidence.  Do not let the generic
@@ -1632,6 +2150,13 @@ def main(argv: list[str] | None = None) -> int:
             "slot": args.slot,
             "attempt_id": args.attempt_id,
         }
+    if detection.projection_disposition is not None:
+        output["invalid_evidence_disposition"] = (
+            detection.projection_disposition
+        )
+        output["detection_projection"] = evidence_payload[
+            "detection_projection"
+        ]
     if bracket_mode and args.slot == "pre":
         _writer_stage(WriterStage.AFTER_PRE_FINALIZATION_BEFORE_SUPERVISOR_DISPATCH)
     print(json.dumps(output, indent=2))

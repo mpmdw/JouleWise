@@ -1,0 +1,147 @@
+{
+  "checks": [
+    {
+      "check_id": "receipt_oracle_byte_equality",
+      "evidence": {
+        "oracle_sha256": "c2368f6263e10a1c0874b114119479ff29c8df1e0829e5ceb94570e7f2f105be"
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "oracle": {
+      "arm_time_receipts": [],
+      "logical_operation_count": 5,
+      "physical_receipt_shape": [
+        {
+          "event": "append-intent",
+          "relative_sequence": 1,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": null,
+          "target_event": "bracket-session-open",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-open",
+          "relative_sequence": 2,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": null,
+          "target_event": null,
+          "target_schema_version": null
+        },
+        {
+          "event": "append-intent",
+          "relative_sequence": 3,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": "pre",
+          "target_event": "bracket-session-slot-claim",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-slot-claim",
+          "relative_sequence": 4,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": "pre",
+          "target_event": null,
+          "target_schema_version": null
+        },
+        {
+          "event": "append-intent",
+          "relative_sequence": 5,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": "pre",
+          "target_event": "bracket-session-slot-finalization",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-slot-finalization",
+          "relative_sequence": 6,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": "pre",
+          "target_event": null,
+          "target_schema_version": null
+        },
+        {
+          "event": "append-intent",
+          "relative_sequence": 7,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": "post",
+          "target_event": "bracket-session-slot-claim",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-slot-claim",
+          "relative_sequence": 8,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": "post",
+          "target_event": null,
+          "target_schema_version": null
+        },
+        {
+          "event": "append-intent",
+          "relative_sequence": 9,
+          "schema_version": "joulewise.calibration_ledger_control.v1",
+          "slot": "post",
+          "target_event": "bracket-session-slot-finalization",
+          "target_schema_version": "joulewise.calibration_window_bracket_session.v1"
+        },
+        {
+          "event": "bracket-session-slot-finalization",
+          "relative_sequence": 10,
+          "schema_version": "joulewise.calibration_window_bracket_session.v1",
+          "slot": "post",
+          "target_event": null,
+          "target_schema_version": null
+        }
+      ],
+      "receipt_count": 10,
+      "schema_version": "joulewise.bracket_session_receipt_oracle.v1",
+      "session_terminal_state": "finalized",
+      "source": {
+        "append_policy_revision": "d117-ledger-resident-v1",
+        "claim_policy_revision": "d117-stable-claim-v1",
+        "module": "joulewise.calibration_ledger",
+        "operation_functions": [
+          "append_bracket_session_receipt",
+          "claim_bracket_session_slot",
+          "finalize_bracket_session_slot"
+        ]
+      },
+      "status": "derived_from_production_model",
+      "terminal_sequence": null,
+      "terminal_sequence_rule": {
+        "applicability": "clean_path_no_recovery_control_rows",
+        "base": "authenticated_arm_head_sequence",
+        "delta": 10,
+        "recovery_note": "Authenticated recovery control rows (for example an abandon-tail repair between an intent and its reconstructed target) may lawfully extend the terminal sequence beyond base+delta. Arm-time verification must validate the business-receipt cadence separately from authenticated control rows rather than requiring base+delta exactly."
+      }
+    }
+  },
+  "facts": [
+    {
+      "fact_id": "desk.receipt_oracle.v1",
+      "value": {
+        "derived_from_committed_ledger_implementation": true,
+        "exact_pack_oracle_match": true
+      }
+    }
+  ],
+  "head_commit": "54f990d156eee3da3467b368b816d4ac4a50f806",
+  "kind": "RECEIPT_ORACLE",
+  "pack_sha256": "1b3892f4f40a5a36a628cc47858b276076c1869e7eac0e2535adf3402c200277",
+  "primary_artifacts": [
+    {
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v2/plan_tree.json",
+      "sha256": "3091fcc7b42ee8ed52d38ac55d9c11ec71162fffb5ce6012f93366b69e93155a"
+    },
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "sha256": "e53a4ef7c36cd06f990bc45a5c977d65d2ad854ba2a0ca38e398af0facb746c0"
+    },
+    {
+      "path": "joulewise/receipt_oracle.py",
+      "sha256": "970b2e646d580cc5a4f1d649d5bfb2b45cb227af3975349a720e87025711e2ce"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_evidence_source.v1"
+}

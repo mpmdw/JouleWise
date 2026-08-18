@@ -1,0 +1,32 @@
+{
+  "schema_version": "joulewise.d117_consumer_family_declaration.v1",
+  "draft_status": "as_generated_pre_d134_freeze",
+  "declaration_kind": "consumer_family_declaration",
+  "binding_mode": "declaration_only",
+  "byte_binding_pinset": false,
+  "authority": "plan-factory frozen cross-pack vocabulary, amended in scope by D-122",
+  "consumer_family_id": "d117-qwen25-1p5b-vs-7b-gamma-consumer-v2",
+  "decode_floor_cells": {
+    "condition_a": "d117-qwen25-1p5b-decode-floor-v2",
+    "condition_b": "d117-qwen25-7b-decode-floor-v2",
+    "derivation": "deterministic plan-factory floor artifact vocabulary",
+    "floor_rule": "cross_stack_armwise_max.v1"
+  },
+  "prefill_p256_floor_dependency": {
+    "cell_ids": {
+      "status": "EMPTY",
+      "value": [],
+      "todo": "TODO(lead authority): D-122 does not identify ruled 256-token prefill floor cells"
+    },
+    "transport_rule": {
+      "status": "EMPTY",
+      "value": "",
+      "todo": "TODO(lead authority): D-122 does not ratify transport from the alpha/beta 128-token prefill floor cells to this 256-token estimand"
+    }
+  },
+  "forbidden_content": [
+    "aggregate artifact byte SHA",
+    "floor artifact pinset",
+    "postcollection receipt or verdict bytes"
+  ]
+}

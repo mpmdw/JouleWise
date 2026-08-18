@@ -7,9 +7,11 @@ bounds against them.
 
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
+import copy
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from decimal import Decimal, ROUND_HALF_EVEN
 import io
+import importlib
 import math
 import json
 import hashlib
@@ -21,12 +23,16 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from typing import Mapping
 from unittest.mock import patch
 
 from joulewise import calibration_ledger as ledger_module
 from joulewise import powermetrics_fiducial as fiducial_module
 from joulewise.powermetrics_fiducial import (
     BINDING_FIELDS,
+    CLOCK_ANCHOR_UNRESOLVED,
+    DETECTION_NONCONVERGENT,
+    DETECTION_PROJECTION_CELL_BUDGET,
     LEGACY_PROTOCOL_ID,
     PROTOCOL_ID,
     PROTOCOL_V2_ID,
@@ -50,6 +56,18 @@ from scripts.validate_powermetrics_fiducial import (
     verify_frozen_protocol,
 )
 from scripts import validate_powermetrics_fiducial as validation_script
+
+try:
+    stage1_test_module = importlib.import_module("tests.test_arm_readiness")
+    from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
+except ModuleNotFoundError as exc:  # Stage-1 lands via the lead-owned main sync.
+    if exc.name not in {
+        "tests.test_arm_readiness",
+        "tests.test_arm_readiness_schemas",
+    }:
+        raise
+    stage1_test_module = None
+    TEST_BOOT_SESSION_ID = None
 
 CADENCE_S = 0.1
 BASELINE_W = 2.0
@@ -457,6 +475,246 @@ class DetectorTests(unittest.TestCase):
             "fixture must expose an accepted off-axis excursion missed by axes/diagonals",
         )
 
+    # D-138 parameter ruling, 2026-08-18.  The retired 100,000-cell budget was
+    # calibrated from the 17,505-cell synthetic acceptance trace and is
+    # exhausted by every real corpus-grade capture: the complete retained
+    # unique protocol-v3 corpus (n=34 full 59-pulse convergences) spans
+    # 112,205..137,189 evaluated cells.  These two constants are the ruled
+    # basis; a silent revert of the production default must fail here.
+    RULED_DETECTION_CELL_BUDGET = 165_000
+    RETIRED_DETECTION_CELL_BUDGET = 100_000
+    OBSERVED_CORPUS_MAX_CELLS = 137_189
+
+    def test_detection_cell_budget_is_the_ruled_corpus_calibrated_value(
+        self,
+    ) -> None:
+        self.assertEqual(
+            DETECTION_PROJECTION_CELL_BUDGET,
+            self.RULED_DETECTION_CELL_BUDGET,
+            "the D-138 detection budget ruling pins 165,000 cells; changing it "
+            "rotates the estimator pin and requires a D-079 reissue plus the "
+            "atomic _v2 successor-family re-freeze",
+        )
+        # The retired budget sits below the observed corpus maximum, so it
+        # could never have admitted a corpus-grade trace.
+        self.assertLess(
+            self.RETIRED_DETECTION_CELL_BUDGET,
+            self.OBSERVED_CORPUS_MAX_CELLS,
+        )
+        # The ruled budget clears the observed maximum by more than the entire
+        # observed min-to-max spread (24,984 cells).
+        self.assertGreater(
+            DETECTION_PROJECTION_CELL_BUDGET - self.OBSERVED_CORPUS_MAX_CELLS,
+            24_984,
+        )
+
+    def test_production_default_budget_spends_past_the_retired_ceiling(
+        self,
+    ) -> None:
+        # Behavioural kill evidence for the ruling: with no injected budget the
+        # production default must keep evaluating past the retired 100,000-cell
+        # ceiling and stop exactly at the ruled bound, still fail-closed.
+        trace, pulses = self.make_case(shift_s=0.0, count=1)
+        with patch.object(
+            fiducial_module,
+            "_pulse_loss_cell_lower_bound",
+            return_value=0.0,
+        ):
+            detection = detect_pulses(trace, pulses)
+        self.assertGreater(
+            detection.projection_evaluated_cell_count,
+            self.RETIRED_DETECTION_CELL_BUDGET,
+        )
+        self.assertEqual(
+            detection.projection_evaluated_cell_count,
+            DETECTION_PROJECTION_CELL_BUDGET,
+        )
+        self.assertEqual(
+            detection.projection_evaluated_cell_budget,
+            DETECTION_PROJECTION_CELL_BUDGET,
+        )
+        self.assertEqual(
+            detection.projection_budget_trigger,
+            "evaluated_cell_budget",
+        )
+        # Fail-closed behaviour is retained at the raised budget.
+        self.assertFalse(detection.all_pulses_detected)
+        self.assertIsNone(detection.b_fiducial_s)
+        self.assertEqual(detection.fits, ())
+        self.assertEqual(detection.reasons, (DETECTION_NONCONVERGENT,))
+
+    def test_flat_loss_projection_exhausts_deterministic_cell_budget(self) -> None:
+        # A zero lower bound prevents every branch-and-bound prune. Without a
+        # work limit this one-pulse analog expands toward the full 2^28 leaf
+        # tree; the small injected limit exercises the production counter.
+        trace, pulses = self.make_case(shift_s=0.0, count=1)
+        outcomes = []
+        for _repeat in range(2):
+            with patch.object(
+                fiducial_module,
+                "_pulse_loss_cell_lower_bound",
+                return_value=0.0,
+            ):
+                outcomes.append(
+                    detect_pulses(
+                        trace,
+                        pulses,
+                        projection_cell_budget=31,
+                    )
+                )
+
+        for detection in outcomes:
+            self.assertFalse(detection.all_pulses_detected)
+            self.assertIsNone(detection.b_fiducial_s)
+            self.assertEqual(detection.fits, ())
+            self.assertEqual(detection.reasons, (DETECTION_NONCONVERGENT,))
+            self.assertEqual(detection.projection_evaluated_cell_count, 31)
+            self.assertEqual(detection.projection_evaluated_cell_budget, 31)
+            self.assertEqual(
+                detection.projection_budget_trigger,
+                "evaluated_cell_budget",
+            )
+        self.assertEqual(
+            (
+                outcomes[0].projection_evaluated_cell_count,
+                outcomes[0].projection_disposition,
+            ),
+            (
+                outcomes[1].projection_evaluated_cell_count,
+                outcomes[1].projection_disposition,
+            ),
+        )
+        payload = instrument_evidence(
+            outcomes[0],
+            bindings={},
+            validation_id="flat-loss-budget",
+            artifact_sha256={},
+            protocol_pulse_count=1,
+            protocol_id=LEGACY_PROTOCOL_ID,
+        )
+        self.assertEqual(payload["status"], "invalid")
+        self.assertIn(DETECTION_NONCONVERGENT, payload["reasons"])
+        self.assertEqual(
+            payload["detection_projection"],
+            {
+                "disposition": DETECTION_NONCONVERGENT,
+                "cell_budget": 31,
+                "wall_budget_s": 120.0,
+                "diagnostics": {
+                    "reproducible": True,
+                    "evaluated_cell_count": 31,
+                    "trigger": "evaluated_cell_budget",
+                },
+            },
+        )
+
+    def test_wall_deadline_is_nonreproducible_host_pathology_diagnostic(
+        self,
+    ) -> None:
+        trace, pulses = self.make_case(shift_s=0.0, count=1)
+        with patch.object(
+            fiducial_module,
+            "_pulse_loss_cell_lower_bound",
+            return_value=0.0,
+        ):
+            deterministic = detect_pulses(
+                trace,
+                pulses,
+                projection_cell_budget=31,
+            )
+        with (
+            patch.object(
+                fiducial_module,
+                "_pulse_loss_cell_lower_bound",
+                return_value=0.0,
+            ),
+            patch.object(fiducial_module.time, "monotonic", return_value=1e99),
+        ):
+            wall = detect_pulses(
+                trace,
+                pulses,
+                projection_cell_budget=31,
+            )
+
+        def evidence_payload(detection):
+            return instrument_evidence(
+                detection,
+                bindings={},
+                validation_id="wall-pathology-diagnostic",
+                artifact_sha256={},
+                protocol_pulse_count=1,
+                protocol_id=LEGACY_PROTOCOL_ID,
+            )
+
+        deterministic_evidence = evidence_payload(deterministic)
+        wall_evidence = evidence_payload(wall)
+        deterministic_projection = deterministic_evidence[
+            "detection_projection"
+        ]
+        wall_projection = wall_evidence["detection_projection"]
+        reproducible_fields = ("disposition", "cell_budget", "wall_budget_s")
+        self.assertEqual(
+            {key: deterministic_projection[key] for key in reproducible_fields},
+            {key: wall_projection[key] for key in reproducible_fields},
+        )
+        self.assertEqual(
+            deterministic_projection["diagnostics"],
+            {
+                "reproducible": True,
+                "evaluated_cell_count": 31,
+                "trigger": "evaluated_cell_budget",
+            },
+        )
+        self.assertEqual(
+            wall_projection["diagnostics"],
+            {
+                "reproducible": False,
+                "evaluated_cell_count": 0,
+                "trigger": "wall_deadline",
+            },
+        )
+        self.assertEqual(wall.fits, ())
+        self.assertIsNone(wall.b_fiducial_s)
+        self.assertEqual(wall.reasons, (DETECTION_NONCONVERGENT,))
+        self.assertEqual(wall_evidence["status"], "invalid")
+        self.assertIsNone(wall_evidence["b_fiducial_s"])
+        self.assertEqual(wall_evidence["pulses"], [])
+
+    def test_unresolved_anchor_bypasses_every_projection_cell(self) -> None:
+        trace, pulses = self.make_case(shift_s=0.0, count=3)
+        with patch.object(
+            fiducial_module,
+            "_accepted_region_projection",
+            side_effect=AssertionError("projection must be skipped"),
+        ) as projection:
+            detection = detect_pulses(
+                trace,
+                pulses,
+                projection_bypass_reason=CLOCK_ANCHOR_UNRESOLVED,
+            )
+        projection.assert_not_called()
+        self.assertEqual(
+            detection.projection_disposition,
+            CLOCK_ANCHOR_UNRESOLVED,
+        )
+        self.assertEqual(detection.projection_evaluated_cell_count, 0)
+        self.assertEqual(
+            detection.projection_evaluated_cell_budget,
+            DETECTION_PROJECTION_CELL_BUDGET,
+        )
+        self.assertEqual(detection.reasons, (CLOCK_ANCHOR_UNRESOLVED,))
+        self.assertEqual(detection.fits, ())
+
+    def test_unresolved_anchor_bypass_refuses_nonzero_anchor_bound(self) -> None:
+        trace, pulses = self.make_case(shift_s=0.0, count=3)
+        with self.assertRaisesRegex(ValueError, "trace_anchor_bound_s == 0"):
+            detect_pulses(
+                trace,
+                pulses,
+                trace_anchor_bound_s=0.001,
+                projection_bypass_reason=CLOCK_ANCHOR_UNRESOLVED,
+            )
+
     def test_missing_edge_fails_closed(self) -> None:
         trace, pulses = self.make_case(shift_s=0.0)
         # Truncate the capture before the final pulse's off edge margin.
@@ -603,6 +861,83 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(set(payload["bindings"]), set(self.bindings()))
         self.assertEqual(payload["pulse_count"], 3)
 
+    def test_healthy_evidence_bytes_match_pre_budget_baseline(self) -> None:
+        bindings = self.bindings(
+            os_build="25F84",
+            mlx_version="0.29.3",
+            pulse_protocol_id=PROTOCOL_ID,
+            estimator_revision=RESIDUAL_REGION_METHOD,
+            protocol_sha256=PROTOCOL_V3_SHA256,
+        )
+        payload = instrument_evidence(
+            self.make_detection(),
+            bindings=bindings,
+            validation_id="full-writer-artifact-compare",
+            artifact_sha256={
+                "raw/powermetrics.plist": "cd" * 32,
+                "events.jsonl": "ef" * 32,
+                "power_trace.csv": "01" * 32,
+            },
+            protocol_pulse_count=3,
+            protocol_id=PROTOCOL_ID,
+            capture_wall_time_s=1_784_491_000.25,
+        )
+        payload["clock_anchor"] = {
+            "method": fiducial_module.CLOCK_METHOD_V2,
+            "effective_clock_anchor_bound_s": 0.0025,
+            "diagnostic": "fixed-review-fixture",
+        }
+        payload["clock_anchor_resolved"] = True
+        raw = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+        self.assertNotIn("detection_projection", payload)
+        self.assertEqual(payload["status"], "valid")
+        self.assertEqual(len(raw), 3923)
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(),
+            "254b86581074063da7622fd792d520d53726e2b3e4744a4a0647a4fd68cc02c7",
+        )
+
+    def test_launch_lineage_stamping_preserves_projection_disposition(self) -> None:
+        projected = replace(
+            self.make_detection(),
+            all_pulses_detected=False,
+            b_fiducial_s=None,
+            fits=(),
+            reasons=(DETECTION_NONCONVERGENT,),
+            projection_evaluated_cell_count=31,
+            projection_evaluated_cell_budget=31,
+            projection_disposition=DETECTION_NONCONVERGENT,
+            projection_budget_trigger="evaluated_cell_budget",
+        )
+        kwargs = {
+            "bindings": {},
+            "validation_id": "launch-bound-projection",
+            "artifact_sha256": {},
+            "protocol_pulse_count": 0,
+            "protocol_id": LEGACY_PROTOCOL_ID,
+        }
+        legacy = instrument_evidence(projected, **kwargs)
+        lineage = {
+            "schema_version": "joulewise.launch_lineage.v1",
+            "pack_id": "pack-stage-2",
+            "completion": None,
+        }
+        stamped = instrument_evidence(
+            projected,
+            launch_lineage=lineage,
+            **kwargs,
+        )
+
+        self.assertEqual(
+            stamped["detection_projection"], legacy["detection_projection"]
+        )
+        self.assertEqual(stamped["launch_lineage"], lineage)
+        without_lineage = dict(stamped)
+        without_lineage.pop("launch_lineage")
+        self.assertEqual(without_lineage, legacy)
+        lineage["pack_id"] = "mutated-after-serialization"
+        self.assertEqual(stamped["launch_lineage"]["pack_id"], "pack-stage-2")
+
     def test_v2_evidence_requires_and_records_capture_wall_time(self) -> None:
         detection = self.make_detection()
         bindings = self.bindings(
@@ -652,6 +987,34 @@ class EvidenceTests(unittest.TestCase):
         )
         self.assertEqual(payload["status"], "invalid")
         self.assertIn("pulse_detection_incomplete", payload["reasons"])
+
+    def test_projection_disposition_with_fitted_evidence_refuses_serialization(
+        self,
+    ) -> None:
+        inconsistent = replace(
+            self.make_detection(),
+            reasons=(DETECTION_NONCONVERGENT,),
+            projection_evaluated_cell_count=31,
+            projection_evaluated_cell_budget=31,
+            projection_disposition=DETECTION_NONCONVERGENT,
+            projection_budget_trigger="evaluated_cell_budget",
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "detection_nonconvergent: projection disposition conflicts with "
+            "fitted evidence",
+        ):
+            instrument_evidence(
+                inconsistent,
+                bindings=self.bindings(),
+                validation_id="inconsistent-projection",
+                artifact_sha256={
+                    "raw/powermetrics.plist": "cd" * 32,
+                    "events.jsonl": "ef" * 32,
+                },
+                protocol_pulse_count=3,
+                protocol_id=LEGACY_PROTOCOL_ID,
+            )
 
     def test_fitted_bound_below_protocol_pulse_count_is_invalid(self) -> None:
         # Regression: a 3-pulse run yields a fitted bound and all-detected, but
@@ -752,13 +1115,346 @@ class EvidenceTests(unittest.TestCase):
         self.assertGreater(new_min_s, window_s)
 
 
+class CalibrationLaunchBoundaryTests(unittest.TestCase):
+    def test_non_marker_config_keeps_launch_binding_dormant(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "acceptance.json"
+            config.write_text('{"schema_version":"legacy"}\n', encoding="utf-8")
+            self.assertIsNone(
+                validation_script.authenticate_calibration_writer_launch_lineage(
+                    root / "wrong-output-name",
+                    session_id=None,
+                    slot=None,
+                    attempt_id=None,
+                    source_config_path=config,
+                )
+            )
+
+    def test_marker_checks_output_basename_before_locator_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "acceptance.json"
+            config.write_text(
+                '{"run_metadata":{"tags":["launch_lineage_required"]}}\n',
+                encoding="utf-8",
+            )
+            with self.assertRaises(ValueError) as caught:
+                validation_script.authenticate_calibration_writer_launch_lineage(
+                    root / "wrong-output-name",
+                    session_id="session-1",
+                    slot="pre",
+                    attempt_id="attempt-pre",
+                    source_config_path=config,
+                )
+            self.assertEqual(
+                caught.exception.reason_code, "launch_binding_mismatch"
+            )
+
+    def test_external_acceptance_requires_authenticated_plan_path_and_digest(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pack = root / "pack"
+            pack.mkdir()
+            config = root / "acceptance.json"
+            config.write_text('{"run_metadata":{"tags":[]}}\n', encoding="utf-8")
+            digest = hashlib.sha256(config.read_bytes()).hexdigest()
+            plan = {
+                "acceptance_policy": {
+                    "issued_acceptance": {
+                        "path": "acceptance.json",
+                        "artifact_sha256": digest,
+                    }
+                }
+            }
+            (pack / "plan_tree.json").write_text(json.dumps(plan), encoding="utf-8")
+            authentication = {"pack_root": str(pack), "config_inventory": {}}
+            with patch.object(validation_script, "REPO_ROOT", root):
+                validation_script._authenticate_calibration_source_config(
+                    authentication,
+                    config_path=config,
+                    config_raw=config.read_bytes(),
+                )
+                plan["acceptance_policy"]["issued_acceptance"][
+                    "artifact_sha256"
+                ] = "0" * 64
+                (pack / "plan_tree.json").write_text(
+                    json.dumps(plan), encoding="utf-8"
+                )
+                with self.assertRaises(ValueError) as caught:
+                    validation_script._authenticate_calibration_source_config(
+                        authentication,
+                        config_path=config,
+                        config_raw=config.read_bytes(),
+                    )
+            self.assertEqual(
+                caught.exception.reason_code, "launch_binding_mismatch"
+            )
+
+    def test_marker_missing_locator_refuses_before_ledger_construction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "acceptance.json"
+            config.write_text(
+                json.dumps(
+                    {"run_metadata": {"tags": ["launch_lineage_required"]}}
+                ),
+                encoding="utf-8",
+            )
+            output_root = root / "runs" / "instrument_validation"
+            output_root.parent.mkdir()
+
+            class ForbiddenLedgerLifecycle:
+                def __init__(self, **_kwargs):
+                    raise AssertionError("ledger construction must not occur")
+
+            stderr = io.StringIO()
+            with (
+                patch.object(validation_script, "verify_frozen_protocol", return_value=True),
+                patch.object(
+                    validation_script,
+                    "DEFAULT_ACCEPTANCE_BOUND_PATH",
+                    config,
+                ),
+                patch.object(
+                    validation_script,
+                    "_CaptureLedgerLifecycle",
+                    ForbiddenLedgerLifecycle,
+                ),
+                redirect_stderr(stderr),
+            ):
+                result = validation_script.main(
+                    [
+                        "--allow-live",
+                        "--output-root",
+                        str(output_root),
+                        "--session-id",
+                        "session-1",
+                        "--slot",
+                        "pre",
+                        "--attempt-id",
+                        "attempt-pre",
+                        "--power-policy",
+                        "ac_high_power",
+                    ]
+                )
+
+            self.assertEqual(result, 2)
+            self.assertIn("launch_consumption_missing", stderr.getvalue())
+            self.assertFalse(output_root.exists())
+
+
+@unittest.skipUnless(
+    stage1_test_module is not None
+    and hasattr(validation_script.arm_readiness_module, "authenticate_launch_lineage"),
+    "stage-1 launch-lineage machinery awaits lead-owned main sync",
+)
+class CalibrationLaunchAuthenticationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        assert stage1_test_module is not None
+        self.stage1 = stage1_test_module.LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        self.stage1.setUp()
+        self.addCleanup(self.stage1.doCleanups)
+        self.readiness = validation_script.arm_readiness_module
+        self.config = self.stage1.pack / "calibration-acceptance.json"
+        self.config.write_bytes(
+            self.readiness.render_json(
+                {
+                    "schema_version": "synthetic.calibration_acceptance.v1",
+                    "run_metadata": {
+                        "tags": ["launch_lineage_required"]
+                    },
+                }
+            )
+        )
+        self.output_root = (
+            Path(self.stage1.arm["arm_context"]["claim_runs_root"])
+            / "instrument_validation"
+        )
+
+    @contextmanager
+    def _authentication_environment(
+        self,
+        *,
+        boot_session_id: str | None = None,
+        inventory: Mapping[str, str] | None = None,
+    ):
+        if boot_session_id is None:
+            boot_session_id = str(TEST_BOOT_SESSION_ID)
+        if inventory is None:
+            inventory = {
+                self.config.relative_to(self.stage1.pack).as_posix():
+                hashlib.sha256(self.config.read_bytes()).hexdigest()
+            }
+        with (
+            patch.object(
+                self.readiness,
+                "_current_boot_session_id",
+                return_value=boot_session_id,
+            ),
+            patch.object(
+                self.readiness,
+                "_git_text",
+                return_value=self.stage1.arm["reviewed_main"]["head_commit"],
+            ),
+            patch.object(
+                self.readiness,
+                "_authenticated_pack_config_inventory",
+                return_value=dict(inventory),
+            ),
+        ):
+            yield
+
+    def _authenticate(
+        self,
+        *,
+        output_root: Path | None = None,
+        session_id: str = "session-1",
+        slot: str = "pre",
+        attempt_id: str = "attempt-pre",
+        boot_session_id: str | None = None,
+        inventory: Mapping[str, str] | None = None,
+    ) -> dict[str, object] | None:
+        with self._authentication_environment(
+            boot_session_id=boot_session_id,
+            inventory=inventory,
+        ):
+            return validation_script.authenticate_calibration_writer_launch_lineage(
+                self.output_root if output_root is None else output_root,
+                session_id=session_id,
+                slot=slot,
+                attempt_id=attempt_id,
+                source_config_path=self.config,
+            )
+
+    def _assert_refusal(self, code: str, **kwargs) -> None:
+        with self.assertRaises(ValueError) as caught:
+            self._authenticate(**kwargs)
+        self.assertEqual(caught.exception.reason_code, code)
+
+    def test_real_settle_locator_authenticates_all_writer_bindings(self) -> None:
+        _consumption_path, settled = self.stage1._settle()
+        authenticated = self._authenticate()
+        assert authenticated is not None
+        self.assertEqual(
+            authenticated["launch_lineage"], settled["launch_lineage"]
+        )
+        self.assertEqual(
+            authenticated["selected_config_sha256"],
+            hashlib.sha256(self.config.read_bytes()).hexdigest(),
+        )
+
+    def test_missing_locator_refuses_registered_missing_code(self) -> None:
+        self._assert_refusal("launch_consumption_missing")
+
+    def test_corrupt_locator_refuses_registered_invalid_code(self) -> None:
+        self.stage1._settle()
+        locator = (
+            self.output_root.parent
+            / self.readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        locator.write_bytes(locator.read_bytes() + b" ")
+        self._assert_refusal("launch_consumption_invalid")
+
+    def test_wrong_root_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        source = (
+            self.output_root.parent
+            / self.readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        alien_root = Path(self.stage1.temporary.name) / "alien-root"
+        alien_root.mkdir()
+        alien = alien_root / source.name
+        alien.write_bytes(source.read_bytes())
+        alien.with_name(f"{alien.name}.sha256").write_bytes(
+            source.with_name(f"{source.name}.sha256").read_bytes()
+        )
+        self._assert_refusal(
+            "launch_binding_mismatch",
+            output_root=alien_root / "instrument_validation",
+        )
+
+    def test_wrong_boot_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        self._assert_refusal(
+            "launch_binding_mismatch",
+            boot_session_id="00000000-0000-4000-8000-000000000099",
+        )
+
+    def test_wrong_bracket_session_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        self._assert_refusal(
+            "launch_binding_mismatch", session_id="session-other"
+        )
+
+    def test_wrong_attempt_for_slot_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        self._assert_refusal(
+            "launch_binding_mismatch",
+            slot="post",
+            attempt_id="attempt-pre",
+        )
+
+    def test_unauthenticated_config_refuses_binding_mismatch(self) -> None:
+        self.stage1._settle()
+        self._assert_refusal("launch_binding_mismatch", inventory={})
+
+    def test_mixed_root_lineages_refuse_conflict(self) -> None:
+        self.stage1._settle()
+        assert stage1_test_module is not None
+        second = stage1_test_module.LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        second.setUp()
+        try:
+            second._settle()
+            second_locator_path = (
+                Path(second.arm["arm_context"]["bound_runs_root"])
+                / self.readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+            )
+            second_locator = self.readiness.parse_json_bytes(
+                second_locator_path.read_bytes(), require_canonical=True
+            )
+        finally:
+            second.doCleanups()
+        bound_locator_path = (
+            Path(self.stage1.arm["arm_context"]["bound_runs_root"])
+            / self.readiness.LAUNCH_LINEAGE_LOCATOR_BASENAME
+        )
+        mixed = self.readiness.parse_json_bytes(
+            bound_locator_path.read_bytes(), require_canonical=True
+        )
+        mixed["launch_lineage"] = copy.deepcopy(
+            second_locator["launch_lineage"]
+        )
+        mixed_raw = self.readiness.render_json(mixed)
+        bound_locator_path.write_bytes(mixed_raw)
+        bound_locator_path.with_name(
+            f"{bound_locator_path.name}.sha256"
+        ).write_bytes(
+            self.readiness.gnu_sidecar(
+                hashlib.sha256(mixed_raw).hexdigest(),
+                bound_locator_path.name,
+            )
+        )
+        self._assert_refusal("launch_lineage_conflict")
+
+
 class FrozenProtocolTests(unittest.TestCase):
     def test_preflight_screen_is_derived_bit_exactly_from_real_artifact(self) -> None:
-        path = Path("configs/calibration/calibration_acceptance_d079_v2.json")
+        # The ACTIVE generation since the D-138 reissue.  The estimator-bearing
+        # branch was fail-closed while the issued pin was stale; the atomic
+        # Phase-2 acceptance/pin re-freeze is exactly what cures it, so this
+        # unit now proves the cured state end to end.
+        path = Path("configs/calibration/calibration_acceptance_d079_v2_r2.json")
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+            "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e",
         )
         artifact = json.loads(raw)
         derivation = artifact["decimal_derivation"]
@@ -766,15 +1462,36 @@ class FrozenProtocolTests(unittest.TestCase):
         expected = Decimal(
             derivation["source_statistics"]["maximum_s"]
         ).quantize(Decimal(rounding["quantum_s"]), rounding=ROUND_HALF_EVEN)
+        # The artifact's own estimator pins are the live ones: no isolation
+        # patch, so this also proves the staleness guard is genuinely cured.
+        self.assertEqual(
+            validation_script._current_estimator_code_sha256(),
+            dict(artifact["prospective_rederivation"]["estimator_code_sha256"]),
+        )
         observed = validation_script._derive_preflight_systematic_screen_s(
             artifact["identity_epoch"], acceptance_path=path
         )
         self.assertIsInstance(observed, Decimal)
         self.assertEqual(observed.as_tuple(), expected.as_tuple())
         self.assertEqual(
-            validation_script.PREFLIGHT_SYSTEMATIC_SCREEN_S.as_tuple(),
-            expected.as_tuple(),
+            validation_script.PREFLIGHT_SYSTEMATIC_SCREEN_S,
+            observed,
+            "the branch-wide convenience value derives from the issued "
+            "artifact once its estimator pin is fresh",
         )
+        # The predecessor issuance keeps its own bytes and stays stale-pinned.
+        predecessor = Path("configs/calibration/calibration_acceptance_d079_v2.json")
+        self.assertEqual(
+            hashlib.sha256(predecessor.read_bytes()).hexdigest(),
+            "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+        )
+        with self.assertRaisesRegex(
+            validation_script._AcceptancePreflightError,
+            "acceptance_artifact_stale",
+        ):
+            validation_script._derive_preflight_systematic_screen_s(
+                artifact["identity_epoch"], acceptance_path=predecessor
+            )
 
     def test_writer_has_no_copied_preflight_scalar_and_comparison_is_derived(self) -> None:
         source = Path(validation_script.__file__).read_text(encoding="utf-8")
@@ -825,6 +1542,15 @@ class FrozenProtocolTests(unittest.TestCase):
                             validation_script,
                             "DEFAULT_ACCEPTANCE_BOUND_PATH",
                             acceptance_path,
+                        ),
+                        patch.object(
+                            validation_script,
+                            "_current_estimator_code_sha256",
+                            return_value=dict(
+                                real_artifact["prospective_rederivation"][
+                                    "estimator_code_sha256"
+                                ]
+                            ),
                         ),
                         redirect_stdout(stdout),
                         redirect_stderr(stderr),
@@ -1438,6 +2164,19 @@ os._exit(23)
                     validation_script,
                     "_CaptureLedgerLifecycle",
                     StopAfterCustodyCapture,
+                ),
+                patch.object(
+                    validation_script,
+                    "_current_estimator_code_sha256",
+                    return_value=dict(
+                        json.loads(
+                            validation_script.DEFAULT_ACCEPTANCE_BOUND_PATH.read_text(
+                                encoding="utf-8"
+                            )
+                        )["prospective_rederivation"][
+                            "estimator_code_sha256"
+                        ]
+                    ),
                 ),
             ):
                 return_code = validation_script.main(

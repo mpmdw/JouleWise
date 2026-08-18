@@ -6,6 +6,7 @@ import io
 import inspect
 import json
 import os
+import shlex
 import shutil
 import time
 import unittest
@@ -21,7 +22,11 @@ from joulewise.arm_readiness_evidence import (
 from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts import author_arm_readiness_evidence as evidence_author_cli
 from scripts import generate_arm_readiness as arm_readiness_cli
-from tests.test_arm_readiness_lifecycle import git, make_go_fixture
+from tests.test_arm_readiness_lifecycle import (
+    git,
+    make_go_fixture,
+    predecessor_pack_root,
+)
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 
 
@@ -95,11 +100,28 @@ def _identity_unit(arm: str, model: str) -> dict:
     }
 
 
-def make_author_fixture():
-    temporary, repository, pack, custody, arm_path = make_go_fixture()
+def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
+    """Build an ALPHA authoring pack plus its two family siblings.
+
+    PACK_FAMILY derivation reads the family named by
+    ``evidence._PACKS_BY_PROFILE``, which is the IMMUTABLE HISTORICAL family, so
+    the default fixture is that family's generation-1 ALPHA member and the
+    siblings match its generation.  A caller may ask for a later generation to
+    exercise successor-chain behaviour; it must then supply the family route for
+    that generation (today: by patching ``_PACKS_BY_PROFILE``, which stands in
+    for the registry-driven successor family route that does not exist yet).
+    """
+
+    generation_suffix = pack_name[pack_name.rindex("_v") :]
+    temporary, repository, pack, custody, arm_path = make_go_fixture(
+        pack_name, "ALPHA"
+    )
 
     for relative in (
+        # Both issued generations: a `_v1`-generation pack pins the D-116
+        # initial issuance, a successor-generation pack pins the D-138 reissue.
         "configs/calibration/calibration_acceptance_d079_v2.json",
+        "configs/calibration/calibration_acceptance_d079_v2_r2.json",
         "docs/decision_log.md",
         "docs/phase_2/window_runbook.md",
         "joulewise/analysis_manifest_v3.py",
@@ -258,8 +280,11 @@ def make_author_fixture():
 
     beta_identity = _identity_unit("B", "beta-model")
     sibling_trees = {
-        "d117_floor_qwen25_7b_v1": [beta_identity],
-        "d117_contrast_qwen25_1p5b_vs_7b_v1": [alpha_identity, beta_identity],
+        f"d117_floor_qwen25_7b{generation_suffix}": [beta_identity],
+        f"d117_contrast_qwen25_1p5b_vs_7b{generation_suffix}": [
+            alpha_identity,
+            beta_identity,
+        ],
     }
     for pack_name, units in sibling_trees.items():
         sibling = repository / "configs/campaigns" / pack_name
@@ -1030,8 +1055,80 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         self.assertFalse((pack / evidence._SOURCE_DIRECTORY).exists())
         self.assertFalse((pack / evidence._EVIDENCE_DIRECTORY).exists())
 
+    def test_historical_pack_is_not_refused_by_the_author_registry_site(
+        self,
+    ) -> None:
+        """The author's registry site resolves a historical v1 identity.
+
+        The pack/profile map is immutable history, so this site must NEVER be
+        the thing that refuses a v1 pack; prevention is layered onto the later
+        governed gates (R2 frozen-plan resolution, freeze-receipt
+        authentication, the R1 lifecycle once a registry installs it).
+        """
+
+        temporary, _repository, pack, _custody, _arm_path = make_go_fixture(
+            "d117_floor_qwen25_1p5b_v1", "ALPHA"
+        )
+        self.addCleanup(temporary.cleanup)
+        tree, _raw = readiness._plan_tree(pack)
+        rows, kinds = evidence._required_generic_rows(pack, tree)
+        self.assertTrue(rows)
+        self.assertIn("PACK_FAMILY", kinds)
+        self.assertEqual(readiness._plan_profile(pack), "ALPHA")
+
+    def test_pack_family_evidence_binds_the_immutable_historical_family(
+        self,
+    ) -> None:
+        temporary, _repository, pack, _custody, _arm_path = make_author_fixture()
+        self.addCleanup(temporary.cleanup)
+        tree, _raw = readiness._plan_tree(pack)
+        context = evidence._DerivationContext(
+            pack_root=pack,
+            repository=readiness._repo_for_pack(pack),
+            tree=tree,
+            pack_sha256=readiness.committed_pack_tree_sha256(pack),
+            head_commit=readiness.reviewed_main(pack)["head_commit"],
+        )
+        derived = evidence._derive_pack_family(context)
+        self.assertEqual(
+            [artifact["path"] for artifact in derived.primary_artifacts],
+            [
+                f"configs/campaigns/{pack_name}/plan_tree.json"
+                for pack_name in evidence._PACKS_BY_PROFILE.values()
+            ],
+        )
+        # The bound family is the historical one.  A registry-driven successor
+        # route for PACK_FAMILY derivation does not exist yet: a _v2 pack would
+        # still bind these three v1 plan trees.  Reported to the magistrate with
+        # the R1 registry install rather than patched here.
+        self.assertEqual(
+            [artifact["path"] for artifact in derived.primary_artifacts],
+            [
+                "configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.json",
+                "configs/campaigns/d117_floor_qwen25_7b_v1/plan_tree.json",
+                "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/plan_tree.json",
+            ],
+        )
+
     def test_authored_evidence_makes_synthetic_pack_freeze_pass(self) -> None:
-        temporary, repository, pack, _custody, _arm_path = make_author_fixture()
+        # This one exercises the SUCCESSOR world end to end (freeze-0002 with a
+        # predecessor root), so it needs the successor family route.  Patching
+        # _PACKS_BY_PROFILE stands in for the registry-driven successor family
+        # route that is not built yet: the code map itself is immutable history
+        # and must not be edited to follow a supersession.
+        family = mock.patch.dict(
+            evidence._PACKS_BY_PROFILE,
+            {
+                "ALPHA": "d117_floor_qwen25_1p5b_v2",
+                "BETA": "d117_floor_qwen25_7b_v2",
+                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+            },
+        )
+        family.start()
+        self.addCleanup(family.stop)
+        temporary, repository, pack, _custody, _arm_path = make_author_fixture(
+            "d117_floor_qwen25_1p5b_v2"
+        )
         self.addCleanup(temporary.cleanup)
         author_output = io.BytesIO()
         author_stdout = _cli_stdout(author_output)
@@ -1048,6 +1145,11 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         pack_relative = pack.relative_to(repository).as_posix()
         source_relative = f"{pack_relative}/{evidence._SOURCE_DIRECTORY}"
         evidence_relative = f"{pack_relative}/{evidence._EVIDENCE_DIRECTORY}"
+        # D-139/F2: the fixture pack is a successor, so the emitted sequence
+        # must carry the mechanically derived predecessor root or the operator
+        # deadlocks on a command that always refuses.
+        predecessor = predecessor_pack_root(repository, pack.name)
+        predecessor_relative = predecessor.relative_to(repository).as_posix()
         self.assertEqual(
             authored["post_authoring"],
             {
@@ -1057,7 +1159,8 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                     "git push origin HEAD:main",
                     (
                         "python3 scripts/generate_arm_readiness.py freeze "
-                        f"--pack-root {pack_relative}"
+                        f"--pack-root {pack_relative} "
+                        f"--predecessor-pack-root {predecessor_relative}"
                     ),
                 ],
                 "recovery": (
@@ -1072,14 +1175,20 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         output = io.BytesIO()
         stdout = _cli_stdout(output)
-        with mock.patch.object(arm_readiness_cli.sys, "stdout", stdout):
-            return_code = arm_readiness_cli.main(
-                [
-                    "freeze",
-                    "--pack-root",
-                    str(pack),
-                ]
-            )
+        # Run the EMITTED command itself, from the repository root, so the
+        # operator sequence is the thing under test rather than a hand-built
+        # argv that happens to work.
+        emitted = shlex.split(authored["post_authoring"]["sequence"][3])
+        self.assertEqual(
+            emitted[:2], ["python3", "scripts/generate_arm_readiness.py"]
+        )
+        previous_directory = Path.cwd()
+        os.chdir(repository)
+        try:
+            with mock.patch.object(arm_readiness_cli.sys, "stdout", stdout):
+                return_code = arm_readiness_cli.main(emitted[2:])
+        finally:
+            os.chdir(previous_directory)
         self.assertEqual(return_code, 0)
         result = readiness.parse_json_bytes(
             output.getvalue(), require_canonical=True
@@ -1104,6 +1213,51 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             ),
             1,
         )
+        self.assertEqual(receipt["receipt_id"], "freeze-0002")
+        # F1 (delta-8): idempotent replay must re-authenticate the CURRENT
+        # successor in full, not only its ancestry.  One appended byte in any
+        # binding the receipt names must refuse instead of replaying PASS with
+        # mutated: false; restoring the bytes must replay PASS again.
+        receipt_path = Path(result["receipt_path"])
+        replay = readiness.generate_freeze_receipt(
+            pack, predecessor_pack_root=predecessor
+        )
+        self.assertEqual(
+            (replay["status"], replay["mutated"], replay["receipt_sha256"]),
+            ("PASS", False, result["receipt_sha256"]),
+        )
+        for label, target in (
+            (
+                "identity projection evidence",
+                pack / "identity_pin_projection.receipts/projection-0001.json",
+            ),
+            ("freeze receipt", receipt_path),
+            (
+                "freeze receipt sidecar",
+                receipt_path.with_name(f"{receipt_path.name}.sha256"),
+            ),
+        ):
+            with self.subTest(tampered=label):
+                original = target.read_bytes()
+                target.write_bytes(original + b"\n")
+                try:
+                    with self.assertRaises(readiness.ArmReadinessError):
+                        readiness.generate_freeze_receipt(
+                            pack, predecessor_pack_root=predecessor
+                        )
+                finally:
+                    target.write_bytes(original)
+                restored = readiness.generate_freeze_receipt(
+                    pack, predecessor_pack_root=predecessor
+                )
+                self.assertEqual(
+                    (
+                        restored["status"],
+                        restored["mutated"],
+                        restored["receipt_sha256"],
+                    ),
+                    ("PASS", False, result["receipt_sha256"]),
+                )
 
 
 if __name__ == "__main__":

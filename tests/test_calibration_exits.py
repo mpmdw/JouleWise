@@ -748,6 +748,59 @@ def _install_fake_writer_dependencies(repo: Path) -> Path:
     return sampler
 
 
+def _rekey_private_writer_acceptance(repo: Path) -> None:
+    """Authenticate copied estimator bytes inside a private synthetic repo."""
+
+    acceptance_path = (
+        repo
+        / "configs"
+        / "calibration"
+        / "calibration_acceptance_d079_v2_r2.json"
+    )
+    acceptance = json.loads(acceptance_path.read_text(encoding="utf-8"))
+    estimator_paths = tuple(
+        acceptance["prospective_rederivation"][
+            "estimator_code_sha256"
+        ]
+    )
+    acceptance["prospective_rederivation"]["estimator_code_sha256"] = {
+        relative: hashlib.sha256((repo / relative).read_bytes()).hexdigest()
+        for relative in estimator_paths
+    }
+    acceptance_core = {
+        key: value
+        for key, value in acceptance.items()
+        if key != "derivation_sha256"
+    }
+    acceptance["derivation_sha256"] = hashlib.sha256(
+        json.dumps(
+            acceptance_core,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    old_acceptance_sha256 = hashlib.sha256(acceptance_path.read_bytes()).hexdigest()
+    acceptance_path.write_text(
+        json.dumps(acceptance, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    new_acceptance_sha256 = hashlib.sha256(acceptance_path.read_bytes()).hexdigest()
+    bracketing_path = repo / "joulewise" / "calibration_bracketing.py"
+    bracketing_source = bracketing_path.read_text(encoding="utf-8")
+    if bracketing_source.count(old_acceptance_sha256) != 1:
+        raise AssertionError("issued acceptance digest pin shape changed")
+    bracketing_path.write_text(
+        bracketing_source.replace(
+            old_acceptance_sha256,
+            new_acceptance_sha256,
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+
 class RefusalInventoryTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
@@ -2217,12 +2270,13 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             REPO_ROOT
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2.json",
+            / "calibration_acceptance_d079_v2_r2.json",
             self.repo
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2.json",
+            / "calibration_acceptance_d079_v2_r2.json",
         )
+        _rekey_private_writer_acceptance(self.repo)
         self.pin = self.repo / "configs" / "calibration" / "calibration_ledger_head.json"
         self.pin.parent.mkdir(parents=True, exist_ok=True)
         self.pin.write_text(
@@ -2482,6 +2536,34 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "pre_finalized": payload["slots"]["pre"]["finalized"],
         }
 
+    def _writer_detector_diagnostic(self, state: dict) -> dict[str, object]:
+        evidence_path = Path(state["custody_locator"]) / "instrument_evidence.json"
+        try:
+            payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return {"instrument_evidence": "unavailable"}
+        pulses = payload.get("pulses")
+        undetected = []
+        if isinstance(pulses, list):
+            undetected = [
+                {
+                    "pulse_index": pulse.get("pulse_index"),
+                    "reasons": pulse.get("reasons"),
+                }
+                for pulse in pulses
+                if isinstance(pulse, dict) and pulse.get("detected") is not True
+            ]
+        anchor = payload.get("clock_anchor")
+        return {
+            "status": payload.get("status"),
+            "b_fiducial_s": payload.get("b_fiducial_s"),
+            "reasons": payload.get("reasons"),
+            "clock_anchor_status": (
+                anchor.get("status") if isinstance(anchor, dict) else None
+            ),
+            "undetected_pulses": undetected,
+        }
+
     def _execute_valid_writer(
         self,
         code: RefusalCode,
@@ -2502,7 +2584,8 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.assertEqual(
             completed.returncode,
             0,
-            f"correction={code.value}\n{completed.stdout}{completed.stderr}",
+            f"correction={code.value}\n{completed.stdout}{completed.stderr}\n"
+            f"detector={json.dumps(self._writer_detector_diagnostic(state), sort_keys=True)}",
         )
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["status"], "valid")
@@ -4271,6 +4354,58 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.assertTrue(
             all(result.code is code for code, result in _WITNESS_RESULTS.items())
         )
+
+    def test_logical_producer_delay_preserves_exact_evidence_bytes(self) -> None:
+        origin = time.time()
+
+        def capture(delay_s: float | None) -> tuple[bytes, bytes, bytes, bytes]:
+            witness = type(self)(methodName="runTest")
+            setup_complete = False
+            try:
+                witness.setUp()
+                setup_complete = True
+                marker = witness.repo / "writer-fixtures" / "producer-delay.json"
+                witness.writer_env_overrides = {
+                    "JW_FAKE_TIME_ORIGIN": repr(origin),
+                }
+                if delay_s is not None:
+                    witness.writer_env_overrides.update(
+                        {
+                            "JW_FAKE_MLX_DELAY_ON_FENCE": "4",
+                            "JW_FAKE_MLX_DELAY_S": repr(delay_s),
+                            "JW_FAKE_MLX_DELAY_RESULT_PATH": str(marker),
+                        }
+                    )
+                state = witness._state_real_writer(
+                    "logical-producer-delay-immunity"
+                )
+                witness._execute_valid_writer(
+                    RefusalCode.QUIET_MAC_AUTH_REQUIRED,
+                    state,
+                )
+                custody = Path(state["custody_locator"])
+                if delay_s is None:
+                    self.assertFalse(marker.exists())
+                else:
+                    self.assertEqual(
+                        json.loads(marker.read_text(encoding="utf-8")),
+                        {"delay_s": delay_s, "fence": 4},
+                    )
+                self.assertFalse((custody / ".test-sampler-acks.jsonl").exists())
+                return (
+                    (custody / "instrument_evidence.json").read_bytes(),
+                    (custody / "events.jsonl").read_bytes(),
+                    (custody / "raw" / "powermetrics.plist").read_bytes(),
+                    (custody / "power_trace.csv").read_bytes(),
+                )
+            finally:
+                if setup_complete:
+                    witness.tearDown()
+                witness.doCleanups()
+
+        baseline = capture(None)
+        delayed = capture(0.12)
+        self.assertEqual(delayed, baseline)
 
     def test_abort_witness_payload_survives_nonowned_sampler_census_decoy(self) -> None:
         decoy_capture = self.repo / "powermetrics-decoy.plist"

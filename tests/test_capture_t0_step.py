@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -575,6 +576,35 @@ class CaptureT0StepTests(unittest.TestCase):
         self.assertIn('clean_elapsed=$((now - clean_since))', source)
         self.assertIn('clean_since=-1', source)
         self.assertNotIn("SETTLE_CHECKS", source)
+
+    def test_prewindow_runs_prefixes_name_the_successor_family(self) -> None:
+        """D-138: the operator gate must name the governed generation.
+
+        The runs-root prefix is ``runs_<pack_id>``.  It cannot be derived from
+        ``_PROFILE_BY_PACK`` — that map is immutable HISTORY (generation 1) —
+        so the prefixes are pinned against the three D-139-approved successor
+        name shapes instead: each window must name a later-generation pack ID
+        of its own profile, which is exactly what a registry install can admit.
+        """
+
+        source = (
+            Path(__file__).resolve().parents[1] / "scripts/prewindow_check.sh"
+        ).read_text(encoding="utf-8")
+        observed = dict(
+            re.findall(
+                r"^\s*(alpha|beta|gamma)\) WINDOW_RUNS_PREFIX=(\S+) ;;$",
+                source,
+                re.MULTILINE,
+            )
+        )
+        self.assertEqual(set(observed), {"alpha", "beta", "gamma"})
+        for window, prefix in sorted(observed.items()):
+            with self.subTest(window=window):
+                self.assertTrue(prefix.startswith("runs_"))
+                pack_id = prefix.removeprefix("runs_")
+                pattern = readiness._SUCCESSOR_PROFILE_PATTERNS[window.upper()]
+                self.assertIsNotNone(pattern.fullmatch(pack_id))
+                self.assertNotIn(pack_id, readiness._PROFILE_BY_PACK)
 
     def test_cli_usage_error_is_a_registered_json_refusal(self) -> None:
         completed = subprocess.run(

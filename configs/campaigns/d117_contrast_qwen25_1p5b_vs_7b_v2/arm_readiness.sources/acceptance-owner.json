@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "check_id": "acceptance_domain_owner_probe",
+      "evidence": {
+        "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+        "copied_scalar_accepted": false,
+        "unknown_key_accepted": false
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "acceptance_artifact_sha256": "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e"
+  },
+  "facts": [
+    {
+      "fact_id": "desk.acceptance_owner.v1",
+      "value": {
+        "active_acceptance_artifact_authenticated": true,
+        "copied_scalar_accepted": false,
+        "domain_owner_verified": true,
+        "unknown_key_accepted": false,
+        "writer_test_status": "PASS"
+      }
+    }
+  ],
+  "head_commit": "54f990d156eee3da3467b368b816d4ac4a50f806",
+  "kind": "ACCEPTANCE_OWNER",
+  "pack_sha256": "edd0eaf9efcbb6f9a9b8ecd36f8ffc05c3d17497b462d1382b8d66970311d91a",
+  "primary_artifacts": [
+    {
+      "path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+      "sha256": "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e"
+    },
+    {
+      "path": "joulewise/calibration_bracketing.py",
+      "sha256": "62111af1903ea6f2cce89fc734d97305df48dffbc9aab6de5e140ffb5ccd2b42"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_evidence_source.v1"
+}

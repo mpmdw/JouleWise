@@ -160,6 +160,12 @@ be re-derived by a future agent gets an entry here.
 | D-135 | SITE BUDGETS ADVISORY (Ed, in-thread 2026-08-12): conservative capsule/page/shard byte budgets and pagination margins WARN, never fail builds/tests/PR gates; the ONLY failing site-size condition is the physical Lakebed 1,048,576-byte cap under the real validator (deploys physically fail past it); content is never trimmed/split/archived to satisfy an advisory budget; SITE-CAPSULE-BUDGET-01 superseded | adopted (Ed, in-thread; transcribed) |
 | D-136 | SITE LANE RETIRED FROM PROCESSES (Ed, in-thread 2026-08-12): no session spends tokens on Lakebed/capsule size, packing, deploy failures, or site-chain diagnosis — the site is a status doc, not a workstream; the site workflow runs on manual dispatch only (never push/pull_request) and its results never gate anything or prompt session work; extends D-135 and D-101 addendum II | adopted (Ed, in-thread; transcribed) |
 | D-137 | ARM-READINESS V1 BOOT-SESSION AMENDMENT (magistrate-ratified, 2026-08-12): every v1 arm or generic evidence receipt carrying `valid_until_monotonic_ns` also carries a derived, never-operator-entered `boot_session_id`; verification and atomic consumption refuse a boot-session mismatch as `readiness_record_expired`; composes with D-120/D-134 and deliberately supersedes the preserved D-134 consult's literal key lists before any production receipt issuance | adopted (magistrate-ratified v1 schema amendment) |
+| D-138 | D-079-PINNED ESTIMATOR-INPUT CHANGES MERGE-STAGE INTO THE ATOMIC RE-FREEZE (magistrate, 2026-08-15; promoted from R-t9-4): any change to the four governed estimator inputs (`joulewise/powermetrics_fiducial.py`, `uncertainty_evidence.py`, `adapters/powermetrics.py`, `reduce.py`) stages on the Phase-2 transaction branch and lands only inside the ONE atomic successor-family re-freeze that folds the D-079 acceptance re-issue; follow-ons ride the same branch (inheritance corollary). Detail: the `### D-138` section at the file tail | adopted |
+| D-139 | ED'S BATCHED RULINGS A1-A3 (Ed, 2026-08-17; packet `docs/process/ed-batch-packet.md`): A1 in-process adversary OUT of the threat model (registered limitation, family-wide); A2 stats delegated — Holm alpha=0.05 m=2 family (decode + prefill_p256, two-sided) adopted, dedicated p256 floor; A3 Phase-2 reserved defaults APPROVED (uniform `_v2` successor pack IDs; chain-monotonic `freeze-0002` with explicit predecessor bindings; existing operational horizons) — acceptance-artifact identity, family-marker particulars, and exact-byte publication REMAIN Ed-reserved; shakedown-first sequencing. Detail: the `### D-139` section at the file tail | adopted |
+| D-142 | ED RULINGS 2026-08-18 EARLY AM (in-session): (i) D-079 successor identity = OPTION B — `d079_calibration_acceptance_v2_n19_r2` at `configs/calibration/calibration_acceptance_d079_v2_r2.json`, `decision_ids` unchanged (`["D-102","D-109"]`, D-138 recorded log-side) — executed as the one-commit migration (3e780a1) and the in-place 165k re-supersession (54f990d..75f22a0); (ii) STANDING NIGHT LICENSE: "yes you've got the license for all that makes sense in pursuit of a solid paper" — the authority under which the D-139 nonclaim diagnostic shakedown ran while the WINDOW-COUNCIL-GATE's claim-window clearance remained pending (dress rehearsal open). RECORDED READING: the gate binds CLAIM windows and kernel tasks; the shakedown was diagnostic/nonclaim per its protocol scout, fenced, custodied, and Ed-licensed with the specific activity described beforehand; the counter-reading (gate text names no shakedown carve-out) is preserved in the T10 report's B-5. Detail: `docs/process_traces/2026-08-18-shakedown-first-light/` | adopted (Ed) |
+| D-143 | DETECTION-PROJECTION CELL BUDGET 100,000 → 165,000 (magistrate parameter ruling, 2026-08-18; license records: `docs/process_traces/2026-08-18-shakedown-first-light/` 02+03): the maiden live capture and three issued corpus members all exhaust 100k under the budgeted detector (real workload 112,205–137,189 cells, n=34 complete-corpus sweep); 165,000 = max + 20.3% headroom, exceeding the whole observed spread; fail-closed semantics retained; behavioural kill tests pin the production path. D-138 cycle re-executed in full (one-pin reissue in place, packs, evidence, freeze-0002 re-mints at the measurement checkout); first-light re-derivation IN-BAND (b_fiducial 0.030878 s ∈ [0.022741, 0.033559]). | adopted |
+| D-140 | FREEZE-STATUS BYTE SEMANTICS, SUCCESSOR EXTENSION (cold gate 2026-08-18, composed verdict: `docs/process_traces/2026-08-18-freeze-semantics-coldgate/14-composed-verdict.md`, three seats concurring — cold Fable adjudicator, Opus contract refuter, gpt-5.6-luna execution refuter): the receipts-govern-over-descriptive-bytes core is EXTENDED to ALL successor packs by this entry's own authority (M-2's clause (d) bars citing the 2026-08-13 override beyond its three receipt hashes — this is a fresh extension, not a precedent citation). The draft→frozen transition IS the minting+committing of the D-134 freeze receipt and plan-tree attachment; bytes inside the receipt's `pack_identity` transitive closure (`calibration_plan.json` and everything hashed into it) never change post-mint, and remaining pack descriptive bytes are never repaired (M-2 core). "Freeze-aware" status = dynamic `target_status` from the authenticated attachment + the fail-closed non-preserve guard + option-(d) freeze-neutral emitted wording (round 6/7: `as_generated_pre_d134_freeze` + authority-naming fields). Executed basis: the round-5 circularity proof (a serialized transition renders every successor pack permanently unarmable — `readiness_freeze_receipt_mismatch` at dry-run/arm/verify, no re-mint path). The first structural consult's §B3 transition sentences, D-6, and R-7 are SUPERSEDED per the composed verdict's amendment language. Options (b) receipt-supersession-for-freeze and (c) README-only transition REJECTED (new gate-engine machinery for cosmetics; frozen-byte repair + split-brain) | adopted (cold gate, 3-seat concurrence; magistrate-composed) |
+| D-141 | GENERATOR WRITE-BOUNDARY + FREEZE-LOADER REGISTERED RESIDUALS (cold gate 2026-08-18 ratification + delta-8 ratification): (i) post-validation symlink substitution in the pack generators' check-then-write boundary is a REGISTERED RESIDUAL — requires a concurrent process racing the desk-time generation, excluded by single-operator generation discipline (D-139 A1 cited by ANALOGY; its own scope is the measurement environment). The accidental class is CLOSED (16-case refuse-before-any-write coverage). REOPENING TRIGGER: any threat-model revision admitting concurrent adversarial local processes, or multi-operator/shared-machine generation. Delta-4's dirfd/`O_NOFOLLOW` remedy demand is formally SUPERSEDED. (ii) `_load_freeze_reference` accepts a hand-authored v1-schema receipt inside a `_v2` pack (chain auth keys on schema) — REGISTERED RESIDUAL under trusted-operator; delta-8 attacked and ratified: no crash or current-tooling path produces that state (mint selects v2 pre-write; plan-tree updates atomic). Both registered in `docs/risk_register.md` (R-019, R-020) | adopted |
 
 ---
 
@@ -8776,6 +8782,74 @@ D-134 consult under
 `docs/process_traces/2026-08-11-5c-readiness-contract/consult.md`. That consult
 is preserved historical evidence and is not edited; this later decision is
 the authority for the amended v1 schema.
+## D-138: D-079-pinned estimator-input changes merge-stage into the atomic re-freeze
+
+**Adopted 2026-08-15 (magistrate; promoted from session ruling R-t9-4 at the
+T9 close).** Any change to the four governed estimator inputs
+(`joulewise/powermetrics_fiducial.py`, `joulewise/uncertainty_evidence.py`,
+`joulewise/adapters/powermetrics.py`, `joulewise/reduce.py`) stages on the
+Phase-2 transaction branch and lands only inside the ONE atomic
+successor-family re-freeze that folds the D-079 acceptance re-issue.
+Follow-on changes ride the same branch (inheritance corollary). Detail and
+implementation notes: the `### D-138` sections later in this file.
+
+## D-139: Ed's batched rulings A1-A3 (threat model, statistics, Phase-2 defaults)
+
+**Adopted 2026-08-17 (Ed, in-session; packet `docs/process/ed-batch-packet.md`).**
+A1: no in-process adversarial programs are assumed (registered limitation,
+family-wide). A2: Holm alpha=0.05 m=2 family (decode + prefill_p256,
+two-sided); dedicated p256 floor. A3: Phase-2 reserved defaults approved —
+uniform `_v2` successor pack IDs, chain-monotonic `freeze-0002` with
+explicit predecessor bindings, existing operational horizons; the
+acceptance-artifact identity, family-marker particulars, and exact-byte
+publication remain Ed-reserved; shakedown-first sequencing. Detail: the
+`### D-139` section later in this file.
+
+## D-142: Ed rulings 2026-08-18 early AM (identity B-keep; standing night license)
+
+**Adopted 2026-08-18 (Ed, in-session).** See the index row for the operative
+content; the shakedown authority reading and its preserved counter-reading
+live there and in the T10 report's B-5 disposition. License records:
+`docs/process_traces/2026-08-18-shakedown-first-light/`.
+
+## D-143: Detection-projection cell budget 165,000
+
+**Adopted 2026-08-18 (magistrate parameter ruling; executed same night).**
+See the index row. Basis, per-bundle sweep table, and the reissue PROCEED
+log are custodied at `docs/process_traces/2026-08-18-shakedown-first-light/`.
+The in-code corpus-basis comment at `joulewise/powermetrics_fiducial.py`
+and the behavioural budget tests are the mechanical guards.
+
+## D-140: Freeze-status byte semantics — successor extension
+
+**Adopted 2026-08-18 (three-seat cold gate; composed verdict at
+`docs/process_traces/2026-08-18-freeze-semantics-coldgate/14-composed-verdict.md`,
+the ONE home).** Receipts govern over descriptive bytes for ALL successor
+packs by this decision's own authority (M-2 clause (d) bars precedent
+citation beyond the three 2026-08-13 receipt hashes). The draft-to-frozen
+transition IS the minting and committing of the D-134 freeze receipt and
+plan-tree attachment; bytes inside the receipt's pack_identity transitive
+closure never change post-mint; remaining descriptive bytes are never
+repaired. "Freeze-aware" status = dynamic `target_status` + the fail-closed
+non-preserve guard + freeze-neutral emitted wording. The first structural
+consult's SS-B3 transition sentences, D-6, and R-7 are superseded per the
+composed verdict's amendment language. Index row above carries the operative
+summary.
+
+## D-141: Generator write-boundary and freeze-loader registered residuals
+
+**Adopted 2026-08-18 (cold-gate ratification + delta-8 ratification).**
+(i) Post-validation symlink substitution at the generators' check-then-write
+boundary: registered residual on desk-time single-operator grounds (D-139 A1
+cited by analogy), 16-case refuse-before-any-write coverage closes the
+accidental class; reopening trigger = threat-model revision admitting
+concurrent adversarial local processes or multi-operator generation.
+(ii) `_load_freeze_reference` accepting a hand-authored v1-schema receipt in
+a `_v2` pack: registered residual under trusted-operator (no crash or
+tooling path produces the state). Registered as R-019/R-020 in
+`docs/risk_register.md`. Index row above carries the operative summary.
+
+
 ### D-133 cl.4 execution ratification + Q8 budget ratification — 2026-08-12 (Ed, T6 session start)
 
 Three Ed rulings taken at the T6 session's first interactive exchange
@@ -9126,6 +9200,135 @@ verification note correcting B2's premise).
    work orders under this ruling; every fix round carries C-028 delta
    re-audits.
 
+### R1 implementation amendment — 2026-08-17 (Phase-2 preparation only; no publication)
+
+This amendment executes the reversible schema/tooling tranche of the ruled
+R1 lifecycle.  It creates no successor pack, receipt, family marker, custody
+root, baseline successor, ARM authority, or publication event.
+
+1. **D-131 clause 4 — no grandfathering is machine-enforced.** A generic
+   `joulewise.arm_readiness_evidence_receipt.v1` presented to an R1-registry
+   path is a `V1_GRANDFATHERING` refusal role.  The 33 issued v1 receipts
+   remain historical bytes only; validation of their historical schema is
+   not revalidation, reinterpretation, or permission to consume them.
+2. **D-134 clauses 1/3/5/6/9/10 — split schemas and registry authority.**
+   `RE_DERIVABLE` uses the exact-key
+   `joulewise.arm_readiness_content_evidence_receipt.v1`, which carries
+   neither `boot_session_id` nor `valid_until_monotonic_ns`.
+   `EXECUTION_BOUND` uses the exact-key
+   `joulewise.arm_readiness_execution_evidence_receipt.v1`, retaining both
+   fields.  The five-class policy, per-kind and per-row policy IDs,
+   irrelevant-path allowlist, ARM horizon/budget, environment-comparison
+   policy, and refusal vocabulary have one exact-key lifecycle-registry
+   input embedded in the successor row registry.  DOCTRINE_PIN and
+   PACK_FAMILY are code-constant `RE_DERIVABLE`; every other generic
+   deriver is code-constant `EXECUTION_BOUND`; authoring refuses a
+   registry/code mismatch.
+3. **Staleness is conjunctive.** The primary gate enumerates every Git path
+   changed in `derivation_commit..reviewed_HEAD` and refuses any path absent
+   from the authenticated exact-path allowlist.  The additional dependency
+   conjunct replays every primary and executed-file binding against both the
+   derivation commit and reviewed HEAD.  The plan-tree exception normalizes
+   only `arm_attachments.arm_readiness.freeze_receipt.path` and `.sha256` by
+   returning that slot to `null`; an added key or any other field change
+   refuses.  A source-level release guard mechanically rejects direct
+   filesystem, Git, or process reads added to a deriver outside the recording
+   helpers.
+4. **R1 clause 3 remains unconditional.** A schema-bearing TERMINAL_REVIEW
+   source must bind the reviewed `head_tree_oid` exactly.  DRY_RUN_REHEARSAL
+   remains under D-134 clause 7's existing same-head rule; neither condition
+   is relaxed by a freshness policy.
+5. **D-137 is AMENDED, with zero reach over content receipts.** Boot-session
+   comparison continues for `EXECUTION_BOUND`, `TIME_BOUND`, and the ARM
+   temporal capability wherever their schemas carry monotonic validity.
+   The new content schema carries neither field, so D-137's boot/deadline
+   rule has zero reach over `RE_DERIVABLE` receipts.  This does not alter any
+   issued v1 byte.
+6. **D-078 lifecycle refusal registry is structurally complete before
+   issuance.** Its eight mandatory roles are `CLASS_MISMATCH`,
+   `DEPENDENCY_CHANGED_SET`, `DEPENDENCY_MANIFEST`, `FAMILY_PUBLICATION`,
+   `SUCCESSOR_CHAIN`, `TEMPORAL_BUDGET`, `UNKNOWN_POLICY`, and
+   `V1_GRANDFATHERING`.  Exact spellings and type labels remain Ed-reserved
+   under R1 clause 6 and therefore come only from that authenticated
+   registry.  The checked-in placeholder uses explicit `ED_RESERVED:`
+   values and refuses issuance/consumption; no placeholder is a reason code.
+7. **Reserved semantics remain fail-closed.** Per-row policies, generic
+   execution horizons, ARM capability horizon, arm-to-consume budget, and
+   execution-environment comparison semantics must all be resolved in the
+   single registry.  The six ruled probe/suite kinds record interpreter,
+   platform, non-repository `sys.path` descriptors/digests, and (for
+   PACK_AUTHENTICATION) inherited-environment value digests now.  Because Ed
+   has not ruled comparison semantics, the implementation comparison
+   allowlist is intentionally empty and an R1 author refuses before writing
+   any output through the registry's `UNKNOWN_POLICY` role.  The
+   temporal-budget gate explicitly evaluates the
+   `TIME_BOUND` T-0 set; session-state and execution deadlines are not
+   silently substituted for that set.  The same registry carries explicit
+   unresolved seams for the three successor pack IDs, cross-root freeze
+   numbering, the freeze-receipt-v2 predecessor-binding set, and the family
+   publication-marker schema; none has a code default or permits generation.
+
+### R1 implementation amendment — FIX ROUND 1 lifecycle enforcement (2026-08-17)
+
+The first contract/execution lens pair rejected the preparation tranche at
+`8fd29f7`; this amendment records the converged cures without authorizing a
+successor publication.
+
+1. **Freshness class is code-only for the complete evidence vocabulary.** One
+   exhaustive table assigns all 29 D-134 evidence kinds plus the ARM capability.
+   `DOCTRINE_PIN` and `PACK_FAMILY` are `RE_DERIVABLE`; the ten other generic
+   derivers plus `DRY_RUN_REHEARSAL`, `GIT_CHECKOUT`,
+   `IDENTITY_PIN_PROJECTION`, `OFFLINE_INPUT_INVENTORY`,
+   `PRIVILEGE_INSTALLATION`, and `TERMINAL_REVIEW` are `EXECUTION_BOUND`;
+   `BACKUP_PREFLIGHT`, `CLOCK_ATTESTATION`, `CLOCK_PROBE`,
+   `MACHINE_PREFLIGHT`, `MAINTENANCE_CENSUS`, `POWERMETRICS_PROBE`,
+   `POWER_PREFLIGHT`, and `PROCESS_CENSUS` are `TIME_BOUND`;
+   `LAUNCH_RECIPE`, `LEDGER_RESERVATION`, and `ROOT_PREFLIGHT` are
+   `SESSION_STATE_BOUND`; the ARM receipt is `TEMPORAL_CAPABILITY`.  A registry
+   supplies policy IDs and ruled parameters but validates against this table;
+   it cannot define, omit, or override a class.  Temporal-budget selection also
+   uses the code table, so relabelling `CLOCK_PROBE` cannot remove it from the
+   budget gate.  Production evidence discovery dispatches TIME/SESSION class
+   validation, while ARM verification dispatches the single-use temporal-
+   capability validation.
+2. **Resolved policy shapes are class-specific.** `RE_DERIVABLE` carries no
+   horizon and only `NOT_APPLICABLE` environment comparison; TIME/SESSION
+   policies carry a positive horizon and `NOT_APPLICABLE`; EXECUTION carries a
+   positive horizon and an applicable comparison.  Contradictory resolved
+   fields refuse instead of being silently ignored.  The implementation's
+   execution-comparison allowlist remains empty, so the outstanding Ed ruling
+   still blocks authoring through the registered `UNKNOWN_POLICY` role.
+3. **Read routing has a best-effort developer-error guard under D-139.** The
+   import-time release lint starts at every deriver and walks ordinary direct
+   or simply aliased calls to reachable top-level local helpers until an
+   explicit recording boundary.  It catches the recognized direct filesystem,
+   Git, and process-read spellings in derivers, the same spellings in those
+   transitive helpers, and simple acquired-callable aliases such as
+   `reader = __import__("builtins").open`,
+   `reader = importlib.import_module("builtins").open`, `reader = os.open`,
+   imported-function aliases, and fixed-point aliases of those readers or
+   helpers.  These checks catch accidental unrecorded reads; they are not a
+   complete Python data-flow analysis or an in-process security boundary.
+   **HONEST REGISTERED LIMITATION:** deliberate same-interpreter circumvention
+   is outside D-139.  Python code in the same interpreter can construct a more
+   dynamic alias, alter module state, or invoke an unmodelled read mechanism.
+   Stronger protection would require a separately ruled OS trust boundary;
+   this guard makes no claim that no read can escape.
+4. **Plan-tree subtraction preserves all non-slot bytes.** Normalization locates
+   the unique `arm_attachments.arm_readiness.freeze_receipt` value token and
+   replaces only that token with `null`.  It does not parse-and-reserialize the
+   surrounding document; whitespace, ordering, and every byte outside the
+   enumerated slot remain identity-bound.
+5. **D-139 A3 successor IDs install through the registry.** The R1 registry's
+   successor field is an exact `ALPHA`/`BETA`/`GAMMA` role map.  Production
+   profile routing admits only the ID installed for that role and validates
+   the D-139-approved uniform successor shapes.  The approved initial values
+   are `d117_floor_qwen25_1p5b_v2`, `d117_floor_qwen25_7b_v2`, and
+   `d117_contrast_qwen25_1p5b_vs_7b_v2`; a later shape-conforming generation
+   can be installed by registry bytes alone, without editing an ID allowlist in
+   Python.  Exact-byte family publication remains reserved and no successor
+   bytes are created by this amendment.
+
 ### WO-MARGIN-RECORDER-AUTHZ contract ADOPTED (magistrate, 2026-08-15; council Phase 0; Sol design consult adopted)
 
 Consult custodied: docs/process_traces/2026-08-15-recorder-authz-consult/
@@ -9466,6 +9669,88 @@ packs can't be edited in place; lands with the successor-family freeze
 transaction under R1]. The full binding is contract-bearing → C-028
 gauntlet before merge.
 
+### D-078 registry amendment — 2026-08-16: calibration-writer launch binding
+
+The calibration writer consumes the stage-1 lineage locator before any
+calibration custody directory, writer lease, ledger reservation, or bracket
+slot claim. For a marker-bearing acceptance input, it first requires the
+literal `--output-root` basename `instrument_validation`, then derives the
+only admissible locator as
+`resolve(--output-root).parent/.joulewise-launch-lineage.json`. No receipt
+path, handoff token, or lineage value is accepted through argv or environment.
+The writer authenticates the locator/sidecar and sibling-root agreement, the
+consumption/arm/pack/HEAD/launch-recipe chain, start and settle predecessors,
+current boot, selected acceptance bytes, authenticated root, bracket session,
+and exact pre/post attempt slot. The selected acceptance must be either an
+authenticated pack inventory member or the external issued-acceptance path
+and raw artifact digest pinned by authenticated `plan_tree.json` bytes.
+
+The writer reopens the same inputs immediately before evidence serialization.
+A valid-but-different locator, full lineage, selected config path, or selected
+config digest is `launch_lineage_conflict`. The authenticated full
+`joulewise.launch_lineage.v1` object is stamped at
+`instrument_evidence.json -> launch_lineage`; the manifest hashes those
+evidence bytes and the calibration ledger's artifact hashes preserve that
+binding. Writer authentication intentionally verifies that consumption
+occurred within the arm horizon but does not reapply the short T-0 expiration
+at collection time.
+
+The closed calibration boundary uses the six D-078 codes
+`launch_consumption_missing`, `launch_consumption_invalid`,
+`launch_binding_mismatch`, `launch_lineage_conflict`,
+`launch_lifecycle_incomplete`, and `launch_handoff_invalid`. A non-marker
+legacy acceptance leaves the mechanism dormant, omits `launch_lineage`, and
+preserves the pre-amendment serialized evidence bytes. Marker rollout remains
+part of the lead-owned successor-family transaction; frozen predecessors are
+not edited in place.
+
+### D-078 registry amendment — 2026-08-15: bounded pulse-detection projection
+
+The instrument-evidence diagnostic vocabulary adds
+`detection_nonconvergent`. It means the joint-loss projection exhausted its
+governed evaluation budget or the supplementary wall deadline. The diagnostic
+always makes the evidence `invalid`, clears the fitted bound, discards every
+partial fit, and exits nonzero; it can never license partial-valid evidence,
+an operator override, ARM, launch, or a claim. `clock_anchor_unresolved`
+remains the already-registered causal refusal: because that condition has
+already invalidated the capture, pulse fitting and the full-resolution
+projection are skipped with zero evaluated cells rather than spending work on
+diagnostics that cannot restore admissibility.
+
+The frozen detector budgets are 100,000 evaluated projection cells across the
+complete multi-pulse attempt and a supplementary 120-second monotonic wall
+deadline. The evaluated-cell count is the primary deterministic mechanism;
+the deadline is only a host-safety backstop. The reproducible projection
+receipt content is the disposition, cell budget, and wall budget. Trigger and
+evaluated-cell count live in a separate diagnostics object: cell-budget
+exhaustion marks those diagnostics reproducible and remains identical for
+identical input, while `wall_deadline` marks them `reproducible: false` because
+host speed determines both values. A wall-trigger record is a host-pathology
+diagnostic, not a reproducible measurement. The flat-loss witness cost was
+approximately 2.7 microseconds per cell, so 100,000 cells cost approximately
+0.27 seconds; the 120-second backstop represents about 440x per-cell slowdown
+(approximately 2.65 decimal orders of magnitude) before it can preempt the
+cell cap. The evidence serializer refuses, rather than silently repairing, any
+object that combines a projection disposition with a fitted bound, a detected
+pulse set, or per-pulse fits. The `clock_anchor_unresolved` zero-cell bypass is
+admissible only when `trace_anchor_bound_s` is zero; a nonzero resolved-anchor
+bound combined with that bypass is an API error. The normal ledger taxonomy
+is unchanged:
+post-capture nonconvergence is a completed `ordinary-invalid` observation,
+not a `calibration_exits` preflight refusal. Its slot-finalization receipt
+hash-binds the complete custody artifacts; for an invalid pre slot the
+terminal bracket-abort receipt carries the exact registered reason
+`detection_nonconvergent` (or `clock_anchor_unresolved`) and the normal
+finalizer releases the writer lease.
+
+Because `joulewise/powermetrics_fiducial.py` is an authenticated estimator
+input, this amendment deliberately makes the currently issued D-079
+acceptance artifact stale. No live writer may cross preflight on the branch.
+Re-issuance and every dependent pin update remain lead-owned inside the
+council's one atomic Phase-2 re-freeze; tests may re-key only a private
+synthetic repository to its own copied bytes and that fixture is never an
+issuance or live evidence.
+
 ### D-130 closure recorded — 2026-08-15
 
 WO-CI-RESTRUCTURE is **CLOSED**. PR #129 (`7a76a29`) landed the
@@ -9630,6 +9915,35 @@ Authority context: R-t9-4 (docs/run_reports/2026-08-16-t9-session.md), the
 2026-08-15 D-078 registry amendment on the staged branch, and the council's
 Phase-2 re-freeze ruling.
 
+### D-138 implementation note — 2026-08-17: authenticated D-079 successor-candidate tooling (nothing issued)
+
+`scripts/reissue_calibration_acceptance.py` now prepares, but cannot issue, a
+D-079 successor candidate.  It authenticates the exact issued predecessor
+through the production byte-pinned loader; reopens all 19 ruled corpus members;
+checks each manifest SHA-256, instrument-evidence SHA-256, source decimal
+`b_fiducial_s` lexeme, and valid prior-observation link; then reconstructs the
+candidate with the production protocol digest, all four D-138 estimator-source
+digests, and the production D-102/D-109 derivation validator.  The tool contains
+no second implementation of the acceptance arithmetic.
+
+Every output is conspicuously marked `"candidate_not_issued": true`.  The
+production exact-byte acceptance loader refuses those marked bytes, and the
+later governed issuance transaction must remove the marker, assign the ruled
+successor identity, and establish the new external byte pin.  The F3 stop rule
+is executable: a member-set, threshold, or any other non-pin/science-facing
+delta prints `VERDICT=STOP` and returns a nonzero status; only a pure
+protocol/estimator-pin delta prints `VERDICT=PROCEED`.  `PROCEED` authorizes only
+continued private transaction preparation, never issuance or publication.
+
+The real-corpus replay at the integrated head `e22e658` authenticated 19/19.
+The member set, all member values, thresholds, and every science-facing field
+were identical.  The protocol digest and three estimator-source digests were
+unchanged; only `joulewise/powermetrics_fiducial.py` rotated, from
+`21ec17c7b2119e5971e6bcf39d9291d907db347ab6aa63996b13a83630e437a3` to
+`501bfdaf44f2768af73f112a703e9da3ab055c03e5b9d493e0dc2eadad82f71b`.
+No acceptance artifact, successor ID, extraction spec, or dependent pin was
+issued or changed by this preparation step.
+
 ### WO-LAUNCH-BINDING stage 3 downstream-authentication checkpoint — 2026-08-16
 
 The authorized downstream implementation keeps D-138's D-079 estimator-input
@@ -9726,3 +10040,68 @@ signal purity — BEFORE any claim window. Exact workload consistency is
 explicitly subordinate to instrument-purity verification for these first
 runs. The claim windows (alpha/beta/gamma) follow only after the shakedown
 evidence is clean.
+
+### R2/M-2 successor-generator preparation — 2026-08-17 implementation record (no successor publication)
+
+The option-C follow-up recorded under WO-T0-PRODUCER is PREPARED, not
+activated.  Each D-117 generator now accepts an explicit pack ID, family
+suffix, and preserve-current-frozen-bytes mode.  The default remains the
+current `_v1` identity with preserve mode on; the only permitted non-preserve
+shape is the matching successor identity (for D-139 A3, `_v2`).  Thus a
+mistyped mixed v1/v2 or preserve/successor invocation refuses before writing.
+
+Outside preserve mode, alpha and beta store the R2 plan reference and sidecar
+as pack-relative `calibration_plan.json` and `calibration_plan.sha256`.
+All three generators derive the reservation `--plan` repo-path token from
+that same stored plan reference plus the selected pack root; gamma's stored
+reference already conformed, but its independent reservation derivation
+shared the defect and is now unified.  Successor identity threading rotates
+the pack directory, pack/family plan and evidence IDs, producer/consumer
+family IDs, roots, and campaign tags.  Every successor science collection
+config adds `launch_lineage_required`; preserve-mode configs never add it.
+The successor ARM attachment begins without a predecessor freeze receipt so
+the Phase-2 transaction can author the ruled `freeze-0002` rather than copying
+or revalidating `freeze-0001`.
+
+No current generated artifact is regenerated to new semantics: preserve-mode
+generation continues to reproduce the checked-in v1 plan, config, manifest,
+contract, sidecar, and readiness bytes exactly.  The generator-source edits
+retain the historical frozen generator SHA inside each preserved plan tree.
+This preparation does not satisfy R1 publication, the stage-4/AXI release
+gate, D-079 reissuance, fresh evidence authoring, marker construction, Ed's
+exact-byte confirmation, or the irreversible successor-family publication.
+
+### R2/M-2 successor-generator preparation amendment — 2026-08-18: first-structural-consult corrections (freeze-semantics cold gate)
+
+The 2026-08-17 record above stands unedited as the historical implementation
+account.  Three corrections from the freeze-semantics cold gate bind over it
+(record `docs/process_traces/2026-08-18-freeze-semantics-coldgate/`; composed
+verdict `14-composed-verdict.md`; adopted as D-140 and D-141):
+
+1. **D-5 correction (cold-gate ruling D-5).**  In the sentence "Every
+   successor science collection config adds `launch_lineage_required`;
+   preserve-mode configs never add it", the second half is an
+   implementation-description error and must not be read as policy.
+   `launch_lineage_required` is successor-FAMILY policy in EVERY mode; the
+   preserve-mode behaviour described is only what the current generators do
+   while reproducing the checked-in `_v1` bytes byte-for-byte, and it confers
+   no mode-conditional exemption.  The owning authority is unchanged
+   (`docs/process_traces/2026-08-15-launch-lineage-consult/consult.md`, which
+   requires the flag in every successor collection config; stage-3 consumers
+   are intentionally dormant without it).
+
+2. **§B3 / D-6 / R-7 SUPERSEDED per D-140.**  The first structural consult's
+   §B3 transition sentences, its D-6 (the status/README freeze transition
+   finalized inside the freeze transaction), and its R-7 status-transition
+   test obligation are superseded.  This is recorded as a REVERSAL on
+   executed evidence, not a re-reading: §B3/R-7 commanded a serialized
+   transition unambiguously, and the round-5 circularity proof shows that a
+   serialized transition renders every successor pack permanently unarmable
+   (`readiness_freeze_receipt_mismatch` at dry-run/arm/verify, with no re-mint
+   path).  The governing doctrine is D-140.
+
+3. **Defect-class rule (composed verdict holding 3).**  A consult ruling on a
+   transaction must resolve the transaction's own module; anchor-completeness
+   claims cover ONLY what was actually opened.  Recorded defect: the first
+   structural consult's D-7 claimed its anchors resolved while never opening
+   `joulewise/arm_readiness.py`.

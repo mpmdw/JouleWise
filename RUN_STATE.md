@@ -10,26 +10,19 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-18 ~01:15 PT (T10 overnight — transaction staged, ONE Ed ruling gates the freeze)
+Last updated: 2026-08-18 morning (T10 overnight complete — confirmation head ready)
 
-## ▶▶ T10 CHECKPOINT (2026-08-18) — READ docs/process/ed-morning-packet-2026-08-18.md FIRST (on integration/phase2-transaction)
+## ▶▶ T10 CHECKPOINT (2026-08-18) — READ docs/process/ed-morning-packet-2026-08-18.md FIRST
 
-State: branch `integration/phase2-transaction` (pushed) carries: both closed
-code streams (generators through 7 rounds/9 audits/1 consult/1 three-seat
-cold gate at 07c12f3; freeze-numbering+profile-maps through 4 audits at
-9574fda), the merged+integration-fixed tree, the generated `_v2` family
-(334-file exact boundary), the custodied D-079 PROCEED candidate (sha
-6956b957…), the merge-gate docs batch (D-140/D-141, risk register R-019/20,
-runsheet+runbook corrections), and the Ed morning packet. Ed's evening +
-overnight closed EVERY stable qualification row (incl. DECISIVE REPLAY: OK
-and the quiet census); dress rehearsal remains, gated with the freeze on
-**Ed's D-079 identity ruling (morning packet item 1 — recommendation "B,
-keep")**. After the ruling: migration commit (inventory pre-assembled) →
-fan-out green → registry install → freeze-0002 × 3 → rehearsal card →
-exact-byte confirmation → publication. Session trace:
-`scratchpad t10-trace-notes.md`; canonical baseline + crash-matrix
-(15/15 OK quiet) logged. Sol capped high/default ~2 days; terra/luna =
-default audit seats (~1/10 cost); Opus = implementation.
+The Phase-2 transaction is EXECUTED to its confirmation head (canonical
+3,688 green; family frozen with freeze-0002 chains, live-authenticated at
+/Users/edr/JouleWise-measurement-20260818; D-079 r2 issued incl. the D-143
+budget correction; first-light shakedown b_fiducial IN-BAND). Ed's morning
+packet carries the exact-byte confirmation table and the reserved rulings
+(family marker; R1 registry values). Session record:
+docs/run_reports/2026-08-18-t10-session.md. This checkpoint supersedes the
+branch's earlier stale top (B-2 in the T10 report); main's own T10
+checkpoint (62c6a06) is consistent with this one.
 
 ## ▶▶ T9 CHECKPOINT (2026-08-16) — PHASE 1 CODE COMPLETE; A NEW SESSION STARTS HERE
 

@@ -16,6 +16,7 @@ from joulewise.arm_readiness import (
     DRY_RUN_RECEIPT_SCHEMA,
     EVIDENCE_RECEIPT_SCHEMA,
     FREEZE_RECEIPT_SCHEMA,
+    FREEZE_RECEIPT_V2_SCHEMA,
     PACK_DIGEST_ALGORITHM,
     READINESS_REASON_CODES,
     ROW_REGISTRY_ID,
@@ -138,6 +139,43 @@ def sample_freeze(profile: str = "ALPHA") -> dict[str, Any]:
         "supersedes": None,
         "assurance": copy.deepcopy(ASSURANCE),
     }
+
+
+def sample_freeze_predecessor(
+    pack_id: str = "d117_floor_qwen25_1p5b_v1",
+) -> dict[str, Any]:
+    return {
+        "pack_id": pack_id,
+        "pack_path": f"configs/campaigns/{pack_id}",
+        "pack_digest_algorithm": PACK_DIGEST_ALGORITHM,
+        "pack_sha256": ZERO_SHA,
+        "plan_id": "plan-test",
+        "plan_sha256": ZERO_SHA,
+        "freeze_receipt": {
+            "receipt_id": "freeze-0001",
+            "path": "arm_readiness.freeze.receipts/freeze-0001.json",
+            "sha256": ZERO_SHA,
+        },
+        "identity_receipt": {
+            "receipt_id": f"{pack_id}/projection-0001",
+            "path": "identity_pin_projection.receipts/projection-0001.json",
+            "sha256": ZERO_SHA,
+        },
+        "evidence_set_sha256": ZERO_SHA,
+    }
+
+
+def sample_freeze_v2(
+    profile: str = "ALPHA",
+    pack_id: str = "d117_floor_qwen25_1p5b_v2",
+) -> dict[str, Any]:
+    receipt = sample_freeze(profile)
+    receipt["schema_version"] = FREEZE_RECEIPT_V2_SCHEMA
+    receipt["receipt_id"] = "freeze-0002"
+    receipt["pack_identity"] = pack_identity(pack_id)
+    del receipt["supersedes"]
+    receipt["predecessor"] = sample_freeze_predecessor()
+    return receipt
 
 
 def sample_arm(root: Path | str = "/tmp/readiness") -> dict[str, Any]:
@@ -854,6 +892,106 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                     readiness._predicate_passes(receipt, rows[row_id]["predicate_id"])
                 )
 
+    def test_freeze_v2_exact_keys_reject_supersession_and_bad_predecessors(
+        self,
+    ) -> None:
+        """R-11: v2 carries `predecessor`, never `supersedes`, exact-key."""
+
+        receipt = sample_freeze_v2()
+        validate_freeze_receipt(receipt)
+        self.assertEqual(
+            set(receipt),
+            (set(readiness.FREEZE_RECEIPT_KEYS) - {"supersedes"}) | {"predecessor"},
+        )
+        illegal = copy.deepcopy(receipt)
+        illegal["supersedes"] = None
+        with self.assertRaises(ArmReadinessError) as caught:
+            validate_freeze_receipt(illegal)
+        self.assertEqual(caught.exception.reason_code, "readiness_unknown_key")
+
+        for key in sorted(readiness.FREEZE_PREDECESSOR_KEYS):
+            with self.subTest(missing=key):
+                missing = copy.deepcopy(receipt)
+                del missing["predecessor"][key]
+                with self.assertRaises(ArmReadinessError):
+                    validate_freeze_receipt(missing)
+        unknown = copy.deepcopy(receipt)
+        unknown["predecessor"]["lineage_id"] = "family-2"
+        with self.assertRaises(ArmReadinessError) as caught:
+            validate_freeze_receipt(unknown)
+        self.assertEqual(caught.exception.reason_code, "readiness_unknown_key")
+
+        for name, mutation in (
+            ("absolute pack_path", {"pack_path": "/tmp/pack"}),
+            ("pack_path/pack_id disagreement", {"pack_path": "configs/campaigns/other"}),
+            ("foreign digest algorithm", {"pack_digest_algorithm": "sha256"}),
+            ("uppercase digest", {"pack_sha256": "A" * 64}),
+        ):
+            with self.subTest(mutation=name):
+                mutated = copy.deepcopy(receipt)
+                mutated["predecessor"].update(mutation)
+                with self.assertRaises(ArmReadinessError):
+                    validate_freeze_receipt(mutated)
+
+        misnamed = copy.deepcopy(receipt)
+        misnamed["predecessor"]["freeze_receipt"]["path"] = (
+            "arm_readiness.freeze.receipts/freeze-0002.json"
+        )
+        with self.assertRaises(ArmReadinessError):
+            validate_freeze_receipt(misnamed)
+
+    def test_freeze_v2_receipt_id_must_be_the_predecessor_ordinal_plus_one(
+        self,
+    ) -> None:
+        """R-6: freeze-0001 may only be followed by freeze-0002."""
+
+        for receipt_id in ("freeze-0001", "freeze-0003", "freeze-0010"):
+            with self.subTest(receipt_id=receipt_id):
+                receipt = sample_freeze_v2()
+                receipt["receipt_id"] = receipt_id
+                with self.assertRaises(ArmReadinessError) as caught:
+                    validate_freeze_receipt(receipt)
+                self.assertEqual(
+                    caught.exception.reason_code, "readiness_schema_invalid"
+                )
+        succeeding = sample_freeze_v2()
+        succeeding["receipt_id"] = "freeze-0003"
+        succeeding["predecessor"]["freeze_receipt"] = {
+            "receipt_id": "freeze-0002",
+            "path": "arm_readiness.freeze.receipts/freeze-0002.json",
+            "sha256": ZERO_SHA,
+        }
+        validate_freeze_receipt(succeeding)
+
+    def test_freeze_v1_remains_its_own_exact_key_vocabulary(self) -> None:
+        """R-9/R-11: v1 receipts keep validating and cannot carry a predecessor."""
+
+        receipt = sample_freeze()
+        self.assertEqual(receipt["schema_version"], FREEZE_RECEIPT_SCHEMA)
+        validate_freeze_receipt(receipt)
+        intruder = sample_freeze()
+        intruder["predecessor"] = sample_freeze_predecessor()
+        with self.assertRaises(ArmReadinessError) as caught:
+            validate_freeze_receipt(intruder)
+        self.assertEqual(caught.exception.reason_code, "readiness_unknown_key")
+        unknown_schema = sample_freeze()
+        unknown_schema["schema_version"] = "joulewise.arm_readiness_freeze_receipt.v3"
+        with self.assertRaisesRegex(ArmReadinessError, "schema is invalid"):
+            validate_freeze_receipt(unknown_schema)
+
+    def test_successor_chain_refusal_is_governed_and_typed(self) -> None:
+        self.assertIn(
+            "readiness_successor_chain_invalid", READINESS_REASON_CODES
+        )
+        self.assertEqual(
+            readiness.REASON_TYPE_BY_CODE["readiness_successor_chain_invalid"],
+            "SUCCESSOR_CHAIN",
+        )
+        self.assertEqual(
+            readiness.SUCCESSOR_CHAIN_REASON_CODES,
+            frozenset({"readiness_successor_chain_invalid"}),
+        )
+
     def test_assurance_and_closed_refusals_are_literal(self) -> None:
         self.assertEqual(
             ASSURANCE,
@@ -862,7 +1000,7 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                 "independent_attestation": False,
             },
         )
-        self.assertEqual(len(READINESS_REASON_CODES), 46)
+        self.assertEqual(len(READINESS_REASON_CODES), 47)
         self.assertNotIn("GO", READINESS_REASON_CODES)
         self.assertNotIn("UNKNOWN", READINESS_REASON_CODES)
         upstream_refusal = sample_evidence()

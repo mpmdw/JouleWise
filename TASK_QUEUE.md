@@ -314,6 +314,25 @@ interpreter mid-correction; a host census must come back empty via the
 supervisor/parent-death watchdog (durable identity-checked registrations,
 bounded SIGTERM->SIGKILL).
 
+## WO-DETECT-PULSES-BUDGET implementation evidence (2026-08-15, council Phase 1)
+
+Implementation on `impl/wo-detect-pulses-budget` adds the frozen 100,000-cell
+whole-detection budget with a supplementary 120-second deadline, registered
+`detection_nonconvergent` invalid evidence, and the zero-cell
+`clock_anchor_unresolved` projection bypass. The writer uses the normal
+finalization path: governed artifacts and terminal receipt are written, a pre
+slot abort carries the exact registered reason, and the lease is released.
+The small-budget flat-loss regression is deterministic at the exact boundary;
+healthy evidence remains byte-identical to the pre-budget baseline. On-host
+the formerly blocked crash matrix completed all 14 tests in 98.964 seconds
+with no internal timeout. This hand-authored evidence note does not retire the
+generated A5 row: kernel/checklist closure and the later D-079 acceptance/pin
+re-freeze remain lead-owned. Canonical replay reached all 3,293 tests in
+1,122.980 seconds with no timeout; its 37 failures and one error are the
+expected authenticated-estimator pin fan-out (`calibration_acceptance_bound_stale`
+or displaced downstream expectations) until that re-freeze, not a license to
+weaken or locally rewrite frozen production pins.
+
 ## WO-CRASHMATRIX-RELIABILITY (registered 2026-08-12, T5; evidence-driven)
 
 tests/test_calibration_writer_crash_matrix is hosted-runner-pathological:
@@ -675,11 +694,17 @@ producer; a 120 ms writer suspension reproduces the exact hosted failure
 shape (status=invalid, b_fiducial_s=null) on the valid-writer step. Harness
 false negative; both failing runs certified safe-to-rerun (each failed case
 passed on its automatic later in-job execution; neither PR touches the
-writer). Fix shape registered (APPLIED 2026-08-16 on `impl/wo-detect-pulses-budget` @ `5449e58`, rides Phase 2; original registration follows): make the pulse producer honor
-the test clock (event-driven, WO-CALEXITS-RELIABILITY lineage) and keep the
-detector reason in the assertion so a real regression is distinguishable
-from this flake. Diagnosis: T6 scratchpad calexits-flake-diag.md (custody
-with T6 session record).
+writer). Fix applied on `impl/wo-detect-pulses-budget`: the test-only producer
+now uses logical protocol-event time and waits for durable sampler
+acknowledgements at each command transition, so command stamps, pulse
+duration, and schedule advancement are scheduler-independent. The production
+real-time driver and fail-closed detector remain unchanged; the
+corrected-writer assertion now surfaces the detector subbranch, and a
+producer-mid-pulse 120 ms delay regression proves identical evidence bytes.
+This deliberately rides the Phase-2 merge because the branch already carries
+stale authenticated estimator inputs; landing it separately on main would
+require a second D-079 re-issuance. Diagnosis: T6 scratchpad
+calexits-flake-diag.md (custody with T6 session record).
 
 
 **THIRD CRASH-MATRIX TIMEOUT CASE (registered 2026-08-16, T9 integration review):**

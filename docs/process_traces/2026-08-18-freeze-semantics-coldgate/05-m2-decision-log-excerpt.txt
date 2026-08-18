@@ -1,0 +1,21 @@
+   table.
+4. Execution = WO-MARGIN-RECORDER-AUTHZ (council Phase 1). This
+   executes D-133's close-out gate; it amends no scientific semantics.
+
+### M-2 GATE AMENDMENT — separate entry (heading added 2026-08-15; recorder-race gate mechanic caught it misfiled inside the recorder adoption entry)
+
+**M-2 GATE AMENDMENT (magistrate, 2026-08-15, per the remanded cold gate's composed verdict —
+docs/process_traces/2026-08-15-m2-coldgate/composed-verdict.md, the ONE home):** the engineering
+core is UPHELD (receipts govern over descriptive bytes; frozen bytes are never repaired). The
+instrument is NARROWED: (a) the "overrode a NO-GO reading" premise is STRICKEN — no machine gate
+or §5C clause reads draft_status; M-2 resolves a human-operator ambiguity only; (b) the "every
+arm packet must cite this ruling" duty is STRICKEN — replaced by one informational operator note
+in the successor packet; (c) the retirement clause is corrected — retirement occurs at successor
+freeze ONLY IF the Phase-2 generator work makes draft_status freeze-aware (currently hardwired at
+every JSON emission site); (d) the override's exhaustive scope is the three 2026-08-13 receipt
+hashes (ddbbb409…1738, a6dec2c2…7870, 2ef73bf0…106f), retiring per pack — it may never be cited
+for any other pack; (e) the contrast pack's pending-ratification/TODO markers are OUTSIDE M-2 and
+carry their own RULING-REQUIRED row; (f) the #149 --plan argv divergence must reconcile under R2
+before any arm.
+
+### WO-LAUNCH-BINDING contract ADOPTED (magistrate, 2026-08-15; council Phase 0; Sol design consult adopted)

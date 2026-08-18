@@ -40,8 +40,8 @@ from joulewise.calibration_ledger import (  # noqa: E402
 )
 from joulewise.calibration_bracketing import (  # noqa: E402
     ACCEPTANCE_BOUND_SCHEMA,
-    DEFAULT_ACCEPTANCE_BOUND_PATH,
     ISSUED_ACCEPTANCE_BOUND_SHA256,
+    PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     _acceptance_bound_from_authenticated_bytes,
     _authenticated_explicit_acceptance_bound,
     _canonical_sha256,
@@ -430,7 +430,7 @@ def main() -> int:
     parser.add_argument(
         "--acceptance-artifact",
         type=Path,
-        default=DEFAULT_ACCEPTANCE_BOUND_PATH,
+        default=PREDECESSOR_ACCEPTANCE_BOUND_PATH,
         help="current D-079 fixture or already-issued artifact used as the template",
     )
     parser.add_argument(
@@ -441,7 +441,7 @@ def main() -> int:
     parser.add_argument(
         "--emit-issued-artifact",
         nargs="?",
-        const=DEFAULT_ACCEPTANCE_BOUND_PATH,
+        const=PREDECESSOR_ACCEPTANCE_BOUND_PATH,
         type=Path,
         metavar="PATH",
         help=(

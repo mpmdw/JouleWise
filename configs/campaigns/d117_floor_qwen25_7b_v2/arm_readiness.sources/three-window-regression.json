@@ -1,0 +1,230 @@
+{
+  "checks": [
+    {
+      "check_id": "three_window_live_ledger_regression",
+      "evidence": {
+        "errors": 0,
+        "executed_files": [
+          {
+            "module": "joulewise",
+            "path": "joulewise/__init__.py",
+            "sha256": "df98d6ea46fd21ec24bb8fc4c208e4e01f5167e6c7f2af36490781779d5710cc"
+          },
+          {
+            "module": "joulewise.adapters",
+            "path": "joulewise/adapters/__init__.py",
+            "sha256": "ccc3710fba6346c4e61e7610cab91de92de68c74d09d66b590ff51aa7a3a9db5"
+          },
+          {
+            "module": "joulewise.adapters.local_transport",
+            "path": "joulewise/adapters/local_transport.py",
+            "sha256": "e371c9cc048eaa85b4b6d9d1f17347afe14aee66933ad506ccaab90b7f28560a"
+          },
+          {
+            "module": "joulewise.adapters.mock_runtime",
+            "path": "joulewise/adapters/mock_runtime.py",
+            "sha256": "2180340a78dd6869521d7808c2fb57886408ee46f751ce29fe8604af0b78f3f1"
+          },
+          {
+            "module": "joulewise.adapters.mock_spec_runtime",
+            "path": "joulewise/adapters/mock_spec_runtime.py",
+            "sha256": "0b7dd1ffa6c0038ae4197d5ab9f62f117b0cd909fe6bab81f5fa1a460ae9dd04"
+          },
+          {
+            "module": "joulewise.adapters.mock_telemetry",
+            "path": "joulewise/adapters/mock_telemetry.py",
+            "sha256": "647e58b8397068887051244f31b5427f27f420c69950da47826bd3294590262a"
+          },
+          {
+            "module": "joulewise.adapters.powermetrics",
+            "path": "joulewise/adapters/powermetrics.py",
+            "sha256": "7380eea85fed2c51034acdbf71bdaa474c8dc4053fc2a1b86a84c05b301947ca"
+          },
+          {
+            "module": "joulewise.adapters.suite_control",
+            "path": "joulewise/adapters/suite_control.py",
+            "sha256": "7beb52f73346bdc1614227c7bb2e89f96846bd58c6a1f90e1831157e4157064b"
+          },
+          {
+            "module": "joulewise.arm_readiness",
+            "path": "joulewise/arm_readiness.py",
+            "sha256": "cc3ef94c31374c153fbe467990d555f4379986562d860a72a1d722f2c2ede634"
+          },
+          {
+            "module": "joulewise.authentication_io",
+            "path": "joulewise/authentication_io.py",
+            "sha256": "5b099cb4504ee090699bd09da7f454816d270df921625745bd051e351a53c99e"
+          },
+          {
+            "module": "joulewise.axi_decode_config",
+            "path": "joulewise/axi_decode_config.py",
+            "sha256": "fab53ea66a636458bb8c36f0c5f5f3f014478db8351e246746c9b6bc7c62dd93"
+          },
+          {
+            "module": "joulewise.bundle",
+            "path": "joulewise/bundle.py",
+            "sha256": "283cf8a58424b62d489402d7eaf4f841cd8de7c4baf81e9e14c1ebaacc7fcf9f"
+          },
+          {
+            "module": "joulewise.bundle_read",
+            "path": "joulewise/bundle_read.py",
+            "sha256": "82d4ef714147cf7c1cd43298f598e6c149bc8ca7a69c2b7038d47cf018f0803c"
+          },
+          {
+            "module": "joulewise.calibration_bracketing",
+            "path": "joulewise/calibration_bracketing.py",
+            "sha256": "62111af1903ea6f2cce89fc734d97305df48dffbc9aab6de5e140ffb5ccd2b42"
+          },
+          {
+            "module": "joulewise.calibration_exits",
+            "path": "joulewise/calibration_exits.py",
+            "sha256": "b7b9d5ac41b4e315dc3660941a04e7d5f65ca030c9d171ef157b845896c2daa6"
+          },
+          {
+            "module": "joulewise.calibration_ledger",
+            "path": "joulewise/calibration_ledger.py",
+            "sha256": "e53a4ef7c36cd06f990bc45a5c977d65d2ad854ba2a0ca38e398af0facb746c0"
+          },
+          {
+            "module": "joulewise.clock",
+            "path": "joulewise/clock.py",
+            "sha256": "410d75dbc2d9b3ef50f02dde79a1feb9645c9705faf0f17217bdb11416f85734"
+          },
+          {
+            "module": "joulewise.cooldown_anchor",
+            "path": "joulewise/cooldown_anchor.py",
+            "sha256": "fbcc30dcfd3e31b2785927fc5cbee8ed9a1e2abf817a10d5b960ed283b64783d"
+          },
+          {
+            "module": "joulewise.identity_pins",
+            "path": "joulewise/identity_pins.py",
+            "sha256": "bb654e7fa88026e20b40123e33025379414b75adc7c4006c18aabf197b9f85f7"
+          },
+          {
+            "module": "joulewise.idle_admission",
+            "path": "joulewise/idle_admission.py",
+            "sha256": "9dc6b5d45c1dc138a13195b64cd1ca23eac0427c864063f26e274775b5a5a79e"
+          },
+          {
+            "module": "joulewise.interfaces",
+            "path": "joulewise/interfaces.py",
+            "sha256": "f943494294d271e832acfb30d23e25d15dabb96df4fbaa80349320a3d4386c3c"
+          },
+          {
+            "module": "joulewise.powermetrics_fiducial",
+            "path": "joulewise/powermetrics_fiducial.py",
+            "sha256": "1824bc4a93152630cecc9580ee42203bddabf18959e0450b7a11fdad813ce95d"
+          },
+          {
+            "module": "joulewise.provenance",
+            "path": "joulewise/provenance.py",
+            "sha256": "d9323ee6e902b8aea09db2a04276b5260c3865989b146a09f00d68fc857bc67f"
+          },
+          {
+            "module": "joulewise.schemas",
+            "path": "joulewise/schemas.py",
+            "sha256": "f4a2830e983e78f1a1aa97f9900377a04e03336b5978a395e7e730a552692b66"
+          },
+          {
+            "module": "joulewise.suite",
+            "path": "joulewise/suite.py",
+            "sha256": "99ec44749ff306d76fd506222fc3325ef913b33cdad55fdf90d576f87e398b63"
+          },
+          {
+            "module": "joulewise.uncertainty_evidence",
+            "path": "joulewise/uncertainty_evidence.py",
+            "sha256": "77412d194bb43c7ffc37339131591e12170371d83d60449ecbd1a3e879c988c7"
+          },
+          {
+            "module": "joulewise.validation",
+            "path": "joulewise/validation.py",
+            "sha256": "82bb03f3aed626446298d186e845b7fe75b3371ca6cbabd7160946bd8e7bfcfd"
+          },
+          {
+            "module": "scripts.validate_powermetrics_fiducial",
+            "path": "scripts/validate_powermetrics_fiducial.py",
+            "sha256": "9ca2a026d18b7b74da2bb1803c60799f453b406dded40d007d361a60020ab844"
+          },
+          {
+            "module": "tests.receipt_corpus",
+            "path": "tests/receipt_corpus.py",
+            "sha256": "eb05a78bd0e7c7c47cd83e8dc1c5234e7307dcc7671cfbd39976c8290f4d7c7d"
+          },
+          {
+            "module": "tests.test_calibration_live_three_window",
+            "path": "tests/test_calibration_live_three_window.py",
+            "sha256": "93ddd8f557df95b70cf0f0a625fee99b81818dd5522fd30190b77d56e79d59ea"
+          }
+        ],
+        "execution_isolated_to_discovered_repository": true,
+        "expected_failures": 0,
+        "failures": 0,
+        "skipped": 3,
+        "test_ids": [
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_all_six_are_same_epoch_causal_fresh_protocol_and_t1_eligible",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_alpha_beta_gamma_each_bind_only_their_own_pre_post_pair",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_bundle_path_uses_ledger_discovery_as_candidate_authority",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_d102_observation_count_boundary_requires_successor",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_d110_allowance_selects_both_max_operands_across_windows",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_each_night_issues_its_verdict_at_a_committed_closeout",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_exactly_six_live_candidates_and_zero_imported_candidates",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_final_closeout_replays_all_verdicts_with_complete_universe",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_issuance_equivalent_base_has_76_receipts_and_30_2_6_dispositions",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_l5_foreign_runs_root_cannot_bracket_with_or_without_binding",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_no_failure_campaign_has_36_valid_observations_two_short_of_trigger",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_no_neighboring_endpoint_can_substitute_for_a_bound_endpoint",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_production_writer_receipts_end_at_derived_terminal_sequence",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_range_expanding_live_observation_requires_successor",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_refuses_head_pin_mismatch_rollback_fork_or_uncommitted_terminal_head",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_refuses_import_marker_removal_import_leakage_or_discovery_regression",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_refuses_missing_duplicate_reordered_or_conflicting_session_receipts",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_refuses_missing_tampered_swapped_or_cross_window_bracket_binding",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_refuses_noncausal_stale_t1_protocol_or_epoch_mismatched_endpoint",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_refuses_omitted_added_duplicated_off_ledger_or_substituted_observations",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_refuses_open_or_abandoned_session_without_governed_closure",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_refuses_systematic_classification",
+          "tests.test_calibration_live_three_window.CalibrationLiveThreeWindowTests.test_successor_prior_set_refuses_omitted_or_changed_authenticated_prefix"
+        ],
+        "tests_run": 23,
+        "unexpected_successes": 0
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "bound_head": "54f990d156eee3da3467b368b816d4ac4a50f806",
+    "exact_test_count": 23
+  },
+  "facts": [
+    {
+      "fact_id": "desk.three_window_regression.v1",
+      "value": {
+        "profiles": [
+          "ALPHA",
+          "BETA",
+          "GAMMA"
+        ],
+        "same_head": true,
+        "three_window_live_ledger_regression_status": "PASS"
+      }
+    }
+  ],
+  "head_commit": "54f990d156eee3da3467b368b816d4ac4a50f806",
+  "kind": "THREE_WINDOW_REGRESSION",
+  "pack_sha256": "7ada4f4f1e0cdd6d4aa943ae6ee0ed5fd2266b46479166ef9a8d044984f0cf5c",
+  "primary_artifacts": [
+    {
+      "path": "joulewise/calibration_bracketing.py",
+      "sha256": "62111af1903ea6f2cce89fc734d97305df48dffbc9aab6de5e140ffb5ccd2b42"
+    },
+    {
+      "path": "joulewise/calibration_ledger.py",
+      "sha256": "e53a4ef7c36cd06f990bc45a5c977d65d2ad854ba2a0ca38e398af0facb746c0"
+    },
+    {
+      "path": "tests/test_calibration_live_three_window.py",
+      "sha256": "93ddd8f557df95b70cf0f0a625fee99b81818dd5522fd30190b77d56e79d59ea"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_evidence_source.v1"
+}

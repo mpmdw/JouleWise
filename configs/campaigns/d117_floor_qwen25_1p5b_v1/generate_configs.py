@@ -8,12 +8,15 @@ import hashlib
 import json
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACK_REL = Path("configs/campaigns/d117_floor_qwen25_1p5b_v1")
+CALIBRATION_PLAN_REFERENCE = "calibration_plan.json"
+CURRENT_FAMILY_SUFFIX = "_v1"
 SPEC_REL = Path("configs/floor_mint/d117_qwen25_1p5b_extraction_spec.json")
 SOURCE_PATH = Path(__file__).resolve()
 if str(REPO_ROOT) not in sys.path:
@@ -50,6 +53,22 @@ BOUND_ROOT_LEAF = "runs_d117_floor_qwen25_1p5b_v1_bound"
 CAMPAIGN_TAG = "d117-floor-qwen25-1p5b-v1"
 DRAFT_STATUS = "unfrozen_draft"
 FROZEN_STATUS = "frozen_by_d134_receipt"
+# Freeze-neutral serialized status for successor (_v2 and later) packs.
+#
+# Cold-gate verdict of 2026-08-18 (composed; adopts option (a) as narrowed and
+# option (d) as a gate condition -- holdings 1 and 6): the committed D-134
+# freeze receipt plus its plan-tree attachment IS the draft->frozen transition,
+# and the receipt's pack_identity pins calibration_plan.json -- which carries a
+# serialized status site -- by SHA. A post-mint serialized transition therefore
+# invalidates the receipt at the dry-run/arm/verify gates, and no re-mint path
+# exists. Every status-bearing byte a successor pack emits must consequently be
+# true on BOTH sides of the receipt: it states when the bytes were generated,
+# never that the pack is unfrozen or unarmable. The dynamic authority remains
+# GenerationIdentity.target_status, read from the authenticated attachment.
+#
+# The 2026-08-13 ordinal-1 packs keep their frozen wording verbatim; their
+# committed bytes are never repaired (M-2 core).
+SUCCESSOR_EMITTED_STATUS = "as_generated_pre_d134_freeze"
 CURRENT_FROZEN_RECEIPT_SHA256 = (
     "ddbbb40974c1b747516f403b3d319079519269892ee48e052a028d9f16b1e738"
 )
@@ -117,6 +136,20 @@ ACCEPTANCE_SHA256 = (
 ACCEPTANCE_DERIVATION_SHA256 = (
     "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
 )
+ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19"
+# D-138 dual-generation acceptance. The frozen `_v1` identity is permanently
+# bound to the D-116 initial issuance; successor generations bind the reissue
+# derived at the integrated estimator head.
+SUCCESSOR_ACCEPTANCE_REL = Path(
+    "configs/calibration/calibration_acceptance_d079_v2_r2.json"
+)
+SUCCESSOR_ACCEPTANCE_SHA256 = (
+    "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e"
+)
+SUCCESSOR_ACCEPTANCE_DERIVATION_SHA256 = (
+    "6b9f622ffd9aca3f627274db1b6516237d012b26e25118a36419d917f2bc6095"
+)
+SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19_r2"
 LEDGER_HEAD_FILE_SHA256 = (
     "6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902"
 )
@@ -156,6 +189,26 @@ def freeze_aware_status(freeze_reference: object) -> str:
     return FROZEN_STATUS
 
 
+def emitted_draft_status() -> str:
+    """Return the descriptive status byte written into generated artifacts.
+
+    This is deliberately NOT ``GenerationIdentity.target_status``. That
+    property is the dynamic, authenticated freeze state and remains the
+    authority a reader should consult; this function returns the generation-
+    time description that gets serialized into bytes the D-134 receipt pins.
+    Under the 2026-08-18 cold-gate verdict (holding 6) those bytes must never
+    transition, so the value they carry is freeze-neutral by construction and
+    ``FROZEN_STATUS`` is unreachable from every serialization site by design.
+    """
+
+    identity = active_generation()
+    if identity.target_is_successor_family:
+        return SUCCESSOR_EMITTED_STATUS
+    # Ordinal-1 packs were frozen on 2026-08-13 with this literal serialized;
+    # preserve-mode replay reproduces those committed bytes verbatim.
+    return DRAFT_STATUS
+
+
 ARM_READINESS_ATTACHMENT = plan_arm_readiness_attachment(
     REPO_ROOT / PACK_REL,
     "ALPHA",
@@ -169,8 +222,243 @@ PRESERVE_CURRENT_FROZEN_BYTES = (
 PACK_STATUS = freeze_aware_status(_FREEZE_REFERENCE)
 
 
+class GenerationIdentity:
+    def __init__(
+        self,
+        pack_id: str = PACK_REL.name,
+        family_suffix: str = CURRENT_FAMILY_SUFFIX,
+        preserve_current_frozen_bytes: bool = PRESERVE_CURRENT_FROZEN_BYTES,
+    ) -> None:
+        self.pack_id = pack_id
+        self.family_suffix = family_suffix
+        self.preserve_current_frozen_bytes = preserve_current_frozen_bytes
+        if not self.family_suffix.startswith("_v") or not self.family_suffix[2:].isdigit():
+            raise ValueError("family suffix must use the _v<positive integer> form")
+        if int(self.family_suffix[2:]) < 1:
+            raise ValueError("family suffix ordinal must be positive")
+        expected_pack_id = (
+            PACK_REL.name.removesuffix(CURRENT_FAMILY_SUFFIX) + self.family_suffix
+        )
+        if self.pack_id != expected_pack_id:
+            raise ValueError(
+                f"pack id must equal {expected_pack_id!r} for {self.family_suffix}"
+            )
+        # Downgrade guard (delta-7 F2). A generator whose own family ordinal is
+        # N must refuse every target below N, in EVERY mode -- generate,
+        # --check, preserve and no-preserve alike. Without it an emitted _v2
+        # generator accepts `--pack-id <family>_v1 --family-suffix _v1
+        # --no-preserve-current-frozen-bytes` and rewrites the predecessor's
+        # tracked, frozen plan_tree.json / plan_tree.sha256 /
+        # producer_contract.json: the ordinal-1 branches of every emitted_*
+        # helper are selected, so the rewrite is silent and byte-plausible.
+        # M-2's frozen-bytes-never-repaired doctrine bars that outright. This
+        # runs in the constructor, which every mode builds before it opens a
+        # single output path, so refusal is always pre-write. Same-ordinal
+        # (N -> N) draft/preserve behaviour and successor (N -> N+1)
+        # generation are untouched.
+        if self.target_ordinal < self.current_ordinal:
+            raise ValueError(
+                f"generator family ordinal {self.current_ordinal} refuses the "
+                f"downgrade target {self.pack_id!r} (family ordinal "
+                f"{self.target_ordinal}): an earlier family's committed bytes "
+                "are never rewritten by a later generator, in any mode"
+            )
+        if self.preserve_current_frozen_bytes and not self.target_is_current:
+            raise ValueError(
+                "preserve mode requires the current target identity"
+            )
+        if (
+            not self.preserve_current_frozen_bytes
+            and self.target_is_current
+            and (PRESERVE_CURRENT_FROZEN_BYTES or self.target_status == FROZEN_STATUS)
+        ):
+            raise ValueError("the current frozen identity requires preserve mode")
+
+    @property
+    def pack_rel(self) -> Path:
+        return PACK_REL.with_name(self.pack_id)
+
+    @property
+    def current_ordinal(self) -> int:
+        return int(CURRENT_FAMILY_SUFFIX[2:])
+
+    @property
+    def target_ordinal(self) -> int:
+        return int(self.family_suffix[2:])
+
+    @property
+    def target_is_current(self) -> bool:
+        return self.pack_id == PACK_REL.name and self.target_ordinal == self.current_ordinal
+
+    @property
+    def target_is_successor_family(self) -> bool:
+        return self.target_ordinal >= 2
+
+    @property
+    def target_status(self) -> str:
+        if not self.target_is_current:
+            return DRAFT_STATUS
+        return freeze_aware_status(ARM_READINESS_ATTACHMENT["freeze_receipt"])
+
+
+_ACTIVE_GENERATION: GenerationIdentity | None = None
+_SUCCESSOR_IDENTITY_TOKENS = (
+    "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+    "evidence-d117-floor-qwen25-1p5b-v1",
+    "plan-set-d117-qwen25-1p5b-7b-phase-floor-v1",
+    "d117-qwen25-phase-floor-set-v1",
+    "d117-qwen25-1p5b-phase-floor-component-v1",
+    "d117-qwen25-1p5b-prefill-p256-floor-v1",
+    "d117-qwen25-1p5b-prefill-p128-floor-v1",
+    "d117-qwen25-1p5b-decode-floor-v1",
+    "tg-d117-qwen25-1p5b-prefill-p256-v1",
+    "tg-d117-qwen25-1p5b-prefill-p128-v1",
+    "tg-d117-qwen25-1p5b-decode-v1",
+    # NOTE (round 6, 2026-08-18 cold-gate verdict holding 6): the gamma pack
+    # name is deliberately NOT a threaded successor-identity token here. The
+    # only thing this generator references inside that pack is the D-122
+    # Q1-ratified p256 prompt ARTIFACT, an external ratified input pinned by
+    # byte SHA -- the same treatment DECODE_TEMPLATE_REL/POLICY_REL get, and
+    # they keep their committed v1 paths in successor generations too.
+    # Threading it would point a successor floor pack at a sibling artifact
+    # whose bytes this generator cannot read or pin: successor gamma packs now
+    # carry a generation-specific freeze-neutral status value, so the threaded
+    # reference and the pinned SHA would disagree, and the emitted
+    # prompt_artifact_sha256 would be a false claim.
+    "d117_floor_qwen25_1p5b_v1",
+    "d117-floor-qwen25-1p5b-v1",
+)
+
+
+def active_generation() -> GenerationIdentity:
+    return _ACTIVE_GENERATION or GenerationIdentity()
+
+
+@contextmanager
+def generation_context(identity: GenerationIdentity):
+    global _ACTIVE_GENERATION
+    previous = _ACTIVE_GENERATION
+    _ACTIVE_GENERATION = identity
+    try:
+        yield
+    finally:
+        _ACTIVE_GENERATION = previous
+
+
+def _successor_token(token: str, identity: GenerationIdentity) -> str:
+    if token == PACK_REL.name:
+        return identity.pack_id
+    current_version = CURRENT_FAMILY_SUFFIX.removeprefix("_")
+    version = identity.family_suffix.removeprefix("_")
+    hyphen_suffix = f"-{current_version}"
+    if token.endswith(hyphen_suffix):
+        return token[: -len(hyphen_suffix)] + f"-{version}"
+    if token.endswith(CURRENT_FAMILY_SUFFIX):
+        return token[: -len(CURRENT_FAMILY_SUFFIX)] + identity.family_suffix
+    raise ValueError(f"successor identity token has no version suffix: {token}")
+
+
+def thread_generation_identity(value: Any) -> Any:
+    identity = active_generation()
+    if identity.target_is_current:
+        return value
+    if isinstance(value, str):
+        for token in _SUCCESSOR_IDENTITY_TOKENS:
+            value = value.replace(token, _successor_token(token, identity))
+        return value
+    if isinstance(value, dict):
+        return {
+            thread_generation_identity(key): thread_generation_identity(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [thread_generation_identity(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(thread_generation_identity(item) for item in value)
+    return value
+
+
+def embedded_generator_bytes() -> bytes:
+    source = SOURCE_PATH.read_text(encoding="utf-8")
+    identity = active_generation()
+    if identity.target_is_current:
+        return source.encode("utf-8")
+    source = thread_generation_identity(source)
+    current_declaration = f'CURRENT_FAMILY_SUFFIX = "{CURRENT_FAMILY_SUFFIX}"'
+    successor_declaration = f'CURRENT_FAMILY_SUFFIX = "{identity.family_suffix}"'
+    if source.count(current_declaration) != 1:
+        raise ValueError("generator family-suffix declaration is not unique")
+    return source.replace(current_declaration, successor_declaration).encode("utf-8")
+
+
+def generated_relative_path(relative: Path) -> Path:
+    identity = active_generation()
+    try:
+        inside_pack = relative.relative_to(PACK_REL)
+    except ValueError:
+        if relative == extraction_spec_rel(identity):
+            return relative
+        raise ValueError(f"output path is outside the target allowlist: {relative}")
+    return identity.pack_rel / inside_pack
+
+
+def extraction_spec_rel(identity: GenerationIdentity | None = None) -> Path:
+    selected = identity or active_generation()
+    if selected.target_ordinal == 1:
+        return SPEC_REL
+    stem_suffix = "_extraction_spec"
+    family_stem = SPEC_REL.stem.removesuffix(stem_suffix)
+    return SPEC_REL.with_name(
+        f"{family_stem}{selected.family_suffix}{stem_suffix}{SPEC_REL.suffix}"
+    )
+
+
+def emitted_plan_reference() -> str:
+    if active_generation().target_ordinal == 1:
+        return (PACK_REL / CALIBRATION_PLAN_REFERENCE).as_posix()
+    return CALIBRATION_PLAN_REFERENCE
+
+
+def emitted_plan_sidecar_reference() -> str:
+    if active_generation().target_ordinal == 1:
+        return (PACK_REL / "calibration_plan.sha256").as_posix()
+    return "calibration_plan.sha256"
+
+
+def generation_arm_readiness_attachment() -> dict[str, Any]:
+    identity = active_generation()
+    return plan_arm_readiness_attachment(
+        REPO_ROOT / identity.pack_rel,
+        "ALPHA",
+        REPO_ROOT,
+    )
+
+
+def acceptance_pin() -> dict[str, Any]:
+    """Return the acceptance generation this pack binds.
+
+    Preserve mode replays the frozen `_v1` bytes, which are permanently bound
+    to the D-116 initial issuance. Any successor generation binds the D-138
+    reissue instead, so the two generations never share a pin.
+    """
+
+    if active_generation().preserve_current_frozen_bytes:
+        return {
+            "acceptance_id": ACCEPTANCE_ID,
+            "rel": ACCEPTANCE_REL,
+            "artifact_sha256": ACCEPTANCE_SHA256,
+            "derivation_sha256": ACCEPTANCE_DERIVATION_SHA256,
+        }
+    return {
+        "acceptance_id": SUCCESSOR_ACCEPTANCE_ID,
+        "rel": SUCCESSOR_ACCEPTANCE_REL,
+        "artifact_sha256": SUCCESSOR_ACCEPTANCE_SHA256,
+        "derivation_sha256": SUCCESSOR_ACCEPTANCE_DERIVATION_SHA256,
+    }
+
+
 def freeze_aware_projection(generated: dict[str, Any]) -> dict[str, Any]:
-    if not PRESERVE_CURRENT_FROZEN_BYTES:
+    if not active_generation().preserve_current_frozen_bytes:
         return generated
     current = json.loads(
         (REPO_ROOT / PACK_REL / "producer_contract.json").read_text(
@@ -180,14 +468,41 @@ def freeze_aware_projection(generated: dict[str, Any]) -> dict[str, Any]:
     return current["identity_pin_projection"]
 
 
-SUCCESSOR_REGENERATION_RULE = (
+def preserved_generator_sha256() -> str:
+    tree = json.loads(
+        (REPO_ROOT / active_generation().pack_rel / "plan_tree.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    return tree["generator"]["sha256"]
+
+
+LEGACY_SUCCESSOR_REGENERATION_RULE = (
     "A successor acceptance artifact issuing before arm REQUIRES pack regeneration "
     "(packs are unfrozen drafts; the D-125 lineage-envelope alternative is recorded "
     "as a freeze-time lead decision)."
-    if PACK_STATUS == DRAFT_STATUS
-    else "A successor acceptance artifact issuing before arm REQUIRES a newly "
-    "generated and newly frozen pack; the D-134 freeze receipt is authoritative."
 )
+FREEZE_NEUTRAL_SUCCESSOR_REGENERATION_RULE = (
+    "A successor acceptance artifact issuing before arm REQUIRES a newly generated "
+    "pack; the committed D-134 freeze receipt and its plan-tree attachment are "
+    "authoritative for this pack's freeze state (the D-125 lineage-envelope "
+    "alternative is recorded as a freeze-time lead decision)."
+)
+
+
+def successor_regeneration_rule() -> str:
+    """Return the acceptance-artifact policy text for the target generation.
+
+    Formerly a module constant keyed on the module-level ``PACK_STATUS``, which
+    made a frozen-status string a live emission path (holding 6 of the
+    2026-08-18 cold-gate verdict bars that). The ordinal-1 literal is the one
+    the 2026-08-13 freeze receipts pin; successors get wording that is true on
+    both sides of their own receipt.
+    """
+
+    if active_generation().target_is_successor_family:
+        return FREEZE_NEUTRAL_SUCCESSOR_REGENERATION_RULE
+    return LEGACY_SUCCESSOR_REGENERATION_RULE
 
 MODEL = {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
@@ -253,12 +568,15 @@ STAGES = (
 
 
 def render_json(value: Any) -> bytes:
-    return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    return (
+        json.dumps(thread_generation_identity(value), indent=2, ensure_ascii=False)
+        + "\n"
+    ).encode("utf-8")
 
 
 def canonical_sha256(value: Any) -> str:
     raw = json.dumps(
-        value,
+        thread_generation_identity(value),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -276,9 +594,73 @@ def sha256_file(path: Path) -> str:
 
 
 def write_bytes(output_root: Path, relative: Path, raw: bytes) -> None:
-    path = output_root / relative
+    resolved = generated_relative_path(relative)
+    if resolved not in validate_generation_output_inventory(active_generation()):
+        raise ValueError(f"output path is outside the closed inventory: {resolved}")
+    path = output_root / resolved
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(raw)
+
+
+def validate_generation_write_boundary(
+    output_root: Path, outputs: Iterable[Path]
+) -> None:
+    """Refuse link traversal or anomalous existing nodes before any write."""
+
+    # Registered residual (lead disposition; registration lives in
+    # docs/risk_register.md -- this comment is not the registration). This
+    # boundary is check-then-write: a concurrent process could substitute a
+    # validated ancestor or write target with a symlink after this function
+    # returns and before the bytes land.
+    #
+    # The disposition rests on DESK-TIME SINGLE-OPERATOR GENERATION, not on the
+    # measurement threat model. Pack generation is hand-run by one operator at
+    # the desk, outside any measurement window, against a repository checkout
+    # the operator controls; nothing else is scheduled to write into the pack
+    # path while it runs. The non-adversarial concurrency that genuinely occurs
+    # here -- editors, backup and sync daemons, the parallel worktree fleet --
+    # clobbers or duplicates files; none of it substitutes an ancestor
+    # directory with a symlink in the microseconds after validation. Winning
+    # this race requires a local program acting adversarially and with
+    # knowledge of the boundary, which single-operator desk discipline
+    # excludes. D-139 A1 ("no adversarial programs affecting the measurement
+    # can be assumed") is cited BY ANALOGY only: its own scope is the
+    # measurement environment, not this generator's desk-time write boundary.
+    #
+    # The accidental class IS closed: pre-existing links anywhere in the pack
+    # path, spec, sidecar, or ancestors refuse before any write. The residual
+    # reopens if the threat model is revised to admit concurrent adversarial
+    # local processes, or if generation moves to multi-operator/shared-machine
+    # use (cold-gate conditions C-B1a and C-B1b, 2026-08-18; C-B1b formally
+    # supersedes delta-4's F2 dirfd remedy demand). No dirfd/O_NOFOLLOW
+    # hardening is attempted here; the residual is registered, not closed.
+
+    root = output_root.absolute()
+
+    def refuse(path: Path, reason: str) -> None:
+        destination = path.resolve(strict=False)
+        raise ValueError(
+            f"refusing generation: {reason}: {path} -> {destination}"
+        )
+
+    if root.is_symlink():
+        refuse(root, "output root is a symlink")
+    if root.exists() and not root.is_dir():
+        refuse(root, "output root is not a real directory")
+
+    for relative in sorted(outputs, key=lambda path: path.as_posix()):
+        current = root
+        for component in relative.parts[:-1]:
+            current = current / component
+            if current.is_symlink():
+                refuse(current, "write ancestor is a symlink")
+            if current.exists() and not current.is_dir():
+                refuse(current, "write ancestor is not a real directory")
+        target = current / relative.name
+        if target.is_symlink():
+            refuse(target, "write target is a symlink")
+        if target.exists() and not target.is_file():
+            refuse(target, "existing write target is not a regular file")
 
 
 def write_json(output_root: Path, relative: Path, value: Any) -> bytes:
@@ -555,6 +937,8 @@ def config_for(
         f"calibration-plan-sha256={plan_sha256}",
         *run["collection_tags"],
     ]
+    if active_generation().target_is_successor_family:
+        tags.append("launch_lineage_required")
     return {
         "schema_version": "0.1",
         "run_id": run["run_id"],
@@ -709,11 +1093,18 @@ def campaign_launch(
 
 
 def freeze_aware_reservation_plan_arguments(
-    preserve_current: bool,
+    identity: GenerationIdentity | None = None,
+    *,
+    pack_rel: Path | None = None,
+    plan_reference: str = CALIBRATION_PLAN_REFERENCE,
 ) -> list[dict[str, str]]:
-    if preserve_current:
+    selected = identity or active_generation()
+    if selected.target_ordinal == 1:
         return []
-    return [literal("--plan"), repo_path(PACK_REL / "calibration_plan.json")]
+    if plan_reference != CALIBRATION_PLAN_REFERENCE:
+        raise ValueError("reservation plan must use the canonical pack-relative reference")
+    resolved_pack_rel = pack_rel or selected.pack_rel
+    return [literal("--plan"), repo_path(resolved_pack_rel / plan_reference)]
 
 
 def stage_graph(
@@ -723,7 +1114,11 @@ def stage_graph(
     bracket_args = [
         literal("--ledger"), binding("ledger_path"),
         literal("--head-pin"), repo_path(LEDGER_HEAD_REL),
-        *freeze_aware_reservation_plan_arguments(PRESERVE_CURRENT_FROZEN_BYTES),
+        *freeze_aware_reservation_plan_arguments(
+            active_generation(),
+            pack_rel=active_generation().pack_rel,
+            plan_reference=CALIBRATION_PLAN_REFERENCE,
+        ),
         literal("--session-id"), binding("bracket_session_id"),
         literal("--window-id"), tree_pointer("/window_identity/window_id"),
         literal("--plan-id"), tree_pointer("/plan/plan_id"),
@@ -993,10 +1388,10 @@ def calibration_basis() -> dict[str, Any]:
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-            "acceptance_id": "d079_calibration_acceptance_v2_n19",
-            "path": ACCEPTANCE_REL.as_posix(),
-            "artifact_sha256": ACCEPTANCE_SHA256,
-            "derivation_sha256": ACCEPTANCE_DERIVATION_SHA256,
+            "acceptance_id": acceptance_pin()["acceptance_id"],
+            "path": acceptance_pin()["rel"].as_posix(),
+            "artifact_sha256": acceptance_pin()["artifact_sha256"],
+            "derivation_sha256": acceptance_pin()["derivation_sha256"],
             "schema_version": "joulewise.calibration_acceptance_bound.v2",
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",
@@ -1210,8 +1605,8 @@ def build_extraction_spec(
     spec = {
         "schema_version": "joulewise.detection_floor_extraction_spec.v1",
         # The frozen plan test pins the extraction-spec artifact SHA.
-        "draft_status": DRAFT_STATUS,
-        "successor_acceptance_artifact_policy": SUCCESSOR_REGENERATION_RULE,
+        "draft_status": emitted_draft_status(),
+        "successor_acceptance_artifact_policy": successor_regeneration_rule(),
         "cells": cells,
         "reported_energy_cells": reported_cells,
         "reported_energy_registration": {
@@ -1297,7 +1692,7 @@ def build_producer_contract(
     return {
         "schema_version": "joulewise.d117_floor_producer_contract.v1",
         # The frozen plan test pins the producer-contract artifact SHA.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": emitted_draft_status(),
         "plan_set_id": "plan-set-d117-qwen25-1p5b-7b-phase-floor-v1",
         "aggregate_artifact_id": "d117-qwen25-phase-floor-set-v1",
         "producer_index": 1,
@@ -1305,7 +1700,7 @@ def build_producer_contract(
         "cell_composition_rule": "componentwise_max_never_sum.v1",
         "consumer_floor_rule": "cross_stack_armwise_max.v1",
         "plan": {
-            "path": (PACK_REL / "calibration_plan.json").as_posix(),
+            "path": emitted_plan_reference(),
             "plan_id": PLAN_ID,
             "sha256": plan_sha256,
             "sidecar_sha256": plan_sidecar_sha256,
@@ -1337,7 +1732,7 @@ def build_producer_contract(
             "sha256": order_manifest_sha256,
         },
         "extraction_spec": {
-            "path": SPEC_REL.as_posix(),
+            "path": extraction_spec_rel().as_posix(),
             "sha256": spec_sha256,
             "member_count": 100,
             "floor_cell_count": 6,
@@ -1357,7 +1752,7 @@ def build_producer_contract(
                     "identity_unit_id": "alpha",
                     "producer_plan_reference": {
                         "plan_id": PLAN_ID,
-                        "path": (PACK_REL / "calibration_plan.json").as_posix(),
+                        "path": emitted_plan_reference(),
                     },
                     "consumer_bindings": [
                         {
@@ -1396,7 +1791,7 @@ def build_producer_contract(
                     "identity_unit_id": "alpha/prefill_p256",
                     "producer_plan_reference": {
                         "plan_id": PLAN_ID,
-                        "path": (PACK_REL / "calibration_plan.json").as_posix(),
+                        "path": emitted_plan_reference(),
                     },
                     "consumer_bindings": [
                         {
@@ -1446,16 +1841,65 @@ def build_producer_contract(
 
 def readme_bytes() -> bytes:
     oracle = derive_bracket_session_receipt_oracle()
-    if PACK_STATUS != DRAFT_STATUS:
-        return (
-            "# D-117 Qwen2.5-1.5B floor campaign — frozen by D-134 receipt\n\n"
-            "This generated description is freeze-aware. The D-134 freeze receipt "
-            "and plan-tree pin are authoritative for frozen state; an external "
-            "unexpired PASS/GO arm receipt is still required before launch.\n\n"
-            f"{SUCCESSOR_REGENERATION_RULE}\n"
-        ).encode("utf-8")
-    return (
+    identity = active_generation()
+    identity_statement = (
+        ""
+        if identity.target_ordinal == 1
+        else f"Pack identity: `{identity.pack_id}` (`{identity.family_suffix}`).\n\n"
+    )
+    # Holding 6 of the 2026-08-18 cold-gate verdict: the successor README is
+    # selected by target GENERATION, never by freeze status, and its wording is
+    # true on both sides of the pack's own D-134 receipt. The former
+    # frozen-status branch is removed, not merely unreachable: under option (a)
+    # a frozen pack's README is the one committed before the receipt was
+    # minted, so a second variant could only ever be emitted into bytes the
+    # receipt already pins.
+    #
+    # The ordinal-1 literal below is retained because THIS generator, at
+    # ordinal 1, must replay the 2026-08-13 committed bytes verbatim. In an
+    # EMITTED successor generator it is unreachable by design (Opus F8): that
+    # generator's family ordinal is >= 2 and GenerationIdentity refuses every
+    # lower-ordinal target before any write, so its legacy "unfrozen draft" /
+    # "not armable" wording can never reach emitted bytes.
+    if identity.target_is_successor_family:
+        content = (
+            "# D-117 Qwen2.5-1.5B floor campaign — status governed by the "
+            "D-134 freeze receipt\n\n"
+            f"{identity_statement}"
+            "This description does not carry freeze status. The committed D-134 "
+            "freeze receipt and its plan-tree attachment are authoritative for "
+            "this pack's frozen state; the receipt pins `calibration_plan.json` "
+            "by SHA, so this text and every serialized `draft_status` field stay "
+            "exactly as generated on both sides of the freeze. An external "
+            "unexpired PASS/GO arm receipt is required before launch.\n\n"
+            "This pack pre-registers the alpha window's 10 absolute decode members, "
+            "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
+            "rider over the same 50 physical bundles. It also carries a dedicated "
+            "Q8 p256 prefill domain with 10 absolute members and ten null A/B/B/A "
+            "blocks (50 additional members), plus three D-123 reported phase-energy "
+            "means. The p256 workload name remains `df_ph_prefill_p256_candidate` "
+            "for byte identity with the gamma consumer even though Q1 has frozen its "
+            "prompt.\n\n"
+            "Its receipt oracle is replay-derived from "
+            f"`{oracle['source']['module']}`: {oracle['receipt_count']} physical "
+            f"receipts for {oracle['logical_operation_count']} logical operations per "
+            "finalized pre/post bracket session. Actual receipt bytes and the absolute "
+            "terminal sequence remain arm-time evidence. Arm-time identities require "
+            "U11 projection, "
+            "and lead review must complete before any later release step.\n\n"
+            f"{successor_regeneration_rule()}\n\n"
+            "Generate or verify with:\n\n"
+            "```text\n"
+            "python3 configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py\n"
+            "python3 configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py --check\n"
+            "```\n\n"
+            "Integrity SHA-256 values in this pack detect drift; they do not mark "
+            "release.\n"
+        )
+        return thread_generation_identity(content).encode("utf-8")
+    content = (
         "# D-117 Qwen2.5-1.5B floor campaign — unfrozen draft\n\n"
+        f"{identity_statement}"
         "This pack pre-registers the alpha window's 10 absolute decode members, "
         "ten null A/B/B/A blocks (40 members), and a zero-member prefill metric "
         "rider over the same 50 physical bundles. It also carries a dedicated "
@@ -1471,21 +1915,38 @@ def readme_bytes() -> bytes:
         "terminal sequence remain arm-time evidence. Arm-time identities require "
         "U11 projection, "
         "and lead review must complete before any later release step.\n\n"
-        f"{SUCCESSOR_REGENERATION_RULE}\n\n"
+        f"{successor_regeneration_rule()}\n\n"
         "Generate or verify with:\n\n"
         "```text\n"
         "python3 configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py\n"
         "python3 configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py --check\n"
         "```\n\n"
             "Integrity SHA-256 values in this draft detect drift; they do not mark release.\n"
-    ).encode("utf-8")
+    )
+    return thread_generation_identity(content).encode("utf-8")
 
 
-def generate(output_root: Path) -> tuple[int, str, str]:
-    source_raw = SOURCE_PATH.read_bytes()
+def generate(
+    output_root: Path,
+    identity: GenerationIdentity | None = None,
+) -> tuple[int, str, str]:
+    with generation_context(identity or GenerationIdentity()):
+        return _generate(output_root)
+
+
+def _generate(output_root: Path) -> tuple[int, str, str]:
+    outputs = validate_generation_output_inventory(active_generation())
+    validate_generation_write_boundary(output_root, outputs)
+    if active_generation().preserve_current_frozen_bytes:
+        for relative in sorted(outputs, key=lambda path: path.as_posix()):
+            write_bytes(output_root, relative, (REPO_ROOT / relative).read_bytes())
+        plan_raw = (REPO_ROOT / active_generation().pack_rel / "calibration_plan.json").read_bytes()
+        tree_raw = (REPO_ROOT / active_generation().pack_rel / "plan_tree.json").read_bytes()
+        return 100, sha256_bytes(plan_raw), sha256_bytes(tree_raw)
+    source_raw = embedded_generator_bytes()
     source_sha256 = (
-        CURRENT_FROZEN_GENERATOR_SHA256
-        if PRESERVE_CURRENT_FROZEN_BYTES
+        preserved_generator_sha256()
+        if active_generation().preserve_current_frozen_bytes
         else sha256_bytes(source_raw)
     )
     (
@@ -1499,7 +1960,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     p256_prompt_text = load_p256_prompt_text()
     for path, expected in (
         (POLICY_REL, POLICY_SHA256),
-        (ACCEPTANCE_REL, ACCEPTANCE_SHA256),
+        (acceptance_pin()["rel"], acceptance_pin()["artifact_sha256"]),
         (LEDGER_HEAD_REL, LEDGER_HEAD_FILE_SHA256),
         (NEG8_SETTLED_REL, NEG8_SETTLED_SHA256),
         (P256_PROMPT_REL, P256_PROMPT_ARTIFACT_SHA256),
@@ -1550,8 +2011,11 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     canonical_blocks = calibration_plan_blocks(blocks)
     plan = {
         "schema_version": PLAN_SCHEMA,
-        # The D-134 freeze receipt pins calibration_plan.json by SHA.
-        "draft_status": DRAFT_STATUS,
+        # The D-134 freeze receipt pins calibration_plan.json by SHA, so this
+        # serialized status can never transition after the receipt is minted --
+        # the committed receipt IS the freeze state (cold-gate verdict
+        # 2026-08-18, holdings 1 and 6). Do not make this field freeze-reactive.
+        "draft_status": emitted_draft_status(),
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N,
@@ -1709,7 +2173,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         stage_manifest = {
             "schema_version": ORDER_SCHEMA,
             # The frozen plan-tree manifest reference pins these bytes by SHA.
-            "draft_status": DRAFT_STATUS,
+            "draft_status": emitted_draft_status(),
             "manifest_id": manifest_id,
             "plan_id": PLAN_ID,
             "calibration_plan_sha256": plan_sha256,
@@ -1729,7 +2193,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     root_manifest = {
         "schema_version": ORDER_SCHEMA,
         # The frozen producer contract pins the root manifest by SHA.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": emitted_draft_status(),
         "manifest_id": "d117-floor-qwen25-1p5b-v1-order-v1",
         "plan_id": PLAN_ID,
         "calibration_plan_sha256": plan_sha256,
@@ -1764,7 +2228,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         config_rows,
         root_manifest_sha256,
     )
-    spec_raw = write_json(output_root, SPEC_REL, spec)
+    spec_raw = write_json(output_root, extraction_spec_rel(), spec)
     spec_sha256 = sha256_bytes(spec_raw)
 
     producer = build_producer_contract(
@@ -1800,7 +2264,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         ),
         p256_prompt_text,
     )
-    if PRESERVE_CURRENT_FROZEN_BYTES:
+    if active_generation().preserve_current_frozen_bytes:
         producer_raw = (REPO_ROOT / PACK_REL / "producer_contract.json").read_bytes()
         producer = json.loads(producer_raw)
         write_bytes(output_root, PACK_REL / "producer_contract.json", producer_raw)
@@ -1820,13 +2284,13 @@ def generate(output_root: Path) -> tuple[int, str, str]:
     tree = {
         "schema_version": TREE_SCHEMA,
         # The D-134 plan-tree sidecar pins this artifact by SHA.
-        "draft_status": DRAFT_STATUS,
+        "draft_status": emitted_draft_status(),
         "plan": {
-            "path": (PACK_REL / "calibration_plan.json").as_posix(),
+            "path": emitted_plan_reference(),
             "plan_id": PLAN_ID,
             "actual_sha256": plan_sha256,
             "declared_sha256": plan_sha256,
-            "sidecar_path": (PACK_REL / "calibration_plan.sha256").as_posix(),
+            "sidecar_path": emitted_plan_sidecar_reference(),
             "sidecar_sha256": sha256_bytes(plan_sidecar_raw),
         },
         "generator": {
@@ -1848,10 +2312,10 @@ def generate(output_root: Path) -> tuple[int, str, str]:
         "acceptance_policy": {
             "selection": "issued_d116_artifact_only",
             "issued_acceptance": {
-                "acceptance_id": "d079_calibration_acceptance_v2_n19",
-                "path": ACCEPTANCE_REL.as_posix(),
-                "artifact_sha256": ACCEPTANCE_SHA256,
-                "derivation_sha256": ACCEPTANCE_DERIVATION_SHA256,
+                "acceptance_id": acceptance_pin()["acceptance_id"],
+                "path": acceptance_pin()["rel"].as_posix(),
+                "artifact_sha256": acceptance_pin()["artifact_sha256"],
+                "derivation_sha256": acceptance_pin()["derivation_sha256"],
             },
             "issued_ledger_head": {
                 "path": LEDGER_HEAD_REL.as_posix(),
@@ -1920,7 +2384,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing",
         },
         "arm_attachments": {
-            "arm_readiness": ARM_READINESS_ATTACHMENT,
+            "arm_readiness": generation_arm_readiness_attachment(),
             "launch": {
                 "schema_version": "joulewise.stage_launch_bindings.v1",
                 "bindings": [
@@ -1965,7 +2429,10 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             },
         },
         "downstream_contract": {
-            "extraction_spec": {"path": SPEC_REL.as_posix(), "sha256": spec_sha256},
+            "extraction_spec": {
+                "path": extraction_spec_rel().as_posix(),
+                "sha256": spec_sha256,
+            },
             "producer_contract": {
                 "path": (PACK_REL / "producer_contract.json").as_posix(),
                 "sha256": producer_sha256,
@@ -1984,7 +2451,7 @@ def generate(output_root: Path) -> tuple[int, str, str]:
             "calibration_observation_count": 2,
         },
     }
-    if PRESERVE_CURRENT_FROZEN_BYTES:
+    if active_generation().preserve_current_frozen_bytes:
         tree_raw = (REPO_ROOT / PACK_REL / "plan_tree.json").read_bytes()
         tree_sidecar_raw = (REPO_ROOT / PACK_REL / "plan_tree.sha256").read_bytes()
         write_bytes(output_root, PACK_REL / "plan_tree.json", tree_raw)
@@ -2059,6 +2526,20 @@ def expected_pack_paths() -> list[Path]:
     return paths
 
 
+def validate_generation_output_inventory(identity: GenerationIdentity) -> set[Path]:
+    pack_outputs = {identity.pack_rel / path for path in expected_pack_paths()}
+    spec_output = extraction_spec_rel(identity)
+    outputs = pack_outputs | {spec_output}
+    if len(pack_outputs) != len(expected_pack_paths()) or spec_output in pack_outputs:
+        raise ValueError("generation output inventory is not exactly contained")
+    if any(
+        path != spec_output and identity.pack_rel not in path.parents
+        for path in outputs
+    ):
+        raise ValueError("generation output inventory escapes the target allowlist")
+    return outputs
+
+
 def actual_pack_paths(pack_root: Path) -> set[Path]:
     return {
         path.relative_to(pack_root)
@@ -2067,13 +2548,18 @@ def actual_pack_paths(pack_root: Path) -> set[Path]:
     }
 
 
-def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
+def check_current(
+    check_root: Path = REPO_ROOT,
+    identity: GenerationIdentity | None = None,
+) -> tuple[int, str, str]:
+    selected_identity = identity or GenerationIdentity()
     with tempfile.TemporaryDirectory(prefix="d117-u5-check-") as tmp:
         temp_root = Path(tmp)
-        count, plan_sha256, tree_sha256 = generate(temp_root)
+        count, plan_sha256, tree_sha256 = generate(temp_root, selected_identity)
+        pack_rel = selected_identity.pack_rel
         generated_paths = set(expected_pack_paths())
         generated_tree = json.loads(
-            (temp_root / PACK_REL / "plan_tree.json").read_text(encoding="utf-8")
+            (temp_root / pack_rel / "plan_tree.json").read_text(encoding="utf-8")
         )
         freeze_reference = generated_tree["arm_attachments"]["arm_readiness"][
             "freeze_receipt"
@@ -2086,7 +2572,7 @@ def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
                 freeze_path.with_name(f"{freeze_path.name}.sha256"),
             }
             freeze_receipt = json.loads(
-                (check_root / PACK_REL / freeze_path).read_text(encoding="utf-8")
+                (check_root / pack_rel / freeze_path).read_text(encoding="utf-8")
             )
             for item in freeze_receipt["evidence"]:
                 evidence_path = Path(item["path"])
@@ -2101,7 +2587,7 @@ def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
                     evidence_sidecar,
                 }
                 evidence_receipt = json.loads(
-                    (check_root / PACK_REL / evidence_path).read_text(
+                    (check_root / pack_rel / evidence_path).read_text(
                         encoding="utf-8"
                     )
                 )
@@ -2119,7 +2605,7 @@ def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
                 projection_path,
                 projection_path.with_suffix(".sha256"),
             }
-        observed_paths = actual_pack_paths(check_root / PACK_REL)
+        observed_paths = actual_pack_paths(check_root / pack_rel)
         missing = sorted(expected_paths - observed_paths)
         extras = sorted(observed_paths - expected_paths)
         if missing or extras:
@@ -2134,12 +2620,13 @@ def check_current(check_root: Path = REPO_ROOT) -> tuple[int, str, str]:
                 )
             raise ValueError("pack inventory differs: " + "; ".join(detail))
         for relative in generated_paths:
-            expected = (temp_root / PACK_REL / relative).read_bytes()
-            actual_path = check_root / PACK_REL / relative
+            expected = (temp_root / pack_rel / relative).read_bytes()
+            actual_path = check_root / pack_rel / relative
             if actual_path.read_bytes() != expected:
-                raise ValueError(f"generated file drifted: {(PACK_REL / relative).as_posix()}")
-        if (check_root / SPEC_REL).read_bytes() != (temp_root / SPEC_REL).read_bytes():
-            raise ValueError(f"generated file drifted: {SPEC_REL.as_posix()}")
+                raise ValueError(f"generated file drifted: {(pack_rel / relative).as_posix()}")
+        spec_rel = extraction_spec_rel(selected_identity)
+        if (check_root / spec_rel).read_bytes() != (temp_root / spec_rel).read_bytes():
+            raise ValueError(f"generated file drifted: {spec_rel.as_posix()}")
         return count, plan_sha256, tree_sha256
 
 
@@ -2151,22 +2638,39 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="write under this temporary repository root instead of the checkout",
     )
+    parser.add_argument("--pack-id", default=PACK_REL.name)
+    parser.add_argument("--family-suffix", default=CURRENT_FAMILY_SUFFIX)
+    parser.add_argument(
+        "--preserve-current-frozen-bytes",
+        action=argparse.BooleanOptionalAction,
+        default=PRESERVE_CURRENT_FROZEN_BYTES,
+    )
     args = parser.parse_args()
     return args
 
 
 def main() -> int:
     args = parse_args()
+    identity = GenerationIdentity(
+        pack_id=args.pack_id,
+        family_suffix=args.family_suffix,
+        preserve_current_frozen_bytes=args.preserve_current_frozen_bytes,
+    )
     if args.check:
         check_root = args.output_root.resolve() if args.output_root else REPO_ROOT
-        count, plan_sha256, tree_sha256 = check_current(check_root)
+        count, plan_sha256, tree_sha256 = check_current(check_root, identity)
         verb = "verified"
     else:
-        output_root = args.output_root.resolve() if args.output_root else REPO_ROOT
-        count, plan_sha256, tree_sha256 = generate(output_root)
+        output_root = args.output_root.absolute() if args.output_root else REPO_ROOT
+        count, plan_sha256, tree_sha256 = generate(output_root, identity)
         verb = "generated"
+    status = identity.target_status
+    identity_label = (
+        "" if identity.target_ordinal == 1 else f"{identity.pack_id} "
+    )
     print(
-        f"{verb} {PACK_STATUS.replace('_', ' ')}: {count} science configs; "
+        f"{verb} {identity_label}{status.replace('_', ' ')}: "
+        f"{count} science configs; "
         f"calibration_plan_sha256={plan_sha256}; plan_tree_sha256={tree_sha256}"
     )
     return 0
