@@ -79,9 +79,9 @@ from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
 FROZEN_GENERATOR_SHA256 = "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06"
-EXPECTED_PACK_SHA256 = "484c615173df89176a2b4a5d83287c718b857a52d46386f54f225875c509e102"
+EXPECTED_PACK_SHA256 = "7915733022313f6eadbc0f0da9771f2edb407be3bb21041002ac47df79cf97a2"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "dbfcc9ccfc748729c6622ccdc4411341613bcab55388d18679a599c396017f22",
+    "generate_configs.py": "70765c95de7b1ccff452dd02858ac929b0826dc84cb6777de815449c01138598",
     "calibration_plan.json": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d",
     "calibration_plan.sha256": "707712fb1152ed41b6d48432932bacf16e6856c8432dafb699e951b077e09312",
     "order_manifest.json": "5c5bd84579ff6bcfe4c0e3c800550f35bd4a04a5cd0061e105c9c3e4775f9fff",

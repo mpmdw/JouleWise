@@ -4134,7 +4134,15 @@ def _issued_d079(tree: Mapping[str, Any]) -> bool:
         issued = nested.get("acceptance_id")
     if issued is None:
         issued = policy.get("issued_artifact_id")
-    return issued in {"d079", "d079_calibration_acceptance_v2_n19"}
+    # Both issued D-079 generations route as the issued artifact: the D-138
+    # reissue is the same schema, corpus, and thresholds re-derived at the
+    # integrated estimator head, not a D-102 corpus-growth successor.  The
+    # initial-issuance id stays listed so predecessor packs are unaffected.
+    return issued in {
+        "d079",
+        "d079_calibration_acceptance_v2_n19",
+        "d079_calibration_acceptance_v2_n19_r2",
+    }
 
 
 def _evidence_directories(pack_root: Path, custody_pack_root: Path) -> tuple[tuple[str, Path], ...]:

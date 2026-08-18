@@ -118,7 +118,10 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
     )
 
     for relative in (
+        # Both issued generations: a `_v1`-generation pack pins the D-116
+        # initial issuance, a successor-generation pack pins the D-138 reissue.
         "configs/calibration/calibration_acceptance_d079_v2.json",
+        "configs/calibration/calibration_acceptance_d079_v2_r2.json",
         "docs/decision_log.md",
         "docs/phase_2/window_runbook.md",
         "joulewise/analysis_manifest_v3.py",

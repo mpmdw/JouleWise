@@ -333,6 +333,47 @@ def preserved_generator_sha256() -> str:
     )
     return tree["generator"]["sha256"]
 
+
+# D-138 dual-generation acceptance. The frozen `_v1` identity is permanently
+# bound to the D-116 initial issuance; successor generations bind the reissue
+# derived at the integrated estimator head.
+PREDECESSOR_ACCEPTANCE = {
+    "acceptance_id": "d079_calibration_acceptance_v2_n19",
+    "rel": "configs/calibration/calibration_acceptance_d079_v2.json",
+    "artifact_sha256": (
+        "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
+    ),
+    "derivation_sha256": (
+        "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
+    ),
+}
+SUCCESSOR_ACCEPTANCE = {
+    "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+    "rel": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+    "artifact_sha256": (
+        "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52"
+    ),
+    "derivation_sha256": (
+        "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b"
+    ),
+}
+
+
+def acceptance_pin() -> dict[str, str]:
+    """Return the acceptance generation this pack binds.
+
+    Preserve mode replays the frozen `_v1` bytes, which are permanently bound
+    to the D-116 initial issuance. Any successor generation binds the D-138
+    reissue instead, so the two generations never share a pin.
+    """
+
+    return (
+        PREDECESSOR_ACCEPTANCE
+        if active_generation().preserve_current_frozen_bytes
+        else SUCCESSOR_ACCEPTANCE
+    )
+
+
 MODEL_A = {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
     "family": "qwen2.5",
@@ -1679,13 +1720,9 @@ def build_tree(
         },
         "acceptance_policy": {
             "selection": "issued_d116_artifact_only",
-            "issued_artifact_id": "d079_calibration_acceptance_v2_n19",
-            "issued_artifact_sha256": (
-                "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
-            ),
-            "issued_derivation_sha256": (
-                "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
-            ),
+            "issued_artifact_id": acceptance_pin()["acceptance_id"],
+            "issued_artifact_sha256": acceptance_pin()["artifact_sha256"],
+            "issued_derivation_sha256": acceptance_pin()["derivation_sha256"],
             "issued_artifact_reopened": False,
             "arming_dependencies": [
                 "impl/d117-postcollection-trust landed and mint bar lifted",

@@ -90,10 +90,10 @@
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-          "path": "configs/calibration/calibration_acceptance_d079_v2.json",
-          "acceptance_id": "d079_calibration_acceptance_v2_n19",
-          "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-          "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+          "path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+          "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+          "artifact_sha256": "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+          "derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b",
           "schema_version": "joulewise.calibration_acceptance_bound.v2"
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",
@@ -399,10 +399,10 @@
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-          "path": "configs/calibration/calibration_acceptance_d079_v2.json",
-          "acceptance_id": "d079_calibration_acceptance_v2_n19",
-          "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-          "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+          "path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+          "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+          "artifact_sha256": "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+          "derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b",
           "schema_version": "joulewise.calibration_acceptance_bound.v2"
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",
@@ -589,10 +589,10 @@
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-          "path": "configs/calibration/calibration_acceptance_d079_v2.json",
-          "acceptance_id": "d079_calibration_acceptance_v2_n19",
-          "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-          "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+          "path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+          "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+          "artifact_sha256": "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+          "derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b",
           "schema_version": "joulewise.calibration_acceptance_bound.v2"
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",
@@ -898,10 +898,10 @@
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-          "path": "configs/calibration/calibration_acceptance_d079_v2.json",
-          "acceptance_id": "d079_calibration_acceptance_v2_n19",
-          "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-          "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+          "path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+          "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+          "artifact_sha256": "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+          "derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b",
           "schema_version": "joulewise.calibration_acceptance_bound.v2"
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",
@@ -1088,10 +1088,10 @@
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-          "path": "configs/calibration/calibration_acceptance_d079_v2.json",
-          "acceptance_id": "d079_calibration_acceptance_v2_n19",
-          "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-          "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+          "path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+          "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+          "artifact_sha256": "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+          "derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b",
           "schema_version": "joulewise.calibration_acceptance_bound.v2"
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",
@@ -1397,10 +1397,10 @@
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-          "path": "configs/calibration/calibration_acceptance_d079_v2.json",
-          "acceptance_id": "d079_calibration_acceptance_v2_n19",
-          "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-          "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+          "path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+          "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+          "artifact_sha256": "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+          "derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b",
           "schema_version": "joulewise.calibration_acceptance_bound.v2"
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",
@@ -2305,7 +2305,7 @@
     "authority": "D-123",
     "procedure_only": true,
     "postcollection_numeric_values": "structurally_absent_until_governed_reduction",
-    "floor_projection_sha256": "fd9cf26c28999aa6b7d1f76cd9b11bfdee04d06ef1077b098cc3e8990abcdb0c",
+    "floor_projection_sha256": "194de72f4d45120a33a1b673106ef879e814524fa1b1fc362f7fe0235351b468",
     "no_semantics_change_rule": "Floor extraction consumes only cells; reported_energy_cells is a disjoint registered projection over the same physical bundle universe."
   },
   "reference_counts": {

@@ -46,17 +46,51 @@ ACCEPTANCE_FIXTURE_SCHEMA = (
     "joulewise.calibration_acceptance_bound.v2.fixture.v1"
 )
 ACCEPTANCE_EVALUATION_SCHEMA = "joulewise.calibration_acceptance_evaluation.v2"
-DEFAULT_ACCEPTANCE_BOUND_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "configs"
-    / "calibration"
-    / "calibration_acceptance_d079_v2.json"
+_CALIBRATION_CONFIG_DIR = (
+    Path(__file__).resolve().parents[1] / "configs" / "calibration"
 )
-DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
-    "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
+# D-116 initial issuance.  Retained as a first-class generation: the frozen
+# `_v1` packs, their extraction specs, and the genesis bootstrap authenticate
+# against these exact bytes forever.  Never repointed.
+PREDECESSOR_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2.json"
 )
+PREDECESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19"
 ISSUED_ACCEPTANCE_BOUND_SHA256 = (
     "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985"
+)
+# D-138 reissue at the integrated estimator head (WO-DETECT-PULSES-BUDGET
+# changed `joulewise/powermetrics_fiducial.py`, one of the four governed
+# estimator-source pins).  Same schema, same n=19 corpus, same thresholds,
+# same science-facing values; the identity carries the reissue ordinal `_r2`
+# rather than a schema bump.
+SUCCESSOR_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_r2.json"
+)
+SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19_r2"
+SUCCESSOR_ACCEPTANCE_BOUND_SHA256 = (
+    "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52"
+)
+# Dual-generation registry.  Authentication is indexed by the artifact's own
+# `acceptance_id`, so a caller cannot present one generation's bytes under the
+# other generation's pin, and predecessor packs stay verifiable unchanged.
+ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
+    PREDECESSOR_ACCEPTANCE_ID: {
+        "path": PREDECESSOR_ACCEPTANCE_BOUND_PATH,
+        "relative_path": "configs/calibration/calibration_acceptance_d079_v2.json",
+        "file_sha256": ISSUED_ACCEPTANCE_BOUND_SHA256,
+    },
+    SUCCESSOR_ACCEPTANCE_ID: {
+        "path": SUCCESSOR_ACCEPTANCE_BOUND_PATH,
+        "relative_path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+        "file_sha256": SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
+    },
+}
+# The LIVE surface: what production loads when no artifact is named.
+ACTIVE_ACCEPTANCE_ID = SUCCESSOR_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = SUCCESSOR_ACCEPTANCE_BOUND_PATH
+DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
+    "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
 )
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 ESTIMATOR_CODE_PATHS = (
@@ -241,9 +275,17 @@ def _valid_acceptance_bound(value: Any) -> bool:
         }
     else:
         return False
+    # Identity is generation-indexed: the retained genesis fixture keeps the
+    # initial-issuance identity, while an issued artifact must name one of the
+    # registered issued generations.  An unregistered id is never authority.
+    allowed_acceptance_ids = (
+        frozenset(ISSUED_ACCEPTANCE_REGISTRY)
+        if role == "issued"
+        else frozenset({PREDECESSOR_ACCEPTANCE_ID})
+    )
     if (
         not role_valid
-        or value.get("acceptance_id") != "d079_calibration_acceptance_v2_n19"
+        or value.get("acceptance_id") not in allowed_acceptance_ids
         or value.get("decision_ids") != ["D-102", "D-109"]
         or value.get("derivation_sha256") != _canonical_sha256(core)
         or not isinstance(identity, Mapping)
@@ -488,15 +530,21 @@ def _acceptance_bound_from_authenticated_bytes(
         )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return None
-    # Any file route is authenticated by one of the two reviewed exact-byte
-    # states: the genesis fixture retained for pre-issuance tests, or the
-    # deterministically emitted issued artifact. A caller cannot turn an
-    # alternate self-consistent document into authority by choosing a path.
-    expected_sha256 = {
-        "schema_fixture_unissued": DEFAULT_ACCEPTANCE_BOUND_SHA256,
-        "issued": ISSUED_ACCEPTANCE_BOUND_SHA256,
-    }.get(value.get("artifact_role") if isinstance(value, Mapping) else None)
-    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+    # Any file route is authenticated by one of the reviewed exact-byte states:
+    # the genesis fixture retained for pre-issuance tests, or a registered
+    # issued generation.  A caller cannot turn an alternate self-consistent
+    # document into authority by choosing a path, and cannot present one issued
+    # generation's bytes under another generation's pin: the expected digest is
+    # selected by the document's own `acceptance_id`.
+    role = value.get("artifact_role") if isinstance(value, Mapping) else None
+    if role == "schema_fixture_unissued":
+        expected_sha256: str | None = DEFAULT_ACCEPTANCE_BOUND_SHA256
+    elif role == "issued":
+        registered = ISSUED_ACCEPTANCE_REGISTRY.get(value.get("acceptance_id"))
+        expected_sha256 = registered["file_sha256"] if registered else None
+    else:
+        expected_sha256 = None
+    if expected_sha256 is None or hashlib.sha256(raw).hexdigest() != expected_sha256:
         return None
     if not _valid_acceptance_bound(value):
         return None
@@ -557,22 +605,33 @@ def issued_calibration_allowance_projection(
 def _authenticated_explicit_acceptance_bound(
     value: Mapping[str, Any],
 ) -> dict[str, Any] | None:
-    """Authenticate an in-memory artifact against the checked-in byte pin."""
+    """Authenticate an in-memory artifact against the checked-in byte pin.
 
-    pinned = load_calibration_acceptance_bound()
+    Routing is generation-indexed so a predecessor pack presenting the D-116
+    issuance still authenticates after the live default moved to the successor.
+    """
+
+    registered = (
+        ISSUED_ACCEPTANCE_REGISTRY.get(value.get("acceptance_id"))
+        if isinstance(value, Mapping)
+        else None
+    )
+    path = (
+        registered["path"] if registered is not None else DEFAULT_ACCEPTANCE_BOUND_PATH
+    )
+    pinned = load_calibration_acceptance_bound(path)
     if pinned is None or dict(value) != pinned:
         return None
     return pinned
 
 
 def _acceptance_artifact_sha256(artifact: Mapping[str, Any]) -> str:
-    """Return the reviewed exact-byte pin for a validated artifact role."""
+    """Return the reviewed exact-byte pin for a validated artifact identity."""
 
-    return (
-        ISSUED_ACCEPTANCE_BOUND_SHA256
-        if artifact.get("artifact_role") == "issued"
-        else DEFAULT_ACCEPTANCE_BOUND_SHA256
-    )
+    if artifact.get("artifact_role") == "issued":
+        registered = ISSUED_ACCEPTANCE_REGISTRY[artifact["acceptance_id"]]
+        return str(registered["file_sha256"])
+    return DEFAULT_ACCEPTANCE_BOUND_SHA256
 
 
 def _valid_sha256(value: Any) -> bool:

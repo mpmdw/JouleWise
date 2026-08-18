@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_floor_qwen25_1p5b_v2/generate_configs.py",
-    "sha256": "e739bbc50d599d277cd27197ae0fffe3617b48dce8f61fb450b1c442786e4cf8"
+    "sha256": "99dec36f625ad8424ab7d951da8564bcb749858ac9369a2c6e39ae383864d9dc"
   },
   "window_identity": {
     "window_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2",
@@ -28,10 +28,10 @@
   "acceptance_policy": {
     "selection": "issued_d116_artifact_only",
     "issued_acceptance": {
-      "acceptance_id": "d079_calibration_acceptance_v2_n19",
-      "path": "configs/calibration/calibration_acceptance_d079_v2.json",
-      "artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-      "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
+      "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+      "path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+      "artifact_sha256": "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+      "derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b"
     },
     "issued_ledger_head": {
       "path": "configs/calibration/calibration_ledger_head.json",
@@ -3691,11 +3691,11 @@
   "downstream_contract": {
     "extraction_spec": {
       "path": "configs/floor_mint/d117_qwen25_1p5b_v2_extraction_spec.json",
-      "sha256": "4c90f08464a3b0c3f2bbafc71eaac95b9495bef928f6f49377469cb30b0a0dbb"
+      "sha256": "5147d032b780419cdbb9e15798c5aefd6834f312bb9fdd9a68fdba88657e345c"
     },
     "producer_contract": {
       "path": "configs/campaigns/d117_floor_qwen25_1p5b_v2/producer_contract.json",
-      "sha256": "f5e99d2dcd6502866650704f6b4321c317421fe2ed78c54d9b50206d13e017a0"
+      "sha256": "a8f8c795e3f0cede4ff7b1a7ce01ac535e4b2878b420de185a5b27d09a7c1c77"
     },
     "prefill_phase_presence": "required_for_all_100_physical_bundles",
     "missing_registered_phase": "refuse"

@@ -136,6 +136,20 @@ ACCEPTANCE_SHA256 = (
 ACCEPTANCE_DERIVATION_SHA256 = (
     "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
 )
+ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19"
+# D-138 dual-generation acceptance. The frozen `_v1` identity is permanently
+# bound to the D-116 initial issuance; successor generations bind the reissue
+# derived at the integrated estimator head.
+SUCCESSOR_ACCEPTANCE_REL = Path(
+    "configs/calibration/calibration_acceptance_d079_v2_r2.json"
+)
+SUCCESSOR_ACCEPTANCE_SHA256 = (
+    "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52"
+)
+SUCCESSOR_ACCEPTANCE_DERIVATION_SHA256 = (
+    "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b"
+)
+SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19_r2"
 LEDGER_HEAD_FILE_SHA256 = (
     "6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902"
 )
@@ -418,6 +432,29 @@ def generation_arm_readiness_attachment() -> dict[str, Any]:
         "ALPHA",
         REPO_ROOT,
     )
+
+
+def acceptance_pin() -> dict[str, Any]:
+    """Return the acceptance generation this pack binds.
+
+    Preserve mode replays the frozen `_v1` bytes, which are permanently bound
+    to the D-116 initial issuance. Any successor generation binds the D-138
+    reissue instead, so the two generations never share a pin.
+    """
+
+    if active_generation().preserve_current_frozen_bytes:
+        return {
+            "acceptance_id": ACCEPTANCE_ID,
+            "rel": ACCEPTANCE_REL,
+            "artifact_sha256": ACCEPTANCE_SHA256,
+            "derivation_sha256": ACCEPTANCE_DERIVATION_SHA256,
+        }
+    return {
+        "acceptance_id": SUCCESSOR_ACCEPTANCE_ID,
+        "rel": SUCCESSOR_ACCEPTANCE_REL,
+        "artifact_sha256": SUCCESSOR_ACCEPTANCE_SHA256,
+        "derivation_sha256": SUCCESSOR_ACCEPTANCE_DERIVATION_SHA256,
+    }
 
 
 def freeze_aware_projection(generated: dict[str, Any]) -> dict[str, Any]:
@@ -1351,10 +1388,10 @@ def calibration_basis() -> dict[str, Any]:
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-            "acceptance_id": "d079_calibration_acceptance_v2_n19",
-            "path": ACCEPTANCE_REL.as_posix(),
-            "artifact_sha256": ACCEPTANCE_SHA256,
-            "derivation_sha256": ACCEPTANCE_DERIVATION_SHA256,
+            "acceptance_id": acceptance_pin()["acceptance_id"],
+            "path": acceptance_pin()["rel"].as_posix(),
+            "artifact_sha256": acceptance_pin()["artifact_sha256"],
+            "derivation_sha256": acceptance_pin()["derivation_sha256"],
             "schema_version": "joulewise.calibration_acceptance_bound.v2",
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",
@@ -1923,7 +1960,7 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
     p256_prompt_text = load_p256_prompt_text()
     for path, expected in (
         (POLICY_REL, POLICY_SHA256),
-        (ACCEPTANCE_REL, ACCEPTANCE_SHA256),
+        (acceptance_pin()["rel"], acceptance_pin()["artifact_sha256"]),
         (LEDGER_HEAD_REL, LEDGER_HEAD_FILE_SHA256),
         (NEG8_SETTLED_REL, NEG8_SETTLED_SHA256),
         (P256_PROMPT_REL, P256_PROMPT_ARTIFACT_SHA256),
@@ -2275,10 +2312,10 @@ def _generate(output_root: Path) -> tuple[int, str, str]:
         "acceptance_policy": {
             "selection": "issued_d116_artifact_only",
             "issued_acceptance": {
-                "acceptance_id": "d079_calibration_acceptance_v2_n19",
-                "path": ACCEPTANCE_REL.as_posix(),
-                "artifact_sha256": ACCEPTANCE_SHA256,
-                "derivation_sha256": ACCEPTANCE_DERIVATION_SHA256,
+                "acceptance_id": acceptance_pin()["acceptance_id"],
+                "path": acceptance_pin()["rel"].as_posix(),
+                "artifact_sha256": acceptance_pin()["artifact_sha256"],
+                "derivation_sha256": acceptance_pin()["derivation_sha256"],
             },
             "issued_ledger_head": {
                 "path": LEDGER_HEAD_REL.as_posix(),

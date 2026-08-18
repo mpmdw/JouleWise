@@ -1378,11 +1378,15 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
 
 class FrozenProtocolTests(unittest.TestCase):
     def test_preflight_screen_is_derived_bit_exactly_from_real_artifact(self) -> None:
-        path = Path("configs/calibration/calibration_acceptance_d079_v2.json")
+        # The ACTIVE generation since the D-138 reissue.  The estimator-bearing
+        # branch was fail-closed while the issued pin was stale; the atomic
+        # Phase-2 acceptance/pin re-freeze is exactly what cures it, so this
+        # unit now proves the cured state end to end.
+        path = Path("configs/calibration/calibration_acceptance_d079_v2_r2.json")
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+            "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
         )
         artifact = json.loads(raw)
         derivation = artifact["decimal_derivation"]
@@ -1390,36 +1394,36 @@ class FrozenProtocolTests(unittest.TestCase):
         expected = Decimal(
             derivation["source_statistics"]["maximum_s"]
         ).quantize(Decimal(rounding["quantum_s"]), rounding=ROUND_HALF_EVEN)
-        # This estimator-bearing branch must remain fail-closed until the
-        # council's later atomic Phase-2 acceptance/pin re-freeze.
+        # The artifact's own estimator pins are the live ones: no isolation
+        # patch, so this also proves the staleness guard is genuinely cured.
+        self.assertEqual(
+            validation_script._current_estimator_code_sha256(),
+            dict(artifact["prospective_rederivation"]["estimator_code_sha256"]),
+        )
+        observed = validation_script._derive_preflight_systematic_screen_s(
+            artifact["identity_epoch"], acceptance_path=path
+        )
+        self.assertIsInstance(observed, Decimal)
+        self.assertEqual(observed.as_tuple(), expected.as_tuple())
+        self.assertEqual(
+            validation_script.PREFLIGHT_SYSTEMATIC_SCREEN_S,
+            observed,
+            "the branch-wide convenience value derives from the issued "
+            "artifact once its estimator pin is fresh",
+        )
+        # The predecessor issuance keeps its own bytes and stays stale-pinned.
+        predecessor = Path("configs/calibration/calibration_acceptance_d079_v2.json")
+        self.assertEqual(
+            hashlib.sha256(predecessor.read_bytes()).hexdigest(),
+            "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+        )
         with self.assertRaisesRegex(
             validation_script._AcceptancePreflightError,
             "acceptance_artifact_stale",
         ):
             validation_script._derive_preflight_systematic_screen_s(
-                artifact["identity_epoch"], acceptance_path=path
+                artifact["identity_epoch"], acceptance_path=predecessor
             )
-        # Isolate decimal derivation under the truthful prospective estimator
-        # pins so this unit still proves the exact screen arithmetic.
-        with patch.object(
-            validation_script,
-            "_current_estimator_code_sha256",
-            return_value=dict(
-                artifact["prospective_rederivation"][
-                    "estimator_code_sha256"
-                ]
-            ),
-        ):
-            observed = validation_script._derive_preflight_systematic_screen_s(
-                artifact["identity_epoch"], acceptance_path=path
-            )
-        self.assertIsInstance(observed, Decimal)
-        self.assertEqual(observed.as_tuple(), expected.as_tuple())
-        self.assertIsNone(
-            validation_script.PREFLIGHT_SYSTEMATIC_SCREEN_S,
-            "the branch-wide convenience value stays unavailable while the "
-            "issued estimator pin is stale",
-        )
 
     def test_writer_has_no_copied_preflight_scalar_and_comparison_is_derived(self) -> None:
         source = Path(validation_script.__file__).read_text(encoding="utf-8")

@@ -194,6 +194,20 @@ STAGES = (
 
 POLICY_REL = Path("configs/campaign_policies/quiet_mac_p2_production.json")
 ACCEPTANCE_REL = Path("configs/calibration/calibration_acceptance_d079_v2.json")
+# D-138 dual-generation acceptance. The frozen `_v1` identity is permanently
+# bound to the D-116 initial issuance; successor generations bind the reissue
+# derived at the integrated estimator head.
+SUCCESSOR_ACCEPTANCE_REL = Path(
+    "configs/calibration/calibration_acceptance_d079_v2_r2.json"
+)
+ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19"
+SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19_r2"
+ACCEPTANCE_DERIVATION_SHA256 = (
+    "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
+)
+SUCCESSOR_ACCEPTANCE_DERIVATION_SHA256 = (
+    "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b"
+)
 LEDGER_HEAD_REL = Path("configs/calibration/calibration_ledger_head.json")
 NEG8_MANIFEST_REL = Path("configs/campaigns/neg8_reference_corpus/order_manifest.json")
 NEG8_CORPUS_REL = Path(
@@ -220,6 +234,7 @@ P256_PROMPT_REL = Path(
 EXPECTED_EXTERNAL_SHA256 = {
     POLICY_REL.as_posix(): "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd",
     ACCEPTANCE_REL.as_posix(): "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+    SUCCESSOR_ACCEPTANCE_REL.as_posix(): "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
     LEDGER_HEAD_REL.as_posix(): "6bbe26258165bbd11ca996324a5862c2e6e34faae7999b6c06f5e12f27ac2902",
     NEG8_MANIFEST_REL.as_posix(): "0ec9d68aa4265cc9378bb682091a973fc92879b76506fa25af828050a608509f",
     NEG8_CORPUS_REL.as_posix(): "74ccdaec74497c3aa7c074ef1129ec2bf2cc01d8ac14d3d07be77ab468599688",
@@ -876,17 +891,38 @@ def family_binding(
     }
 
 
+def acceptance_pin() -> dict[str, Any]:
+    """Return the acceptance generation this pack binds.
+
+    Preserve mode replays the frozen `_v1` bytes, which are permanently bound
+    to the D-116 initial issuance. Any successor generation binds the D-138
+    reissue instead, so the two generations never share a pin.
+    """
+
+    if active_generation().preserve_current_frozen_bytes:
+        return {
+            "acceptance_id": ACCEPTANCE_ID,
+            "rel": ACCEPTANCE_REL,
+            "derivation_sha256": ACCEPTANCE_DERIVATION_SHA256,
+        }
+    return {
+        "acceptance_id": SUCCESSOR_ACCEPTANCE_ID,
+        "rel": SUCCESSOR_ACCEPTANCE_REL,
+        "derivation_sha256": SUCCESSOR_ACCEPTANCE_DERIVATION_SHA256,
+    }
+
+
 def calibration_basis() -> dict[str, Any]:
     return {
         "calibration_scope": "production_window",
         "acceptance_selection": "issued_d116_artifact_only",
         "issued_acceptance": {
-            "path": ACCEPTANCE_REL.as_posix(),
-            "acceptance_id": "d079_calibration_acceptance_v2_n19",
-            "artifact_sha256": EXPECTED_EXTERNAL_SHA256[ACCEPTANCE_REL.as_posix()],
-            "derivation_sha256": (
-                "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
-            ),
+            "path": acceptance_pin()["rel"].as_posix(),
+            "acceptance_id": acceptance_pin()["acceptance_id"],
+            "artifact_sha256": EXPECTED_EXTERNAL_SHA256[
+                acceptance_pin()["rel"].as_posix()
+            ],
+            "derivation_sha256": acceptance_pin()["derivation_sha256"],
             "schema_version": "joulewise.calibration_acceptance_bound.v2",
         },
         "allowance_rule": "max(observed_drift_s,0.010818)",

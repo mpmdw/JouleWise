@@ -11,7 +11,7 @@
   },
   "generator": {
     "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/generate_configs.py",
-    "sha256": "d4c07db20db46823656d2ce44b64614f05f9267269692f6a80cd2804579de0d0"
+    "sha256": "2ecec791ce2c4a136ac6c333a3eee0c4fc82ed749ba4eaefe73ef060f20635ec"
   },
   "window_identity": {
     "window_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v2",
@@ -33,9 +33,9 @@
   },
   "acceptance_policy": {
     "selection": "issued_d116_artifact_only",
-    "issued_artifact_id": "d079_calibration_acceptance_v2_n19",
-    "issued_artifact_sha256": "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-    "issued_derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02",
+    "issued_artifact_id": "d079_calibration_acceptance_v2_n19_r2",
+    "issued_artifact_sha256": "1c51e2d4e0d19c8e7f8602614ab97d7cbc9fd61858aa4d0bd63b8ef95e5c3a52",
+    "issued_derivation_sha256": "7d2044e861275adc723c18a2236258b3c3b862222c4a5f70d413539f2a6fa73b",
     "issued_artifact_reopened": false,
     "arming_dependencies": [
       "impl/d117-postcollection-trust landed and mint bar lifted",

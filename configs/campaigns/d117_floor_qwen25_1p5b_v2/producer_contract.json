@@ -53,7 +53,7 @@
   },
   "extraction_spec": {
     "path": "configs/floor_mint/d117_qwen25_1p5b_v2_extraction_spec.json",
-    "sha256": "4c90f08464a3b0c3f2bbafc71eaac95b9495bef928f6f49377469cb30b0a0dbb",
+    "sha256": "5147d032b780419cdbb9e15798c5aefd6834f312bb9fdd9a68fdba88657e345c",
     "member_count": 100,
     "floor_cell_count": 6,
     "floor_cell_member_references": 150,

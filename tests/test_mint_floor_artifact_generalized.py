@@ -1279,12 +1279,17 @@ SYNTHETIC_COMPONENT_SHA256S = (
     "8ac980a543bfa7d61d4f1e8e849ba6ca12d6ac16320592ae081da2a2bca70495",
     "a8c195553895a7a3d178336e0a1b133f84488ed68c6726c394966e7be61a0d70",
 )
+# The synthetic producer plans embed the LIVE issued acceptance (identity and
+# both digests), so these frozen pins move with a D-079 issuance. Re-derived
+# for the D-138 reissue (d079_calibration_acceptance_v2_n19_r2) with the
+# independent fixture oracle `_fixture_canonical_sha256`, never with the mint
+# code under test.
 SYNTHETIC_PRODUCER_PIN_SHA256S = (
-    "7bcc2e10908b2d1b258bcf42c4fd099bcb0b222f826be077f1e01ee10f0cbeb2",
-    "f8c3f664e76e3650f9fbe3dd40311d90ed563af66a143c4880f2675632bb0999",
+    "98974587fb695341856cd587060fc24aac4b31199c94e2f8a04899df661ee788",
+    "6656a6e1ffd797a923744540fd35767b90557d8825383a3fa5550fb0f2b524c7",
 )
 SYNTHETIC_PRODUCER_SET_SHA256 = (
-    "2e1d9e4ef1675fed8e89db98639ec40e1cc3617f933d7f1ddb29305cb0245163"
+    "646e655e3ca5f705eedc764115e8a3f5cd5d118f2e4777a449eb1efb22229f42"
 )
 CLI_COMPONENT_SHA256S = (
     "6325b71a5b7826201e1d93a087a1a4e90854fb6edcf5149322bc50de4d272cf6",

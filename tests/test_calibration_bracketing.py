@@ -20,6 +20,9 @@ from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     ISSUED_ACCEPTANCE_BOUND_SHA256,
+    PREDECESSOR_ACCEPTANCE_BOUND_PATH,
+    SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
+    SUCCESSOR_ACCEPTANCE_ID,
     CalibrationCandidate,
     _canonical_sha256,
     _valid_acceptance_bound,
@@ -442,8 +445,16 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
+        # The live default is the ACTIVE generation.  Since the D-138 reissue
+        # it is the successor artifact; the D-116 initial issuance keeps its own
+        # registered pin and is asserted separately below.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), ISSUED_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), SUCCESSOR_ACCEPTANCE_BOUND_SHA256
+        )
+        self.assertEqual(artifact["acceptance_id"], SUCCESSOR_ACCEPTANCE_ID)
+        self.assertEqual(
+            hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
+            ISSUED_ACCEPTANCE_BOUND_SHA256,
         )
         self.assertTrue(_valid_acceptance_bound(artifact))
         self.assertTrue(artifact["issuance"]["claim_eligible"])

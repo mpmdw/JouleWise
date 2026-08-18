@@ -24,7 +24,11 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
 
 from joulewise import arm_readiness as _readiness
-from joulewise.calibration_bracketing import _acceptance_bound_from_authenticated_bytes
+from joulewise.calibration_bracketing import (
+    ISSUED_ACCEPTANCE_REGISTRY as _ISSUED_ACCEPTANCE_REGISTRY,
+    PREDECESSOR_ACCEPTANCE_ID as _PREDECESSOR_ACCEPTANCE_ID,
+    _acceptance_bound_from_authenticated_bytes,
+)
 from joulewise.floor_extraction import (
     validate_extraction_spec as _validate_extraction_spec,
 )
@@ -882,10 +886,17 @@ def _derive_acceptance_owner(context: _DerivationContext) -> _DerivedKind:
     policy = context.tree.get("acceptance_policy")
     issued = policy.get("issued_acceptance") if isinstance(policy, Mapping) else None
     if issued is None and isinstance(policy, Mapping):
+        # Flat-shaped policies (gamma) name the artifact by id only; resolve the
+        # path from the dual-generation registry so predecessor and successor
+        # packs each reach their own issued bytes.
+        declared_id = policy.get("issued_artifact_id")
+        registered = _ISSUED_ACCEPTANCE_REGISTRY.get(declared_id)
+        if registered is None:
+            registered = _ISSUED_ACCEPTANCE_REGISTRY[_PREDECESSOR_ACCEPTANCE_ID]
         issued = {
-            "path": "configs/calibration/calibration_acceptance_d079_v2.json",
+            "path": registered["relative_path"],
             "artifact_sha256": policy.get("issued_artifact_sha256"),
-            "acceptance_id": policy.get("issued_artifact_id"),
+            "acceptance_id": declared_id,
         }
     normalized_pin = (
         {
