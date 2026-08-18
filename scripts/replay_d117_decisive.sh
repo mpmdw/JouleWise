@@ -7,7 +7,12 @@
 set -eu
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
-WORK=${1:-"$REPO_ROOT/.decisive-replay"}
+if [ "$#" -lt 1 ]; then
+  echo "usage: $0 <work-dir-outside-the-repository>" >&2
+  echo "(the governed hydrator refuses destinations inside the repo, so no in-repo default exists)" >&2
+  exit 2
+fi
+WORK=$1
 DESCRIPTOR="$REPO_ROOT/tests/fixtures/d117_v2_production/transport_descriptor.json"
 CENSUS="$REPO_ROOT/tests/fixtures/d117_v2_production/custody_store/manifest.json"
 
