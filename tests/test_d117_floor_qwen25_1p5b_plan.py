@@ -69,9 +69,9 @@ from scripts.run_campaign import load_order_entries  # noqa: E402
 
 
 FROZEN_GENERATOR_SHA256 = "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06"
-EXPECTED_PACK_SHA256 = "096aefe9c86dec8ef58d0e74ceb2f9d80c69b36ecab7dde7a7085e917309bf5c"
+EXPECTED_PACK_SHA256 = "b7b7d72e2cf3774ac658b80f2f4e9283038191959cc5e33743a94bab504687fd"
 EXPECTED_FILE_SHA256 = {
-    "generate_configs.py": "f5901537a4a4412174bec1ce58cf76965ef4c4e8bee7485b6f920a7279751aae",
+    "generate_configs.py": "eb9b5d11b87924121ce83f9192d96f7aed3814026ef40ba8495d67e5238a26d0",
     "calibration_plan.json": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d",
     "calibration_plan.sha256": "707712fb1152ed41b6d48432932bacf16e6856c8432dafb699e951b077e09312",
     "order_manifest.json": "5c5bd84579ff6bcfe4c0e3c800550f35bd4a04a5cd0061e105c9c3e4775f9fff",
@@ -506,6 +506,63 @@ class D117FloorQwen251p5BPlanTests(unittest.TestCase):
                 )
                 self.assertNotEqual(rejected.returncode, 0)
                 self.assertEqual(checkout_inventory(output_root), set())
+
+    def test_generation_refuses_symlinked_write_inventory_before_any_write(self) -> None:
+        successor = GENERATOR_MODULE.GenerationIdentity(
+            pack_id="d117_floor_qwen25_1p5b_v2",
+            family_suffix="_v2",
+            preserve_current_frozen_bytes=False,
+        )
+        cases = {
+            "pack_directory": (successor.pack_rel, True),
+            "pack_file": (successor.pack_rel / "README.md", False),
+            "extraction_spec": (
+                GENERATOR_MODULE.extraction_spec_rel(successor),
+                False,
+            ),
+            "sidecar": (
+                successor.pack_rel / "calibration_plan.sha256",
+                False,
+            ),
+        }
+        for name, (relative, is_directory) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory(
+                prefix="d117-alpha-symlink-root-"
+            ) as temp, tempfile.TemporaryDirectory(
+                prefix="d117-alpha-symlink-escape-"
+            ) as escape:
+                output_root = Path(temp)
+                escape_root = Path(escape)
+                target = output_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                destination = (
+                    escape_root if is_directory else escape_root / f"{name}.escaped"
+                )
+                target.symlink_to(destination, target_is_directory=is_directory)
+                before = checkout_inventory(output_root)
+                rejected = subprocess.run(
+                    [
+                        sys.executable,
+                        str(GENERATOR),
+                        "--output-root",
+                        str(output_root),
+                        "--pack-id",
+                        successor.pack_id,
+                        "--family-suffix",
+                        successor.family_suffix,
+                        "--no-preserve-current-frozen-bytes",
+                    ],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn("refusing generation", rejected.stderr)
+                self.assertIn(str(target), rejected.stderr)
+                self.assertIn(str(destination.resolve(strict=False)), rejected.stderr)
+                self.assertEqual(checkout_inventory(output_root), before)
+                self.assertEqual(list(escape_root.iterdir()), [])
 
     def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
         successor_id = "d117_floor_qwen25_1p5b_v2"

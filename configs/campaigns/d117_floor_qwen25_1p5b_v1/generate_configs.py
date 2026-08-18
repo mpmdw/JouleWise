@@ -481,6 +481,39 @@ def write_bytes(output_root: Path, relative: Path, raw: bytes) -> None:
     path.write_bytes(raw)
 
 
+def validate_generation_write_boundary(
+    output_root: Path, outputs: Iterable[Path]
+) -> None:
+    """Refuse link traversal or anomalous existing nodes before any write."""
+
+    root = output_root.absolute()
+
+    def refuse(path: Path, reason: str) -> None:
+        destination = path.resolve(strict=False)
+        raise ValueError(
+            f"refusing generation: {reason}: {path} -> {destination}"
+        )
+
+    if root.is_symlink():
+        refuse(root, "output root is a symlink")
+    if root.exists() and not root.is_dir():
+        refuse(root, "output root is not a real directory")
+
+    for relative in sorted(outputs, key=lambda path: path.as_posix()):
+        current = root
+        for component in relative.parts[:-1]:
+            current = current / component
+            if current.is_symlink():
+                refuse(current, "write ancestor is a symlink")
+            if current.exists() and not current.is_dir():
+                refuse(current, "write ancestor is not a real directory")
+        target = current / relative.name
+        if target.is_symlink():
+            refuse(target, "write target is a symlink")
+        if target.exists() and not target.is_file():
+            refuse(target, "existing write target is not a regular file")
+
+
 def write_json(output_root: Path, relative: Path, value: Any) -> bytes:
     raw = render_json(value)
     write_bytes(output_root, relative, raw)
@@ -1714,7 +1747,14 @@ def generate(
 
 
 def _generate(output_root: Path) -> tuple[int, str, str]:
-    validate_generation_output_inventory(active_generation())
+    outputs = validate_generation_output_inventory(active_generation())
+    validate_generation_write_boundary(output_root, outputs)
+    if active_generation().preserve_current_frozen_bytes:
+        for relative in sorted(outputs, key=lambda path: path.as_posix()):
+            write_bytes(output_root, relative, (REPO_ROOT / relative).read_bytes())
+        plan_raw = (REPO_ROOT / active_generation().pack_rel / "calibration_plan.json").read_bytes()
+        tree_raw = (REPO_ROOT / active_generation().pack_rel / "plan_tree.json").read_bytes()
+        return 100, sha256_bytes(plan_raw), sha256_bytes(tree_raw)
     source_raw = embedded_generator_bytes()
     source_sha256 = (
         preserved_generator_sha256()
@@ -2430,7 +2470,7 @@ def main() -> int:
         count, plan_sha256, tree_sha256 = check_current(check_root, identity)
         verb = "verified"
     else:
-        output_root = args.output_root.resolve() if args.output_root else REPO_ROOT
+        output_root = args.output_root.absolute() if args.output_root else REPO_ROOT
         count, plan_sha256, tree_sha256 = generate(output_root, identity)
         verb = "generated"
     status = identity.target_status

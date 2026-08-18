@@ -406,6 +406,39 @@ def write_bytes(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
+def validate_generation_write_boundary(
+    output_root: Path, outputs: Iterable[Path]
+) -> None:
+    """Refuse link traversal or anomalous existing nodes before any write."""
+
+    root = output_root.absolute()
+
+    def refuse(path: Path, reason: str) -> None:
+        destination = path.resolve(strict=False)
+        raise ValueError(
+            f"refusing generation: {reason}: {path} -> {destination}"
+        )
+
+    if root.is_symlink():
+        refuse(root, "output root is a symlink")
+    if root.exists() and not root.is_dir():
+        refuse(root, "output root is not a real directory")
+
+    for relative in sorted(outputs, key=lambda path: path.as_posix()):
+        current = root
+        for component in relative.parts[:-1]:
+            current = current / component
+            if current.is_symlink():
+                refuse(current, "write ancestor is a symlink")
+            if current.exists() and not current.is_dir():
+                refuse(current, "write ancestor is not a real directory")
+        target = current / relative.name
+        if target.is_symlink():
+            refuse(target, "write target is a symlink")
+        if target.exists() and not target.is_file():
+            refuse(target, "existing write target is not a regular file")
+
+
 def sidecar_bytes(digest: str, filename: str) -> bytes:
     return f"{digest}  {filename}\n".encode("utf-8")
 
@@ -1716,7 +1749,24 @@ def generate(
 
 
 def _generate(output_repo_root: Path) -> dict[str, str]:
-    validate_generation_output_inventory(active_generation())
+    outputs = validate_generation_output_inventory(active_generation())
+    validate_generation_write_boundary(output_repo_root, outputs)
+    if active_generation().preserve_current_frozen_bytes:
+        for relative in sorted(outputs, key=lambda path: path.as_posix()):
+            write_bytes(
+                output_repo_root / relative,
+                (REPO_ROOT / relative).read_bytes(),
+            )
+        pack_root = REPO_ROOT / active_generation().pack_rel
+        return {
+            "plan_sha256": file_sha256(pack_root / "calibration_plan.json"),
+            "tree_sha256": file_sha256(pack_root / "plan_tree.json"),
+            "analysis_sha256": file_sha256(pack_root / "analysis_manifest_v3.json"),
+            "prompt_sha256": file_sha256(pack_root / "prefill_prompt_candidate.json"),
+            "consumer_declaration_sha256": file_sha256(
+                pack_root / "consumer_family_declaration.json"
+            ),
+        }
     out = output_repo_root / active_generation().pack_rel
     out.mkdir(parents=True, exist_ok=True)
     generator_bytes = embedded_generator_bytes()
@@ -2035,7 +2085,10 @@ def main(argv: list[str] | None = None) -> int:
             identity,
         )
         if args.check
-        else generate(args.output_root or REPO_ROOT, identity)
+        else generate(
+            args.output_root.absolute() if args.output_root else REPO_ROOT,
+            identity,
+        )
     )
     mode = "checked" if args.check else "generated"
     status = identity.target_status

@@ -77,7 +77,7 @@ EXPECTED_SHA256 = {
         "condition_family_df_ph_prefill_p256_qwen25_7b.json"
     ): "d34252b4ebe6e379c9e724688c7398b5f96ff79fbddd90ab876e23316ecd1252",
     "generate_configs.py": (
-        "b39268d884196ac242487393634235d58c5c4e5d9c172cd435667a06e05575e7"
+        "0ffa76450c739a90041484c99bc31da7c07787dc6ed8d1d6ff7f74164c72fcdd"
     ),
     "01_phase_decode_absolute/order_manifest.json": (
         "36a5fae72b37643550ecb4471b4566db30331a4089abc3f4827593632407bba2"
@@ -511,6 +511,63 @@ class D117Qwen25SevenBPlanTests(unittest.TestCase):
                 )
                 self.assertNotEqual(rejected.returncode, 0)
                 self.assertEqual(checkout_inventory(output_root), set())
+
+    def test_generation_refuses_symlinked_write_inventory_before_any_write(self) -> None:
+        successor = GENERATOR_MODULE.GenerationIdentity(
+            pack_id="d117_floor_qwen25_7b_v2",
+            family_suffix="_v2",
+            preserve_current_frozen_bytes=False,
+        )
+        cases = {
+            "pack_directory": (successor.pack_rel, True),
+            "pack_file": (successor.pack_rel / "README.md", False),
+            "extraction_spec": (
+                GENERATOR_MODULE.extraction_spec_rel(successor),
+                False,
+            ),
+            "sidecar": (
+                successor.pack_rel / "calibration_plan.sha256",
+                False,
+            ),
+        }
+        for name, (relative, is_directory) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory(
+                prefix="d117-beta-symlink-root-"
+            ) as temp, tempfile.TemporaryDirectory(
+                prefix="d117-beta-symlink-escape-"
+            ) as escape:
+                output_root = Path(temp)
+                escape_root = Path(escape)
+                target = output_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                destination = (
+                    escape_root if is_directory else escape_root / f"{name}.escaped"
+                )
+                target.symlink_to(destination, target_is_directory=is_directory)
+                before = checkout_inventory(output_root)
+                rejected = subprocess.run(
+                    [
+                        sys.executable,
+                        str(GENERATOR),
+                        "--output-root",
+                        str(output_root),
+                        "--pack-id",
+                        successor.pack_id,
+                        "--family-suffix",
+                        successor.family_suffix,
+                        "--no-preserve-current-frozen-bytes",
+                    ],
+                    cwd=REPO_ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn("refusing generation", rejected.stderr)
+                self.assertIn(str(target), rejected.stderr)
+                self.assertIn(str(destination.resolve(strict=False)), rejected.stderr)
+                self.assertEqual(checkout_inventory(output_root), before)
+                self.assertEqual(list(escape_root.iterdir()), [])
 
     def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
         successor_id = "d117_floor_qwen25_7b_v2"

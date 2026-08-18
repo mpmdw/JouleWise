@@ -2078,6 +2078,17 @@ def build_artifacts(
 ) -> dict[Path, bytes]:
     selected = identity or GenerationIdentity()
     with generation_context(selected):
+        if selected.preserve_current_frozen_bytes:
+            outputs = {
+                *(selected.pack_rel / path for path in expected_pack_files()),
+                extraction_spec_rel(selected),
+            }
+            artifacts = {
+                relative: (REPO_ROOT / relative).read_bytes()
+                for relative in outputs
+            }
+            validate_artifact_inventory(selected, artifacts)
+            return artifacts
         artifacts = _build_artifacts()
         validate_artifact_inventory(selected, artifacts)
         return artifacts
@@ -2529,10 +2540,44 @@ def _build_artifacts() -> dict[Path, bytes]:
 
 
 def write_artifacts(output_root: Path, artifacts: Mapping[Path, bytes]) -> None:
+    validate_generation_write_boundary(output_root, artifacts)
     for relative, content in artifacts.items():
         path = output_root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
+
+
+def validate_generation_write_boundary(
+    output_root: Path, outputs: Iterable[Path]
+) -> None:
+    """Refuse link traversal or anomalous existing nodes before any write."""
+
+    root = output_root.absolute()
+
+    def refuse(path: Path, reason: str) -> None:
+        destination = path.resolve(strict=False)
+        raise ValueError(
+            f"refusing generation: {reason}: {path} -> {destination}"
+        )
+
+    if root.is_symlink():
+        refuse(root, "output root is a symlink")
+    if root.exists() and not root.is_dir():
+        refuse(root, "output root is not a real directory")
+
+    for relative in sorted(outputs, key=lambda path: path.as_posix()):
+        current = root
+        for component in relative.parts[:-1]:
+            current = current / component
+            if current.is_symlink():
+                refuse(current, "write ancestor is a symlink")
+            if current.exists() and not current.is_dir():
+                refuse(current, "write ancestor is not a real directory")
+        target = current / relative.name
+        if target.is_symlink():
+            refuse(target, "write target is a symlink")
+        if target.exists() and not target.is_file():
+            refuse(target, "existing write target is not a regular file")
 
 
 def actual_pack_paths(pack_root: Path) -> set[Path]:
@@ -2657,7 +2702,7 @@ def main() -> int:
             "3 reporting cells"
         )
         return 0
-    output_root = args.output_root.resolve() if args.output_root else REPO_ROOT
+    output_root = args.output_root.absolute() if args.output_root else REPO_ROOT
     write_artifacts(output_root, artifacts)
     pack_count = sum(1 for path in artifacts if identity.pack_rel in path.parents)
     print(

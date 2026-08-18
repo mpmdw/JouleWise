@@ -33,9 +33,10 @@ V1_SPEC_RELS = (
     Path("configs/floor_mint/d117_qwen25_1p5b_extraction_spec.json"),
     Path("configs/floor_mint/d117_qwen25_7b_extraction_spec.json"),
 )
+ROW_REGISTRY_REL = Path("configs/arm_readiness/d117_row_registry_v1.json")
 
 EXACT_SHAS = {
-    "generate_configs.py": "24089d40381596cdaaa328fce781de5ea3de7381a093a3c3069432d3f2977ca4",
+    "generate_configs.py": "15e6fd7f63f79dcbccfa480051c1606fd789833b0fc1ce1e425d7d3e42ca0262",
     "calibration_plan.json": "4609b74f5b1b40eb4576a1f389c5d90be3edde532bdc017314cdb300c485a218",
     "plan_tree.json": "8c53a834d78c81145b8f35b25f8d50182d596dc82c171e815f8a160117ab525d",
     "analysis_manifest_v3.json": "e3bc0e3620be2a25c60a6dc7bcab0910997d7d97030f5e80727cd5d951559a57",
@@ -213,6 +214,73 @@ def link_successor_self_check_inputs(output_root: Path) -> None:
                 target.symlink_to(source, target_is_directory=source.is_dir())
 
 
+def install_v2_freeze_fixture_runtime(output_root: Path) -> Path:
+    """Install the exact freeze CLI with its unavailable fixture inputs modeled."""
+
+    joulewise_path = output_root / "joulewise"
+    if joulewise_path.is_symlink():
+        joulewise_path.unlink()
+    shutil.copytree(ROOT / "joulewise", joulewise_path)
+    arm_readiness_path = joulewise_path / "arm_readiness.py"
+    source = arm_readiness_path.read_text(encoding="utf-8")
+    marker = "_PROFILE_BY_PACK = {\n"
+    if source.count(marker) != 1:
+        raise AssertionError("D-134 profile map marker is not unique")
+    additions = (
+        '    "d117_floor_qwen25_1p5b_v2": "ALPHA",\n'
+        '    "d117_floor_qwen25_7b_v2": "BETA",\n'
+        '    "d117_contrast_qwen25_1p5b_vs_7b_v2": "GAMMA",\n'
+    )
+    source = source.replace(marker, marker + additions)
+    boot_start = source.index("def _current_boot_session_id() -> str:\n")
+    boot_end = source.index("\ndef _pairs_no_duplicates", boot_start)
+    source = (
+        source[:boot_start]
+        + "def _current_boot_session_id() -> str:\n"
+        + '    return "00000000-0000-4000-8000-000000000001"\n\n'
+        + source[boot_end + 1 :]
+    )
+    arm_readiness_path.write_text(source, encoding="utf-8")
+    scripts_path = output_root / "scripts"
+    scripts_path.mkdir()
+    freeze_script = scripts_path / "generate_arm_readiness.py"
+    shutil.copy2(ROOT / "scripts/generate_arm_readiness.py", freeze_script)
+    if freeze_script.read_bytes() != (
+        ROOT / "scripts/generate_arm_readiness.py"
+    ).read_bytes():
+        raise AssertionError("fixture freeze CLI differs from the production route")
+    return freeze_script
+
+
+def remove_v2_freeze_fixture_runtime(output_root: Path) -> None:
+    shutil.rmtree(output_root / "joulewise")
+    (output_root / "joulewise").symlink_to(
+        ROOT / "joulewise", target_is_directory=True
+    )
+    shutil.rmtree(output_root / "scripts")
+
+
+def probe_generator_status(generator: Path, cwd: Path) -> str:
+    code = (
+        "import importlib.util, pathlib, sys; "
+        "path = pathlib.Path(sys.argv[1]); "
+        "spec = importlib.util.spec_from_file_location('status_probe', path); "
+        "module = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module); "
+        "print(module.GenerationIdentity(preserve_current_frozen_bytes=True).target_status)"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", code, str(generator)],
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(completed.stderr)
+    return completed.stdout.strip()
+
+
 class D117GammaPlanTest(unittest.TestCase):
     maxDiff = None
 
@@ -259,9 +327,7 @@ class D117GammaPlanTest(unittest.TestCase):
                     self.assertEqual(completed.returncode, 0, completed.stderr)
                     outputs.append(Path(output_root) / GENERATOR_MODULE.PACK_REL)
                 self.assertEqual(actual_inventory(outputs[0]), actual_inventory(outputs[1]))
-                generated_paths = set(
-                    GENERATOR_MODULE.expected_pack_paths(include_generator=False)
-                )
+                generated_paths = set(GENERATOR_MODULE.expected_pack_paths())
                 self.assertEqual(actual_inventory(outputs[0]), generated_paths)
                 for relative in generated_paths:
                     self.assertEqual(
@@ -376,6 +442,59 @@ class D117GammaPlanTest(unittest.TestCase):
                 )
                 self.assertNotEqual(rejected.returncode, 0)
                 self.assertEqual(checkout_inventory(output_root), set())
+
+    def test_generation_refuses_symlinked_write_inventory_before_any_write(self) -> None:
+        successor = GENERATOR_MODULE.GenerationIdentity(
+            pack_id="d117_contrast_qwen25_1p5b_vs_7b_v2",
+            family_suffix="_v2",
+            preserve_current_frozen_bytes=False,
+        )
+        cases = {
+            "pack_directory": (successor.pack_rel, True),
+            "pack_file": (successor.pack_rel / "README.md", False),
+            "sidecar": (
+                successor.pack_rel / "calibration_plan.sha256",
+                False,
+            ),
+        }
+        for name, (relative, is_directory) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory(
+                prefix="d117-gamma-symlink-root-"
+            ) as temp, tempfile.TemporaryDirectory(
+                prefix="d117-gamma-symlink-escape-"
+            ) as escape:
+                output_root = Path(temp)
+                escape_root = Path(escape)
+                target = output_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                destination = (
+                    escape_root if is_directory else escape_root / f"{name}.escaped"
+                )
+                target.symlink_to(destination, target_is_directory=is_directory)
+                before = checkout_inventory(output_root)
+                rejected = subprocess.run(
+                    [
+                        sys.executable,
+                        str(GENERATOR),
+                        "--output-root",
+                        str(output_root),
+                        "--pack-id",
+                        successor.pack_id,
+                        "--family-suffix",
+                        successor.family_suffix,
+                        "--no-preserve-current-frozen-bytes",
+                    ],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn("refusing generation", rejected.stderr)
+                self.assertIn(str(target), rejected.stderr)
+                self.assertIn(str(destination.resolve(strict=False)), rejected.stderr)
+                self.assertEqual(checkout_inventory(output_root), before)
+                self.assertEqual(list(escape_root.iterdir()), [])
 
     def test_successor_generation_threads_plan_identity_and_lineage(self) -> None:
         successor_id = "d117_contrast_qwen25_1p5b_vs_7b_v2"
@@ -731,6 +850,186 @@ class D117GammaPlanTest(unittest.TestCase):
                     check=False, capture_output=True, text=True,
                 )
                 self.assertEqual(regenerated.returncode, 0, regenerated.stderr)
+                self.assertEqual(git_status(output_root), "")
+
+    def test_authenticated_freeze_transition_preserves_frozen_bytes(self) -> None:
+        from tests import test_d117_floor_qwen25_1p5b_plan as alpha_tests
+        from tests import test_d117_floor_qwen25_7b_plan as beta_tests
+
+        generators = (
+            (GENERATOR, GENERATOR_MODULE, GENERATOR_MODULE.PACK_REL, 8),
+            (alpha_tests.GENERATOR, alpha_tests.GENERATOR_MODULE, alpha_tests.PACK_REL, 6),
+            (
+                beta_tests.GENERATOR,
+                beta_tests.GENERATOR_MODULE,
+                beta_tests.PACK.relative_to(ROOT),
+                6,
+            ),
+        )
+        v1_roots = tuple(item[2] for item in generators)
+        with tempfile.TemporaryDirectory(prefix="d117-authenticated-freeze-") as temp:
+            output_root = Path(temp)
+            initialize_git_tracked_checkout(
+                output_root,
+                (*v1_roots, *V1_SPEC_RELS, ROW_REGISTRY_REL),
+            )
+            link_successor_self_check_inputs(output_root)
+            alpha_tests.link_successor_self_check_inputs(output_root)
+            compatibility_link = (
+                output_root
+                / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
+            )
+            self.assertTrue(compatibility_link.is_symlink())
+            compatibility_link.unlink()
+
+            v2_packs: list[Path] = []
+            preserve_commands: list[list[str]] = []
+            for generator, _module, v1_rel, _status_site_count in generators:
+                v2_rel = v1_rel.with_name(v1_rel.name.removesuffix("_v1") + "_v2")
+                generated = subprocess.run(
+                    [
+                        sys.executable,
+                        str(generator),
+                        "--output-root",
+                        str(output_root),
+                        "--pack-id",
+                        v2_rel.name,
+                        "--family-suffix",
+                        "_v2",
+                        "--no-preserve-current-frozen-bytes",
+                    ],
+                    cwd=ROOT,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(generated.returncode, 0, generated.stderr)
+                v2_packs.append(v2_rel)
+                preserve = [
+                    sys.executable,
+                    str(output_root / v2_rel / "generate_configs.py"),
+                    "--output-root",
+                    str(output_root),
+                    "--preserve-current-frozen-bytes",
+                ]
+                self.assertEqual(
+                    probe_generator_status(output_root / v2_rel / "generate_configs.py", output_root),
+                    "unfrozen_draft",
+                )
+                before = hash_inventory(output_root, (v2_rel,))
+                preserved_draft = subprocess.run(
+                    preserve,
+                    cwd=output_root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(
+                    preserved_draft.returncode, 0, preserved_draft.stderr
+                )
+                self.assertEqual(
+                    probe_generator_status(output_root / v2_rel / "generate_configs.py", output_root),
+                    "unfrozen_draft",
+                )
+                self.assertEqual(hash_inventory(output_root, (v2_rel,)), before)
+                preserve_commands.append(preserve)
+
+            commit_fixture(output_root, "track emitted draft v2 families")
+            unmodeled = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/generate_arm_readiness.py"),
+                    "freeze",
+                    "--pack-root",
+                    str(output_root / v2_packs[0]),
+                ],
+                cwd=output_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(unmodeled.returncode, 2, unmodeled.stderr)
+            self.assertEqual(
+                json.loads(unmodeled.stdout)["reason_codes"],
+                ["readiness_row_registry_mismatch"],
+            )
+            freeze_script = install_v2_freeze_fixture_runtime(output_root)
+            freeze_results: list[dict[str, Any]] = []
+            try:
+                for v2_rel in v2_packs:
+                    frozen = subprocess.run(
+                        [
+                            sys.executable,
+                            str(freeze_script),
+                            "freeze",
+                            "--pack-root",
+                            str(output_root / v2_rel),
+                        ],
+                        cwd=output_root,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    result = json.loads(frozen.stdout)
+                    self.assertEqual(
+                        frozen.returncode, 1, frozen.stdout + frozen.stderr
+                    )
+                    self.assertEqual(result["status"], "REFUSE")
+                    self.assertTrue(result["mutated"])
+                    self.assertTrue(result["reason_codes"])
+                    freeze_results.append(result)
+            finally:
+                remove_v2_freeze_fixture_runtime(output_root)
+
+            commit_fixture(output_root, "track genuine v2 freeze receipts")
+            for (
+                (_generator, _module, _v1_rel, status_site_count),
+                v2_rel,
+                preserve,
+                freeze_result,
+            ) in zip(generators, v2_packs, preserve_commands, freeze_results, strict=True):
+                pack_root = output_root / v2_rel
+                tree = read_json(pack_root / "plan_tree.json")
+                attachment = tree["arm_attachments"]["arm_readiness"][
+                    "freeze_receipt"
+                ]
+                self.assertIsNotNone(attachment)
+                self.assertEqual(attachment["sha256"], freeze_result["receipt_sha256"])
+                receipt_path = pack_root / attachment["path"]
+                self.assertEqual(sha256(receipt_path), attachment["sha256"])
+                source = (pack_root / "generate_configs.py").read_text(
+                    encoding="utf-8"
+                )
+                self.assertEqual(
+                    source.count('"draft_status": active_generation().target_status'),
+                    status_site_count,
+                )
+                frozen_bytes = hash_inventory(output_root, (v2_rel,))
+                checked = subprocess.run(
+                    [*preserve, "--check"],
+                    cwd=output_root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(checked.returncode, 0, checked.stderr)
+                self.assertEqual(
+                    probe_generator_status(pack_root / "generate_configs.py", output_root),
+                    "frozen_by_d134_receipt",
+                )
+                regenerated = subprocess.run(
+                    preserve,
+                    cwd=output_root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(regenerated.returncode, 0, regenerated.stderr)
+                self.assertEqual(
+                    probe_generator_status(pack_root / "generate_configs.py", output_root),
+                    "frozen_by_d134_receipt",
+                )
+                self.assertEqual(hash_inventory(output_root, (v2_rel,)), frozen_bytes)
                 self.assertEqual(git_status(output_root), "")
 
     def test_generator_check_rejects_extra_pack_file(self) -> None:
