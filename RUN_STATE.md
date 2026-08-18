@@ -10,7 +10,26 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-16 (T9 close — Phase-1 code complete)
+Last updated: 2026-08-18 ~01:15 PT (T10 overnight — transaction staged, ONE Ed ruling gates the freeze)
+
+## ▶▶ T10 CHECKPOINT (2026-08-18) — READ docs/process/ed-morning-packet-2026-08-18.md FIRST (on integration/phase2-transaction)
+
+State: branch `integration/phase2-transaction` (pushed) carries: both closed
+code streams (generators through 7 rounds/9 audits/1 consult/1 three-seat
+cold gate at 07c12f3; freeze-numbering+profile-maps through 4 audits at
+9574fda), the merged+integration-fixed tree, the generated `_v2` family
+(334-file exact boundary), the custodied D-079 PROCEED candidate (sha
+6956b957…), the merge-gate docs batch (D-140/D-141, risk register R-019/20,
+runsheet+runbook corrections), and the Ed morning packet. Ed's evening +
+overnight closed EVERY stable qualification row (incl. DECISIVE REPLAY: OK
+and the quiet census); dress rehearsal remains, gated with the freeze on
+**Ed's D-079 identity ruling (morning packet item 1 — recommendation "B,
+keep")**. After the ruling: migration commit (inventory pre-assembled) →
+fan-out green → registry install → freeze-0002 × 3 → rehearsal card →
+exact-byte confirmation → publication. Session trace:
+`scratchpad t10-trace-notes.md`; canonical baseline + crash-matrix
+(15/15 OK quiet) logged. Sol capped high/default ~2 days; terra/luna =
+default audit seats (~1/10 cost); Opus = implementation.
 
 ## ▶▶ T9 CHECKPOINT (2026-08-16) — PHASE 1 CODE COMPLETE; A NEW SESSION STARTS HERE
 
