@@ -36,7 +36,16 @@ GENERATOR_SPEC = importlib.util.spec_from_file_location(
 )
 assert GENERATOR_SPEC is not None and GENERATOR_SPEC.loader is not None
 GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
-GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
+# Loading a pack generator by file location writes __pycache__ INTO the
+# tracked v1 pack, where sibling arm-readiness fixtures then copy it as a
+# pack file and fail on a build byproduct. Suppress the cache write for
+# this one load and restore the interpreter default.
+_PREVIOUS_DONT_WRITE_BYTECODE = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
+finally:
+    sys.dont_write_bytecode = _PREVIOUS_DONT_WRITE_BYTECODE
 PLAN_ID = "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1"
 EVIDENCE_ROOT_ID = "evidence-d117-floor-qwen25-1p5b-v1"
 CONTRAST_PACK = ROOT / "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1"

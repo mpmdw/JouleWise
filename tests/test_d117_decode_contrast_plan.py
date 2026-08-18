@@ -29,7 +29,16 @@ GENERATOR = PACK / "generate_configs.py"
 GENERATOR_SPEC = importlib.util.spec_from_file_location("d117_gamma_generator", GENERATOR)
 assert GENERATOR_SPEC is not None and GENERATOR_SPEC.loader is not None
 GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
-GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
+# Loading a pack generator by file location writes __pycache__ INTO the
+# tracked v1 pack, where sibling arm-readiness fixtures then copy it as a
+# pack file and fail on a build byproduct. Suppress the cache write for
+# this one load and restore the interpreter default.
+_PREVIOUS_DONT_WRITE_BYTECODE = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
+finally:
+    sys.dont_write_bytecode = _PREVIOUS_DONT_WRITE_BYTECODE
 V1_SPEC_RELS = (
     Path("configs/floor_mint/d117_qwen25_1p5b_extraction_spec.json"),
     Path("configs/floor_mint/d117_qwen25_7b_extraction_spec.json"),

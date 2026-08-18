@@ -46,7 +46,16 @@ GENERATOR_SPEC = importlib.util.spec_from_file_location(
 )
 assert GENERATOR_SPEC is not None and GENERATOR_SPEC.loader is not None
 GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
-GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
+# Loading a pack generator by file location writes __pycache__ INTO the
+# tracked v1 pack, where sibling arm-readiness fixtures then copy it as a
+# pack file and fail on a build byproduct. Suppress the cache write for
+# this one load and restore the interpreter default.
+_PREVIOUS_DONT_WRITE_BYTECODE = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    GENERATOR_SPEC.loader.exec_module(GENERATOR_MODULE)
+finally:
+    sys.dont_write_bytecode = _PREVIOUS_DONT_WRITE_BYTECODE
 OLD_PACK = REPO_ROOT / "configs/campaigns/qwen25_7b_decode_floor_v1"
 
 PLAN_ID = "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v1"

@@ -220,6 +220,14 @@ class ArmReadinessRegistryTests(unittest.TestCase):
                     ROOT / pack_relative,
                     frozen_clone / pack_relative,
                     dirs_exist_ok=True,
+                    # A sibling suite that imports a pack's generate_configs.py
+                    # by file location leaves __pycache__ inside the v1 pack.
+                    # It is never a pack artifact -- the generator's own
+                    # actual_pack_paths() already excludes it from the inventory
+                    # it audits -- so carrying it into the fixture would fail
+                    # this comparison on a build byproduct instead of on pack
+                    # bytes.
+                    ignore=shutil.ignore_patterns("__pycache__"),
                 )
             for relative in overlay:
                 target = frozen_clone / relative
@@ -416,19 +424,97 @@ class ArmReadinessRegistryTests(unittest.TestCase):
                     0,
                     "an uncommitted freeze receipt must remain an anomalous extra",
                 )
+            # The freeze TRANSACTION -- not the pack generator -- is what records
+            # the attachment: `joulewise.arm_readiness` mints the receipt and
+            # rewrites plan_tree.json plus its sidecar in the same operation
+            # (the plan-tree carrier is the one pre-existing artifact a freeze is
+            # allowed to move). A receipt on disk with no attachment is therefore
+            # a half-applied fixture, not a state the contract can produce, and
+            # relying on a later non-preserve regeneration to attach it is
+            # exactly the rewrite the frozen-identity guard now refuses. Emulate
+            # the carrier rewrite with the transaction's own byte format so the
+            # committed state below is the state a real mint leaves behind.
+            render_plan_tree = importlib.import_module(
+                "joulewise.arm_readiness",
+            )._render_plan_tree
+            for pack_name in PACKS.values():
+                pack_root = clone / "configs/campaigns" / pack_name
+                receipt_relative = "arm_readiness.freeze.receipts/freeze-0001.json"
+                receipt_raw = (pack_root / receipt_relative).read_bytes()
+                tree = json.loads(
+                    (pack_root / "plan_tree.json").read_text(encoding="utf-8")
+                )
+                tree["arm_attachments"]["arm_readiness"]["freeze_receipt"] = {
+                    "path": receipt_relative,
+                    "sha256": hashlib.sha256(receipt_raw).hexdigest(),
+                }
+                tree_raw = render_plan_tree(tree)
+                (pack_root / "plan_tree.json").write_bytes(tree_raw)
+                (pack_root / "plan_tree.sha256").write_bytes(
+                    gnu_sidecar(
+                        hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json"
+                    )
+                )
             subprocess.run(["git", "config", "user.email", "tests@joulewise.invalid"], cwd=clone, check=True)
             subprocess.run(["git", "config", "user.name", "JouleWise tests"], cwd=clone, check=True)
             subprocess.run(["git", "add", "."], cwd=clone, check=True)
             subprocess.run(["git", "commit", "-qm", "committed freeze state"], cwd=clone, check=True)
-            for profile, pack_name in PACKS.items():
+            for pack_name in PACKS.values():
                 pack_root = clone / "configs/campaigns" / pack_name
+                # Fail-closed frozen-identity guard: once the committed receipt
+                # makes the current identity frozen, EVERY non-preserve
+                # regeneration of that identity is refused before a single
+                # write -- both the explicit opt-out and the default mode, whose
+                # default is False here because the fixture receipt is not the
+                # generator's embedded CURRENT_FROZEN_RECEIPT_SHA256.
+                for refused_argv in ([], ["--no-preserve-current-frozen-bytes"]):
+                    refused = subprocess.run(
+                        [
+                            sys.executable,
+                            str(pack_root / "generate_configs.py"),
+                            *refused_argv,
+                        ],
+                        cwd=clone,
+                        text=True,
+                        capture_output=True,
+                    )
+                    self.assertNotEqual(
+                        refused.returncode,
+                        0,
+                        "a committed freeze receipt must refuse non-preserve regeneration",
+                    )
+                    self.assertIn(
+                        "the current frozen identity requires preserve mode",
+                        refused.stdout + refused.stderr,
+                    )
+                # Post-freeze regeneration is EXPLICIT preserve mode, and it is
+                # byte-stable: the frozen pack's bytes never move.
+                before = {
+                    path.relative_to(pack_root): hashlib.sha256(
+                        path.read_bytes()
+                    ).hexdigest()
+                    for path in pack_root.rglob("*")
+                    if path.is_file() and "__pycache__" not in path.parts
+                }
                 generated = subprocess.run(
-                    [sys.executable, str(pack_root / "generate_configs.py")],
+                    [
+                        sys.executable,
+                        str(pack_root / "generate_configs.py"),
+                        "--preserve-current-frozen-bytes",
+                    ],
                     cwd=clone,
                     text=True,
                     capture_output=True,
                 )
                 self.assertEqual(generated.returncode, 0, generated.stdout + generated.stderr)
+                after = {
+                    path.relative_to(pack_root): hashlib.sha256(
+                        path.read_bytes()
+                    ).hexdigest()
+                    for path in pack_root.rglob("*")
+                    if path.is_file() and "__pycache__" not in path.parts
+                }
+                self.assertEqual(after, before)
                 slot = json.loads((pack_root / "plan_tree.json").read_text())["arm_attachments"]["arm_readiness"]
                 receipt_raw = (pack_root / "arm_readiness.freeze.receipts/freeze-0001.json").read_bytes()
                 self.assertEqual(
@@ -440,12 +526,55 @@ class ArmReadinessRegistryTests(unittest.TestCase):
                 )
             for pack_name in PACKS.values():
                 completed = subprocess.run(
-                    [sys.executable, str(clone / "configs/campaigns" / pack_name / "generate_configs.py"), "--check"],
+                    [
+                        sys.executable,
+                        str(clone / "configs/campaigns" / pack_name / "generate_configs.py"),
+                        "--check",
+                        "--preserve-current-frozen-bytes",
+                    ],
                     cwd=clone,
                     text=True,
                     capture_output=True,
                 )
                 self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            # Preserve mode replays committed bytes, so the byte comparison
+            # inside --check compares the checkout to itself. Prove the leg
+            # above still discriminates: the teeth are the attachment
+            # authentication the generator performs at import (committed
+            # receipt bytes vs HEAD, and vs the receipt the plan pins) and the
+            # pack inventory it derives from the pinned reference. Break the
+            # pin and the same command must refuse.
+            for pack_name in PACKS.values():
+                pack_root = clone / "configs/campaigns" / pack_name
+                tree_path = pack_root / "plan_tree.json"
+                original = tree_path.read_bytes()
+                mutated = json.loads(original.decode("utf-8"))
+                pin = mutated["arm_attachments"]["arm_readiness"]["freeze_receipt"]
+                pin["sha256"] = "0" * 64
+                tree_path.write_bytes(render_plan_tree(mutated))
+                try:
+                    refused = subprocess.run(
+                        [
+                            sys.executable,
+                            str(pack_root / "generate_configs.py"),
+                            "--check",
+                            "--preserve-current-frozen-bytes",
+                        ],
+                        cwd=clone,
+                        text=True,
+                        capture_output=True,
+                    )
+                finally:
+                    tree_path.write_bytes(original)
+                self.assertNotEqual(
+                    refused.returncode,
+                    0,
+                    "a plan pin that is not the committed receipt must refuse",
+                )
+                self.assertIn(
+                    "committed freeze receipt is not the receipt the plan pins",
+                    refused.stdout + refused.stderr,
+                )
 
 
 if __name__ == "__main__":
