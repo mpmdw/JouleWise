@@ -28,10 +28,24 @@ workload ~122-124k; a 130k override completes all 59 fits) — the budget
 was set below the real corpus workload and no audit could see it (raw
 corpus traces live outside the repo). The instrument and the night were
 both sound; the fail-closed behavior worked. A full-corpus sweep is
-running to ground the corrected budget value + margin; the parameter
-change is D-138-class and rides this same transaction (fresh reissue of
-the acceptance candidate pre-publication — mechanical, the tooling is
-proven). Your morning rulings below.
+running to ground the corrected budget value + margin — COMPLETED while
+you slept: full-corpus sweep n=34 (max 137,189 cells), budget ruled to
+165,000 (20.3% headroom, exceeds the observed spread), and the ENTIRE
+D-138 cycle re-executed: one-pin reissue (in place, same identity),
+packs regenerated, evidence re-authored, family RE-FROZEN at the
+measurement checkout — final head 75f22a0, all batteries green.
+
+**AND THE HEADLINE: last night's captured bundle, re-derived under the
+corrected budget — b_fiducial = 0.0309 s, INSIDE the issued corpus band
+[0.0227, 0.0336], 59/59 pulses, evaluation count exactly as the sweep
+predicted. The instrument is verified with real overnight data.** The
+maiden fail-closure + root-cause + corpus-grounded correction + in-band
+re-derivation is, frankly, the strongest instrument-soundness story this
+project has: the safety machinery caught a real mis-set parameter on its
+first live contact, and the correction was derived from the complete
+corpus, not tuned to pass. Rivoire will recognize what that means.
+(Reduction record: shakedown-20260818/reduction-under-165k.json.)
+Your morning rulings below.
 
 ## 1. RULED ("B, keep") — EXECUTED. Retained for the record: D-079 reissue identity
 
