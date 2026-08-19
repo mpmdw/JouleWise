@@ -8,8 +8,14 @@ it into existence, because almost nothing in this instrument was designed
 speculatively — nearly every gate exists because a specific failure
 happened, or was demonstrated to be about to happen.*
 
-*Status note: written 2026-08-18, on the Phase-2 transaction branch, the
-morning the successor pack family reached its confirmation point.*
+*Status note: revised 2026-08-19. Since the first draft the instrument has
+changed in one deep way and one broad way. The deep change: the estimator that
+ties the sampler's clock to the workload's clock had its central assumption
+measured and found false, and was replaced (section 5). The broad change: every
+stored measurement now carries a machine-readable record of which capture
+pipeline produced it, and only the current one may support a claim (section 6).
+Every calibration number quoted below has been re-checked against the artifact
+now in force, `d079_calibration_acceptance_v2_n17_r6`.*
 
 ---
 
@@ -70,7 +76,7 @@ concrete consequences shaped the whole project:
   not "the machine's power."
 
 Because none of these properties comes from the vendor, the instrument's
-job is to *measure its own measurement system*. Sections 4–6 are that
+job is to *measure its own measurement system*. Sections 4–8 are that
 self-measurement; everything else is protecting it from contamination.
 
 ## 3. The two families of error
@@ -94,7 +100,10 @@ subtly wrong — and when it was found, the project voided *every*
 claim-eligible corpus collected under it and rebuilt the anchoring
 machinery from scratch. That decision (repair, then re-collect, rather
 than patch and excuse) set the tone for everything after: attribution
-errors are silent, so the machinery that bounds them must be loud.
+errors are silent, so the machinery that bounds them must be loud. It
+happened a second time, smaller and far more instructive, on 2026-08-18 —
+section 5 is that story, and it is the best single illustration of how this
+project treats being wrong.
 
 **Resolution error: a difference that isn't there, or a real one you
 can't see.** Even with perfect attribution, the machine's background
@@ -104,8 +113,8 @@ apart under the best possible conditions, differ by up to X joules, then
 no claim of a difference smaller than X is honest — no matter what the
 point estimates say.
 
-Attribution is bounded by **calibration** (section 4). Resolution is
-bounded by **floors** (section 6). The composed claim carries both.
+Attribution is bounded by **calibration** (sections 4 and 5). Resolution
+is bounded by **floors** (section 8). The composed claim carries both.
 
 ## 4. The fiducial calibration: the instrument measuring itself
 
@@ -130,8 +139,8 @@ commanded times. The accepted evidence is conservatively collapsed to one
 symmetric worst-edge scalar per capture: the capture's b_fiducial is
 driven by the *worst* pulse, not the average, because a phase boundary in
 a real measurement gets no averaging — it lands where it lands. Across the
-19-member corpus that grounds the current acceptance artifact, b_fiducial
-ranges from 0.0227 s to 0.0336 s.
+17-member corpus that grounds the current acceptance artifact, b_fiducial
+ranges from 0.0232 s to 0.0329 s.
 
 **Why pulses:** you cannot bound attribution error by measuring an unknown
 workload — you need a signal whose ground truth you control. A commanded
@@ -145,8 +154,8 @@ trace is itself a hazard. So the detector carries a preregistered
 evaluation budget: if it cannot converge on all 59 pulses within a fixed
 number of candidate evaluations, the capture is **refused as
 non-convergent** — never accepted with a partial fit. On the night of
-2026-08-17→18, the very first live capture under the current estimator hit
-that budget and was refused. The diagnosis that followed is the best short
+2026-08-17→18, the very first live capture under the pulse detector then in
+force hit that budget and was refused. The diagnosis that followed is the best short
 course on this project's method:
 
 1. *Don't retry.* Rerunning until a capture passes is selection on the
@@ -161,17 +170,34 @@ course on this project's method:
    could expose because raw calibration traces are too large to live in
    the repository.
 3. *Correct from the complete evidence, not until it passes.* Every
-   retained raw trace on the machine — 34 of them — was swept; the maximum
+   retained raw trace on the machine was swept — 40 unique captures, of
+   which 34 converged fully and 6 refused before fitting; the maximum
    observed demand was 137,189 evaluations; the budget was reset to
    165,000, about 20% above the maximum, with the margin exceeding the
    entire observed spread.
 4. *Then, and only then, re-derive.* The refused capture, re-evaluated
    under the corrected budget, converged on all 59 pulses and yielded
-   b_fiducial = 0.0309 s — inside the issued corpus band.
+   b_fiducial = 0.0309 s under the anchor estimator then in force. (That
+   number moved when the estimator was replaced the next day — section 5.)
 
 A safety gate refusing on first contact with reality, the refusal
 diagnosed rather than overridden, and the fix grounded in the full corpus:
 that is the intended shape of every failure this instrument will ever have.
+
+**The budget was re-earned, not inherited.** When the anchor estimator was
+replaced (section 5), the sweep that justified 165,000 became invalid — it had
+been run under the old anchors — so it was redone. The budget stayed at
+165,000, now standing on the claim-bearing population's own numbers: the 17
+corpus survivors demand between 115,449 and 137,535 evaluations, median
+122,097, and 165,000 is that maximum plus about 20%. One later validation-only
+capture resolves its clock anchor cleanly and then demands 1,282,827
+evaluations, 9.2× the next highest demand of any v3-resolvable capture (a set
+wider than the 17 survivors); it is recorded as refused rather than
+admitted. Raising the cap to swallow it was considered and rejected, because a
+ninefold increase driven by one outlier would make a wall-clock deadline the
+real limit and the failure mode dependent on how fast the host machine happens
+to be. A budget is a safety gate only if the population it protects sets it,
+not the worst thing it ever saw.
 
 **Clock discipline.** The anchor between the two timelines is only valid
 if neither clock moves during a capture. The system clock's network-time
@@ -183,22 +209,199 @@ operations the measurement account can run without a password; the
 authorization was installed and exercised as part of operator
 qualification). The anchoring machinery itself carries a 5 ms ceiling —
 an anchor that cannot be established to better than 5 ms refuses the
-capture.
+capture. How that anchor is computed, and what happened when its model
+turned out to be wrong, is section 5.
 
 **Bracketing and drift.** A single calibration is a snapshot. Real windows
 are bracketed: a calibration before and after the science members, with
 the timing allowance taken as the full disagreement between the brackets
-(never less than a genesis lower bound of 9.724 ms, derived from the
-historical range of 17 same-epoch bounds). If the brackets disagree by
+(never less than the *bracket screen* of 9.724 ms — sections 5 and 7 explain
+its provenance — derived from the historical range of 17 same-epoch bounds). If the brackets disagree by
 more than 10.165 ms, the entire window is refused — that much drift means
 the instrument was not the same instrument at both ends of the night.
 
-## 5. The calibration acceptance: pinning the instrument's identity
+## 5. The clock anchor, and the day its model was falsified
+
+**What an anchor is.** Two clocks are involved in every capture and neither
+knows about the other. The sampler labels its rows with the system's
+wall-clock time, but measures how long each row lasted on its own **monotonic**
+timeline — a counter that only ever advances and is never adjusted by network
+synchronization — and the workload stamps its pulse commands in wall-clock
+time. To integrate energy between event boundaries you must know how those two
+timelines line up, and nothing in the operating system tells you. The **clock
+anchor** is the measured relationship between them — and because it is
+measured, it is reported as an *interval*, never a point. Its half-width is
+part of every bound the instrument publishes.
+
+**How the evidence arrives.** Each time the wall clock rolls over a whole
+second, the sampler prints that whole-second wall-clock label on the row whose
+averaging interval just ended, and every row also reports how long it covered
+in the monotonic timeline. Each row therefore says: *the very first sample
+ended somewhere in this one-second-wide window of wall time, shifted back by
+the elapsed time accumulated since*. A 197-second capture yields about 197
+such statements, and five system timestamps taken around the capture (spawn, first parse, sampling start, stop, final
+parse) bracket the same quantity causally. The anchor is whatever survives all
+of that evidence at once.
+
+**The old method, and its hidden assumption.** The previous estimator (the
+censored-intersection method) intersected those windows with the causal
+bracket: if what remained had positive width, its midpoint became the anchor
+and its half-width the bound; if what remained was empty, the capture was
+refused. The method is sound *given* one assumption that was never stated as
+an assumption — that one second of wall time is exactly one second of the
+sampler's elapsed timeline. Rate = 1.
+
+**The falsification.** On this machine the wall clock runs about **7 parts per
+million** fast against the monotonic timeline — seven microseconds per second.
+Over a 197-second capture that accumulates roughly 1.4 ms of stretch, and the
+machine's own
+records agree: the wall-versus-monotonic spans logged during the diagnostic
+probe were 1.442–1.447 ms. The intersection windows, after the causal
+bracket, are only about a millisecond wide. A systematic stretch the same size
+as the thing you are intersecting does not perturb the answer; it destroys it.
+Six back-to-back captures under identical conditions made it visible: two
+resolved, with intersection widths of +780 µs and +1.039 ms, and four came
+back empty, at −4 µs, −159 µs, −210 µs and −313 µs. Same machine, same
+protocol, same sitting — a coin flip.
+
+That alternation was the loud symptom: good captures refused for no physical
+reason. The silent problem was worse. When the intersection *did* survive, its
+midpoint sat off by roughly half the accumulated drift, in the same direction
+every time. Every accepted anchor carried a bias nobody could see.
+
+**The replacement: solve for the rate instead of assuming it.** The current
+method — *rate-aware set membership* — asks which **(rate, offset)** pairs are
+consistent with *every* constraint at once, and returns the entire feasible
+set. That set is convex, and the search runs in exact rational arithmetic, so
+no floating-point rounding can invent or destroy feasibility at the margin.
+The anchor interval is the width of the set; the fitted rate falls out as a
+by-product — on the afternoon diagnostic probe (the disciplined capture the
+science review examined), a window from +7.243 to +7.285 ppm, 0.04 ppm wide,
+which is why a mid-capture change of rate cannot hide inside it. If no rate reconciles the constraints, the capture is refused. The method
+never picks the least-bad rate.
+
+**What is frozen around it, so the fit cannot absorb anything it likes.**
+Departure from a straight-line relation between the clocks is capped at
+250 µs, a fitted rate beyond ±50 ppm *refuses* rather than being clipped to
+the limit, and neither constant may be widened after a failure is observed
+without declaring an entirely new method. The fit is also not a substitute for
+turning network time off: the model assumes nothing is steering the clock
+mid-capture, and the enforced network-time-OFF window is what makes that
+assumption admissible. One further term is easy to mistake for redundancy — the
+anchor's half-width covers *where the timeline starts*, while a separate term
+covers drift *within* the capture, and both are load-bearing because the pulse
+detector maps the trace outward from the anchor's midpoint at rate 1 while the
+pulse commands carry wall-clock stamps.
+
+**Pricing the rate is what makes the bound honest.** Across the re-derived
+corpus the anchor term rose in the mean by 0.311 ms, against member bounds in
+the 25–35 ms range; on the calibration fixture shared by the whole test suite,
+the identical inputs yield a bound 3.09 microseconds wider — a figure that
+already includes a numerical detail priced rather than deferred (the padding
+constant was raised from 1 nanosecond to 1 microsecond, covering the
+representation error of double-precision epoch timestamps). Individual
+b_fiducial values moved *both* ways, because the pulse detector re-fits the
+trace under a shifted anchor: 6 of the 17 issued members tightened, including
+the one that becomes the new corpus maximum. The padding raise by itself moved
+every anchor-v3 bound outward by 1 µs minus 1 ns; under that change alone
+nothing tightened and no capture changed status.
+
+**Refusals of previously accepted captures are the correction working.** The
+derivation corpus went from 19 members to **17**. Two captures the old model
+had accepted now refuse, for a physical reason rather than a numerical one:
+their timestamps admit *no single rate at all*. One is pinned to
+[−1.1, +5.2] ppm by its early stamp pairs and to [−16.04, −15.99] ppm by its
+long baselines — disjoint by more than 15 ppm — with its wall-versus-monotonic
+offset moving −3.18 ms mid-capture; the smallest slack that would make it
+feasible is 5.612 µs. The other runs at −9.2 ppm early and −2.27 ppm late;
+1.873 µs. The mechanism is that the wall clock was being actively *steered*
+during those captures, before clock discipline existed as a protocol step, and
+the custody record agrees independently: the earliest clock-pin record on this
+machine postdates both. For contrast, of the 43 replayed corpus-lineage
+captures, 41 need exactly zero slack. The model fits an ordinary capture to sub-microsecond
+consistency and refuses precisely the captures where something was moving the
+clock.
+
+**Which direction a correction moves your own thresholds is diagnostic.** One
+of the two refused captures was the *corpus maximum* under the old model
+(b_fiducial 0.033559 s), so removing it makes the instrument's screens
+**stricter**: the maximum falls to 0.032898 s and the bracket screen tightens
+from 0.010818 s to 0.009724 s. A correction that discards your most
+contaminated data point and leaves you a harder bar to clear is the shape of
+an honest one; be suspicious of the opposite. Likewise, 11 of the 32 captures
+that survived re-derivation produced intervals that no longer contain the old method's
+accepted point — exactly what removing a bias should do, not an anomaly to be
+explained away.
+
+**The lesson worth carrying away: replay is not validity.** Every stored
+bundle from the old era still replays perfectly — feed the old bytes to the
+old estimator and you get the old numbers, to the last digit, forever. What
+died was not reproducibility but *claim-eligibility*, because faithfully
+reproducing a computation whose model is false reproduces the error
+faithfully. That has a concrete consequence: each corpus member's bound is the
+new derivation itself, **not** the larger of the old and new values. Taking
+the maximum would look conservative while smuggling the falsified model's
+numbers back in wherever they happened to be bigger. A superseded model is
+superseded, not demoted to a floor.
+
+## 6. What a bundle remembers: capture eras and the claim barrier
+
+The section above leaves an obvious question: hundreds of stored measurements
+on this machine were taken under an estimator now known to be wrong. What
+happens to them?
+
+**Every bundle carries its own capture-pipeline identity.** A stored bundle
+records the anchor method that produced it, paired inseparably with a schema
+label — `p2-038.1`, `.2`, or `.3` for the three generations of capture
+pipeline. One canonical table maps method to label, and the *method* is the
+single key everything dispatches on. If a bundle's label and its method
+disagree it is refused outright, rather than resolved in favour of either: the
+record is lying about itself and there is no honest way to guess which half is
+true. Where the capture machinery produced no such evidence at all, no era is
+synthesised — the evidence is marked explicitly incomplete, because inventing a
+plausible label is the one failure this design must never have.
+
+**Two questions, deliberately kept apart:** *can this bundle be verified?* and
+*may this bundle support a claim?*
+
+- **Strict verification is era-faithful, forever.** Every stored bundle is
+  re-derived under *its own* recorded method — `.1` bundles under the legacy
+  replay, `.2` under the old censored-intersection derivation, `.3` under the
+  current one — and crossing an era against another era's method refuses. The
+  748 stored second-era bundles in the repository tree (off-repository mirrors
+  hold more) therefore keep every bit of their audit value: they still authenticate, they still replay byte-exactly,
+  and their custody chains remain checkable. Nothing was rewritten, relabelled,
+  or deleted.
+- **Claim admission is a separate, mechanical barrier.** Supporting a
+  published number requires the *positive presentation* of the current
+  claim-bearing method — one closed set with one member today. Absence is not
+  permission. A single shared predicate implements this, and the three
+  claim-side consumers (analysis admission, floor extraction, and whole-window
+  member admission) all call it rather than re-implementing the test or
+  writing the method name inline, so the barrier cannot rot apart in one lane
+  while holding in another.
+
+**The problem that forced it into existence.** Before this, superseded
+bundles were kept out of claims by per-window policy documents — that is, by a
+human remembering to apply a rule. That works until the night it doesn't. A
+policy document is not a gate.
+
+**Why there are two refusal reasons and not one.** The barrier distinguishes
+`capture_pipeline_superseded` — an authentically stored bundle whose method has
+been retired — from `capture_pipeline_absent`, where there is no such evidence
+at all. Collapsing them would have been simpler and also false: 745 of the 748
+stored second-era bundles record that their anchor *did* resolve, so filing
+them under "anchor unresolved" would contradict their own authenticated
+metadata. Refusals are published results, so a refusal reason must be true
+about the artifact it names, not merely convenient.
+
+## 7. The calibration acceptance: pinning the instrument's identity
 
 A bound measured by one version of the estimator code says nothing about a
 different version. So the instrument's identity is pinned cryptographically
 by the **calibration acceptance artifact** — currently
-`d079_calibration_acceptance_v2_n17_r3` — which records:
+`d079_calibration_acceptance_v2_n17_r6`, whose own file hash begins
+`0227bca3` — which records:
 
 - the 17-member derivation corpus (every member's b_fiducial, byte-exact),
 - the decision thresholds derived from that corpus,
@@ -211,17 +414,51 @@ every downstream consumer refuse with a *staleness* error, on purpose. A
 changed estimator is a different instrument, and a different instrument
 does not inherit the old instrument's evidence. When an estimator change
 is genuinely wanted (the detection budget above was one), the acceptance
-is **reissued**: the tool re-authenticates all 19 corpus members from
-their raw artifacts under the new code, verifies that every scientific
-value is byte-identical, produces a machine-checked delta report showing
-*exactly one changed pin*, and only then may a new acceptance be issued.
-The reissue is "science-neutral by construction": if anything beyond the
-intended code pin differs, the tool stops. This happened twice on the
-transaction that is now at its confirmation point — once for the audited
-detection improvements, once more for the budget correction — and both
-delta reports are custodied in the repository's process traces.
+is **reissued**: all 19 members of the replay set are re-authenticated from
+their raw artifacts under the new code, every derived quantity is compared
+against the predecessor's record with zero mismatches tolerated, and the new
+artifact publishes a delta naming exactly which pins rotated and to what. The
+reissue is "science-neutral by construction": if anything beyond the intended
+code pins differs, it does not issue.
 
-## 6. Floors: what the instrument may claim to distinguish
+**The generation chain.** Because the pin rule has no exceptions, the artifact
+has a lineage rather than a version number, and every link in it is a document
+you can open:
+
+| Generation | What forced it | What moved |
+|---|---|---|
+| `…_v2_n19` | first issuance | — |
+| `…_v2_n19_r2` | audited detection work, then the budget correction | one estimator pin, rotated twice; corpus still 19 |
+| `…_v2_n17_r3` | the anchor replacement (section 5) | the science itself: corpus 19 → 17, screens tightened |
+| `…_v2_n17_r4` | making the new anchor the live capture method | one estimator pin |
+| `…_v2_n17_r5` | the production capture flip | three estimator pins |
+| `…_v2_n17_r6` | capture-era presentation (section 6) | two estimator pins |
+
+Only `r3` changed any science. `r4`, `r5` and `r6` are **proven-neutral
+reissues** — forced by the pin rule, not by any new measurement — and each
+carries its proof rather than an assertion: a named predecessor with its file
+hash, the before-and-after hash of every estimator source that changed, and the
+record that the full 19-member replay reproduced every anchor bound,
+disposition, projection cell count and b_fiducial value exactly. Predecessor
+generations are kept byte-identical forever; a superseded generation is retired
+as the *live* artifact, never edited.
+
+**Policy constants are resolved, never copied.** A trap lives in that table:
+the bracket screen was 0.010818 s under the 19-member generations and is
+0.009724 s under the 17-member ones. If any consumer held that number as a
+literal, historical replays would silently start judging old data by new
+thresholds. So no such literal exists anywhere in the mint lane — a regression
+test forbids both digits (the one home for the registered values is the
+acceptance registry itself, which the guard deliberately exempts) — and every
+consumer resolves the screen and the
+allowance rule *from the generation the supplied artifact itself names*. An
+unregistered identity refuses; an artifact whose stated screen disagrees with
+the registered value for its identity refuses rather than a winner being
+chosen. That is what lets the live instrument move while every historical
+replay stays byte-exact: the past is judged by the rules of the past, by
+machinery rather than by memory.
+
+## 8. Floors: what the instrument may claim to distinguish
 
 A **detection floor** is the empirically demonstrated smallest energy
 difference the complete measurement system can distinguish for a given
@@ -267,7 +504,7 @@ Floors do not transfer across phases, prompt lengths, or stacks; the
 transporting a floor from a different prompt length would be an assumption
 wearing a measurement's clothes.
 
-## 7. The quiet machine: protecting the signal
+## 9. The quiet machine: protecting the signal
 
 Everything above assumes the machine's background is stationary and small.
 It is not, unless forced to be. Resident daemons index files, analyze
@@ -306,7 +543,7 @@ The defenses, each with its scar tissue:
   fleet shut down, and the driver's own censuses are part of the capture's
   custody record.
 
-## 8. Frozen plans and the freeze ceremony
+## 10. Frozen plans and the freeze ceremony
 
 **Why freeze:** the most seductive way to corrupt a measurement campaign
 is to adjust it after seeing data — drop the awkward bundle, tweak the
@@ -322,9 +559,10 @@ are generated by committed generator programs, so the entire pack is
 reproducible byte-for-byte from its generator — and audited regressions
 prove the generator cannot overwrite an earlier generation's committed
 bytes (a defect class that was found, fought through seven rounds of
-implementation and nine audits, and closed with generational proofs: the
-version-2 packs can generate a version-3 family without touching version-1
-or version-2 bytes).
+implementation and nine audits, and closed with generational proofs). That
+property has since been exercised for real rather than only proved: the
+version-2 packs have generated a version-3 family without altering a byte of
+the version-1 or version-2 packs — see *Lineage in practice*, below.
 
 **The freeze receipt.** Freezing a pack mints a receipt: a cryptographic
 attestation binding the plan's exact bytes (via SHA-256 of the calibration
@@ -347,6 +585,33 @@ easy to miss and load-bearing:
   valid *historical* records — their receipts still authenticate — but the
   lineage is explicit and machine-checked in both directions.
 
+**Lineage in practice: how a frozen family gets a successor.** When section
+5's anchor replacement moved the calibration artifact, the three frozen
+campaign packs were left bound to a generation that can no longer bear claims.
+The obvious repair — regenerate the packs in place against the new artifact —
+is exactly what the freeze machinery exists to prevent: it would destroy the
+historical attestation the receipts were minted to provide and leave a
+directory claiming to be frozen while holding different bytes. So the family
+grew a third generation instead. Each `_v2` pack's **unedited** generator was
+run to emit a `_v3` tree, and only the emitted, not-yet-frozen drafts were
+retargeted at the current calibration artifact. The frozen `_v2` packs were
+not touched at all — including their generator programs, which are themselves
+frozen pack content, hashed inside the very plan trees they produce; a
+regression re-hashes the committed `_v2` trees to prove it.
+
+Two details earn their weight. **Bind at birth, not by retargeting later:** a
+pack pins the *file hash* of the acceptance artifact it was emitted against,
+and issuing a newer artifact leaves the older file untouched — so a pack
+emitted against last week's generation and quietly moved to this week's would
+pin a hash that still verifies, and the staleness would be invisible. The
+successor packs were therefore emitted already bound to the live generation.
+**Freeze is deliberately the last step:** the successor family's readiness
+evidence has been authored at the designated measurement checkout — eleven
+evidence documents per pack, thirty-three in all, every one passing — and the
+freeze receipts chaining each `_v3` pack to its `_v2` predecessor's
+`freeze-0002` are the one step still outstanding. Nothing may be collected
+under the successor family until they exist.
+
 **Identity-pin projection.** Before freezing, a projection tool reads the
 *actual* model files and runtime the night will execute (the real
 safetensors on disk, hashed; the real runtime identity) and pins them into
@@ -362,7 +627,7 @@ set, minted in the wrong place, was reverted on the record and re-minted
 correctly. (The revert commits are still in the history; honest history is
 preferred over clean history throughout this project.)
 
-## 9. Arming, the window, and the operator
+## 11. Arming, the window, and the operator
 
 A measurement night is a ceremony with a deliberately narrow shape.
 
@@ -398,7 +663,7 @@ byte drift, and clock trouble. Fabrication by the single trusted human
 with root access is out of scope — and the papers says so, because a
 limitation stated is a boundary, while a limitation hidden is a landmine.
 
-## 10. From samples to claims
+## 12. From samples to claims
 
 The full pipeline, end to end:
 
@@ -412,9 +677,12 @@ The full pipeline, end to end:
    event-logged operation boundaries under the anchored clock; apply the
    bracket-derived timing allowance to every phase edge.
 6. **Gate** — the whole-window verdict: acceptance artifact fresh and
-   authenticated, brackets within drift allowance, pre-flight screen
-   passed, custody complete, every member's lineage authenticated. Any
-   failure refuses the window's evidence — recorded, not discarded.
+   authenticated, every member presenting the current capture pipeline
+   (section 6), brackets within drift allowance — screened against the
+   generation the artifact itself names, never a copied constant —
+   pre-flight screen passed, custody complete, every member's lineage
+   authenticated. Any failure refuses the window's evidence — recorded, not
+   discarded.
 7. **Claim** — only differences exceeding the labeled floor plus
    pre-registered margins, under the pre-registered statistical family
    (the first campaign's two contrasts form one Holm-corrected family at
@@ -429,7 +697,7 @@ empirically demonstrated floor of F joules plus stated margins — and here
 is the complete refusal log of everything the instrument declined to
 claim along the way.*
 
-## 11. The verification culture, briefly
+## 13. The verification culture, briefly
 
 Every mechanism above exists in code with fail-closed refusals, and the
 project's process mirrors the instrument: implementations are audited
@@ -445,7 +713,7 @@ instrument's own refusal gates caught a mis-set parameter on their first
 night of contact with reality. The run reports under `docs/run_reports/`
 are the evidence trail, and they are written to be read.
 
-## 12. Glossary
+## 14. Glossary
 
 - **ABBA block** — a measure-A, B, B, A schedule that cancels slow drift
   to first order in paired comparisons.
@@ -459,7 +727,20 @@ are the evidence trail, and they are written to be read.
   of clock misalignment between workload and sampler.
 - **b_fiducial** — a capture's measured worst-edge timing bound: how far a
   commanded pulse edge can appear displaced in the trace.
+- **Capture era** — the generation of capture pipeline that produced a
+  stored bundle, recorded inside it as an anchor method paired with a schema
+  label (`p2-038.1/.2/.3`). Old eras are verified forever under their own
+  method; only the current era may support a claim.
 - **Census** — the pre-window process sweeps proving the machine quiet.
+- **Claim barrier** — the single shared test every claim-side consumer calls,
+  admitting a bundle only on positive presentation of the current
+  claim-bearing capture era.
+- **Clock anchor** — the measured relationship between the system's wall
+  clock, in which the sampler labels each row and the workload stamps its
+  pulse commands, and the sampler's own monotonic timeline, in which each
+  row's duration is reported; it is published as an interval. The current
+  method solves for the two clocks' *rate* as well as their offset and
+  refuses when no single rate fits (section 5).
 - **Detection budget** — the preregistered cap on the pulse detector's
   search effort; exhaustion refuses the capture as non-convergent.
 - **Detection floor** — the demonstrated smallest energy difference the
@@ -468,13 +749,23 @@ are the evidence trail, and they are written to be read.
   attribution error.
 - **Freeze receipt** — the cryptographic attestation that a pack's bytes
   are final; the receipt is the frozen state.
+- **Generation (of the acceptance artifact)** — one issued link in the
+  artifact's lineage. Predecessors are kept byte-identical forever, and each
+  consumer resolves its thresholds from the generation the supplied artifact
+  names.
 - **Identity-pin projection** — the receipt pinning the actual model and
   runtime bytes a night will execute.
 - **Pack** — the committed, frozen directory of every configuration a
   measurement night will run.
 - **powermetrics** — Apple's telemetry sampler; the measurement primitive.
+- **ppm (parts per million)** — the unit for clock-rate differences; 1 ppm
+  is one microsecond per second, so 7 ppm accumulates about 1.4 ms over a
+  200-second capture.
 - **Rail** — a named power channel (CPU, GPU, ANE); the measurement
   boundary is exactly these three.
 - **Refusal** — a recorded decision not to admit evidence when a gate
   fails; the instrument's most common and most important output.
+- **Reissue (science-neutral)** — a new acceptance generation forced by an
+  estimator byte change alone, whose neutrality is proven by replaying the
+  whole corpus and diffing every derived quantity, not asserted.
 - **Window** — one uninterrupted, calibrated, quiet collection session.
