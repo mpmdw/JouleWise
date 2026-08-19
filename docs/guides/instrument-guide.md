@@ -603,8 +603,10 @@ Two details earn their weight. **Bind at birth, not by retargeting later:** a
 pack pins the *file hash* of the acceptance artifact it was emitted against,
 and issuing a newer artifact leaves the older file untouched — so a pack
 emitted against last week's generation and quietly moved to this week's would
-pin a hash that still verifies, and the staleness would be invisible. The
-successor packs were therefore emitted already bound to the live generation.
+pin a hash that still verifies, and the staleness would be invisible. The successor
+packs therefore reached their would-be-frozen state already bound to the
+live generation: the retarget happened in the unfrozen drafts, before any
+receipt existed, so no frozen pack ever pointed at a stale generation.
 **Freeze is deliberately the last step:** the successor family's readiness
 evidence has been authored at the designated measurement checkout — eleven
 evidence documents per pack, thirty-three in all, every one passing — and the

@@ -38,7 +38,9 @@ reachable within the validity window.
 ## Exact S5 sequence (as extracted from the T10 record; one commit per step)
 
 At `/Users/edr/JouleWise-measurement-20260818`, branch
-`impl/r2-s0-mint-resolver` @ `3a75a77`:
+`impl/r2-s0-mint-resolver` — first `git pull --ff-only origin
+impl/r2-s0-mint-resolver` to the current head `246167f` (docs-only delta
+since `3a75a77`; no pack byte moves), then:
 
 ```
 # U11 identity-pin projection (freeze refuses without it), commit each:

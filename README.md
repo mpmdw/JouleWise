@@ -34,8 +34,9 @@ recalibrated from a complete 34-bundle sweep of every retained calibration
 trace (not tuned to pass), and the same capture then re-derived cleanly
 **inside the issued calibration band**. Separately, the operator
 qualification checklist completed end to end, catching and fixing three
-real defects along the way. The full test suite (3,688 tests) is green at
-the confirmation head.
+real defects along the way. The full test suite is green at the
+confirmation head (the suite count is deliberately not quoted here; see
+the freshness policy below).
 
 **Working on now:** the final read-and-reply items that publish the frozen
 family (an exact-byte confirmation and two reserved rulings), the

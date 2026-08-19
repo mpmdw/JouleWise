@@ -10,7 +10,7 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-19 (T12 — R1/R2 co-design rulings ratified; re-freeze cycle resuming)
+Last updated: 2026-08-19 (T12b — executed through S4; S5 mints on Ed's ruling)
 
 ## ▶▶ T12b (2026-08-19 midday) — TRANSACTION EXECUTED THROUGH S4; S5 MINTS BLOCKED ON A PERMISSION RULING (ED)
 
@@ -34,6 +34,10 @@ commands in the packet) → S6 docs/canonical FULL GREEN → the r6
 confirmation table (draft in the packet, three [PENDING MINT] rows).
 
 ## ▶▶ T12 (2026-08-19) — R1/R2 CO-DESIGN RULINGS RATIFIED; CYCLE RESUMES UNDER THEM
+
+*(Superseded detail: this block's r5 references predate the r6 reissue —
+the live generation is r6; see T12b above and
+`docs/process_traces/2026-08-19-r1-r2-codesign/15-amendment-r6.md`.)*
 
 The two rulings that parked the re-freeze cycle at steps 3-6 are RATIFIED
 under the co-design protocol (now minted D-144; first application, protocol

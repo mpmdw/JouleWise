@@ -1,4 +1,8 @@
 # 🟢 BETWEEN RUNS
+> **LIVE HAZARD (2026-08-19):** the three `_v3` packs' authored freeze
+> evidence (33 receipts) EXPIRES ~2026-08-20T16:51Z and DIES ON ANY
+> REBOOT (boot session da90818c…). Do not reboot before the S5
+> freeze-0003 mints land. Details: docs/process/ed-s5-mint-decision-2026-08-19.md.
 
 Terms used here: a *measurement window* is one uninterrupted, calibrated
 collection session; a *pack* is the frozen campaign plan and its authenticated
