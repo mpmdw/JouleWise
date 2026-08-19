@@ -148,23 +148,53 @@ square pulse is the simplest possible known signal: its true edges are in
 the event log, its observed edges are in the trace, and the difference *is*
 the attribution error, measured rather than assumed.
 
-**The detection budget — and the night it proved itself.** For each
-pulse, the detector is not just looking for the single best placement of
-the pulse's two edges in the trace — it has to map out *every* placement
-the data cannot rule out, because the pulse's timing bound is the full
-extent of that surviving region. It does this by carving the
-two-dimensional plane of possible edge shifts into rectangles, proving
-rectangles out wherever even their best case fits the data worse than
-the acceptance threshold, and splitting the survivors down to a tenth of
-a millisecond. "Converging on a pulse" means finishing that map: every
-rectangle either ruled out or resolved. The map-drawing is expensive,
-and a search that runs forever on a pathological trace is itself a
-hazard. So the detector carries a preregistered evaluation budget: if it
-cannot finish the map for all 59 pulses within a fixed number of
-rectangle evaluations, the capture is **refused as non-convergent** —
-never accepted with a partial map, because the unexplored area might
-hide admissible edge placements, and a bound computed from an unfinished
-map could be too small. On the night of
+**The detection budget — and the night it proved itself.** Recall what
+the detector is actually being asked. A pulse was *commanded* at a known
+time with a known duration, and the trace shows power stepping up and
+back down somewhere near those times. The calibration question is: how
+far from the commanded times could the pulse's start and stop edges
+really have landed, as far as the recorded samples can tell? The
+detector answers by trial. Take one candidate answer — say, "the start
+edge was really 3 ms late and the stop edge 1 ms early" — work out what
+every power sample *would* have read if that were true, and compare
+against what the samples actually read. Some candidates fit well; most
+fit terribly.
+
+If the detector kept only the single best-fitting candidate, it would be
+pretending the samples pin the edges to a point. They do not: each
+sample is an average over roughly a tenth of a second, so a whole
+neighbourhood of nearby candidates fits the data essentially as well as
+the best one, and any of them could be the truth. The honest output is
+therefore the *entire set* of candidates the samples cannot rule out —
+and the pulse's timing bound is the worst edge displacement found
+anywhere in that set. Which creates an obligation: the set must be found
+*without gaps*, because a missed pocket of acceptable candidates could
+hide the very displacement that should have set the bound, and the bound
+would come out too small.
+
+That obligation is what the rectangles are for. The candidates form a
+two-dimensional plane — one axis for how far the start edge shifted, one
+for the stop edge. You cannot try infinitely many points, and trying a
+grid of points would leave the space *between* grid points untested. So
+the detector takes a whole rectangle of the plane at once and computes a
+guarantee of the form "nothing anywhere inside this rectangle can fit
+the data better than X." If even that best case X is worse than the
+acceptance threshold, the entire rectangle — infinitely many candidates
+— is ruled out in one step. A rectangle that cannot be ruled out is cut
+in half and each half examined again, down to a tenth of a millisecond,
+at which point the survivor's whole extent is counted into the set.
+Every point of the plane ends up either provably ruled out or counted
+in. **"Converging on a pulse" means finishing that job** — the map of
+what the data allows is complete, with no unexamined territory.
+
+The map-drawing is expensive, and a search that grinds forever on a
+pathological trace is itself a hazard on a measurement night. So the
+detector carries a preregistered budget, counted in rectangle
+evaluations: if it cannot finish the maps for all 59 pulses within the
+budget, the capture is **refused as non-convergent** — never accepted
+with a partial map, for exactly the reason above: unexplored territory
+might hide admissible edge placements, and a bound computed from an
+unfinished map could be too small. On the night of
 2026-08-17→18, the very first live capture under the pulse detector then in
 force hit that budget and was refused. The diagnosis that followed is the best short
 course on this project's method:
