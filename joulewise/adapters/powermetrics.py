@@ -20,7 +20,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from xml.parsers.expat import ExpatError
@@ -1812,6 +1812,9 @@ def _parse_powermetrics_records(
                     "plist_timestamp_s": _timestamp_epoch_utc(
                         _required(document, "timestamp", index)
                     ),
+                    "plist_timestamp_ns": _timestamp_epoch_ns_utc(
+                        _required(document, "timestamp", index)
+                    ),
                     "is_delta": (
                         document["is_delta"]
                         if isinstance(document.get("is_delta"), bool)
@@ -1842,6 +1845,8 @@ def anchor_records_from_powermetrics(
                 power_w=record.combined_power_w,
                 energy_j=energy_j,
                 is_delta=record.metadata.get("is_delta"),
+                elapsed_ns=record.elapsed_ns,
+                native_timestamp_ns=record.metadata.get("plist_timestamp_ns"),
             )
         )
     return anchor_records
@@ -2198,6 +2203,20 @@ def _timestamp_epoch_utc(value: object) -> float:
     else:
         value = value.astimezone(timezone.utc)
     return value.timestamp()
+
+
+def _timestamp_epoch_ns_utc(value: object) -> int:
+    """Map a plist date to epoch nanoseconds without a float conversion."""
+
+    if not isinstance(value, datetime):
+        raise ValueError(f"powermetrics timestamp is not a datetime: {value!r}")
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    microseconds = (value - epoch) // timedelta(microseconds=1)
+    return microseconds * 1000
 
 
 def _optional_string(value: object) -> str | None:

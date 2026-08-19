@@ -25,6 +25,7 @@ from joulewise.adapters.powermetrics import (
     RAW_SAMPLES_NAME,
     SAMPLERS,
     PowermetricsTelemetryAdapter,
+    anchor_records_from_powermetrics,
     decode_rich_telemetry,
     idle_window_gpu_quality,
     parse_powermetrics_records,
@@ -38,6 +39,8 @@ from joulewise.controller import run_benchmark
 from joulewise.interfaces import RunContext, TelemetryAdapter
 from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus, TelemetryBackend
 from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+    CLOCK_METHOD_V2,
     derive_powermetrics_clock_evidence,
     derive_powermetrics_clock_evidence_v2,
 )
@@ -188,6 +191,24 @@ class PowermetricsParserTests(unittest.TestCase):
         self.assertEqual(len(set(actual)), len(actual))
         self.assertAlmostEqual(first, 1_783_394_101.0, places=6)
         self.assertAlmostEqual(actual[2], 1_783_394_104.0524974, places=6)
+
+    def test_native_anchor_projection_retains_exact_integer_time_fields(self) -> None:
+        records = parse_powermetrics_records(FIXTURE.read_bytes())
+        projected = anchor_records_from_powermetrics(records)
+        for record, anchor in zip(records, projected, strict=True):
+            self.assertIs(type(record.metadata["plist_timestamp_ns"]), int)
+            self.assertEqual(anchor.elapsed_ns, record.elapsed_ns)
+            self.assertEqual(
+                anchor.native_timestamp_ns,
+                record.metadata["plist_timestamp_ns"],
+            )
+            self.assertEqual(
+                anchor.native_timestamp_s,
+                record.metadata["plist_timestamp_s"],
+            )
+
+    def test_capture_method_switch_remains_on_v2(self) -> None:
+        self.assertEqual(ACTIVE_CAPTURE_ANCHOR_METHOD, CLOCK_METHOD_V2)
 
     def test_samples_align_all_rails_on_each_timestamp_for_d027(self) -> None:
         records = parse_powermetrics_records(FIXTURE.read_bytes())
