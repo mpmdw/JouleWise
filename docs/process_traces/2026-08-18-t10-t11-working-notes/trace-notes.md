@@ -460,3 +460,34 @@ contract.
   _v2 pack regeneration, evidence re-author, freeze-0002 re-mints at the
   measurement checkout, canonical FULL GREEN, the confirmation table
   (docs/process/ed-confirmation-2026-08-18-v3.md).
+
+## FINAL STATE (supersedes the mid-cycle addendum): cycle PARKED at 003f7187
+- Steps 0-2 COMPLETE: raw custody 15/15 restored+verified; v3 capture
+  activation for 3/4 sites; r4 issued (dcb3d3ed…, one pin moved,
+  science-neutrality PROVEN by direct 19-member replay — note the reissue
+  TOOL cannot check v3 generations, it compares stored scalars; bespoke
+  derive/build scripts are the r3/r4 route).
+- Steps 3-6 STOPPED on two rulings — run these through the CO-DESIGN
+  PROTOCOL (terra/Sol + Opus independent designs → debate → Fable ruling):
+  R1: production capture-pipeline v3 adoption (adapters/powermetrics.py
+  hardcodes v2 at 4 sites, emits p2-038.2; flip touches cli.py strict
+  verify, campaign gate :1644, contracts; 54 historical bundles carry the
+  v2 label → the admission gate question; one new test failure
+  test_whole_window_selection…embeds_allowance_once is this same root,
+  fail-closed). R2: mint-lane fan-out shape (flat 0.010818 migration
+  BREAKS n=19 estimator replay — executed refutation; generation-indexing
+  via _D102_GENERATION_DERIVATIONS recommended; one analysis proposes a
+  _v3 PACK FAMILY instead of regenerating _v2 — pack-identity design;
+  _ACCEPTANCE_SELECTION is an independent axis, do not move).
+- NO confirmation table exists (correctly refused without step-4 receipt
+  hashes). Measurement-checkout freezes UNTOUCHED (r2-era receipts stand;
+  no honest-revert performed — right call, family never left worse).
+- Canonical at bb81323: 3726 ran, 16F/22E — the 33 mint-lane reds are the
+  known fan-out awaiting step 3; ONE new failure (the v2-label admission
+  gate, ruling R1's evidence); zero cured, zero unexplained.
+- Incidental defects queued: stale DEFAULT_ACCEPTANCE_BOUND_SHA256
+  genesis digest (zero consumers, live trap); evidence-author acceptance
+  copy-list omits r3/r4.
+- Coordinator correction owned: my "no live codex processes" ground-truth
+  was WRONG (pgrep pattern missed them); the agent harvested both
+  sessions productively.
