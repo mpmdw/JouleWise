@@ -28,7 +28,7 @@
     "os_build": "synthetic-d117-os",
     "powermetrics_sha256": "c2f8ef614953475fcc9af95b6aaaf1d5b8c43a0f4c682f72f56c6503945b3b94",
     "sampling_interval_ms": 100,
-    "anchor_method_version": "powermetrics_native_second_censored_intersection_v1",
+    "anchor_method_version": "powermetrics_native_second_rate_aware_set_membership_v1",
     "mlx_version": "synthetic-mlx",
     "pulse_protocol_id": "powermetrics_pulse_fiducial_v3",
     "power_policy": "synthetic-ac-high-power",
