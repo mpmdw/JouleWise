@@ -106,6 +106,138 @@ class CapturePipelineEraTests(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("does not match", problems[0])
 
+    def test_v3_unresolved_rich_telemetry_uses_its_fallback_endpoint(self) -> None:
+        self.assertEqual(
+            cli._powermetrics_trace_endpoint_s(
+                {},
+                {
+                    "method": CLOCK_METHOD_V3,
+                    "status": "unknown",
+                    "trace_fallback_endpoint_epoch_s": 42.0,
+                },
+            ),
+            42.0,
+        )
+
+    def test_adapter_empty_capture_emits_the_active_v3_method(self) -> None:
+        from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+        from joulewise.clock import ClockStamp, FakeClock
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        stamp = ClockStamp(1.0, 1.0, 1.0, 0.0, 0.0)
+        with (
+            patch.object(adapter, "_drain_until_stop_bracket", return_value=None),
+            patch.object(adapter, "_take_measured_capture", return_value=(None, None)),
+        ):
+            result = adapter.stop_sampling_with_evidence(
+                make_config(),
+                None,
+                sampling_started=stamp,
+                sampling_stopped=stamp,
+            )
+        self.assertEqual(
+            result.uncertainty_evidence["clock_anchor"]["method"],
+            CLOCK_METHOD_V3,
+        )
+
+    def test_adapter_bracket_rederivation_emits_the_active_v3_method(self) -> None:
+        from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+        from joulewise.clock import ClockStamp, FakeClock
+        from tests.test_powermetrics import documents_to_stream, fixture_documents
+
+        capture = documents_to_stream(fixture_documents())
+        seen_methods: list[str] = []
+
+        def deriver(method: str):
+            seen_methods.append(method)
+            return lambda **_kwargs: (
+                {
+                    "clock_anchor": {
+                        "status": "bounded",
+                        "method": method,
+                        "admissible_lower_epoch_s": 100.0,
+                    }
+                },
+                100.0,
+            )
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=100.0))
+        stamp = ClockStamp(100.0, 100.0, 100.0, 0.0, 0.0)
+        with (
+            patch.object(adapter, "_drain_until_stop_bracket", return_value=101.0),
+            patch.object(adapter, "_take_measured_capture", return_value=(capture, None)),
+            patch.object(adapter, "_freeze_stop_bracketing_prefix", return_value=capture),
+            patch(
+                "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                side_effect=deriver,
+            ),
+        ):
+            result = adapter.stop_sampling_with_evidence(
+                make_config(),
+                None,
+                sampling_started=stamp,
+                sampling_stopped=stamp,
+            )
+        self.assertEqual(seen_methods, [CLOCK_METHOD_V3, CLOCK_METHOD_V3])
+        self.assertEqual(
+            result.uncertainty_evidence["clock_anchor"]["method"],
+            CLOCK_METHOD_V3,
+        )
+
+    def test_adapter_drain_probe_emits_the_active_v3_method(self) -> None:
+        from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+        from joulewise.clock import ClockStamp, FakeClock
+        from tests.test_powermetrics import documents_to_stream, fixture_documents
+
+        class RunningProcess:
+            def poll(self):
+                return None
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        adapter._process = RunningProcess()
+        adapter._first_parse_stamp = ClockStamp(80.0, 80.0, 80.0, 0.0, 0.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter._capture_path = Path(tmp) / "capture.plist"
+            adapter._capture_path.write_bytes(
+                documents_to_stream(fixture_documents()[:1])
+            )
+            with patch(
+                "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                return_value=lambda **_kwargs: (
+                    {"clock_anchor": {"admissible_lower_epoch_s": 90.0}},
+                    90.0,
+                ),
+            ) as resolver:
+                adapter._drain_until_stop_bracket(
+                    make_config(),
+                    sampling_started=ClockStamp(80.0, 80.0, 80.0, 0.0, 0.0),
+                    sampling_stopped=ClockStamp(87.0, 87.0, 87.0, 0.0, 0.0),
+                )
+        self.assertTrue(resolver.call_args_list)
+        self.assertEqual(
+            {args.args[0] for args in resolver.call_args_list},
+            {CLOCK_METHOD_V3},
+        )
+
+    def test_arm_readiness_recognizes_the_r5_v3_acceptance_generation(self) -> None:
+        from joulewise.arm_readiness import _issued_d079
+
+        policy = {
+            "selection": "issued_d116_artifact_only",
+            "issued": "d079_calibration_acceptance_v2_n17_r5",
+        }
+        self.assertTrue(_issued_d079({"acceptance_policy": policy}))
+        self.assertFalse(
+            _issued_d079(
+                {
+                    "acceptance_policy": {
+                        **policy,
+                        "issued": "d079_calibration_acceptance_v2_n17_r6",
+                    }
+                }
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

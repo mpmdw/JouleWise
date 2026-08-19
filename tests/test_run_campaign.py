@@ -8635,7 +8635,11 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "p2-work-a__r1",
             attempt1_records=_clean_idle_records(),
             attempt2_records=None,
-            expected_strict_valid=False,
+            # The final-attempt pairing is a whole-window admission concern,
+            # not a generic bundle-layout requirement.  The verdict below
+            # still must reject the absent final telemetry rather than fall
+            # back to attempt 1.
+            expected_strict_valid=True,
         )
         section = run_campaign_module.idle_admission_core_verdict(
             [evaluation], binding

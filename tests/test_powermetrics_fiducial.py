@@ -51,6 +51,7 @@ from joulewise.powermetrics_fiducial import (
     van_der_corput,
     window_license_min_duration_s,
 )
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
 from scripts.validate_powermetrics_fiducial import (
     trim_trace_after_warmups,
     verify_frozen_protocol,
@@ -679,7 +680,7 @@ class DetectorTests(unittest.TestCase):
             ),
         )
         payload = instrument_evidence(
-            outcomes[0],
+            replace(outcomes[0], anchor_method=CLOCK_METHOD_V2),
             bindings={},
             validation_id="flat-loss-budget",
             artifact_sha256={},
@@ -732,7 +733,7 @@ class DetectorTests(unittest.TestCase):
 
         def evidence_payload(detection):
             return instrument_evidence(
-                detection,
+                replace(detection, anchor_method=CLOCK_METHOD_V2),
                 bindings={},
                 validation_id="wall-pathology-diagnostic",
                 artifact_sha256={},
@@ -921,7 +922,12 @@ class EvidenceTests(unittest.TestCase):
             (on_s + 10.0, off_s + 10.0) for on_s, off_s in pulse_schedule(3)
         ]
         trace = synthetic_trace(true_pulses, end_s=true_pulses[-1][1] + 10.0)
-        return detect_pulses(trace, commanded(true_pulses))
+        # These synthetic detector fixtures model a retained v2 calibration
+        # era.  The serializer now deliberately rejects an unstated era.
+        return replace(
+            detect_pulses(trace, commanded(true_pulses)),
+            anchor_method=CLOCK_METHOD_V2,
+        )
 
     def bindings(self, **overrides):
         base = {
@@ -1550,7 +1556,7 @@ class FrozenProtocolTests(unittest.TestCase):
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb",
+            "92b9c0608bc97fbd7769050213b1433c32d3fe060d1292167920363e58b8cf0f",
         )
         artifact = json.loads(raw)
         self.assertEqual(

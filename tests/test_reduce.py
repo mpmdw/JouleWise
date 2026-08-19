@@ -2200,11 +2200,18 @@ class D078R01RegressionTests(unittest.TestCase):
                 thermal_pressure=pressure,
             )
 
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
+
         metadata = {
             "environment_admission": {
                 "attempts": [{"attempt": 1, "start_s": 0.0, "end_s": 1.0}]
             },
-            "uncertainty_evidence": {"clock_anchor": {"clock_stamps": {"x": {}}}},
+            "uncertainty_evidence": {
+                "clock_anchor": {
+                    "method": CLOCK_METHOD_V2,
+                    "clock_stamps": {"x": {}},
+                }
+            },
         }
         for label, pressure, expected in (
             (
@@ -2241,8 +2248,8 @@ class D078R01RegressionTests(unittest.TestCase):
                         return_value=object(),
                     ),
                     patch(
-                        "joulewise.uncertainty_evidence.derive_powermetrics_anchor_v2",
-                        return_value={
+                        "joulewise.uncertainty_evidence.resolve_anchor_reconstructor",
+                        return_value=lambda **_kwargs: {
                             "status": "bounded",
                             "first_sample_end_point_epoch_s": 2.0,
                         },
@@ -2399,13 +2406,10 @@ class D078R01RegressionTests(unittest.TestCase):
     def test_current_admission_gap_overlap_and_post_bracket_fail_independently(self) -> None:
         from joulewise.bundle_read import BundleReader
         from joulewise.environment_admission import current_environment_refusals
-        from tests.test_controller import produce_clean_powermetrics_bundle
+        from tests.test_p2038_production_path import P2038ProductionPathTests
 
         with tempfile.TemporaryDirectory() as tmp:
-            bundle, summary = produce_clean_powermetrics_bundle(
-                Path(tmp),
-                "reduce-current-environment",
-            )
+            bundle, summary = P2038ProductionPathTests().run_mode(Path(tmp), "normal")
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
             reader = BundleReader(bundle)
             measured_window = reader.measured_window()
@@ -2434,12 +2438,21 @@ class D078R01RegressionTests(unittest.TestCase):
                         "captured_at_s"
                     ] = measured_window.end_s - 0.1
                 with self.subTest(label=label):
-                    reasons = current_environment_refusals(
-                        metadata,
-                        bundle_path=bundle,
-                        measured_window_start_s=measured_window.start_s,
-                        measured_window_end_s=measured_window.end_s,
-                    )
+                    # The p2038 v3 fixture binds a local test policy rather
+                    # than a checked-in campaign policy.  Keep this regression
+                    # focused on causal admission timing and the stored-method
+                    # thermal scan; recomputed-policy custody has its own test.
+                    with patch(
+                        "joulewise.environment_admission."
+                        "_recomputed_environment_evaluation_refusals",
+                        return_value=(),
+                    ):
+                        reasons = current_environment_refusals(
+                            metadata,
+                            bundle_path=bundle,
+                            measured_window_start_s=measured_window.start_s,
+                            measured_window_end_s=measured_window.end_s,
+                        )
                     self.assertEqual(
                         "environment_admission_missing" in reasons,
                         expected_missing,
@@ -2830,8 +2843,12 @@ class D078R01RegressionTests(unittest.TestCase):
         )
 
         protocol_id = overrides.pop("protocol_id", PROTOCOL_V2_ID)
+        anchor_method = overrides.pop("anchor_method", ACTIVE_CAPTURE_ANCHOR_METHOD)
+        first_endpoint_s = overrides.pop("first_endpoint_s", None)
         evidence, _raw, calibration_events = self_consistent_calibration(
-            protocol_id=protocol_id if protocol_id == PROTOCOL_ID else None
+            protocol_id=protocol_id if protocol_id == PROTOCOL_ID else None,
+            anchor_method=anchor_method,
+            first_endpoint_s=first_endpoint_s,
         )
         if protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}:
             event_rows = [
@@ -2898,13 +2915,29 @@ class D078R01RegressionTests(unittest.TestCase):
         b_fiducial_s=None,
         mutate_bytes=None,
         calibration_events_override=None,
+        measurement_fixture: Path | None = None,
     ) -> Path:
         import shutil
 
         bundle = Path(tmp) / "bundle"
-        shutil.copytree(self.FIXTURE, bundle)
+        shutil.copytree(measurement_fixture or self.FIXTURE, bundle)
         evidence = json.loads(json.dumps(evidence))
         evidence_protocol_id = evidence.get("protocol_id")
+        calibration_first_endpoint_s = None
+        capture_wall_time_s = evidence.get("capture_wall_time_s")
+        if (
+            evidence_protocol_id in {
+                "powermetrics_pulse_fiducial_v2",
+                "powermetrics_pulse_fiducial_v3",
+            }
+            and isinstance(capture_wall_time_s, int | float)
+            and not isinstance(capture_wall_time_s, bool)
+        ):
+            # ``self_consistent_calibration`` records its first command at
+            # first_endpoint + 1.95 s.  Rebuild its primary bytes at the
+            # evidence's declared epoch so a dynamic v3 measuring fixture
+            # cannot carry a stale but internally inconsistent calibration.
+            calibration_first_endpoint_s = float(capture_wall_time_s) - 1.95
         _canonical_evidence, calibration_raw, calibration_events = (
             self_consistent_calibration(
                 protocol_id=(
@@ -2912,7 +2945,8 @@ class D078R01RegressionTests(unittest.TestCase):
                     if evidence_protocol_id
                     == "powermetrics_pulse_fiducial_v3"
                     else None
-                )
+                ),
+                first_endpoint_s=calibration_first_endpoint_s,
             )
         )
         if calibration_events_override is not None:
@@ -3015,6 +3049,59 @@ class D078R01RegressionTests(unittest.TestCase):
             json.dumps(metadata, indent=2, sort_keys=True) + "\n"
         )
         return bundle
+
+    def _v3_measurement_bundle_with_calibration(
+        self,
+        tmp: str,
+        *,
+        calibration_age_s: float,
+    ) -> Path:
+        """Attach a calibration to a real current-era production fixture."""
+
+        from joulewise.bundle_read import BundleReader
+        from joulewise.powermetrics_fiducial import MAX_AGE_S
+        from joulewise.uncertainty_evidence import (
+            CLOCK_METHOD_V3,
+            SCHEMA_VERSION_V3,
+        )
+        from tests.test_p2038_production_path import P2038ProductionPathTests
+
+        root = Path(tmp)
+        measurement, source_summary = P2038ProductionPathTests().run_mode(
+            root / "v3-measurement-source", "normal"
+        )
+        self.assertEqual(source_summary.status, RunStatus.SUCCEEDED)
+        source_reader = BundleReader(measurement)
+        source_metadata = source_reader.metadata()
+        source_window = source_reader.measured_window()
+        self.assertIsNotNone(source_window)
+        uncertainty = source_metadata["uncertainty_evidence"]
+        self.assertEqual(uncertainty["schema_version"], SCHEMA_VERSION_V3)
+        self.assertEqual(
+            uncertainty["clock_anchor"]["method"], CLOCK_METHOD_V3
+        )
+        calibration_first_endpoint_s = source_window.start_s - calibration_age_s
+        self.assertLess(
+            calibration_first_endpoint_s + 1.95,
+            source_window.start_s - MAX_AGE_S,
+        )
+        device = source_metadata["device"]
+        snapshot = source_metadata["campaign_environment_preflight"]["snapshot"]
+        power_hz = source_reader.raw_config()["sampling"]["power_hz"]
+        evidence = self._valid_instrument_evidence(
+            first_endpoint_s=calibration_first_endpoint_s,
+            bindings={
+                "hardware_model": device["hw_model"],
+                "os_build": device["kern_osversion"],
+                "sampling_interval_ms": 1000.0 / power_hz,
+                "mlx_version": snapshot["python_packages"]["mlx"]["version"],
+            },
+        )
+        return self._bundle_with_calibration(
+            root / "v3-calibration",
+            evidence=evidence,
+            measurement_fixture=measurement,
+        )
 
     def test_051_fiducial_bound_widens_effective_bound(self) -> None:
         from joulewise.bundle_read import BundleReader
@@ -3577,11 +3664,69 @@ class D078R01RegressionTests(unittest.TestCase):
         # into the future and re-hashed both evidence and custody manifest.
         # The measuring run_started declaration moves with it, so the old age
         # check passed; immutable calibration event bytes still prove the lie.
+        # Era rationale: this retained p2-038.1 D-078 measurement fixture
+        # cannot authenticate the regenerated current-v3 calibration physics,
+        # so strict validation refuses it as invalid before it reaches the
+        # stale-horizon check.  The current-era stale lane has its own pin
+        # immediately below.
         evidence = self._valid_instrument_evidence()
         evidence["capture_wall_time_s"] += 10_000_000.0
         with tempfile.TemporaryDirectory() as tmp:
             bundle = self._bundle_with_calibration(tmp, evidence=evidence)
             summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+        self.assertIn(
+            "instrument_calibration_invalid",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_052_v3_measurement_stale_calibration_still_refuses_stale(self) -> None:
+        """A p2-038.3 bundle with only an expired calibration keeps the stale pin."""
+
+        from joulewise.bundle_read import BundleReader
+        from joulewise.powermetrics_fiducial import MAX_AGE_S
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp) / "v3-measurement-source"
+            # Give the otherwise valid v3 calibration one complete freshness
+            # horizon of age without changing its bytes, bindings, or era.
+            bundle = self._v3_measurement_bundle_with_calibration(
+                tmp,
+                calibration_age_s=MAX_AGE_S + 100.0,
+            )
+            reader = BundleReader(bundle)
+            source_window = BundleReader(
+                source_root / "p2038-production-shaped"
+            ).measured_window()
+            self.assertIsNotNone(source_window)
+            artifact = json.loads(
+                (bundle / "calibration" / "instrument_evidence.json").read_text()
+            )
+            self.assertGreater(
+                source_window.start_s - artifact["capture_wall_time_s"], MAX_AGE_S
+            )
+            bound, detail = reduce_module._verify_instrument_calibration(
+                reader,
+                reader.metadata(),
+                reader.metadata()["instrument_calibration"],
+                strict_physics=True,
+            )
+            self.assertIsNone(bound)
+            self.assertEqual(detail, "instrument_calibration_stale")
+            # The p2038 fixture uses a local policy.  Keep this probe about the
+            # calibration horizon rather than its independent policy custody.
+            with (
+                patch(
+                    "joulewise.reduce.current_environment_refusals",
+                    return_value=(),
+                ),
+                patch(
+                    "joulewise.reduce.environment_admission_refusals",
+                    return_value=(),
+                ),
+            ):
+                summary = reduce_module.reduce_bundle(
+                    bundle, reducer_version="0.5.2"
+                )
         self.assertIn(
             "instrument_calibration_stale",
             summary.window_evidence_precheck["gross_request"]["reasons"],

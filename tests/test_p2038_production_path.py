@@ -27,18 +27,94 @@ from joulewise.adapters.powermetrics import (
 )
 from joulewise.bundle_read import BundleReader
 from joulewise.cli import validate_bundle
-from joulewise.clock import SystemClock
+from joulewise.clock import ClockStamp
 from joulewise.controller import _load_instrument_calibration_attachment, run_benchmark
 from joulewise.environment import evaluate_environment_policy
 from joulewise.reduce import reduce_bundle
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy
 from joulewise.uncertainty_evidence import (
     ACTIVE_CAPTURE_ANCHOR_METHOD,
+    CLOCK_METHOD_V2,
+    CLOCK_METHOD_V3,
     SCHEMA_FOR_ANCHOR_METHOD,
+    capture_pipeline_refusal,
+    derive_powermetrics_anchor_v3,
 )
 
 
-FIXTURE_PROCESS = Path(__file__).parent / "fixtures" / "fake_powermetrics_process.py"
+V3_FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "p2038_v3_production"
+V3_FIXTURE_PROFILE = V3_FIXTURE_ROOT / "paired_clock_native_records.json"
+V2_REFUSAL_FIXTURE = Path(__file__).parent / "fixtures" / "d117_v2_production"
+FIXTURE_PROCESS = V3_FIXTURE_ROOT / "fake_powermetrics_process.py"
+
+
+class RateFitFixtureClock:
+    """Replay the v3 fixture's paired clock timeline without a 62 s wall wait."""
+
+    def __init__(self, base_s: float, profile: dict) -> None:
+        self._base_s = base_s
+        self._now = base_s
+        self._stamps = iter(profile["clock_stamps"].values())
+        self._advance_now = False
+
+    def now(self) -> float:
+        value = self._now
+        if self._advance_now:
+            self._now += 5.0
+        return value
+
+    def stamp(self) -> ClockStamp:
+        row = next(self._stamps)
+        epoch_s = self._base_s + float(row["epoch_offset_s"])
+        monotonic_s = float(row["monotonic_s"])
+        self._now = epoch_s
+        self._advance_now = True
+        return ClockStamp(
+            epoch_s=epoch_s,
+            monotonic_before_s=monotonic_s - 1e-6,
+            monotonic_after_s=monotonic_s + 1e-6,
+            wall_resolution_s=1e-6,
+            monotonic_resolution_s=1e-6,
+        )
+
+    def sleep(self, seconds: float) -> None:
+        self._now += seconds
+
+    def info(self) -> dict:
+        return {"kind": "p2038-v3-fixture", "epoch_s": self._base_s}
+
+
+def load_v3_production_fixture(*, base_s: float) -> tuple[dict, dict]:
+    """Return the fixture facts and its independently specified v3 result."""
+
+    profile = json.loads(V3_FIXTURE_PROFILE.read_text(encoding="utf-8"))
+    stamps = {
+        name: ClockStamp(
+            epoch_s=base_s + float(row["epoch_offset_s"]),
+            monotonic_before_s=float(row["monotonic_s"]) - 1e-6,
+            monotonic_after_s=float(row["monotonic_s"]) + 1e-6,
+            wall_resolution_s=1e-6,
+            monotonic_resolution_s=1e-6,
+        )
+        for name, row in profile["clock_stamps"].items()
+    }
+    from joulewise.uncertainty_evidence import NativeAnchorRecord
+
+    records = [
+        NativeAnchorRecord(
+            elapsed_s=float(row["elapsed_ns"]) / 1_000_000_000.0,
+            native_timestamp_s=base_s + float(row["endpoint_offset_s"]),
+            power_w=2.0,
+            energy_j=2.0,
+            is_delta=True,
+            elapsed_ns=int(row["elapsed_ns"]),
+            native_timestamp_ns=round(
+                (base_s + float(row["endpoint_offset_s"])) * 1_000_000_000
+            ),
+        )
+        for row in profile["native_records"]
+    ]
+    return profile, derive_powermetrics_anchor_v3(stamps=stamps, records=records)
 
 
 def claim_admission_fixture():
@@ -110,7 +186,7 @@ def claim_admission_fixture():
         "thermal_pressure": "nominal",
         "load_average_1m": 0.0,
         "capture_scope": "provided_test_fixture",
-        "python_packages": {"mlx": {"version": "p2038-test-mlx"}},
+        "python_packages": {"mlx": {"version": "0.31.2"}},
     }
     evaluation = evaluate_environment_policy(snapshot, policy.environment_guard)
     policy_sha256 = "a" * 64
@@ -158,13 +234,13 @@ def install_complete_calibration(directory: Path) -> None:
     (directory / "events.jsonl").write_bytes(event_bytes)
     bindings = {
         "hardware_model": "Mac15,9",
-        "os_build": "24G720",
+        "os_build": "25F84",
         "powermetrics_sha256": hashlib.sha256(
             FIXTURE_PROCESS.read_bytes()
         ).hexdigest(),
-        "sampling_interval_ms": 50.0,
+        "sampling_interval_ms": 100.0,
         "anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD,
-        "mlx_version": "p2038-test-mlx",
+        "mlx_version": "0.31.2",
         "pulse_protocol_id": PROTOCOL_V2_ID,
         "power_policy": "ac_high_power",
         "estimator_revision": RESIDUAL_REGION_METHOD,
@@ -259,9 +335,12 @@ def production_config() -> BenchmarkConfig:
             "workload_profile": {
                 "name": "p2038_production_shaped",
                 "prompt_tokens": 32,
-                "output_tokens": 200,
+                # The fixture clock provides the 80 s capture span.  A short
+                # mock decode keeps this production-path assertion focused on
+                # the telemetry contract rather than simulated token time.
+                "output_tokens": 8,
             },
-            "sampling": {"power_hz": 20.0, "idle_seconds": 0.25},
+            "sampling": {"power_hz": 10.0, "idle_seconds": 0.5},
         }
     )
 
@@ -310,9 +389,17 @@ class P2038ProductionPathTests(unittest.TestCase):
                     runtime_power_policy=None,
                 )
 
-    def run_mode(self, root: Path, mode: str):
+    def run_mode(
+        self,
+        root: Path,
+        mode: str,
+        *,
+        registry: object | None = None,
+    ):
         state_path = root / f"{mode}.state"
         policy, binding, preflight, snapshot = claim_admission_fixture()
+        fixture_base_s = float(math.floor(time.time()))
+        profile, _anchor = load_v3_production_fixture(base_s=fixture_base_s)
         guard_observation = {
             "display_power_state": "all_asleep",
             "screensaver_engaged": False,
@@ -332,6 +419,7 @@ class P2038ProductionPathTests(unittest.TestCase):
                 {
                     "P2038_FAKE_POWERMETRICS_MODE": mode,
                     "P2038_FAKE_POWERMETRICS_STATE": str(state_path),
+                    "P2038_V3_FIXTURE_EPOCH_S": str(fixture_base_s),
                 },
             ),
             patch(
@@ -342,8 +430,8 @@ class P2038ProductionPathTests(unittest.TestCase):
             return run_benchmark(
                 production_config(),
                 root,
-                SystemClock(),
-                registry=ProductionShapedRegistry(),
+                RateFitFixtureClock(fixture_base_s, profile),
+                registry=registry or ProductionShapedRegistry(),
                 reducer=reduce_bundle,
                 environment_snapshot=snapshot,
                 campaign_policy=policy,
@@ -354,6 +442,23 @@ class P2038ProductionPathTests(unittest.TestCase):
             )
 
     def test_real_powermetrics_evidence_path_passes_p2029_p2040_gates(self) -> None:
+        fixture_base_s = float(math.floor(time.time()))
+        fixture, fixture_anchor = load_v3_production_fixture(
+            base_s=fixture_base_s
+        )
+        self.assertEqual(fixture_anchor["status"], fixture["expected"]["status"])
+        self.assertEqual(fixture_anchor["method"], CLOCK_METHOD_V3)
+        self.assertEqual(
+            fixture_anchor["records_checked"], fixture["expected"]["records_checked"]
+        )
+        self.assertEqual(
+            fixture_anchor["native_rollover_count"],
+            fixture["expected"]["native_rollover_count"],
+        )
+        self.assertGreaterEqual(
+            fixture_anchor["rate_fit_baseline_s"],
+            fixture["expected"]["minimum_rate_fit_baseline_s"],
+        )
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             bundle, summary = self.run_mode(root, "normal")
@@ -464,6 +569,18 @@ class P2038ProductionPathTests(unittest.TestCase):
                 False,
             )
 
+    def test_retained_v2_production_fixture_is_a_refusal_arm(self) -> None:
+        metadata = json.loads(
+            (V2_REFUSAL_FIXTURE / "strict_seed_bundle" / "metadata.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            metadata["uncertainty_evidence"]["clock_anchor"]["method"],
+            CLOCK_METHOD_V2,
+        )
+        self.assertEqual(capture_pipeline_refusal(metadata), "capture_pipeline_superseded")
+
     def test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             bundle, summary = self.run_mode(Path(tmp), "rail_only")
@@ -525,32 +642,25 @@ class P2038ProductionPathTests(unittest.TestCase):
 
         class SnapshotRegistry(ProductionShapedRegistry):
             def resolve_telemetry(self, config, clock):
+                drain_timer = LogicalDrainTimer()
                 return (
                     SnapshotAdapter(
                         clock,
                         executable=str(FIXTURE_PROCESS),
                         privilege_prefix=(sys.executable,),
+                        drain_monotonic=drain_timer.monotonic,
+                        drain_sleep=drain_timer.sleep,
                     ),
                     None,
                 )
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            state_path = root / "extreme.state"
-            with patch.dict(
-                os.environ,
-                {
-                    "P2038_FAKE_POWERMETRICS_MODE": "extreme_post",
-                    "P2038_FAKE_POWERMETRICS_STATE": str(state_path),
-                },
-            ):
-                bundle, summary = run_benchmark(
-                    production_config(),
-                    root,
-                    SystemClock(),
-                    registry=SnapshotRegistry(),
-                    environment_snapshot=None,
-                )
+            bundle, summary = self.run_mode(
+                root,
+                "extreme_post",
+                registry=SnapshotRegistry(),
+            )
             self.assertEqual(summary.status.value, "succeeded")
             post_records = parse_powermetrics_records(
                 (bundle / "raw" / "powermetrics_idle_post.plist").read_bytes()
@@ -629,13 +739,7 @@ class P2038ProductionPathTests(unittest.TestCase):
 
     def test_strict_rederivation_rejects_evidence_raw_and_marker_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            bundle, summary = run_benchmark(
-                production_config(),
-                Path(tmp),
-                SystemClock(),
-                registry=ProductionShapedRegistry(),
-                environment_snapshot=None,
-            )
+            bundle, summary = self.run_mode(Path(tmp), "normal")
             self.assertEqual(summary.status.value, "succeeded")
             targets = {
                 "metadata": bundle / "metadata.json",
