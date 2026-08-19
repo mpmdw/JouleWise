@@ -30,7 +30,25 @@ MAX_CLOCK_RATE_DEVIATION_PPM = 50.0
 MIN_RATE_FIT_BASELINE_S = 60.0
 MIN_NATIVE_ROLLOVERS = 2
 MAX_EFFECTIVE_CLOCK_ANCHOR_BOUND_S = 0.005
-NUMERIC_PADDING_S = 1e-9
+# Float64 representation pricing (cold science review 2026-08-18, Q1c and
+# condition 2).  The v3 chain is exact rational arithmetic, but its inputs are
+# recorded binary64 values that ``Fraction`` exactifies: an inexact stored value
+# is turned into an exact rational that may sit INWARD of the quantity it
+# stands for, and no other term in the composition pays for that.  For POSIX
+# epochs in [2**30, 2**31) s (2004-01-10 through 2038-01-19) one ulp is
+# 2**-22 s ~= 238.4 ns.  At most four such epoch-scale roundings can lean
+# inward in the emitted bound: two in the float subtractions that form
+# ``offset_span_s`` (each operand epoch-scale), and at most one per projected
+# anchor endpoint through the exactified stamp epochs.  The inward-leaning
+# total is therefore bounded by 4 * 2**-22 s ~= 954 ns, which 1e-6 s covers.
+# The predecessor value 1e-9 did NOT cover it; the review ratified the
+# deferral for the validation artifact only and forbade it surviving unpriced
+# into the frozen successor.  ``EPOCH_REPRESENTATION_ULP_COUNT`` makes the
+# coverage self-checking rather than assumed: a capture whose own epoch scale
+# would need more padding than this constant supplies refuses
+# (``numeric_padding_insufficient``) instead of emitting an underpriced bound.
+NUMERIC_PADDING_S = 1e-6
+EPOCH_REPRESENTATION_ULP_COUNT = 4
 RATE_SOLVER_BOX_PPM = 1000.0
 # Per-record energy-counter consistency: powermetrics power values are the
 # integer-mJ rail energy counters divided by elapsed time and rounded to mW,
@@ -789,7 +807,57 @@ def derive_powermetrics_anchor_v3(
     stamps: Mapping[str, ClockStamp],
     records: Sequence[NativeAnchorRecord],
 ) -> dict[str, Any]:
-    """Exact affine-rate set-membership anchor (schema ``p2-038.3``)."""
+    """Exact affine-rate set-membership anchor (schema ``p2-038.3``).
+
+    Method identity: ``powermetrics_native_second_rate_aware_set_membership_v1``.
+    The three paragraphs below are part of that identity, not commentary: the
+    cold science review of 2026-08-18 ratified the method conditional on them
+    being stated where the method lives (conditions 3 and 4).
+
+    **Model condition (review Q1a).** Containment is conditional on a model,
+    not unconditional. The model is (i) the wall clock is affine in monotonic
+    time across the capture -- one rate, no mid-capture step -- and (ii) every
+    native whole-second label may depart from that affine relation by at most
+    ``MAX_AFFINE_CLOCK_RESIDUAL_S`` (250 us), an allowance charged IN FULL,
+    always, never shrunk to an observed residual. Within the model the emitted
+    interval contains the true first-record endpoint by construction: sustained
+    slew cannot understate the bound (its drift is charged in full by the
+    wall-minus-monotonic span term below), a rate projection touching
+    +/-``MAX_CLOCK_RATE_DEVIATION_PPM`` refuses rather than clips, and a
+    mid-capture rate change refuses at small magnitude because long-baseline
+    stamp pairs constrain the rate to ~0.05 ppm width. The one genuine evasion
+    window is a NON-affine wall excursion of at most ~250 us occurring between
+    stamps: the arithmetic cannot see it, and it is excluded STRUCTURALLY, not
+    statistically, by the authenticated network-time-OFF admission required of
+    prospective claim-bearing captures (consult I4). Per-member network-time
+    provenance therefore travels with every record derived by this method; a
+    capture with network time ON or unknown is validation-only material, and no
+    fitted rate may be treated as a substitute for that environmental control.
+
+    **Span-term dependency (review Q1b).** The bound composes
+    ``H + wall_minus_monotonic_span_s + stamp_resolution_s +
+    numeric_padding_s``, and the first two terms price DIFFERENT errors. ``H``
+    is half the projected anchor interval: it prices where the first record's
+    endpoint sits on the wall timeline. ``wall_minus_monotonic_span_s`` prices
+    within-capture wall-versus-elapsed drift, and it is load-bearing because
+    the detector maps the trace forward from the single anchor point at rate
+    exactly 1 (``joulewise.powermetrics_fiducial`` re-parses the raw records
+    with ``first_record_endpoint_s`` and accumulates ``elapsed_ns``) while the
+    pulse commands that trace is compared against carry wall-epoch stamps.
+    Neither term subsumes the other and removing either breaks containment.
+    Dropping the span term is lawful ONLY together with re-mapping the trace
+    under the fitted rate window ``[rate_lower, rate_upper]`` -- that is a
+    different estimator and requires a NEW method identity, not an edit here.
+    The only true overlap is that the 250 us allowance widens ``H`` while a
+    real departure also inflates the span; that is priced, one-sided
+    conservatism of order <= ~0.5 ms and is retained deliberately.
+
+    **Numeric pricing (review Q1c, condition 2).** ``NUMERIC_PADDING_S`` prices
+    the float64 representation error of the epoch-scale inputs this function
+    exactifies with ``Fraction``; see that constant's derivation. The guard
+    below refuses ``numeric_padding_insufficient`` rather than assuming the
+    constant is large enough for the capture's own epoch scale.
+    """
 
     serialized_stamps = {
         name: stamp_to_dict(stamps[name])
@@ -926,6 +994,25 @@ def derive_powermetrics_anchor_v3(
             "wall_minus_monotonic_span_exceeded",
             serialized_stamps,
             {"wall_minus_monotonic_span_s": offset_span_s},
+        )
+
+    # Price the float64 representation error of the epoch-scale inputs this
+    # estimator exactifies (review Q1c / condition 2).  The padding constant is
+    # fixed, so the coverage claim is checked against THIS capture's epoch
+    # scale instead of being assumed: an epoch scale whose ulp outgrows the
+    # constant refuses rather than emitting an underpriced bound.
+    epoch_scale_s = max(abs(stamp.epoch_s) for stamp in ordered)
+    epoch_representation_term_s = EPOCH_REPRESENTATION_ULP_COUNT * math.ulp(
+        epoch_scale_s
+    )
+    if Fraction(NUMERIC_PADDING_S) < Fraction(epoch_representation_term_s):
+        return _unresolved_anchor_v3(
+            "numeric_padding_insufficient",
+            serialized_stamps,
+            {
+                "numeric_padding_s": NUMERIC_PADDING_S,
+                "epoch_representation_term_s": epoch_representation_term_s,
+            },
         )
 
     ns_per_second = Fraction(1_000_000_000)
@@ -1121,6 +1208,7 @@ def derive_powermetrics_anchor_v3(
         "wall_minus_monotonic_span_s": offset_span_s,
         "stamp_resolution_s": stamp_resolution_s,
         "numeric_padding_s": NUMERIC_PADDING_S,
+        "epoch_representation_term_s": epoch_representation_term_s,
         "first_parse_lag_s": first_parse_lag_s,
         "effective_clock_anchor_bound_s": effective_bound_s,
         "arithmetic": "exact_rational_outward_rounded_v1",

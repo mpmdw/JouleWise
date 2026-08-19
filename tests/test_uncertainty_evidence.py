@@ -401,6 +401,69 @@ class AnchorV2Tests(unittest.TestCase):
         )
 
 
+# Epoch-scale fixture for the float64 representation pricing (cold science
+# review Q1c / condition 2).  The synthetic AnchorV3ExactTests fixtures live at
+# epoch 1000 s, where a binary64 ulp is ~1.1e-13 s and the representation error
+# the review priced is invisible.  Real captures sit near 1.76e9 s, inside the
+# binade [2**30, 2**31) where one ulp is 2**-22 s ~= 238.4 ns.
+EPOCH_SCALE_BASE_S = 1_760_000_000
+EPOCH_SCALE_ANCHOR_NS = (EPOCH_SCALE_BASE_S + 1) * 1_000_000_000
+EPOCH_SCALE_STAMP_RESOLUTION_S = 1e-4
+
+
+def epoch_scale_records(count: int = 61):
+    """Native records whose first endpoint sits at a real-world epoch."""
+
+    from joulewise.uncertainty_evidence import NativeAnchorRecord
+
+    result = []
+    q_ns = 0
+    for index in range(count):
+        elapsed_ns = 999_000_000 if index == 0 else 1_000_000_000
+        if index > 0:
+            q_ns += elapsed_ns
+        native_ns = (
+            (EPOCH_SCALE_ANCHOR_NS + q_ns) // 1_000_000_000 * 1_000_000_000
+        )
+        elapsed_s = elapsed_ns / 1_000_000_000.0
+        result.append(
+            NativeAnchorRecord(
+                elapsed_s=elapsed_s,
+                native_timestamp_s=native_ns / 1_000_000_000.0,
+                power_w=1.0,
+                energy_j=elapsed_s,
+                is_delta=True,
+                elapsed_ns=elapsed_ns,
+                native_timestamp_ns=native_ns,
+            )
+        )
+    return result
+
+
+def epoch_scale_stamps() -> dict[str, ClockStamp]:
+    def make(monotonic: Fraction) -> ClockStamp:
+        epoch = Fraction(EPOCH_SCALE_BASE_S) + (monotonic - 100)
+        return ClockStamp(
+            float(epoch),
+            float(monotonic),
+            float(monotonic),
+            EPOCH_SCALE_STAMP_RESOLUTION_S,
+            EPOCH_SCALE_STAMP_RESOLUTION_S,
+        )
+
+    first = Fraction(100) + Fraction(1) + Fraction(1, 1024)
+    return {
+        "pre_spawn": make(Fraction(100)),
+        "first_parse": make(first),
+        "sampling_started": make(max(first, Fraction(102))),
+        "sampling_stopped": make(Fraction(160)),
+        "post_parse": make(Fraction(161)),
+    }
+
+
+EPOCH_SCALE_STAMPS = epoch_scale_stamps()
+
+
 class AnchorV3ExactTests(unittest.TestCase):
     """Exact LP, elimination, containment, and refusal kill evidence."""
 
@@ -761,6 +824,98 @@ class AnchorV3ExactTests(unittest.TestCase):
         self.assertEqual(result["status"], "bounded")
         self.assertLess(result["anchor_upper_epoch_s"], 1001.01)
         self.assertGreater(abs(result["first_sample_end_point_epoch_s"] - 1001.5), 0.49)
+
+    def test_numeric_padding_is_priced_for_epoch_scale_representation(self) -> None:
+        """Cold science review Q1c / condition 2: the float64 span/epoch
+        representation error is priced by the constant, and the constant's
+        sufficiency is checked against the capture's own epoch scale."""
+
+        from joulewise.uncertainty_evidence import (
+            EPOCH_REPRESENTATION_ULP_COUNT,
+            NUMERIC_PADDING_S,
+        )
+
+        # The review's explicit floor, and the derivation behind it: at most
+        # four epoch-scale ulps can lean inward, and one ulp anywhere in the
+        # binade [2**30, 2**31) s (through 2038-01-19) is 2**-22 s.
+        self.assertGreaterEqual(NUMERIC_PADDING_S, 1e-6)
+        self.assertEqual(EPOCH_REPRESENTATION_ULP_COUNT, 4)
+        self.assertEqual(math.ulp(float(2**31 - 1024)), 2.0**-22)
+        self.assertGreaterEqual(
+            NUMERIC_PADDING_S,
+            EPOCH_REPRESENTATION_ULP_COUNT * math.ulp(float(2**31 - 1024)),
+        )
+        self.assertLess(
+            EPOCH_REPRESENTATION_ULP_COUNT * math.ulp(float(2**31 - 1024)),
+            1e-6,
+        )
+
+    def test_epoch_scale_capture_charges_the_priced_padding(self) -> None:
+        from joulewise.uncertainty_evidence import (
+            NUMERIC_PADDING_S,
+            _round_outward_up,
+        )
+
+        result = self.derive(
+            stamps=EPOCH_SCALE_STAMPS, records=epoch_scale_records()
+        )
+        self.assertEqual(result["status"], "bounded")
+        self.assertEqual(result["numeric_padding_s"], NUMERIC_PADDING_S)
+        self.assertEqual(result["epoch_representation_term_s"], 2.0**-20)
+        self.assertGreaterEqual(
+            result["numeric_padding_s"], result["epoch_representation_term_s"]
+        )
+        composed = (
+            Fraction(result["anchor_only_bound_s"])
+            + Fraction(result["wall_minus_monotonic_span_s"])
+            + Fraction(result["stamp_resolution_s"])
+        )
+        # The padding is charged outward and is not absorbed by rounding: the
+        # emitted bound exceeds the unpadded composition by at least the
+        # representation term the review demanded be priced.  ``composed`` uses
+        # the already-outward-rounded half-width, so the exact half-width is
+        # pinned from below by one ulp of it.
+        exact_half_width_floor = Fraction(
+            result["anchor_only_bound_s"]
+        ) - Fraction(math.ulp(result["anchor_only_bound_s"]))
+        self.assertGreaterEqual(
+            Fraction(result["effective_clock_anchor_bound_s"]),
+            exact_half_width_floor
+            + Fraction(result["wall_minus_monotonic_span_s"])
+            + Fraction(result["stamp_resolution_s"])
+            + Fraction(NUMERIC_PADDING_S),
+        )
+        self.assertGreater(
+            result["effective_clock_anchor_bound_s"] - float(composed),
+            result["epoch_representation_term_s"],
+        )
+        self.assertLessEqual(
+            Fraction(result["effective_clock_anchor_bound_s"]),
+            Fraction(
+                _round_outward_up(composed + Fraction(NUMERIC_PADDING_S))
+            ),
+        )
+
+    def test_padding_smaller_than_representation_term_refuses(self) -> None:
+        """Kill evidence: the retired 1e-9 padding does not cover an
+        epoch-scale capture and must refuse rather than emit a bound."""
+
+        import joulewise.uncertainty_evidence as module
+
+        original = module.NUMERIC_PADDING_S
+        try:
+            module.NUMERIC_PADDING_S = 1e-9
+            mutant = self.derive(
+                stamps=EPOCH_SCALE_STAMPS, records=epoch_scale_records()
+            )
+            self.assert_unresolved(mutant, "numeric_padding_insufficient")
+            self.assertEqual(mutant["epoch_representation_term_s"], 2.0**-20)
+            self.assertEqual(mutant["numeric_padding_s"], 1e-9)
+            # The guard is scale-aware, not a blanket rejection: the same
+            # padding covers a small-epoch synthetic fixture.
+            self.assertEqual(self.derive()["status"], "bounded")
+        finally:
+            module.NUMERIC_PADDING_S = original
 
     def test_v3_wrapper_and_registered_dispatch(self) -> None:
         from joulewise.uncertainty_evidence import (
