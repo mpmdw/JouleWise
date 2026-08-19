@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from joulewise import cli
+from joulewise.analysis_engine.claims import ordered_reason_codes
 from joulewise.schemas import TelemetryBackend
 from joulewise.uncertainty_evidence import (
     CLOCK_METHOD_V2,
@@ -33,7 +34,9 @@ class _Reader:
 
 
 class CapturePipelineEraTests(unittest.TestCase):
-    def _strict_problems(self, schema: str, method: str) -> list[str]:
+    def _strict_problems(
+        self, schema: str | None, method: str | None
+    ) -> list[str]:
         # Missing stamps intentionally stops before byte replay: this is the
         # crossed-era refusal attack, not a coincidental estimator mismatch.
         metadata = {
@@ -65,6 +68,13 @@ class CapturePipelineEraTests(unittest.TestCase):
                     problems,
                 )
 
+    def test_both_missing_schema_and_method_are_era_inconsistent(self) -> None:
+        problems = self._strict_problems(None, None)
+        self.assertIn(
+            "strict: uncertainty evidence: clock_anchor_era_inconsistent",
+            problems,
+        )
+
     def test_claim_barrier_rejects_every_non_v3_stored_method(self) -> None:
         for method in (CLOCK_METHOD_V2, "unregistered-anchor-method"):
             with self.subTest(method=method):
@@ -82,6 +92,41 @@ class CapturePipelineEraTests(unittest.TestCase):
                     }
                 }
             )
+        )
+
+    def test_claim_barrier_distinguishes_absent_from_superseded_presentation(
+        self,
+    ) -> None:
+        absent_shapes = (
+            None,
+            {},
+            {"uncertainty_evidence": None},
+            {"uncertainty_evidence": {}},
+            {"uncertainty_evidence": {"clock_anchor": None}},
+            {"uncertainty_evidence": {"clock_anchor": {}}},
+            {
+                "uncertainty_evidence": {
+                    "capture_pipeline_absent": True,
+                    "clock_anchor": {"method": None},
+                }
+            },
+        )
+        for metadata in absent_shapes:
+            with self.subTest(metadata=metadata):
+                self.assertEqual(
+                    capture_pipeline_refusal(metadata), "capture_pipeline_absent"
+                )
+        # A supplied value is a presentation of a non-claim-bearing era even
+        # if strict verification separately rejects its malformed spelling.
+        self.assertEqual(
+            capture_pipeline_refusal(
+                {"uncertainty_evidence": {"clock_anchor": {"method": 7}}}
+            ),
+            "capture_pipeline_superseded",
+        )
+        self.assertEqual(
+            ordered_reason_codes(["capture_pipeline_absent"]),
+            ["capture_pipeline_absent"],
         )
 
     def test_v3_corrupt_rich_telemetry_is_not_fail_open(self) -> None:
@@ -109,7 +154,6 @@ class CapturePipelineEraTests(unittest.TestCase):
     def test_v3_unresolved_rich_telemetry_uses_its_fallback_endpoint(self) -> None:
         self.assertEqual(
             cli._powermetrics_trace_endpoint_s(
-                {},
                 {
                     "method": CLOCK_METHOD_V3,
                     "status": "unknown",
@@ -219,12 +263,12 @@ class CapturePipelineEraTests(unittest.TestCase):
             {CLOCK_METHOD_V3},
         )
 
-    def test_arm_readiness_recognizes_the_r5_v3_acceptance_generation(self) -> None:
+    def test_arm_readiness_recognizes_the_r6_v3_acceptance_generation(self) -> None:
         from joulewise.arm_readiness import _issued_d079
 
         policy = {
             "selection": "issued_d116_artifact_only",
-            "issued": "d079_calibration_acceptance_v2_n17_r5",
+            "issued": "d079_calibration_acceptance_v2_n17_r6",
         }
         self.assertTrue(_issued_d079({"acceptance_policy": policy}))
         self.assertFalse(
@@ -232,7 +276,7 @@ class CapturePipelineEraTests(unittest.TestCase):
                 {
                     "acceptance_policy": {
                         **policy,
-                        "issued": "d079_calibration_acceptance_v2_n17_r6",
+                        "issued": "d079_calibration_acceptance_v2_n17_r7",
                     }
                 }
             )

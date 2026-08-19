@@ -141,7 +141,8 @@ runs/instrument_validation/<validation_id>/
 
 `instrument_evidence.json` binds: `hardware_model`, `os_build`,
 `powermetrics_sha256`, `sampling_interval_ms`, `anchor_method_version`
-(`powermetrics_native_second_censored_intersection_v1`), `mlx_version`,
+(a registered stored anchor method equal to the measuring bundle's recorded
+anchor method), `mlx_version`,
 `pulse_protocol_id`, `power_policy`. A missing/empty binding field makes the
 artifact `invalid` (fail closed). Production bundles reference the artifact
 via

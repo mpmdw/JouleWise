@@ -1503,9 +1503,14 @@ def _verify_instrument_calibration(
             measured_window = reader.measured_window()
         except (BundleReadError, KeyError, TypeError, ValueError):
             return None, "instrument_calibration_stale"
+        if abs(float(capture_wall_time_s) - derived_capture_wall_time_s) > 1.0:
+            # The declared freshness origin and immutable calibration-event
+            # chronology are independently authenticated.  Do not collapse a
+            # relabelled declaration into ordinary age staleness: the latter
+            # is an honest horizon expiry, while this is a custody lie.
+            return None, "instrument_calibration_capture_time_mismatch"
         if (
-            abs(float(capture_wall_time_s) - derived_capture_wall_time_s) > 1.0
-            or len(collection_times) != 1
+            len(collection_times) != 1
             or isinstance(collection_times[0], bool)
             or not isinstance(collection_times[0], int | float)
             or not math.isfinite(float(collection_times[0]))
@@ -1825,6 +1830,7 @@ def _derive_anchor_context(
                 if detail
                 in {
                     "instrument_calibration_mismatch",
+                    "instrument_calibration_capture_time_mismatch",
                     "instrument_calibration_stale",
                 }
                 else "instrument_calibration_invalid"
@@ -2401,6 +2407,7 @@ def _apply_anchor_claim_gates(
             "instrument_calibration_missing",
             "instrument_calibration_mismatch",
             "instrument_calibration_invalid",
+            "instrument_calibration_capture_time_mismatch",
             "instrument_calibration_stale",
         }
         else []

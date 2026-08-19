@@ -1250,7 +1250,10 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
             "strict: uncertainty evidence: clock_anchor and sample_phase must be objects"
         ]
     anchor_method = clock_anchor.get("method")
-    if SCHEMA_FOR_ANCHOR_METHOD.get(anchor_method) != schema_version:
+    if (
+        (schema_version is None and anchor_method is None)
+        or SCHEMA_FOR_ANCHOR_METHOD.get(anchor_method) != schema_version
+    ):
         problems.append("strict: uncertainty evidence: clock_anchor_era_inconsistent")
     stamp_rows = clock_anchor.get("clock_stamps")
     if not isinstance(stamp_rows, dict):
@@ -1523,7 +1526,7 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
                 return [
                     "strict: raw-to-trace: current-era clock_anchor evidence is missing"
                 ]
-            point_s = _powermetrics_trace_endpoint_s(evidence, clock_anchor)
+            point_s = _powermetrics_trace_endpoint_s(clock_anchor)
             expected = samples_from_raw_powermetrics(
                 read_authentication_input(
                     raw_path,
@@ -1540,9 +1543,7 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
     )
 
 
-def _powermetrics_trace_endpoint_s(
-    evidence: dict[str, Any], clock_anchor: dict[str, Any]
-) -> float:
+def _powermetrics_trace_endpoint_s(clock_anchor: dict[str, Any]) -> float:
     """The record-0 window END the stored trace/rich telemetry must replay.
 
     Bounded evidence uses the anchor point. An unresolved current-era native
@@ -1598,7 +1599,7 @@ def _strict_rich_telemetry_problems(reader: BundleReader) -> list[str]:
             "recorded rich_telemetry_error"
         ]
     try:
-        point_s = _powermetrics_trace_endpoint_s(evidence, clock_anchor)
+        point_s = _powermetrics_trace_endpoint_s(clock_anchor)
         expected = rich_telemetry_jsonl(
             read_authentication_input(
                 raw_path,

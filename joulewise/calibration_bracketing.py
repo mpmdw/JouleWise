@@ -41,7 +41,6 @@ from joulewise.powermetrics_fiducial import (
 from joulewise.schemas import CalibrationBracketingPolicy
 from joulewise.uncertainty_evidence import (
     ACTIVE_CAPTURE_ANCHOR_METHOD,
-    CLOCK_METHOD_V2,
 )
 
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
@@ -116,6 +115,16 @@ ANCHOR_V3_R5_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r5"
 ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256 = (
     "92b9c0608bc97fbd7769050213b1433c32d3fe060d1292167920363e58b8cf0f"
 )
+# D-079 anchor-v3 capture-presentation reissue.  The member table and D-102
+# statistics are unchanged; r6 rotates only the two governed estimator pins
+# touched by the positive capture-pipeline and calibration-time taxonomy work.
+ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r6.json"
+)
+ANCHOR_V3_R6_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r6"
+ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256 = (
+    "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -151,10 +160,17 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_R6_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+        ),
+        "file_sha256": ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R5_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R5_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R6_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH
 # Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
 # not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
 GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
@@ -207,6 +223,8 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     ANCHOR_V3_R4_ACCEPTANCE_ID: _D102_N17_DERIVATION,
     # r5 is the science-neutral production-capture flip reissue of r4.
     ANCHOR_V3_R5_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r6 is the science-neutral capture-presentation reissue of r5.
+    ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
 
 
@@ -1256,9 +1274,9 @@ def _capture_pipeline_refusal_for_observation(
     """Classify a ledger-valid candidate's capture era before reconciliation."""
 
     method = observation.t1_bindings.get("anchor_method_version")
-    # Ledger validation owns malformed/unregistered binding failures.  The
-    # era barrier applies only to the retained, otherwise authentic v2 line.
-    if method == CLOCK_METHOD_V2:
+    # This is deliberately an allowlist: every stored era other than the
+    # active claim-bearing method is replay evidence, never a claim candidate.
+    if method != ACTIVE_CAPTURE_ANCHOR_METHOD:
         return "capture_pipeline_superseded"
     return None
 
@@ -1982,6 +2000,7 @@ def calibration_bracket_for_bundles(
     bracket_plan_id: str | None = None,
     bracket_plan_sha256: str | None = None,
     bracket_evidence_root_id: str | None = None,
+    diagnostics: list[dict[str, str]] | None = None,
     _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Use the runs root only for the evaluated window's T1/endpoints."""
@@ -2036,6 +2055,7 @@ def calibration_bracket_for_bundles(
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_mismatch",)
+    superseded_observations: list[LedgerObservation] = []
     if ledger_snapshot is None:
         candidates: tuple[CalibrationCandidate, ...] = ()
     else:
@@ -2095,16 +2115,15 @@ def calibration_bracket_for_bundles(
         bracket_runs_root=runs_root,
         _allow_unissued_fixture=_allow_unissued_fixture,
     )
-    if ledger_snapshot is not None and superseded_observations:
-        result["candidate_discovery"] = {
-            "rejections": [
+    if superseded_observations:
+        if diagnostics is not None:
+            diagnostics.extend(
                 {
                     "attempt_id": observation.attempt_id,
                     "reason": "capture_pipeline_superseded",
                 }
                 for observation in superseded_observations
-            ]
-        }
+            )
         if not candidates:
             reasons = tuple(dict.fromkeys((*reasons, "capture_pipeline_superseded")))
     return result, reasons

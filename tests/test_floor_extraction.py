@@ -91,6 +91,7 @@ from joulewise.floor_extraction import (
 )
 from joulewise.analysis_engine.inputs import MOCK_TELEMETRY_CLAIM_REFUSAL
 from joulewise.cli import validate_bundle
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
 from scripts.extract_detection_floors import main as extract_main
 from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
@@ -391,6 +392,19 @@ def write_bundle(runs_root: Path, bundle_id: str, summary: dict) -> None:
     bundle.mkdir(parents=True, exist_ok=True)
     (bundle / "summary_metrics.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    # Synthetic claim-shaped members are current-era presentations unless a
+    # regression explicitly overwrites this fixture with an absent or retired
+    # capture shape.  B2 makes an omitted pipeline a distinct refusal rather
+    # than a neutral legacy default.
+    (bundle / "metadata.json").write_text(
+        json.dumps(
+            {"uncertainty_evidence": {"clock_anchor": {"method": CLOCK_METHOD_V3}}},
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
     )
 
 
@@ -883,6 +897,7 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
             evaluate_cpu_idle_admission,
         )
         from joulewise.schemas import BenchmarkConfig
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
 
         bundle = root / bundle_id
         summary = make_summary(value)
@@ -1005,6 +1020,9 @@ class CpuAndWholeWindowClaimBarrierTests(unittest.TestCase):
                     "power": dict(power),
                     "power_source": "AC Power",
                 },
+            },
+            "uncertainty_evidence": {
+                "clock_anchor": {"method": CLOCK_METHOD_V3},
             },
             # Minted effective bound dominates the fixture bracket maximum
             # (0.02 s) so a clean core stays clean under the round-6
@@ -5746,6 +5764,58 @@ class StrictValidationGateTests(unittest.TestCase):
 
 
 class TelemetryIdentityGateTests(unittest.TestCase):
+    def test_v2_anchor_member_refuses_capture_pipeline_superseded(self) -> None:
+        """The floor lane pins the shared capture-era barrier independently."""
+
+        fixture = Path("tests/fixtures/d117_v2_production/strict_seed_bundle")
+        with mock.patch(
+            "joulewise.floor_extraction.window_evidence_precheck",
+            return_value={"reasons": []},
+        ):
+            member = _evaluate_member(
+                slot="v2-anchor",
+                bundle_id=fixture.name,
+                block_id=None,
+                position=None,
+                runs_root=fixture.parent,
+                metric="gross_energy_j",
+                window_class="request",
+                cooldowns={},
+                hash_bundles=False,
+                strict_validator=lambda _path, _strict: (),
+            )
+        self.assertIn("capture_pipeline_superseded", member.reasons)
+
+    def test_absent_anchor_member_refuses_capture_pipeline_absent(self) -> None:
+        """The floor lane independently classifies absent presentation."""
+
+        fixture = Path("tests/fixtures/d117_v2_production/strict_seed_bundle")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / fixture.name
+            shutil.copytree(fixture, bundle)
+            metadata_path = bundle / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["uncertainty_evidence"] = {"capture_pipeline_absent": True}
+            metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+            with mock.patch(
+                "joulewise.floor_extraction.window_evidence_precheck",
+                return_value={"reasons": []},
+            ):
+                member = _evaluate_member(
+                    slot="absent-anchor",
+                    bundle_id=bundle.name,
+                    block_id=None,
+                    position=None,
+                    runs_root=root,
+                    metric="gross_energy_j",
+                    window_class="request",
+                    cooldowns={},
+                    hash_bundles=False,
+                    strict_validator=lambda _path, _strict: (),
+                )
+        self.assertIn("capture_pipeline_absent", member.reasons)
+
     def test_label_disagreement_is_strict_invalid_at_extraction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp)

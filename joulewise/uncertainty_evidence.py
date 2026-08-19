@@ -18,6 +18,10 @@ SCHEMA_VERSION_V3 = "p2-038.3"
 CLOCK_METHOD = "powermetrics_spawn_ready_wall_monotonic_envelope_v1"
 CLOCK_METHOD_V2 = "powermetrics_native_second_censored_intersection_v1"
 CLOCK_METHOD_V3 = "powermetrics_native_second_rate_aware_set_membership_v1"
+# Native-anchor method identities are shared by capture, re-derivation, and
+# strict replay.  Keep the registered native set explicit so a future method
+# cannot silently become eligible merely by appearing in one dispatch map.
+NATIVE_ANCHOR_METHODS = frozenset({CLOCK_METHOD_V2, CLOCK_METHOD_V3})
 PHASE_METHOD = "interval_support_vs_controller_markers_v1"
 IDLE_METHOD = "pre_post_idle_observed_envelope_v1"
 DRIFT_GUARD_METHOD = "p2_015_prediction_guard_v1"
@@ -1288,7 +1292,7 @@ ANCHOR_METHOD_DERIVERS = {
     CLOCK_METHOD_V2: derive_powermetrics_anchor_v2,
     CLOCK_METHOD_V3: derive_powermetrics_anchor_v3,
 }
-ANCHOR_METHOD_VERSIONS = frozenset(ANCHOR_METHOD_DERIVERS)
+ANCHOR_METHOD_VERSIONS = NATIVE_ANCHOR_METHODS
 # The ratified D-079 r3 science-facing generation is the activation event for
 # prospective capture under the rate-aware set-membership anchor.
 ACTIVE_CAPTURE_ANCHOR_METHOD = CLOCK_METHOD_V3
@@ -1296,21 +1300,28 @@ CLAIM_BEARING_ANCHOR_METHODS = frozenset({CLOCK_METHOD_V3})
 
 
 def capture_pipeline_refusal(metadata: Mapping[str, Any]) -> str | None:
-    """Return the claim-admission refusal for a stored anchor era, if any."""
+    """Classify capture-pipeline presentation for claim admission.
+
+    Claim-bearing evidence is a positive presentation: only a stored,
+    claim-bearing anchor method passes.  Missing or malformed presentation is
+    distinct from an authentically stored but retired method, so consumers can
+    preserve the causal difference without failing open.
+    """
 
     if not isinstance(metadata, Mapping):
-        return None
+        return "capture_pipeline_absent"
     uncertainty = metadata.get("uncertainty_evidence")
     clock_anchor = (
         uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
     )
     if not isinstance(clock_anchor, Mapping):
+        return "capture_pipeline_absent"
+    method = clock_anchor.get("method")
+    if method is None:
+        return "capture_pipeline_absent"
+    if method in CLAIM_BEARING_ANCHOR_METHODS:
         return None
-    return (
-        None
-        if clock_anchor.get("method") in CLAIM_BEARING_ANCHOR_METHODS
-        else "capture_pipeline_superseded"
-    )
+    return "capture_pipeline_superseded"
 
 
 def resolve_anchor_deriver(method: str):

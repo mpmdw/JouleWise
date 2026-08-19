@@ -1069,7 +1069,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
             places=6,
         )
         self.assertGreater(operational_now[0], 0.45)
-        self.assertLessEqual(
+        self.assertLess(
             operational_now[0],
             anchor_lag_s + 2.0 / config.sampling.power_hz + 0.25,
         )
@@ -2109,6 +2109,9 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s",
             )
             metadata = json.loads((bundle_path / "metadata.json").read_text())
+            # v3 requires a coherent rate-fit set. Dropping the final native
+            # frame therefore withholds a formerly bounded v2-style estimate;
+            # inputs.py then correctly treats the unknown anchor as unusable.
             self.assertEqual(
                 metadata["uncertainty_evidence"]["clock_anchor"]["status"],
                 "unknown",

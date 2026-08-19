@@ -42,6 +42,7 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
@@ -2187,7 +2188,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2261,7 +2265,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2533,40 +2540,53 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 places=12,
             )
 
-    def test_d079_v2_measurement_shape_refuses_capture_pipeline_superseded(self) -> None:
+    def test_d079_measurement_shape_refuses_capture_pipeline_presentation(self) -> None:
         from joulewise.powermetrics_fiducial import PROTOCOL_ID
 
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            bundle, _minted, _minted_bound, _operative_bound = (
-                self._build_v052_bundle(root, protocol_id=PROTOCOL_ID)
-            )
-            # Isolate the member-era barrier from calibration custody.  The
-            # member loop must still be reached through the real session, so
-            # a valid bracket is supplied rather than allowing an earlier
-            # ledger refusal to mask the v2 measurement shape.
-            with patch.object(
-                whole_window_module,
-                "calibration_bracket_for_bundles",
-                return_value=({"b_fiducial_s": 0.024}, ()),
-            ):
-                session = AuthenticatedConsumptionSession(
-                    root,
-                    {bundle.name},
-                    calibration_ledger_snapshot=_fixture_snapshot([])[0],
-                    _allow_unissued_calibration_fixture=True,
+        for presentation, expected in (
+            ("superseded", "capture_pipeline_superseded"),
+            ("absent", "capture_pipeline_absent"),
+        ):
+            with self.subTest(presentation=presentation), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                bundle, _minted, _minted_bound, _operative_bound = (
+                    self._build_v052_bundle(root, protocol_id=PROTOCOL_ID)
                 )
-                session._prepare(
-                    bundle_paths={bundle.name: bundle},
-                    policy=SimpleNamespace(
-                        calibration_bracketing=CalibrationBracketingPolicy(
-                            require_bracket=True,
-                            calibration_bracket_max_drift_s=0.010,
-                        )
-                    ),
-                )
-        self.assertFalse(session.ready)
-        self.assertIn("capture_pipeline_superseded", session.refusal_reasons)
+                if presentation == "absent":
+                    metadata_path = bundle / "metadata.json"
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    metadata["uncertainty_evidence"] = {
+                        "capture_pipeline_absent": True
+                    }
+                    metadata_path.write_text(
+                        json.dumps(metadata) + "\n", encoding="utf-8"
+                    )
+                # Isolate the member-era barrier from calibration custody. The
+                # real session must still reach the member loop, so a valid
+                # bracket is supplied rather than letting an earlier ledger
+                # refusal mask this whole-window lane.
+                with patch.object(
+                    whole_window_module,
+                    "calibration_bracket_for_bundles",
+                    return_value=({"b_fiducial_s": 0.024}, ()),
+                ):
+                    session = AuthenticatedConsumptionSession(
+                        root,
+                        {bundle.name},
+                        calibration_ledger_snapshot=_fixture_snapshot([])[0],
+                        _allow_unissued_calibration_fixture=True,
+                    )
+                    session._prepare(
+                        bundle_paths={bundle.name: bundle},
+                        policy=SimpleNamespace(
+                            calibration_bracketing=CalibrationBracketingPolicy(
+                                require_bracket=True,
+                                calibration_bracket_max_drift_s=0.010,
+                            )
+                        ),
+                    )
+                self.assertFalse(session.ready)
+                self.assertIn(expected, session.refusal_reasons)
 
     def test_session_retains_widening_introduced_metric_local_refusal(
         self,
@@ -2618,7 +2638,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2678,7 +2701,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.03
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2841,7 +2867,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.01
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2906,7 +2935,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",

@@ -3659,25 +3659,63 @@ class D078R01RegressionTests(unittest.TestCase):
             stale.window_evidence_precheck["gross_request"]["reasons"],
         )
 
-    def test_052_relabelled_capture_time_disagrees_with_hashed_events(self) -> None:
-        # F1 defect shape: an attacker moved only the declared capture time far
-        # into the future and re-hashed both evidence and custody manifest.
-        # The measuring run_started declaration moves with it, so the old age
-        # check passed; immutable calibration event bytes still prove the lie.
-        # Era rationale: this retained p2-038.1 D-078 measurement fixture
-        # cannot authenticate the regenerated current-v3 calibration physics,
-        # so strict validation refuses it as invalid before it reaches the
-        # stale-horizon check.  The current-era stale lane has its own pin
-        # immediately below.
-        evidence = self._valid_instrument_evidence()
-        evidence["capture_wall_time_s"] += 10_000_000.0
-        with tempfile.TemporaryDirectory() as tmp:
-            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
-            summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
-        self.assertIn(
-            "instrument_calibration_invalid",
-            summary.window_evidence_precheck["gross_request"]["reasons"],
-        )
+    def test_052_v3_relabelled_capture_time_refuses_its_own_taxonomy(self) -> None:
+        """F1: re-hashing a relabelled time cannot masquerade as staleness."""
+
+        from joulewise.powermetrics_fiducial import MAX_AGE_S
+
+        def reduced_reasons(*, relabel_capture_time: bool) -> list[str]:
+            with tempfile.TemporaryDirectory() as tmp:
+                bundle = self._v3_measurement_bundle_with_calibration(
+                    tmp,
+                    calibration_age_s=MAX_AGE_S + 100.0,
+                )
+                if relabel_capture_time:
+                    # The adversary changes only the declared evidence time,
+                    # then re-hashes the evidence and its custody manifest.
+                    # The immutable calibration events retain the true epoch.
+                    evidence_path = bundle / "calibration" / "instrument_evidence.json"
+                    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+                    evidence["capture_wall_time_s"] += 10_000_000.0
+                    evidence_raw = (
+                        json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+                    ).encode("utf-8")
+                    evidence_path.write_bytes(evidence_raw)
+                    manifest_path = bundle / "calibration" / "manifest.json"
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    manifest["artifacts"]["instrument_evidence.json"] = (
+                        hashlib.sha256(evidence_raw).hexdigest()
+                    )
+                    manifest_raw = (
+                        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+                    ).encode("utf-8")
+                    manifest_path.write_bytes(manifest_raw)
+                    metadata_path = bundle / "metadata.json"
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    metadata["instrument_calibration"].update(
+                        {
+                            "artifact_sha256": hashlib.sha256(evidence_raw).hexdigest(),
+                            "validation_manifest_sha256": hashlib.sha256(
+                                manifest_raw
+                            ).hexdigest(),
+                        }
+                    )
+                    metadata_path.write_text(
+                        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                summary = reduce_module.reduce_bundle(bundle, reducer_version="0.5.2")
+                return summary.window_evidence_precheck["gross_request"]["reasons"]
+
+        attacked = reduced_reasons(relabel_capture_time=True)
+        control = reduced_reasons(relabel_capture_time=False)
+        self.assertIn("instrument_calibration_capture_time_mismatch", attacked)
+        self.assertNotIn("instrument_calibration_stale", attacked)
+        # Removing the one attack line restores the honest stale-horizon arm,
+        # so this assertion cannot pass merely because all v3 calibrations
+        # are stale in this deliberately aged fixture.
+        self.assertIn("instrument_calibration_stale", control)
+        self.assertNotIn("instrument_calibration_capture_time_mismatch", control)
 
     def test_052_v3_measurement_stale_calibration_still_refuses_stale(self) -> None:
         """A p2-038.3 bundle with only an expired calibration keeps the stale pin."""

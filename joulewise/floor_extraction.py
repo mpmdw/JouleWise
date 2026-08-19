@@ -187,6 +187,7 @@ CELL_REFUSAL_CODES = (
     "anchor_energy_envelope_exceeds_quarter_metric",
     ANCHOR_FALLBACK_MEMBER_REFUSAL,
     "clock_anchor_unresolved",
+    "capture_pipeline_absent",
     "capture_pipeline_superseded",
     "environment_admission_missing",
     "cpu_admission_unenforced",
