@@ -12,14 +12,15 @@ file instead.
 
 Last updated: 2026-08-18 morning (T10 overnight complete — confirmation head ready)
 
-## ▶▶ T11 POINTER (2026-08-18 late evening) — ACTIVE WORK IS ON THE BRANCH
+## ▶▶ T12 POINTER (2026-08-19 evening) — ACTIVE WORK IS ON `impl/r2-s0-mint-resolver`
 
-The live successor order is the T11 CHECKPOINT in RUN_STATE.md **on branch
-`integration/phase2-transaction`** (pushed). Start there: it carries the
-anchor-v3 arc state, the mid-execution re-freeze cycle, the night's two
-licensed quiet blocks, the Ed-owed rulings, and the discipline notes.
-Main is current through the morning's PR #159 merge; everything after
-(anchor-v3, r3/r4, re-freeze) is branch-side pending Ed's confirmation.
+The live successor order is the T12-FINAL CHECKPOINT in RUN_STATE.md **on
+branch `impl/r2-s0-mint-resolver`** (pushed; it carries the executed D-147
+transaction S0–S4, the S5 Ed-gate + evidence deadline — NO REBOOTS — and
+the S6 close order). That branch supersedes the older T11 pointer to
+`integration/phase2-transaction` for active work; the integration branch
+is the merge target, not the work site. Main carries the enriched
+guide/paper docs ahead of the code they describe (noted in those commits).
 
 ## ▶▶ T10 CHECKPOINT (2026-08-18) — READ docs/process/ed-morning-packet-2026-08-18.md FIRST
 
