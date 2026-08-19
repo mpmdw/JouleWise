@@ -148,12 +148,23 @@ square pulse is the simplest possible known signal: its true edges are in
 the event log, its observed edges are in the trace, and the difference *is*
 the attribution error, measured rather than assumed.
 
-**The detection budget — and the night it proved itself.** The pulse
-search is expensive, and a search that runs forever on a pathological
-trace is itself a hazard. So the detector carries a preregistered
-evaluation budget: if it cannot converge on all 59 pulses within a fixed
-number of candidate evaluations, the capture is **refused as
-non-convergent** — never accepted with a partial fit. On the night of
+**The detection budget — and the night it proved itself.** For each
+pulse, the detector is not just looking for the single best placement of
+the pulse's two edges in the trace — it has to map out *every* placement
+the data cannot rule out, because the pulse's timing bound is the full
+extent of that surviving region. It does this by carving the
+two-dimensional plane of possible edge shifts into rectangles, proving
+rectangles out wherever even their best case fits the data worse than
+the acceptance threshold, and splitting the survivors down to a tenth of
+a millisecond. "Converging on a pulse" means finishing that map: every
+rectangle either ruled out or resolved. The map-drawing is expensive,
+and a search that runs forever on a pathological trace is itself a
+hazard. So the detector carries a preregistered evaluation budget: if it
+cannot finish the map for all 59 pulses within a fixed number of
+rectangle evaluations, the capture is **refused as non-convergent** —
+never accepted with a partial map, because the unexplored area might
+hide admissible edge placements, and a bound computed from an unfinished
+map could be too small. On the night of
 2026-08-17→18, the very first live capture under the pulse detector then in
 force hit that budget and was refused. The diagnosis that followed is the best short
 course on this project's method:
