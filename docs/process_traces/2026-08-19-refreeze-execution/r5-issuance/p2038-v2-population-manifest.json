@@ -1,0 +1,2999 @@
+{
+  "root": "/Users/edr/code/JouleWise",
+  "schema_version": "p2-038.2",
+  "count": 748,
+  "members": [
+    {
+      "path": "runs_char_t3appup_20260804_r01/char-t3appup-20260804-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_char_t3appup_20260804_r02/char-t3appup-20260804-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b04-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b04-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b04-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b04-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b05-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b05-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b05-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b05-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b06-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b06-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b06-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b06-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b07-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b07-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b07-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b07-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b08-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b08-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b08-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b08-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b09-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b09-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b09-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b09-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b10-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b10-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b10-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-cmp-abba-ph-decode-b10-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729/sw7bfloor-df-ph-decode-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_7bfloor_20260729_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-decode-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-prefill-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725/p2015-df-ph-short-prefill-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a10_20260725_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b04-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b04-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b04-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b04-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b05-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b05-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b05-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b05-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b06-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b06-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b06-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b06-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b07-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b07-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b07-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b07-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b08-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b08-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b08-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b08-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b09-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b09-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b09-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b09-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b10-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b10-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b10-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-decode-b10-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-prefill-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-ph-prefill-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-rq-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-rq-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-rq-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-rq-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-rq-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-rq-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-cmp-abba-rq-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-decode-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-prefill-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-ph-short-prefill-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-mid-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-rq-short-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-su-sentinel-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-su-sentinel-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-df-su-sentinel-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-neg8-reference-end/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a5_20260723/p2015-neg8-reference-start/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-decode-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-decode-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-decode-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-df-cmp-abba-ph-prefill-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-neg8-reference-end/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a6_20260723/p2015-neg8-reference-start/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-cmp-abba-rq-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-cmp-abba-rq-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-cmp-abba-rq-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-cmp-abba-rq-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-cmp-abba-rq-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-cmp-abba-rq-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-cmp-abba-rq-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-cmp-abba-rq-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-decode-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-prefill-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-df-ph-short-prefill-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a7_20260723/p2015-neg8-reference-start/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b04-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b04-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b04-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b04-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b05-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b05-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b05-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b05-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b06-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b06-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b06-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b06-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b07-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b07-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-cmp-abba-su-b07-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-decode-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-rq-long-prompt-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-df-su-sentinel-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-neg8-reference-end/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a8_20260723/p2015-neg8-reference-start/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a9_20260724_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_a_20260722/p2015-neg8-reference-start/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b04-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b04-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b04-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b04-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b05-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b05-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b05-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b05-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b06-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b06-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b06-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b06-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b07-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b07-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b07-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b07-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b08-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b08-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b08-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b08-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b09-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b09-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b09-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b09-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b10-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b10-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b10-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726/p2015-df-cmp-abba-ph-prefill-b10-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_b_20260726_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b04-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b04-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b04-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b04-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b05-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b05-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b05-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b05-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b06-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b06-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b06-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b06-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b07-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b07-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b07-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b07-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b08-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b08-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b08-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b08-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b09-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b09-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b09-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b09-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b10-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b10-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b10-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726/p2015-df-cmp-abba-ph-decode-b10-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_c_20260726_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b04-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b04-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b04-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b04-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b05-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b05-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b05-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b05-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b06-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b06-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b06-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b06-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b07-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b07-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b07-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b07-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b08-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b08-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b08-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b08-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b09-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b09-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b09-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b09-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b10-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b10-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b10-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730/swdec-contrast-b10-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_contrast_20260730_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-mid-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-rq-short-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726/p2015-df-su-sentinel-abs-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_d_20260726_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0128o2048-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0128o2048-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0128o2048-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0128o2048-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0128o2048-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0128o2048-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0128o2048-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0512o0512-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0512o0512-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0512o0512-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0512o0512-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0512o0512-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0512o0512-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p0512o0512-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p2048o0128-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p2048o0128-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p2048o0128-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p2048o0128-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p2048o0128-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p2048o0128-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtadd-p2048o0128-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0128-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0128-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0128-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0128-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0128-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0128-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0128-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0128-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0256-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0256-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0256-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0256-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0256-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0256-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0256-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0256-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0512-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0512-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0512-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0512-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0512-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0512-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0512-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o0512-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o1024-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o1024-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o1024-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o1024-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o1024-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o1024-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o1024-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o1024-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o2048-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o2048-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o2048-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o2048-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o2048-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o2048-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o2048-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/mtlin-o2048-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyA_20260731_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0128o2048-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0128o2048-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0128o2048-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0128o2048-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0128o2048-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0128o2048-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0128o2048-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0128o2048-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0512o0512-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0512o0512-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0512o0512-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0512o0512-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0512o0512-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0512o0512-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0512o0512-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p0512o0512-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p2048o0128-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p2048o0128-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p2048o0128-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p2048o0128-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p2048o0128-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p2048o0128-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtadd-p2048o0128-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b04-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b04-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b04-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b04-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b05-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b05-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b05-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0128-b05-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b01-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b01-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b01-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b01-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b02-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b02-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b02-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b02-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b03-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b03-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b03-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b03-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b04-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b04-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b04-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b04-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b05-a1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b05-a2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b05-b1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/mtnull-o0512-b05-b2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/neg8-window-end-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/neg8-window-end-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/neg8-window-end-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/neg8-window-midpoint/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/neg8-window-start-r1/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/neg8-window-start-r2/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801/neg8-window-start-r3/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r01/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r02/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r03/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r04/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r05/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r06/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r07/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r08/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r09/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r10/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r11/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "runs_window_metrologyB_20260801_bound/neg8-refcorpus-r12/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    },
+    {
+      "path": "tests/fixtures/d117_v2_production/strict_seed_bundle/metadata.json",
+      "method": "powermetrics_native_second_censored_intersection_v1"
+    }
+  ]
+}

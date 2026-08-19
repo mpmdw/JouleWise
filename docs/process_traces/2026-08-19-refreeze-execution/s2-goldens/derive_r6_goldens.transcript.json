@@ -1,0 +1,19 @@
+{
+  "acceptance_file_sha256": "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
+  "acceptance_id": "d079_calibration_acceptance_v2_n17_r6",
+  "cli_component_sha256s": [
+    "6325b71a5b7826201e1d93a087a1a4e90854fb6edcf5149322bc50de4d272cf6",
+    "258b512b3017d53bd260871eccdc43c1f6d473e58886dd3326c23a5f4e2359ca"
+  ],
+  "mint_implementation_called": false,
+  "oracle": "tests.test_mint_floor_artifact_generalized._fixture_canonical_sha256",
+  "synthetic_component_sha256s": [
+    "8ac980a543bfa7d61d4f1e8e849ba6ca12d6ac16320592ae081da2a2bca70495",
+    "a8c195553895a7a3d178336e0a1b133f84488ed68c6726c394966e7be61a0d70"
+  ],
+  "synthetic_producer_pin_sha256s": [
+    "1d9bd87ab82f721ea08a013d97630683e665d5afb23455255899ebb8a642d74c",
+    "509e6b38c155897c523320a7061253b115609e70bf4f9b95f8b17d1c96f009d1"
+  ],
+  "synthetic_producer_set_sha256": "fe9c031e6fbcec9d1bc771ba2297972469c8a72140596d5655f37559e85c7065"
+}

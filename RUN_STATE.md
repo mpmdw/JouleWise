@@ -10,7 +10,72 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-19 (T12b — executed through S4; S5 mints on Ed's ruling)
+Last updated: 2026-08-19 evening (T12-FINAL checkpoint — Codex pool empty until ~23:22; S5 on Ed's ruling)
+
+## ▶▶ T12-FINAL CHECKPOINT (2026-08-19 evening; Codex pool EXHAUSTED until ~23:22 local) — SUCCESSOR STARTS HERE
+
+**THE TWO CLOCKS THAT MATTER:**
+1. **S5 freeze mints are Ed-gated** (classifier block; packet
+   `docs/process/ed-s5-mint-decision-2026-08-19.md` has the three options
+   and exact commands). The S4 evidence EXPIRES ~2026-08-20T16:51Z and
+   DIES ON ANY REBOOT (boot session da90818c…). **NO REBOOTS** until the
+   mints land or Ed chooses re-authoring.
+2. **Codex (terra/luna/Sol) usage exhausted until ~23:22 tonight.** Nothing
+   in the remaining transaction needs Codex (S5 = Ed + lead; S6 = lead +
+   Opus seats); future gauntlet rounds do.
+
+**STATE (branch impl/r2-s0-mint-resolver, everything pushed):** the D-147
+transaction is EXECUTED THROUGH S4 — S0 resolver / S1 anchor-v3 capture
+flip + p2-038.3 era system + claim barrier + D-079 r5→r6 (both
+neutrality-proven 19/19, r6 live, sha 0227bca3…) / S2 goldens (mint suite
+FULL GREEN) / S3 `_v3` family emitted bound-to-r6-at-birth / S4 evidence
+33/33 PASS authored at the measurement checkout (its git state: branch
+checked out, S4 commit landed to origin via pull). Canonical at the
+S1-clean head: 3,755 ran, docs-freshness-only red (now cured by the
+README fix). Full execution custody (lens reports, delta audits, fix
+reports, r5/r6 issuance + neutrality proofs, S4 manifest, suite logs):
+`docs/process_traces/2026-08-19-refreeze-execution/`. Rulings + co-design
+corpus + r6 amendment: `docs/process_traces/2026-08-19-r1-r2-codesign/`.
+
+**DOCS (Ed-driven, advisor-facing):** instrument guide fully rewritten to
+Ed's writing standard (global CLAUDE.md §Writing standard; memory
+`explainer-docs-plain-language-debt` — READ BOTH before writing ANY
+explainer prose); paper enriched + plain-language pass; the pulse-fit
+worked-example page is committed at
+`docs/guides/figures/pulse-example.html` and published at
+https://claude.ai/code/artifact/08ae099a-5dd1-409e-a88e-257ffb3697cf.
+Guide+paper are synced to main (docs-ahead-of-code, noted in the commits).
+
+**SUCCESSOR ORDER:**
+1. If Ed has ruled on S5: execute per the packet (U11 projection ×3 →
+   freeze-0003 ×3 at /Users/edr/JouleWise-measurement-20260818, one commit
+   per step, NO retries on refusals) → land via pull-from-measurement-
+   checkout → lead verifies every receipt (path-binding, PASS, ordinal
+   0003, predecessor triple vs the T10 table) → fill the confirmation
+   table's three [PENDING MINT] rows.
+2. S6 close: kernel rows under kernel-transaction discipline
+   (state_kernel M7/M8 from the consistency sweep + a transaction row);
+   T12 run report (docs/run_reports/, records the mint outcome); final
+   canonical FULL GREEN at the closed head; README activity blurb; then
+   the merge path (impl/r2-s0-mint-resolver → integration/phase2-
+   transaction → main per rule-4/D-072 gates).
+3. Ed-owed beyond S5: family marker (recommend: retrofit co-design),
+   R1 row-registry reserved values (3/5 supplied = the `_v3` ids), A4
+   markers, env-fingerprint semantics, anchor-v2 population disposition
+   (recommend the registered-limitation paragraph), exact-byte
+   confirmation.
+
+**Worktrees:** this session's scratchpad (cbd9b7b5…) dies with it — all
+load-bearing content is now committed; wtS0 (branch), wtTXN, wtCANON,
+wtDOCS and the lens/delta trees are disposable. The measurement checkout
+is AHEAD-synced (S4 landed) and must not be reset.
+
+**Discipline notes (session additions):** never `| tail` a discriminating
+suite run (bitten again this session — full log to a file, then grep);
+implementation codex runs need `-s workspace-write` and prompt WRITE_SCOPE
+as inline JSON; linked-worktree git metadata is outside codex sandboxes —
+the lead commits; glossing passes cluster their factual errors in the NEW
+glosses — fidelity-check those specifically.
 
 ## ▶▶ T12b (2026-08-19 midday) — TRANSACTION EXECUTED THROUGH S4; S5 MINTS BLOCKED ON A PERMISSION RULING (ED)
 

@@ -1,0 +1,3 @@
+MEMBERS 19
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-proof.json

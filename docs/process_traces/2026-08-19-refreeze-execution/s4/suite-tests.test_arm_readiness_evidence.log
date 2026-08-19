@@ -1,0 +1,16 @@
+test_allowlist_tampering_refuses_before_policy_use (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_allowlist_tampering_refuses_before_policy_use) ... ok
+test_changed_set_primary_gate_and_manifest_conjunct_discriminate (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_changed_set_primary_gate_and_manifest_conjunct_discriminate) ... ok
+test_content_schema_has_no_boot_or_deadline_keys (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_content_schema_has_no_boot_or_deadline_keys) ... ok
+test_contradictory_resolved_policy_fields_refuse (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_contradictory_resolved_policy_fields_refuse) ... ok
+test_deriver_read_routing_guard_detects_direct_helper_and_alias_reads (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_deriver_read_routing_guard_detects_direct_helper_and_alias_reads) ... ok
+test_plan_tree_normalization_subtracts_only_freeze_slot (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_plan_tree_normalization_subtracts_only_freeze_slot) ... ok
+test_r1_lifecycle_is_dormant_for_historical_v1_registry_and_profile (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_r1_lifecycle_is_dormant_for_historical_v1_registry_and_profile) ... ok
+test_reserved_and_unimplemented_environment_policies_refuse_authoring (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_reserved_and_unimplemented_environment_policies_refuse_authoring) ... ok
+test_successor_profile_ids_install_from_registry_roles (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_successor_profile_ids_install_from_registry_roles) ... ok
+test_taxonomy_is_code_constant_and_registry_mismatch_refuses (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_taxonomy_is_code_constant_and_registry_mismatch_refuses) ... ok
+test_v1_receipt_is_never_grandfathered_and_fixture_bytes_are_neutral (tests.test_arm_readiness_evidence.R1EvidenceLifecycleTests.test_v1_receipt_is_never_grandfathered_and_fixture_bytes_are_neutral) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.682s
+
+OK

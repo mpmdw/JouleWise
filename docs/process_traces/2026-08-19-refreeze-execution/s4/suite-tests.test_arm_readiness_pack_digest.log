@@ -1,0 +1,11 @@
+test_byte_exact_domain_nul_lf_framing_and_determinism (tests.test_arm_readiness_pack_digest.CommittedPackDigestTests.test_byte_exact_domain_nul_lf_framing_and_determinism) ... ok
+test_git_symlink_mode_refuses (tests.test_arm_readiness_pack_digest.CommittedPackDigestTests.test_git_symlink_mode_refuses) ... ok
+test_gitlink_mode_160000_commit_refuses_before_disk_synthesis (tests.test_arm_readiness_pack_digest.CommittedPackDigestTests.test_gitlink_mode_160000_commit_refuses_before_disk_synthesis) ... ok
+test_governed_namespace_anomaly_refuses_and_external_arm_has_no_hash_cycle (tests.test_arm_readiness_pack_digest.CommittedPackDigestTests.test_governed_namespace_anomaly_refuses_and_external_arm_has_no_hash_cycle) ... ok
+test_non_utf8_git_tree_path_refuses_without_filesystem_construction (tests.test_arm_readiness_pack_digest.CommittedPackDigestTests.test_non_utf8_git_tree_path_refuses_without_filesystem_construction) ... ok
+test_pack_mutations_refuse_bytes_path_mode_missing_extra_untracked_symlink (tests.test_arm_readiness_pack_digest.CommittedPackDigestTests.test_pack_mutations_refuse_bytes_path_mode_missing_extra_untracked_symlink) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.142s
+
+OK
