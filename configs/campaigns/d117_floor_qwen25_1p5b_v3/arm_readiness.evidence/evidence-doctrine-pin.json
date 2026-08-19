@@ -1,0 +1,55 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "doctrine_pin_derivation",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-doctrine-pin-v1",
+  "facts": [
+    {
+      "fact_id": "clock.restore_recipe.v1",
+      "source_kind": "PACK",
+      "source_path": "arm_readiness.sources/doctrine-pin.json",
+      "source_sha256": "62bd68990a6f20b104231492f39accf11a36dec4e8c5ae02ecf4420ef25bc56b",
+      "value": {
+        "close_out_recipe_hashes_match_pack": true,
+        "restore_after_both_backups": true,
+        "restore_after_verdict": true
+      },
+      "value_type": "OBJECT"
+    },
+    {
+      "fact_id": "desk.arming_procedure.v1",
+      "source_kind": "PACK",
+      "source_path": "arm_readiness.sources/doctrine-pin.json",
+      "source_sha256": "62bd68990a6f20b104231492f39accf11a36dec4e8c5ae02ecf4420ef25bc56b",
+      "value": {
+        "frozen_launch_recipe_hash_matches_pack": true,
+        "runbook_section_hashes_match_pack": true,
+        "runbook_sections": [
+          "5",
+          "5A",
+          "5B",
+          "5C",
+          "6",
+          "10"
+        ]
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "1d3873bb7a37e9363202429f14587c85a0b4efc0",
+  "issued_at_utc": "2026-08-19T16:51:33.551326Z",
+  "kind": "DOCTRINE_PIN",
+  "pack_sha256": "b170fe0bb02fa29b829203b759030048a1a5442f91603e000e18bb0f23845ddb",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 2468742407178458
+}

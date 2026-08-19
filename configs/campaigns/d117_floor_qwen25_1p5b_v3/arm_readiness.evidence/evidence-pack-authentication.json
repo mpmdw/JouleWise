@@ -1,0 +1,43 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "pack_generator_check",
+      "status": "PASS"
+    },
+    {
+      "check_id": "manifest_validator",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-pack-authentication-v1",
+  "facts": [
+    {
+      "fact_id": "desk.current_pack.v1",
+      "source_kind": "PROBE",
+      "source_path": "arm_readiness.sources/pack-authentication.json",
+      "source_sha256": "f23a3d82381918e83f6600b20d59f30ffc224741eabd54067e9ced1acfbd887c",
+      "value": {
+        "attempt_policy_status": "PASS",
+        "committed_pack_digest_status": "PASS",
+        "extraction_specification_status": "PASS",
+        "manifest_validator_status": "PASS",
+        "pack_generator_check_status": "PASS",
+        "plan_validator_status": "PASS"
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "1d3873bb7a37e9363202429f14587c85a0b4efc0",
+  "issued_at_utc": "2026-08-19T16:51:33.551326Z",
+  "kind": "PACK_AUTHENTICATION",
+  "pack_sha256": "b170fe0bb02fa29b829203b759030048a1a5442f91603e000e18bb0f23845ddb",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 2468742407178458
+}
