@@ -360,6 +360,16 @@ the module itself. Closure: the module completes under 15 minutes on a
 hosted runner with no internal per-case timeout, and the exclusive-job
 ceiling tightens accordingly. Not on the paper critical path.
 
+## WO-DETERMINISM-LOAD-ISOLATION (registered 2026-08-19, T12; owed from T11 queue additions)
+
+`test_logical_producer_delay_preserves_exact_evidence_bytes` is
+LOAD-SENSITIVE: a byte-identity determinism test that spawns real writer
+subprocesses; CPU contention perturbs sampler-driven capture content, and
+the failure is indistinguishable from a real evidence-bytes regression.
+Scoped hardening round: isolate the test from load or gate it on quiet
+conditions, with a defect-shaped regression proving the isolation. Ordinary
+gauntlet; no kernel semantics move.
+
 ## Shelved Follow-Ups With Triggers (C-027 disposition ledger — REV-10)
 
 - **SOL-FAST-TIER (updated 2026-08-09, Ed — supersedes the 2026-08-08 fast

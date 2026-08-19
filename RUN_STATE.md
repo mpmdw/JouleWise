@@ -10,7 +10,47 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-18 morning (T10 overnight complete — confirmation head ready)
+Last updated: 2026-08-19 (T12 — R1/R2 co-design rulings ratified; re-freeze cycle resuming)
+
+## ▶▶ T12 (2026-08-19) — R1/R2 CO-DESIGN RULINGS RATIFIED; CYCLE RESUMES UNDER THEM
+
+The two rulings that parked the re-freeze cycle at steps 3-6 are RATIFIED
+under the co-design protocol (now minted D-144; first application, protocol
+validated — both debates produced executed refutations of seat positions
+and of the magistrate's briefs). Custody:
+`docs/process_traces/2026-08-19-r1-r2-codesign/` (14 files, reading order).
+Rulings: D-146 (R1, `13-r1-ruling.md`) and D-147 (R2, `14-r2-ruling.md`);
+generation record + t-quantile note minted D-145.
+
+**What changed vs the parked brief:** (1) the flip mandates a
+science-neutral D-079 r5 in the SAME COMMIT (r4 pins the adapter bytes);
+(2) the `_v3` family binds r5 AT BIRTH (the emission-time file-sha pin
+would not catch a later retarget); (3) parked step 6 is AMENDED —
+freeze-0003 mints on the NEW `_v3` roots, chained to the untouched `_v2`
+freeze-0002 receipts; no freeze-0002 re-mint anywhere; (4) the `_v2`
+generators are frozen pack content and are READ-ONLY — `_v3` is emitted by
+the unedited generators then draft-retargeted; (5) the canonical red
+`embeds_allowance_once` roots in the shared test helper (executed proof),
+fixed BEFORE the flip; (6) a mechanical claim barrier (one shared
+predicate, new engine reason `capture_pipeline_superseded`) is part of the
+flip — no such barrier exists today (executed: all 769 window summaries
+pass the reducer-version barrier).
+
+**Execution order (D-147 S8, binding):** S0 R2 kernel (resolver/rewiring/
+schema/genesis rename) → S1 R1 flip + r5 (one commit) → S2 goldens once →
+S3 `_v3` emission + retarget + checks → S4 evidence re-author ×3 → S5
+freeze-0003 ×3 (LAST acceptance-bearing step, at
+/Users/edr/JouleWise-measurement-20260818) → S6 docs → canonical FULL
+GREEN → Ed's v3 confirmation table (now carries r5 identities).
+Implementation runs the full C-028 gauntlet per stage; Fable final review;
+one more two-seat pass over the implemented artifact pre-merge (BIG).
+
+**Ed-owed (delta from T11 list):** the confirmation table basis moves
+r4 → r5; family-marker ruling recommendation = `_v3` lands first, marker
+retrofits via its own co-design pass; R2 supplies three of the five R1
+row-registry reserved values (`successor_pack_ids` = the `_v3` ids);
+stored-anchor-v2 population disposition (registered limitation vs barrier
+alone — magistrate recommends the limitation paragraph).
 
 ## ▶▶ T11 CHECKPOINT (2026-08-18 late evening — Ed-ordered session checkpoint; SUCCESSOR STARTS HERE)
 
