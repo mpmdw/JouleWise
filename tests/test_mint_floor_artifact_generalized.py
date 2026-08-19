@@ -44,6 +44,7 @@ from joulewise.detection_floor import (
 )
 from joulewise.calibration_bracketing import (
     DEFAULT_ACCEPTANCE_BOUND_PATH,
+    PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
     load_calibration_acceptance_bound,
@@ -783,6 +784,7 @@ def _v2_postcollection(
     absolute: mint1.AuthenticatedComponent,
     comparative: mint1.AuthenticatedComponent,
     *,
+    acceptance_id: str,
     bracket_binding: dict,
     bracket_binding_sha256: str,
     extraction_report_sha256: str,
@@ -831,9 +833,9 @@ def _v2_postcollection(
             "head_digest"
         ],
         "observed_drift_s": "0.001000",
-        "allowance_rule": generalized.V2_ALLOWANCE_RULE(_live_acceptance_id()),
-        "bracket_screen_s": generalized.V2_BRACKET_SCREEN_S(_live_acceptance_id()),
-        "applied_allowance_s": generalized.V2_BRACKET_SCREEN_S(_live_acceptance_id()),
+        "allowance_rule": generalized.allowance_rule_for(acceptance_id),
+        "bracket_screen_s": generalized.bracket_screen_s_for(acceptance_id),
+        "applied_allowance_s": generalized.bracket_screen_s_for(acceptance_id),
         "allowance_embedding_count": 1,
         "extraction_report_sha256": extraction_report_sha256,
         "absolute_floor_full_precision": str(absolute_decimal),
@@ -843,14 +845,6 @@ def _v2_postcollection(
         "comparative_floor_six_decimal": six(comparative_decimal),
         "operative_floor_six_decimal": six(operative_decimal),
     }
-
-
-def _live_acceptance_id() -> str:
-    acceptance = load_calibration_acceptance_bound()
-    assert acceptance is not None
-    return acceptance["acceptance_id"]
-
-
 def _fixture_canonical_sha256(value: object) -> str:
     payload = json.dumps(
         value,
@@ -994,6 +988,8 @@ def synthetic_v2_fixture() -> tuple[
     SimpleNamespace,
 ]:
     base_plan, base_absolute, base_comparative = seven_b_components()
+    acceptance = load_calibration_acceptance_bound()
+    assert acceptance is not None
     producers = []
     inputs = {}
     all_cell_ids = []
@@ -1138,6 +1134,7 @@ def synthetic_v2_fixture() -> tuple[
                     "postcollection": _v2_postcollection(
                         absolute,
                         comparative,
+                        acceptance_id=acceptance["acceptance_id"],
                         bracket_binding=binding,
                         bracket_binding_sha256=bracket_binding_sha256,
                         extraction_report_sha256=report_sha256,
@@ -1171,8 +1168,6 @@ def synthetic_v2_fixture() -> tuple[
         runtime_identity_sha256 = components[0].source_regime[
             "stack_identity_sha256"
         ]
-        acceptance = load_calibration_acceptance_bound()
-        assert acceptance is not None
         acceptance_sha256 = file_sha256(DEFAULT_ACCEPTANCE_BOUND_PATH)
         producer = {
             "plan": {
@@ -1231,8 +1226,8 @@ def synthetic_v2_fixture() -> tuple[
                         pre_exact_bound_lexeme_s="0.020000",
                         post_exact_bound_lexeme_s="0.021000",
                     ),
-                    "allowance_rule": generalized.V2_ALLOWANCE_RULE(
-                        _live_acceptance_id()
+                    "allowance_rule": generalized.allowance_rule_for(
+                        acceptance["acceptance_id"]
                     ),
                 }
             ),
@@ -1358,7 +1353,7 @@ def _mixed_calibration_basis(
             "derivation_sha256": acceptance["derivation_sha256"],
             "schema_version": acceptance["schema_version"],
         },
-        "allowance_rule": generalized.V2_ALLOWANCE_RULE(_live_acceptance_id()),
+        "allowance_rule": generalized.allowance_rule_for(acceptance["acceptance_id"]),
         "allowance_embedding_count": 1,
         "component_composition": "componentwise_max_never_sum.v1",
     }
@@ -1579,6 +1574,7 @@ def freeze_mixed_estimator_v2_pinset(
             cell_pin["postcollection"] = _v2_postcollection(
                 absolute,
                 comparative,
+                acceptance_id=inputs.calibration_acceptance["acceptance_id"],
                 bracket_binding=inputs.bracket_binding,
                 bracket_binding_sha256=inputs.bracket_binding_sha256,
                 extraction_report_sha256=report_sha256,
@@ -1757,6 +1753,7 @@ def freeze_mixed_estimator_v2_pinset(
                 cell_pin["postcollection"] = _v2_postcollection(
                     cell.absolute,
                     cell.comparative,
+                    acceptance_id=inputs.calibration_acceptance["acceptance_id"],
                     bracket_binding=binding,
                     bracket_binding_sha256=binding_sha256,
                     extraction_report_sha256=report_sha256,
@@ -1832,6 +1829,7 @@ def _reattach_producer_report(
         cell_pin["postcollection"] = _v2_postcollection(
             absolute,
             comparative,
+            acceptance_id=inputs.calibration_acceptance["acceptance_id"],
             bracket_binding=inputs.bracket_binding,
             bracket_binding_sha256=inputs.bracket_binding_sha256,
             extraction_report_sha256=report_sha256,
@@ -2166,6 +2164,9 @@ def freeze_production_extracted_v2_pinset(
             postcollection = _v2_postcollection(
                 cell.absolute,
                 cell.comparative,
+                acceptance_id=updated_source.calibration_acceptance[
+                    "acceptance_id"
+                ],
                 bracket_binding=updated_source.bracket_binding,
                 bracket_binding_sha256=(
                     updated_source.bracket_binding_sha256
@@ -2671,6 +2672,7 @@ def install_production_extracted_v2_cli_fixture(root: Path):
             postcollection = _v2_postcollection(
                 components["absolute"],
                 components["comparative"],
+                acceptance_id=source.calibration_acceptance["acceptance_id"],
                 bracket_binding=binding,
                 bracket_binding_sha256=binding_sha256,
                 extraction_report_sha256=report_sha256,
@@ -2734,8 +2736,8 @@ def install_production_extracted_v2_cli_fixture(root: Path):
                     pre_exact_bound_lexeme_s="0.020000",
                     post_exact_bound_lexeme_s="0.021000",
                 ),
-                "allowance_rule": generalized.V2_ALLOWANCE_RULE(
-                    _live_acceptance_id()
+                "allowance_rule": generalized.allowance_rule_for(
+                    acceptance["acceptance_id"]
                 ),
             },
         )
@@ -3093,6 +3095,7 @@ def install_v2_cli_fixture(root: Path):
             cell_pin["postcollection"] = _v2_postcollection(
                 components["absolute"],
                 components["comparative"],
+                acceptance_id=source.calibration_acceptance["acceptance_id"],
                 bracket_binding=binding,
                 bracket_binding_sha256=binding_sha256,
                 extraction_report_sha256=components[
@@ -5082,8 +5085,8 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
                     Decimal(bracket["acceptance"]["drift"]["observed_s"]),
                     "f",
                 ),
-                "allowance_rule": generalized.V2_ALLOWANCE_RULE(
-                    _live_acceptance_id()
+                "allowance_rule": generalized.allowance_rule_for(
+                    acceptance["acceptance_id"]
                 ),
                 "bracket_screen_s": bracket["acceptance"]["drift"]["screen_s"],
                 "applied_allowance_s": allowance["value_s"],
@@ -5217,8 +5220,8 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
                     ),
                     "f",
                 ),
-                "allowance_rule": generalized.V2_ALLOWANCE_RULE(
-                    _live_acceptance_id()
+                "allowance_rule": generalized.allowance_rule_for(
+                    acceptance["acceptance_id"]
                 ),
                 "bracket_screen_s": second_bracket["acceptance"]["drift"][
                     "screen_s"
@@ -5504,6 +5507,43 @@ class PinsetTests(unittest.TestCase):
 
 
 class V2PinsetAndMintTests(unittest.TestCase):
+    def test_v2_postcollection_uses_the_declared_n19_acceptance_policy(
+        self,
+    ) -> None:
+        pinset, inputs, _snapshot = synthetic_v2_fixture()
+        producer = pinset["producer_plans"][0]
+        acceptance = load_calibration_acceptance_bound(
+            PREDECESSOR_ACCEPTANCE_BOUND_PATH
+        )
+        self.assertIsNotNone(acceptance)
+        producer["calibration_acceptance"]["acceptance_id"] = acceptance[
+            "acceptance_id"
+        ]
+        source = inputs[producer["plan"]["plan_id"]]
+        cell = source.cells[producer["cells"][0]["role"]]
+        postcollection = _v2_postcollection(
+            cell.absolute,
+            cell.comparative,
+            bracket_binding=source.bracket_binding,
+            bracket_binding_sha256=source.bracket_binding_sha256,
+            extraction_report_sha256=cell.absolute.report_sha256,
+            acceptance_id=producer["calibration_acceptance"]["acceptance_id"],
+        )
+
+        acceptance_id = producer["calibration_acceptance"]["acceptance_id"]
+        self.assertEqual(
+            postcollection["allowance_rule"],
+            generalized.allowance_rule_for(acceptance_id),
+        )
+        self.assertEqual(
+            postcollection["bracket_screen_s"],
+            generalized.bracket_screen_s_for(acceptance_id),
+        )
+        self.assertEqual(
+            postcollection["applied_allowance_s"],
+            postcollection["bracket_screen_s"],
+        )
+
     def test_authentication_session_report_parser_refuses_strict_attacks(
         self,
     ) -> None:
@@ -6043,11 +6083,11 @@ class V2PinsetAndMintTests(unittest.TestCase):
             )["artifact_id"]
             for cell in producer["cells"]:
                 cell["allowance_contract"] = {
-                    "allowance_rule": generalized.V2_ALLOWANCE_RULE(
-                        _live_acceptance_id()
+                    "allowance_rule": generalized.allowance_rule_for(
+                        producer["calibration_acceptance"]["acceptance_id"]
                     ),
-                    "bracket_screen_s": generalized.V2_BRACKET_SCREEN_S(
-                        _live_acceptance_id()
+                    "bracket_screen_s": generalized.bracket_screen_s_for(
+                        producer["calibration_acceptance"]["acceptance_id"]
                     ),
                     "allowance_embedding_count": 1,
                 }
@@ -8764,8 +8804,8 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                         later_observations[1].exact_bound_lexeme_s
                     ),
                 ),
-                "allowance_rule": generalized.V2_ALLOWANCE_RULE(
-                    _live_acceptance_id()
+                "allowance_rule": generalized.allowance_rule_for(
+                    original.calibration_acceptance["acceptance_id"]
                 ),
             }
             correct = replace(
@@ -8783,6 +8823,7 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                 cell_pin["postcollection"] = _v2_postcollection(
                     role_cell.absolute,
                     role_cell.comparative,
+                    acceptance_id=correct.calibration_acceptance["acceptance_id"],
                     bracket_binding=later_binding,
                     bracket_binding_sha256=later_binding_sha256,
                     extraction_report_sha256=(
@@ -8838,6 +8879,7 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                 attacked_post = _v2_postcollection(
                     role_cell.absolute,
                     role_cell.comparative,
+                    acceptance_id=attacked.calibration_acceptance["acceptance_id"],
                     bracket_binding=earlier_binding,
                     bracket_binding_sha256=earlier_binding_sha256,
                     extraction_report_sha256=(
@@ -9485,13 +9527,21 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                 (
                     "negative-zero",
                     "-0",
-                    generalized.V2_BRACKET_SCREEN_S(_live_acceptance_id()),
+                    generalized.bracket_screen_s_for(
+                        source["producer_plans"][0]["calibration_acceptance"][
+                            "acceptance_id"
+                        ]
+                    ),
                 ),
                 ("exponent", "0", "1.0818E-2"),
                 (
                     "leading-plus",
                     "+0",
-                    generalized.V2_BRACKET_SCREEN_S(_live_acceptance_id()),
+                    generalized.bracket_screen_s_for(
+                        source["producer_plans"][0]["calibration_acceptance"][
+                            "acceptance_id"
+                        ]
+                    ),
                 ),
             ):
                 with self.subTest(label=label):

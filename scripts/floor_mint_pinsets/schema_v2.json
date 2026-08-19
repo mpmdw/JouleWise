@@ -177,6 +177,18 @@
         }
       }
     },
+    "n19AcceptanceIds": {
+      "enum": [
+        "d079_calibration_acceptance_v2_n19",
+        "d079_calibration_acceptance_v2_n19_r2"
+      ]
+    },
+    "n17AcceptanceIds": {
+      "enum": [
+        "d079_calibration_acceptance_v2_n17_r3",
+        "d079_calibration_acceptance_v2_n17_r4"
+      ]
+    },
     "allowanceContract": {
       "type": "object",
       "additionalProperties": false,
@@ -699,14 +711,17 @@
       "allOf": [
         {
           "if": {
+            "required": [
+              "calibration_acceptance"
+            ],
             "properties": {
               "calibration_acceptance": {
+                "required": [
+                  "acceptance_id"
+                ],
                 "properties": {
                   "acceptance_id": {
-                    "enum": [
-                      "d079_calibration_acceptance_v2_n19",
-                      "d079_calibration_acceptance_v2_n19_r2"
-                    ]
+                    "$ref": "#/$defs/n19AcceptanceIds"
                   }
                 }
               }
@@ -735,14 +750,17 @@
         },
         {
           "if": {
+            "required": [
+              "calibration_acceptance"
+            ],
             "properties": {
               "calibration_acceptance": {
+                "required": [
+                  "acceptance_id"
+                ],
                 "properties": {
                   "acceptance_id": {
-                    "enum": [
-                      "d079_calibration_acceptance_v2_n17_r3",
-                      "d079_calibration_acceptance_v2_n17_r4"
-                    ]
+                    "$ref": "#/$defs/n17AcceptanceIds"
                   }
                 }
               }
@@ -978,14 +996,17 @@
                 "allOf": [
                   {
                     "if": {
+                      "required": [
+                        "calibration_acceptance"
+                      ],
                       "properties": {
                         "calibration_acceptance": {
+                          "required": [
+                            "acceptance_id"
+                          ],
                           "properties": {
                             "acceptance_id": {
-                              "enum": [
-                                "d079_calibration_acceptance_v2_n19",
-                                "d079_calibration_acceptance_v2_n19_r2"
-                              ]
+                              "$ref": "#/$defs/n19AcceptanceIds"
                             }
                           }
                         }
@@ -1014,14 +1035,17 @@
                   },
                   {
                     "if": {
+                      "required": [
+                        "calibration_acceptance"
+                      ],
                       "properties": {
                         "calibration_acceptance": {
+                          "required": [
+                            "acceptance_id"
+                          ],
                           "properties": {
                             "acceptance_id": {
-                              "enum": [
-                                "d079_calibration_acceptance_v2_n17_r3",
-                                "d079_calibration_acceptance_v2_n17_r4"
-                              ]
+                              "$ref": "#/$defs/n17AcceptanceIds"
                             }
                           }
                         }

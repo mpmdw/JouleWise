@@ -77,18 +77,6 @@ def bracket_screen_s_for(acceptance_id: str) -> str | None:
     return acceptance_bracket_screen_s(acceptance_id)
 
 
-def V2_ALLOWANCE_RULE(acceptance_id: str) -> str | None:
-    """Compatibility wrapper for the generation-resolved allowance rule."""
-
-    return allowance_rule_for(acceptance_id)
-
-
-def V2_BRACKET_SCREEN_S(acceptance_id: str) -> str | None:
-    """Compatibility wrapper for the generation-resolved bracket screen."""
-
-    return bracket_screen_s_for(acceptance_id)
-
-
 V2_CELL_COMPOSITION_RULE = "componentwise_max_never_sum.v1"
 V2_CONSUMER_FLOOR_RULE = "cross_stack_armwise_max.v1"
 V2_BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
@@ -647,8 +635,8 @@ def _parse_v2_postcollection(
         row["comparative_evaluation_basis_members"],
         f"{label}.comparative_evaluation_basis_members",
     )
-    allowance_rule = V2_ALLOWANCE_RULE(acceptance_id)
-    bracket_screen_s = V2_BRACKET_SCREEN_S(acceptance_id)
+    allowance_rule = allowance_rule_for(acceptance_id)
+    bracket_screen_s = bracket_screen_s_for(acceptance_id)
     if allowance_rule is None or bracket_screen_s is None:
         raise MintError(f"{label}: unregistered acceptance generation {acceptance_id!r}")
     if row["allowance_rule"] != allowance_rule:

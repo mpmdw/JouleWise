@@ -19,4 +19,3 @@ class MintPolicyResolverGuardTests(unittest.TestCase):
                 source = (repository / relative).read_text(encoding="utf-8")
                 self.assertNotIn("0.010818", source)
                 self.assertNotIn("0.009724", source)
-

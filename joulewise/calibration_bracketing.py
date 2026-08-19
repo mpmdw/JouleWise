@@ -13,6 +13,7 @@ import math
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
@@ -200,25 +201,30 @@ def acceptance_generation_operatives(
         return None
     operatives = derivation["operatives"]
     registered_screen = operatives["bracket_screen_s"]
-    decimal_derivation = (
-        acceptance.get("decimal_derivation") if acceptance is not None else None
-    )
-    supplied_operatives = (
-        decimal_derivation.get("ratified_operatives")
-        if isinstance(decimal_derivation, Mapping)
-        else None
-    )
-    if (
-        isinstance(supplied_operatives, Mapping)
-        and supplied_operatives.get("bracket_screen_s") != registered_screen
-    ):
-        raise ValueError(
-            "supplied acceptance bracket_screen_s "
-            f"{supplied_operatives.get('bracket_screen_s')!r} disagrees with "
-            f"registered bracket_screen_s {registered_screen!r} for "
-            f"acceptance_id {acceptance_id!r}"
-        )
-    return operatives
+    if acceptance is not None and "decimal_derivation" in acceptance:
+        decimal_derivation = acceptance["decimal_derivation"]
+        if not isinstance(decimal_derivation, Mapping):
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: decimal_derivation must be a mapping"
+            )
+        if "ratified_operatives" not in decimal_derivation:
+            return MappingProxyType(operatives)
+        supplied_operatives = decimal_derivation["ratified_operatives"]
+        if not isinstance(supplied_operatives, Mapping):
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: ratified_operatives must be a mapping"
+            )
+        if supplied_operatives.get("bracket_screen_s") != registered_screen:
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: bracket_screen_s "
+                f"{supplied_operatives.get('bracket_screen_s')!r} disagrees with "
+                f"registered bracket_screen_s {registered_screen!r} for "
+                f"acceptance_id {acceptance_id!r}"
+            )
+    return MappingProxyType(operatives)
 
 
 def acceptance_bracket_screen_s(

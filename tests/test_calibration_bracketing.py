@@ -36,6 +36,7 @@ from joulewise.calibration_bracketing import (
     _canonical_sha256,
     _acceptance_artifact_sha256,
     _valid_acceptance_bound,
+    acceptance_generation_operatives,
     build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
     discover_calibration_candidates,
@@ -658,6 +659,72 @@ class CalibrationBracketingTests(unittest.TestCase):
                 post_exact_bound_lexeme_s="0.021000",
             )
         )
+
+    def test_generation_operatives_are_immutable(self) -> None:
+        operatives = acceptance_generation_operatives(ANCHOR_V3_R4_ACCEPTANCE_ID)
+        self.assertIsInstance(operatives, MappingProxyType)
+        self.assertIsNotNone(operatives)
+        original_screen = operatives["bracket_screen_s"]
+        try:
+            with self.assertRaises(TypeError):
+                operatives["bracket_screen_s"] = "0.010818"
+        finally:
+            if isinstance(operatives, dict):
+                operatives["bracket_screen_s"] = original_screen
+
+    def test_attempted_operatives_poisoning_does_not_accept_crosswire(self) -> None:
+        operatives = acceptance_generation_operatives(ANCHOR_V3_R4_ACCEPTANCE_ID)
+        self.assertIsNotNone(operatives)
+        original_screen = operatives["bracket_screen_s"]
+        try:
+            try:
+                operatives["bracket_screen_s"] = "0.010818"
+            except TypeError:
+                pass
+            crosswired = load_calibration_acceptance_bound()
+            self.assertIsNotNone(crosswired)
+            crosswired = json.loads(json.dumps(crosswired))
+            crosswired["decimal_derivation"]["ratified_operatives"][
+                "bracket_screen_s"
+            ] = "0.010818"
+            with self.assertRaisesRegex(
+                ValueError,
+                "supplied acceptance operatives disagree with the registered generation",
+            ):
+                acceptance_generation_operatives(
+                    ANCHOR_V3_R4_ACCEPTANCE_ID,
+                    acceptance=crosswired,
+                )
+        finally:
+            if isinstance(operatives, dict):
+                operatives["bracket_screen_s"] = original_screen
+
+    def test_malformed_supplied_operatives_refuse_at_resolver_boundary(self) -> None:
+        acceptance = load_calibration_acceptance_bound()
+        self.assertIsNotNone(acceptance)
+        malformed_shapes = (
+            ("string", "malformed"),
+            ("list", []),
+            ("null", None),
+        )
+        for container in ("decimal_derivation", "ratified_operatives"):
+            for shape, malformed in malformed_shapes:
+                with self.subTest(container=container, shape=shape):
+                    supplied = json.loads(json.dumps(acceptance))
+                    if container == "decimal_derivation":
+                        supplied["decimal_derivation"] = malformed
+                    else:
+                        supplied["decimal_derivation"][
+                            "ratified_operatives"
+                        ] = malformed
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "supplied acceptance operatives disagree with the registered generation",
+                    ):
+                        acceptance_generation_operatives(
+                            ANCHOR_V3_R4_ACCEPTANCE_ID,
+                            acceptance=supplied,
+                        )
 
     def test_issued_artifact_authenticates_and_becomes_claim_eligible(self) -> None:
         artifact = _synthetic_issued_artifact()

@@ -145,7 +145,7 @@ def _validate_calibration_basis(
             "authenticated producer acceptance context is required for calibration_basis"
         )
     acceptance_id = calibration_acceptance.get("acceptance_id")
-    if not isinstance(acceptance_id, str):
+    if not isinstance(acceptance_id, str) or not acceptance_id:
         raise _MintEstimatorError(
             "authenticated producer acceptance_id must be a nonempty string"
         )
