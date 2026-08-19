@@ -187,14 +187,33 @@ Every point of the plane ends up either provably ruled out or counted
 in. **"Converging on a pulse" means finishing that job** — the map of
 what the data allows is complete, with no unexamined territory.
 
-The map-drawing is expensive, and a search that grinds forever on a
-pathological trace is itself a hazard on a measurement night. So the
-detector carries a preregistered budget, counted in rectangle
-evaluations: if it cannot finish the maps for all 59 pulses within the
-budget, the capture is **refused as non-convergent** — never accepted
-with a partial map, for exactly the reason above: unexplored territory
-might hide admissible edge placements, and a bound computed from an
-unfinished map could be too small. On the night of
+Why put a limit on that work at all? Two reasons. First, without one,
+a bad trace can make the search grind on and on: how long it takes —
+and whether the operator gives up and re-runs — would then depend on
+how fast the machine happens to be and how patient the human happens to
+feel, which means two people with the same data could reach different
+verdicts. A fixed allowance makes the outcome a property of the *data*:
+the same trace always costs the same number of rectangle evaluations
+and always gets the same verdict, on any machine, forever. Second, the
+amount of work the map needs is itself a diagnosis. A clean pulse train
+has crisp steps, so most of the plane is ruled out cheaply — every
+healthy capture on this machine finishes all 59 maps in roughly 115,000
+to 138,000 evaluations, and the allowance is set at 165,000, that
+maximum plus about 20% headroom. When a capture needs far more than
+that, it is not a slow search; it is the data telling you the pulse
+edges are genuinely smeared or ambiguous — something on the machine
+blurred the steps the map is trying to trace.
+
+Both reasons have already been exercised for real. One capture — whose
+clock anchoring and custody all checked out fine — needed 1,282,827
+evaluations, nine times more than any healthy capture ever has. Without
+the budget, that would have been several minutes of grinding ending in
+a bound of dubious meaning; with it, the capture was refused on the
+spot, with the effort count recorded as the reason. And when a capture
+does exceed the allowance, it is **refused as non-convergent** — never
+accepted with whatever partial map existed when the money ran out, for
+exactly the reason above: the unexplored territory might hide the very
+edge placement that should have set the bound. On the night of
 2026-08-17→18, the very first live capture under the pulse detector then in
 force hit that budget and was refused. The diagnosis that followed is the best short
 course on this project's method:
