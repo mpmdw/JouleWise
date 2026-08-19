@@ -22,7 +22,10 @@ from joulewise.calibration_bracketing import (
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     ESTIMATOR_CODE_PATHS,
     ISSUED_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_ACCEPTANCE_ID,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
+    SUCCESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
     SUCCESSOR_ACCEPTANCE_ID,
     CalibrationCandidate,
@@ -562,16 +565,25 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
-        # The live default is the ACTIVE generation.  Since the D-138 reissue
-        # it is the successor artifact; the D-116 initial issuance keeps its own
-        # registered pin and is asserted separately below.
+        # The live default is the ACTIVE generation.  Since the anchor-v3
+        # science reissue it is the n=17 generation; both retained earlier
+        # generations keep their own registered pins and are asserted below.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), SUCCESSOR_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], SUCCESSOR_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_ACCEPTANCE_ID)
+        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
             ISSUED_ACCEPTANCE_BOUND_SHA256,
+        )
+        self.assertEqual(
+            hashlib.sha256(SUCCESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
+            SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
+        )
+        self.assertEqual(
+            json.loads(SUCCESSOR_ACCEPTANCE_BOUND_PATH.read_bytes())["acceptance_id"],
+            SUCCESSOR_ACCEPTANCE_ID,
         )
         self.assertTrue(_valid_acceptance_bound(artifact))
         self.assertTrue(artifact["issuance"]["claim_eligible"])
@@ -601,8 +613,8 @@ class CalibrationBracketingTests(unittest.TestCase):
             {
                 "observed_drift_s": "0.001000",
                 "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
-                "bracket_screen_s": "0.010818",
-                "applied_allowance_s": "0.010818",
+                "bracket_screen_s": "0.009724",
+                "applied_allowance_s": "0.009724",
                 "allowance_embedding_count": 1,
             },
         )
@@ -2222,10 +2234,10 @@ class CalibrationBracketingTests(unittest.TestCase):
     def test_acceptance_artifact_rederives_from_decimal_member_table(self) -> None:
         artifact = load_calibration_acceptance_bound()
         self.assertIsNotNone(artifact)
-        self.assertEqual(artifact["derivation_corpus"]["n"], 19)
+        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             artifact["decimal_derivation"]["source_statistics"]["range_s"],
-            "0.010817749309353528",
+            "0.00972358928879385",
         )
         tampered = json.loads(json.dumps(artifact))
         tampered["derivation_corpus"]["members"][0]["b_fiducial_s"] = "0.030"

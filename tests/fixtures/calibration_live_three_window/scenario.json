@@ -5,14 +5,14 @@
     "receipt_count": 76,
     "observation_count": 38,
     "disposition_counts": {
-      "valid": 30,
+      "valid": 26,
       "systematic-invalid": 2,
-      "ordinary-invalid": 6
+      "ordinary-invalid": 10
     },
-    "synthetic_additions_to_n19_derivation_corpus": {
-      "valid": 11,
+    "synthetic_additions_to_derivation_corpus": {
+      "valid": 9,
       "systematic-invalid": 2,
-      "ordinary-invalid": 6
+      "ordinary-invalid": 10
     }
   },
   "identity_epoch": {
@@ -107,11 +107,11 @@
     "candidate_count": 6,
     "imported_candidate_count": 0,
     "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
-    "never_zero_allowance_s": "0.010818",
+    "never_zero_allowance_s": "0.009724",
     "valid_observation_count": {
-      "issuance": 30,
-      "after_three_live_windows": 36,
-      "corpus_doubling_trigger": 38,
+      "issuance": 26,
+      "after_three_live_windows": 32,
+      "corpus_doubling_trigger": 34,
       "shortfall": 2
     },
     "allowance_branch_vectors": [
@@ -121,15 +121,15 @@
         "pre_bound_s": "0.025000",
         "post_bound_s": "0.026000",
         "observed_drift_s": "0.001000",
-        "selected_allowance_s": "0.010818"
+        "selected_allowance_s": "0.009724"
       },
       {
         "window": "beta",
         "branch": "observed_drift_s",
         "pre_bound_s": "0.020000",
-        "post_bound_s": "0.031000",
-        "observed_drift_s": "0.011000",
-        "selected_allowance_s": "0.011000"
+        "post_bound_s": "0.029900",
+        "observed_drift_s": "0.009900",
+        "selected_allowance_s": "0.009900"
       }
     ],
     "cross_window_openness": [
@@ -154,8 +154,8 @@
     },
     "d102_count_boundary": {
       "additional_valid_observations": 2,
-      "expected_total_valid_same_epoch": 38,
-      "expected_trigger": "corpus_doubles_from_19_to_38"
+      "expected_total_valid_same_epoch": 34,
+      "expected_trigger": "corpus_doubles_from_17_to_34"
     },
     "successor_prior_set_integrity": {
       "mutations": [

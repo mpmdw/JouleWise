@@ -353,7 +353,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             )
 
         additions = cls.scenario["issuance_equivalent_base"][
-            "synthetic_additions_to_n19_derivation_corpus"
+            "synthetic_additions_to_derivation_corpus"
         ]
         for disposition, count in additions.items():
             for index in range(count):
@@ -722,7 +722,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             "attempt_id": target_core.get("attempt_id"),
         }
 
-    def test_issuance_equivalent_base_has_76_receipts_and_30_2_6_dispositions(
+    def test_issuance_equivalent_base_has_76_receipts_and_26_2_10_dispositions(
         self,
     ) -> None:
         expected = self.scenario["issuance_equivalent_base"]
@@ -1110,7 +1110,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 )
                 self.assertEqual(allowance["embedding_count"], 1)
 
-    def test_no_failure_campaign_has_36_valid_observations_two_short_of_trigger(
+    def test_no_failure_campaign_has_32_valid_observations_two_short_of_trigger(
         self,
     ) -> None:
         expected = self.scenario["expected_live_extension"][
@@ -1141,7 +1141,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             result, reasons = self._evaluate(name)
             self.assertEqual(reasons, ())
             self.assertNotIn(
-                "corpus_doubles_from_19_to_38",
+                "corpus_doubles_from_17_to_34",
                 result["acceptance"]["prospective_rederivation"][
                     "observed_triggers"
                 ],
@@ -1664,7 +1664,10 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         vector = self.scenario["staged_successor_vectors"][
             "d102_count_boundary"
         ]
-        self.assertEqual(vector["expected_total_valid_same_epoch"], 38)
+        self.assertEqual(vector["expected_total_valid_same_epoch"], 34)
+        self.assertEqual(
+            vector["expected_trigger"], "corpus_doubles_from_17_to_34"
+        )
 
     @unittest.skip("U2 successor engine pending")
     def test_successor_prior_set_refuses_omitted_or_changed_authenticated_prefix(

@@ -188,9 +188,9 @@ capture.
 **Bracketing and drift.** A single calibration is a snapshot. Real windows
 are bracketed: a calibration before and after the science members, with
 the timing allowance taken as the full disagreement between the brackets
-(never less than a genesis lower bound of 10.818 ms, derived from the
-historical range of 19 same-epoch bounds). If the brackets disagree by
-more than 12.093 ms, the entire window is refused — that much drift means
+(never less than a genesis lower bound of 9.724 ms, derived from the
+historical range of 17 same-epoch bounds). If the brackets disagree by
+more than 10.165 ms, the entire window is refused — that much drift means
 the instrument was not the same instrument at both ends of the night.
 
 ## 5. The calibration acceptance: pinning the instrument's identity
@@ -198,9 +198,9 @@ the instrument was not the same instrument at both ends of the night.
 A bound measured by one version of the estimator code says nothing about a
 different version. So the instrument's identity is pinned cryptographically
 by the **calibration acceptance artifact** — currently
-`d079_calibration_acceptance_v2_n19_r2` — which records:
+`d079_calibration_acceptance_v2_n17_r3` — which records:
 
-- the 19-member derivation corpus (every member's b_fiducial, byte-exact),
+- the 17-member derivation corpus (every member's b_fiducial, byte-exact),
 - the decision thresholds derived from that corpus,
 - and the SHA-256 hashes of the four estimator source files that computed
   them (the fiducial estimator, the uncertainty machinery, the sampler

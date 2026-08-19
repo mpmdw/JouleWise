@@ -4134,14 +4134,17 @@ def _issued_d079(tree: Mapping[str, Any]) -> bool:
         issued = nested.get("acceptance_id")
     if issued is None:
         issued = policy.get("issued_artifact_id")
-    # Both issued D-079 generations route as the issued artifact: the D-138
-    # reissue is the same schema, corpus, and thresholds re-derived at the
-    # integrated estimator head, not a D-102 corpus-growth successor.  The
-    # initial-issuance id stays listed so predecessor packs are unaffected.
+    # Every issued D-079 generation routes as the issued artifact.  The D-138
+    # reissue re-derived the same corpus at the integrated estimator head; the
+    # anchor-v3 generation re-derived the same LEDGER under a corrected
+    # estimator method.  Neither is a D-102 corpus-GROWTH successor, which is
+    # what `SUCCESSOR_ACCEPTANCE_ONLY` rows exist for.  Earlier ids stay listed
+    # so predecessor packs are unaffected.
     return issued in {
         "d079",
         "d079_calibration_acceptance_v2_n19",
         "d079_calibration_acceptance_v2_n19_r2",
+        "d079_calibration_acceptance_v2_n17_r3",
     }
 
 

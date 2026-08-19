@@ -374,7 +374,7 @@ and `after_midpoint_stages.txt` contains
 Never list a reference or bound-corpus directory (runbook §4).
 
 **D-7. Unchanged, stated for completeness.** §5A clock stabilization, the §5B
-pre-calibration fiducial screen (`b_fiducial_s <= 0.033558756679900`), the 3+1+3
+pre-calibration fiducial screen (`b_fiducial_s <= 0.032898493715362`), the 3+1+3
 governed references, the 12-member in-window bound corpus and its same-window mint,
 the `quiet_mac_p2_production` policy binding via `--campaign-policy`, `--max-failures 1`,
 and the single `caffeinate -is /bin/zsh …/window-chain.zsh` launch all apply

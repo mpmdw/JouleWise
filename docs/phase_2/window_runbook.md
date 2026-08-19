@@ -689,7 +689,7 @@ member is collected:
 
 1. Read `b_fiducial_s` from the newly minted
    `RUNS_ROOT/instrument_validation/<id>/instrument_evidence.json`.
-2. Require `b_fiducial_s <= 0.033558756679900` (33.558756680 ms). This is the
+2. Require `b_fiducial_s <= 0.032898493715362` (32.898493715 ms). This is the
    larger, and so the more conservative, of the prior observed maximum
    (33.558756680 ms) and the 95% Student-t upper level for a new observation
    over the same n=19 corpus (33.353749299 ms).
@@ -705,8 +705,8 @@ valid only for Mac15,9 / macOS 25F84 /
 bindings, and it is re-derived when any of those change (D-079 clause 3).
 
 **Single source of truth.** This value is *derived from* the issued D-079
-calibration-acceptance artifact (`d079_calibration_acceptance_v2_n19`, sha
-`31611396…`), not independently chosen. The only stored comparison is two-way:
+calibration-acceptance artifact (`d079_calibration_acceptance_v2_n17_r3`, sha
+`73f02263…`), not independently chosen. The only stored comparison is two-way:
 the chain's frozen `PRE_CAL_FIDUCIAL_MAX_S` literal must equal the
 acceptance-derived value. Then execute the writer's authenticated
 `_derive_preflight_systematic_screen_s()` path and require its runtime result
@@ -1278,10 +1278,10 @@ calibrate_slot() {
 
 # D-079 clause 3: pre-flight calibration screen. Refuses an out-of-family
 # pre-calibration before any member is collected. Derived from the issued
-# acceptance artifact d079_calibration_acceptance_v2_n19 (sha 31611396...).
+# acceptance artifact d079_calibration_acceptance_v2_n17_r3 (sha 73f02263...).
 # If a successor acceptance issues before arm, regenerate and re-hash this
 # chain with it (freeze-plan Q4); bindings and derivation are in §5B.
-PRE_CAL_FIDUCIAL_MAX_S=0.033558756679900
+PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
 
 screen_pre_calibration() {
   local dir="$1"
@@ -1461,10 +1461,10 @@ After `measurement_complete`, wake the display once.
 - [ ] Confirm both are within 24 hours and share the same power-policy and
   instrument bindings.
 - [ ] Confirm bracket-bound drift against the **derived** screen of
-  `0.010818 s` (10.817749309 ms), not the old underived `0.010 s`
+  `0.009724 s` (9.723589289 ms), not the old underived `0.010 s`
   constant (D-079 clause 1). Drift within the screen passes clean.
 - [ ] If drift is slightly above the screen, the window is **not**
-  discarded: the FULL allowance `max(|B_pre − B_post|, 0.010818 s)` — not
+  discarded: the FULL allowance `max(|B_pre − B_post|, 0.009724 s)` — not
   merely the excess above the screen — is added once to the larger endpoint
   bound and carried into every floor and claim the window produces, so the
   floor publishes wider. Drift above `0.012093166090593858 s` refuses the
@@ -1596,8 +1596,8 @@ Fresh-process recovery examples:
 | Display awake, screensaver engaged, `environment_admission_failed`, or CPU admission failure | The measurement environment was contaminated or unknown. | Lose the affected member. Stop the stage, remove the cause, settle 180 seconds, and rerun into a clean slot. Never waive admission. |
 | `clock_anchor_unresolved` on calibration | The calibration capture could not be causally anchored. | Preserve it, settle, and retry once into a new validation directory. Abort after the second failure or any different calibration reason. |
 | `pulse_calibration_rollover_gate_timeout` | Native powermetrics time did not advance before the pulse train. | Abort calibration and preserve the evidence. Repair machine state outside the window. |
-| Pre-calibration fiducial above `0.033558756679900` (chain aborts before member 1) | The pre-calibration is out of family — typically a GPU clock/voltage ramp aliased into the fitted pulse start (D-079 clause 3). | Do not collect. Retry only after naming and removing a specific cause, within the pre-registered retry count, recording both attempts as evidence (§5B). With no identifiable cause, end the window. Never re-run merely to obtain a passing number. |
-| Bracket drift above `0.010818 s` (D-079 derived screen) | Either ordinary repeatability scatter slightly over the screen, or an out-of-family systematic. | If the pre-calibration passed the §5B level screen, the window survives: the excess is carried by the governed extraction as an added uncertainty term and floors publish wider. If the §5B level screen failed, the excess is not budgetable and the window is not claim-bearing (D-079 clause 2). Never hand-apply an allowance. |
+| Pre-calibration fiducial above `0.032898493715362` (chain aborts before member 1) | The pre-calibration is out of family — typically a GPU clock/voltage ramp aliased into the fitted pulse start (D-079 clause 3). | Do not collect. Retry only after naming and removing a specific cause, within the pre-registered retry count, recording both attempts as evidence (§5B). With no identifiable cause, end the window. Never re-run merely to obtain a passing number. |
+| Bracket drift above `0.009724 s` (D-079 derived screen) | Either ordinary repeatability scatter slightly over the screen, or an out-of-family systematic. | If the pre-calibration passed the §5B level screen, the window survives: the excess is carried by the governed extraction as an added uncertainty term and floors publish wider. If the §5B level screen failed, the excess is not budgetable and the window is not claim-bearing (D-079 clause 2). Never hand-apply an allowance. |
 | `instrument_calibration_bracket_missing` | The claim members lack a valid causal pre/post calibration pair. | Mark the window non-claim-bearing. Never borrow a calibration from another power or machine state. |
 | `calibration_bracket_exceeds_minted_bound` | The post calibration's bound is larger than one or more member envelopes minted under the pre calibration. | Do not patch metadata. Re-reduce only through a governed prospective path; otherwise recollect. |
 | `neg8_drift_bound_underived` or `neg8_idle_sub_drift_bound_underived` | One family has no authenticated derived bound. | Collect the complete settled-reference corpus and mint the dual-family artifact. Never insert a constant or borrow the other family. |

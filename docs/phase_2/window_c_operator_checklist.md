@@ -125,8 +125,8 @@ These values are already defined, but the final chain must consume the issued ar
 | Gate | Required result |
 |---|---|
 | Wall-versus-monotonic span | No more than `0.005 s` per member. |
-| Pre-calibration fiducial | `b_fiducial_s <= 0.033558756679900`. |
-| Clean calibration-bracket drift | No more than `0.010818 s`. |
+| Pre-calibration fiducial | `b_fiducial_s <= 0.032898493715362`. |
+| Clean calibration-bracket drift | No more than `0.009724 s`. |
 | Budgetable ordinary excess | At most `0.001275166090593858 s`, for maximum drift `0.012093166090593858 s`; identified systematic defects are never budgeted. |
 | Bound freshness | Minted from all 12 bound members inside this window; maximum age `86400 s`; exact OS, supply, and calibration identities must match. |
 | Environment | AC and externally connected, low-power mode off, all online displays asleep, screensaver disengaged, thermal pressure nominal. |

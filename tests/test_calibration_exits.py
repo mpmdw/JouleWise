@@ -755,7 +755,7 @@ def _rekey_private_writer_acceptance(repo: Path) -> None:
         repo
         / "configs"
         / "calibration"
-        / "calibration_acceptance_d079_v2_r2.json"
+        / "calibration_acceptance_d079_v2_n17_r3.json"
     )
     acceptance = json.loads(acceptance_path.read_text(encoding="utf-8"))
     estimator_paths = tuple(
@@ -2270,11 +2270,11 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             REPO_ROOT
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_r2.json",
+            / "calibration_acceptance_d079_v2_n17_r3.json",
             self.repo
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_r2.json",
+            / "calibration_acceptance_d079_v2_n17_r3.json",
         )
         _rekey_private_writer_acceptance(self.repo)
         self.pin = self.repo / "configs" / "calibration" / "calibration_ledger_head.json"

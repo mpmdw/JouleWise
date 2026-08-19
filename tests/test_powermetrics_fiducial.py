@@ -1448,17 +1448,23 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
 
 class FrozenProtocolTests(unittest.TestCase):
     def test_preflight_screen_is_derived_bit_exactly_from_real_artifact(self) -> None:
-        # The ACTIVE generation since the D-138 reissue.  The estimator-bearing
-        # branch was fail-closed while the issued pin was stale; the atomic
-        # Phase-2 acceptance/pin re-freeze is exactly what cures it, so this
-        # unit now proves the cured state end to end.
-        path = Path("configs/calibration/calibration_acceptance_d079_v2_r2.json")
+        # The ACTIVE generation since the anchor-v3 science reissue.  The
+        # estimator-bearing branch was fail-closed while the issued pin was
+        # stale; the atomic Phase-2 acceptance/pin re-freeze is exactly what
+        # cures it, so this unit proves the cured state end to end.
+        path = Path(
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r3.json"
+        )
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e",
+            "73f022633e7bc22e9e129617f3f2ad8797293adaff3b53923dc41f75da2ae917",
         )
         artifact = json.loads(raw)
+        self.assertEqual(
+            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r3"
+        )
+        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         derivation = artifact["decimal_derivation"]
         rounding = derivation["rounding"]["preflight_level_screen"]
         expected = Decimal(
@@ -1481,22 +1487,39 @@ class FrozenProtocolTests(unittest.TestCase):
             "the branch-wide convenience value derives from the issued "
             "artifact once its estimator pin is fresh",
         )
-        # The predecessor issuance keeps its own bytes and stays stale-pinned.
-        predecessor = Path("configs/calibration/calibration_acceptance_d079_v2.json")
-        self.assertEqual(
-            hashlib.sha256(predecessor.read_bytes()).hexdigest(),
-            "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-        )
-        with self.assertRaisesRegex(
-            validation_script._AcceptancePreflightError,
-            "acceptance_artifact_stale",
+        # Every retained predecessor generation keeps its own exact bytes and
+        # stays stale-pinned: a superseded generation must never be able to
+        # serve as live authority just because a caller names its path.
+        for relative, expected_sha256 in (
+            (
+                "configs/calibration/calibration_acceptance_d079_v2.json",
+                "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+            ),
+            (
+                "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+                "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e",
+            ),
         ):
-            validation_script._derive_preflight_systematic_screen_s(
-                artifact["identity_epoch"], acceptance_path=predecessor
+            predecessor = Path(relative)
+            self.assertEqual(
+                hashlib.sha256(predecessor.read_bytes()).hexdigest(),
+                expected_sha256,
+                relative,
             )
+            with self.assertRaisesRegex(
+                validation_script._AcceptancePreflightError,
+                "acceptance_artifact_stale",
+            ):
+                validation_script._derive_preflight_systematic_screen_s(
+                    artifact["identity_epoch"], acceptance_path=predecessor
+                )
 
     def test_writer_has_no_copied_preflight_scalar_and_comparison_is_derived(self) -> None:
         source = Path(validation_script.__file__).read_text(encoding="utf-8")
+        self.assertNotIn(
+            'PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.032898493715362")',
+            source,
+        )
         self.assertNotIn(
             'PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")',
             source,

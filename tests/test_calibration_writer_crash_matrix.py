@@ -102,20 +102,20 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             cls.repo / "configs" / "calibration" / "powermetrics_fiducial",
         )
         shutil.copy2(
-            REPO_ROOT / "configs" / "calibration" / "calibration_acceptance_d079_v2_r2.json",
-            cls.repo / "configs" / "calibration" / "calibration_acceptance_d079_v2_r2.json",
+            REPO_ROOT / "configs" / "calibration" / "calibration_acceptance_d079_v2_n17_r3.json",
+            cls.repo / "configs" / "calibration" / "calibration_acceptance_d079_v2_n17_r3.json",
         )
         # This private synthetic repository must authenticate the estimator
         # bytes it actually copied, which are this checkout's bytes rather than
         # the issued artifact's recorded ones; this fixture re-key is test
         # custody, never an issuance or live claim. It copies the LIVE issued
-        # generation (the D-138 reissue) because that is what the production
-        # loader resolves by default.
+        # generation (the anchor-v3 science reissue) because that is what the
+        # production loader resolves by default.
         acceptance_path = (
             cls.repo
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_r2.json"
+            / "calibration_acceptance_d079_v2_n17_r3.json"
         )
         acceptance = json.loads(acceptance_path.read_text(encoding="utf-8"))
         estimator_paths = tuple(
@@ -150,7 +150,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
                 REPO_ROOT
                 / "configs"
                 / "calibration"
-                / "calibration_acceptance_d079_v2_r2.json"
+                / "calibration_acceptance_d079_v2_n17_r3.json"
             ).read_bytes()
         ).hexdigest()
         new_acceptance_sha256 = hashlib.sha256(
