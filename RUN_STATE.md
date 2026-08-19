@@ -12,6 +12,65 @@ file instead.
 
 Last updated: 2026-08-18 morning (T10 overnight complete — confirmation head ready)
 
+## ▶▶ T11 CHECKPOINT (2026-08-18 late evening — Ed-ordered session checkpoint; SUCCESSOR STARTS HERE)
+
+**Ed's directive at checkpoint:** fresh session, point at RUN_STATE. Roster:
+sparing Sol; Fable+Opus liberally; terra xhigh / luna max as Codex seats;
+watch the Codex pool (ledger blind — count runs). CO-DESIGN RULE (D-144
+pending mint): independent Sol(or terra)+Opus designs → bounded debate →
+Fable ruling → gauntlet → Fable final review; big designs get one more
+debate pass post-review.
+
+**State:** everything through the anchor-v3 arc is committed/pushed on
+`integration/phase2-transaction`. Read IN ORDER: (1)
+docs/process_traces/2026-08-18-t10-t11-working-notes/trace-notes.md — the
+full two-day trace; (2) docs/process_traces/2026-08-18-anchor-v3-science-review/
+— the ratified science; (3) the morning packet + ed-confirmation docs.
+Day-2 arc: knife-edge anchor root-caused → anchor-v3 (set-membership,
+cold-reviewed, 7 conditions executed) → corpus n=17 r3 issued (screens
+TIGHTENED) → capture activation + science-neutral r4 (bb81323) → THE
+ATOMIC RE-FREEZE CYCLE WAS MID-EXECUTION at checkpoint (an Opus agent was
+executing: fan-out to floor-mint/detection-floor/pack generators →
+regenerate 3 _v2 packs → evidence re-author → freeze-0002 re-mints AT
+/Users/edr/JouleWise-measurement-20260818 (path-binding!) → canonical
+suite → confirmation table to docs/process/ed-confirmation-2026-08-18-v3.md).
+CHECK `git log` on the branch: whatever the agent landed is durable;
+resume the cycle from its last commit against the brief recorded in
+trace-notes.md (§"Conditions executed + budget ruling + generation
+launch" and after). Fan-out list: the f4d5ea7/2de24b0 commit messages +
+the generation report's enumeration (test_mint_floor_artifact_generalized
+must return to full green; canonical FULL GREEN is the bar).
+
+**Then (the night plan Ed licensed):** quiesce fleet → quiet block 1:
+v3-native calibration captures (update the shakedown clone
+/Users/edr/JouleWise-window-custody/shakedown-20260818/clone to the final
+head first; driver + pristine-ledger pattern in the working-notes dir) →
+quiet block 2: the GSM8K profiler pilot (~64 min; branch
+pilot/gsm8k-harness @ f0c4399 in the wtS-scout worktree; RUN_CARD in
+docs/process_traces/2026-08-18-gsm8k-profiler-pilot/; dry-run validated;
+lead launches live) → morning reductions + Ed's confirmation.
+
+**Ed-owed rulings (accumulated):** the v3 confirmation table (supersedes
+packet §3); family-marker particulars; R1 registry reserved values (five
+items); profiler memo open Qs (cap-terminated completions; prompt style);
+A4 contrast markers; environment-fingerprint semantics. Decision-log
+minting owed: D-144 (co-design rule), the r3/r4 generation entry, the
+t-quantile note, the load-sensitive determinism test queue item.
+
+**Worktree map:** wtTXN (scratchpad, branch checked out) — the successor
+should create its OWN worktrees; the scratchpad path dies with the old
+session but all content is committed. Measurement checkout =
+/Users/edr/JouleWise-measurement-20260818 (freeze mints live HERE).
+Custody: ~/JouleWise-window-custody/{shakedown-20260818,ed-qual-20260817,
+profiler-pilot-20260818}. The stale cs-pedagogy worktree removal is
+classifier-blocked — Ed can `git worktree remove --force` it.
+
+**Discipline notes for the successor:** one writer per worktree (wrapper
+rc75 lock enforces); never launch scoped codex runs into a tree with ANY
+other writer including yourself; agents must not launch Sol; quiet blocks
+mean ZERO tool calls mid-capture; pipe-masking on discriminating runs is
+forbidden; the D-078 no-retry discipline covers every refused capture.
+
 ## ▶▶ T10 CHECKPOINT (2026-08-18) — READ docs/process/ed-morning-packet-2026-08-18.md FIRST
 
 The Phase-2 transaction is EXECUTED to its confirmation head (canonical
