@@ -10,7 +10,56 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-19 evening (T12-FINAL checkpoint — Codex pool empty until ~23:22; S5 on Ed's ruling)
+Last updated: 2026-08-19 late evening (T13 — D-148 rulings recorded; S5 needs Ed's 30-second settings edit)
+
+## ▶▶ T13 CHECKPOINT (2026-08-19 late evening) — CLEARED-CONTEXT RESUME POINT; READ THIS BLOCK THEN docs/process/ed-s5-mint-decision-2026-08-19.md
+
+**Ed ruled seven decisions in-session — ALL RECORDED as D-148** (decision
+log index + body; memories updated: merge-authority, ed-hardware). The
+operative ones for a fresh session:
+
+- **S5 mints:** Ed chose the settings-rule route (D-148.1), but the
+  classifier also blocks Claude from WRITING the rule — it needs ED'S
+  HANDS (30 s; exact snippet now at the top of the S5 packet). Once the
+  rule exists: run the six commands (U11 projection ×3 then freeze-0003
+  ×3, ONE AT A TIME, commit per step, D-078 no-retry on any refusal) at
+  /Users/edr/JouleWise-measurement-20260818 (branch checked out there,
+  ahead-synced through S4 @ 3a75a770 + landed on origin), then verify
+  receipts (path-binding to the measurement checkout, status PASS,
+  receipt_id freeze-0003, predecessor triple matching the packet's
+  freeze-0002 shas), then land by `git pull --ff-only
+  file:///Users/edr/JouleWise-measurement-20260818 impl/r2-s0-mint-resolver`
+  from a dev worktree (NEVER push from the measurement checkout), then
+  fill the packet's three [PENDING MINT] confirmation rows. HARD
+  DEADLINES: evidence dies ~2026-08-20T16:51Z or on ANY REBOOT.
+- **Merges (D-148.2):** gate-authorized. When the S6 gate shape is green
+  (review of final head + CI + fresh pass over post-review commits),
+  merge impl→integration/phase2-transaction→main WITHOUT waiting for Ed.
+- **Quiet windows (D-148.4):** lead-delegated whenever no hands are
+  needed at the machine — schedule and run at lead discretion. Hands/
+  sudo/reboots stay Ed's.
+- **R1 registry values (D-148.5):** Ed defers to council — run the
+  co-design/council pass (Codex pool returns ~23:22 tonight; terra/luna
+  seats per the roster in T11) over the five reserved values (three
+  proposed = the `_v3` pack ids), then install the row registry (queued
+  kernel row, kernel-transaction discipline).
+- **Limitations (D-148.6/.7):** the in-process-adversary family and the
+  748-bundle anchor-v2 population are ACCEPTED/REGISTERED — recorded in
+  CLAIMS_STATUS.md; fold into the paper's §7 at the next docs touch (the
+  anchor-v2 paragraph already exists there; add the registered status).
+
+**AFTER S5, the remaining close (S6) is:** kernel rows (state_kernel
+M7/M8 + transaction row — consistency-sweep findings in
+docs/process_traces/2026-08-19-refreeze-execution/reports/consistency-sweep.md)
+→ T12/T13 run report (docs/run_reports/) → final canonical FULL GREEN at
+the closed head → README activity blurb → gate shape → MERGE WAVE
+(pre-authorized). Then: council on registry values; the profiler pilot +
+first v3 quiet windows under D-148.4; Ed-owed residue (family marker
+retrofit, A4 markers, env-fingerprint semantics — batch packet).
+
+**Everything else about this session** (what S0–S4 are, custody layout,
+the guide/paper rewrite + writing standard, discipline notes) is in the
+T12-FINAL block directly below — read it next.
 
 ## ▶▶ T12-FINAL CHECKPOINT (2026-08-19 evening; Codex pool EXHAUSTED until ~23:22 local) — SUCCESSOR STARTS HERE
 

@@ -21,13 +21,23 @@ the same harness class as the 2026-08-05 self-merge block (cured then by a
 a permission rule for claim-bearing identity mints while you were
 reachable within the validity window.
 
-**Options:**
+**RULED (D-148.1): Option 2.** The classifier ALSO blocks Claude from
+writing the rule itself (self-granting permissions is a hard harness
+boundary), so the rule needs YOUR hands (~30 s): open
+`.claude/settings.local.json` in the repo root and add these four lines
+inside `permissions.allow` (keeping the existing entries):
+
+```
+"Bash(python3 scripts/project_identity_pins.py freeze *)",
+"Bash(python3 scripts/generate_arm_readiness.py freeze *)",
+"Bash(cd /Users/edr/JouleWise-measurement-20260818 && python3 scripts/project_identity_pins.py freeze *)",
+"Bash(cd /Users/edr/JouleWise-measurement-20260818 && python3 scripts/generate_arm_readiness.py freeze *)"
+```
+
+Then tell Claude to run S5 (the license is issued; the procedure is
+below). Fallbacks remain:
 1. You run the six commands yourself at `/Users/edr/JouleWise-measurement-20260818`
-   (exact sequence below, ~5 minutes; the verification battery is scripted
-   and Claude checks every receipt afterward).
-2. You add a narrow Bash allow rule for the two scripts to
-   `.claude/settings.local.json` and tell Claude to execute S5 under the
-   already-issued license.
+   (exact sequence below, ~5 minutes; Claude verifies every receipt after).
 3. Defer — but the S4 evidence EXPIRES ~2026-08-20T16:51:33Z and dies on
    ANY REBOOT (boot session `da90818c-9c31-45d0-8813-deae65fba143`).
    After either event: `git rm -r` of the six governed evidence dirs and a
