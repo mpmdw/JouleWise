@@ -1284,16 +1284,17 @@ SYNTHETIC_COMPONENT_SHA256S = (
 )
 # The synthetic producer plans embed the LIVE issued acceptance (identity and
 # both digests), so these frozen pins move with a D-079 issuance. Re-derived
-# for the D-138 detection-budget reissue of d079_calibration_acceptance_v2_n19_r2
-# with the
-# independent fixture oracle `_fixture_canonical_sha256`, never with the mint
-# code under test.
+# once for the r6 generation d079_calibration_acceptance_v2_n17_r6
+# (file SHA-256 0227bca3...) with the independent fixture oracle
+# `_fixture_canonical_sha256`, never with the mint code under test. The
+# acceptance-independent component and CLI component pins were rechecked and
+# remain unchanged.
 SYNTHETIC_PRODUCER_PIN_SHA256S = (
-    "6fb779c29f1de9e15cee1166040623bb9428dc0d0d33dc48c9723481cb8e3226",
-    "e795a3ea61d5c713a0f41a86ef4a49d43cec7a918de7f9e6ce77cce33e4758bc",
+    "1d9bd87ab82f721ea08a013d97630683e665d5afb23455255899ebb8a642d74c",
+    "509e6b38c155897c523320a7061253b115609e70bf4f9b95f8b17d1c96f009d1",
 )
 SYNTHETIC_PRODUCER_SET_SHA256 = (
-    "9f00ff357f87ae05ed96391e4bf9215d768601d47dbbbb860493cc7fec6e1113"
+    "fe9c031e6fbcec9d1bc771ba2297972469c8a72140596d5655f37559e85c7065"
 )
 CLI_COMPONENT_SHA256S = (
     "6325b71a5b7826201e1d93a087a1a4e90854fb6edcf5149322bc50de4d272cf6",
@@ -1360,16 +1361,27 @@ def _mixed_calibration_basis(
 
 
 def _mixed_common_mode_session() -> SimpleNamespace:
+    acceptance = load_calibration_acceptance_bound()
+    assert acceptance is not None
+    bracket_screen_s = generalized.bracket_screen_s_for(
+        acceptance["acceptance_id"]
+    )
+    assert bracket_screen_s is not None
+    endpoint_max_b_fiducial_s = 0.021
+    calibration_drift_allowance_s = float(bracket_screen_s)
+    operative_b_fiducial_s = (
+        endpoint_max_b_fiducial_s + calibration_drift_allowance_s
+    )
     bracket = {
         "status": "passed",
-        "endpoint_max_b_fiducial_s": 0.021,
-        "calibration_drift_allowance_s": 0.010818,
-        "b_fiducial_s": 0.031818,
-        "operative_b_fiducial_s": 0.031818,
+        "endpoint_max_b_fiducial_s": endpoint_max_b_fiducial_s,
+        "calibration_drift_allowance_s": calibration_drift_allowance_s,
+        "b_fiducial_s": operative_b_fiducial_s,
+        "operative_b_fiducial_s": operative_b_fiducial_s,
         "acceptance": {
             "allowance": {
                 "rule": "max(observed_drift_s,bracket_screen_s)",
-                "value_s": "0.010818",
+                "value_s": bracket_screen_s,
                 "embedding_count": 1,
                 "embedded_in": "b_fiducial_s",
             }
@@ -1379,7 +1391,7 @@ def _mixed_common_mode_session() -> SimpleNamespace:
         ready=True,
         refusal_reasons=(),
         calibration_bracket=bracket,
-        operative_fiducial_bound_s=0.031818,
+        operative_fiducial_bound_s=operative_b_fiducial_s,
     )
 
 
@@ -9099,6 +9111,12 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                 generalized.V2_ASSURANCE_PROFILE,
             )
 
+            acceptance_id = source["producer_plans"][0][
+                "calibration_acceptance"
+            ]["acceptance_id"]
+            bracket_screen_s = generalized.bracket_screen_s_for(acceptance_id)
+            assert bracket_screen_s is not None
+
             with (
                 mock.patch.object(
                     generalized,
@@ -9151,7 +9169,7 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                 "observed_drift_s": "0.002000",
                 # Decimal-equivalent spelling preserves the never-zero rule
                 # while still testing exact report-string authentication.
-                "applied_allowance_s": "0.0108180",
+                "applied_allowance_s": f"{bracket_screen_s}0",
             }
             for field, replacement in mismatch_values.items():
                 with self.subTest(field=field):
