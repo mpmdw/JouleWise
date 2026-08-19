@@ -287,19 +287,21 @@ the limit, and neither constant may be widened after a failure is observed
 without declaring an entirely new method. The fit is also not a substitute for
 turning network time off: the model assumes nothing is steering the clock
 mid-capture, and the enforced network-time-OFF window is what makes that
-assumption admissible. One further term is easy to mistake for redundancy — the
-anchor's half-width covers *where the timeline starts*, while a separate term
-covers drift *within* the capture, and both are load-bearing because the pulse
-detector maps the trace outward from the anchor's midpoint at rate 1 while the
-pulse commands carry wall-clock stamps.
+assumption admissible. One further term is easy to mistake for redundancy. The
+anchor's half-width says *where the timeline starts*; a separate term pays for
+the two clocks drifting apart *during* the capture. Both are needed, because
+the pulse detector walks forward through the trace from the anchor's midpoint
+at the monotonic clock's own rate, while the pulse commands it is comparing
+against are stamped in wall-clock time.
 
-**Pricing the rate is what makes the bound honest.** Across the re-derived
-corpus the anchor term rose in the mean by 0.311 ms, against member bounds in
-the 25–35 ms range; on the calibration fixture shared by the whole test suite,
-the identical inputs yield a bound 3.09 microseconds wider — a figure that
-already includes a numerical detail priced rather than deferred (the padding
-constant was raised from 1 nanosecond to 1 microsecond, covering the
-representation error of double-precision epoch timestamps). Individual
+**Paying for the rate is what makes the bound honest.** Across the re-derived
+corpus the anchor term rose by 0.311 ms on average, against per-capture bounds
+in the 25–35 ms range. On the calibration fixture shared by the whole test
+suite, the very same inputs now yield a bound 3.09 microseconds wider. That
+figure already includes one numerical detail that was paid for rather than
+deferred: the padding constant was raised from 1 nanosecond to 1 microsecond,
+to cover the rounding error you get when a timestamp counted from 1970 is
+stored as a double-precision number. Individual
 b_fiducial values moved *both* ways, because the pulse detector re-fits the
 trace under a shifted anchor: 6 of the 17 issued members tightened, including
 the one that becomes the new corpus maximum. The padding raise by itself moved
@@ -375,11 +377,11 @@ plausible label is the one failure this design must never have.
 - **Claim admission is a separate, mechanical barrier.** Supporting a
   published number requires the *positive presentation* of the current
   claim-bearing method — one closed set with one member today. Absence is not
-  permission. A single shared predicate implements this, and the three
-  claim-side consumers (analysis admission, floor extraction, and whole-window
-  member admission) all call it rather than re-implementing the test or
-  writing the method name inline, so the barrier cannot rot apart in one lane
-  while holding in another.
+  permission. One shared test implements this, and the three places that admit
+  evidence to a claim — the analysis, the floor extraction, and the
+  whole-window check — all call that one test. None of them re-implements it or
+  writes the method name into its own code, so the barrier cannot quietly decay
+  in one place while still holding in another.
 
 **The problem that forced it into existence.** Before this, superseded
 bundles were kept out of claims by per-window policy documents — that is, by a
@@ -600,10 +602,11 @@ frozen pack content, hashed inside the very plan trees they produce; a
 regression re-hashes the committed `_v2` trees to prove it.
 
 Two details earn their weight. **Bind at birth, not by retargeting later:** a
-pack pins the *file hash* of the acceptance artifact it was emitted against,
-and issuing a newer artifact leaves the older file untouched — so a pack
-emitted against last week's generation and quietly moved to this week's would
-pin a hash that still verifies, and the staleness would be invisible. The successor
+pack records the *file hash* of the acceptance artifact it was built against,
+and issuing a newer artifact leaves the older file untouched. So a pack built
+against last week's generation and quietly pointed at this week's would still
+carry a hash that verifies cleanly, and nothing would reveal that it is out of
+date. The successor
 packs therefore reached their would-be-frozen state already bound to the
 live generation: the retarget happened in the unfrozen drafts, before any
 receipt existed, so no frozen pack ever pointed at a stale generation.
