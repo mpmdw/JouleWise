@@ -445,3 +445,18 @@ contract.
 - Rulings executed via the running re-freeze cycle: capture flip Option C
   (flip+wire+r4 inside the cycle), r3 stays live as intermediate, raw
   custody restoration in-cycle, t-quantile note → D-144 batch.
+
+## FINAL CHECKPOINT ADDENDUM (session close)
+- At close, a canonical suite was RUNNING at bb81323 (the re-freeze
+  agent's real wait), output landing at
+  /private/tmp/claude-501/-Users-edr-code-JouleWise/d6206bd4-5fa1-4141-9529-e3e811ea7da4/scratchpad/final-full.log
+  — the scratchpad directory persists on disk after session close. If
+  that log shows totals at bb81323, the successor can consume them
+  instead of rerunning (~30 min saved); staleness fan-out from the
+  incomplete re-freeze (test_mint_floor_artifact_generalized etc.) is
+  EXPECTED red until the cycle completes.
+- Re-freeze cycle position at close: capture activation + r4 reissue
+  LANDED (bb81323); remaining per the brief: fan-out constants/goldens,
+  _v2 pack regeneration, evidence re-author, freeze-0002 re-mints at the
+  measurement checkout, canonical FULL GREEN, the confirmation table
+  (docs/process/ed-confirmation-2026-08-18-v3.md).
