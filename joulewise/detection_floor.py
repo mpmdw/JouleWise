@@ -35,6 +35,10 @@ from joulewise.authentication_io import (
     read_authentication_input,
     sha256_authentication_input,
 )
+from joulewise.calibration_bracketing import (
+    acceptance_allowance_rule,
+    acceptance_bracket_screen_s,
+)
 from joulewise.identity_pins import (
     STACK_IDENTITY_DOMAIN,
     STACK_IDENTITY_FIELDS,
@@ -2347,6 +2351,10 @@ def _project_floor_mint_pinset_v2(
             or not _is_trimmed_string(acceptance.get("derivation_rule_id"))
         ):
             return None
+        bracket_screen_s = acceptance_bracket_screen_s(acceptance["acceptance_id"])
+        allowance_rule = acceptance_allowance_rule(acceptance["acceptance_id"])
+        if bracket_screen_s is None or allowance_rule is None:
+            return None
         plan_ids.append(plan["plan_id"])
         component_artifact_ids.append(component_artifact["artifact_id"])
         component_artifact_hashes.append(component_artifact["sha256"])
@@ -2444,8 +2452,8 @@ def _project_floor_mint_pinset_v2(
                     post.get("comparative_evaluation_basis_members")
                 )
                 or post.get("allowance_rule")
-                != "max(observed_drift_s,0.010818)"
-                or post.get("bracket_screen_s") != "0.010818"
+                != allowance_rule
+                or post.get("bracket_screen_s") != bracket_screen_s
                 or type(post.get("allowance_embedding_count")) is not int
                 or post.get("allowance_embedding_count") != 1
                 or any(
@@ -2488,7 +2496,8 @@ def _project_floor_mint_pinset_v2(
             except InvalidOperation:
                 return None
             if (
-                applied_allowance != max(observed_drift, Decimal("0.010818"))
+                applied_allowance
+                != max(observed_drift, Decimal(bracket_screen_s))
                 or operative_full != max(absolute_full, comparative_full)
             ):
                 return None

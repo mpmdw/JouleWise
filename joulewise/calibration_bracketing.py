@@ -135,7 +135,9 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
 # The LIVE surface: what production loads when no artifact is named.
 ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R4_ACCEPTANCE_ID
 DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R4_ACCEPTANCE_BOUND_PATH
-DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
+# Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
+# not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
+GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
     "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
 )
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -184,6 +186,65 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     # member table, therefore the same D-102 derivation.
     ANCHOR_V3_R4_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
+
+
+def acceptance_generation_operatives(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> Mapping[str, str] | None:
+    """Return registered D-102 operatives, refusing an operative crosswire."""
+
+    derivation = _D102_GENERATION_DERIVATIONS.get(acceptance_id)
+    if derivation is None:
+        return None
+    operatives = derivation["operatives"]
+    registered_screen = operatives["bracket_screen_s"]
+    decimal_derivation = (
+        acceptance.get("decimal_derivation") if acceptance is not None else None
+    )
+    supplied_operatives = (
+        decimal_derivation.get("ratified_operatives")
+        if isinstance(decimal_derivation, Mapping)
+        else None
+    )
+    if (
+        isinstance(supplied_operatives, Mapping)
+        and supplied_operatives.get("bracket_screen_s") != registered_screen
+    ):
+        raise ValueError(
+            "supplied acceptance bracket_screen_s "
+            f"{supplied_operatives.get('bracket_screen_s')!r} disagrees with "
+            f"registered bracket_screen_s {registered_screen!r} for "
+            f"acceptance_id {acceptance_id!r}"
+        )
+    return operatives
+
+
+def acceptance_bracket_screen_s(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Resolve the registered bracket screen for an acceptance generation."""
+
+    operatives = acceptance_generation_operatives(
+        acceptance_id, acceptance=acceptance
+    )
+    return operatives["bracket_screen_s"] if operatives is not None else None
+
+
+def acceptance_allowance_rule(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Render the registered never-zero allowance rule for a generation."""
+
+    screen = acceptance_bracket_screen_s(acceptance_id, acceptance=acceptance)
+    return f"max(observed_drift_s,{screen})" if screen is not None else None
+
+
 # Retained name for the D-116/D-138 n=19 generations' comparators.
 _D102_OPERATIVE_VALUES = _D102_N19_DERIVATION["operatives"]
 
@@ -626,7 +687,7 @@ def _acceptance_bound_from_authenticated_bytes(
     # selected by the document's own `acceptance_id`.
     role = value.get("artifact_role") if isinstance(value, Mapping) else None
     if role == "schema_fixture_unissued":
-        expected_sha256: str | None = DEFAULT_ACCEPTANCE_BOUND_SHA256
+        expected_sha256: str | None = GENESIS_FIXTURE_ACCEPTANCE_SHA256
     elif role == "issued":
         registered = ISSUED_ACCEPTANCE_REGISTRY.get(value.get("acceptance_id"))
         expected_sha256 = registered["file_sha256"] if registered else None
@@ -719,7 +780,7 @@ def _acceptance_artifact_sha256(artifact: Mapping[str, Any]) -> str:
     if artifact.get("artifact_role") == "issued":
         registered = ISSUED_ACCEPTANCE_REGISTRY[artifact["acceptance_id"]]
         return str(registered["file_sha256"])
-    return DEFAULT_ACCEPTANCE_BOUND_SHA256
+    return GENESIS_FIXTURE_ACCEPTANCE_SHA256
 
 
 def _valid_sha256(value: Any) -> bool:
@@ -1983,6 +2044,9 @@ __all__ = [
     "BRACKET_BINDING_SCHEMA",
     "BRACKET_SCHEMA",
     "CalibrationCandidate",
+    "acceptance_allowance_rule",
+    "acceptance_bracket_screen_s",
+    "acceptance_generation_operatives",
     "build_calibration_bracket_binding",
     "calibration_bracket_for_bundles",
     "discover_calibration_candidates",

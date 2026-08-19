@@ -187,10 +187,16 @@
       ],
       "properties": {
         "allowance_rule": {
-          "const": "max(observed_drift_s,0.010818)"
+          "enum": [
+            "max(observed_drift_s,0.010818)",
+            "max(observed_drift_s,0.009724)"
+          ]
         },
         "bracket_screen_s": {
-          "const": "0.010818"
+          "enum": [
+            "0.010818",
+            "0.009724"
+          ]
         },
         "allowance_embedding_count": {
           "const": 1
@@ -462,10 +468,16 @@
           "$ref": "#/$defs/decimalString"
         },
         "allowance_rule": {
-          "const": "max(observed_drift_s,0.010818)"
+          "enum": [
+            "max(observed_drift_s,0.010818)",
+            "max(observed_drift_s,0.009724)"
+          ]
         },
         "bracket_screen_s": {
-          "const": "0.010818"
+          "enum": [
+            "0.010818",
+            "0.009724"
+          ]
         },
         "applied_allowance_s": {
           "$ref": "#/$defs/decimalString"
@@ -683,7 +695,81 @@
             "$ref": "#/$defs/finalCell"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "calibration_acceptance": {
+                "properties": {
+                  "acceptance_id": {
+                    "enum": [
+                      "d079_calibration_acceptance_v2_n19",
+                      "d079_calibration_acceptance_v2_n19_r2"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "cells": {
+                "items": {
+                  "properties": {
+                    "postcollection": {
+                      "properties": {
+                        "allowance_rule": {
+                          "const": "max(observed_drift_s,0.010818)"
+                        },
+                        "bracket_screen_s": {
+                          "const": "0.010818"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "calibration_acceptance": {
+                "properties": {
+                  "acceptance_id": {
+                    "enum": [
+                      "d079_calibration_acceptance_v2_n17_r3",
+                      "d079_calibration_acceptance_v2_n17_r4"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "cells": {
+                "items": {
+                  "properties": {
+                    "postcollection": {
+                      "properties": {
+                        "allowance_rule": {
+                          "const": "max(observed_drift_s,0.009724)"
+                        },
+                        "bracket_screen_s": {
+                          "const": "0.009724"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "deskAggregate": {
       "type": "object",
@@ -883,7 +969,91 @@
         "aggregate": {
           "$ref": "#/$defs/deskAggregate"
         }
-      }
+      },
+      "allOf": [
+        {
+          "properties": {
+            "producer_plans": {
+              "items": {
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "calibration_acceptance": {
+                          "properties": {
+                            "acceptance_id": {
+                              "enum": [
+                                "d079_calibration_acceptance_v2_n19",
+                                "d079_calibration_acceptance_v2_n19_r2"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "cells": {
+                          "items": {
+                            "properties": {
+                              "allowance_contract": {
+                                "properties": {
+                                  "allowance_rule": {
+                                    "const": "max(observed_drift_s,0.010818)"
+                                  },
+                                  "bracket_screen_s": {
+                                    "const": "0.010818"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "calibration_acceptance": {
+                          "properties": {
+                            "acceptance_id": {
+                              "enum": [
+                                "d079_calibration_acceptance_v2_n17_r3",
+                                "d079_calibration_acceptance_v2_n17_r4"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "cells": {
+                          "items": {
+                            "properties": {
+                              "allowance_contract": {
+                                "properties": {
+                                  "allowance_rule": {
+                                    "const": "max(observed_drift_s,0.009724)"
+                                  },
+                                  "bracket_screen_s": {
+                                    "const": "0.009724"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
     },
     "finalPinset": {
       "description": "Mintable only through the generalized v2 gate, which binds every parsed inventory field to authenticated input evidence, an exact corresponding emitted value, or an authenticated self-hash relation.",
