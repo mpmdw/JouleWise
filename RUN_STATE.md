@@ -71,15 +71,6 @@ other writer including yourself; agents must not launch Sol; quiet blocks
 mean ZERO tool calls mid-capture; pipe-masking on discriminating runs is
 forbidden; the D-078 no-retry discipline covers every refused capture.
 
-## ▶▶ T11 POINTER (2026-08-18 late evening) — ACTIVE WORK IS ON THE BRANCH
-
-The live successor order is the T11 CHECKPOINT in RUN_STATE.md **on branch
-`integration/phase2-transaction`** (pushed). Start there: it carries the
-anchor-v3 arc state, the mid-execution re-freeze cycle, the night's two
-licensed quiet blocks, the Ed-owed rulings, and the discipline notes.
-Main is current through the morning's PR #159 merge; everything after
-(anchor-v3, r3/r4, re-freeze) is branch-side pending Ed's confirmation.
-
 ## ▶▶ T10 CHECKPOINT (2026-08-18) — READ docs/process/ed-morning-packet-2026-08-18.md FIRST
 
 The Phase-2 transaction is EXECUTED to its confirmation head (canonical
