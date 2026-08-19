@@ -131,6 +131,7 @@ ENGINE_REASON_CODES = frozenset(
         "whole_window_verdict_provenance_invalid",
         "whole_window_verdict_conflict",
         "calibration_bracket_exceeds_minted_bound",
+        "capture_pipeline_superseded",
     }
 )
 
@@ -167,6 +168,7 @@ _NOT_RESOLVABLE = frozenset(
         "whole_window_verdict_provenance_invalid",
         "whole_window_verdict_conflict",
         "calibration_bracket_exceeds_minted_bound",
+        "capture_pipeline_superseded",
         "paired_block_incomplete",
         "fixed_n_plan_incomplete",
         "window_evidence_precheck_missing",

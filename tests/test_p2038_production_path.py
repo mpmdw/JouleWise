@@ -32,6 +32,10 @@ from joulewise.controller import _load_instrument_calibration_attachment, run_be
 from joulewise.environment import evaluate_environment_policy
 from joulewise.reduce import reduce_bundle
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy
+from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+    SCHEMA_FOR_ANCHOR_METHOD,
+)
 
 
 FIXTURE_PROCESS = Path(__file__).parent / "fixtures" / "fake_powermetrics_process.py"
@@ -159,9 +163,7 @@ def install_complete_calibration(directory: Path) -> None:
             FIXTURE_PROCESS.read_bytes()
         ).hexdigest(),
         "sampling_interval_ms": 50.0,
-        "anchor_method_version": (
-            "powermetrics_native_second_censored_intersection_v1"
-        ),
+        "anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD,
         "mlx_version": "p2038-test-mlx",
         "pulse_protocol_id": PROTOCOL_V2_ID,
         "power_policy": "ac_high_power",
@@ -393,12 +395,15 @@ class P2038ProductionPathTests(unittest.TestCase):
             self.assertTrue((bundle / "raw" / "powermetrics_idle_post.plist").is_file())
             self.assertNotIn("clock_anchor_bound_s", metadata.get("extra", {}))
             self.assertNotIn("idle_drift_bound_w", metadata.get("extra", {}))
-            self.assertEqual(metadata["uncertainty_evidence"]["schema_version"], "p2-038.2")
+            self.assertEqual(
+                metadata["uncertainty_evidence"]["schema_version"],
+                SCHEMA_FOR_ANCHOR_METHOD[ACTIVE_CAPTURE_ANCHOR_METHOD],
+            )
             clock_anchor = metadata["uncertainty_evidence"]["clock_anchor"]
             self.assertEqual(clock_anchor["status"], "bounded")
             self.assertEqual(
                 clock_anchor["method"],
-                "powermetrics_native_second_censored_intersection_v1",
+                ACTIVE_CAPTURE_ANCHOR_METHOD,
             )
             self.assertGreaterEqual(clock_anchor["native_rollover_count"], 1)
             self.assertIn("energy_anchor_shift_envelopes", stored)
@@ -436,8 +441,8 @@ class P2038ProductionPathTests(unittest.TestCase):
             self.assertIsNotNone(support_end_s)
             self.assertGreaterEqual(support_end_s, measured_window.end_s)
             # scripts/run_campaign.assert_production_uncertainty still pins
-            # p2-038.1 (outside this stream's write scope); replicate its
-            # bundle-level guarantees against the p2-038.2 evidence here.
+            # the active capture era; replicate its bundle-level guarantees
+            # against the active evidence here.
             for key in (
                 "clock_anchor_bound_s",
                 "marker_to_first_sample_phase_bound_s",

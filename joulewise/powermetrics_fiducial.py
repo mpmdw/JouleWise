@@ -1458,13 +1458,16 @@ def instrument_evidence(
         reasons.append("raw_or_event_hash_missing_or_invalid")
     if not capture_time_ok:
         reasons.append("capture_time_missing_or_invalid")
+    anchor_method = detection.anchor_method
+    if not isinstance(anchor_method, str) or not anchor_method:
+        raise ValueError("detection anchor method is missing")
     payload = {
         "schema_version": "joulewise.instrument_evidence.v1",
         "protocol_id": protocol_id,
         "validation_id": validation_id,
         "status": "valid" if valid else "invalid",
         "reasons": sorted(set(reasons)),
-        "anchor_method_version": detection.anchor_method or CLOCK_METHOD_V2,
+        "anchor_method_version": anchor_method,
         "b_fiducial_s": detection.b_fiducial_s,
         "residual_median_s_diagnostic_only": detection.residual_median_s,
         "residual_p95_s_diagnostic_only": detection.residual_p95_s,

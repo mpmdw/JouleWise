@@ -117,6 +117,7 @@ from joulewise.environment_admission import (
     current_environment_refusals,
     environment_admission_refusals,
 )
+from joulewise.uncertainty_evidence import capture_pipeline_refusal
 
 __all__ = [
     "EXTRACTION_SCHEMA_VERSION",
@@ -186,6 +187,7 @@ CELL_REFUSAL_CODES = (
     "anchor_energy_envelope_exceeds_quarter_metric",
     ANCHOR_FALLBACK_MEMBER_REFUSAL,
     "clock_anchor_unresolved",
+    "capture_pipeline_superseded",
     "environment_admission_missing",
     "cpu_admission_unenforced",
     "whole_window_neg8_verdict_missing",
@@ -1922,6 +1924,9 @@ def _evaluate_member(
         )
         if anchor_fallback_member_unusable(summary, metadata, path):
             reasons.append(ANCHOR_FALLBACK_MEMBER_REFUSAL)
+        pipeline_refusal = capture_pipeline_refusal(metadata)
+        if pipeline_refusal is not None:
+            reasons.append(pipeline_refusal)
         # A claim-bearing floor may only be extracted from a STRICT-VALID
         # bundle (D-030): the measured window, summed curve, and re-reduction
         # of the raw artifacts must all agree with summary_metrics.json.  A

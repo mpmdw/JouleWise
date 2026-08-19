@@ -79,6 +79,7 @@ from joulewise.calibration_ledger import (
 )
 from joulewise.publication_privacy import source_provenance_problems
 from joulewise.schemas import BenchmarkConfig, SchemaError
+from joulewise.uncertainty_evidence import capture_pipeline_refusal
 
 from .claims import REDUCER_REASON_CODES, ordered_reason_codes
 from joulewise.cooldown import cooldown_disposition_from_raw
@@ -108,8 +109,9 @@ GOVERNED_REDUCER_IDLE_METHOD_PAIRS: Mapping[str, str] = {
 SUPERSEDED_ANCHOR_REDUCER_VERSIONS = frozenset({"0.5.1", "0.6.1"})
 
 # Reducer versions whose wire is REQUIRED to carry the deterministic
-# anchor-shift energy envelopes (frozen field names, p2-038.2 metadata
-# schema).  Older wires read additively: an absent envelope adds no term,
+# anchor-shift energy envelopes (frozen field names; anchor-era dispatch is
+# carried by the stored clock method).  Older wires read additively: an absent
+# envelope adds no term,
 # while a present-but-malformed one always fails closed.
 ANCHOR_ENVELOPE_REDUCER_VERSIONS = frozenset(
     {"0.5.2", "0.6.2"}
@@ -185,7 +187,7 @@ def anchor_fallback_member_unusable(
     return bool(
         isinstance(anchor, Mapping)
         and (
-            anchor.get("status") == "unresolved"
+            anchor.get("status") == "unknown"
             or isinstance(anchor.get("trace_fallback_method"), str)
         )
     )
@@ -3463,6 +3465,9 @@ def window_evidence_precheck(
             reasons.append("idle_window_suspect")
         elif suspect is not False:
             reasons.append("idle_window_suspect_unknown")
+    pipeline_refusal = capture_pipeline_refusal(evidence.metadata)
+    if pipeline_refusal is not None:
+        reasons.append(pipeline_refusal)
     result = {
         "status": "eligible" if eligible and not reasons else "ineligible",
         "eligible": eligible and not reasons,

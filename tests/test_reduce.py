@@ -43,6 +43,7 @@ from joulewise.schemas import (
     TelemetryBackend,
 )
 from joulewise.suite import suite_manifest_sha256
+from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -58,7 +59,7 @@ DEFAULT_IDLE = {
     "telemetry_backend": "mock",
 }
 
-_SELF_CONSISTENT_CALIBRATION: tuple[dict, bytes, bytes] | None = None
+_SELF_CONSISTENT_CALIBRATIONS: dict[str, tuple[dict, bytes, bytes]] = {}
 
 
 def self_consistent_calibration(
@@ -66,17 +67,20 @@ def self_consistent_calibration(
     first_endpoint_s: float | None = None,
     commanded_edges: list[tuple[float, float]] | None = None,
     protocol_id: str | None = None,
+    anchor_method: str = ACTIVE_CAPTURE_ANCHOR_METHOD,
 ) -> tuple[dict, bytes, bytes]:
     """Build a physically consistent protocol calibration for reducer tests."""
 
-    global _SELF_CONSISTENT_CALIBRATION
+    from joulewise.uncertainty_evidence import (
+        resolve_anchor_deriver,
+    )
     use_cache = (
         first_endpoint_s is None
         and commanded_edges is None
         and protocol_id is None
     )
-    if use_cache and _SELF_CONSISTENT_CALIBRATION is not None:
-        evidence, raw, events = _SELF_CONSISTENT_CALIBRATION
+    if use_cache and anchor_method in _SELF_CONSISTENT_CALIBRATIONS:
+        evidence, raw, events = _SELF_CONSISTENT_CALIBRATIONS[anchor_method]
         return json.loads(json.dumps(evidence)), raw, events
 
     from joulewise.adapters.powermetrics import (
@@ -98,8 +102,6 @@ def self_consistent_calibration(
         pulse_schedule,
         rederive_detection_from_artifacts,
     )
-    from joulewise.uncertainty_evidence import derive_powermetrics_anchor_v2
-
     # Keep the synthetic calibration on the same epoch scale as the retained
     # D-078 measuring bundle.  Freshness now covers the measured-window end,
     # so a calibration living near epoch 1000 would be correctly stale for a
@@ -191,11 +193,13 @@ def self_consistent_calibration(
         "post_parse": stamp(capture_end_s + 1.0),
     }
     native = parse_powermetrics_records(raw)
-    clock_anchor = derive_powermetrics_anchor_v2(
+    clock_anchor = resolve_anchor_deriver(anchor_method)(
         stamps=anchor_stamps,
         records=anchor_records_from_powermetrics(native),
     )
     if clock_anchor.get("status") != "bounded":
+        raise AssertionError(clock_anchor)
+    if clock_anchor.get("method") != anchor_method:
         raise AssertionError(clock_anchor)
 
     event_rows: list[dict] = []
@@ -230,9 +234,7 @@ def self_consistent_calibration(
         "os_build": "25F84",
         "powermetrics_sha256": "ab" * 32,
         "sampling_interval_ms": 100,
-        "anchor_method_version": (
-            "powermetrics_native_second_censored_intersection_v1"
-        ),
+        "anchor_method_version": anchor_method,
         "mlx_version": "0.31.2",
         "pulse_protocol_id": protocol_id,
         "power_policy": "ac_high_power",
@@ -269,7 +271,7 @@ def self_consistent_calibration(
     if evidence["status"] != "valid":
         raise AssertionError(evidence["reasons"])
     if use_cache:
-        _SELF_CONSISTENT_CALIBRATION = (evidence, raw, events)
+        _SELF_CONSISTENT_CALIBRATIONS[anchor_method] = (evidence, raw, events)
     return json.loads(json.dumps(evidence)), raw, events
 
 

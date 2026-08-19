@@ -40,6 +40,10 @@ from joulewise.calibration_ledger import (
 )
 from joulewise.environment import evaluate_environment_policy
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+    SCHEMA_FOR_ANCHOR_METHOD,
+)
 from joulewise.calibration_bracketing import discover_calibration_candidates
 from joulewise.whole_window import (
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -6804,10 +6808,12 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
         self.config = production_config()
         self.metadata = {
             "uncertainty_evidence": {
-                "schema_version": "p2-038.2",
+                "schema_version": SCHEMA_FOR_ANCHOR_METHOD[
+                    ACTIVE_CAPTURE_ANCHOR_METHOD
+                ],
                 "clock_anchor": {
                     "status": "bounded",
-                    "method": "powermetrics_native_second_censored_intersection_v1",
+                    "method": ACTIVE_CAPTURE_ANCHOR_METHOD,
                 },
                 "sample_phase": {"status": "bounded"},
                 "idle_drift": {
@@ -6862,7 +6868,7 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
                 self.bundle, allow_mock_runtime=True
             )
 
-    def test_current_p2038_2_with_composed_margin_and_envelope_passes(self) -> None:
+    def test_current_p2038_3_with_composed_margin_and_envelope_passes(self) -> None:
         result = self._assertion()
         self.assertEqual(result["clock_method"], self.metadata["uncertainty_evidence"]["clock_anchor"]["method"])
         # Three-term composed bound: bundle + fiducial + wall-minus-monotonic
@@ -6876,6 +6882,15 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
         self.metadata["uncertainty_evidence"]["clock_anchor"][
             "method"
         ] = "powermetrics_spawn_ready_wall_monotonic_envelope_v1"
+        with self.assertRaises(run_campaign_module.ShakedownGateError) as raised:
+            self._assertion()
+        self.assertEqual(raised.exception.code, "clock_evidence_missing")
+
+    def test_retained_v2_evidence_is_rejected_at_the_production_gate(self) -> None:
+        self.metadata["uncertainty_evidence"]["schema_version"] = "p2-038.2"
+        self.metadata["uncertainty_evidence"]["clock_anchor"][
+            "method"
+        ] = "powermetrics_native_second_censored_intersection_v1"
         with self.assertRaises(run_campaign_module.ShakedownGateError) as raised:
             self._assertion()
         self.assertEqual(raised.exception.code, "clock_evidence_missing")

@@ -170,8 +170,8 @@ frozen historical replay arms only, `protocol_id` is
 pinned to the frozen replay sha; the current strict path accepts authenticated
 v2 validation evidence from this arc and requires v3 for future claim-bearing
 calibration collections, as specified below); `status` is `valid`;
-`anchor_method_version` equals the reducer's own
-`powermetrics_native_second_censored_intersection_v1`; the artifact's
+`anchor_method_version` is a registered stored anchor method and equals the
+measuring bundle's recorded anchor method; the artifact's
 `b_fiducial_s` matches the metadata scalar; every binding field is present
 and non-empty; and the bundle-supplied environment fields (`hardware_model`
 from `device.hw_model`, `os_build` from `device.kern_osversion`) match the
@@ -181,7 +181,8 @@ metadata scalar alone. An invalid or malformed reference is
 `B_bundle` alone.
 
 Hash verification is not by itself calibration verification. Reducer
-consumption re-parses the hash-verified raw plist, re-derives its v2 trace
+consumption re-parses the hash-verified raw plist, re-derives its
+stored-method trace
 anchor from the recorded ClockStamps, reconstructs all warmup and protocol
 pulses from the hash-verified event ledger, and re-runs the shared fiducial
 detector. Pulse count, detected flags, spurious-plateau count, and containment

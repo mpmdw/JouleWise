@@ -22,6 +22,11 @@ PHASE_METHOD = "interval_support_vs_controller_markers_v1"
 IDLE_METHOD = "pre_post_idle_observed_envelope_v1"
 DRIFT_GUARD_METHOD = "p2_015_prediction_guard_v1"
 CLOCK_ANCHOR_UNRESOLVED = "clock_anchor_unresolved"
+SCHEMA_FOR_ANCHOR_METHOD = {
+    CLOCK_METHOD: SCHEMA_VERSION,
+    CLOCK_METHOD_V2: SCHEMA_VERSION_V2,
+    CLOCK_METHOD_V3: SCHEMA_VERSION_V3,
+}
 # D-078 fail-closed limits for the v2 censored-intersection anchor estimator.
 MAX_WALL_MINUS_MONOTONIC_SPAN_S = 0.005
 MAX_FIRST_PARSE_LAG_S = 0.25
@@ -1287,6 +1292,25 @@ ANCHOR_METHOD_VERSIONS = frozenset(ANCHOR_METHOD_DERIVERS)
 # The ratified D-079 r3 science-facing generation is the activation event for
 # prospective capture under the rate-aware set-membership anchor.
 ACTIVE_CAPTURE_ANCHOR_METHOD = CLOCK_METHOD_V3
+CLAIM_BEARING_ANCHOR_METHODS = frozenset({CLOCK_METHOD_V3})
+
+
+def capture_pipeline_refusal(metadata: Mapping[str, Any]) -> str | None:
+    """Return the claim-admission refusal for a stored anchor era, if any."""
+
+    if not isinstance(metadata, Mapping):
+        return None
+    uncertainty = metadata.get("uncertainty_evidence")
+    clock_anchor = (
+        uncertainty.get("clock_anchor") if isinstance(uncertainty, Mapping) else None
+    )
+    if not isinstance(clock_anchor, Mapping):
+        return None
+    return (
+        None
+        if clock_anchor.get("method") in CLAIM_BEARING_ANCHOR_METHODS
+        else "capture_pipeline_superseded"
+    )
 
 
 def resolve_anchor_deriver(method: str):

@@ -1354,8 +1354,8 @@ class _Execution:
             )
         if self._uncertainty_evidence is None:
             self._uncertainty_evidence = {
-                "schema_version": "p2-038.1",
                 "telemetry_backend": self._telemetry.name,
+                "capture_pipeline_absent": True,
             }
         for key in ("idle_drift", "idle_drift_guard"):
             if key in result:

@@ -104,11 +104,15 @@ from joulewise.schemas import (
 )
 from joulewise.validation import finite_float
 from joulewise.uncertainty_evidence import (
-    SCHEMA_VERSION as P2038_SCHEMA_VERSION,
+    CLOCK_METHOD,
+    CLOCK_METHOD_V2,
+    CLOCK_METHOD_V3,
     SCHEMA_VERSION_V2 as P2038_SCHEMA_VERSION_V2,
+    SCHEMA_VERSION_V3 as P2038_SCHEMA_VERSION_V3,
+    SCHEMA_FOR_ANCHOR_METHOD,
     derive_idle_drift_evidence,
     derive_powermetrics_clock_evidence,
-    derive_powermetrics_clock_evidence_v2,
+    resolve_clock_evidence_deriver,
     stamp_from_mapping,
 )
 
@@ -1230,7 +1234,7 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
         ]
     problems: list[str] = []
     schema_version = evidence.get("schema_version")
-    if schema_version not in {P2038_SCHEMA_VERSION, P2038_SCHEMA_VERSION_V2}:
+    if schema_version not in set(SCHEMA_FOR_ANCHOR_METHOD.values()):
         problems.append(
             "strict: uncertainty evidence: unsupported or missing schema_version"
         )
@@ -1245,6 +1249,9 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
         return problems + [
             "strict: uncertainty evidence: clock_anchor and sample_phase must be objects"
         ]
+    anchor_method = clock_anchor.get("method")
+    if SCHEMA_FOR_ANCHOR_METHOD.get(anchor_method) != schema_version:
+        problems.append("strict: uncertainty evidence: clock_anchor_era_inconsistent")
     stamp_rows = clock_anchor.get("clock_stamps")
     if not isinstance(stamp_rows, dict):
         return problems + [
@@ -1263,14 +1270,9 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
                 label=f"strict bundle {reader.path.name} powermetrics evidence",
             )
         )
-        if schema_version == P2038_SCHEMA_VERSION_V2:
-            expected, _point = derive_powermetrics_clock_evidence_v2(
-                stamps=stamps,
-                records=anchor_records_from_powermetrics(raw_records),
-            )
-        else:
+        if anchor_method == CLOCK_METHOD:
             # Exact dispatch for stored p2-038.1 evidence (D-078): the frozen
-            # spawn-bracket derivation is replayed, never re-derived as v2.
+            # spawn-bracket derivation is replayed, never re-derived as v2/v3.
             expected, _point = derive_powermetrics_clock_evidence(
                 stamps=stamps,
                 elapsed_s=[
@@ -1281,13 +1283,18 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
                     for record in raw_records
                 ],
             )
+        else:
+            expected, _point = resolve_clock_evidence_deriver(anchor_method)(
+                stamps=stamps,
+                records=anchor_records_from_powermetrics(raw_records),
+            )
     except (KeyError, OSError, TypeError, ValueError) as exc:
         return problems + [
             f"strict: uncertainty evidence: cannot re-derive clock evidence: {exc}"
         ]
     expected_anchor = expected["clock_anchor"]
     if (
-        schema_version == P2038_SCHEMA_VERSION_V2
+        anchor_method in {CLOCK_METHOD_V2, CLOCK_METHOD_V3}
         and isinstance(expected_anchor, dict)
         and expected_anchor.get("status") != "bounded"
         and raw_records
@@ -1538,13 +1545,13 @@ def _powermetrics_trace_endpoint_s(
 ) -> float:
     """The record-0 window END the stored trace/rich telemetry must replay.
 
-    Bounded evidence uses the anchor point. A p2-038.2 unresolved anchor
-    (``clock_anchor_unresolved``) records the adapter's structural fallback
-    endpoint instead; strict replays it exactly, and the claim barrier stays
-    in the precheck, never here."""
+    Bounded evidence uses the anchor point. An unresolved current-era native
+    anchor records the adapter's structural fallback endpoint instead; strict
+    replays it exactly, and the claim barrier stays in the precheck, never here.
+    """
 
     if (
-        evidence.get("schema_version") == P2038_SCHEMA_VERSION_V2
+        clock_anchor.get("method") in {CLOCK_METHOD_V2, CLOCK_METHOD_V3}
         and clock_anchor.get("status") != "bounded"
     ):
         return finite_float(
@@ -1558,11 +1565,11 @@ def _powermetrics_trace_endpoint_s(
 
 
 def _strict_rich_telemetry_problems(reader: BundleReader) -> list[str]:
-    """D-078: rich telemetry must move with the corrected anchor (p2-038.2).
+    """Rich telemetry must move with its stored current-era anchor method.
 
     Stored p2-038.1 bundles keep their legacy native-date reconstruction and
-    are not re-judged; p2-038.2 bundles must byte-match a re-derivation from
-    the raw capture at the stored anchor endpoint."""
+    are not re-judged; p2-038.2 and p2-038.3 bundles must byte-match a
+    re-derivation from the raw capture at the stored anchor endpoint."""
 
     if _validated_config_telemetry_backend(reader) != TelemetryBackend.POWERMETRICS:
         return []
@@ -1570,13 +1577,15 @@ def _strict_rich_telemetry_problems(reader: BundleReader) -> list[str]:
     if not isinstance(metadata, dict) or _strict_legacy_bundle_metadata(metadata):
         return []
     evidence = metadata.get("uncertainty_evidence")
-    if (
-        not isinstance(evidence, dict)
-        or evidence.get("schema_version") != P2038_SCHEMA_VERSION_V2
-    ):
+    if not isinstance(evidence, dict):
         return []
     clock_anchor = evidence.get("clock_anchor")
     if not isinstance(clock_anchor, dict):
+        return []
+    if SCHEMA_FOR_ANCHOR_METHOD.get(clock_anchor.get("method")) not in {
+        P2038_SCHEMA_VERSION_V2,
+        P2038_SCHEMA_VERSION_V3,
+    }:
         return []
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
     rich_path = reader.path / RICH_TELEMETRY_NAME

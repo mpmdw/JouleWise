@@ -55,6 +55,9 @@ EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n19_r2"] = (
 EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r4"] = (
     EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r3"]
 )
+EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r5"] = (
+    EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r3"]
+)
 
 
 def sha256(path: Path) -> str:

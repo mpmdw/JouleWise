@@ -65,6 +65,7 @@ from joulewise.reduce import (
     _verify_instrument_calibration,
 )
 from joulewise.schemas import BenchmarkConfig, CampaignPolicy, TelemetryBackend
+from joulewise.uncertainty_evidence import capture_pipeline_refusal
 from joulewise.salvage_dangler import (
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     validate_salvage_exclusion_payload,
@@ -195,6 +196,7 @@ _REDERIVATION_LEAF_REASONS = frozenset(
         "anchor_energy_envelope_exceeds_quarter_metric",
         "anchor_energy_envelope_unrecorded",
         "clock_anchor_unresolved",
+        "capture_pipeline_superseded",
         "instrument_calibration_missing",
         "instrument_calibration_mismatch",
         "instrument_calibration_invalid",
@@ -710,6 +712,11 @@ class AuthenticatedConsumptionSession:
         for bundle_id, path in sorted(bundle_paths.items()):
             stored_summary = _read_json_object(path / "summary_metrics.json")
             metadata = _read_json_object(path / "metadata.json")
+            pipeline_refusal = capture_pipeline_refusal(metadata)
+            if pipeline_refusal is not None:
+                reasons.add(pipeline_refusal)
+                self._summaries[bundle_id] = stored_summary or {}
+                continue
             if not _current_strict_summary(stored_summary, path):
                 self._summaries[bundle_id] = stored_summary or {}
                 continue

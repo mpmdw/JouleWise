@@ -28,6 +28,8 @@ from joulewise.calibration_bracketing import (
     ANCHOR_V3_ACCEPTANCE_ID,
     ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_R4_ACCEPTANCE_ID,
+    ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R5_ACCEPTANCE_ID,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
@@ -573,13 +575,13 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
         # The live default is the ACTIVE generation.  Since the anchor-v3
-        # capture-activation reissue it is the n=17 r4 generation; all three
+        # production-capture flip reissue it is the n=17 r5 generation; all
         # retained earlier generations keep their own registered pins and are
         # asserted below.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R4_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R5_ACCEPTANCE_ID)
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
@@ -2133,6 +2135,48 @@ class CalibrationBracketingTests(unittest.TestCase):
         )
         self.assertTrue(
             result["post"]["relative_path"].endswith("current-post")
+        )
+
+    def test_v2_ledger_candidate_reports_era_rejection_not_custody_failure(self) -> None:
+        v2_bindings = dict(self.bindings)
+        v2_bindings["anchor_method_version"] = CLOCK_METHOD_V2
+        snapshot, registered = _fixture_snapshot(
+            [
+                self.candidate("retained-v2", 90.0, "0.025", bindings=v2_bindings),
+                self.candidate("current-pre", 99.0, "0.025"),
+                self.candidate("current-post", 111.0, "0.026"),
+            ]
+        )
+        by_attempt = {
+            observation.attempt_id: candidate
+            for observation, candidate in zip(snapshot.observations, registered, strict=True)
+        }
+        reader = SimpleNamespace(
+            measured_window=lambda: SimpleNamespace(start_s=100.0, end_s=110.0),
+            metadata=lambda: {"instrument_calibration": {"bindings": self.bindings}},
+        )
+        with (
+            patch("joulewise.calibration_bracketing.BundleReader", return_value=reader),
+            patch(
+                "joulewise.calibration_bracketing._candidate_from_observation",
+                side_effect=lambda observation: by_attempt[observation.attempt_id],
+            ),
+            patch(
+                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                return_value=_current_estimator_acceptance_fixture(),
+            ),
+        ):
+            result, reasons = calibration_bracket_for_bundles(
+                Path("/caller-root"),
+                [Path("/caller-root/window-member")],
+                self.policy,
+                ledger_snapshot=snapshot,
+                _allow_unissued_fixture=True,
+            )
+        self.assertNotIn("calibration_ledger_custody_invalid", reasons)
+        self.assertIn(
+            {"attempt_id": "fixture-attempt-0-instrument_validation/retained-v2", "reason": "capture_pipeline_superseded"},
+            result["candidate_discovery"]["rejections"],
         )
 
     def test_off_ledger_candidate_refuses_even_beside_registered_pair(self) -> None:
