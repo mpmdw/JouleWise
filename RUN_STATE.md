@@ -12,6 +12,27 @@ file instead.
 
 Last updated: 2026-08-19 (T12 — R1/R2 co-design rulings ratified; re-freeze cycle resuming)
 
+## ▶▶ T12b (2026-08-19 midday) — TRANSACTION EXECUTED THROUGH S4; S5 MINTS BLOCKED ON A PERMISSION RULING (ED)
+
+READ FIRST: docs/process/ed-s5-mint-decision-2026-08-19.md — the ONE
+blocking decision (classifier blocks the mint scripts; three options; the
+S4 evidence expires ~2026-08-20T16:51Z and DIES ON REBOOT).
+
+State on impl/r2-s0-mint-resolver @ 3a75a77 (pushed): S0 resolver + S1
+capture flip (p2-038.3, claim barrier, D-079 r5→r6 chain, both
+neutrality-proven 19/19) + S2 goldens (mint suite FULL GREEN, first of the
+cycle) + S3 _v3 family emission (bound r6 at birth; _v1/_v2 byte-preserved)
++ S4 evidence ×3 (33 receipts PASS at the measurement checkout, landed) —
+each stage through the C-028 gauntlet (two-lens reviews, fix rounds with
+delta re-audits, magistrate final reviews; custody
+docs/process_traces/2026-08-19-r1-r2-codesign/ + session scratchpad
+r5-issuance/, r6-issuance/, s2-goldens/, s4/). Canonical at the S1-clean
+head: 3,755 ran; residual reds now only docs-freshness (S6) after the
+three-window fixture fix + residue round; the evidence-author pair cured
+at S3. Remaining: S5 freeze-0003 ×3 (BLOCKED on Ed; procedure + exact
+commands in the packet) → S6 docs/canonical FULL GREEN → the r6
+confirmation table (draft in the packet, three [PENDING MINT] rows).
+
 ## ▶▶ T12 (2026-08-19) — R1/R2 CO-DESIGN RULINGS RATIFIED; CYCLE RESUMES UNDER THEM
 
 The two rulings that parked the re-freeze cycle at steps 3-6 are RATIFIED
