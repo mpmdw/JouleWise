@@ -1284,9 +1284,9 @@ ANCHOR_METHOD_DERIVERS = {
     CLOCK_METHOD_V3: derive_powermetrics_anchor_v3,
 }
 ANCHOR_METHOD_VERSIONS = frozenset(ANCHOR_METHOD_DERIVERS)
-# The consult's F3 reissue paragraph makes activation part of the later D-079
-# acceptance reissue; this implementation remains prospective until then.
-ACTIVE_CAPTURE_ANCHOR_METHOD = CLOCK_METHOD_V2
+# The ratified D-079 r3 science-facing generation is the activation event for
+# prospective capture under the rate-aware set-membership anchor.
+ACTIVE_CAPTURE_ANCHOR_METHOD = CLOCK_METHOD_V3
 
 
 def resolve_anchor_deriver(method: str):
@@ -1296,6 +1296,24 @@ def resolve_anchor_deriver(method: str):
         return ANCHOR_METHOD_DERIVERS[method]
     except (KeyError, TypeError) as exc:
         raise ValueError("clock anchor method is unregistered") from exc
+
+
+CLOCK_EVIDENCE_DERIVERS = {
+    CLOCK_METHOD_V2: derive_powermetrics_clock_evidence_v2,
+    CLOCK_METHOD_V3: derive_powermetrics_clock_evidence_v3,
+}
+
+
+def resolve_clock_evidence_deriver(method: str):
+    """Return the full-evidence deriver for a registered capture method."""
+
+    # Keep capture dispatch subordinate to the canonical anchor registry so a
+    # full-evidence wrapper cannot make an otherwise unregistered method live.
+    resolve_anchor_deriver(method)
+    try:
+        return CLOCK_EVIDENCE_DERIVERS[method]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("clock evidence method is unregistered") from exc
 
 
 # Independent raw RECONSTRUCTION (the reducer's own re-derivation from raw

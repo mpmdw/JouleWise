@@ -41,6 +41,7 @@ from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus, Telemet
 from joulewise.uncertainty_evidence import (
     ACTIVE_CAPTURE_ANCHOR_METHOD,
     CLOCK_METHOD_V2,
+    CLOCK_METHOD_V3,
     derive_powermetrics_clock_evidence,
     derive_powermetrics_clock_evidence_v2,
 )
@@ -207,8 +208,8 @@ class PowermetricsParserTests(unittest.TestCase):
                 record.metadata["plist_timestamp_s"],
             )
 
-    def test_capture_method_switch_remains_on_v2(self) -> None:
-        self.assertEqual(ACTIVE_CAPTURE_ANCHOR_METHOD, CLOCK_METHOD_V2)
+    def test_capture_method_switch_activates_v3(self) -> None:
+        self.assertEqual(ACTIVE_CAPTURE_ANCHOR_METHOD, CLOCK_METHOD_V3)
 
     def test_samples_align_all_rails_on_each_timestamp_for_d027(self) -> None:
         records = parse_powermetrics_records(FIXTURE.read_bytes())

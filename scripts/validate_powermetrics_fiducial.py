@@ -117,8 +117,8 @@ from joulewise.powermetrics_fiducial import (  # noqa: E402
     rederive_detection_from_artifacts,
 )
 from joulewise.uncertainty_evidence import (  # noqa: E402
-    CLOCK_METHOD_V2,
-    derive_powermetrics_clock_evidence_v2,
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+    resolve_clock_evidence_deriver,
 )
 
 PROTOCOL_PATH = (
@@ -565,6 +565,43 @@ def _write_text_artifact(path: Path, payload: str, stage: WriterStage) -> None:
 
 def sha256_path(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _derive_active_capture_clock_evidence(*, stamps, records):
+    """Derive calibration clock evidence under the active registered method."""
+
+    deriver = resolve_clock_evidence_deriver(ACTIVE_CAPTURE_ANCHOR_METHOD)
+    return deriver(stamps=stamps, records=records)
+
+
+def _label_active_capture_detection(detection, evidence: Mapping[str, Any]):
+    """Carry the active clock method into the authored instrument evidence."""
+
+    clock_anchor = evidence.get("clock_anchor")
+    if not isinstance(clock_anchor, Mapping):
+        raise ValueError("active capture clock anchor is missing")
+    method = clock_anchor.get("method")
+    if method != ACTIVE_CAPTURE_ANCHOR_METHOD:
+        raise ValueError("active capture clock anchor method drifted")
+    return replace(
+        detection,
+        anchor_method=method,
+        derivation_role="prospective",
+    )
+
+
+def _planned_t1_bindings(
+    *, planned_epoch: Mapping[str, Any], sampler_binary: Path, mlx_version: object
+) -> dict[str, Any]:
+    """Project the capture-time T1 bindings from the active method identity."""
+
+    return {
+        **planned_epoch,
+        "powermetrics_sha256": sha256_path(sampler_binary),
+        "anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD,
+        "mlx_version": mlx_version,
+        "protocol_sha256": sha256_path(PROTOCOL_PATH),
+    }
 
 
 def _raise_calibration_launch_lineage(
@@ -1636,13 +1673,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     out_dir = args.output_root / validation_id
     custody_locator = normalize_calibration_custody_path(out_dir)
-    planned_t1 = {
-        **planned_epoch,
-        "powermetrics_sha256": sha256_path(args.sampler_binary),
-        "anchor_method_version": CLOCK_METHOD_V2,
-        "mlx_version": getattr(mx, "__version__", None),
-        "protocol_sha256": sha256_path(PROTOCOL_PATH),
-    }
+    planned_t1 = _planned_t1_bindings(
+        planned_epoch=planned_epoch,
+        sampler_binary=args.sampler_binary,
+        mlx_version=getattr(mx, "__version__", None),
+    )
     # D-109 reservation-first: ordinary captures append here; D-117 bracket
     # captures authenticate the exact slot that the bookend tool already
     # reserved. Both paths run before directory creation, sampler launch, and
@@ -1948,7 +1983,7 @@ def main(argv: list[str] | None = None) -> int:
     data = capture_path.read_bytes()
     _writer_stage(WriterStage.DURING_RAW_EVENTS_ARTIFACT)
     native_records = parse_powermetrics_records(data)
-    evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
+    evidence, point_anchor_s = _derive_active_capture_clock_evidence(
         stamps={
             "pre_spawn": pre_spawn,
             "first_parse": first_parse,
@@ -2009,6 +2044,7 @@ def main(argv: list[str] | None = None) -> int:
             None if anchor_resolved else CLOCK_ANCHOR_UNRESOLVED
         ),
     )
+    detection = _label_active_capture_detection(detection, evidence)
     events.close()
 
     if launch_authentication is not None:

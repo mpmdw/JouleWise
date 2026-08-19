@@ -24,6 +24,7 @@ import time
 import unittest
 from unittest import mock
 
+from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 from joulewise.calibration_exits import (
     REFUSAL_BY_CODE,
     REFUSAL_INVENTORY,
@@ -755,7 +756,7 @@ def _rekey_private_writer_acceptance(repo: Path) -> None:
         repo
         / "configs"
         / "calibration"
-        / "calibration_acceptance_d079_v2_n17_r3.json"
+        / "calibration_acceptance_d079_v2_n17_r4.json"
     )
     acceptance = json.loads(acceptance_path.read_text(encoding="utf-8"))
     estimator_paths = tuple(
@@ -2270,11 +2271,11 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             REPO_ROOT
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_n17_r3.json",
+            / "calibration_acceptance_d079_v2_n17_r4.json",
             self.repo
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_n17_r3.json",
+            / "calibration_acceptance_d079_v2_n17_r4.json",
         )
         _rekey_private_writer_acceptance(self.repo)
         self.pin = self.repo / "configs" / "calibration" / "calibration_ledger_head.json"
@@ -3058,9 +3059,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "powermetrics_sha256": hashlib.sha256(
                 self.fake_sampler.read_bytes()
             ).hexdigest(),
-            "anchor_method_version": (
-                "powermetrics_native_second_censored_intersection_v1"
-            ),
+            "anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD,
             "mlx_version": "test-mlx-1",
             "protocol_sha256": hashlib.sha256(
                 (

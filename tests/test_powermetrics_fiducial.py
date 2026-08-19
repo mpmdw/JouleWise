@@ -248,6 +248,98 @@ class ScheduleTests(unittest.TestCase):
             )
 
 
+class ActiveCaptureMethodTests(unittest.TestCase):
+    def test_capture_clock_dispatch_emits_active_schema_and_tracks_registry(
+        self,
+    ) -> None:
+        from joulewise.uncertainty_evidence import (
+            CLOCK_METHOD_V2,
+            CLOCK_METHOD_V3,
+            SCHEMA_VERSION_V2,
+            SCHEMA_VERSION_V3,
+        )
+        from tests.test_uncertainty_evidence import AnchorV3ExactTests
+
+        fixture = AnchorV3ExactTests()
+        stamps = fixture.stamps()
+        records = fixture.records()
+
+        evidence, point = validation_script._derive_active_capture_clock_evidence(
+            stamps=stamps, records=records
+        )
+        self.assertEqual(evidence["schema_version"], SCHEMA_VERSION_V3)
+        self.assertEqual(evidence["clock_anchor"]["method"], CLOCK_METHOD_V3)
+        self.assertIsNotNone(point)
+        detection = validation_script._label_active_capture_detection(
+            fiducial_module.FiducialDetection(
+                baseline_w=None,
+                robust_sigma_w=None,
+                fits=(),
+                spurious_plateau_count=0,
+                all_pulses_detected=False,
+                b_fiducial_s=None,
+                residual_median_s=None,
+                residual_p95_s=None,
+            ),
+            evidence,
+        )
+        self.assertEqual(detection.anchor_method, CLOCK_METHOD_V3)
+        self.assertEqual(detection.derivation_role, "prospective")
+
+        with patch.object(
+            validation_script, "ACTIVE_CAPTURE_ANCHOR_METHOD", CLOCK_METHOD_V2
+        ):
+            historical, _historical_point = (
+                validation_script._derive_active_capture_clock_evidence(
+                    stamps=stamps, records=records
+                )
+            )
+            historical_detection = (
+                validation_script._label_active_capture_detection(
+                    detection, historical
+                )
+            )
+        self.assertEqual(historical["schema_version"], SCHEMA_VERSION_V2)
+        self.assertEqual(historical["clock_anchor"]["method"], CLOCK_METHOD_V2)
+        self.assertEqual(historical_detection.anchor_method, CLOCK_METHOD_V2)
+
+    def test_planned_t1_projection_tracks_active_capture_method(self) -> None:
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V2, CLOCK_METHOD_V3
+
+        planned_epoch = {
+            "os_build": "test-build",
+            "hardware_model": "test-model",
+        }
+        with patch.object(
+            validation_script,
+            "sha256_path",
+            side_effect=["sampler-digest", "protocol-digest"],
+        ):
+            projected = validation_script._planned_t1_bindings(
+                planned_epoch=planned_epoch,
+                sampler_binary=Path("/test/powermetrics"),
+                mlx_version="test-mlx",
+            )
+        self.assertEqual(projected["anchor_method_version"], CLOCK_METHOD_V3)
+
+        with (
+            patch.object(
+                validation_script, "ACTIVE_CAPTURE_ANCHOR_METHOD", CLOCK_METHOD_V2
+            ),
+            patch.object(
+                validation_script,
+                "sha256_path",
+                side_effect=["sampler-digest", "protocol-digest"],
+            ),
+        ):
+            historical = validation_script._planned_t1_bindings(
+                planned_epoch=planned_epoch,
+                sampler_binary=Path("/test/powermetrics"),
+                mlx_version="test-mlx",
+            )
+        self.assertEqual(historical["anchor_method_version"], CLOCK_METHOD_V2)
+
+
 class DetectorTests(unittest.TestCase):
     def make_case(self, *, shift_s: float, jitter: bool = False, count: int = 6):
         true_pulses = [
@@ -1453,16 +1545,16 @@ class FrozenProtocolTests(unittest.TestCase):
         # stale; the atomic Phase-2 acceptance/pin re-freeze is exactly what
         # cures it, so this unit proves the cured state end to end.
         path = Path(
-            "configs/calibration/calibration_acceptance_d079_v2_n17_r3.json"
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r4.json"
         )
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "73f022633e7bc22e9e129617f3f2ad8797293adaff3b53923dc41f75da2ae917",
+            "dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb",
         )
         artifact = json.loads(raw)
         self.assertEqual(
-            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r3"
+            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r4"
         )
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         derivation = artifact["decimal_derivation"]

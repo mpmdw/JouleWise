@@ -49,6 +49,12 @@ EXPECTED_BY_ACCEPTANCE_ID = {
 EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n19_r2"] = (
     EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n19"]
 )
+# r4 is a science-neutral estimator-pin reissue of r3: identical corpus,
+# identical member table, therefore identical expected statistics AND the same
+# anchor-v3 value semantics (the stored v2 lexeme is SUPERSEDED, never copied).
+EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r4"] = (
+    EXPECTED_BY_ACCEPTANCE_ID["d079_calibration_acceptance_v2_n17_r3"]
+)
 
 
 def sha256(path: Path) -> str:

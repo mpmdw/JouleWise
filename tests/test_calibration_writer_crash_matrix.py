@@ -15,6 +15,7 @@ import time
 import unittest
 from unittest import mock
 
+from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 from joulewise.calibration_ledger import (
     BRACKET_SESSION_ABORT_EVENT,
     BRACKET_SESSION_FINALIZATION_EVENT,
@@ -102,8 +103,8 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             cls.repo / "configs" / "calibration" / "powermetrics_fiducial",
         )
         shutil.copy2(
-            REPO_ROOT / "configs" / "calibration" / "calibration_acceptance_d079_v2_n17_r3.json",
-            cls.repo / "configs" / "calibration" / "calibration_acceptance_d079_v2_n17_r3.json",
+            REPO_ROOT / "configs" / "calibration" / "calibration_acceptance_d079_v2_n17_r4.json",
+            cls.repo / "configs" / "calibration" / "calibration_acceptance_d079_v2_n17_r4.json",
         )
         # This private synthetic repository must authenticate the estimator
         # bytes it actually copied, which are this checkout's bytes rather than
@@ -115,7 +116,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             cls.repo
             / "configs"
             / "calibration"
-            / "calibration_acceptance_d079_v2_n17_r3.json"
+            / "calibration_acceptance_d079_v2_n17_r4.json"
         )
         acceptance = json.loads(acceptance_path.read_text(encoding="utf-8"))
         estimator_paths = tuple(
@@ -150,7 +151,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
                 REPO_ROOT
                 / "configs"
                 / "calibration"
-                / "calibration_acceptance_d079_v2_n17_r3.json"
+                / "calibration_acceptance_d079_v2_n17_r4.json"
             ).read_bytes()
         ).hexdigest()
         new_acceptance_sha256 = hashlib.sha256(
@@ -220,9 +221,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
                 "powermetrics_sha256": hashlib.sha256(
                     self.fake_sampler.read_bytes()
                 ).hexdigest(),
-                "anchor_method_version": (
-                    "powermetrics_native_second_censored_intersection_v1"
-                ),
+                "anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD,
                 "mlx_version": "test-mlx-1",
                 "protocol_sha256": hashlib.sha256(
                     (

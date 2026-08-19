@@ -38,6 +38,7 @@ from joulewise.powermetrics_fiducial import (
     verify_stored_evidence_physics,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
+from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
 BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
@@ -86,6 +87,22 @@ ANCHOR_V3_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r3"
 ANCHOR_V3_ACCEPTANCE_BOUND_SHA256 = (
     "73f022633e7bc22e9e129617f3f2ad8797293adaff3b53923dc41f75da2ae917"
 )
+# D-079 anchor-v3 CAPTURE-ACTIVATION reissue.  Activating the rate-aware
+# set-membership anchor as the live capture method
+# (`ACTIVE_CAPTURE_ANCHOR_METHOD`, plus the capture/admission/projection wiring)
+# changed the bytes of `joulewise/uncertainty_evidence.py`, one of the four
+# governed estimator sources, which fires the r3 artifact's own
+# `protocol_or_estimator_byte_change` trigger.  SCIENCE-NEUTRAL: the whole
+# corpus was re-derived under the anchor-v3 estimator at the activation head and
+# every physical value reproduced r3 exactly, so r4 differs from r3 in the
+# estimator pin set alone.  r3 is RETAINED as an intermediate generation.
+ANCHOR_V3_R4_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r4.json"
+)
+ANCHOR_V3_R4_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r4"
+ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256 = (
+    "dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -107,10 +124,17 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_R4_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R4_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r4.json"
+        ),
+        "file_sha256": ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R4_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R4_ACCEPTANCE_BOUND_PATH
 DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
     "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
 )
@@ -156,6 +180,9 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     PREDECESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
     SUCCESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
     ANCHOR_V3_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r4 is a science-neutral estimator-pin reissue of r3: same corpus, same
+    # member table, therefore the same D-102 derivation.
+    ANCHOR_V3_R4_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
 # Retained name for the D-116/D-138 n=19 generations' comparators.
 _D102_OPERATIVE_VALUES = _D102_N19_DERIVATION["operatives"]
@@ -1010,7 +1037,7 @@ def load_calibration_candidate(
         or bindings.get("protocol_sha256") != protocol_sha256(str(protocol_id))
         or evidence.get("pulse_count") != protocol_pulse_count(str(protocol_id))
         or evidence.get("anchor_method_version")
-        != "powermetrics_native_second_censored_intersection_v1"
+        != ACTIVE_CAPTURE_ANCHOR_METHOD
         or evidence.get("residual_region_method") != RESIDUAL_REGION_METHOD
         or not isinstance(
             evidence.get("residual_region_coverage_assumption"), str

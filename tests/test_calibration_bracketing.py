@@ -22,8 +22,11 @@ from joulewise.calibration_bracketing import (
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     ESTIMATOR_CODE_PATHS,
     ISSUED_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_ACCEPTANCE_BOUND_PATH,
     ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_ACCEPTANCE_ID,
+    ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R4_ACCEPTANCE_ID,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
@@ -67,6 +70,7 @@ from joulewise.powermetrics_fiducial import (
     V2_BINDING_FIELDS,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V2, CLOCK_METHOD_V3
 from scripts.calibration_ledger_bootstrap import (
     _issued_acceptance_artifact,
     _issued_artifact_bytes,
@@ -566,12 +570,13 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
         # The live default is the ACTIVE generation.  Since the anchor-v3
-        # science reissue it is the n=17 generation; both retained earlier
-        # generations keep their own registered pins and are asserted below.
+        # capture-activation reissue it is the n=17 r4 generation; all three
+        # retained earlier generations keep their own registered pins and are
+        # asserted below.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R4_ACCEPTANCE_ID)
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
@@ -580,6 +585,12 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(SUCCESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
             SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
+        )
+        # r3 is RETAINED as an intermediate generation: superseded as the live
+        # default, still authenticating byte-identically under its own pin.
+        self.assertEqual(
+            hashlib.sha256(ANCHOR_V3_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
+            ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
         )
         self.assertEqual(
             json.loads(SUCCESSOR_ACCEPTANCE_BOUND_PATH.read_bytes())["acceptance_id"],
@@ -2318,27 +2329,18 @@ class CalibrationBracketingTests(unittest.TestCase):
             ],
         )
 
-    def test_hash_rekeyed_candidate_cannot_bypass_binding_authentication(self) -> None:
+    def test_candidate_admission_requires_active_v3_method(self) -> None:
         # H2 validity defect shape: rewriting a binding and then rehashing the
         # evidence/manifest must not create an authenticated bracket endpoint.
         bindings = dict(self.bindings)
         bindings.update(
             {
-                "anchor_method_version": (
-                    "powermetrics_native_second_censored_intersection_v1"
-                ),
+                "anchor_method_version": CLOCK_METHOD_V3,
                 "pulse_protocol_id": PROTOCOL_ID,
                 "protocol_sha256": PROTOCOL_V3_SHA256,
                 "estimator_revision": RESIDUAL_REGION_METHOD,
             }
         )
-        canonical = json.dumps(
-            bindings,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8")
         events = b'{"timestamp_s":99.0}\n'
         raw = b"authenticated-by-patched-physics"
         evidence = {
@@ -2357,7 +2359,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             "bindings": bindings,
             "binding_evidence": {
                 "schema_version": "joulewise.instrument_binding_evidence.v1",
-                "binding_vector_sha256": hashlib.sha256(canonical).hexdigest(),
+                "binding_vector_sha256": "",
                 "powermetrics_binary": {
                     "path": "/usr/bin/powermetrics",
                     "sha256": bindings["powermetrics_sha256"],
@@ -2376,7 +2378,20 @@ class CalibrationBracketingTests(unittest.TestCase):
             (directory / "events.jsonl").write_bytes(events)
             (directory / "raw/powermetrics.plist").write_bytes(raw)
 
-            def write_evidence_and_manifest() -> None:
+            def write_evidence_and_manifest(
+                *, refresh_binding_vector: bool = True
+            ) -> None:
+                if refresh_binding_vector:
+                    canonical = json.dumps(
+                        evidence["bindings"],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    ).encode("utf-8")
+                    evidence["binding_evidence"]["binding_vector_sha256"] = (
+                        hashlib.sha256(canonical).hexdigest()
+                    )
                 evidence_raw = json.dumps(evidence, sort_keys=True).encode()
                 (directory / "instrument_evidence.json").write_bytes(evidence_raw)
                 artifacts = {
@@ -2409,8 +2424,19 @@ class CalibrationBracketingTests(unittest.TestCase):
                 )
                 self.assertIsNotNone(candidate)
                 self.assertEqual(candidate.b_fiducial_s, "0.02")
-                evidence["bindings"]["hardware_model"] = "tampered-model"
+                self.assertEqual(
+                    candidate.bindings["anchor_method_version"], CLOCK_METHOD_V3
+                )
+                evidence["anchor_method_version"] = CLOCK_METHOD_V2
+                evidence["bindings"]["anchor_method_version"] = CLOCK_METHOD_V2
                 write_evidence_and_manifest()
+                self.assertIsNone(
+                    load_calibration_candidate(directory, runs_root=root)
+                )
+                evidence["anchor_method_version"] = CLOCK_METHOD_V3
+                evidence["bindings"]["anchor_method_version"] = CLOCK_METHOD_V3
+                evidence["bindings"]["hardware_model"] = "tampered-model"
+                write_evidence_and_manifest(refresh_binding_vector=False)
                 self.assertIsNone(
                     load_calibration_candidate(directory, runs_root=root)
                 )

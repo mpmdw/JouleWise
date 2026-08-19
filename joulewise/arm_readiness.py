@@ -4145,6 +4145,7 @@ def _issued_d079(tree: Mapping[str, Any]) -> bool:
         "d079_calibration_acceptance_v2_n19",
         "d079_calibration_acceptance_v2_n19_r2",
         "d079_calibration_acceptance_v2_n17_r3",
+        "d079_calibration_acceptance_v2_n17_r4",
     }
 
 

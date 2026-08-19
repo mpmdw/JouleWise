@@ -920,6 +920,7 @@ class AnchorV3ExactTests(unittest.TestCase):
     def test_v3_wrapper_and_registered_dispatch(self) -> None:
         from joulewise.uncertainty_evidence import (
             ACTIVE_CAPTURE_ANCHOR_METHOD,
+            ANCHOR_METHOD_DERIVERS,
             ANCHOR_METHOD_VERSIONS,
             CLOCK_METHOD_V2,
             CLOCK_METHOD_V3,
@@ -937,6 +938,11 @@ class AnchorV3ExactTests(unittest.TestCase):
         self.assertIsNotNone(point)
         self.assertEqual(ANCHOR_METHOD_VERSIONS, {CLOCK_METHOD_V2, CLOCK_METHOD_V3})
         self.assertIs(resolve_anchor_deriver(CLOCK_METHOD_V3), derive_powermetrics_anchor_v3)
-        self.assertEqual(ACTIVE_CAPTURE_ANCHOR_METHOD, CLOCK_METHOD_V2)
+        self.assertEqual(ACTIVE_CAPTURE_ANCHOR_METHOD, CLOCK_METHOD_V3)
+        self.assertIn(ACTIVE_CAPTURE_ANCHOR_METHOD, ANCHOR_METHOD_DERIVERS)
+        self.assertIs(
+            resolve_anchor_deriver(ACTIVE_CAPTURE_ANCHOR_METHOD),
+            derive_powermetrics_anchor_v3,
+        )
         with self.assertRaisesRegex(ValueError, "unregistered"):
             resolve_anchor_deriver("unknown")
