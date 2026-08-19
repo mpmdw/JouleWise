@@ -21,6 +21,7 @@ from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     ESTIMATOR_CODE_PATHS,
+    GENESIS_FIXTURE_ACCEPTANCE_SHA256,
     ISSUED_ACCEPTANCE_BOUND_SHA256,
     ANCHOR_V3_ACCEPTANCE_BOUND_PATH,
     ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
@@ -33,6 +34,7 @@ from joulewise.calibration_bracketing import (
     SUCCESSOR_ACCEPTANCE_ID,
     CalibrationCandidate,
     _canonical_sha256,
+    _acceptance_artifact_sha256,
     _valid_acceptance_bound,
     build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
@@ -609,6 +611,21 @@ class CalibrationBracketingTests(unittest.TestCase):
         self.assertEqual(
             pin["head_digest"],
             "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
+        )
+
+    def test_genesis_fixture_bytes_authenticate_under_their_own_pin(self) -> None:
+        raw = _unissued_acceptance_fixture_bytes()
+        fixture = json.loads(raw)
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(), GENESIS_FIXTURE_ACCEPTANCE_SHA256
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "schema-fixture-unissued.json"
+            path.write_bytes(raw)
+            self.assertEqual(load_calibration_acceptance_bound(path), fixture)
+        self.assertEqual(
+            _acceptance_artifact_sha256(fixture),
+            GENESIS_FIXTURE_ACCEPTANCE_SHA256,
         )
 
     def test_issued_allowance_projection_uses_exact_decimal_authority(self) -> None:

@@ -831,9 +831,9 @@ def _v2_postcollection(
             "head_digest"
         ],
         "observed_drift_s": "0.001000",
-        "allowance_rule": generalized.V2_ALLOWANCE_RULE,
-        "bracket_screen_s": generalized.V2_BRACKET_SCREEN_S,
-        "applied_allowance_s": generalized.V2_BRACKET_SCREEN_S,
+        "allowance_rule": generalized.V2_ALLOWANCE_RULE(_live_acceptance_id()),
+        "bracket_screen_s": generalized.V2_BRACKET_SCREEN_S(_live_acceptance_id()),
+        "applied_allowance_s": generalized.V2_BRACKET_SCREEN_S(_live_acceptance_id()),
         "allowance_embedding_count": 1,
         "extraction_report_sha256": extraction_report_sha256,
         "absolute_floor_full_precision": str(absolute_decimal),
@@ -843,6 +843,12 @@ def _v2_postcollection(
         "comparative_floor_six_decimal": six(comparative_decimal),
         "operative_floor_six_decimal": six(operative_decimal),
     }
+
+
+def _live_acceptance_id() -> str:
+    acceptance = load_calibration_acceptance_bound()
+    assert acceptance is not None
+    return acceptance["acceptance_id"]
 
 
 def _fixture_canonical_sha256(value: object) -> str:
@@ -1225,7 +1231,9 @@ def synthetic_v2_fixture() -> tuple[
                         pre_exact_bound_lexeme_s="0.020000",
                         post_exact_bound_lexeme_s="0.021000",
                     ),
-                    "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+                    "allowance_rule": generalized.V2_ALLOWANCE_RULE(
+                        _live_acceptance_id()
+                    ),
                 }
             ),
         )
@@ -1350,7 +1358,7 @@ def _mixed_calibration_basis(
             "derivation_sha256": acceptance["derivation_sha256"],
             "schema_version": acceptance["schema_version"],
         },
-        "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+        "allowance_rule": generalized.V2_ALLOWANCE_RULE(_live_acceptance_id()),
         "allowance_embedding_count": 1,
         "component_composition": "componentwise_max_never_sum.v1",
     }
@@ -2726,7 +2734,9 @@ def install_production_extracted_v2_cli_fixture(root: Path):
                     pre_exact_bound_lexeme_s="0.020000",
                     post_exact_bound_lexeme_s="0.021000",
                 ),
-                "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+                "allowance_rule": generalized.V2_ALLOWANCE_RULE(
+                    _live_acceptance_id()
+                ),
             },
         )
         producer["plan"].update(
@@ -5072,7 +5082,9 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
                     Decimal(bracket["acceptance"]["drift"]["observed_s"]),
                     "f",
                 ),
-                "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+                "allowance_rule": generalized.V2_ALLOWANCE_RULE(
+                    _live_acceptance_id()
+                ),
                 "bracket_screen_s": bracket["acceptance"]["drift"]["screen_s"],
                 "applied_allowance_s": allowance["value_s"],
                 "allowance_embedding_count": allowance["embedding_count"],
@@ -5205,7 +5217,9 @@ def build_d117_production_fixture(root: Path) -> SimpleNamespace:
                     ),
                     "f",
                 ),
-                "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+                "allowance_rule": generalized.V2_ALLOWANCE_RULE(
+                    _live_acceptance_id()
+                ),
                 "bracket_screen_s": second_bracket["acceptance"]["drift"][
                     "screen_s"
                 ],
@@ -6029,8 +6043,12 @@ class V2PinsetAndMintTests(unittest.TestCase):
             )["artifact_id"]
             for cell in producer["cells"]:
                 cell["allowance_contract"] = {
-                    "allowance_rule": generalized.V2_ALLOWANCE_RULE,
-                    "bracket_screen_s": generalized.V2_BRACKET_SCREEN_S,
+                    "allowance_rule": generalized.V2_ALLOWANCE_RULE(
+                        _live_acceptance_id()
+                    ),
+                    "bracket_screen_s": generalized.V2_BRACKET_SCREEN_S(
+                        _live_acceptance_id()
+                    ),
                     "allowance_embedding_count": 1,
                 }
                 for component_name in ("absolute", "comparative"):
@@ -8746,7 +8764,9 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
                         later_observations[1].exact_bound_lexeme_s
                     ),
                 ),
-                "allowance_rule": generalized.V2_ALLOWANCE_RULE,
+                "allowance_rule": generalized.V2_ALLOWANCE_RULE(
+                    _live_acceptance_id()
+                ),
             }
             correct = replace(
                 original,
@@ -9462,9 +9482,17 @@ print("AUDIT=" + json.dumps({"observed": sorted(observed), "registered": sorted(
             path, _digest, _inputs, _snapshot = freeze_synthetic_v2_pinset(root)
             source = load_json(path)
             for label, observed, applied in (
-                ("negative-zero", "-0", generalized.V2_BRACKET_SCREEN_S),
+                (
+                    "negative-zero",
+                    "-0",
+                    generalized.V2_BRACKET_SCREEN_S(_live_acceptance_id()),
+                ),
                 ("exponent", "0", "1.0818E-2"),
-                ("leading-plus", "+0", generalized.V2_BRACKET_SCREEN_S),
+                (
+                    "leading-plus",
+                    "+0",
+                    generalized.V2_BRACKET_SCREEN_S(_live_acceptance_id()),
+                ),
             ):
                 with self.subTest(label=label):
                     candidate = copy.deepcopy(source)
