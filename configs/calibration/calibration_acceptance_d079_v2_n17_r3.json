@@ -1,0 +1,628 @@
+{
+  "schema_version": "joulewise.calibration_acceptance_bound.v2",
+  "acceptance_id": "d079_calibration_acceptance_v2_n17_r3",
+  "decision_ids": [
+    "D-102",
+    "D-109"
+  ],
+  "artifact_role": "issued",
+  "issuance": {
+    "status": "issued",
+    "claim_eligible": true,
+    "reason": "D-109 R2 raw-physics and artifact-hash verification is bound by the authenticated historical-import cutoff; every member value in this generation is re-derived from manifest-authenticated primary bytes under the ratified anchor-v3 estimator"
+  },
+  "ledger_cutoff": {
+    "sequence": 76,
+    "head_digest": "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
+    "ledger_schema": "joulewise.calibration_observation_ledger.v1",
+    "role": "issued_acceptance_baseline"
+  },
+  "identity_epoch": {
+    "os_build": "25F84",
+    "hardware_model": "Mac15,9",
+    "power_policy": "ac_high_power",
+    "sampling_interval_ms": 100,
+    "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+    "pulse_protocol_id": "powermetrics_pulse_fiducial_v3"
+  },
+  "prospective_rederivation": {
+    "calendar_expiry": null,
+    "trigger_observation_rule": "judge_under_prior_artifact_never_self_fit",
+    "triggers": [
+      "identity_field_change",
+      "protocol_or_estimator_byte_change",
+      "new_valid_same_identity_capture_expands_observed_range",
+      "corpus_doubles_from_17_to_34",
+      "new_systematic_failure_challenges_preflight_screen"
+    ],
+    "protocol_sha256": "9eaf92f85136e234c56ea3ffd34392a73c313d4a092cabf308f5f5aaff9a31b1",
+    "estimator_code_sha256": {
+      "joulewise/powermetrics_fiducial.py": "07630bc4345fa9eb8a2bd7da5c5f83abdc2eaed9a3247a6ccfaa463e0755fe48",
+      "joulewise/uncertainty_evidence.py": "be6187d65827b6ebe30e4357999ebc8b4662e9c7bb55490cf23284ed314ffa4d",
+      "joulewise/adapters/powermetrics.py": "9f165a513f1f60a314dfaa3fbc8c95781c13072b1e997c208dfad0acda7ed3ec",
+      "joulewise/reduce.py": "1da45a4791ae4e4aa5ee05d3a26a60088ff85fe50d9f440ac975f2037408fcdb"
+    }
+  },
+  "derivation_corpus": {
+    "selection": "valid protocol-v3 captures before the excluded window-B judged pair, exact identity epoch, re-derived from primary bytes under the anchor-v3 rate-aware set-membership estimator; the two pre-clock-discipline members whose stamp rectangles admit no single affine wall rate are EXCLUDED and recorded in derivation_notes.excluded_predecessor_members",
+    "n": 17,
+    "members": [
+      {
+        "member_id": "20260722T145535-e941c821",
+        "source_directory": "runs_window_a_20260722/instrument_validation/20260722T145535-e941c821",
+        "b_fiducial_s": "0.030067931757111657",
+        "manifest_sha256": "e34cdc199a479364dfdc539b3f924aefc997f7fecdeaa5d3d706028bf78e13a7",
+        "instrument_evidence_sha256": "148a7b45fa5efe88c6d925c836cb9c11596ffc1412960f6248e6bd8114b3eb7a"
+      },
+      {
+        "member_id": "20260722T194118-9dc0749d",
+        "source_directory": "runs_window_a2_20260722/instrument_validation/20260722T194118-9dc0749d",
+        "b_fiducial_s": "0.027365018417518542",
+        "manifest_sha256": "0852da1adb0d0dd243b2142bd67da636f26c07eee4bbfbe1f79f78c771742041",
+        "instrument_evidence_sha256": "b763e5d6703255d7ebb18113c56cccda8908bb9d8049ab4210935304f50faa3f"
+      },
+      {
+        "member_id": "20260722T214220-1acdbbc0",
+        "source_directory": "runs_window_a3_20260722/instrument_validation/20260722T214220-1acdbbc0",
+        "b_fiducial_s": "0.03289849371536248",
+        "manifest_sha256": "ee78c1a87e5ab21f5c042e4dd2db38b9b7742be1ecaaa75fe0280f7c75a2f5b1",
+        "instrument_evidence_sha256": "3ea8f946d3522de46b01a90d29b0462f138a7048aa96df33bac79509d46349ea"
+      },
+      {
+        "member_id": "20260722T215127-eeef661a",
+        "source_directory": "runs_window_a4_20260722/instrument_validation/20260722T215127-eeef661a",
+        "b_fiducial_s": "0.02317490442656863",
+        "manifest_sha256": "9bf378fb924b96cf88015bd35f8733a2a31b2a965872a7781f7c3170fc55e0a5",
+        "instrument_evidence_sha256": "0659f79270fca6fa1459c01cf7ba8163337b28c3224b3c751eaa2241ca728024"
+      },
+      {
+        "member_id": "20260722T232509-82642517",
+        "source_directory": "runs_window_a5_20260723/instrument_validation/20260722T232509-82642517",
+        "b_fiducial_s": "0.028744604461883507",
+        "manifest_sha256": "5dcba24e377004801d8630dc7007955c85d6e0df42d23766474ef8e70e9bfe70",
+        "instrument_evidence_sha256": "e2741fe23dcf9bf972f037d6736ec78d3733dbb76d3522d03818b705a8a444d7"
+      },
+      {
+        "member_id": "20260723T023058-8732d1c9",
+        "source_directory": "runs_window_a5_20260723/instrument_validation/20260723T023058-8732d1c9",
+        "b_fiducial_s": "0.025549688302808828",
+        "manifest_sha256": "ce4b3866ad92fa0be6ae5c2d8dead3c745aae5fd572b2b12f22ce6315977317d",
+        "instrument_evidence_sha256": "68680e5371e0cfac4313e4f0198e29ad89b477f6e6b470d6813d2131f83f921c"
+      },
+      {
+        "member_id": "20260723T052051-d9358c8a",
+        "source_directory": "runs_window_a5_20260723/instrument_validation/20260723T052051-d9358c8a",
+        "b_fiducial_s": "0.026112736870656926",
+        "manifest_sha256": "0f13d2f89242aa06ac921ef8e80c90f10079fefa78ecc313195fc82ad729be02",
+        "instrument_evidence_sha256": "62bd8e967bfd6f6c61e86f68fc427ded99d3cc301ecd3b6263571010b87a4e1c"
+      },
+      {
+        "member_id": "20260723T194632-d04e038e",
+        "source_directory": "runs_window_a6_20260723/instrument_validation/20260723T194632-d04e038e",
+        "b_fiducial_s": "0.025120423355537637",
+        "manifest_sha256": "b1835c633161226ce71b5b7ba17ad95d12719eba00201819f6b0a725aa01d1ec",
+        "instrument_evidence_sha256": "f321e38ef08d08455a89084e07de65beea4be43c4d5157e4432c04b908b909a6"
+      },
+      {
+        "member_id": "20260723T195730-bc4ba14a",
+        "source_directory": "runs_window_a7_20260723/instrument_validation/20260723T195730-bc4ba14a",
+        "b_fiducial_s": "0.025462798878078775",
+        "manifest_sha256": "1a9e9776d1286bf8b3f7f3e01b943baed8e275d4d27271e25e91ab773eeb2005",
+        "instrument_evidence_sha256": "71c646f3cd2d3c960d98061b8b3d27679aea357397bb9602a8bb3e456eb43eb7"
+      },
+      {
+        "member_id": "20260723T221449-e9ae755e",
+        "source_directory": "runs_window_a7_20260723/instrument_validation/20260723T221449-e9ae755e",
+        "b_fiducial_s": "0.027201280356104838",
+        "manifest_sha256": "448d30359957c3786d24806d8f39a4577709abdb4144e6b5f29058dd9448e319",
+        "instrument_evidence_sha256": "3d8f80a7bc3870f3472fa4dc0cf82eb6570e78b2371f5b52f019e70e934fcf2a"
+      },
+      {
+        "member_id": "20260723T223406-314f6d9e",
+        "source_directory": "runs_window_a8_20260723/instrument_validation/20260723T223406-314f6d9e",
+        "b_fiducial_s": "0.025993442258292716",
+        "manifest_sha256": "d8801c8c0bcc1b429c5ec20eefaa341e0506cf749227936a409e2c6cb4fac7fe",
+        "instrument_evidence_sha256": "e39f93a9ad22e0003a47947f028feef857029910cd1c41f0134d5802eb24b803"
+      },
+      {
+        "member_id": "20260724T014109-57844352",
+        "source_directory": "runs_window_a8_20260723/instrument_validation/20260724T014109-57844352",
+        "b_fiducial_s": "0.02562670977988252",
+        "manifest_sha256": "4cd0fac603ea08c8ae27f4f7be9a3abf0e05a4800852f632d95622ae04ebda6e",
+        "instrument_evidence_sha256": "ee681d97af16f831b9d29cf54f43669ca5b138b4521524ec02946f58d0e6e736"
+      },
+      {
+        "member_id": "20260725T005132-a64711b7",
+        "source_directory": "runs_window_a9_20260724/instrument_validation/20260725T005132-a64711b7",
+        "b_fiducial_s": "0.02366861961761718",
+        "manifest_sha256": "c239775f1005a3461338fcd6ed7b0354253fd9b19631c4254354a0951f8f3cc9",
+        "instrument_evidence_sha256": "54a882afb71d601086053db862e448b61b34574b83b414c146f9c2d3761df1be"
+      },
+      {
+        "member_id": "20260725T011533-0b5ec77c",
+        "source_directory": "runs_window_a9_20260724/instrument_validation/20260725T011533-0b5ec77c",
+        "b_fiducial_s": "0.029273357215668885",
+        "manifest_sha256": "1b0e39338fc15aaf35395a1a5ae91834bd4af626fc07743e13ec72a5bd998fa0",
+        "instrument_evidence_sha256": "63fd3bf3415720558f2925d6997288b250c4ef4d48f95b577e0357799dc38ca5"
+      },
+      {
+        "member_id": "20260725T022712-0a9534f5",
+        "source_directory": "runs_window_a9_20260724/instrument_validation/20260725T022712-0a9534f5",
+        "b_fiducial_s": "0.028733193582380412",
+        "manifest_sha256": "c3c8e5aae83fbc7865d8daba433384538402c412db40e2269d398665458d9185",
+        "instrument_evidence_sha256": "d0853c448ddc47be11c08b00c410fb169a534d3ad0180a9716b4689f235235da"
+      },
+      {
+        "member_id": "20260725T030533-d3f076e5",
+        "source_directory": "runs_window_a10_20260725/instrument_validation/20260725T030533-d3f076e5",
+        "b_fiducial_s": "0.026415695490612106",
+        "manifest_sha256": "f1c6a4b2c965c689916a4be0c49ea6515e1f78b28ea4b7a7df3c1e85132e348a",
+        "instrument_evidence_sha256": "e2f83efb8effb6a305cd5d09b3465a23b68e0e4dd96624507e96c1d45384802e"
+      },
+      {
+        "member_id": "20260725T060617-97c5cba6",
+        "source_directory": "runs_window_a10_20260725/instrument_validation/20260725T060617-97c5cba6",
+        "b_fiducial_s": "0.02501695592329986",
+        "manifest_sha256": "984bbe85e6b2ab4a6ade95fc567972636d62b347e5686f16878764396a66b704",
+        "instrument_evidence_sha256": "10c31305f00245cadef3d71b75ddbf46f542811177da8d13e3def6308e19efa2"
+      }
+    ]
+  },
+  "prior_observation_set": {
+    "cutoff": {
+      "sequence": 76,
+      "head_digest": "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
+      "ledger_schema": "joulewise.calibration_observation_ledger.v1"
+    },
+    "content_identity_method": "sha256(canonical_json({instrument_evidence.json,manifest.json} byte sha256s))",
+    "epoch_catalog": {
+      "d079_epoch": {
+        "os_build": "25F84",
+        "hardware_model": "Mac15,9",
+        "power_policy": "ac_high_power",
+        "sampling_interval_ms": 100,
+        "estimator_revision": "joint_loss_sublevel_interval_branch_v2",
+        "pulse_protocol_id": "powermetrics_pulse_fiducial_v3"
+      }
+    },
+    "observations": [
+      {
+        "content_id": "c2a4412ee77fd2c10a397c8c4072d06c31bf26ea6b6a9a2ad1764dced71de2e9",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T145535-e941c821"
+      },
+      {
+        "content_id": "029a412be038ce88428ff1e8d302d90f2020e5cb0179ef4a750613fffc51f8ee",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T194118-9dc0749d"
+      },
+      {
+        "content_id": "ec850ad5359df234cf091b452194753acbd609f8c5102443fca8cfb40b3c72aa",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260722T213749-563b9849"
+      },
+      {
+        "content_id": "7232cfa1de9e6e19543d00c976e184ee23f8e4a17d2b05f7f4fa44fc6461f01f",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T214220-1acdbbc0"
+      },
+      {
+        "content_id": "7d7e898178e7fac74d9733a6703319d3458785abb671a2d43907a1018549f554",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T215127-eeef661a"
+      },
+      {
+        "content_id": "273e6326b8a43c4b97d2d9437cee84320488dc5857cf3bd663e916c53601f02f",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T222332-901c5c13"
+      },
+      {
+        "content_id": "5092d2cd9912f5dd0fa79161e86e7eb07c0196f61585a0770500a27be46df55c",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260722T232509-82642517"
+      },
+      {
+        "content_id": "08ea40cb06c6290ad056a698a0803e4dbfc4591203121f4524169e380d8fc7fa",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T023058-8732d1c9"
+      },
+      {
+        "content_id": "eac62f5e4fa7600afbb6d822b6770e25513ae79e00a5e2ad12c0e89cfb205df1",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T052051-d9358c8a"
+      },
+      {
+        "content_id": "c75a8d727664c28ff3bbce88eab6e4065e00bc965f2f447fb2a41df488faa9fd",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T183306-4ce692b4"
+      },
+      {
+        "content_id": "0c5851939bac8e93973dbf8464e7c053ce4b1da0a708efa062a80d169004e6d9",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T194632-d04e038e"
+      },
+      {
+        "content_id": "2ae2573af972e9c9b3fbe0aa98d57d265056b58902b35eb5995925fa10c1fbe8",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T195730-bc4ba14a"
+      },
+      {
+        "content_id": "418db55fa63dd5a0bae1ebb2291d860748df350d1b94aae4645d858c0527741c",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T221449-e9ae755e"
+      },
+      {
+        "content_id": "f3db4bc343a25c25734a017a02089ddc15db5169d67b222356d5a6fc09e143e4",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260723T223406-314f6d9e"
+      },
+      {
+        "content_id": "35ae646c47747e8561982ec8a7128e2e1a84e5c3255de66ee18ba51415017dc3",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260724T014109-57844352"
+      },
+      {
+        "content_id": "bf7c217c20effafa210cb53e86db0e6743df4e5eafca779d79ae0e8073c8f7b3",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T005132-a64711b7"
+      },
+      {
+        "content_id": "10fe0bff822d2c2546f2cbc45d85e9fb46cbd739dc4a972585775a2e2f29a0ec",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T011533-0b5ec77c"
+      },
+      {
+        "content_id": "ff6de7a0496f834973007f3c355b3c2dd3bd37e9701b632b049904f134f52e00",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T022712-0a9534f5"
+      },
+      {
+        "content_id": "51f24f06cc5d99a58fc354423f4b08b03dfe5c2e8ece4ea148967896802cb984",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T030533-d3f076e5"
+      },
+      {
+        "content_id": "1ef9ce6167865f3e04304b73ada774e11515b3895a5b51d5c1d8b7eb18af9aea",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260725T055825-b10cb348"
+      },
+      {
+        "content_id": "ac89c0d106fdf4aff146f11f77c95dea4682d35d71e6c3582c9169772149acc9",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260725T060617-97c5cba6"
+      },
+      {
+        "content_id": "03a6a20dae1071f7c74e5c006e891849e83c317080390b64473ed319545a4710",
+        "epoch_id": "d079_epoch",
+        "disposition": "systematic-invalid",
+        "attempt_id": "20260726T000039-491995f3"
+      },
+      {
+        "content_id": "20d2518c3d99619a1ba56ffa679fadf9a5e5870064324c27f5cb6a7a99e9afdb",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260726T031222-e0ce33f5"
+      },
+      {
+        "content_id": "ce9373a047879fbf94c30d5119b2735ca6a9b9f16ddb460f8310f8654642b96b",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260726T225227-1f550773"
+      },
+      {
+        "content_id": "8872864d1c97f40987dab4d693479fee6405c8616ea1effdf2a0457c10f5a8f8",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260726T225920-ab4272f5"
+      },
+      {
+        "content_id": "03497b300c7d35bd6fe08855dc468687e788f81481ab7285b04fa726a202d440",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260727T015824-45feb516"
+      },
+      {
+        "content_id": "51633cd3498a0c234962301bd608f5a31916bd3a3cb3f2e805fd2215edc849ca",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260727T020611-4a409a30"
+      },
+      {
+        "content_id": "20ff4e73d0a329e3ecfc4b98be496c66392c77ea353a96f9885d5e52bdb98e37",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260727T050047-95e2f87e"
+      },
+      {
+        "content_id": "7410aafd9448b8da07e4b919e324b24bc7b15ac9b01a3200e39ef6f615cadfc3",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260729T204105-39d25f8a"
+      },
+      {
+        "content_id": "4451d9a9cd5c6b5a801d146908b549886bd11559fc4c2ee3e771434fb4b95bd9",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260730T014035-124df355"
+      },
+      {
+        "content_id": "6026cb9f72b5a76f2a4b5b4f88bde06d644e3cd47e4e0cdc11d44ab6ecf5fabf",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260730T210703-f76b5771"
+      },
+      {
+        "content_id": "e522d8fabdebaa446776c52f8c263be6d853b700107d21c835557be475b165c2",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260731T012210-374020b6"
+      },
+      {
+        "content_id": "bd170c828910f4543f60ee76fae1f04b10707c58cd907be4c707706faea78aae",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260731T161713-b8b08280"
+      },
+      {
+        "content_id": "ff49477c8c7d71df3a9b7f86681e436ede8b7c1ac8c2b3fb2ee745cd6421ada1",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260731T214355-126fc2ab"
+      },
+      {
+        "content_id": "473a8aec1aba846e270ddccaa6bbea5b315cd36f28616e2daff2d7edefe52518",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260801T010113-e859f3aa"
+      },
+      {
+        "content_id": "9add6b6926ef2eb45722cfcdc8562a643dba0fd43f045ae534419fc7a7ecfd21",
+        "epoch_id": "d079_epoch",
+        "disposition": "ordinary-invalid",
+        "attempt_id": "20260801T010805-ff3fdc88"
+      },
+      {
+        "content_id": "ea0c34c63f1c9bed2649081eab80a3fbaf5c4ffd1ea37da12bc11945053aefca",
+        "epoch_id": "d079_epoch",
+        "disposition": "valid",
+        "attempt_id": "20260801T014059-8c3bfe9e"
+      },
+      {
+        "content_id": "ef01bcca6caf35f7abea2dcaa7acf8cc53d5a9e3463c413dba61d17f9179c448",
+        "epoch_id": "d079_epoch",
+        "disposition": "systematic-invalid",
+        "attempt_id": "20260801T064830-c76f5d1c"
+      }
+    ]
+  },
+  "backfill_candidate": {
+    "status": "issued",
+    "candidate_inventory": {
+      "ordinary-invalid": 6,
+      "systematic-invalid": 2,
+      "valid": 30
+    },
+    "production_issuance_blocked": false,
+    "required_verification": "complete: lead-owned raw-physics and artifact-hash verification",
+    "superseded_id_only_blind_exclusions": [
+      "20260726T000039-491995f3",
+      "20260726T031222-e0ce33f5"
+    ]
+  },
+  "decimal_derivation": {
+    "numeric_semantics": "decimal_source_lexemes",
+    "source_statistics": {
+      "minimum_s": "0.02317490442656863",
+      "minimum_member_id": "20260722T215127-eeef661a",
+      "maximum_s": "0.03289849371536248",
+      "maximum_member_id": "20260722T214220-1acdbbc0",
+      "range_s": "0.00972358928879385",
+      "mean_presentation_s": {
+        "value": "0.026848579671140323",
+        "label": "rounded_presentation",
+        "rounding_rule": "ROUND_HALF_EVEN to quantum 0.000000000000000001 s"
+      },
+      "sample_sd_presentation_s": {
+        "value": "0.002460856207694636",
+        "label": "rounded_presentation",
+        "rounding_rule": "ROUND_HALF_EVEN to quantum 0.000000000000000001 s"
+      },
+      "prediction_95_two_draw_s": "0.007377644019421586",
+      "prediction_99_two_draw_s": "0.010164834757777545"
+    },
+    "presentation_values": {
+      "d079_range_12_places_s": {
+        "value": "0.009723589289",
+        "label": "presentation_only_not_a_comparator",
+        "rounding_rule": "ROUND_HALF_EVEN to quantum 0.000000000001 s"
+      }
+    },
+    "rounding": {
+      "mode": "ROUND_HALF_EVEN",
+      "operative_bracket_screen": {
+        "source": "decimal_derivation.source_statistics.range_s",
+        "quantum_s": "0.000001",
+        "value_s": "0.009724",
+        "numeric_role": "operative_comparator"
+      },
+      "preflight_level_screen": {
+        "source": "decimal_derivation.source_statistics.maximum_s",
+        "quantum_s": "0.000000000000001",
+        "value_s": "0.032898493715362",
+        "numeric_role": "operative_comparator"
+      }
+    },
+    "two_draw_prediction_derivation": {
+      "rule": "prediction_p_two_draw_s = t(p, n-1) * sample_sd_presentation_s * sqrt(2), evaluated in binary64 and recorded as its shortest round-tripping decimal",
+      "degrees_of_freedom": 16,
+      "t_975_quantile": "2.11990529922125467446",
+      "t_995_quantile": "2.92078162242509999197",
+      "quantile_method": "exact even-degree-of-freedom closed form (Abramowitz & Stegun 26.7.4) solved by bisection in 60-digit decimal",
+      "predecessor_note": "the ratified n=19 generation recorded t(0.995,18)=2.878440472713585 from a numerical CDF root find; the exact quantile is 2.87844047273860811780, a 2.5e-11 absolute difference that moved maximum_budgetable_drift_s by 1.05e-13 s. This generation records the exact quantile and its method so the derivation replays deterministically"
+    },
+    "ratified_operatives": {
+      "bracket_screen_s": "0.009724",
+      "preflight_level_screen_s": "0.032898493715362",
+      "max_budgetable_excess_s": "0.000440834757777545",
+      "maximum_budgetable_drift_s": "0.010164834757777545",
+      "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
+      "operative_bound_rule": "max(pre_b_fiducial_s,post_b_fiducial_s)+calibration_drift_allowance_s",
+      "embedding_count": 1
+    }
+  },
+  "derivation_notes": {
+    "generation": "science-facing successor to d079_calibration_acceptance_v2_n19_r2: member values and the corpus size both change because the anchor estimator changed method, not because the ledger changed",
+    "predecessor": {
+      "acceptance_id": "d079_calibration_acceptance_v2_n19_r2",
+      "relative_path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+      "file_sha256": "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e",
+      "derivation_sha256": "6b9f622ffd9aca3f627274db1b6516237d012b26e25118a36419d917f2bc6095",
+      "relationship": "retained byte-identical forever; predecessor packs and the genesis ledger bootstrap authenticate against it unchanged"
+    },
+    "method_identity": {
+      "anchor_method": "powermetrics_native_second_rate_aware_set_membership_v1",
+      "rederivation_schema": "joulewise.clock_anchor_rederivation.v1",
+      "evidence_schema": "p2-038.3",
+      "model_condition": "containment is conditional on the model: an affine wall-vs-monotonic relation with native departure bounded by the frozen 250 us model-departure allowance. The justification for that condition is the authenticated network-time-OFF admission required of every prospective claim-bearing capture; the fit is not a substitute for that environmental control",
+      "span_term_dependency": "the anchor half-width H covers anchor PLACEMENT while the wall-minus-monotonic span term covers within-capture wall-versus-elapsed drift, which is load-bearing because the detector maps the trace at rate 1 from the anchor midpoint while pulse commands carry wall-epoch stamps. Removing either term breaks containment. Dropping the span term is lawful ONLY together with re-mapping the trace under the fitted rate window, under a new method identity. The earlier double-charge characterization is RETIRED: the only true overlap is the 250 us allowance widening H while real departures also inflate the span, a priced <=~0.5 ms conservatism",
+      "frozen_constants": {
+        "MAX_AFFINE_CLOCK_RESIDUAL_S": "0.000250",
+        "MAX_CLOCK_RATE_DEVIATION_PPM": "50.0",
+        "NUMERIC_PADDING_S": "0.000001",
+        "EPOCH_REPRESENTATION_ULP_COUNT": "4",
+        "may_widen_after_observed_failures": false,
+        "note": "widening either departure constant after seeing failures requires a new ruled method identity, never a recalibration"
+      },
+      "numeric_pricing": "NUMERIC_PADDING_S was raised from 1e-9 to 1e-6 s so the float64 epoch representation error (at most four epoch-scale ulps, 9.5367431640625e-07 s at POSIX epoch scale) is priced rather than deferred. Every anchor-v3 bound moves outward by 1e-6 - 1e-9 s; no number tightens and no member changed status"
+    },
+    "derivation_method": {
+      "corpus_root": "/Users/edr/code/JouleWise",
+      "per_member_procedure": "authenticate manifest.json and instrument_evidence.json against this artifact's predecessor pins; take events.jsonl and raw/powermetrics.plist by the CONTENT hashes recorded in the member's own instrument_evidence.artifact_sha256; then replay rederive_detection_from_artifacts under the anchor-v3 deriver at the governed detection-projection cell budget",
+      "value_semantics": "b_fiducial_s is the anchor-v3 re-derived value itself, NOT max(stored_v2, anchor_v3). The v2 rate=1 assumption is a falsified model, so its stored scalars are superseded rather than a floor: the cold science review ratified the corpus maximum DECREASING under the corrected method",
+      "raw_custody": "raw/powermetrics.plist is not retained inside the repository for the window-A members; the bytes replayed here were taken from the operator backup archive and admitted only because they hash to the value bound inside each member's hash-authenticated instrument_evidence.json. Location is not authority; content identity is",
+      "governed_projection_cell_budget": 165000,
+      "budget_ruling": "OPTION B (lead ruling under cold review condition 1): DETECTION_PROJECTION_CELL_BUDGET stays 165,000, calibrated on the claim-bearing population maximum of 137,535 evaluated cells plus 20% headroom. Option A (1,550,000, admitting every v3-resolvable member including validation-only probes) was rejected: a ~9.4x increase driven by one validation-only probe would make the frozen 120 s wall deadline the binding guard and the failure mode host-dependent",
+      "budget_probe_status": "validation-only knife-edge probe 20260818T182149-a7e8b412 is recorded BOUNDED-BUT-NONCONVERGENT: its anchor resolves under anchor-v3 but its detector demands 1,282,827 cells (9.21x the next highest) and therefore returns detection_nonconvergent at the governed 165,000-cell budget. That is the budget mechanism working, not a defect; the probe is not claim-bearing and is not a corpus member",
+      "corpus_survivor_cell_demand": {
+        "n": 17,
+        "min": 115449,
+        "median": 122097,
+        "p95": 137535,
+        "max": 137535
+      }
+    },
+    "excluded_predecessor_members": [
+      {
+        "member_id": "20260722T222332-901c5c13",
+        "source_directory": "runs_window_a4_20260722/instrument_validation/20260722T222332-901c5c13",
+        "manifest_sha256": "ef74ebd5f0a94ba05786c19fe068be3fd797542dd9d7ce988dd7b55f1b6e8c54",
+        "instrument_evidence_sha256": "e6d338d5061f0f1258d47bfc0600fb1f458a6780e954024020b136a3ac5bf8fe",
+        "issued_b_fiducial_s_under_predecessor": "0.03355875667989999",
+        "anchor_v3_status": "unresolved",
+        "anchor_v3_detail": "affine_clock_fit_empty",
+        "refusal_reason": "no single affine wall-versus-monotonic rate reconciles this capture's ClockStamp rectangles with its native whole-second labels inside the frozen 250 us model-departure allowance",
+        "mechanism": "ACTIVE TIME STEERING during the capture, pre-clock-discipline: the wall clock was being corrected while the bundle was recorded, so the between-stamp assumption every anchor method relies on does not hold. This is correct science, not a method artifact -- the same contamination was present under the predecessor method, which silently ACCEPTED it"
+      },
+      {
+        "member_id": "20260723T183306-4ce692b4",
+        "source_directory": "runs_window_a6_20260723/instrument_validation/20260723T183306-4ce692b4",
+        "manifest_sha256": "baf1f2f0d1c27ae9fc70a341b35965a1259ea951ccd7997d662d4846ca568a9c",
+        "instrument_evidence_sha256": "689456dab5e5723155dfb237439671475a220b8f9f0329fc12d67dadfd69d3dd",
+        "issued_b_fiducial_s_under_predecessor": "0.027262160888545217",
+        "anchor_v3_status": "unresolved",
+        "anchor_v3_detail": "affine_clock_fit_empty",
+        "refusal_reason": "no single affine wall-versus-monotonic rate reconciles this capture's ClockStamp rectangles with its native whole-second labels inside the frozen 250 us model-departure allowance",
+        "mechanism": "ACTIVE TIME STEERING during the capture, pre-clock-discipline: the wall clock was being corrected while the bundle was recorded, so the between-stamp assumption every anchor method relies on does not hold. This is correct science, not a method artifact -- the same contamination was present under the predecessor method, which silently ACCEPTED it"
+      }
+    ],
+    "exclusion_accounting": {
+      "predecessor_n": 19,
+      "successor_n": 17,
+      "excluded_n": 2,
+      "recording_shape": "the acceptance member-row schema has no exclusion field and is validated as an exact five-key set, so exclusions are recorded HERE rather than as annotated corpus rows. The two excluded attempts remain in prior_observation_set with their historical `valid` disposition: the observation ledger records what the instrument judged at the time and is never rewritten; corpus MEMBERSHIP is what this generation changes",
+      "custody_corroboration": "the earliest clock-discipline pin record on this machine is pin-20260727T051946Z (time.apple.com), which POSTDATES both excluded captures -- independent custody corroboration of the pre-discipline claim",
+      "corpus_max_consequence": "the predecessor's corpus MAXIMUM 20260722T222332-901c5c13 (0.03355875667989999 s) is one of the two exclusions, so the screens derived from this corpus TIGHTEN rather than loosen: the maximum falls to 0.03289849371536248 s on 20260722T214220-1acdbbc0 and the range falls to 0.00972358928879385 s",
+      "surviving_pre_discipline_members": "pre-discipline survivors remain sound for containment: a steady slew is a genuine wall rate whose drift the span term charges in full. 41 of 43 replayed bundles need exactly zero model slack"
+    },
+    "permanently_refusing_records": [
+      {
+        "bundle_id": "20260722T213749-563b9849",
+        "role": "archive_unresolved_outside_ratified_partition",
+        "anchor_v3_detail": "affine_clock_fit_empty",
+        "never_issued": true,
+        "quarantine": "permanent",
+        "note": "a THIRD pre-clock-discipline refusal, and the archive member identified by the root-cause diagnosis as having no retained raw/powermetrics.plist at its canonical path (runs/instrument_validation/20260722T213749-563b9849/raw is empty). It was never a member of any issued D-079 corpus; its historical disposition in prior_observation_set is `ordinary-invalid`. It is PERMANENTLY QUARANTINED: canonical raw custody is lost, so it can never be replayed from repository custody, and the off-canonical backup replay that was possible refuses under anchor-v3 for the same steering mechanism as the two exclusions above"
+      },
+      {
+        "bundle_id": "20260725T055825-b10cb348",
+        "role": "negative_control_span_exceeded",
+        "anchor_v3_detail": "wall_minus_monotonic_span_exceeded",
+        "observed_wall_minus_monotonic_span_s": "0.00640",
+        "never_issued": true,
+        "quarantine": "permanent",
+        "note": "the PRESERVED NEGATIVE CONTROL required by cold review condition 5. Its 6.40 ms wall-minus-monotonic offset span exceeds the 5 ms refusal gate; it was verified still refusing under anchor-v3. Resolving it would silently repeal the gate, so it must remain refused under every future method identity"
+      }
+    ],
+    "methodology_review_adjudication": {
+      "trigger": "the design consult's R2 bar required explicit methodology review rather than automatic acceptance whenever a re-derived effective bound moved by more than +/-0.25 ms or a tighter interval failed to contain the old admissible point",
+      "adjudication": "the cold science review CONSTITUTES that mandated methodology review. It ratified Q1 method soundness, Q2 the two corpus refusals as correct science rather than a method artifact, and Q3 the corpus deltas as an honest correction with successor regeneration as the right path",
+      "review_document": "docs/process_traces/2026-08-18-anchor-v3-science-review/03-cold-science-review.md",
+      "review_sha256": "f98e0714e6c1ac6a913d0f72e0f6a3bab2218ebae36246d56ac774015a1db85f",
+      "validation_artifact_digest_sha256": "82665f29caf78515bf63feeb5856a440284f6e205901c52773a042fbd258b94f",
+      "bias_finding": "the predecessor's rate=1 assumption is measurably false by several ppm; its knife-edge intersections placed anchor midpoints with a rate-drift bias of order drift/2. Removing a bias SHOULD produce new intervals that exclude the old biased points, so exclusions were EXPECTED, not anomalous",
+      "outlier_mechanism_note": "The +4.72 ms b_fiducial delta on 20260818T045736-4d9e9db9 is NOT explained by the anchor shift alone: that member's anchor point moves only +0.27 ms and its B_anchor only +0.32 ms. The remainder is detector-refit sensitivity under the shifted anchor -- accepted regions jumping sample quanta, which changes which edge is worst -- so the delta is fail-closed and widening, not a containment loss."
+    },
+    "residual_margin_distribution": {
+      "condition": 7,
+      "quantity": "min_l_infinity_residual_upper_bound_s",
+      "issued_corpus_survivors": {
+        "n": 17,
+        "min": "1.4901161193847657e-11",
+        "median": "1.4901161193847657e-11",
+        "p95": "1.4901161193847657e-11",
+        "max": "1.4901161193847657e-11"
+      },
+      "all_bounded_replayed_members": {
+        "n": 45,
+        "min": "1.4901161193847657e-11",
+        "median": "1.4901161193847657e-11",
+        "p95": "1.4901161193847657e-11",
+        "max": "1.4901161193847657e-11"
+      },
+      "interpretation": "the reported quantity is an UPPER bound produced by 24 bisections of the 250 us allowance, so its floor is 250e-6/2**24 = 1.4901161193847656e-11 s. Every bounded member sits exactly at that floor: the minimal L-infinity model departure is indistinguishable from zero at ~15 ps resolution, and the 250 us allowance is roughly seven orders of magnitude from binding on any surviving member. The distribution is degenerate by construction and cannot rank members; what it establishes is that no surviving member is anywhere near the gate",
+      "members_that_do_bind": [
+        "20260722T213749-563b9849",
+        "20260722T222332-901c5c13",
+        "20260723T183306-4ce692b4"
+      ]
+    },
+    "network_time_provenance": {
+      "per_member_state": "unknown_in_artifact",
+      "carried_in_bundle": false,
+      "verified": "all 17 member bundles were re-opened and none carries any network-time attestation field; the state is uniformly unrecorded, so it is stated once here rather than repeated as 17 identical member fields (the member-row schema is a validated exact five-key set)",
+      "consequence": "cold review condition 4 and consult bar I4: historical unknown-state material supports this corpus derivation, but every PROSPECTIVE claim-bearing capture requires an authenticated network-time-OFF admission. ON or unknown cannot be normalized away by the affine fit"
+    }
+  },
+  "derivation_sha256": "6210582723e14de4b880c3afe0a13cbeb89dfc2ffe4abe02b78be464772e0415"
+}

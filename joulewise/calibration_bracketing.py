@@ -71,9 +71,24 @@ SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19_r2"
 SUCCESSOR_ACCEPTANCE_BOUND_SHA256 = (
     "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e"
 )
-# Dual-generation registry.  Authentication is indexed by the artifact's own
-# `acceptance_id`, so a caller cannot present one generation's bytes under the
-# other generation's pin, and predecessor packs stay verifiable unchanged.
+# D-079 anchor-v3 science-facing generation.  The clock-anchor estimator moved
+# from the falsified rate=1 censored intersection to the rate-aware
+# set-membership method, so member VALUES change and the corpus SHRINKS: the
+# two pre-clock-discipline captures whose stamp rectangles admit no single
+# affine wall rate now refuse.  Same schema and same `decision_ids`; the
+# identity carries the corpus size and the reissue ordinal.  Ratified by the
+# cold science review at
+# `docs/process_traces/2026-08-18-anchor-v3-science-review/03-cold-science-review.md`.
+ANCHOR_V3_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r3.json"
+)
+ANCHOR_V3_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r3"
+ANCHOR_V3_ACCEPTANCE_BOUND_SHA256 = (
+    "73f022633e7bc22e9e129617f3f2ad8797293adaff3b53923dc41f75da2ae917"
+)
+# Multi-generation registry.  Authentication is indexed by the artifact's own
+# `acceptance_id`, so a caller cannot present one generation's bytes under
+# another generation's pin, and predecessor packs stay verifiable unchanged.
 ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
     PREDECESSOR_ACCEPTANCE_ID: {
         "path": PREDECESSOR_ACCEPTANCE_BOUND_PATH,
@@ -85,10 +100,17 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         "relative_path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
         "file_sha256": SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r3.json"
+        ),
+        "file_sha256": ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = SUCCESSOR_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = SUCCESSOR_ACCEPTANCE_BOUND_PATH
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_ACCEPTANCE_BOUND_PATH
 DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
     "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
 )
@@ -100,12 +122,43 @@ ESTIMATOR_CODE_PATHS = (
     "joulewise/reduce.py",
 )
 ACCEPTANCE_IDENTITY_FIELDS = IDENTITY_EPOCH_FIELDS
-_D102_OPERATIVE_VALUES = {
-    "bracket_screen_s": "0.010818",
-    "preflight_level_screen_s": "0.033558756679900",
-    "max_budgetable_excess_s": "0.001275166090593858",
-    "maximum_budgetable_drift_s": "0.012093166090593858",
+# The D-102 derivation is corpus-indexed, not global: corpus size, the two
+# two-draw prediction pins, the ratified operative comparators, and the
+# corpus-doubling trigger vocabulary are all functions of the member table a
+# generation was derived from.  Retaining them per generation is what keeps the
+# predecessor generations authenticating byte-identically after the live
+# default moves.
+_D102_N19_DERIVATION: dict[str, Any] = {
+    "corpus_n": 19,
+    "corpus_doubling_trigger": "corpus_doubles_from_19_to_38",
+    "prediction_95_two_draw_s": "0.008826584887500717",
+    "prediction_99_two_draw_s": "0.012093166090593858",
+    "operatives": {
+        "bracket_screen_s": "0.010818",
+        "preflight_level_screen_s": "0.033558756679900",
+        "max_budgetable_excess_s": "0.001275166090593858",
+        "maximum_budgetable_drift_s": "0.012093166090593858",
+    },
 }
+_D102_N17_DERIVATION: dict[str, Any] = {
+    "corpus_n": 17,
+    "corpus_doubling_trigger": "corpus_doubles_from_17_to_34",
+    "prediction_95_two_draw_s": "0.007377644019421586",
+    "prediction_99_two_draw_s": "0.010164834757777545",
+    "operatives": {
+        "bracket_screen_s": "0.009724",
+        "preflight_level_screen_s": "0.032898493715362",
+        "max_budgetable_excess_s": "0.000440834757777545",
+        "maximum_budgetable_drift_s": "0.010164834757777545",
+    },
+}
+_D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
+    PREDECESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
+    SUCCESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
+    ANCHOR_V3_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+}
+# Retained name for the D-116/D-138 n=19 generations' comparators.
+_D102_OPERATIVE_VALUES = _D102_N19_DERIVATION["operatives"]
 
 
 @dataclass(frozen=True)
@@ -283,6 +336,14 @@ def _valid_acceptance_bound(value: Any) -> bool:
         if role == "issued"
         else frozenset({PREDECESSOR_ACCEPTANCE_ID})
     )
+    # The corpus-derived expectations are selected by the artifact's own
+    # identity, never by the live default, so every registered generation keeps
+    # validating against the member table it was actually derived from.
+    generation = _D102_GENERATION_DERIVATIONS.get(value.get("acceptance_id"))
+    if generation is None:
+        return False
+    expected_n = generation["corpus_n"]
+    operative_values = generation["operatives"]
     if (
         not role_valid
         or value.get("acceptance_id") not in allowed_acceptance_ids
@@ -308,13 +369,13 @@ def _valid_acceptance_bound(value: Any) -> bool:
             "identity_field_change",
             "protocol_or_estimator_byte_change",
             "new_valid_same_identity_capture_expands_observed_range",
-            "corpus_doubles_from_19_to_38",
+            generation["corpus_doubling_trigger"],
             "new_systematic_failure_challenges_preflight_screen",
         }
         or not isinstance(corpus, Mapping)
-        or corpus.get("n") != 19
+        or corpus.get("n") != expected_n
         or not isinstance(corpus.get("members"), list)
-        or len(corpus["members"]) != 19
+        or len(corpus["members"]) != expected_n
         or not isinstance(cutoff, Mapping)
         or cutoff.get("ledger_schema") != LEDGER_SCHEMA
         or not isinstance(prior, Mapping)
@@ -356,7 +417,7 @@ def _valid_acceptance_bound(value: Any) -> bool:
             return False
         member_ids.append(member["member_id"])
         values.append(bound)
-    if len(set(member_ids)) != 19 or member_ids != sorted(member_ids):
+    if len(set(member_ids)) != expected_n or member_ids != sorted(member_ids):
         return False
 
     prior_ids: list[str] = []
@@ -455,20 +516,20 @@ def _valid_acceptance_bound(value: Any) -> bool:
         or statistics["sample_sd_presentation_s"].get("label")
         != "rounded_presentation"
         or statistics.get("prediction_95_two_draw_s")
-        != "0.008826584887500717"
+        != generation["prediction_95_two_draw_s"]
         or statistics.get("prediction_99_two_draw_s")
-        != "0.012093166090593858"
+        != generation["prediction_99_two_draw_s"]
         or rounding.get("mode") != "ROUND_HALF_EVEN"
         or not isinstance(rounding.get("operative_bracket_screen"), Mapping)
         or rounding["operative_bracket_screen"].get("quantum_s") != "0.000001"
         or rounding["operative_bracket_screen"].get("value_s")
-        != _D102_OPERATIVE_VALUES["bracket_screen_s"]
+        != operative_values["bracket_screen_s"]
         or not isinstance(rounding.get("preflight_level_screen"), Mapping)
         or rounding["preflight_level_screen"].get("quantum_s")
         != "0.000000000000001"
         or rounding["preflight_level_screen"].get("value_s")
-        != _D102_OPERATIVE_VALUES["preflight_level_screen_s"]
-        or any(operatives.get(key) != item for key, item in _D102_OPERATIVE_VALUES.items())
+        != operative_values["preflight_level_screen_s"]
+        or any(operatives.get(key) != item for key, item in operative_values.items())
         or operatives.get("allowance_rule")
         != "max(observed_drift_s,bracket_screen_s)"
         or operatives.get("operative_bound_rule")
@@ -476,9 +537,9 @@ def _valid_acceptance_bound(value: Any) -> bool:
         or operatives.get("embedding_count") != 1
     ):
         return False
-    screen = Decimal(_D102_OPERATIVE_VALUES["bracket_screen_s"])
-    maximum = Decimal(_D102_OPERATIVE_VALUES["maximum_budgetable_drift_s"])
-    excess = Decimal(_D102_OPERATIVE_VALUES["max_budgetable_excess_s"])
+    screen = Decimal(operative_values["bracket_screen_s"])
+    maximum = Decimal(operative_values["maximum_budgetable_drift_s"])
+    excess = Decimal(operative_values["max_budgetable_excess_s"])
     return (
         (max(values) - min(values)).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_EVEN
@@ -487,7 +548,7 @@ def _valid_acceptance_bound(value: Any) -> bool:
         and max(values).quantize(
             Decimal("0.000000000000001"), rounding=ROUND_HALF_EVEN
         )
-        == Decimal(_D102_OPERATIVE_VALUES["preflight_level_screen_s"])
+        == Decimal(operative_values["preflight_level_screen_s"])
         and screen + excess == maximum
     )
 
@@ -1512,6 +1573,12 @@ def evaluate_calibration_bracket(
             return result, ("instrument_calibration_invalid",)
         matching_decimals[id(candidate)] = candidate_decimal
     corpus_members = artifact["derivation_corpus"]["members"]
+    # The corpus-doubling trigger is a function of THIS artifact's corpus, not
+    # a global constant: a generation derived from a smaller corpus reaches its
+    # doubling threshold sooner, and says so in its own trigger vocabulary.
+    _generation = _D102_GENERATION_DERIVATIONS[artifact["acceptance_id"]]
+    corpus_doubling_trigger = _generation["corpus_doubling_trigger"]
+    corpus_doubling_threshold = 2 * _generation["corpus_n"]
     observed_triggers = result["acceptance"]["prospective_rederivation"][
         "observed_triggers"
     ]
@@ -1564,8 +1631,8 @@ def evaluate_calibration_bracket(
         if observation.disposition == "valid"
         and dict(observation.identity_epoch) == dict(identity_epoch)
     ]
-    if len(valid_same_epoch) >= 38:
-        observed_triggers.append("corpus_doubles_from_19_to_38")
+    if len(valid_same_epoch) >= corpus_doubling_threshold:
+        observed_triggers.append(corpus_doubling_trigger)
     corpus_values = [
         Decimal(member["b_fiducial_s"]) for member in corpus_members
     ]
@@ -1718,7 +1785,7 @@ def evaluate_calibration_bracket(
         if trigger
         in {
             "protocol_or_estimator_byte_change",
-            "corpus_doubles_from_19_to_38",
+            corpus_doubling_trigger,
             "new_valid_same_identity_capture_expands_observed_range",
             "new_systematic_failure_challenges_preflight_screen",
         }
