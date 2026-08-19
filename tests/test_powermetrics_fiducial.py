@@ -197,7 +197,9 @@ class ScheduleTests(unittest.TestCase):
     ) -> None:
         from tests.test_reduce import self_consistent_calibration
 
-        evidence, raw, events = self_consistent_calibration()
+        evidence, raw, events = self_consistent_calibration(
+            protocol_id=PROTOCOL_V2_ID
+        )
         valid = fiducial_module.rederive_detection_from_artifacts(
             raw,
             events,
@@ -2255,6 +2257,119 @@ os._exit(23)
                 ),
             )
             lifecycle.abandon("test_stable_claim_cleanup")
+
+
+class AnchorMethodDispatchTests(unittest.TestCase):
+    @staticmethod
+    def empty_detection(**overrides):
+        value = fiducial_module.FiducialDetection(
+            baseline_w=None,
+            robust_sigma_w=None,
+            fits=(),
+            spurious_plateau_count=0,
+            all_pulses_detected=False,
+            b_fiducial_s=None,
+            residual_median_s=None,
+            residual_p95_s=None,
+        )
+        return replace(value, **overrides)
+
+    def test_fresh_cross_method_derivation_skips_stored_number_comparison(self) -> None:
+        from tests.test_reduce import self_consistent_calibration
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
+
+        evidence, raw, events = self_consistent_calibration()
+        recorded = copy.deepcopy(evidence["clock_anchor"])
+        before = copy.deepcopy(recorded)
+        prospective = {
+            "status": "bounded",
+            "method": CLOCK_METHOD_V3,
+            "first_sample_end_point_epoch_s": (
+                recorded["first_sample_end_point_epoch_s"] + 0.0001
+            ),
+            "effective_clock_anchor_bound_s": 0.003,
+        }
+        detector_result = self.empty_detection()
+        with (
+            patch.object(
+                fiducial_module,
+                "resolve_anchor_deriver",
+                return_value=lambda **_kwargs: prospective,
+            ) as resolver,
+            patch.object(
+                fiducial_module, "detect_pulses", return_value=detector_result
+            ),
+        ):
+            result = fiducial_module.rederive_detection_from_artifacts(
+                raw,
+                events,
+                recorded,
+                protocol_id=PROTOCOL_V2_ID,
+                anchor_method=CLOCK_METHOD_V3,
+                derivation_role="validation_only",
+            )
+        resolver.assert_called_once_with(CLOCK_METHOD_V3)
+        self.assertEqual(recorded, before)
+        self.assertEqual(result.anchor_method, CLOCK_METHOD_V3)
+        self.assertEqual(result.derivation_role, "validation_only")
+
+    def test_authentication_mode_dispatches_stored_method_and_keeps_equality_gate(self) -> None:
+        from tests.test_reduce import self_consistent_calibration
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
+
+        evidence, raw, events = self_consistent_calibration()
+        recorded = evidence["clock_anchor"]
+        mismatched = dict(recorded)
+        mismatched["first_sample_end_point_epoch_s"] += 0.01
+        with patch.object(
+            fiducial_module,
+            "resolve_anchor_deriver",
+            return_value=lambda **_kwargs: mismatched,
+        ) as resolver:
+            with self.assertRaisesRegex(ValueError, "disagrees with raw bytes"):
+                fiducial_module.rederive_detection_from_artifacts(
+                    raw, events, recorded, protocol_id=LEGACY_PROTOCOL_ID
+                )
+        resolver.assert_called_once_with(CLOCK_METHOD_V2)
+
+    def test_unregistered_stored_method_and_invalid_roles_fail_closed(self) -> None:
+        from tests.test_reduce import self_consistent_calibration
+
+        evidence, raw, events = self_consistent_calibration()
+        recorded = copy.deepcopy(evidence["clock_anchor"])
+        recorded["method"] = "unregistered"
+        with self.assertRaisesRegex(
+            ValueError, "calibration clock anchor method is unregistered"
+        ):
+            fiducial_module.rederive_detection_from_artifacts(
+                raw, events, recorded, protocol_id=LEGACY_PROTOCOL_ID
+            )
+        with self.assertRaisesRegex(ValueError, "derivation_role"):
+            fiducial_module.rederive_detection_from_artifacts(
+                raw,
+                events,
+                evidence["clock_anchor"],
+                protocol_id=LEGACY_PROTOCOL_ID,
+                derivation_role="claim_bearing",
+            )
+        with self.assertRaisesRegex(ValueError, "derivation_role"):
+            self.empty_detection(derivation_role="claim_bearing")
+
+    def test_evidence_author_stamps_method_that_produced_detection(self) -> None:
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
+
+        payload = instrument_evidence(
+            self.empty_detection(
+                anchor_method=CLOCK_METHOD_V3,
+                derivation_role="prospective",
+            ),
+            bindings={},
+            validation_id="prospective-v3",
+            artifact_sha256={},
+            protocol_pulse_count=0,
+            protocol_id=LEGACY_PROTOCOL_ID,
+        )
+        self.assertEqual(payload["anchor_method_version"], CLOCK_METHOD_V3)
 
 
 if __name__ == "__main__":

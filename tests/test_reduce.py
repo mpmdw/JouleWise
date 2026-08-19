@@ -3916,6 +3916,143 @@ class D078R01RegressionTests(unittest.TestCase):
                     payload["summary_provenance"]["reducer_version"], expected
                 )
 
+    def test_anchor_reconstruction_dispatches_on_stored_v3_method(self) -> None:
+        import copy
+
+        from joulewise.bundle_read import BundleReader
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
+
+        reader = BundleReader(self.FIXTURE)
+        metadata = copy.deepcopy(reader.metadata())
+        stored_anchor = metadata["uncertainty_evidence"]["clock_anchor"]
+        stored_anchor["method"] = CLOCK_METHOD_V3
+        derived = {
+            "status": "bounded",
+            "first_sample_end_point_epoch_s": stored_anchor[
+                "first_sample_end_point_epoch_s"
+            ],
+            "effective_clock_anchor_bound_s": 0.002,
+            "wall_minus_monotonic_span_s": 0.001,
+        }
+        with patch.object(
+            reduce_module,
+            "resolve_anchor_reconstructor",
+            return_value=lambda **_kwargs: derived,
+        ) as resolver:
+            context = reduce_module._derive_anchor_context(
+                reader, metadata, reducer_version="0.5.2"
+            )
+        resolver.assert_called_once_with(CLOCK_METHOD_V3)
+        self.assertFalse(context.unresolved)
+        self.assertEqual(context.bundle_bound_s, 0.002)
+        self.assertEqual(context.edge_span_s, 0.001)
+
+    def test_unregistered_anchor_reconstruction_refuses_before_fallback(self) -> None:
+        import copy
+
+        from joulewise.bundle_read import BundleReader
+
+        reader = BundleReader(self.FIXTURE)
+        metadata = copy.deepcopy(reader.metadata())
+        metadata["uncertainty_evidence"]["clock_anchor"]["method"] = (
+            "powermetrics_not_a_registered_anchor_method_v9"
+        )
+        context = reduce_module._derive_anchor_context(
+            reader, metadata, reducer_version="0.5.2"
+        )
+        self.assertTrue(context.unresolved)
+        self.assertEqual(context.detail, "anchor_method_unregistered")
+        self.assertIsNone(context.curve)
+
+    def test_legacy_p2_038_1_label_keeps_its_historical_reconstruction(self) -> None:
+        """The pre-v2 envelope label must reconstruct exactly as it always has.
+
+        Reconstruction has always run the v2 censored-intersection estimator
+        regardless of the stored label, so registering the historical label
+        must not change any reconstructed number -- while the label still
+        cannot satisfy a calibration artifact's anchor_method_version binding.
+        """
+
+        from joulewise.bundle_read import BundleReader
+        from joulewise.uncertainty_evidence import (
+            ANCHOR_METHOD_VERSIONS,
+            CLOCK_METHOD,
+            derive_powermetrics_anchor_v2,
+            resolve_anchor_reconstructor,
+        )
+
+        self.assertNotIn(CLOCK_METHOD, ANCHOR_METHOD_VERSIONS)
+        self.assertIs(
+            resolve_anchor_reconstructor(CLOCK_METHOD),
+            derive_powermetrics_anchor_v2,
+        )
+        reader = BundleReader(self.FIXTURE)
+        metadata = reader.metadata()
+        self.assertEqual(
+            metadata["uncertainty_evidence"]["clock_anchor"]["method"], CLOCK_METHOD
+        )
+        context = reduce_module._derive_anchor_context(
+            reader, metadata, reducer_version="0.5.2"
+        )
+        self.assertFalse(context.unresolved)
+
+    def test_calibration_binding_accepts_registered_v3_and_rejects_unregistered(
+        self,
+    ) -> None:
+        """A calibration may declare any REGISTERED anchor method.
+
+        The calibration artifact describes a separate instrument-validation
+        capture, so its anchor method is deliberately independent of the
+        measurement bundle's own stored anchor method; only membership in the
+        registered set and agreement with its own hash-bound bindings row are
+        enforced.
+        """
+
+        from joulewise.bundle_read import BundleReader
+        from joulewise.uncertainty_evidence import CLOCK_METHOD, CLOCK_METHOD_V3
+
+        evidence = self._replay_era(
+            self._valid_instrument_evidence(
+                anchor_method_version=CLOCK_METHOD_V3,
+                bindings={"anchor_method_version": CLOCK_METHOD_V3},
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=evidence)
+            reader = BundleReader(bundle)
+            metadata = reader.metadata()
+            bound, detail = reduce_module._verify_instrument_calibration(
+                reader,
+                metadata,
+                metadata["instrument_calibration"],
+                strict_physics=False,
+            )
+            self.assertIsNotNone(bound)
+            self.assertIsNone(detail)
+
+        # The pre-v2 envelope label is a reconstruction-compatibility entry
+        # only: it can never satisfy a calibration artifact's binding.
+        unregistered = self._replay_era(
+            self._valid_instrument_evidence(
+                anchor_method_version=CLOCK_METHOD,
+                bindings={"anchor_method_version": CLOCK_METHOD},
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self._bundle_with_calibration(tmp, evidence=unregistered)
+            reader = BundleReader(bundle)
+            metadata = reader.metadata()
+            bound, detail = reduce_module._verify_instrument_calibration(
+                reader,
+                metadata,
+                metadata["instrument_calibration"],
+                strict_physics=False,
+            )
+            self.assertIsNone(bound)
+            self.assertEqual(
+                detail, "instrument_calibration_anchor_method_mismatch"
+            )
+
 
 class ReductionLaunchLineageBoundaryTests(unittest.TestCase):
     """Post-hoc admission lives beside callers, not in the pinned reducer."""
