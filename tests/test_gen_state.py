@@ -21,6 +21,7 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    "D144-SEATPASS-FOLLOWUPS",
     "RECEIPT-HISTSEM-01",
     "REFREEZE-D147-CLOSE",
     # [AGENT]
@@ -284,9 +285,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # repair (74 - 2 + 2 = 74); the T9 close retires delivered
         # WO-L2-REAUDIT (73); D-139 A1 retires WO-RECORDER-GRANT-IDENTITY:
         # 73 - 1 = 73; the 2026-08-20 gate-1 fix gauntlet mints
-        # RECEIPT-HISTSEM-01 (C1): 73 + 1 = 74 exact live records.
+        # RECEIPT-HISTSEM-01 (C1): 73 + 1 = 74; the D-144 seat pass mints
+        # D144-SEATPASS-FOLLOWUPS: 74 + 1 = 75 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 74)
+        self.assertEqual(len(self.tasks), 75)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

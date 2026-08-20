@@ -1000,6 +1000,37 @@
       "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
       "stop_card": null
     },
+    "D144-SEATPASS-FOLLOWUPS": {
+      "acceptance": {
+        "evidence": [
+          "SF-1: a non-gating persisted report channel surfaces capture_pipeline_superseded for mixed-era ledger observations on a production surface, with an end-to-end regression proving both the report and that valid v3 claims are NOT refused for retained history",
+          "SF-3: a registry-sync test binds schema_v2.json's generation->screen conditional to the Python acceptance registries",
+          "SF-5: the no-copied-scalar guard covers the mint lane per R2 S1(i) rather than a 3-file allowlist"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D144-SEATPASS-FOLLOWUPS/acceptance",
+          "label": "D144-SEATPASS-FOLLOWUPS acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Close the three should-fix findings of the D-144 pre-merge seat pass (ruling: docs/process_traces/2026-08-20-go-session/d144-seatpass-ruling.md); SF-1's shape is ruled non-gating (the one-line guard drop was executably refuted as a false-refusal defect)."
+      },
+      "authority": {
+        "label": "D-144 seat-pass ruling 2026-08-20 (GO; SF dispositions post-debate)",
+        "path": "docs/process_traces/2026-08-20-go-session/d144-seatpass-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "D-144 seat-pass should-fix follow-ups: SF-1 non-gating superseded-era report channel, SF-3 schema/registry sync test, SF-5 mint-lane-wide scalar guard.",
+      "id": "D144-SEATPASS-FOLLOWUPS",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 65,
+      "status": "queued",
+      "status_note": "Minted 2026-08-20 from the D-144 pre-merge seat pass (both seats GO; nits recorded in the ruling, not queued).",
+      "stop_card": null
+    },
     "DOC-008": {
       "acceptance": {
         "evidence": [
