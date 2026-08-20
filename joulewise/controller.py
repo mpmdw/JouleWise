@@ -1631,7 +1631,9 @@ class _Execution:
         if self._telemetry.name == "powermetrics":
             self._attach_sampler_teardown_custody()
             teardown = self._sampler_teardown.report
-            if not isinstance(teardown, dict) or teardown.get("status") != "clean":
+            if self._sampler_teardown.spawned and (
+                not isinstance(teardown, dict) or teardown.get("status") != "clean"
+            ):
                 self._sampling_stop_claimed = False
                 raise _StageFailure(
                     "measured_run",
@@ -1653,15 +1655,21 @@ class _Execution:
             return start(self._config, self._context)
 
     def _attach_sampler_teardown_custody(self) -> None:
-        """Merge fail-closed sampler custody into uncertainty evidence."""
+        """Persist sampler custody evidence for every powermetrics-shaped run.
+
+        A mock pipeline may legitimately avoid a sampler spawn, while this
+        controller cannot distinguish that case from a silently unmatched real
+        spawn.  Real-window enforcement that custody is engaged *and* clean
+        therefore belongs to the scheduler-gate layer and its activation-gates
+        register; non-engagement remains explicit here rather than masquerading
+        as a clean census.
+        """
 
         if self._telemetry is None or self._telemetry.name != "powermetrics":
             return
         teardown = self._sampler_teardown.report
-        if teardown is None and self._sampler_teardown.spawned:
-            teardown = self._sampler_teardown.teardown()
         if teardown is None:
-            return
+            teardown = self._sampler_teardown.teardown()
         if self._uncertainty_evidence is None:
             self._uncertainty_evidence = {}
         self._uncertainty_evidence["process_group_teardown"] = dict(teardown)

@@ -87,6 +87,38 @@ class SamplerTeardownTests(unittest.TestCase):
         self.assertEqual(fallback_custodian._isolation_mode, "none_direct_child")
         self.assertIsNone(fallback_custodian._process_group_id)
 
+    def test_no_matching_spawn_records_not_engaged_custody(self) -> None:
+        custodian = SamplerTeardown()
+
+        with custodian.intercept_popen():
+            pass
+        report = custodian.teardown()
+
+        self.assertFalse(custodian.spawned)
+        self.assertEqual(report["status"], "not_engaged")
+        self.assertFalse(report["spawn_observed"])
+        self.assertEqual(report["isolation_mode"], "not_spawned")
+        self.assertFalse(report["census_completed"])
+
+    def test_pidless_matching_synthetic_process_is_not_custodied(self) -> None:
+        synthetic_process = object()
+        custodian = SamplerTeardown()
+
+        with patch(
+            "joulewise.sampler_teardown.subprocess.Popen",
+            return_value=synthetic_process,
+        ):
+            with custodian.intercept_popen():
+                returned = subprocess.Popen(
+                    ["/usr/bin/powermetrics", "-o", "capture"]
+                )
+        report = custodian.teardown()
+
+        self.assertIs(returned, synthetic_process)
+        self.assertFalse(custodian.spawned)
+        self.assertEqual(report["status"], "not_engaged")
+        self.assertFalse(report["spawn_observed"])
+
     def test_sigterm_ignoring_direct_child_is_killed(self) -> None:
         code = (
             "import signal,sys,time; "
@@ -112,6 +144,7 @@ class SamplerTeardownTests(unittest.TestCase):
         report = custodian.report
         assert report is not None
         self.assertEqual(report["status"], "clean")
+        self.assertTrue(report["spawn_observed"])
         self.assertEqual(report["isolation_mode"], "none_direct_child")
         self.assertTrue(report["kill_escalated"])
         self.assertTrue(report["leader_reaped"])
@@ -248,6 +281,7 @@ class SamplerTeardownTests(unittest.TestCase):
             set(report),
             {
                 "status",
+                "spawn_observed",
                 "isolation_mode",
                 "direct_child_pid",
                 "process_group_id",
@@ -268,6 +302,7 @@ class SamplerTeardownTests(unittest.TestCase):
                 "errors",
             },
         )
+        self.assertTrue(report["spawn_observed"])
 
 
 if __name__ == "__main__":

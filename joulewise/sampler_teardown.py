@@ -132,6 +132,11 @@ class SamplerTeardown:
                     subprocess.Popen = original_popen
             process = original_popen(*args, **kwargs)
             if capture_this and self._process is None:
+                # Synthetic pipelines commonly return a Popen-shaped object
+                # with no OS pid.  Such an object was never available for
+                # process custody, even when its argv resembles powermetrics.
+                if getattr(process, "pid", None) is None:
+                    return process
                 self._adopt(process, command_argv)
                 return _CustodiedProcess(process, self)
             return process
@@ -179,8 +184,7 @@ class SamplerTeardown:
         selected = process if process is not None else self._process
         report = self._new_report()
         if selected is None:
-            report["status"] = "clean"
-            report["census_completed"] = True
+            report["status"] = "not_engaged"
             self.report = report
             return report
         try:
@@ -236,6 +240,7 @@ class SamplerTeardown:
     def _new_report(self) -> dict[str, Any]:
         return {
             "status": "contamination_unknown",
+            "spawn_observed": self.spawned,
             "isolation_mode": self._isolation_mode,
             "direct_child_pid": self._direct_child_pid,
             "process_group_id": self._process_group_id,

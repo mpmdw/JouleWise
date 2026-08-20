@@ -641,6 +641,22 @@ class FakeProcessPowermetricsRegistry:
         return adapters.resolve_transport(config)
 
 
+class NonEngagedPowermetricsRegistry:
+    """Use the mock telemetry lifecycle under the powermetrics controller seam."""
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            telemetry.name = "powermetrics"
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 class RetryAdmissionPowermetricsAdapter(PowermetricsTelemetryAdapter):
     """Process-backed sampler with deterministic retry CPU conditions."""
 
@@ -1621,6 +1637,7 @@ class HappyPathTests(ControllerTestCase):
             set(teardown),
             {
                 "status",
+                "spawn_observed",
                 "isolation_mode",
                 "direct_child_pid",
                 "process_group_id",
@@ -1642,6 +1659,7 @@ class HappyPathTests(ControllerTestCase):
             },
         )
         self.assertEqual(teardown["status"], "clean")
+        self.assertTrue(teardown["spawn_observed"])
         self.assertIn(
             teardown["isolation_mode"], {"isolated_group", "none_direct_child"}
         )
@@ -1665,6 +1683,24 @@ class HappyPathTests(ControllerTestCase):
             hashlib.sha256(attempt_two.read_bytes()).hexdigest(),
         )
 
+    def test_powermetrics_without_custodied_spawn_succeeds_not_engaged(
+        self,
+    ) -> None:
+        bundle_path, summary = run_benchmark(
+            make_config("controller-powermetrics-not-engaged"),
+            self.runs_root,
+            self.clock,
+            registry=NonEngagedPowermetricsRegistry(),
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        teardown = metadata["uncertainty_evidence"]["process_group_teardown"]
+        self.assertEqual(teardown["status"], "not_engaged")
+        self.assertFalse(teardown["spawn_observed"])
+        self.assertEqual(teardown["isolation_mode"], "not_spawned")
+        self.assertFalse(teardown["census_completed"])
+
     def test_powermetrics_contaminated_teardown_census_fails_run_closed(
         self,
     ) -> None:
@@ -1684,6 +1720,7 @@ class HappyPathTests(ControllerTestCase):
         metadata = json.loads((bundle_path / "metadata.json").read_text())
         teardown = metadata["uncertainty_evidence"]["process_group_teardown"]
         self.assertEqual(teardown["status"], "contaminated")
+        self.assertTrue(teardown["spawn_observed"])
         self.assertTrue(teardown["survivors_detected"])
         self.assertEqual(teardown["escaped_candidates"], [escaped])
 
