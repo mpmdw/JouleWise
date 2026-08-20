@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -76,6 +77,17 @@ V2_PACK_TREE_SHA256 = {
     ),
 }
 
+# These directories enter a pack only through the arm-readiness freeze/MINT
+# transaction.  They are deliberately absent from generator output, but a
+# post-MINT generator check audits the finalized pack inventory named by the
+# now-pinned plan tree and therefore needs them as explicit test-fixture state.
+MINT_CUSTODY_DIRECTORIES = (
+    "arm_readiness.evidence",
+    "arm_readiness.freeze.receipts",
+    "arm_readiness.sources",
+    "identity_pin_projection.receipts",
+)
+
 
 def load_json(relative: str) -> dict[str, Any]:
     value = json.loads((ROOT / relative).read_text(encoding="utf-8"))
@@ -86,6 +98,35 @@ def load_json(relative: str) -> dict[str, Any]:
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def generator_command(family: dict[str, Any], output_root: Path) -> list[str]:
+    return [
+        sys.executable,
+        str(
+            ROOT
+            / "configs/campaigns"
+            / family["v2"]
+            / "generate_configs.py"
+        ),
+        "--output-root",
+        str(output_root),
+        "--pack-id",
+        family["v3"],
+        "--family-suffix",
+        "_v3",
+    ]
+
+
+def seed_mint_custody(family: dict[str, Any], output_root: Path) -> None:
+    """Overlay committed non-generator artifacts for finalized-pack checking."""
+
+    relative_pack = Path("configs/campaigns") / family["v3"]
+    for directory in MINT_CUSTODY_DIRECTORIES:
+        shutil.copytree(
+            ROOT / relative_pack / directory,
+            output_root / relative_pack / directory,
+        )
 
 
 class D117V3FamilyTests(unittest.TestCase):
@@ -110,22 +151,7 @@ class D117V3FamilyTests(unittest.TestCase):
             output_root = Path(temp)
             for family in FAMILIES:
                 with self.subTest(family=family["v3"]):
-                    generator = (
-                        ROOT
-                        / "configs/campaigns"
-                        / family["v2"]
-                        / "generate_configs.py"
-                    )
-                    command = [
-                        sys.executable,
-                        str(generator),
-                        "--output-root",
-                        str(output_root),
-                        "--pack-id",
-                        family["v3"],
-                        "--family-suffix",
-                        "_v3",
-                    ]
+                    command = generator_command(family, output_root)
                     generated = subprocess.run(
                         command,
                         cwd=ROOT,
@@ -140,6 +166,9 @@ class D117V3FamilyTests(unittest.TestCase):
                     self.assertTrue((generated_pack / "order_manifest.json").is_file())
                     if family["v3_spec"] is not None:
                         self.assertTrue((output_root / family["v3_spec"]).is_file())
+                    for directory in MINT_CUSTODY_DIRECTORIES:
+                        self.assertFalse((generated_pack / directory).exists())
+                    seed_mint_custody(family, output_root)
                     checked = subprocess.run(
                         [*command, "--check"],
                         cwd=ROOT,
@@ -160,6 +189,35 @@ class D117V3FamilyTests(unittest.TestCase):
             },
             before,
         )
+
+    def test_check_still_refuses_missing_generator_owned_output(self) -> None:
+        """The MINT-custody overlay must not make generator checks fail open."""
+
+        family = FAMILIES[0]
+        with tempfile.TemporaryDirectory(prefix="d117-v3-missing-owned-") as temp:
+            output_root = Path(temp)
+            command = generator_command(family, output_root)
+            generated = subprocess.run(
+                command,
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            seed_mint_custody(family, output_root)
+
+            generated_pack = output_root / "configs/campaigns" / family["v3"]
+            (generated_pack / "order_manifest.json").unlink()
+            checked = subprocess.run(
+                [*command, "--check"],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(checked.returncode, 0)
+            self.assertIn("missing=order_manifest.json", checked.stderr)
 
     def test_v3_specs_and_plan_trees_bind_r6_via_generation_resolver(self) -> None:
         self.assertEqual(
