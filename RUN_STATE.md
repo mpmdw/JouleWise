@@ -92,6 +92,19 @@ between suite runs); the codex wrapper requires the literal
 WRITE_SCOPE: line in the prompt when --write-scope is passed; the
 `&`-fanout ban caught once (killed before any orphan).
 
+**STANDING HAZARD — the four r6-pinned estimator sources are FROZEN
+SURFACES:** `joulewise/powermetrics_fiducial.py`,
+`joulewise/uncertainty_evidence.py`,
+`joulewise/adapters/powermetrics.py`, `joulewise/reduce.py`
+(estimator_code_sha256,
+configs/calibration/calibration_acceptance_d079_v2_n17_r6.json:40-43).
+ANY byte change invalidates the live acceptance and requires a
+science-neutral D-079 reissue at a family boundary. EVERY
+WRITE_SCOPE authorization checks this list first (a 2026-08-20 brief
+authorized adapters/powermetrics.py for the PROC-TEARDOWN work and
+was caught only by repo-wide discovery — the work was remanded to a
+new unpinned module).
+
 **TRIGGER SEMANTICS (supersedes T14-GO's loop-line trigger):** Ed starts a
 FRESH SESSION at ~23:34 PST pointed at this file. THAT SESSION HAS THE
 GO — full fresh Fable + Codex accounts, LIBERAL model use across

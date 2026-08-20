@@ -71,6 +71,7 @@ _PACK_TERMINAL_EVENTS = frozenset({"atexit", "exit", "signal"})
 _RACE_EXERCISED = "RACE_EXERCISED"
 _NO_RACE_PRE_WRITE = "NO_RACE_PRE_WRITE"
 _TRACE_INCOMPLETE = "TRACE_INCOMPLETE"
+_LOGICAL_WRITER_TEST_ORIGIN_S = 1_784_490_850.05
 
 
 @dataclass(frozen=True)
@@ -4355,7 +4356,11 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         )
 
     def test_logical_producer_delay_preserves_exact_evidence_bytes(self) -> None:
-        origin = time.time()
+        # The logical writer is intentionally independent of discovery time.
+        # A wall-clock-derived origin makes every governed byte a function of
+        # how long earlier modules took, even though elapsed host time is not
+        # part of this suspension-immunity contract.
+        origin = _LOGICAL_WRITER_TEST_ORIGIN_S
 
         def capture(delay_s: float | None) -> tuple[bytes, bytes, bytes, bytes]:
             witness = type(self)(methodName="runTest")
@@ -4404,7 +4409,27 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
 
         baseline = capture(None)
         delayed = capture(0.12)
-        self.assertEqual(delayed, baseline)
+        for artifact, delayed_bytes, baseline_bytes in zip(
+            (
+                "instrument_evidence.json",
+                "events.jsonl",
+                "raw/powermetrics.plist",
+                "power_trace.csv",
+            ),
+            delayed,
+            baseline,
+            strict=True,
+        ):
+            with self.subTest(artifact=artifact):
+                self.assertEqual(
+                    delayed_bytes,
+                    baseline_bytes,
+                    (
+                        f"{artifact} changed under logical producer delay: "
+                        f"delayed_sha256={hashlib.sha256(delayed_bytes).hexdigest()} "
+                        f"baseline_sha256={hashlib.sha256(baseline_bytes).hexdigest()}"
+                    ),
+                )
 
     def test_abort_witness_payload_survives_nonowned_sampler_census_decoy(self) -> None:
         decoy_capture = self.repo / "powermetrics-decoy.plist"
