@@ -13,6 +13,8 @@ result when a required gate or piece of evidence fails.
 successor measurement campaign family is frozen; the work is on the
 integration branch pending its final review gates, after which fresh
 calibration and measurement windows produce the paper's results data.
+Live state, gates, and work selection are owned by
+[`RUN_STATE.md`](RUN_STATE.md); this summary does not duplicate them.
 
 ## Current activity (refreshed each work block; last: 2026-08-19 night)
 
