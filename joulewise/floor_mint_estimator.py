@@ -18,6 +18,10 @@ from typing import Any, Mapping, Sequence
 from joulewise import detection_floor, floor_extraction
 from joulewise.arm_readiness import LaunchLineageError
 from joulewise.authentication_io import active_v2_authentication_session
+from joulewise.calibration_bracketing import (
+    acceptance_allowance_rule,
+    acceptance_bracket_screen_s,
+)
 from joulewise.whole_window import (
     AuthenticatedConsumptionSession,
     authenticate_window_launch_lineage,
@@ -36,8 +40,6 @@ __all__ = [
 _DEFAULT_PATH = "default"
 _COMMON_MODE_PATH = "common_mode"
 _ABBA_POSITIONS = ("A1", "B1", "B2", "A2")
-_BRACKET_SCREEN = Decimal("0.010818")
-_ALLOWANCE_RULE = "max(observed_drift_s,0.010818)"
 _COMPONENT_COMPOSITION = "componentwise_max_never_sum.v1"
 _ACCEPTANCE_SELECTION = "issued_d116_artifact_only"
 _PENDING_STATUS = "candidate_pending_floor_commonmode_01"
@@ -142,6 +144,25 @@ def _validate_calibration_basis(
         raise _MintEstimatorError(
             "authenticated producer acceptance context is required for calibration_basis"
         )
+    acceptance_id = calibration_acceptance.get("acceptance_id")
+    if not isinstance(acceptance_id, str) or not acceptance_id:
+        raise _MintEstimatorError(
+            "authenticated producer acceptance_id must be a nonempty string"
+        )
+    try:
+        bracket_screen_s = acceptance_bracket_screen_s(
+            acceptance_id, acceptance=calibration_acceptance
+        )
+        allowance_rule = acceptance_allowance_rule(
+            acceptance_id, acceptance=calibration_acceptance
+        )
+    except ValueError as exc:
+        raise _MintEstimatorError(str(exc)) from exc
+    if bracket_screen_s is None or allowance_rule is None:
+        raise _MintEstimatorError(
+            f"unregistered acceptance generation {acceptance_id!r}"
+        )
+    registered_screen = _decimal(bracket_screen_s, "registered bracket screen")
     issued = basis.get("issued_acceptance")
     if not isinstance(issued, Mapping):
         raise _MintEstimatorError(
@@ -163,7 +184,7 @@ def _validate_calibration_basis(
     if (
         basis.get("calibration_scope") != declared_calibration_scope
         or basis.get("acceptance_selection") != _ACCEPTANCE_SELECTION
-        or basis.get("allowance_rule") != _ALLOWANCE_RULE
+        or basis.get("allowance_rule") != allowance_rule
         or isinstance(basis.get("allowance_embedding_count"), bool)
         or basis.get("allowance_embedding_count") != 1
         or basis.get("component_composition") != _COMPONENT_COMPOSITION
@@ -189,10 +210,10 @@ def _validate_calibration_basis(
             "authenticated producer allowance projection is malformed"
         ) from exc
     if (
-        screen != _BRACKET_SCREEN
-        or applied != max(observed, _BRACKET_SCREEN)
+        screen != registered_screen
+        or applied != max(observed, registered_screen)
         or calibration_allowance_projection.get("allowance_rule")
-        != _ALLOWANCE_RULE
+        != allowance_rule
         or isinstance(
             calibration_allowance_projection.get("allowance_embedding_count"),
             bool,
@@ -201,7 +222,8 @@ def _validate_calibration_basis(
         != 1
     ):
         raise _MintEstimatorError(
-            "authenticated producer allowance does not implement max(observed_drift_s,0.010818) exactly once"
+            "authenticated producer allowance does not implement "
+            f"{allowance_rule} exactly once"
         )
 
 

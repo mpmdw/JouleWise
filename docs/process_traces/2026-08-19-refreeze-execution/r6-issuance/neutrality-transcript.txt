@@ -1,0 +1,76 @@
+20260722T145535-e941c821 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-0.json
+20260722T194118-9dc0749d bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-1.json
+20260722T214220-1acdbbc0 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-2.json
+20260722T215127-eeef661a bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-3.json
+20260722T222332-901c5c13 refused exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-4.json
+20260722T232509-82642517 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-5.json
+20260723T023058-8732d1c9 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-6.json
+20260723T052051-d9358c8a bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-7.json
+20260723T183306-4ce692b4 refused exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-8.json
+20260723T194632-d04e038e bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-9.json
+20260723T195730-bc4ba14a bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-10.json
+20260723T221449-e9ae755e bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-11.json
+20260723T223406-314f6d9e bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-12.json
+20260724T014109-57844352 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-13.json
+20260725T005132-a64711b7 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-14.json
+20260725T011533-0b5ec77c bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-15.json
+20260725T022712-0a9534f5 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-16.json
+20260725T030533-d3f076e5 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-17.json
+20260725T060617-97c5cba6 bounded exact=True
+MEMBERS 1
+MISMATCHES 0
+PROOF /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/r6-issuance/r6-neutrality-member-18.json

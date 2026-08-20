@@ -270,8 +270,8 @@ Additive; no seeded plan row above is rewritten.
   fit the consumer.
 - Reducer 0.5.2 / AXI 0.6.2 mint per-metric anchor-shift energy envelopes
   (`energy_anchor_shift_envelopes`,
-  `energy_bound_terms_j.E_clock_anchor_shift_bound_j`; metadata uncertainty
-  schema p2-038.2). The engine propagates them through absolute and paired
+  `energy_bound_terms_j.E_clock_anchor_shift_bound_j`; the stored clock
+  method owns metadata-era dispatch). The engine propagates them through absolute and paired
   contrasts as the deterministic bound term `E_clock_anchor_shift_bound_j`.
   A per-metric envelope pass never by itself makes a comparative contrast
   identifiable — the contrast's decision interval consumes the bound

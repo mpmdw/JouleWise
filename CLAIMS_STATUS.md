@@ -1,5 +1,22 @@
 # Claims Status
 
+> **Era update (2026-08-19):** exclusion of pre-anchor-v3 evidence from
+> claims is now enforced MECHANICALLY by the instrument (the capture-era
+> claim barrier, D-146) — not only by the protocol decisions recorded
+> below. Every corpus collected before the anchor-v3 production flip is
+> non-claim-bearing under the current instrument; fresh collection under
+> the `_v3` family is the claim path.
+
+> **Registered limitations (Ed rulings D-148.6/.7, 2026-08-19):** (a) the
+> stored anchor-v2 population — 748 bundles in the repository tree — is
+> PERMANENTLY non-claim-bearing on estimator grounds (the v2 rate=1 model
+> was falsified); replay/audit value retained forever; enforcement is the
+> mechanical D-146 claim barrier. (b) The in-process-adversary family
+> (recorder check-to-grant race, T-0 capture provenance, hostile same-UID
+> injection, forged launch-context) is accepted as a registered limitation:
+> the threat model assumes no adversarial process on the measurement
+> machine (D-139 A1). Both belong in the paper's limitations section —
+> the anchor-v2 paragraph is already drafted there.
 Terms used here: a *measurement window* is one uninterrupted, calibrated
 collection session; a *pack* is the frozen campaign plan and its authenticated
 supporting files; a *detection floor* is the largest false difference the

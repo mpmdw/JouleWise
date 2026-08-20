@@ -45,6 +45,8 @@ from joulewise.authentication_io import (  # noqa: E402
     read_authentication_input,
 )
 from joulewise.calibration_bracketing import (  # noqa: E402
+    acceptance_allowance_rule,
+    acceptance_bracket_screen_s,
     issued_calibration_allowance_projection,
     validate_calibration_bracket_binding,
 )
@@ -61,8 +63,20 @@ PINSET_SCHEMA_VERSION = "joulewise.floor_mint_pinset.v1"
 PINSET_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pinset.v2"
 PIN_REQUIREMENTS_SCHEMA_VERSION_V2 = "joulewise.floor_mint_pin_requirements.v2"
 V2_MINT_TOOL_VERSION = "joulewise.floor_mint.generalized.v2"
-V2_ALLOWANCE_RULE = "max(observed_drift_s,0.010818)"
-V2_BRACKET_SCREEN_S = "0.010818"
+
+
+def allowance_rule_for(acceptance_id: str) -> str | None:
+    """Resolve the mint allowance rule for the named acceptance generation."""
+
+    return acceptance_allowance_rule(acceptance_id)
+
+
+def bracket_screen_s_for(acceptance_id: str) -> str | None:
+    """Resolve the mint bracket screen for the named acceptance generation."""
+
+    return acceptance_bracket_screen_s(acceptance_id)
+
+
 V2_CELL_COMPOSITION_RULE = "componentwise_max_never_sum.v1"
 V2_CONSUMER_FLOOR_RULE = "cross_stack_armwise_max.v1"
 V2_BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
@@ -567,7 +581,12 @@ def _semantics_id(value: object, label: str) -> str:
     return text
 
 
-def _parse_v2_postcollection(value: object, label: str) -> None:
+def _parse_v2_postcollection(
+    value: object,
+    label: str,
+    *,
+    acceptance_id: str,
+) -> None:
     row = _object(
         value,
         label,
@@ -616,13 +635,17 @@ def _parse_v2_postcollection(value: object, label: str) -> None:
         row["comparative_evaluation_basis_members"],
         f"{label}.comparative_evaluation_basis_members",
     )
-    if row["allowance_rule"] != V2_ALLOWANCE_RULE:
+    allowance_rule = allowance_rule_for(acceptance_id)
+    bracket_screen_s = bracket_screen_s_for(acceptance_id)
+    if allowance_rule is None or bracket_screen_s is None:
+        raise MintError(f"{label}: unregistered acceptance generation {acceptance_id!r}")
+    if row["allowance_rule"] != allowance_rule:
         raise MintError(
-            f"{label}.allowance_rule must equal {V2_ALLOWANCE_RULE!r}"
+            f"{label}.allowance_rule must equal {allowance_rule!r}"
         )
-    if row["bracket_screen_s"] != V2_BRACKET_SCREEN_S:
+    if row["bracket_screen_s"] != bracket_screen_s:
         raise MintError(
-            f"{label}.bracket_screen_s must equal {V2_BRACKET_SCREEN_S!r}"
+            f"{label}.bracket_screen_s must equal {bracket_screen_s!r}"
         )
     if (
         isinstance(row["allowance_embedding_count"], bool)
@@ -636,7 +659,7 @@ def _parse_v2_postcollection(value: object, label: str) -> None:
     applied = _decimal_text(
         row["applied_allowance_s"], f"{label}.applied_allowance_s"
     )
-    if applied != max(observed, Decimal(V2_BRACKET_SCREEN_S)):
+    if applied != max(observed, Decimal(bracket_screen_s)):
         raise MintError(
             f"{label}.applied_allowance_s does not apply the never-zero rule once"
         )
@@ -784,7 +807,7 @@ def _parse_v2_pinset(value: object) -> V2Pinset:
                 "derivation_rule_id",
             },
         )
-        _string(
+        acceptance_id = _string(
             acceptance["acceptance_id"],
             f"{label}.calibration_acceptance.acceptance_id",
         )
@@ -887,7 +910,9 @@ def _parse_v2_pinset(value: object) -> V2Pinset:
                         "must equal the producer pins"
                     )
             _parse_v2_postcollection(
-                cell["postcollection"], f"{cell_label}.postcollection"
+                cell["postcollection"],
+                f"{cell_label}.postcollection",
+                acceptance_id=acceptance_id,
             )
             post = cell["postcollection"]
             producer_custody_pins.append(

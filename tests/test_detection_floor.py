@@ -79,6 +79,7 @@ from joulewise.whole_window import (
     WholeWindowDriftAllowanceResult,
     neg8_claim_family_for_metric,
 )
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V3, SCHEMA_VERSION_V3
 from tests.test_arm_readiness import LaunchConsumptionV2Tests
 from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
 
@@ -242,17 +243,25 @@ class TestAnchorFallbackFloorMemberGate(unittest.TestCase):
         anchor = (
             {
                 "status": "unresolved",
+                "method": CLOCK_METHOD_V3,
                 "trace_fallback_method": "legacy_spawn_bracket_midpoint_v1",
             }
             if fallback
-            else {"status": "bounded"}
+            else {"status": "bounded", "method": CLOCK_METHOD_V3}
         )
         (bundle / "metadata.json").write_text(
             json.dumps(
                 {
                     "config_sha256": hashlib.sha256(config_raw).hexdigest(),
                     "adapters": {"telemetry": {"name": "powermetrics"}},
-                    "uncertainty_evidence": {"clock_anchor": anchor},
+                    # This fixture exercises the anchor-fallback member gate,
+                    # not a missing/retired capture pipeline.  Present the
+                    # active v3 identity so the claim barrier reaches that
+                    # original subject.
+                    "uncertainty_evidence": {
+                        "schema_version": SCHEMA_VERSION_V3,
+                        "clock_anchor": anchor,
+                    },
                 },
                 sort_keys=True,
             )

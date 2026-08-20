@@ -57,9 +57,9 @@ from joulewise.bundle_read import (
     axi_v2_validation_problems,
 )
 from joulewise.uncertainty_evidence import (
+    ANCHOR_METHOD_VERSIONS,
     CLOCK_ANCHOR_UNRESOLVED,
-    CLOCK_METHOD_V2,
-    derive_powermetrics_anchor_v2,
+    resolve_anchor_reconstructor,
     stamp_from_mapping,
 )
 from joulewise.idle_dependence import (
@@ -1380,7 +1380,16 @@ def _verify_instrument_calibration(
         return None, "instrument_calibration_invalid"
     if evidence.get("status") != "valid":
         return None, "instrument_calibration_artifact_invalid"
-    if evidence.get("anchor_method_version") != CLOCK_METHOD_V2:
+    # The calibration artifact describes a SEPARATE instrument-validation
+    # capture, so its anchor method is deliberately NOT required to equal the
+    # measurement bundle's own stored anchor method.  What is required is that
+    # the calibration declares a registered method, and that the declaration
+    # agrees with its own hash-bound bindings row (enforced below).
+    anchor_method_version = evidence.get("anchor_method_version")
+    if (
+        not isinstance(anchor_method_version, str)
+        or anchor_method_version not in ANCHOR_METHOD_VERSIONS
+    ):
         return None, "instrument_calibration_anchor_method_mismatch"
     artifact_bound = evidence.get("b_fiducial_s")
     if (
@@ -1494,9 +1503,14 @@ def _verify_instrument_calibration(
             measured_window = reader.measured_window()
         except (BundleReadError, KeyError, TypeError, ValueError):
             return None, "instrument_calibration_stale"
+        if abs(float(capture_wall_time_s) - derived_capture_wall_time_s) > 1.0:
+            # The declared freshness origin and immutable calibration-event
+            # chronology are independently authenticated.  Do not collapse a
+            # relabelled declaration into ordinary age staleness: the latter
+            # is an honest horizon expiry, while this is a custody lie.
+            return None, "instrument_calibration_capture_time_mismatch"
         if (
-            abs(float(capture_wall_time_s) - derived_capture_wall_time_s) > 1.0
-            or len(collection_times) != 1
+            len(collection_times) != 1
             or isinstance(collection_times[0], bool)
             or not isinstance(collection_times[0], int | float)
             or not math.isfinite(float(collection_times[0]))
@@ -1612,7 +1626,7 @@ def _verify_instrument_calibration(
         "hardware_model": device.get("hw_model"),
         "os_build": device.get("kern_osversion"),
         "sampling_interval_ms": sampling_interval_ms,
-        "anchor_method_version": CLOCK_METHOD_V2,
+        "anchor_method_version": anchor_method_version,
         "mlx_version": mlx.get("version") if isinstance(mlx, dict) else None,
         "pulse_protocol_id": evidence_protocol_id,
     }
@@ -1727,7 +1741,7 @@ def _derive_anchor_context(
     authenticated_fiducial_bound_override_s: float | None = None,
     instrument_calibration_physics_cache: dict[str, float] | None = None,
 ) -> _AnchorContext:
-    """Re-derive the D-078 censored-intersection anchor from primary evidence.
+    """Re-derive the bundle-declared clock anchor from primary evidence.
 
     Powermetrics bundles must re-resolve their record-0 window END from the
     raw plist's native whole-second stamps intersected with the causal clock
@@ -1780,7 +1794,11 @@ def _derive_anchor_context(
         raw_records = parse_powermetrics_records(raw_path.read_bytes())
     except (OSError, ValueError):
         return _unresolved_anchor_context("raw_capture_unparseable")
-    derivation = derive_powermetrics_anchor_v2(
+    try:
+        anchor_deriver = resolve_anchor_reconstructor(clock_anchor.get("method"))
+    except ValueError:
+        return _unresolved_anchor_context("anchor_method_unregistered")
+    derivation = anchor_deriver(
         stamps=stamps,
         records=anchor_records_from_powermetrics(raw_records),
     )
@@ -1812,6 +1830,7 @@ def _derive_anchor_context(
                 if detail
                 in {
                     "instrument_calibration_mismatch",
+                    "instrument_calibration_capture_time_mismatch",
                     "instrument_calibration_stale",
                 }
                 else "instrument_calibration_invalid"
@@ -2388,6 +2407,7 @@ def _apply_anchor_claim_gates(
             "instrument_calibration_missing",
             "instrument_calibration_mismatch",
             "instrument_calibration_invalid",
+            "instrument_calibration_capture_time_mismatch",
             "instrument_calibration_stale",
         }
         else []

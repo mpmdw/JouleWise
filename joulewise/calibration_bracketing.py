@@ -13,6 +13,7 @@ import math
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
@@ -38,6 +39,9 @@ from joulewise.powermetrics_fiducial import (
     verify_stored_evidence_physics,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
+from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+)
 
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
 BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
@@ -71,9 +75,59 @@ SUCCESSOR_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n19_r2"
 SUCCESSOR_ACCEPTANCE_BOUND_SHA256 = (
     "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e"
 )
-# Dual-generation registry.  Authentication is indexed by the artifact's own
-# `acceptance_id`, so a caller cannot present one generation's bytes under the
-# other generation's pin, and predecessor packs stay verifiable unchanged.
+# D-079 anchor-v3 science-facing generation.  The clock-anchor estimator moved
+# from the falsified rate=1 censored intersection to the rate-aware
+# set-membership method, so member VALUES change and the corpus SHRINKS: the
+# two pre-clock-discipline captures whose stamp rectangles admit no single
+# affine wall rate now refuse.  Same schema and same `decision_ids`; the
+# identity carries the corpus size and the reissue ordinal.  Ratified by the
+# cold science review at
+# `docs/process_traces/2026-08-18-anchor-v3-science-review/03-cold-science-review.md`.
+ANCHOR_V3_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r3.json"
+)
+ANCHOR_V3_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r3"
+ANCHOR_V3_ACCEPTANCE_BOUND_SHA256 = (
+    "73f022633e7bc22e9e129617f3f2ad8797293adaff3b53923dc41f75da2ae917"
+)
+# D-079 anchor-v3 CAPTURE-ACTIVATION reissue.  Activating the rate-aware
+# set-membership anchor as the live capture method
+# (`ACTIVE_CAPTURE_ANCHOR_METHOD`, plus the capture/admission/projection wiring)
+# changed the bytes of `joulewise/uncertainty_evidence.py`, one of the four
+# governed estimator sources, which fires the r3 artifact's own
+# `protocol_or_estimator_byte_change` trigger.  SCIENCE-NEUTRAL: the whole
+# corpus was re-derived under the anchor-v3 estimator at the activation head and
+# every physical value reproduced r3 exactly, so r4 differs from r3 in the
+# estimator pin set alone.  r3 is RETAINED as an intermediate generation.
+ANCHOR_V3_R4_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r4.json"
+)
+ANCHOR_V3_R4_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r4"
+ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256 = (
+    "dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb"
+)
+# D-079 anchor-v3 production-capture flip reissue. The member table and
+# D-102 statistics are unchanged; r5 rotates only governed estimator pins.
+ANCHOR_V3_R5_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r5.json"
+)
+ANCHOR_V3_R5_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r5"
+ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256 = (
+    "92b9c0608bc97fbd7769050213b1433c32d3fe060d1292167920363e58b8cf0f"
+)
+# D-079 anchor-v3 capture-presentation reissue.  The member table and D-102
+# statistics are unchanged; r6 rotates only the two governed estimator pins
+# touched by the positive capture-pipeline and calibration-time taxonomy work.
+ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r6.json"
+)
+ANCHOR_V3_R6_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r6"
+ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256 = (
+    "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d"
+)
+# Multi-generation registry.  Authentication is indexed by the artifact's own
+# `acceptance_id`, so a caller cannot present one generation's bytes under
+# another generation's pin, and predecessor packs stay verifiable unchanged.
 ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
     PREDECESSOR_ACCEPTANCE_ID: {
         "path": PREDECESSOR_ACCEPTANCE_BOUND_PATH,
@@ -85,11 +139,41 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         "relative_path": "configs/calibration/calibration_acceptance_d079_v2_r2.json",
         "file_sha256": SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r3.json"
+        ),
+        "file_sha256": ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
+    },
+    ANCHOR_V3_R4_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R4_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r4.json"
+        ),
+        "file_sha256": ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256,
+    },
+    ANCHOR_V3_R5_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R5_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r5.json"
+        ),
+        "file_sha256": ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256,
+    },
+    ANCHOR_V3_R6_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+        ),
+        "file_sha256": ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = SUCCESSOR_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = SUCCESSOR_ACCEPTANCE_BOUND_PATH
-DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R6_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH
+# Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
+# not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
+GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
     "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
 )
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -100,12 +184,114 @@ ESTIMATOR_CODE_PATHS = (
     "joulewise/reduce.py",
 )
 ACCEPTANCE_IDENTITY_FIELDS = IDENTITY_EPOCH_FIELDS
-_D102_OPERATIVE_VALUES = {
-    "bracket_screen_s": "0.010818",
-    "preflight_level_screen_s": "0.033558756679900",
-    "max_budgetable_excess_s": "0.001275166090593858",
-    "maximum_budgetable_drift_s": "0.012093166090593858",
+# The D-102 derivation is corpus-indexed, not global: corpus size, the two
+# two-draw prediction pins, the ratified operative comparators, and the
+# corpus-doubling trigger vocabulary are all functions of the member table a
+# generation was derived from.  Retaining them per generation is what keeps the
+# predecessor generations authenticating byte-identically after the live
+# default moves.
+_D102_N19_DERIVATION: dict[str, Any] = {
+    "corpus_n": 19,
+    "corpus_doubling_trigger": "corpus_doubles_from_19_to_38",
+    "prediction_95_two_draw_s": "0.008826584887500717",
+    "prediction_99_two_draw_s": "0.012093166090593858",
+    "operatives": {
+        "bracket_screen_s": "0.010818",
+        "preflight_level_screen_s": "0.033558756679900",
+        "max_budgetable_excess_s": "0.001275166090593858",
+        "maximum_budgetable_drift_s": "0.012093166090593858",
+    },
 }
+_D102_N17_DERIVATION: dict[str, Any] = {
+    "corpus_n": 17,
+    "corpus_doubling_trigger": "corpus_doubles_from_17_to_34",
+    "prediction_95_two_draw_s": "0.007377644019421586",
+    "prediction_99_two_draw_s": "0.010164834757777545",
+    "operatives": {
+        "bracket_screen_s": "0.009724",
+        "preflight_level_screen_s": "0.032898493715362",
+        "max_budgetable_excess_s": "0.000440834757777545",
+        "maximum_budgetable_drift_s": "0.010164834757777545",
+    },
+}
+_D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
+    PREDECESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
+    SUCCESSOR_ACCEPTANCE_ID: _D102_N19_DERIVATION,
+    ANCHOR_V3_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r4 is a science-neutral estimator-pin reissue of r3: same corpus, same
+    # member table, therefore the same D-102 derivation.
+    ANCHOR_V3_R4_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r5 is the science-neutral production-capture flip reissue of r4.
+    ANCHOR_V3_R5_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r6 is the science-neutral capture-presentation reissue of r5.
+    ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+}
+
+
+def acceptance_generation_operatives(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> Mapping[str, str] | None:
+    """Return registered D-102 operatives, refusing an operative crosswire."""
+
+    derivation = _D102_GENERATION_DERIVATIONS.get(acceptance_id)
+    if derivation is None:
+        return None
+    operatives = derivation["operatives"]
+    registered_screen = operatives["bracket_screen_s"]
+    if acceptance is not None and "decimal_derivation" in acceptance:
+        decimal_derivation = acceptance["decimal_derivation"]
+        if not isinstance(decimal_derivation, Mapping):
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: decimal_derivation must be a mapping"
+            )
+        if "ratified_operatives" not in decimal_derivation:
+            return MappingProxyType(operatives)
+        supplied_operatives = decimal_derivation["ratified_operatives"]
+        if not isinstance(supplied_operatives, Mapping):
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: ratified_operatives must be a mapping"
+            )
+        if supplied_operatives.get("bracket_screen_s") != registered_screen:
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: bracket_screen_s "
+                f"{supplied_operatives.get('bracket_screen_s')!r} disagrees with "
+                f"registered bracket_screen_s {registered_screen!r} for "
+                f"acceptance_id {acceptance_id!r}"
+            )
+    return MappingProxyType(operatives)
+
+
+def acceptance_bracket_screen_s(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Resolve the registered bracket screen for an acceptance generation."""
+
+    operatives = acceptance_generation_operatives(
+        acceptance_id, acceptance=acceptance
+    )
+    return operatives["bracket_screen_s"] if operatives is not None else None
+
+
+def acceptance_allowance_rule(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Render the registered never-zero allowance rule for a generation."""
+
+    screen = acceptance_bracket_screen_s(acceptance_id, acceptance=acceptance)
+    return f"max(observed_drift_s,{screen})" if screen is not None else None
+
+
+# Retained name for the D-116/D-138 n=19 generations' comparators.
+_D102_OPERATIVE_VALUES = _D102_N19_DERIVATION["operatives"]
 
 
 @dataclass(frozen=True)
@@ -283,6 +469,14 @@ def _valid_acceptance_bound(value: Any) -> bool:
         if role == "issued"
         else frozenset({PREDECESSOR_ACCEPTANCE_ID})
     )
+    # The corpus-derived expectations are selected by the artifact's own
+    # identity, never by the live default, so every registered generation keeps
+    # validating against the member table it was actually derived from.
+    generation = _D102_GENERATION_DERIVATIONS.get(value.get("acceptance_id"))
+    if generation is None:
+        return False
+    expected_n = generation["corpus_n"]
+    operative_values = generation["operatives"]
     if (
         not role_valid
         or value.get("acceptance_id") not in allowed_acceptance_ids
@@ -308,13 +502,13 @@ def _valid_acceptance_bound(value: Any) -> bool:
             "identity_field_change",
             "protocol_or_estimator_byte_change",
             "new_valid_same_identity_capture_expands_observed_range",
-            "corpus_doubles_from_19_to_38",
+            generation["corpus_doubling_trigger"],
             "new_systematic_failure_challenges_preflight_screen",
         }
         or not isinstance(corpus, Mapping)
-        or corpus.get("n") != 19
+        or corpus.get("n") != expected_n
         or not isinstance(corpus.get("members"), list)
-        or len(corpus["members"]) != 19
+        or len(corpus["members"]) != expected_n
         or not isinstance(cutoff, Mapping)
         or cutoff.get("ledger_schema") != LEDGER_SCHEMA
         or not isinstance(prior, Mapping)
@@ -356,7 +550,7 @@ def _valid_acceptance_bound(value: Any) -> bool:
             return False
         member_ids.append(member["member_id"])
         values.append(bound)
-    if len(set(member_ids)) != 19 or member_ids != sorted(member_ids):
+    if len(set(member_ids)) != expected_n or member_ids != sorted(member_ids):
         return False
 
     prior_ids: list[str] = []
@@ -455,20 +649,20 @@ def _valid_acceptance_bound(value: Any) -> bool:
         or statistics["sample_sd_presentation_s"].get("label")
         != "rounded_presentation"
         or statistics.get("prediction_95_two_draw_s")
-        != "0.008826584887500717"
+        != generation["prediction_95_two_draw_s"]
         or statistics.get("prediction_99_two_draw_s")
-        != "0.012093166090593858"
+        != generation["prediction_99_two_draw_s"]
         or rounding.get("mode") != "ROUND_HALF_EVEN"
         or not isinstance(rounding.get("operative_bracket_screen"), Mapping)
         or rounding["operative_bracket_screen"].get("quantum_s") != "0.000001"
         or rounding["operative_bracket_screen"].get("value_s")
-        != _D102_OPERATIVE_VALUES["bracket_screen_s"]
+        != operative_values["bracket_screen_s"]
         or not isinstance(rounding.get("preflight_level_screen"), Mapping)
         or rounding["preflight_level_screen"].get("quantum_s")
         != "0.000000000000001"
         or rounding["preflight_level_screen"].get("value_s")
-        != _D102_OPERATIVE_VALUES["preflight_level_screen_s"]
-        or any(operatives.get(key) != item for key, item in _D102_OPERATIVE_VALUES.items())
+        != operative_values["preflight_level_screen_s"]
+        or any(operatives.get(key) != item for key, item in operative_values.items())
         or operatives.get("allowance_rule")
         != "max(observed_drift_s,bracket_screen_s)"
         or operatives.get("operative_bound_rule")
@@ -476,9 +670,9 @@ def _valid_acceptance_bound(value: Any) -> bool:
         or operatives.get("embedding_count") != 1
     ):
         return False
-    screen = Decimal(_D102_OPERATIVE_VALUES["bracket_screen_s"])
-    maximum = Decimal(_D102_OPERATIVE_VALUES["maximum_budgetable_drift_s"])
-    excess = Decimal(_D102_OPERATIVE_VALUES["max_budgetable_excess_s"])
+    screen = Decimal(operative_values["bracket_screen_s"])
+    maximum = Decimal(operative_values["maximum_budgetable_drift_s"])
+    excess = Decimal(operative_values["max_budgetable_excess_s"])
     return (
         (max(values) - min(values)).quantize(
             Decimal("0.000001"), rounding=ROUND_HALF_EVEN
@@ -487,7 +681,7 @@ def _valid_acceptance_bound(value: Any) -> bool:
         and max(values).quantize(
             Decimal("0.000000000000001"), rounding=ROUND_HALF_EVEN
         )
-        == Decimal(_D102_OPERATIVE_VALUES["preflight_level_screen_s"])
+        == Decimal(operative_values["preflight_level_screen_s"])
         and screen + excess == maximum
     )
 
@@ -538,7 +732,7 @@ def _acceptance_bound_from_authenticated_bytes(
     # selected by the document's own `acceptance_id`.
     role = value.get("artifact_role") if isinstance(value, Mapping) else None
     if role == "schema_fixture_unissued":
-        expected_sha256: str | None = DEFAULT_ACCEPTANCE_BOUND_SHA256
+        expected_sha256: str | None = GENESIS_FIXTURE_ACCEPTANCE_SHA256
     elif role == "issued":
         registered = ISSUED_ACCEPTANCE_REGISTRY.get(value.get("acceptance_id"))
         expected_sha256 = registered["file_sha256"] if registered else None
@@ -631,7 +825,7 @@ def _acceptance_artifact_sha256(artifact: Mapping[str, Any]) -> str:
     if artifact.get("artifact_role") == "issued":
         registered = ISSUED_ACCEPTANCE_REGISTRY[artifact["acceptance_id"]]
         return str(registered["file_sha256"])
-    return DEFAULT_ACCEPTANCE_BOUND_SHA256
+    return GENESIS_FIXTURE_ACCEPTANCE_SHA256
 
 
 def _valid_sha256(value: Any) -> bool:
@@ -949,7 +1143,7 @@ def load_calibration_candidate(
         or bindings.get("protocol_sha256") != protocol_sha256(str(protocol_id))
         or evidence.get("pulse_count") != protocol_pulse_count(str(protocol_id))
         or evidence.get("anchor_method_version")
-        != "powermetrics_native_second_censored_intersection_v1"
+        != ACTIVE_CAPTURE_ANCHOR_METHOD
         or evidence.get("residual_region_method") != RESIDUAL_REGION_METHOD
         or not isinstance(
             evidence.get("residual_region_coverage_assumption"), str
@@ -1074,6 +1268,19 @@ def _candidate_from_observation(
     )
 
 
+def _capture_pipeline_refusal_for_observation(
+    observation: LedgerObservation,
+) -> str | None:
+    """Classify a ledger-valid candidate's capture era before reconciliation."""
+
+    method = observation.t1_bindings.get("anchor_method_version")
+    # This is deliberately an allowlist: every stored era other than the
+    # active claim-bearing method is replay evidence, never a claim candidate.
+    if method != ACTIVE_CAPTURE_ANCHOR_METHOD:
+        return "capture_pipeline_superseded"
+    return None
+
+
 def discover_calibration_candidates(
     ledger_snapshot: CalibrationLedgerSnapshot,
 ) -> tuple[CalibrationCandidate, ...]:
@@ -1103,6 +1310,8 @@ def discover_calibration_candidates(
             or observation.bracket_session_id is not None
             and observation.bracket_session_id not in finalized_session_ids
         ):
+            continue
+        if _capture_pipeline_refusal_for_observation(observation) is not None:
             continue
         candidate = _candidate_from_observation(observation)
         if candidate is None:
@@ -1369,6 +1578,7 @@ def evaluate_calibration_bracket(
         for observation in ledger_snapshot.observations
         if observation.disposition == "valid"
         and not observation.is_historical_import
+        and _capture_pipeline_refusal_for_observation(observation) is None
         and (
             observation.bracket_session_id is None
             or observation.bracket_session_id in finalized_session_ids
@@ -1512,6 +1722,12 @@ def evaluate_calibration_bracket(
             return result, ("instrument_calibration_invalid",)
         matching_decimals[id(candidate)] = candidate_decimal
     corpus_members = artifact["derivation_corpus"]["members"]
+    # The corpus-doubling trigger is a function of THIS artifact's corpus, not
+    # a global constant: a generation derived from a smaller corpus reaches its
+    # doubling threshold sooner, and says so in its own trigger vocabulary.
+    _generation = _D102_GENERATION_DERIVATIONS[artifact["acceptance_id"]]
+    corpus_doubling_trigger = _generation["corpus_doubling_trigger"]
+    corpus_doubling_threshold = 2 * _generation["corpus_n"]
     observed_triggers = result["acceptance"]["prospective_rederivation"][
         "observed_triggers"
     ]
@@ -1564,8 +1780,8 @@ def evaluate_calibration_bracket(
         if observation.disposition == "valid"
         and dict(observation.identity_epoch) == dict(identity_epoch)
     ]
-    if len(valid_same_epoch) >= 38:
-        observed_triggers.append("corpus_doubles_from_19_to_38")
+    if len(valid_same_epoch) >= corpus_doubling_threshold:
+        observed_triggers.append(corpus_doubling_trigger)
     corpus_values = [
         Decimal(member["b_fiducial_s"]) for member in corpus_members
     ]
@@ -1718,7 +1934,7 @@ def evaluate_calibration_bracket(
         if trigger
         in {
             "protocol_or_estimator_byte_change",
-            "corpus_doubles_from_19_to_38",
+            corpus_doubling_trigger,
             "new_valid_same_identity_capture_expands_observed_range",
             "new_systematic_failure_challenges_preflight_screen",
         }
@@ -1784,6 +2000,7 @@ def calibration_bracket_for_bundles(
     bracket_plan_id: str | None = None,
     bracket_plan_sha256: str | None = None,
     bracket_evidence_root_id: str | None = None,
+    diagnostics: list[dict[str, str]] | None = None,
     _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Use the runs root only for the evaluated window's T1/endpoints."""
@@ -1838,13 +2055,30 @@ def calibration_bracket_for_bundles(
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_mismatch",)
+    superseded_observations: list[LedgerObservation] = []
     if ledger_snapshot is None:
         candidates: tuple[CalibrationCandidate, ...] = ()
     else:
         candidates = discover_calibration_candidates(ledger_snapshot)
+        superseded_observations = [
+            observation
+            for observation in ledger_snapshot.observations
+            if observation.disposition == "valid"
+            and not observation.is_historical_import
+            and (
+                observation.bracket_session_id is None
+                or any(
+                    session.session_id == observation.bracket_session_id
+                    and session.state == "finalized"
+                    for session in ledger_snapshot.bracket_sessions
+                )
+            )
+            and _capture_pipeline_refusal_for_observation(observation) is not None
+        ]
         registered_valid = sum(
             observation.disposition == "valid"
             and not observation.is_historical_import
+            and _capture_pipeline_refusal_for_observation(observation) is None
             and (
                 observation.bracket_session_id is None
                 or any(
@@ -1866,7 +2100,7 @@ def calibration_bracket_for_bundles(
                 _allow_unissued_fixture=_allow_unissued_fixture,
             )
             return empty, ("calibration_ledger_custody_invalid",)
-    return evaluate_calibration_bracket(
+    result, reasons = evaluate_calibration_bracket(
         candidates,
         window_start_s=min(window.start_s for window in windows),
         window_end_s=max(window.end_s for window in windows),
@@ -1881,6 +2115,18 @@ def calibration_bracket_for_bundles(
         bracket_runs_root=runs_root,
         _allow_unissued_fixture=_allow_unissued_fixture,
     )
+    if superseded_observations:
+        if diagnostics is not None:
+            diagnostics.extend(
+                {
+                    "attempt_id": observation.attempt_id,
+                    "reason": "capture_pipeline_superseded",
+                }
+                for observation in superseded_observations
+            )
+        if not candidates:
+            reasons = tuple(dict.fromkeys((*reasons, "capture_pipeline_superseded")))
+    return result, reasons
 
 
 __all__ = [
@@ -1889,6 +2135,9 @@ __all__ = [
     "BRACKET_BINDING_SCHEMA",
     "BRACKET_SCHEMA",
     "CalibrationCandidate",
+    "acceptance_allowance_rule",
+    "acceptance_bracket_screen_s",
+    "acceptance_generation_operatives",
     "build_calibration_bracket_binding",
     "calibration_bracket_for_bundles",
     "discover_calibration_candidates",

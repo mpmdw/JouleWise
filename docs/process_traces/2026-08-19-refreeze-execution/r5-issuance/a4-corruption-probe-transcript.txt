@@ -1,0 +1,7 @@
+A4_CORRUPTION_PROBE=p2-038.3
+test_v3_corrupt_rich_telemetry_is_not_fail_open (tests.test_capture_pipeline_era.CapturePipelineEraTests.test_v3_corrupt_rich_telemetry_is_not_fail_open) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.013s
+
+OK

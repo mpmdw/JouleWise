@@ -25,6 +25,7 @@ from joulewise.adapters.powermetrics import (
     RAW_SAMPLES_NAME,
     SAMPLERS,
     PowermetricsTelemetryAdapter,
+    anchor_records_from_powermetrics,
     decode_rich_telemetry,
     idle_window_gpu_quality,
     parse_powermetrics_records,
@@ -38,8 +39,12 @@ from joulewise.controller import run_benchmark
 from joulewise.interfaces import RunContext, TelemetryAdapter
 from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus, TelemetryBackend
 from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+    CLOCK_METHOD_V2,
+    CLOCK_METHOD_V3,
     derive_powermetrics_clock_evidence,
     derive_powermetrics_clock_evidence_v2,
+    derive_powermetrics_clock_evidence_v3,
 )
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "powermetrics_sample.plist"
@@ -188,6 +193,24 @@ class PowermetricsParserTests(unittest.TestCase):
         self.assertEqual(len(set(actual)), len(actual))
         self.assertAlmostEqual(first, 1_783_394_101.0, places=6)
         self.assertAlmostEqual(actual[2], 1_783_394_104.0524974, places=6)
+
+    def test_native_anchor_projection_retains_exact_integer_time_fields(self) -> None:
+        records = parse_powermetrics_records(FIXTURE.read_bytes())
+        projected = anchor_records_from_powermetrics(records)
+        for record, anchor in zip(records, projected, strict=True):
+            self.assertIs(type(record.metadata["plist_timestamp_ns"]), int)
+            self.assertEqual(anchor.elapsed_ns, record.elapsed_ns)
+            self.assertEqual(
+                anchor.native_timestamp_ns,
+                record.metadata["plist_timestamp_ns"],
+            )
+            self.assertEqual(
+                anchor.native_timestamp_s,
+                record.metadata["plist_timestamp_s"],
+            )
+
+    def test_capture_method_switch_activates_v3(self) -> None:
+        self.assertEqual(ACTIVE_CAPTURE_ANCHOR_METHOD, CLOCK_METHOD_V3)
 
     def test_samples_align_all_rails_on_each_timestamp_for_d027(self) -> None:
         records = parse_powermetrics_records(FIXTURE.read_bytes())
@@ -865,6 +888,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", AppendingPopen),
+            patch(
+                "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                return_value=derive_powermetrics_clock_evidence_v2,
+            ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
@@ -1014,6 +1041,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", R4LagPopen),
+            patch(
+                "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                return_value=derive_powermetrics_clock_evidence_v2,
+            ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
@@ -1116,10 +1147,9 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 documents_to_stream(fixture_documents()[:1])
             )
             with patch(
-                "joulewise.adapters.powermetrics.derive_powermetrics_clock_evidence_v2",
-                return_value=(
-                    {"clock_anchor": {"admissible_lower_epoch_s": 90.0}},
-                    90.0,
+                "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                return_value=lambda **_kwargs: (
+                    {"clock_anchor": {"admissible_lower_epoch_s": 90.0}}, 90.0
                 ),
             ):
                 result = adapter._drain_until_stop_bracket(
@@ -1134,6 +1164,39 @@ class PowermetricsAdapterTests(unittest.TestCase):
             2.0 / config.sampling.power_hz + 0.25,
             places=12,
         )
+
+    def test_adapter_dispatches_the_active_capture_method_constant(self) -> None:
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+
+        class RunningProcess:
+            def poll(self):
+                return None
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        adapter._process = RunningProcess()
+        adapter._first_parse_stamp = ClockStamp(80.0, 80.0, 80.0, 0.0, 0.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter._capture_path = Path(tmp) / "capture.plist"
+            adapter._capture_path.write_bytes(documents_to_stream(fixture_documents()[:1]))
+            with (
+                patch(
+                    "joulewise.adapters.powermetrics.ACTIVE_CAPTURE_ANCHOR_METHOD",
+                    CLOCK_METHOD_V2,
+                ),
+                patch(
+                    "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                    return_value=lambda **_kwargs: (
+                        {"clock_anchor": {"admissible_lower_epoch_s": 90.0}},
+                        90.0,
+                    ),
+                ) as resolver,
+            ):
+                adapter._drain_until_stop_bracket(
+                    config,
+                    sampling_started=ClockStamp(80.0, 80.0, 80.0, 0.0, 0.0),
+                    sampling_stopped=ClockStamp(87.0, 87.0, 87.0, 0.0, 0.0),
+                )
+        resolver.assert_called_with(CLOCK_METHOD_V2)
 
     def test_evidence_stop_caps_nonfinite_or_absurd_derived_anchor_lag(self) -> None:
         config = make_config(sampling={"power_hz": 10.0, "idle_seconds": 5.0})
@@ -1231,6 +1294,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", BracketedPopen),
+            patch(
+                "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                return_value=derive_powermetrics_clock_evidence_v2,
+            ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
@@ -1421,7 +1488,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         def deadline_guarded_derive(*args, **kwargs):
             if instances and not instances[0].terminated:
                 raise AssertionError("deadline must skip provisional derivation")
-            return derive_powermetrics_clock_evidence_v2(*args, **kwargs)
+            return derive_powermetrics_clock_evidence_v3(*args, **kwargs)
 
         adapter = PowermetricsTelemetryAdapter(
             clock,
@@ -1436,8 +1503,8 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 side_effect=tracking_parse,
             ),
             patch(
-                "joulewise.adapters.powermetrics.derive_powermetrics_clock_evidence_v2",
-                side_effect=deadline_guarded_derive,
+                "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                return_value=deadline_guarded_derive,
             ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
@@ -1572,6 +1639,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", BracketedPopen),
+            patch(
+                "joulewise.adapters.powermetrics.resolve_clock_evidence_deriver",
+                return_value=derive_powermetrics_clock_evidence_v2,
+            ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
@@ -2038,9 +2109,12 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s",
             )
             metadata = json.loads((bundle_path / "metadata.json").read_text())
+            # v3 requires a coherent rate-fit set. Dropping the final native
+            # frame therefore withholds a formerly bounded v2-style estimate;
+            # inputs.py then correctly treats the unknown anchor as unusable.
             self.assertEqual(
                 metadata["uncertainty_evidence"]["clock_anchor"]["status"],
-                "bounded",
+                "unknown",
             )
             diagnostics = metadata["device"]["parse_diagnostics"]
             measured = [

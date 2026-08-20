@@ -509,25 +509,35 @@ Previously finalized interim bundles are not rewritten when P2-015 lands.
 ```json
 {
   "uncertainty_evidence": {
-    "schema_version": "p2-038.1",
+    "schema_version": "p2-038.3",
     "telemetry_backend": "powermetrics",
     "clock_anchor": {
       "status": "bounded",
-      "method": "powermetrics_spawn_ready_wall_monotonic_envelope_v1",
-      "process_spawn_lower_monotonic_s": 0.0,
-      "first_parse_upper_monotonic_s": 0.0,
+      "method": "powermetrics_native_second_rate_aware_set_membership_v1",
+      "clock_stamps": {},
+      "records_checked": 0,
+      "native_rollover_count": 0,
+      "rate_fit_baseline_s": 0.0,
+      "model_departure_allowance_s": 0.0,
+      "min_l_infinity_residual_upper_bound_s": 0.0,
+      "rate_lower": 0.0,
+      "rate_upper": 0.0,
+      "rate_limit_ppm": 50.0,
+      "anchor_lower_epoch_s": 0.0,
+      "anchor_upper_epoch_s": 0.0,
+      "admissible_lower_epoch_s": 0.0,
+      "admissible_upper_epoch_s": 0.0,
       "wall_minus_monotonic_lower_s": 0.0,
       "wall_minus_monotonic_upper_s": 0.0,
-      "first_sample_end_lower_epoch_s": 0.0,
-      "first_sample_end_upper_epoch_s": 0.0,
+      "wall_minus_monotonic_span_s": 0.0,
+      "stamp_resolution_s": 0.0,
+      "numeric_padding_s": 0.000001,
+      "epoch_representation_term_s": 0.0,
+      "first_parse_lag_s": 0.0,
       "first_sample_end_point_epoch_s": 0.0,
       "anchor_only_bound_s": 0.0,
       "effective_clock_anchor_bound_s": 0.0,
-      "plist_timestamp_check": {
-        "method": "whole_second_consistency_only_v1",
-        "records_checked": 0,
-        "all_intervals_intersect": true
-      }
+      "arithmetic": "exact_rational_outward_rounded_v1"
     },
     "sample_phase": {
       "status": "bounded",
@@ -730,8 +740,8 @@ For the single expected bundle, the campaign runner performs:
    - config telemetry is `powermetrics`;
    - runtime is neither `mock` nor a test backend;
    - measured, pre-idle, and post-idle raw plists exist;
-   - `uncertainty_evidence.schema_version == "p2-038.1"`;
-   - clock method is `powermetrics_spawn_ready_wall_monotonic_envelope_v1`;
+   - `uncertainty_evidence.schema_version == "p2-038.3"`;
+   - clock method is `powermetrics_native_second_rate_aware_set_membership_v1`;
    - idle method is `pre_post_idle_observed_envelope_v1` or its later calibrated combination;
    - all four top-level bounds are finite and non-negative;
    - `metadata.extra` contains neither `clock_anchor_bound_s` nor `idle_drift_bound_w`;

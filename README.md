@@ -9,42 +9,39 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-> **🟡 MACHINE: BETWEEN RUNS — D-117 pre-window state.** This document
-> does not assert that a measurement window is in flight; verify live
-> machine state directly before acting. Current work is the ten-item U1-U10
-> instrument-readiness repair path, followed by the prospective alpha, beta, and gamma
-> claim windows. Live selection remains owned by the generated
-> state-kernel work-selection tables in [`RUN_STATE.md`](RUN_STATE.md) and
-> [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
-> [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
+**Status:** the instrument's clock-anchor correction is complete and the
+successor measurement campaign family is frozen; the work is on the
+integration branch pending its final review gates, after which fresh
+calibration and measurement windows produce the paper's results data.
+Live state, gates, and work selection are owned by
+[`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
+(`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-08-18 morning)
+## Current activity (refreshed each work block; last: 2026-08-19 night)
 
-**Just completed (overnight 2026-08-17→18):** the entire Phase 2 successor
-re-freeze, executed to its confirmation point. The three successor packs
-(the "v2 family") are generated, evidence-authored, and frozen with
-receipts that cryptographically chain to their predecessors; the
-calibration acceptance was reissued science-neutrally after the audited
-estimator change (all 19 corpus members byte-identical, exactly one code
-pin changed); and the instrument produced its **first-light verification
-data**: a fixed-work calibration capture ran overnight on the quiet
-machine, the new detection-budget safety check correctly refused an
-undersized search budget on first contact with real data, the budget was
-recalibrated from a complete 34-bundle sweep of every retained calibration
-trace (not tuned to pass), and the same capture then re-derived cleanly
-**inside the issued calibration band**. Separately, the operator
-qualification checklist completed end to end, catching and fixing three
-real defects along the way. The full test suite (3,688 tests) is green at
-the confirmation head.
+**Just completed (2026-08-19):** the clock-anchor correction became the
+production instrument, end to end. The estimator whose rate=1 assumption
+was measured and found false is retired from capture; the corrected
+set-membership anchor now labels every new measurement, every stored
+measurement carries a machine-checked record of which capture pipeline
+produced it (old recordings stay auditable forever but can no longer
+support claims — enforced by the instrument, not by policy documents),
+and the calibration policy constants are looked up from the acceptance
+artifact's own registered generation instead of living as copied numbers
+in code. The third generation of campaign packs was produced from the
+frozen second generation without altering a byte of it and is now frozen
+with receipts chaining to its predecessors'. Two science-neutral
+acceptance reissues were forced by the byte-pinning rule along the way;
+each proved itself by replaying all 19 corpus members with zero
+mismatches. The instrument guide was rewritten so every term is built
+before it is used, and the paper's methodology now describes the
+corrected instrument with the transition reported as evidence.
 
-**Working on now:** the final read-and-reply items that publish the frozen
-family (an exact-byte confirmation and two reserved rulings), the
-operator's dress rehearsal, and a newcomer-facing instrument guide.
-
-**Queued next:** (1) publication of the successor family on explicit
-confirmation; (2) the focused re-audit and a fresh readiness council;
-(3) the alpha, beta, and gamma measurement windows only after that
-council says go.
+**Next:** finish the four pre-merge review gates and merge the
+transaction to main, council-rule the readiness-registry reserved
+values, then the first fresh calibration captures and quiet measurement
+windows under the corrected instrument — the data the paper's results
+tables are waiting for.
 ## Current State
 
 Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete

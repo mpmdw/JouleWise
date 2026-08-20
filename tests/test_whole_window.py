@@ -20,6 +20,10 @@ from joulewise.calibration_ledger import (
     LEDGER_SCHEMA,
     CalibrationLedgerSnapshot,
 )
+from joulewise.uncertainty_evidence import (
+    CLOCK_METHOD_V3,
+    SCHEMA_FOR_ANCHOR_METHOD,
+)
 from joulewise.whole_window import AuthenticatedConsumptionSession
 from joulewise.whole_window import (
     ADAPTER_CONTINUITY_SCHEMA,
@@ -529,7 +533,16 @@ class TwoScopeRefusalTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        # Positive claim-bearing presentation (D-146 S3):
+                        # the barrier refuses metadata that does not present
+                        # an active-era capture anchor.
+                        "uncertainty_evidence": {
+                            "schema_version": SCHEMA_FOR_ANCHOR_METHOD[
+                                CLOCK_METHOD_V3
+                            ],
+                            "clock_anchor": {"method": CLOCK_METHOD_V3},
+                        },
                     },
                     sort_keys=True,
                 )

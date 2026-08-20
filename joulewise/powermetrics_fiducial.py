@@ -29,12 +29,13 @@ import json
 import math
 import statistics
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Sequence
 
 from joulewise.uncertainty_evidence import (
+    ANCHOR_METHOD_VERSIONS,
     CLOCK_METHOD_V2,
-    derive_powermetrics_anchor_v2,
+    resolve_anchor_deriver,
     stamp_from_mapping,
     valid_clock_stamp,
 )
@@ -494,6 +495,12 @@ class FiducialDetection:
     projection_wall_budget_s: float = DETECTION_PROJECTION_WALL_BUDGET_S
     projection_disposition: str | None = None
     projection_budget_trigger: str | None = None
+    anchor_method: str | None = None
+    derivation_role: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.derivation_role not in (None, "validation_only", "prospective"):
+            raise ValueError("derivation_role is not registered")
 
 
 class _ProjectionBudgetExhausted(RuntimeError):
@@ -1091,6 +1098,8 @@ def rederive_detection_from_artifacts(
     recorded_clock_anchor: Mapping[str, Any],
     *,
     protocol_id: str = PROTOCOL_ID,
+    anchor_method: str | None = None,
+    derivation_role: str | None = None,
 ) -> FiducialDetection:
     """Re-run calibration physics from hash-verified primary bytes.
 
@@ -1105,6 +1114,8 @@ def rederive_detection_from_artifacts(
         parse_powermetrics_records,
     )
 
+    if derivation_role not in (None, "validation_only", "prospective"):
+        raise ValueError("derivation_role is not registered")
     expected_pulse_count = protocol_pulse_count(protocol_id)
     strict_protocol = protocol_id in {PROTOCOL_V2_ID, PROTOCOL_ID}
     if strict_protocol:
@@ -1114,6 +1125,20 @@ def rederive_detection_from_artifacts(
         capture_wall_time_from_events(events_jsonl)
     if not isinstance(recorded_clock_anchor, Mapping):
         raise ValueError("calibration clock anchor is missing")
+    recorded_anchor_method = recorded_clock_anchor.get("method")
+    if anchor_method is None:
+        if (
+            not isinstance(recorded_anchor_method, str)
+            or recorded_anchor_method not in ANCHOR_METHOD_VERSIONS
+        ):
+            raise ValueError("calibration clock anchor method is unregistered")
+        selected_anchor_method = str(recorded_anchor_method)
+        anchor_deriver = resolve_anchor_deriver(selected_anchor_method)
+        authenticate_stored_anchor = True
+    else:
+        selected_anchor_method = anchor_method
+        anchor_deriver = resolve_anchor_deriver(selected_anchor_method)
+        authenticate_stored_anchor = selected_anchor_method == recorded_anchor_method
     stamp_rows = recorded_clock_anchor.get("clock_stamps")
     if not isinstance(stamp_rows, Mapping):
         raise ValueError("calibration clock stamps are missing")
@@ -1126,30 +1151,33 @@ def rederive_detection_from_artifacts(
         native_records = parse_powermetrics_records(raw_powermetrics)
     except (KeyError, OverflowError, TypeError, ValueError) as exc:
         raise ValueError("calibration anchor evidence is malformed") from exc
-    derived_anchor = derive_powermetrics_anchor_v2(
+    derived_anchor = anchor_deriver(
         stamps=anchor_stamps,
         records=anchor_records_from_powermetrics(native_records),
     )
     if derived_anchor.get("status") != "bounded":
         raise ValueError("calibration trace anchor is unresolved")
-    for field in (
-        "method",
-        "first_sample_end_point_epoch_s",
-        "effective_clock_anchor_bound_s",
-    ):
-        recorded = recorded_clock_anchor.get(field)
-        derived = derived_anchor.get(field)
-        if isinstance(derived, float):
-            if (
-                isinstance(recorded, bool)
-                or not isinstance(recorded, int | float)
-                or not math.isclose(
-                    float(recorded), derived, rel_tol=0.0, abs_tol=1e-12
-                )
-            ):
-                raise ValueError("calibration clock anchor disagrees with raw bytes")
-        elif recorded != derived:
-            raise ValueError("calibration clock anchor method disagrees")
+    if authenticate_stored_anchor:
+        for field in (
+            "method",
+            "first_sample_end_point_epoch_s",
+            "effective_clock_anchor_bound_s",
+        ):
+            recorded = recorded_clock_anchor.get(field)
+            derived = derived_anchor.get(field)
+            if isinstance(derived, float):
+                if (
+                    isinstance(recorded, bool)
+                    or not isinstance(recorded, int | float)
+                    or not math.isclose(
+                        float(recorded), derived, rel_tol=0.0, abs_tol=1e-12
+                    )
+                ):
+                    raise ValueError(
+                        "calibration clock anchor disagrees with raw bytes"
+                    )
+            elif recorded != derived:
+                raise ValueError("calibration clock anchor method disagrees")
 
     try:
         text = events_jsonl.decode("utf-8")
@@ -1233,12 +1261,16 @@ def rederive_detection_from_artifacts(
     protocol_intervals = trim_trace_after_pulses(intervals, pairs["warmup"])
     if strict_protocol:
         authenticate_protocol_schedule(pairs["pulse"], protocol_intervals)
-    return detect_pulses(
-        protocol_intervals,
-        pairs["pulse"],
-        trace_anchor_bound_s=float(
-            derived_anchor["effective_clock_anchor_bound_s"]
+    return replace(
+        detect_pulses(
+            protocol_intervals,
+            pairs["pulse"],
+            trace_anchor_bound_s=float(
+                derived_anchor["effective_clock_anchor_bound_s"]
+            ),
         ),
+        anchor_method=selected_anchor_method,
+        derivation_role=derivation_role,
     )
 
 
@@ -1426,13 +1458,16 @@ def instrument_evidence(
         reasons.append("raw_or_event_hash_missing_or_invalid")
     if not capture_time_ok:
         reasons.append("capture_time_missing_or_invalid")
+    anchor_method = detection.anchor_method
+    if not isinstance(anchor_method, str) or not anchor_method:
+        raise ValueError("detection anchor method is missing")
     payload = {
         "schema_version": "joulewise.instrument_evidence.v1",
         "protocol_id": protocol_id,
         "validation_id": validation_id,
         "status": "valid" if valid else "invalid",
         "reasons": sorted(set(reasons)),
-        "anchor_method_version": CLOCK_METHOD_V2,
+        "anchor_method_version": anchor_method,
         "b_fiducial_s": detection.b_fiducial_s,
         "residual_median_s_diagnostic_only": detection.residual_median_s,
         "residual_p95_s_diagnostic_only": detection.residual_p95_s,

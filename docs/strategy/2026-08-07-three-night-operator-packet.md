@@ -535,7 +535,7 @@ source actions remain in
 | `ABORT-ENVIRONMENT` | `environment_admission_failed`; display awake; screensaver engaged; CPU admission failure | Lose the affected member, preserve it, remove the cause, settle, and follow only the frozen recovery. Never waive admission. |
 | `ABORT-CAL-ANCHOR` | `clock_anchor_unresolved` on calibration | Preserve the capture. One settled retry is allowed only when this is the sole reason; otherwise end the attempt. |
 | `ABORT-CAL-ROLLOVER` | `pulse_calibration_rollover_gate_timeout` | Abort calibration, preserve it, and repair machine state outside the window. |
-| `ABORT-CAL-LEVEL` | Pre-calibration fiducial above `0.033558756679900` (symptom row; no separate literal refusal code in §10) | Stop before member 1. Retry only after a named cause is removed and within the frozen count. |
+| `ABORT-CAL-LEVEL` | Pre-calibration fiducial above `0.032898493715362` (symptom row; no separate literal refusal code in §10) | Stop before member 1. Retry only after a named cause is removed and within the frozen count. |
 | `ABORT-CAL-BRACKET-MISSING` | `instrument_calibration_bracket_missing` | Mark the window non-claim-bearing. Never borrow another calibration. |
 | `ABORT-CAL-BRACKET-BOUND` | `calibration_bracket_exceeds_minted_bound` | Do not patch metadata. Use a governed prospective re-reduction path or recollect. |
 | `ABORT-BOUND-UNDERIVED` | `neg8_drift_bound_underived`; `neg8_idle_sub_drift_bound_underived` | Collect the complete settled-reference corpus and mint both families; never insert a constant. |
@@ -550,7 +550,7 @@ source actions remain in
 | `ABORT-OCCUPIED-SLOT` | `incomplete_existing`; occupied run ID | Strict-validate and preserve the old occurrence, move it to quarantine, then use the exact governed supersession procedure. |
 | `ABORT-CAMPAIGN-LOCK` | `another campaign appears to be running` | Check the recorded process ID. Stop for a live owner; quarantine a proven dead lock; never delete an unreadable lock blindly. |
 | `ABORT-OPERATOR-TOUCH` | Operator touches display, input, lid, or power (symptom row; no literal refusal code) | Lose the active member. A power-identity change ends the entire window. |
-| `ABORT-BRACKET-DRIFT-NONCLAIM` | Bracket drift above `0.010818 s` **and** a failed pre-calibration level screen (symptom row; no single literal refusal code) | The window is non-claim-bearing. When the pre-calibration level screen passed, this is not an abort: carry the governed excess through extraction. Never hand-apply an allowance. |
+| `ABORT-BRACKET-DRIFT-NONCLAIM` | Bracket drift above `0.009724 s` **and** a failed pre-calibration level screen (symptom row; no single literal refusal code) | The window is non-claim-bearing. When the pre-calibration level screen passed, this is not an abort: carry the governed excess through extraction. Never hand-apply an allowance. |
 
 The packet also stops for failures that §10 does not assign a literal refusal
 code. Report these packet-level aliases with the exact observed text:

@@ -1,0 +1,39 @@
+{
+  "authored_kinds": [
+    "ACCEPTANCE_OWNER",
+    "DOCTRINE_PIN",
+    "ESTIMATOR_IDENTITY",
+    "MINT_TRUST",
+    "MULTICELL_MINT",
+    "PACK_AUTHENTICATION",
+    "PACK_FAMILY",
+    "REASON_CODE_COVERAGE",
+    "RECEIPT_ORACLE",
+    "RECOVERY_LEDGER_TEST",
+    "THREE_WINDOW_REGRESSION"
+  ],
+  "mutated": true,
+  "post_authoring": {
+    "recovery": "A reboot or HEAD change voids all twelve receipts; run git rm -r -- configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.sources configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence before re-authoring.",
+    "sequence": [
+      "git add -- configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.sources configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence",
+      "git commit",
+      "git push origin HEAD:main",
+      "python3 scripts/generate_arm_readiness.py freeze --pack-root configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3 --predecessor-pack-root configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2"
+    ]
+  },
+  "receipt_paths": [
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-acceptance-owner.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-doctrine-pin.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-estimator-identity.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-mint-trust.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-multicell-mint.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-pack-authentication.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-pack-family.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-reason-code-coverage.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-receipt-oracle.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-recovery-ledger-test.json",
+    "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-three-window-regression.json"
+  ],
+  "status": "PASS"
+}

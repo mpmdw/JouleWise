@@ -1,0 +1,13 @@
+{
+  "members": [
+    {
+      "member_id": "20260722T145535-e941c821",
+      "disposition": "bounded",
+      "anchor_bound_s": 0.0011349971959968978,
+      "anchor_detail": null,
+      "b_fiducial_s": 0.030067931757111657,
+      "projection_evaluated_cell_count": 122859
+    }
+  ],
+  "mismatches": []
+}

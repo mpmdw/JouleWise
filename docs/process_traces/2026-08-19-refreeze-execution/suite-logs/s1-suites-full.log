@@ -1,0 +1,812 @@
+...............................................................F....F..................................................................F............F.FFFF............................................usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --calibration-custody-store requires minted consumption semantics
+..WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+....warning: preserved 27 torn campaign-log bytes at /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpzmogu106/campaign_log.jsonl.torn-20260819T102053372465Z-3b23836bf203
+.........warning: FAILED to preserve 12 torn campaign-log bytes to /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp6om6tnze/campaign_log.jsonl.torn-20260819T102056499596Z-8f5927bdb239 (PermissionError('injected sidecar failure')); append refused, log untouched
+........usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: salvage-dangler semantics require --window-membership-binding and --salvage-closure
+usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --waivers is forbidden under salvage-dangler semantics
+........................F......................................................................warning: preserved 7 torn campaign-log bytes at /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1ghvi9k2/campaign_log.jsonl.torn-20260819T102153690491Z-e867134bb1b6
+...bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+...............................................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+error: environment preflight failed: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+.............bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+.............................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+ENVIRONMENT PREFLIGHT FAILED: display_power_state='any_awake' (fail)
+override binding: snapshot_sha256=5b63e0cbf4d66ec48f8079ce252379be0cf8695c79ecd857bab10f430f64228a findings_sha256=5f82754478db0b19396360a005dcdc309d3e7d994261b0c31ddab68833771ccf
+...............................................E............EEEEEE...EEE..{"arm_blocked": true, "code": "calibration_frozen_protocol_invalid", "exit_id": "correct-preflight", "next_command": "recover_calibration_ledger.py readiness --phase pre-reserve --session-id SESSION --plan PLAN", "status": "refused"}
+....F..EE.........{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.{"arm_blocked": true, "code": "calibration_ledger_malformed", "context": {"detail": "stop after custody-path regression observation"}, "exit_id": "hard-stop-preserved", "next_command": "recover_calibration_ledger.py explain calibration_ledger_malformed", "status": "refused", "terminal_result": "night_stopped_preserved"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+{"attempt_id": "session-writer-post", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "post"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+..Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpbr031236/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_ambiguous_reference
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: adapter_observations_missing
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+  condition: whole_window_campaign_membership_unresolved
+NEG-8 WHOLE-WINDOW VERDICT: flagged
+  decision: passed
+ok draft-off-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpf9zrhk07/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmptdiqbfo2/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+ok draft-off-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp8e5_w8le/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmporfzoq42/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+P1_DELAYED_WRITERS=1 EVENT_GATED_FINAL_WRITES=1 BOUNDED_RETRIES=0 THREAD_REGISTRY_EMPTY=1 ESCAPED=0
+.P3_SIGSTOP_RUNS=3 IDENTITY=PASS WALL_MUTATION=FAILS_IDENTITY
+.RAW_ENOTEMPTY=0 FATAL_RETRY_DIAGNOSTIC=0 CONTROLS_MUTATION=NO_RACE_PRE_WRITE
+RACE_EXERCISED=0 NO_RACE_PRE_WRITE=1 TRACE_INCOMPLETE=0
+.P1_CYCLES=4 RAW_ENOTEMPTY=0 RETRY_EXHAUSTION=0 MAX_CLEANUP_S=0.002783
+.......P2_OWNERSHIP_CYCLES=4 TIMEOUTS=2 EXCEPTIONS=2 ESRCH=4 REGISTRY_EMPTY=1
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 103 event-warmup_command_off-3
+CASE STAGE calibration_quiet_mac_auth_required 145 event-pulse_command_off-45
+CASE STAGE calibration_quiet_mac_auth_required 187 event-pulse_command_off-87
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 104 event-warmup_command_on-4
+CASE STAGE calibration_quiet_mac_auth_required 108 event-pulse_command_on-8
+CASE STAGE calibration_quiet_mac_auth_required 133 event-pulse_command_off-33
+CASE STAGE calibration_quiet_mac_auth_required 175 event-pulse_command_off-75
+CASE STAGE calibration_quiet_mac_auth_required 219 event-pulse_command_off-119
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+.CASE START calibration_ledger_missing
+CASE PASS calibration_ledger_missing
+CASE START calibration_ledger_malformed
+CASE PASS calibration_ledger_malformed
+CASE START calibration_ledger_chain_conflict
+CASE PASS calibration_ledger_chain_conflict
+CASE START calibration_ledger_attempt_conflict
+CASE PASS calibration_ledger_attempt_conflict
+CASE START calibration_ledger_bracket_session_conflict
+CASE PASS calibration_ledger_bracket_session_conflict
+CASE START calibration_ledger_content_conflict
+CASE PASS calibration_ledger_content_conflict
+CASE START calibration_ledger_rollback
+CASE PASS calibration_ledger_rollback
+CASE START calibration_ledger_operation_conflict
+CASE PASS calibration_ledger_operation_conflict
+CASE START calibration_ledger_ungoverned_business
+CASE PASS calibration_ledger_ungoverned_business
+CASE START calibration_ledger_custody_invalid
+CASE PASS calibration_ledger_custody_invalid
+CASE START calibration_unsafe_lock_inode
+CASE PASS calibration_unsafe_lock_inode
+CASE START calibration_physical_ledger_unreadable
+CASE PASS calibration_physical_ledger_unreadable
+CASE START calibration_legacy_journal_unreadable
+CASE PASS calibration_legacy_journal_unreadable
+CASE START calibration_legacy_journal_archive_conflict
+CASE PASS calibration_legacy_journal_archive_conflict
+CASE START calibration_legacy_journal_archive_failed
+CASE PASS calibration_legacy_journal_archive_failed
+CASE START calibration_intent_target_malformed
+CASE PASS calibration_intent_target_malformed
+CASE START calibration_recovery_nonconvergent
+CASE PASS calibration_recovery_nonconvergent
+CASE START calibration_abandon_not_clean
+CASE PASS calibration_abandon_not_clean
+CASE START calibration_abandon_pin_mismatch
+CASE PASS calibration_abandon_pin_mismatch
+CASE START calibration_head_pin_unreadable
+CASE PASS calibration_head_pin_unreadable
+CASE START calibration_head_pin_malformed
+CASE PASS calibration_head_pin_malformed
+CASE START calibration_custody_unreadable
+CASE PASS calibration_custody_unreadable
+CASE START calibration_tail_requires_abandon
+CASE PASS calibration_tail_requires_abandon
+CASE START calibration_custody_complete_use_resume
+CASE PASS calibration_custody_complete_use_resume
+CASE START calibration_custody_partial
+CASE PASS calibration_custody_partial
+CASE START calibration_live_writer_contention
+CASE PASS calibration_live_writer_contention
+CASE START calibration_ledger_bracket_session_open
+CASE PASS calibration_ledger_bracket_session_open
+CASE START calibration_ledger_pending
+CASE PASS calibration_ledger_pending
+CASE START calibration_ledger_head_uncommitted
+CASE PASS calibration_ledger_head_uncommitted
+CASE START calibration_ledger_head_mismatch
+CASE PASS calibration_ledger_head_mismatch
+CASE START calibration_ledger_recovery_required
+CASE PASS calibration_ledger_recovery_required
+CASE START calibration_ledger_baseline_missing
+CASE PASS calibration_ledger_baseline_missing
+CASE START calibration_observation_unclassifiable
+CASE PASS calibration_observation_unclassifiable
+CASE START calibration_recovery_credentials_invalid
+CASE PASS calibration_recovery_credentials_invalid
+CASE START calibration_abandon_credentials_invalid
+CASE PASS calibration_abandon_credentials_invalid
+CASE START calibration_abandon_active_intent
+CASE PASS calibration_abandon_active_intent
+CASE START calibration_head_pin_not_committed
+CASE PASS calibration_head_pin_not_committed
+CASE START calibration_reservation_input_invalid
+CASE PASS calibration_reservation_input_invalid
+CASE START calibration_reservation_head_mismatch
+CASE PASS calibration_reservation_head_mismatch
+CASE START calibration_reservation_identity_conflict
+CASE PASS calibration_reservation_identity_conflict
+CASE START calibration_session_not_found
+CASE PASS calibration_session_not_found
+CASE START calibration_session_not_open
+CASE PASS calibration_session_not_open
+CASE START calibration_slot_order_conflict
+CASE PASS calibration_slot_order_conflict
+CASE START calibration_claim_id_invalid
+CASE PASS calibration_claim_id_invalid
+CASE START calibration_finalization_binding_conflict
+CASE PASS calibration_finalization_binding_conflict
+CASE START calibration_session_not_terminal
+CASE PASS calibration_session_not_terminal
+CASE START calibration_session_terminal_not_head
+CASE PASS calibration_session_terminal_not_head
+CASE START calibration_plan_unreadable
+CASE PASS calibration_plan_unreadable
+CASE START calibration_plan_hash_mismatch
+CASE PASS calibration_plan_hash_mismatch
+CASE START calibration_pre_reserve_not_ready
+CASE PASS calibration_pre_reserve_not_ready
+CASE START calibration_pre_slot_not_ready
+CASE STAGE calibration_pre_slot_not_ready 0 writer-launched
+CASE STAGE calibration_pre_slot_not_ready 1 custody-created
+CASE STAGE calibration_pre_slot_not_ready 105 event-warmup_command_off-5
+CASE STAGE calibration_pre_slot_not_ready 149 event-pulse_command_off-49
+CASE STAGE calibration_pre_slot_not_ready 193 event-pulse_command_off-93
+CASE STAGE calibration_pre_slot_not_ready 226 event-sampling_stopped-126
+CASE PASS calibration_pre_slot_not_ready
+CASE START calibration_terminal_not_ready
+CASE PASS calibration_terminal_not_ready
+CASE START calibration_pin_advancement_not_needed
+CASE PASS calibration_pin_advancement_not_needed
+CASE START calibration_pin_advancement_unsafe
+CASE PASS calibration_pin_advancement_unsafe
+CASE START calibration_pin_candidate_mismatch
+CASE PASS calibration_pin_candidate_mismatch
+CASE START calibration_reservation_json_invalid
+CASE PASS calibration_reservation_json_invalid
+CASE START calibration_writer_bracket_arguments
+CASE STAGE calibration_writer_bracket_arguments 0 writer-launched
+CASE STAGE calibration_writer_bracket_arguments 1 custody-created
+CASE STAGE calibration_writer_bracket_arguments 102 event-warmup_command_on-2
+CASE STAGE calibration_writer_bracket_arguments 144 event-pulse_command_on-44
+CASE STAGE calibration_writer_bracket_arguments 187 event-pulse_command_off-87
+CASE STAGE calibration_writer_bracket_arguments 226 event-sampling_stopped-126
+CASE STAGE calibration_writer_bracket_arguments 1001 manifest-written
+CASE PASS calibration_writer_bracket_arguments
+CASE START calibration_writer_bracket_rederive_conflict
+CASE STAGE calibration_writer_bracket_rederive_conflict 0 writer-launched
+CASE STAGE calibration_writer_bracket_rederive_conflict 1 custody-created
+CASE STAGE calibration_writer_bracket_rederive_conflict 142 event-pulse_command_on-42
+CASE STAGE calibration_writer_bracket_rederive_conflict 184 event-pulse_command_on-84
+CASE STAGE calibration_writer_bracket_rederive_conflict 223 event-pulse_command_off-123
+CASE STAGE calibration_writer_bracket_rederive_conflict 226 event-sampling_stopped-126
+CASE PASS calibration_writer_bracket_rederive_conflict
+CASE START calibration_frozen_protocol_invalid
+CASE STAGE calibration_frozen_protocol_invalid 0 writer-launched
+CASE STAGE calibration_frozen_protocol_invalid 1 custody-created
+CASE STAGE calibration_frozen_protocol_invalid 140 event-pulse_command_on-40
+CASE STAGE calibration_frozen_protocol_invalid 182 event-pulse_command_on-82
+CASE STAGE calibration_frozen_protocol_invalid 223 event-pulse_command_off-123
+CASE STAGE calibration_frozen_protocol_invalid 226 event-sampling_stopped-126
+CASE STAGE calibration_frozen_protocol_invalid 1001 manifest-written
+CASE PASS calibration_frozen_protocol_invalid
+CASE START calibration_rederive_output_required
+CASE STAGE calibration_rederive_output_required 0 writer-launched
+CASE STAGE calibration_rederive_output_required 1 custody-created
+CASE STAGE calibration_rederive_output_required 103 event-warmup_command_off-3
+CASE STAGE calibration_rederive_output_required 142 event-pulse_command_on-42
+CASE STAGE calibration_rederive_output_required 182 event-pulse_command_on-82
+CASE STAGE calibration_rederive_output_required 225 event-pulse_command_off-125
+CASE STAGE calibration_rederive_output_required 226 event-sampling_stopped-126
+CASE PASS calibration_rederive_output_required
+CASE START calibration_rederive_failed
+CASE STAGE calibration_rederive_failed 0 writer-launched
+CASE STAGE calibration_rederive_failed 1 custody-created
+CASE STAGE calibration_rederive_failed 106 event-warmup_command_on-6
+CASE STAGE calibration_rederive_failed 147 event-pulse_command_off-47
+CASE STAGE calibration_rederive_failed 191 event-pulse_command_off-91
+CASE STAGE calibration_rederive_failed 226 event-sampling_stopped-126
+CASE STAGE calibration_rederive_failed 1001 manifest-written
+CASE PASS calibration_rederive_failed
+CASE START calibration_output_requires_rederive
+CASE STAGE calibration_output_requires_rederive 0 writer-launched
+CASE STAGE calibration_output_requires_rederive 1 custody-created
+CASE STAGE calibration_output_requires_rederive 102 event-warmup_command_on-2
+CASE STAGE calibration_output_requires_rederive 145 event-pulse_command_off-45
+CASE STAGE calibration_output_requires_rederive 188 event-pulse_command_on-88
+CASE STAGE calibration_output_requires_rederive 226 event-sampling_stopped-126
+CASE STAGE calibration_output_requires_rederive 1000 instrument-evidence-written
+CASE PASS calibration_output_requires_rederive
+CASE START calibration_quiet_mac_auth_required
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 102 event-warmup_command_on-2
+CASE STAGE calibration_quiet_mac_auth_required 142 event-pulse_command_on-42
+CASE STAGE calibration_quiet_mac_auth_required 185 event-pulse_command_off-85
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE STAGE calibration_quiet_mac_auth_required 1001 manifest-written
+CASE PASS calibration_quiet_mac_auth_required
+CASE START calibration_power_policy_required
+CASE STAGE calibration_power_policy_required 0 writer-launched
+CASE STAGE calibration_power_policy_required 1 custody-created
+CASE STAGE calibration_power_policy_required 140 event-pulse_command_on-40
+CASE STAGE calibration_power_policy_required 183 event-pulse_command_off-83
+CASE STAGE calibration_power_policy_required 226 event-sampling_stopped-126
+CASE PASS calibration_power_policy_required
+CASE START calibration_reserved_slot_mismatch
+CASE PASS calibration_reserved_slot_mismatch
+CASE START calibration_display_arm_failed
+CASE PASS calibration_display_arm_failed
+CASE START calibration_sampler_never_ready
+CASE PASS calibration_sampler_never_ready
+CASE START pulse_calibration_rollover_gate_timeout
+CASE PASS pulse_calibration_rollover_gate_timeout
+..CASE CACHED calibration_reservation_input_invalid
+CASE CACHED calibration_plan_unreadable
+CASE CACHED calibration_plan_hash_mismatch
+CASE CACHED calibration_pre_reserve_not_ready
+CASE CACHED calibration_pre_slot_not_ready
+CASE CACHED calibration_terminal_not_ready
+CASE CACHED calibration_reservation_json_invalid
+CASE CACHED calibration_writer_bracket_arguments
+CASE CACHED calibration_writer_bracket_rederive_conflict
+CASE CACHED calibration_frozen_protocol_invalid
+CASE CACHED calibration_rederive_output_required
+CASE CACHED calibration_rederive_failed
+CASE CACHED calibration_output_requires_rederive
+CASE CACHED calibration_quiet_mac_auth_required
+CASE CACHED calibration_power_policy_required
+.CASE CACHED calibration_abandon_pin_mismatch
+CASE CACHED calibration_tail_requires_abandon
+CASE CACHED calibration_custody_complete_use_resume
+CASE CACHED calibration_custody_partial
+CASE CACHED calibration_live_writer_contention
+CASE CACHED calibration_ledger_bracket_session_open
+CASE CACHED calibration_ledger_pending
+CASE CACHED calibration_ledger_head_uncommitted
+CASE CACHED calibration_ledger_head_mismatch
+CASE CACHED calibration_ledger_recovery_required
+CASE CACHED calibration_ledger_baseline_missing
+CASE CACHED calibration_observation_unclassifiable
+CASE CACHED calibration_recovery_credentials_invalid
+CASE CACHED calibration_abandon_credentials_invalid
+CASE CACHED calibration_abandon_active_intent
+CASE CACHED calibration_head_pin_not_committed
+CASE CACHED calibration_reservation_input_invalid
+CASE CACHED calibration_reservation_head_mismatch
+CASE CACHED calibration_reservation_identity_conflict
+CASE CACHED calibration_session_not_found
+CASE CACHED calibration_session_not_open
+CASE CACHED calibration_slot_order_conflict
+CASE CACHED calibration_claim_id_invalid
+CASE CACHED calibration_session_not_terminal
+CASE CACHED calibration_session_terminal_not_head
+CASE CACHED calibration_plan_unreadable
+CASE CACHED calibration_plan_hash_mismatch
+CASE CACHED calibration_pre_reserve_not_ready
+CASE CACHED calibration_pre_slot_not_ready
+CASE CACHED calibration_terminal_not_ready
+CASE CACHED calibration_pin_advancement_not_needed
+CASE CACHED calibration_pin_advancement_unsafe
+CASE CACHED calibration_pin_candidate_mismatch
+CASE CACHED calibration_reservation_json_invalid
+CASE CACHED calibration_writer_bracket_arguments
+CASE CACHED calibration_writer_bracket_rederive_conflict
+CASE CACHED calibration_frozen_protocol_invalid
+CASE CACHED calibration_rederive_output_required
+CASE CACHED calibration_rederive_failed
+CASE CACHED calibration_output_requires_rederive
+CASE CACHED calibration_quiet_mac_auth_required
+CASE CACHED calibration_power_policy_required
+CASE CACHED calibration_reserved_slot_mismatch
+CASE CACHED calibration_display_arm_failed
+CASE CACHED calibration_sampler_never_ready
+CASE CACHED pulse_calibration_rollover_gate_timeout
+CASE CACHED calibration_ledger_missing
+CASE CACHED calibration_ledger_malformed
+CASE CACHED calibration_ledger_chain_conflict
+CASE CACHED calibration_ledger_attempt_conflict
+CASE CACHED calibration_ledger_bracket_session_conflict
+CASE CACHED calibration_ledger_content_conflict
+CASE CACHED calibration_ledger_rollback
+CASE CACHED calibration_ledger_operation_conflict
+CASE CACHED calibration_ledger_ungoverned_business
+CASE CACHED calibration_ledger_custody_invalid
+CASE CACHED calibration_unsafe_lock_inode
+CASE CACHED calibration_physical_ledger_unreadable
+CASE CACHED calibration_legacy_journal_unreadable
+CASE CACHED calibration_legacy_journal_archive_conflict
+CASE CACHED calibration_legacy_journal_archive_failed
+CASE CACHED calibration_intent_target_malformed
+CASE CACHED calibration_recovery_nonconvergent
+CASE CACHED calibration_abandon_not_clean
+CASE CACHED calibration_head_pin_unreadable
+CASE CACHED calibration_head_pin_malformed
+CASE CACHED calibration_custody_unreadable
+CASE CACHED calibration_finalization_binding_conflict
+.CASE CACHED calibration_ledger_missing
+CASE CACHED calibration_ledger_malformed
+CASE CACHED calibration_ledger_chain_conflict
+CASE CACHED calibration_ledger_attempt_conflict
+CASE CACHED calibration_ledger_bracket_session_conflict
+CASE CACHED calibration_ledger_content_conflict
+CASE CACHED calibration_ledger_rollback
+CASE CACHED calibration_ledger_operation_conflict
+CASE CACHED calibration_ledger_ungoverned_business
+CASE CACHED calibration_ledger_custody_invalid
+CASE CACHED calibration_unsafe_lock_inode
+CASE CACHED calibration_physical_ledger_unreadable
+CASE CACHED calibration_legacy_journal_unreadable
+CASE CACHED calibration_legacy_journal_archive_conflict
+CASE CACHED calibration_legacy_journal_archive_failed
+CASE CACHED calibration_recovery_nonconvergent
+CASE CACHED calibration_abandon_not_clean
+CASE CACHED calibration_abandon_pin_mismatch
+CASE CACHED calibration_head_pin_unreadable
+CASE CACHED calibration_head_pin_malformed
+CASE CACHED calibration_custody_unreadable
+CASE CACHED calibration_ledger_pending
+CASE CACHED calibration_ledger_head_uncommitted
+CASE CACHED calibration_ledger_head_mismatch
+CASE CACHED calibration_ledger_baseline_missing
+CASE CACHED calibration_observation_unclassifiable
+CASE CACHED calibration_recovery_credentials_invalid
+CASE CACHED calibration_abandon_credentials_invalid
+CASE CACHED calibration_abandon_active_intent
+CASE CACHED calibration_head_pin_not_committed
+CASE CACHED calibration_reservation_head_mismatch
+CASE CACHED calibration_session_not_found
+CASE CACHED calibration_session_not_open
+CASE CACHED calibration_claim_id_invalid
+CASE CACHED calibration_finalization_binding_conflict
+CASE CACHED calibration_session_not_terminal
+CASE CACHED calibration_session_terminal_not_head
+CASE CACHED calibration_pin_advancement_not_needed
+CASE CACHED calibration_pin_advancement_unsafe
+CASE CACHED calibration_pin_candidate_mismatch
+............F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 DETACHED_GRANDCHILD_CENSUS_REPORTED=1
+.{"event": "powermetrics_post_teardown_census", "findings": [{"command": "/bin/zsh /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1786289380023-tq2qhk.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'WT=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0\\012SP=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad\\012cd \"$WT\" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_reduce tests.test_whole_window_selection tests.test_run_campaign tests.test_powermetrics_fiducial tests.test_calibration_exits > \"$SP/s1-suites-full.log\" 2>&1; echo \"exit=$?\"; grep -c -E '\"'\"'^(FAIL|ERROR):'\"'\"' \"$SP/s1-suites-full.log\"' < /dev/null && pwd -P >| /tmp/claude-d70e-cwd", "pid": 41337}], "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR", "scope": "detect_and_report_only"}
+{"event": "powermetrics_post_teardown_census", "findings": [{"command": "/bin/zsh /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1786289380023-tq2qhk.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'WT=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0\\012SP=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad\\012cd \"$WT\" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_reduce tests.test_whole_window_selection tests.test_run_campaign tests.test_powermetrics_fiducial tests.test_calibration_exits > \"$SP/s1-suites-full.log\" 2>&1; echo \"exit=$?\"; grep -c -E '\"'\"'^(FAIL|ERROR):'\"'\"' \"$SP/s1-suites-full.log\"' < /dev/null && pwd -P >| /tmp/claude-d70e-cwd", "pid": 41337}], "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR", "scope": "detect_and_report_only"}
+{"event": "powermetrics_post_teardown_census", "findings": [{"command": "/bin/zsh /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1786289380023-tq2qhk.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'WT=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0\\012SP=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad\\012cd \"$WT\" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_reduce tests.test_whole_window_selection tests.test_run_campaign tests.test_powermetrics_fiducial tests.test_calibration_exits > \"$SP/s1-suites-full.log\" 2>&1; echo \"exit=$?\"; grep -c -E '\"'\"'^(FAIL|ERROR):'\"'\"' \"$SP/s1-suites-full.log\"' < /dev/null && pwd -P >| /tmp/claude-d70e-cwd", "pid": 41337}], "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR", "scope": "detect_and_report_only"}
+F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3
+.{"event": "powermetrics_post_teardown_census", "findings": [{"command": "/bin/zsh /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1786289380023-tq2qhk.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'WT=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0\\012SP=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad\\012cd \"$WT\" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_reduce tests.test_whole_window_selection tests.test_run_campaign tests.test_powermetrics_fiducial tests.test_calibration_exits > \"$SP/s1-suites-full.log\" 2>&1; echo \"exit=$?\"; grep -c -E '\"'\"'^(FAIL|ERROR):'\"'\"' \"$SP/s1-suites-full.log\"' < /dev/null && pwd -P >| /tmp/claude-d70e-cwd", "pid": 41337}], "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR", "scope": "detect_and_report_only"}
+F4_SUCCESS_CAPTURE_BYTES=214524 SHA256=6aa3b1ea3b07ac9230d7c920eccf5d467edc194efceb7d1d1ae3e97041ec315f BYTE_IDENTICAL=1
+.
+======================================================================
+ERROR: test_flat_loss_projection_exhausts_deterministic_cell_budget (tests.test_powermetrics_fiducial.DetectorTests.test_flat_loss_projection_exhausts_deterministic_cell_budget)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 681, in test_flat_loss_projection_exhausts_deterministic_cell_budget
+    payload = instrument_evidence(
+        outcomes[0],
+    ...<4 lines>...
+        protocol_id=LEGACY_PROTOCOL_ID,
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_wall_deadline_is_nonreproducible_host_pathology_diagnostic (tests.test_powermetrics_fiducial.DetectorTests.test_wall_deadline_is_nonreproducible_host_pathology_diagnostic)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 743, in test_wall_deadline_is_nonreproducible_host_pathology_diagnostic
+    deterministic_evidence = evidence_payload(deterministic)
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 734, in evidence_payload
+    return instrument_evidence(
+        detection,
+    ...<4 lines>...
+        protocol_id=LEGACY_PROTOCOL_ID,
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_any_detection_reason_forces_invalid_status (tests.test_powermetrics_fiducial.EvidenceTests.test_any_detection_reason_forces_invalid_status)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1072, in test_any_detection_reason_forces_invalid_status
+    payload = instrument_evidence(
+        detection,
+    ...<6 lines>...
+        protocol_pulse_count=3,
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_fitted_bound_below_protocol_pulse_count_is_invalid (tests.test_powermetrics_fiducial.EvidenceTests.test_fitted_bound_below_protocol_pulse_count_is_invalid)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1119, in test_fitted_bound_below_protocol_pulse_count_is_invalid
+    payload = instrument_evidence(
+        detection,
+    ...<2 lines>...
+        artifact_sha256={},
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_healthy_evidence_bytes_match_pre_budget_baseline (tests.test_powermetrics_fiducial.EvidenceTests.test_healthy_evidence_bytes_match_pre_budget_baseline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 966, in test_healthy_evidence_bytes_match_pre_budget_baseline
+    payload = instrument_evidence(
+        self.make_detection(),
+    ...<9 lines>...
+        capture_wall_time_s=1_784_491_000.25,
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_launch_lineage_stamping_preserves_projection_disposition (tests.test_powermetrics_fiducial.EvidenceTests.test_launch_lineage_stamping_preserves_projection_disposition)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1013, in test_launch_lineage_stamping_preserves_projection_disposition
+    legacy = instrument_evidence(projected, **kwargs)
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_missing_binding_field_fails_closed (tests.test_powermetrics_fiducial.EvidenceTests.test_missing_binding_field_fails_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1156, in test_missing_binding_field_fails_closed
+    payload = instrument_evidence(
+        detection,
+    ...<2 lines>...
+        artifact_sha256={},
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_undetected_pulse_forces_invalid_even_when_bound_present (tests.test_powermetrics_fiducial.EvidenceTests.test_undetected_pulse_forces_invalid_even_when_bound_present)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1144, in test_undetected_pulse_forces_invalid_even_when_bound_present
+    payload = instrument_evidence(
+        forced,
+    ...<3 lines>...
+        protocol_pulse_count=len(forced.fits),
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_v2_evidence_requires_and_records_capture_wall_time (tests.test_powermetrics_fiducial.EvidenceTests.test_v2_evidence_requires_and_records_capture_wall_time)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1051, in test_v2_evidence_requires_and_records_capture_wall_time
+    missing = instrument_evidence(
+        detection, protocol_id=PROTOCOL_V2_ID, **kwargs
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_valid_evidence_carries_bindings_and_bound (tests.test_powermetrics_fiducial.EvidenceTests.test_valid_evidence_carries_bindings_and_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 942, in test_valid_evidence_carries_bindings_and_bound
+    payload = instrument_evidence(
+        detection,
+    ...<7 lines>...
+        protocol_id=LEGACY_PROTOCOL_ID,
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/joulewise/powermetrics_fiducial.py", line 1463, in instrument_evidence
+    raise ValueError("detection anchor method is missing")
+ValueError: detection anchor method is missing
+
+======================================================================
+ERROR: test_rederive_only_emits_v2_widened_evidence_and_rejects_hash_mismatch (tests.test_powermetrics_fiducial.FrozenProtocolTests.test_rederive_only_emits_v2_widened_evidence_and_rejects_hash_mismatch)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1786, in test_rederive_only_emits_v2_widened_evidence_and_rejects_hash_mismatch
+    anchor_method=CLOCK_METHOD_V2
+                  ^^^^^^^^^^^^^^^
+NameError: name 'CLOCK_METHOD_V2' is not defined
+
+======================================================================
+ERROR: test_shared_controller_verifier_rejects_forged_zero_residual_rows (tests.test_powermetrics_fiducial.FrozenProtocolTests.test_shared_controller_verifier_rejects_forged_zero_residual_rows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1744, in test_shared_controller_verifier_rejects_forged_zero_residual_rows
+    anchor_method=CLOCK_METHOD_V2
+                  ^^^^^^^^^^^^^^^
+NameError: name 'CLOCK_METHOD_V2' is not defined
+
+======================================================================
+FAIL: test_current_admission_gap_overlap_and_post_bracket_fail_independently (tests.test_reduce.D078R01RegressionTests.test_current_admission_gap_overlap_and_post_bracket_fail_independently) (label='coherent_bracket')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_reduce.py", line 2443, in test_current_admission_gap_overlap_and_post_bracket_fail_independently
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        "environment_admission_missing" in reasons,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        expected_missing,
+        ^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: True != False
+
+======================================================================
+FAIL: test_current_thermal_scan_refuses_elevated_or_missing_interval_pressure (tests.test_reduce.D078R01RegressionTests.test_current_thermal_scan_refuses_elevated_or_missing_interval_pressure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_reduce.py", line 2257, in test_current_thermal_scan_refuses_elevated_or_missing_interval_pressure
+    self.assertEqual(reasons, expected)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: ('environment_admission_missing',) != ('thermal_pressure_elevated_in_window',)
+
+First differing element 0:
+'environment_admission_missing'
+'thermal_pressure_elevated_in_window'
+
+- ('environment_admission_missing',)
++ ('thermal_pressure_elevated_in_window',)
+
+======================================================================
+FAIL: test_d079_real_selector_to_real_reducer_embeds_allowance_once (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_d079_real_selector_to_real_reducer_embeds_allowance_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_whole_window_selection.py", line 2417, in test_d079_real_selector_to_real_reducer_embeds_allowance_once
+    self.assertTrue(session.ready, session.refusal_reasons)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : ('capture_pipeline_superseded',)
+
+======================================================================
+FAIL: test_rederivation_records_the_expected_operative_anchor_bound (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_rederivation_records_the_expected_operative_anchor_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_whole_window_selection.py", line 1984, in test_rederivation_records_the_expected_operative_anchor_bound
+    self.assertAlmostEqual(
+    ~~~~~~~~~~~~~~~~~~~~~~^
+        minted["energy_anchor_shift_envelopes"][
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        places=12,
+        ^^^^^^^^^^
+    )
+    ^
+AssertionError: 0.07799607349394995 != 0.07799298220062004 within 12 places (3.0912933299126477e-06 difference)
+
+======================================================================
+FAIL: test_reducer_0_6_2_uses_the_same_authenticated_override_path (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_reducer_0_6_2_uses_the_same_authenticated_override_path) (pointer='/gross_energy_j')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_whole_window_selection.py", line 2057, in test_reducer_0_6_2_uses_the_same_authenticated_override_path
+    self.assertAlmostEqual(
+    ~~~~~~~~~~~~~~~~~~~~~~^
+        widened["anchor_bound_s"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.EXPECTED_OPERATIVE_ANCHOR_BOUND_S,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        places=12,
+        ^^^^^^^^^^
+    )
+    ^
+AssertionError: 0.07899607349394995 != 0.07899298220062004 within 12 places (3.0912933299126477e-06 difference)
+
+======================================================================
+FAIL: test_reducer_0_6_2_uses_the_same_authenticated_override_path (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_reducer_0_6_2_uses_the_same_authenticated_override_path) (pointer='/phase_energy_j/prefill')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_whole_window_selection.py", line 2057, in test_reducer_0_6_2_uses_the_same_authenticated_override_path
+    self.assertAlmostEqual(
+    ~~~~~~~~~~~~~~~~~~~~~~^
+        widened["anchor_bound_s"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.EXPECTED_OPERATIVE_ANCHOR_BOUND_S,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        places=12,
+        ^^^^^^^^^^
+    )
+    ^
+AssertionError: 0.07899607349394995 != 0.07899298220062004 within 12 places (3.0912933299126477e-06 difference)
+
+======================================================================
+FAIL: test_reducer_0_6_2_uses_the_same_authenticated_override_path (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_reducer_0_6_2_uses_the_same_authenticated_override_path) (pointer='/idle_subtracted_energy_j')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_whole_window_selection.py", line 2057, in test_reducer_0_6_2_uses_the_same_authenticated_override_path
+    self.assertAlmostEqual(
+    ~~~~~~~~~~~~~~~~~~~~~~^
+        widened["anchor_bound_s"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.EXPECTED_OPERATIVE_ANCHOR_BOUND_S,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        places=12,
+        ^^^^^^^^^^
+    )
+    ^
+AssertionError: 0.07899607349394995 != 0.07899298220062004 within 12 places (3.0912933299126477e-06 difference)
+
+======================================================================
+FAIL: test_reducer_0_6_2_uses_the_same_authenticated_override_path (tests.test_whole_window_selection.MaxBracketConsumptionTests.test_reducer_0_6_2_uses_the_same_authenticated_override_path) (pointer='/phase_energy_j/decode')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_whole_window_selection.py", line 2057, in test_reducer_0_6_2_uses_the_same_authenticated_override_path
+    self.assertAlmostEqual(
+    ~~~~~~~~~~~~~~~~~~~~~~^
+        widened["anchor_bound_s"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self.EXPECTED_OPERATIVE_ANCHOR_BOUND_S,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        places=12,
+        ^^^^^^^^^^
+    )
+    ^
+AssertionError: 0.07899607349394995 != 0.07899298220062004 within 12 places (3.0912933299126477e-06 difference)
+
+======================================================================
+FAIL: test_missing_final_attempt_telemetry_fails_closed (tests.test_run_campaign.IdleAdmissionCoreVerdictTests.test_missing_final_attempt_telemetry_fails_closed)
+Fix round 1 (blocker): absent retried telemetry fails closed.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_run_campaign.py", line 8634, in test_missing_final_attempt_telemetry_fails_closed
+    evaluation = self._produced_retry_member(
+        "p2-work-a__r1",
+    ...<2 lines>...
+        expected_strict_valid=False,
+    )
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_run_campaign.py", line 8572, in _produced_retry_member
+    self.assertIs(evaluation.strict_valid, expected_strict_valid)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not False
+
+======================================================================
+FAIL: test_preflight_screen_is_derived_bit_exactly_from_real_artifact (tests.test_powermetrics_fiducial.FrozenProtocolTests.test_preflight_screen_is_derived_bit_exactly_from_real_artifact)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_powermetrics_fiducial.py", line 1551, in test_preflight_screen_is_derived_bit_exactly_from_real_artifact
+    self.assertEqual(
+    ~~~~~~~~~~~~~~~~^
+        hashlib.sha256(raw).hexdigest(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: '92b9c0608bc97fbd7769050213b1433c32d3fe060d1292167920363e58b8cf0f' != 'dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb'
+- 92b9c0608bc97fbd7769050213b1433c32d3fe060d1292167920363e58b8cf0f
++ dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb
+
+
+----------------------------------------------------------------------
+Ran 549 tests in 716.633s
+
+FAILED (failures=10, errors=12)

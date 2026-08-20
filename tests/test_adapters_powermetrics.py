@@ -4,7 +4,7 @@ import plistlib
 import tempfile
 import unittest
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -234,6 +234,38 @@ class PowermetricsIncrementalSliceTests(unittest.TestCase):
                         )
                     )
                 )
+
+
+class PowermetricsExactAnchorInputTests(unittest.TestCase):
+    def test_timestamp_epoch_ns_converter_never_rounds_through_float(self) -> None:
+        value = datetime(2026, 8, 18, 17, 31, 36, 123456, tzinfo=timezone.utc)
+        epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        expected = (value - epoch) // timedelta(microseconds=1) * 1000
+        self.assertEqual(powermetrics._timestamp_epoch_ns_utc(value), expected)
+        self.assertEqual(
+            powermetrics._timestamp_epoch_ns_utc(value.replace(tzinfo=None)),
+            expected,
+        )
+        with self.assertRaisesRegex(ValueError, "not a datetime"):
+            powermetrics._timestamp_epoch_ns_utc("2026-08-18")
+
+    def test_parser_and_anchor_projection_retain_exact_integer_times(self) -> None:
+        parsed = powermetrics.parse_powermetrics_records(FIXTURE.read_bytes())
+        projected = powermetrics.anchor_records_from_powermetrics(parsed)
+        self.assertEqual(len(projected), len(parsed))
+        for raw, anchor in zip(parsed, projected, strict=True):
+            self.assertIs(type(raw.metadata["plist_timestamp_ns"]), int)
+            self.assertEqual(anchor.elapsed_ns, raw.elapsed_ns)
+            self.assertEqual(
+                anchor.native_timestamp_ns,
+                raw.metadata["plist_timestamp_ns"],
+            )
+            # Frozen v2 fields remain the existing float projections.
+            self.assertEqual(anchor.elapsed_s, raw.elapsed_ns / 1_000_000_000.0)
+            self.assertEqual(
+                anchor.native_timestamp_s,
+                float(raw.metadata["plist_timestamp_s"]),
+            )
 
 
 if __name__ == "__main__":

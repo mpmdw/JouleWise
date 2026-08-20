@@ -1,0 +1,22 @@
+{
+  "schema_version": "joulewise.d117_prompt_candidate.v1",
+  "draft_status": "as_generated_pre_d134_freeze",
+  "candidate_status": "PROPOSED-PENDING-LEAD-RATIFICATION",
+  "authority": {
+    "prompt_length": "D-122 clause 1",
+    "prompt_text": "TODO(lead): no named authority pins text"
+  },
+  "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+  "prompt_text_utf8_sha256": "f149dddcb4b9d27b3d68b0455c5f774e56e37bfc04430b53e139a4c08f044faf",
+  "planned_token_count": 256,
+  "token_count_basis": {
+    "status": "LOCAL-TOKENIZER-ARTIFACT-VERIFIED-CANDIDATE",
+    "shared_tokenizer_json_sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+    "model_artifacts_checked": [
+      "Qwen2.5-1.5B-Instruct-4bit",
+      "Qwen2.5-7B-Instruct-4bit"
+    ],
+    "construction": "35 seven-token repo-idiom sentences plus one eleven-token sentence under the shared Qwen2.5 tokenizer",
+    "lead_rerun_required_before_ratification": true
+  }
+}

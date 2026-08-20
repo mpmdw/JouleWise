@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="912" viewBox="0 0 1020 912" role="img" aria-labelledby="figBtitle figBdesc">
+  <title id="figBtitle">Figure B (skeleton). Phase-energy means and fully composed intervals</title>
+  <desc id="figBdesc">Skeleton for the phase-energy mean figure. Phase grouped by model on the horizontal axis; gross energy per request in joules on the vertical axis with no numeric scale. Each phase carries an unfilled reported-mean mark, an unfilled fully composed interval placeholder, and a visually distinct operative-floor reference glyph that is not an error bar. Independent valid-bundle counts and token-normalized companions are annotation placeholders. The whole figure is marked STOP_FILL; every D-123 supplier is unknown.</desc>
+  <rect x="0" y="0" width="1020" height="912" fill="#ffffff"/>
+  <text x="40" y="32" font-family="sans-serif" font-size="18" fill="#1b1b1b" font-weight="bold">Figure B (skeleton). Phase-energy means and fully composed intervals</text>
+  <text x="40" y="54" font-family="sans-serif" font-size="13" fill="#555555">Number-free skeleton. Mean marks, interval placeholders, and floor references are unfilled; no scale or ordering is implied.</text>
+  <rect x="790" y="16" width="190" height="26" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="885.0" y="30" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL - NO PANEL RENDERS</text>
+  <text x="40" y="74" font-family="sans-serif" font-size="11" fill="#a33">Render gate (plan): currently STOP_FILL - the registry marks every D-123 mean, interval, companion, and count supplier UNKNOWN. Do not substitute the</text>
+  <text x="40" y="91" font-family="sans-serif" font-size="11" fill="#a33">absolute floor component's internal mean or count.</text>
+  <g opacity="0.085" transform="rotate(-24 550.0 265.0)">
+  <text x="550.0" y="265.0" font-family="sans-serif" font-size="122" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="10">STOP_FILL</text>
+  </g>
+  <g stroke="#ececec" stroke-width="1.5">
+    <line x1="130" y1="410" x2="970" y2="410"/>
+    <line x1="130" y1="352" x2="970" y2="352"/>
+    <line x1="130" y1="294" x2="970" y2="294"/>
+    <line x1="130" y1="236" x2="970" y2="236"/>
+    <line x1="130" y1="178" x2="970" y2="178"/>
+    <line x1="130" y1="120" x2="970" y2="120"/>
+  </g>
+  <line x1="130" y1="120" x2="130" y2="410" stroke="#333333" stroke-width="1.8"/>
+  <text x="90" y="265.0" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 90 265.0)">gross energy per request (joules)</text>
+  <text x="106" y="265.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle" transform="rotate(-90 106 265.0)">no numeric scale: values unissued</text>
+  <line x1="209.0" y1="154" x2="209.0" y2="376" stroke="#1b6ca8" stroke-width="2.2" stroke-dasharray="7 5"/>
+  <line x1="198.0" y1="154" x2="220.0" y2="154" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="198.0" y1="376" x2="220.0" y2="376" stroke="#1b6ca8" stroke-width="2.2"/>
+  <circle cx="209.0" cy="265.0" r="8" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="209.0" y="249.0" font-family="sans-serif" font-size="14" fill="#1b6ca8" font-weight="bold" text-anchor="middle">?</text>
+  <path d="M269.0,296.0 L278.0,313.0 L260.0,313.0 z" fill="#ffffff" stroke="#6a6a6a" stroke-width="2.2"/>
+  <text x="269.0" y="331.0" font-family="sans-serif" font-size="10" fill="#6a6a6a" text-anchor="middle">floor ref.</text>
+  <text x="269.0" y="343.0" font-family="sans-serif" font-size="9" fill="#6a6a6a" text-anchor="middle">(not an error bar)</text>
+  <text x="235.0" y="434" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold" text-anchor="middle">prompt processing</text>
+  <text x="235.0" y="452" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_1p5B_prompt_J_per_request]</text>
+  <text x="235.0" y="465" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_1p5B_prompt_lower_J]</text>
+  <text x="235.0" y="478" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_1p5B_prompt_upper_J]</text>
+  <text x="235.0" y="491" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_1p5B_prompt_J_per_token]</text>
+  <text x="235.0" y="504" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[N_bundles_1p5B_prompt]</text>
+  <text x="235.0" y="517" font-family="monospace" font-size="9.5" fill="#6a6a6a" text-anchor="middle">[F_1p5B_prompt_operative_J]</text>
+  <rect x="193.0" y="534" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="235.0" y="548" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <line x1="419.0" y1="154" x2="419.0" y2="376" stroke="#1b6ca8" stroke-width="2.2" stroke-dasharray="7 5"/>
+  <line x1="408.0" y1="154" x2="430.0" y2="154" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="408.0" y1="376" x2="430.0" y2="376" stroke="#1b6ca8" stroke-width="2.2"/>
+  <circle cx="419.0" cy="265.0" r="8" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="419.0" y="249.0" font-family="sans-serif" font-size="14" fill="#1b6ca8" font-weight="bold" text-anchor="middle">?</text>
+  <path d="M479.0,296.0 L488.0,313.0 L470.0,313.0 z" fill="#ffffff" stroke="#6a6a6a" stroke-width="2.2"/>
+  <text x="479.0" y="331.0" font-family="sans-serif" font-size="10" fill="#6a6a6a" text-anchor="middle">floor ref.</text>
+  <text x="479.0" y="343.0" font-family="sans-serif" font-size="9" fill="#6a6a6a" text-anchor="middle">(not an error bar)</text>
+  <text x="445.0" y="434" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold" text-anchor="middle">token generation</text>
+  <text x="445.0" y="452" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_1p5B_decode_J_per_request]</text>
+  <text x="445.0" y="465" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_1p5B_decode_lower_J]</text>
+  <text x="445.0" y="478" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_1p5B_decode_upper_J]</text>
+  <text x="445.0" y="491" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_1p5B_decode_J_per_token]</text>
+  <text x="445.0" y="504" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[N_bundles_1p5B_decode]</text>
+  <text x="445.0" y="517" font-family="monospace" font-size="9.5" fill="#6a6a6a" text-anchor="middle">[F_1p5B_decode_operative_J]</text>
+  <rect x="403.0" y="534" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="445.0" y="548" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <text x="340.0" y="570" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold" text-anchor="middle">model: 1.5B</text>
+  <line x1="550.0" y1="112" x2="550.0" y2="528" stroke="#cccccc" stroke-width="1.4"/>
+  <line x1="629.0" y1="154" x2="629.0" y2="376" stroke="#1b6ca8" stroke-width="2.2" stroke-dasharray="7 5"/>
+  <line x1="618.0" y1="154" x2="640.0" y2="154" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="618.0" y1="376" x2="640.0" y2="376" stroke="#1b6ca8" stroke-width="2.2"/>
+  <circle cx="629.0" cy="265.0" r="8" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="629.0" y="249.0" font-family="sans-serif" font-size="14" fill="#1b6ca8" font-weight="bold" text-anchor="middle">?</text>
+  <path d="M689.0,296.0 L698.0,313.0 L680.0,313.0 z" fill="#ffffff" stroke="#6a6a6a" stroke-width="2.2"/>
+  <text x="689.0" y="331.0" font-family="sans-serif" font-size="10" fill="#6a6a6a" text-anchor="middle">floor ref.</text>
+  <text x="689.0" y="343.0" font-family="sans-serif" font-size="9" fill="#6a6a6a" text-anchor="middle">(not an error bar)</text>
+  <text x="655.0" y="434" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold" text-anchor="middle">prompt processing</text>
+  <text x="655.0" y="452" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_7B_prompt_J_per_request]</text>
+  <text x="655.0" y="465" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_7B_prompt_lower_J]</text>
+  <text x="655.0" y="478" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_7B_prompt_upper_J]</text>
+  <text x="655.0" y="491" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_7B_prompt_J_per_token]</text>
+  <text x="655.0" y="504" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[N_bundles_7B_prompt]</text>
+  <text x="655.0" y="517" font-family="monospace" font-size="9.5" fill="#6a6a6a" text-anchor="middle">[F_7B_prompt_operative_J]</text>
+  <rect x="613.0" y="534" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="655.0" y="548" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <line x1="839.0" y1="154" x2="839.0" y2="376" stroke="#1b6ca8" stroke-width="2.2" stroke-dasharray="7 5"/>
+  <line x1="828.0" y1="154" x2="850.0" y2="154" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="828.0" y1="376" x2="850.0" y2="376" stroke="#1b6ca8" stroke-width="2.2"/>
+  <circle cx="839.0" cy="265.0" r="8" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="839.0" y="249.0" font-family="sans-serif" font-size="14" fill="#1b6ca8" font-weight="bold" text-anchor="middle">?</text>
+  <path d="M899.0,296.0 L908.0,313.0 L890.0,313.0 z" fill="#ffffff" stroke="#6a6a6a" stroke-width="2.2"/>
+  <text x="899.0" y="331.0" font-family="sans-serif" font-size="10" fill="#6a6a6a" text-anchor="middle">floor ref.</text>
+  <text x="899.0" y="343.0" font-family="sans-serif" font-size="9" fill="#6a6a6a" text-anchor="middle">(not an error bar)</text>
+  <text x="865.0" y="434" font-family="sans-serif" font-size="12" fill="#1b1b1b" font-weight="bold" text-anchor="middle">token generation</text>
+  <text x="865.0" y="452" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_7B_decode_J_per_request]</text>
+  <text x="865.0" y="465" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_7B_decode_lower_J]</text>
+  <text x="865.0" y="478" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_7B_decode_upper_J]</text>
+  <text x="865.0" y="491" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[E_7B_decode_J_per_token]</text>
+  <text x="865.0" y="504" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="middle">[N_bundles_7B_decode]</text>
+  <text x="865.0" y="517" font-family="monospace" font-size="9.5" fill="#6a6a6a" text-anchor="middle">[F_7B_decode_operative_J]</text>
+  <rect x="823.0" y="534" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="865.0" y="548" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <text x="760.0" y="570" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold" text-anchor="middle">model: 7B</text>
+  <line x1="130" y1="410" x2="970" y2="410" stroke="#333333" stroke-width="1.8"/>
+  <text x="550.0" y="444" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle"></text>
+  <text x="550.0" y="594" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle">phase, grouped by model</text>
+  <circle cx="140" cy="622" r="7" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="156" y="626" font-family="sans-serif" font-size="11.5" fill="#333333">reported mean (placeholder)</text>
+  <path d="M362.1,614 L370.1,629 L354.1,629 z" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="378.1" y="626" font-family="sans-serif" font-size="11.5" fill="#333333">operative floor reference (distinct glyph, never an error bar)</text>
+  <text x="130" y="646" font-family="sans-serif" font-size="11.5" fill="#333333">The dashed vertical rule at each phase is the fully composed lower-to-upper interval placeholder; per-token companions stay table annotations.</text>
+  <line x1="40" y1="666" x2="980" y2="666" stroke="#e2e2e2" stroke-width="1.5"/>
+  <text x="40" y="690" font-family="sans-serif" font-size="12" fill="#555555" font-weight="bold">Number-free caption stub (verbatim from docs/paper/figures-plan.md):</text>
+  <text x="40" y="709" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">Reader-facing phase-energy means and fully composed measurement intervals from the prospectively registered alpha and beta reported-</text>
+  <text x="40" y="726" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">mean cells. Independent valid-bundle counts accompany the marks; token-normalized companions remain table annotations under the</text>
+  <text x="40" y="743" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">recorded-token and same-tokenizer rules.</text>
+  <text x="40" y="769" font-family="sans-serif" font-size="12" fill="#555555" font-weight="bold">Mandatory D-119 disclosure line (verbatim; may be replaced only by weaker wording):</text>
+  <text x="40" y="788" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">The plotted means are internal to the named software-counter boundary and become demonstrated results only when the D-123 reported-</text>
+  <text x="40" y="805" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">mean artifact and its authenticated member basis issue; until then this figure has no data supplier.</text>
+  <text x="40" y="831" font-family="sans-serif" font-size="11" fill="#555555">Registry rows consumed: sixteen D-123 mean/interval/companion tokens [E_*_J_per_request] [E_*_lower_J] [E_*_upper_J] [E_*_J_per_token], four count</text>
+  <text x="40" y="848" font-family="sans-serif" font-size="11" fill="#555555">tokens [N_bundles_*], and the four operative-floor tokens from Figure A used only as clearly distinct floor references. Freeze status at audit: all</text>
+  <text x="40" y="865" font-family="sans-serif" font-size="11" fill="#555555">twenty D-123 rows are STOP_FILL / SUPPLIER_UNKNOWN - the reported-mean artifact field, its admitted member basis, its composed interval endpoints, and</text>
+  <text x="40" y="882" font-family="sans-serif" font-size="11" fill="#555555">its runtime-observed per-token companions are undefined in the repository.</text>
+</svg>

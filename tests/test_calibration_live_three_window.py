@@ -55,6 +55,7 @@ from joulewise.powermetrics_fiducial import (
     PROTOCOL_V2_ID,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
 from scripts import validate_powermetrics_fiducial as production_writer
 from tests.receipt_corpus import ReceiptCorpus
 
@@ -353,7 +354,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             )
 
         additions = cls.scenario["issuance_equivalent_base"][
-            "synthetic_additions_to_n19_derivation_corpus"
+            "synthetic_additions_to_derivation_corpus"
         ]
         for disposition, count in additions.items():
             for index in range(count):
@@ -722,7 +723,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             "attempt_id": target_core.get("attempt_id"),
         }
 
-    def test_issuance_equivalent_base_has_76_receipts_and_30_2_6_dispositions(
+    def test_issuance_equivalent_base_has_76_receipts_and_26_2_10_dispositions(
         self,
     ) -> None:
         expected = self.scenario["issuance_equivalent_base"]
@@ -1110,7 +1111,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 )
                 self.assertEqual(allowance["embedding_count"], 1)
 
-    def test_no_failure_campaign_has_36_valid_observations_two_short_of_trigger(
+    def test_no_failure_campaign_has_32_valid_observations_two_short_of_trigger(
         self,
     ) -> None:
         expected = self.scenario["expected_live_extension"][
@@ -1141,7 +1142,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
             result, reasons = self._evaluate(name)
             self.assertEqual(reasons, ())
             self.assertNotIn(
-                "corpus_doubles_from_19_to_38",
+                "corpus_doubles_from_17_to_34",
                 result["acceptance"]["prospective_rederivation"][
                     "observed_triggers"
                 ],
@@ -1444,7 +1445,7 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         )
         self.assertEqual(reasons, ("calibration_bracket_binding_invalid",))
 
-    def test_refuses_noncausal_stale_t1_protocol_or_epoch_mismatched_endpoint(
+    def test_refuses_noncausal_stale_t1_protocol_epoch_or_v2_era_endpoint(
         self,
     ) -> None:
         gamma = self.windows["gamma"]
@@ -1576,6 +1577,86 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
                 )
                 self.assertEqual(reasons, expected_reasons)
 
+        def v2_open_t1(value: dict) -> None:
+            for slot in ("pre", "post"):
+                value["slots"][slot]["t1_bindings"][
+                    "anchor_method_version"
+                ] = CLOCK_METHOD_V2
+
+        def v2_final_t1(value: dict) -> None:
+            value["t1_bindings"]["anchor_method_version"] = CLOCK_METHOD_V2
+
+        v2_era = self.receipts
+        for live_window in self.windows.values():
+            v2_era = v2_era.replace(
+                self._receipt_selector(
+                    live_window["session_id"], BRACKET_SESSION_OPEN_EVENT
+                ),
+                lambda row: self._changed(row, v2_open_t1),
+            )
+            for slot in ("pre", "post"):
+                v2_era = v2_era.replace(
+                    self._receipt_selector(
+                        live_window["session_id"],
+                        BRACKET_SESSION_FINALIZATION_EVENT,
+                        slot,
+                    ),
+                    lambda row: self._changed(row, v2_final_t1),
+                )
+        snapshot = self._variant_snapshot(self._rechain(v2_era))
+        reader = SimpleNamespace(
+            measured_window=lambda: SimpleNamespace(
+                start_s=gamma["window_start_s"],
+                end_s=gamma["window_end_s"],
+            ),
+            metadata=lambda: {
+                "instrument_calibration": {"bindings": dict(self.t1)}
+            },
+        )
+        diagnostics: list[dict[str, str]] = []
+        with (
+            patch(
+                "joulewise.calibration_bracketing.BundleReader",
+                return_value=reader,
+            ),
+            patch(
+                "joulewise.calibration_bracketing._candidate_from_observation",
+                side_effect=self._candidate,
+            ),
+            patch(
+                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                return_value=self.acceptance,
+            ),
+        ):
+            result, reasons = calibration_bracket_for_bundles(
+                Path(gamma["runs_root"]),
+                [Path(gamma["runs_root"]) / "science-member"],
+                self.policy,
+                ledger_snapshot=snapshot,
+                diagnostics=diagnostics,
+            )
+
+        self.assertEqual(self._discover(snapshot), ())
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(
+            reasons,
+            (
+                "instrument_calibration_bracket_missing",
+                "capture_pipeline_superseded",
+            ),
+        )
+        self.assertEqual(
+            diagnostics,
+            [
+                {
+                    "attempt_id": f"d117-{name}-{slot}",
+                    "reason": "capture_pipeline_superseded",
+                }
+                for name in self.windows
+                for slot in ("pre", "post")
+            ],
+        )
+
     def test_refuses_systematic_classification(self) -> None:
         window = {
             "session_id": "session-d117-systematic",
@@ -1664,7 +1745,10 @@ class CalibrationLiveThreeWindowTests(unittest.TestCase):
         vector = self.scenario["staged_successor_vectors"][
             "d102_count_boundary"
         ]
-        self.assertEqual(vector["expected_total_valid_same_epoch"], 38)
+        self.assertEqual(vector["expected_total_valid_same_epoch"], 34)
+        self.assertEqual(
+            vector["expected_trigger"], "corpus_doubles_from_17_to_34"
+        )
 
     @unittest.skip("U2 successor engine pending")
     def test_successor_prior_set_refuses_omitted_or_changed_authenticated_prefix(

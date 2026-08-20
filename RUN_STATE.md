@@ -10,7 +10,456 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-18 morning (T10 overnight complete — confirmation head ready)
+Last updated: 2026-08-19 ~21:00 PDT (T16-FANOUT-READY — all prep landed; stopped; the 23:34 fresh session is the GO)
+
+## ▶▶ T16-FANOUT-READY (2026-08-19 ~21:00 PDT, FINAL checkpoint of the pre-/clear session) — EVERYTHING STOPPED; THE 23:34 SESSION IS THE GO
+
+**TRIGGER SEMANTICS (supersedes T14-GO's loop-line trigger):** Ed starts a
+FRESH SESSION at ~23:34 PST pointed at this file. THAT SESSION HAS THE
+GO — full fresh Fable + Codex accounts, LIBERAL model use across
+terra/luna/Sol/Opus/Fable per the standing fan-out order. It fans out
+immediately; the /loop line (T14-GO) is the recommended self-driving
+harness once running. Nothing is in flight now; nothing self-starts
+before that session.
+
+**GATE SCOREBOARD (four gates to the merge wave, then the T14-GO
+sequence):**
+1. Canonical FULL GREEN — ONE residue: 3 fails, one root
+   (test_unedited_v2_generators_emit_v3_successors × 3 families) — the
+   pre-mint successor-emission test vs the now-frozen `_v3` receipts;
+   details + log in the T12/T13 run-report addendum. FIX FIRST (small,
+   gauntleted), then rerun canonical (~47 min).
+2. Fresh-pass — SATISFIED (CLEAN through b92b43d; report + fixed
+   findings in custody; post-b92b43d commits are custody landings +
+   bookkeeping, focused-verified).
+3. D-144 seat pass — packet READY:
+   docs/process_traces/2026-08-19-r1-r2-codesign/16-d144-seatpass-packet.md
+   (terra xhigh + Opus, debate, Fable ruling).
+4. Merge wave under D-148.2 when 1-3 green: impl/r2-s0-mint-resolver →
+   integration/phase2-transaction → main.
+
+**READY-MADE PACKETS (all in custody under
+docs/process_traces/2026-08-19-prep-sprint/):**
+- ready-packet/ — the full READY-candidate council sitting packet (11
+  seat rows, 14 program rows, charter brief, 17 OPEN-ITEMS; note the
+  dual-assembly reconciliation and the ED-row roll-up 3 closed / 12
+  partial / 8 open). The sitting is SUBSTANTIVE — expect STILL-OPEN rows
+  and conditions, and the packet's P-13 (head identity) is cured by the
+  merge wave FIRST.
+- registry-packet/ — the D-148.5 council packet PLUS the executed
+  byte-pin experiment: **CONFIRMED-BLOCKER** (install breaks the frozen
+  family; no supersession path; windows UNAFFECTED under unchanged v1;
+  recommended disposition to rule: defer install to the `_v4` family
+  boundary — magistrate + cold instance per rule 11).
+- paper-staging/ — registry audit (0/34 locators clean; 8-slot coverage
+  hole; era-codes renderer gap F1 = named work item), refreshed-registry
+  DRAFT (adoption is a reviewed step), 5 STOP_FILL figure skeletons.
+- merge-freshpass.md — gate 2 report.
+
+**ED-DECISION ITEMS the fresh session should surface at the right
+moments (not blockers tonight):** (1) sudoers one-liner adding
+`-getusingnetworktime` — required before any D-149 auto-GO window (the
+T-0 author currently demands an interactive paste; collision documented
+in ready-packet ED rows); (2) A4 markers + env-fingerprint semantics
+(batch packet); (3) day-5 exact-byte confirmations.
+
+**RECOVERED WORK LEDGER (queue these into the plan):** Phase-3 manifest
+supersession (never executed; validator refuses all pack manifests incl.
+_v3 — design custodied in the phase2-plan consult); dress rehearsal
+ED-Q-L8-2 (never ran; mechanism _v2-stale); WO-CENSUS-SEMANTICS cascade
+(ED-Q-L9-3 fixture uncommitted); prewindow_check.sh census patterns;
+window.env/capture_t0_step key-set defect; runbook _v2→_v3 pass;
+generator CURRENT_FROZEN_RECEIPT constants post-mint; era-codes →
+results-renderer closed set; ED-L10-1 re-scope; charter re-baseline +
+amendments; the D-149 automation seat-audit the packet demands.
+
+**Session hygiene notes for the successor:** run tests THEN commit —
+never in one compound (this session pushed 2 reds that way); packet
+assemblers get the CURRENT head pinned at spawn; killed parents can
+leave running children (dual-assembly happened — reconcile, don't
+clobber).
+
+## ▶▶ T15-PREP (2026-08-19 night) — ACTIVE NOW: 5-HOUR CLAUDE-SIDE PREP SPRINT; CODEX RESETS 23:34 PST (11:34 PM) WITH FULL ACCOUNTS
+
+**Ed's plan (this block + T14-GO below = the complete grasp):** the
+pre-/clear session works the PREP LIST below NOW with ample Claude/Fable
+capacity; at **23:34 PST the Codex pool resets and Ed is providing a FULL
+Fable account AND a FULL Codex account** for maximal fan-out. The prep
+exists so the Codex seats (terra xhigh / luna max / Sol) wake into
+READY-MADE packets — zero cold starts. After prep is checkpointed, Ed
+/clears (possibly twice, with side questions between) and types the
+T14-GO /loop line; the five-day run proceeds per T14-GO's sequence.
+
+**PREP LIST (work down in order; 1+2 are merge gates in their own right):**
+1. Full canonical at the merge head — machine time; a gate input DONE
+   when green. [launched from the pre-/clear session]
+2. Fresh-pass review of d59d36f..HEAD (brief in T13-STOP/T13) — Opus
+   seat; second gate input DONE when clean. [launched]
+3. D-144 pre-merge seat-pass PACKET: scoped S0–S5 artifact diff, brief,
+   debate agenda, the D-146/D-147 clauses it verifies — assembled so the
+   terra+Opus debate fires at pool return. [assembling]
+4. Registry-values council PACKET (D-148.5): the five reserved values —
+   three proposed (= the three _v3 pack ids for successor_pack_ids) —
+   the remaining two enumerated FROM the R1-registry consult custody
+   (docs/process_traces/2026-08-16-grant-identity-consult/ is NOT it —
+   find the registry consult under the 2026-08-15/16 traces; the ed
+   packet lists the five); seat briefs written. [assembling]
+5. READY-candidate council PACKET: evidence rows against the 2026-08-15
+   NOT-READY charter form (docs/process/instrument-readiness-audit-
+   charter.md, verdict-form amendments 11-12), item by item with custody
+   pointers. The heaviest and highest-value prep item.
+6. D-149 GO-receipt tooling: the five GO conditions as a mechanical
+   checklist evaluation (script + receipt template) so every window GO
+   is a written receipt from the first shakedown; pre-stage shakedown
+   run cards + window drivers from the T11 working-notes patterns.
+7. Paper staging: verify every results-fill-registry row is
+   renderable-shaped; number-free figure skeletons per
+   docs/paper/figures-plan.md (D-119 disclosure lines verbatim).
+
+**Assembler discipline:** packet assemblers run read-only and write to
+session scratch; the LEAD lands their outputs into
+docs/process_traces/... serially (one writer per tree). Prep outputs are
+committed and pushed as they land so the post-/clear thread inherits
+everything through git, never through a dead scratchpad.
+
+**At 23:34 PST:** (GATE COUNT, canonical formulation: FOUR pre-merge gates — canonical FULL GREEN, fresh-pass clean, D-144 seat pass, then the wave itself under D-148.2.) Fan out per the standing order — D-144 seat pass and
+registry council first (packets 3+4), gauntlet seats on their outputs,
+then the merge wave when all four gates are green (T14-GO item 1), then
+straight down the T14-GO sequence.
+
+## ▶▶ T14-GO (2026-08-19 night, FINAL pre-/clear checkpoint) — ED'S FIVE-DAY GO IS ISSUED; THE /loop INVOCATION IS THE TRIGGER
+
+Ed's plan, verbatim intent: gates cleared → this checkpoint → /clear →
+the fresh thread FANS OUT and works a FIVE-DAY LOOP on the paper
+pipeline. **The GO is granted here.** A fresh session that arrives via
+the /loop line below does NOT wait for further permission — it reads
+this file and starts. (A fresh session arriving WITHOUT the loop — plain
+conversation — still treats Ed's messages as the driver.)
+
+**The loop line Ed will type:**
+`/loop work the paper pipeline: read RUN_STATE, continue per the standing orders (D-128 mandate, D-148 gate-authorized merges, D-149 window automation); never idle between blocks`
+Self-paced dynamic mode: match each wakeup to what is actually awaited
+(suite ~50 min; overnight window = hours; desk blocks 20–30 min).
+
+**Cleared gates (all durable):** permission allowlist live in
+.claude/settings.local.json (project scripts both interpreters, the
+measurement checkout incl. its git, caffeinate, unittest); D-148.2
+merges gate-authorized; D-148.4+D-149 full no-hands window automation
+with the five-condition auto-GO (each GO a receipt in window custody);
+D-148.5 registry values to council. Ed's only retained items: hands-on
+hardware, reboots, new sudo, claim publication, exact-byte confirmation
+— batch to ONE day-5 packet unless truly blocking.
+
+**FIVE-DAY SEQUENCE (fan out maximally per the standing fan-out order;
+Codex pool resets ~23:22 nightly — terra xhigh / luna max seats, Opus
+corps when the pool is dry):**
+1. Merge gates: rerun full canonical at the merge head; rerun the
+   fresh-pass over d59d36f..HEAD (brief in the T13 block); run the
+   D-144 BIG-design pre-merge seat pass (terra+Opus debate over the
+   implemented S0–S5 artifact, Fable ruling). All green → MERGE WAVE
+   impl/r2-s0-mint-resolver → integration/phase2-transaction → main.
+2. Registry council (D-148.5): five reserved values (three proposed =
+   the _v3 pack ids) → install the row registry (kernel-transaction
+   discipline).
+3. READY-candidate council: assemble the packet against the 2026-08-15
+   NOT-READY charter form; clear WINDOW-COUNCIL-GATE.
+4. Windows under D-149, shakedown FIRST (D-139): instrument-verification
+   captures, then alpha (1p5b floors), beta (7b floors), gamma
+   (contrast) overnight; every GO receipt custodied; D-078 no-retry.
+5. Reductions → verdicts → floors from issued artifacts → paper §6
+   tables filled ONLY from the results-fill registry → figures per the
+   registered plan with D-119 disclosure lines verbatim → full-draft
+   fidelity + pedagogy passes (the writing standard binds) → day-5
+   packet to Ed (tables, receipts, refusal log, exact-byte
+   confirmation).
+
+**Standing discipline (the short list the loop must never drop):** stop
+means stop; refused captures end lanes (diagnose, never re-arm-and-hope);
+two same-signature failures → consult, not round three; quiet blocks =
+zero tool calls mid-capture; one writer per worktree; the lead verifies
+receipts itself; kernel edits = kernel+regen+pins one transaction;
+explainer prose obeys the global writing standard; keep the remote
+current; count Codex runs (ledger blind).
+
+**Where everything is:** T13/T13-STOP (directly below) = gate-input
+status and the fresh-pass brief; T12-FINAL = the executed-transaction map
+and custody index; docs/process/ed-s5-mint-decision-2026-08-19.md = the
+completed confirmation table awaiting Ed's byte confirmation (day-5
+packet item); decision log D-144..D-149 = tonight's authority set.
+
+## ▶▶ T13-STOP (2026-08-19 night, Ed stop orders ×2) — NOTHING IN FLIGHT; RESUME ONLY ON ED'S EXPLICIT GO (SUPERSEDED same night: Ed resumed prep — see T15-PREP above; the go-for-pipeline semantics of T14-GO stand)
+
+*(Second stop, later the same night: after the stop below, Ed cleared
+gates — the permission allowlist is live in settings.local.json and
+D-149 standing window automation is minted/pushed — and the gate-input
+reruns were briefly restarted, then Ed ordered a full stop again. Both
+were killed early; the gate-input status below is unchanged: ALL
+UNSATISFIED, rerun from scratch. The successor does NOT self-start the
+pipeline: gates are cleared, but the run begins on Ed's explicit go.)*
+
+All background work stopped cleanly (the final-canonical run and the
+fresh-pass reviewer were killed mid-run — BOTH GATE INPUTS ARE
+UNSATISFIED and must be rerun from scratch). S5 is COMPLETE and landed
+(freeze-0003 ×3 verified; confirmation table filled; branch pushed @
+75cb868 incl. the S6 bookkeeping: kernel transaction green, T12/T13 run
+report, README blurb). NO MERGE HAS OCCURRED.
+
+**The complete pre-merge gate list for the successor (corrected — Ed
+caught the omission):**
+1. Final canonical FULL GREEN at the merge head (rerun; ~46 min).
+2. Fresh-pass review over d59d36f..<the merge head> — SATISFIED
+   2026-08-19 night: CLEAN through b92b43d, all claim-bearing digests
+   recomputed and matched (report:
+   docs/process_traces/2026-08-19-prep-sprint/merge-freshpass.md);
+   commits after b92b43d are the fix-round of that report's own
+   bookkeeping findings + prep landings and carry no pack/receipt bytes.
+3. **The D-144 BIG-design pre-merge seat pass** — terra+Opus debate over
+   the implemented S0–S5 artifact, Fable ruling on findings.
+   POOL-GATED (~23:22). This is a ruled requirement of D-146/D-147's own
+   classification, not optional.
+4. Then the merge wave under D-148.2 (gate-authorized; no Ed wait).
+
+Also queued at pool-return: the D-148.5 council pass on the five R1
+row-registry reserved values. The run report's canonical addendum is
+still a placeholder — fill it from gate input 1.
+
+## ▶▶ T13 CHECKPOINT (2026-08-19 late evening) — CLEARED-CONTEXT RESUME POINT; READ THIS BLOCK THEN docs/process/ed-s5-mint-decision-2026-08-19.md
+
+**Ed ruled seven decisions in-session — ALL RECORDED as D-148** (decision
+log index + body; memories updated: merge-authority, ed-hardware). The
+operative ones for a fresh session:
+
+- **S5 mints:** Ed chose the settings-rule route (D-148.1), but the
+  classifier also blocks Claude from WRITING the rule — it needs ED'S
+  HANDS (30 s; exact snippet now at the top of the S5 packet). Once the
+  rule exists: run the six commands (U11 projection ×3 then freeze-0003
+  ×3, ONE AT A TIME, commit per step, D-078 no-retry on any refusal) at
+  /Users/edr/JouleWise-measurement-20260818 (branch checked out there,
+  ahead-synced through S4 @ 3a75a770 + landed on origin), then verify
+  receipts (path-binding to the measurement checkout, status PASS,
+  receipt_id freeze-0003, predecessor triple matching the packet's
+  freeze-0002 shas), then land by `git pull --ff-only
+  file:///Users/edr/JouleWise-measurement-20260818 impl/r2-s0-mint-resolver`
+  from a dev worktree (NEVER push from the measurement checkout), then
+  fill the packet's three [PENDING MINT] confirmation rows. HARD
+  DEADLINES: evidence dies ~2026-08-20T16:51Z or on ANY REBOOT.
+- **Merges (D-148.2):** gate-authorized. When the S6 gate shape is green
+  (review of final head + CI + fresh pass over post-review commits),
+  merge impl→integration/phase2-transaction→main WITHOUT waiting for Ed.
+- **Quiet windows (D-148.4):** lead-delegated whenever no hands are
+  needed at the machine — schedule and run at lead discretion. Hands/
+  sudo/reboots stay Ed's.
+- **R1 registry values (D-148.5):** Ed defers to council — run the
+  co-design/council pass (Codex pool returns ~23:22 tonight; terra/luna
+  seats per the roster in T11) over the five reserved values (three
+  proposed = the `_v3` pack ids), then install the row registry (queued
+  kernel row, kernel-transaction discipline).
+- **Limitations (D-148.6/.7):** the in-process-adversary family and the
+  748-bundle anchor-v2 population are ACCEPTED/REGISTERED — recorded in
+  CLAIMS_STATUS.md; fold into the paper's §7 at the next docs touch (the
+  anchor-v2 paragraph already exists there; add the registered status).
+
+**AFTER S5, the remaining close (S6) is:** kernel rows (state_kernel
+M7/M8 + transaction row — consistency-sweep findings in
+docs/process_traces/2026-08-19-refreeze-execution/reports/consistency-sweep.md)
+→ T12/T13 run report (docs/run_reports/) → final canonical FULL GREEN at
+the closed head → README activity blurb → gate shape → MERGE WAVE
+(pre-authorized). Then: council on registry values; the profiler pilot +
+first v3 quiet windows under D-148.4; Ed-owed residue (family marker
+retrofit, A4 markers, env-fingerprint semantics — batch packet).
+
+**Everything else about this session** (what S0–S4 are, custody layout,
+the guide/paper rewrite + writing standard, discipline notes) is in the
+T12-FINAL block directly below — read it next.
+
+## ▶▶ T12-FINAL CHECKPOINT (2026-08-19 evening; Codex pool EXHAUSTED until ~23:22 local) — SUCCESSOR STARTS HERE
+
+**THE TWO CLOCKS THAT MATTER:**
+1. **S5 freeze mints are Ed-gated** (classifier block; packet
+   `docs/process/ed-s5-mint-decision-2026-08-19.md` has the three options
+   and exact commands). The S4 evidence EXPIRES ~2026-08-20T16:51Z and
+   DIES ON ANY REBOOT (boot session da90818c…). **NO REBOOTS** until the
+   mints land or Ed chooses re-authoring.
+2. **Codex (terra/luna/Sol) usage exhausted until ~23:22 tonight.** Nothing
+   in the remaining transaction needs Codex (S5 = Ed + lead; S6 = lead +
+   Opus seats); future gauntlet rounds do.
+
+**STATE (branch impl/r2-s0-mint-resolver, everything pushed):** the D-147
+transaction is EXECUTED THROUGH S4 — S0 resolver / S1 anchor-v3 capture
+flip + p2-038.3 era system + claim barrier + D-079 r5→r6 (both
+neutrality-proven 19/19, r6 live, sha 0227bca3…) / S2 goldens (mint suite
+FULL GREEN) / S3 `_v3` family emitted bound-to-r6-at-birth / S4 evidence
+33/33 PASS authored at the measurement checkout (its git state: branch
+checked out, S4 commit landed to origin via pull). Canonical at the
+S1-clean head: 3,755 ran, docs-freshness-only red (now cured by the
+README fix). Full execution custody (lens reports, delta audits, fix
+reports, r5/r6 issuance + neutrality proofs, S4 manifest, suite logs):
+`docs/process_traces/2026-08-19-refreeze-execution/`. Rulings + co-design
+corpus + r6 amendment: `docs/process_traces/2026-08-19-r1-r2-codesign/`.
+
+**DOCS (Ed-driven, advisor-facing):** instrument guide fully rewritten to
+Ed's writing standard (global CLAUDE.md §Writing standard; memory
+`explainer-docs-plain-language-debt` — READ BOTH before writing ANY
+explainer prose); paper enriched + plain-language pass; the pulse-fit
+worked-example page is committed at
+`docs/guides/figures/pulse-example.html` and published at
+https://claude.ai/code/artifact/08ae099a-5dd1-409e-a88e-257ffb3697cf.
+Guide+paper are synced to main (docs-ahead-of-code, noted in the commits).
+
+**SUCCESSOR ORDER:**
+1. If Ed has ruled on S5: execute per the packet (U11 projection ×3 →
+   freeze-0003 ×3 at /Users/edr/JouleWise-measurement-20260818, one commit
+   per step, NO retries on refusals) → land via pull-from-measurement-
+   checkout → lead verifies every receipt (path-binding, PASS, ordinal
+   0003, predecessor triple vs the T10 table) → fill the confirmation
+   table's three [PENDING MINT] rows.
+2. S6 close: kernel rows under kernel-transaction discipline
+   (state_kernel M7/M8 from the consistency sweep + a transaction row);
+   T12 run report (docs/run_reports/, records the mint outcome); final
+   canonical FULL GREEN at the closed head; README activity blurb; then
+   the merge path (impl/r2-s0-mint-resolver → integration/phase2-
+   transaction → main per rule-4/D-072 gates).
+3. Ed-owed beyond S5: family marker (recommend: retrofit co-design),
+   R1 row-registry reserved values (3/5 supplied = the `_v3` ids), A4
+   markers, env-fingerprint semantics, anchor-v2 population disposition
+   (recommend the registered-limitation paragraph), exact-byte
+   confirmation.
+
+**Worktrees:** this session's scratchpad (cbd9b7b5…) dies with it — all
+load-bearing content is now committed; wtS0 (branch), wtTXN, wtCANON,
+wtDOCS and the lens/delta trees are disposable. The measurement checkout
+is AHEAD-synced (S4 landed) and must not be reset.
+
+**Discipline notes (session additions):** never `| tail` a discriminating
+suite run (bitten again this session — full log to a file, then grep);
+implementation codex runs need `-s workspace-write` and prompt WRITE_SCOPE
+as inline JSON; linked-worktree git metadata is outside codex sandboxes —
+the lead commits; glossing passes cluster their factual errors in the NEW
+glosses — fidelity-check those specifically.
+
+## ▶▶ T12b (2026-08-19 midday) — TRANSACTION EXECUTED THROUGH S4; S5 MINTS BLOCKED ON A PERMISSION RULING (ED)
+
+READ FIRST: docs/process/ed-s5-mint-decision-2026-08-19.md — the ONE
+blocking decision (classifier blocks the mint scripts; three options; the
+S4 evidence expires ~2026-08-20T16:51Z and DIES ON REBOOT).
+
+State on impl/r2-s0-mint-resolver @ 3a75a77 (pushed): S0 resolver + S1
+capture flip (p2-038.3, claim barrier, D-079 r5→r6 chain, both
+neutrality-proven 19/19) + S2 goldens (mint suite FULL GREEN, first of the
+cycle) + S3 _v3 family emission (bound r6 at birth; _v1/_v2 byte-preserved)
++ S4 evidence ×3 (33 receipts PASS at the measurement checkout, landed) —
+each stage through the C-028 gauntlet (two-lens reviews, fix rounds with
+delta re-audits, magistrate final reviews; custody
+docs/process_traces/2026-08-19-r1-r2-codesign/ + session scratchpad
+r5-issuance/, r6-issuance/, s2-goldens/, s4/). Canonical at the S1-clean
+head: 3,755 ran; residual reds now only docs-freshness (S6) after the
+three-window fixture fix + residue round; the evidence-author pair cured
+at S3. Remaining: S5 freeze-0003 ×3 (BLOCKED on Ed; procedure + exact
+commands in the packet) → S6 docs/canonical FULL GREEN → the r6
+confirmation table (draft in the packet, three [PENDING MINT] rows).
+
+## ▶▶ T12 (2026-08-19) — R1/R2 CO-DESIGN RULINGS RATIFIED; CYCLE RESUMES UNDER THEM
+
+*(Superseded detail: this block's r5 references predate the r6 reissue —
+the live generation is r6; see T12b above and
+`docs/process_traces/2026-08-19-r1-r2-codesign/15-amendment-r6.md`.)*
+
+The two rulings that parked the re-freeze cycle at steps 3-6 are RATIFIED
+under the co-design protocol (now minted D-144; first application, protocol
+validated — both debates produced executed refutations of seat positions
+and of the magistrate's briefs). Custody:
+`docs/process_traces/2026-08-19-r1-r2-codesign/` (14 files, reading order).
+Rulings: D-146 (R1, `13-r1-ruling.md`) and D-147 (R2, `14-r2-ruling.md`);
+generation record + t-quantile note minted D-145.
+
+**What changed vs the parked brief:** (1) the flip mandates a
+science-neutral D-079 r5 in the SAME COMMIT (r4 pins the adapter bytes);
+(2) the `_v3` family binds r5 AT BIRTH (the emission-time file-sha pin
+would not catch a later retarget); (3) parked step 6 is AMENDED —
+freeze-0003 mints on the NEW `_v3` roots, chained to the untouched `_v2`
+freeze-0002 receipts; no freeze-0002 re-mint anywhere; (4) the `_v2`
+generators are frozen pack content and are READ-ONLY — `_v3` is emitted by
+the unedited generators then draft-retargeted; (5) the canonical red
+`embeds_allowance_once` roots in the shared test helper (executed proof),
+fixed BEFORE the flip; (6) a mechanical claim barrier (one shared
+predicate, new engine reason `capture_pipeline_superseded`) is part of the
+flip — no such barrier exists today (executed: all 769 window summaries
+pass the reducer-version barrier).
+
+**Execution order (D-147 S8, binding):** S0 R2 kernel (resolver/rewiring/
+schema/genesis rename) → S1 R1 flip + r5 (one commit) → S2 goldens once →
+S3 `_v3` emission + retarget + checks → S4 evidence re-author ×3 → S5
+freeze-0003 ×3 (LAST acceptance-bearing step, at
+/Users/edr/JouleWise-measurement-20260818) → S6 docs → canonical FULL
+GREEN → Ed's v3 confirmation table (now carries r5 identities).
+Implementation runs the full C-028 gauntlet per stage; Fable final review;
+one more two-seat pass over the implemented artifact pre-merge (BIG).
+
+**Ed-owed (delta from T11 list):** the confirmation table basis moves
+r4 → r5; family-marker ruling recommendation = `_v3` lands first, marker
+retrofits via its own co-design pass; R2 supplies three of the five R1
+row-registry reserved values (`successor_pack_ids` = the `_v3` ids);
+stored-anchor-v2 population disposition (registered limitation vs barrier
+alone — magistrate recommends the limitation paragraph).
+
+## ▶▶ T11 CHECKPOINT (2026-08-18 late evening — Ed-ordered session checkpoint; SUCCESSOR STARTS HERE)
+
+**Ed's directive at checkpoint:** fresh session, point at RUN_STATE. Roster:
+sparing Sol; Fable+Opus liberally; terra xhigh / luna max as Codex seats;
+watch the Codex pool (ledger blind — count runs). CO-DESIGN RULE (D-144
+pending mint): independent Sol(or terra)+Opus designs → bounded debate →
+Fable ruling → gauntlet → Fable final review; big designs get one more
+debate pass post-review.
+
+**State:** everything through the anchor-v3 arc is committed/pushed on
+`integration/phase2-transaction`. Read IN ORDER: (1)
+docs/process_traces/2026-08-18-t10-t11-working-notes/trace-notes.md — the
+full two-day trace; (2) docs/process_traces/2026-08-18-anchor-v3-science-review/
+— the ratified science; (3) the morning packet + ed-confirmation docs.
+Day-2 arc: knife-edge anchor root-caused → anchor-v3 (set-membership,
+cold-reviewed, 7 conditions executed) → corpus n=17 r3 issued (screens
+TIGHTENED) → capture activation + science-neutral r4 (bb81323) → THE
+ATOMIC RE-FREEZE CYCLE WAS MID-EXECUTION at checkpoint (an Opus agent was
+executing: fan-out to floor-mint/detection-floor/pack generators →
+regenerate 3 _v2 packs → evidence re-author → freeze-0002 re-mints AT
+/Users/edr/JouleWise-measurement-20260818 (path-binding!) → canonical
+suite → confirmation table to docs/process/ed-confirmation-2026-08-18-v3.md).
+CHECK `git log` on the branch: whatever the agent landed is durable;
+resume the cycle from its last commit against the brief recorded in
+trace-notes.md (§"Conditions executed + budget ruling + generation
+launch" and after). Fan-out list: the f4d5ea7/2de24b0 commit messages +
+the generation report's enumeration (test_mint_floor_artifact_generalized
+must return to full green; canonical FULL GREEN is the bar).
+
+**Then (the night plan Ed licensed):** quiesce fleet → quiet block 1:
+v3-native calibration captures (update the shakedown clone
+/Users/edr/JouleWise-window-custody/shakedown-20260818/clone to the final
+head first; driver + pristine-ledger pattern in the working-notes dir) →
+quiet block 2: the GSM8K profiler pilot (~64 min; branch
+pilot/gsm8k-harness @ f0c4399 in the wtS-scout worktree; RUN_CARD in
+docs/process_traces/2026-08-18-gsm8k-profiler-pilot/; dry-run validated;
+lead launches live) → morning reductions + Ed's confirmation.
+
+**Ed-owed rulings (accumulated):** the v3 confirmation table (supersedes
+packet §3); family-marker particulars; R1 registry reserved values (five
+items); profiler memo open Qs (cap-terminated completions; prompt style);
+A4 contrast markers; environment-fingerprint semantics. Decision-log
+minting owed: D-144 (co-design rule), the r3/r4 generation entry, the
+t-quantile note, the load-sensitive determinism test queue item.
+
+**Worktree map:** wtTXN (scratchpad, branch checked out) — the successor
+should create its OWN worktrees; the scratchpad path dies with the old
+session but all content is committed. Measurement checkout =
+/Users/edr/JouleWise-measurement-20260818 (freeze mints live HERE).
+Custody: ~/JouleWise-window-custody/{shakedown-20260818,ed-qual-20260817,
+profiler-pilot-20260818}. The stale cs-pedagogy worktree removal is
+classifier-blocked — Ed can `git worktree remove --force` it.
+
+**Discipline notes for the successor:** one writer per worktree (wrapper
+rc75 lock enforces); never launch scoped codex runs into a tree with ANY
+other writer including yourself; agents must not launch Sol; quiet blocks
+mean ZERO tool calls mid-capture; pipe-masking on discriminating runs is
+forbidden; the D-078 no-retry discipline covers every refused capture.
 
 ## ▶▶ T12 POINTER (2026-08-19 evening) — ACTIVE WORK IS ON `impl/r2-s0-mint-resolver`
 
@@ -3686,7 +4135,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-17). Latest report: [T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED](docs/run_reports/2026-08-16-t9-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-19). Latest report: [T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings](docs/run_reports/2026-08-19-t12-t13-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -3694,11 +4143,11 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [QUIET-MAC]
 
-- GATED — Q2 `D117-W-ALPHA` (excluded by: WINDOW-COUNCIL-GATE): Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v1 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.
+- GATED — Q2 `D117-W-ALPHA` (excluded by: WINDOW-COUNCIL-GATE): Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v3 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.
 
 ### [AGENT]
 
-- READY — A1 `WO-LAUNCH-BINDING`: Bind arm-capability consume to immediate frozen-chain exec and require authenticated launch-consumption provenance at downstream claim consumers.
+- CONTINUE — A63 `REFREEZE-D147-CLOSE`: Close the executed D-147 re-freeze transaction: final canonical FULL GREEN at the frozen head, then the gate-authorized merge wave to main; council pass on the five R1 registry reserved values at pool return.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

@@ -1,0 +1,36 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "estimator_registry_projection",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-estimator-identity-v1",
+  "facts": [
+    {
+      "fact_id": "desk.estimator_identity.v1",
+      "source_kind": "PACK",
+      "source_path": "arm_readiness.sources/estimator-identity.json",
+      "source_sha256": "7d0bd63d32927a610e17c30723123e00c96496451160443ccea2091cc8b68152",
+      "value": {
+        "admitted_by_mint_registry": true,
+        "cli_estimator_id_accepted": false,
+        "estimator_id_derived_from_frozen_plan": true
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "1d3873bb7a37e9363202429f14587c85a0b4efc0",
+  "issued_at_utc": "2026-08-19T16:52:23.588950Z",
+  "kind": "ESTIMATOR_IDENTITY",
+  "pack_sha256": "07dff08b32006a0fc4be4c2f853a8284c19924fcf241edf0773faad1731a9ce2",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 2468792444508708
+}

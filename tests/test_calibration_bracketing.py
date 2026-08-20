@@ -21,13 +21,26 @@ from joulewise.calibration_bracketing import (
     ACCEPTANCE_BOUND_SCHEMA,
     DEFAULT_ACCEPTANCE_BOUND_PATH,
     ESTIMATOR_CODE_PATHS,
+    GENESIS_FIXTURE_ACCEPTANCE_SHA256,
     ISSUED_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_ACCEPTANCE_BOUND_PATH,
+    ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_ACCEPTANCE_ID,
+    ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R4_ACCEPTANCE_ID,
+    ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
+    ANCHOR_V3_R6_ACCEPTANCE_ID,
+    ANCHOR_V3_R5_ACCEPTANCE_ID,
     PREDECESSOR_ACCEPTANCE_BOUND_PATH,
+    SUCCESSOR_ACCEPTANCE_BOUND_PATH,
     SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
     SUCCESSOR_ACCEPTANCE_ID,
     CalibrationCandidate,
     _canonical_sha256,
+    _acceptance_artifact_sha256,
     _valid_acceptance_bound,
+    acceptance_generation_operatives,
     build_calibration_bracket_binding,
     calibration_bracket_for_bundles,
     discover_calibration_candidates,
@@ -64,6 +77,12 @@ from joulewise.powermetrics_fiducial import (
     V2_BINDING_FIELDS,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
+from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+    CLOCK_METHOD,
+    CLOCK_METHOD_V2,
+    CLOCK_METHOD_V3,
+)
 from scripts.calibration_ledger_bootstrap import (
     _issued_acceptance_artifact,
     _issued_artifact_bytes,
@@ -518,6 +537,7 @@ class CalibrationBracketingTests(unittest.TestCase):
                 "sampling_interval_ms": 100,
                 "pulse_protocol_id": PROTOCOL_ID,
                 "power_policy": "ac_high_power",
+                "anchor_method_version": ACTIVE_CAPTURE_ANCHOR_METHOD,
                 "estimator_revision": RESIDUAL_REGION_METHOD,
                 "protocol_sha256": PROTOCOL_V3_SHA256,
             }
@@ -562,16 +582,32 @@ class CalibrationBracketingTests(unittest.TestCase):
 
         self.assertIsNotNone(artifact)
         self.assertEqual(artifact["artifact_role"], "issued")
-        # The live default is the ACTIVE generation.  Since the D-138 reissue
-        # it is the successor artifact; the D-116 initial issuance keeps its own
-        # registered pin and is asserted separately below.
+        # The live default is the ACTIVE generation.  Since the S1 fix-round
+        # barrier/taxonomy pin moves it is the n=17 r6 generation; all
+        # retained earlier generations keep their own registered pins and are
+        # asserted below.
         self.assertEqual(
-            hashlib.sha256(raw).hexdigest(), SUCCESSOR_ACCEPTANCE_BOUND_SHA256
+            hashlib.sha256(raw).hexdigest(), ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256
         )
-        self.assertEqual(artifact["acceptance_id"], SUCCESSOR_ACCEPTANCE_ID)
+        self.assertEqual(artifact["acceptance_id"], ANCHOR_V3_R6_ACCEPTANCE_ID)
+        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             hashlib.sha256(PREDECESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
             ISSUED_ACCEPTANCE_BOUND_SHA256,
+        )
+        self.assertEqual(
+            hashlib.sha256(SUCCESSOR_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
+            SUCCESSOR_ACCEPTANCE_BOUND_SHA256,
+        )
+        # r3 is RETAINED as an intermediate generation: superseded as the live
+        # default, still authenticating byte-identically under its own pin.
+        self.assertEqual(
+            hashlib.sha256(ANCHOR_V3_ACCEPTANCE_BOUND_PATH.read_bytes()).hexdigest(),
+            ANCHOR_V3_ACCEPTANCE_BOUND_SHA256,
+        )
+        self.assertEqual(
+            json.loads(SUCCESSOR_ACCEPTANCE_BOUND_PATH.read_bytes())["acceptance_id"],
+            SUCCESSOR_ACCEPTANCE_ID,
         )
         self.assertTrue(_valid_acceptance_bound(artifact))
         self.assertTrue(artifact["issuance"]["claim_eligible"])
@@ -588,6 +624,21 @@ class CalibrationBracketingTests(unittest.TestCase):
             "08456d5076c18a9a7f758969b02f5b6f7ad9fcc267dd12e2d3778c22458094d7",
         )
 
+    def test_genesis_fixture_bytes_authenticate_under_their_own_pin(self) -> None:
+        raw = _unissued_acceptance_fixture_bytes()
+        fixture = json.loads(raw)
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(), GENESIS_FIXTURE_ACCEPTANCE_SHA256
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "schema-fixture-unissued.json"
+            path.write_bytes(raw)
+            self.assertEqual(load_calibration_acceptance_bound(path), fixture)
+        self.assertEqual(
+            _acceptance_artifact_sha256(fixture),
+            GENESIS_FIXTURE_ACCEPTANCE_SHA256,
+        )
+
     def test_issued_allowance_projection_uses_exact_decimal_authority(self) -> None:
         artifact = load_calibration_acceptance_bound()
         self.assertIsNotNone(artifact)
@@ -601,8 +652,8 @@ class CalibrationBracketingTests(unittest.TestCase):
             {
                 "observed_drift_s": "0.001000",
                 "allowance_rule": "max(observed_drift_s,bracket_screen_s)",
-                "bracket_screen_s": "0.010818",
-                "applied_allowance_s": "0.010818",
+                "bracket_screen_s": "0.009724",
+                "applied_allowance_s": "0.009724",
                 "allowance_embedding_count": 1,
             },
         )
@@ -618,6 +669,72 @@ class CalibrationBracketingTests(unittest.TestCase):
                 post_exact_bound_lexeme_s="0.021000",
             )
         )
+
+    def test_generation_operatives_are_immutable(self) -> None:
+        operatives = acceptance_generation_operatives(ANCHOR_V3_R4_ACCEPTANCE_ID)
+        self.assertIsInstance(operatives, MappingProxyType)
+        self.assertIsNotNone(operatives)
+        original_screen = operatives["bracket_screen_s"]
+        try:
+            with self.assertRaises(TypeError):
+                operatives["bracket_screen_s"] = "0.010818"
+        finally:
+            if isinstance(operatives, dict):
+                operatives["bracket_screen_s"] = original_screen
+
+    def test_attempted_operatives_poisoning_does_not_accept_crosswire(self) -> None:
+        operatives = acceptance_generation_operatives(ANCHOR_V3_R4_ACCEPTANCE_ID)
+        self.assertIsNotNone(operatives)
+        original_screen = operatives["bracket_screen_s"]
+        try:
+            try:
+                operatives["bracket_screen_s"] = "0.010818"
+            except TypeError:
+                pass
+            crosswired = load_calibration_acceptance_bound()
+            self.assertIsNotNone(crosswired)
+            crosswired = json.loads(json.dumps(crosswired))
+            crosswired["decimal_derivation"]["ratified_operatives"][
+                "bracket_screen_s"
+            ] = "0.010818"
+            with self.assertRaisesRegex(
+                ValueError,
+                "supplied acceptance operatives disagree with the registered generation",
+            ):
+                acceptance_generation_operatives(
+                    ANCHOR_V3_R4_ACCEPTANCE_ID,
+                    acceptance=crosswired,
+                )
+        finally:
+            if isinstance(operatives, dict):
+                operatives["bracket_screen_s"] = original_screen
+
+    def test_malformed_supplied_operatives_refuse_at_resolver_boundary(self) -> None:
+        acceptance = load_calibration_acceptance_bound()
+        self.assertIsNotNone(acceptance)
+        malformed_shapes = (
+            ("string", "malformed"),
+            ("list", []),
+            ("null", None),
+        )
+        for container in ("decimal_derivation", "ratified_operatives"):
+            for shape, malformed in malformed_shapes:
+                with self.subTest(container=container, shape=shape):
+                    supplied = json.loads(json.dumps(acceptance))
+                    if container == "decimal_derivation":
+                        supplied["decimal_derivation"] = malformed
+                    else:
+                        supplied["decimal_derivation"][
+                            "ratified_operatives"
+                        ] = malformed
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "supplied acceptance operatives disagree with the registered generation",
+                    ):
+                        acceptance_generation_operatives(
+                            ANCHOR_V3_R4_ACCEPTANCE_ID,
+                            acceptance=supplied,
+                        )
 
     def test_issued_artifact_authenticates_and_becomes_claim_eligible(self) -> None:
         artifact = _synthetic_issued_artifact()
@@ -2028,6 +2145,96 @@ class CalibrationBracketingTests(unittest.TestCase):
             result["post"]["relative_path"].endswith("current-post")
         )
 
+    def test_v2_ledger_candidate_reports_era_rejection_not_custody_failure(self) -> None:
+        v2_bindings = dict(self.bindings)
+        v2_bindings["anchor_method_version"] = CLOCK_METHOD_V2
+        snapshot, registered = _fixture_snapshot(
+            [
+                self.candidate("retained-v2", 90.0, "0.025", bindings=v2_bindings),
+                self.candidate("current-pre", 99.0, "0.025"),
+                self.candidate("current-post", 111.0, "0.026"),
+            ]
+        )
+        by_attempt = {
+            observation.attempt_id: candidate
+            for observation, candidate in zip(snapshot.observations, registered, strict=True)
+        }
+        reader = SimpleNamespace(
+            measured_window=lambda: SimpleNamespace(start_s=100.0, end_s=110.0),
+            metadata=lambda: {"instrument_calibration": {"bindings": self.bindings}},
+        )
+        diagnostics: list[dict[str, str]] = []
+        with (
+            patch("joulewise.calibration_bracketing.BundleReader", return_value=reader),
+            patch(
+                "joulewise.calibration_bracketing._candidate_from_observation",
+                side_effect=lambda observation: by_attempt[observation.attempt_id],
+            ),
+            patch(
+                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                return_value=_current_estimator_acceptance_fixture(),
+            ),
+        ):
+            result, reasons = calibration_bracket_for_bundles(
+                Path("/caller-root"),
+                [Path("/caller-root/window-member")],
+                self.policy,
+                ledger_snapshot=snapshot,
+                diagnostics=diagnostics,
+                _allow_unissued_fixture=True,
+            )
+        self.assertNotIn("calibration_ledger_custody_invalid", reasons)
+        self.assertIn(
+            {"attempt_id": "fixture-attempt-0-instrument_validation/retained-v2", "reason": "capture_pipeline_superseded"},
+            diagnostics,
+        )
+        self.assertNotIn("candidate_discovery", result)
+
+    def test_v1_ledger_candidate_reports_era_rejection_not_custody_failure(self) -> None:
+        v1_bindings = dict(self.bindings)
+        v1_bindings["anchor_method_version"] = CLOCK_METHOD
+        snapshot, registered = _fixture_snapshot(
+            [
+                self.candidate("retained-v1", 90.0, "0.025", bindings=v1_bindings),
+                self.candidate("current-pre", 99.0, "0.025"),
+                self.candidate("current-post", 111.0, "0.026"),
+            ]
+        )
+        by_attempt = {
+            observation.attempt_id: candidate
+            for observation, candidate in zip(snapshot.observations, registered, strict=True)
+        }
+        reader = SimpleNamespace(
+            measured_window=lambda: SimpleNamespace(start_s=100.0, end_s=110.0),
+            metadata=lambda: {"instrument_calibration": {"bindings": self.bindings}},
+        )
+        diagnostics: list[dict[str, str]] = []
+        with (
+            patch("joulewise.calibration_bracketing.BundleReader", return_value=reader),
+            patch(
+                "joulewise.calibration_bracketing._candidate_from_observation",
+                side_effect=lambda observation: by_attempt[observation.attempt_id],
+            ),
+            patch(
+                "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+                return_value=_current_estimator_acceptance_fixture(),
+            ),
+        ):
+            result, reasons = calibration_bracket_for_bundles(
+                Path("/caller-root"),
+                [Path("/caller-root/window-member")],
+                self.policy,
+                ledger_snapshot=snapshot,
+                diagnostics=diagnostics,
+                _allow_unissued_fixture=True,
+            )
+        self.assertNotIn("calibration_ledger_custody_invalid", reasons)
+        self.assertIn(
+            {"attempt_id": "fixture-attempt-0-instrument_validation/retained-v1", "reason": "capture_pipeline_superseded"},
+            diagnostics,
+        )
+        self.assertNotIn("candidate_discovery", result)
+
     def test_off_ledger_candidate_refuses_even_beside_registered_pair(self) -> None:
         candidates = [
             self.candidate("pre", 99.0, "0.025"),
@@ -2222,10 +2429,10 @@ class CalibrationBracketingTests(unittest.TestCase):
     def test_acceptance_artifact_rederives_from_decimal_member_table(self) -> None:
         artifact = load_calibration_acceptance_bound()
         self.assertIsNotNone(artifact)
-        self.assertEqual(artifact["derivation_corpus"]["n"], 19)
+        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         self.assertEqual(
             artifact["decimal_derivation"]["source_statistics"]["range_s"],
-            "0.010817749309353528",
+            "0.00972358928879385",
         )
         tampered = json.loads(json.dumps(artifact))
         tampered["derivation_corpus"]["members"][0]["b_fiducial_s"] = "0.030"
@@ -2306,27 +2513,18 @@ class CalibrationBracketingTests(unittest.TestCase):
             ],
         )
 
-    def test_hash_rekeyed_candidate_cannot_bypass_binding_authentication(self) -> None:
+    def test_candidate_admission_requires_active_v3_method(self) -> None:
         # H2 validity defect shape: rewriting a binding and then rehashing the
         # evidence/manifest must not create an authenticated bracket endpoint.
         bindings = dict(self.bindings)
         bindings.update(
             {
-                "anchor_method_version": (
-                    "powermetrics_native_second_censored_intersection_v1"
-                ),
+                "anchor_method_version": CLOCK_METHOD_V3,
                 "pulse_protocol_id": PROTOCOL_ID,
                 "protocol_sha256": PROTOCOL_V3_SHA256,
                 "estimator_revision": RESIDUAL_REGION_METHOD,
             }
         )
-        canonical = json.dumps(
-            bindings,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8")
         events = b'{"timestamp_s":99.0}\n'
         raw = b"authenticated-by-patched-physics"
         evidence = {
@@ -2345,7 +2543,7 @@ class CalibrationBracketingTests(unittest.TestCase):
             "bindings": bindings,
             "binding_evidence": {
                 "schema_version": "joulewise.instrument_binding_evidence.v1",
-                "binding_vector_sha256": hashlib.sha256(canonical).hexdigest(),
+                "binding_vector_sha256": "",
                 "powermetrics_binary": {
                     "path": "/usr/bin/powermetrics",
                     "sha256": bindings["powermetrics_sha256"],
@@ -2364,7 +2562,20 @@ class CalibrationBracketingTests(unittest.TestCase):
             (directory / "events.jsonl").write_bytes(events)
             (directory / "raw/powermetrics.plist").write_bytes(raw)
 
-            def write_evidence_and_manifest() -> None:
+            def write_evidence_and_manifest(
+                *, refresh_binding_vector: bool = True
+            ) -> None:
+                if refresh_binding_vector:
+                    canonical = json.dumps(
+                        evidence["bindings"],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    ).encode("utf-8")
+                    evidence["binding_evidence"]["binding_vector_sha256"] = (
+                        hashlib.sha256(canonical).hexdigest()
+                    )
                 evidence_raw = json.dumps(evidence, sort_keys=True).encode()
                 (directory / "instrument_evidence.json").write_bytes(evidence_raw)
                 artifacts = {
@@ -2397,8 +2608,19 @@ class CalibrationBracketingTests(unittest.TestCase):
                 )
                 self.assertIsNotNone(candidate)
                 self.assertEqual(candidate.b_fiducial_s, "0.02")
-                evidence["bindings"]["hardware_model"] = "tampered-model"
+                self.assertEqual(
+                    candidate.bindings["anchor_method_version"], CLOCK_METHOD_V3
+                )
+                evidence["anchor_method_version"] = CLOCK_METHOD_V2
+                evidence["bindings"]["anchor_method_version"] = CLOCK_METHOD_V2
                 write_evidence_and_manifest()
+                self.assertIsNone(
+                    load_calibration_candidate(directory, runs_root=root)
+                )
+                evidence["anchor_method_version"] = CLOCK_METHOD_V3
+                evidence["bindings"]["anchor_method_version"] = CLOCK_METHOD_V3
+                evidence["bindings"]["hardware_model"] = "tampered-model"
+                write_evidence_and_manifest(refresh_binding_vector=False)
                 self.assertIsNone(
                     load_calibration_candidate(directory, runs_root=root)
                 )

@@ -1,0 +1,296 @@
+{
+  "arm_disposition": "NOT_APPLICABLE",
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "evidence": [
+    {
+      "evidence_id": "freeze-acceptance-owner-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-acceptance-owner.json",
+      "receipt_kind": "ACCEPTANCE_OWNER",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "11bfa2fd6d3ff568951d56fb25471b3cb627bdd5786241c6f8046011e1975796",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-doctrine-pin-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-doctrine-pin.json",
+      "receipt_kind": "DOCTRINE_PIN",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "0e56dbdc9ac890d9b083899742638c682fd6fe823bf30762202d47e8090849a1",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-estimator-identity-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-estimator-identity.json",
+      "receipt_kind": "ESTIMATOR_IDENTITY",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "4b93c836ed2b734a43dd0fdefa6f5819b441a3df9f9e1fe8ea175fc4101deb6f",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-mint-trust-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-mint-trust.json",
+      "receipt_kind": "MINT_TRUST",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "441b95a0ff19dc42a9c111c9e4bd79a5a8d897670ad8e3608db35bfff294c9de",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-multicell-mint-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-multicell-mint.json",
+      "receipt_kind": "MULTICELL_MINT",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "fd06a0a91239e877a7c28b922d940a364aca108498da83659afed691d27e519e",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-pack-authentication-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-pack-authentication.json",
+      "receipt_kind": "PACK_AUTHENTICATION",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "b9bf943d6a0e08d1dc94598643640b7ad7f32f2e87a89df3b8ff54f1b2eef2a2",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-pack-family-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-pack-family.json",
+      "receipt_kind": "PACK_FAMILY",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "69ad8185c091a0cf54e20586848b686a00b1a1becee987dc52c4d3ff433d84ad",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-reason-code-coverage-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-reason-code-coverage.json",
+      "receipt_kind": "REASON_CODE_COVERAGE",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "afa6e3a97f2efd0d628e94fe8d6e98d03f941262b282553b368d4bb2291ecb31",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-receipt-oracle-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-receipt-oracle.json",
+      "receipt_kind": "RECEIPT_ORACLE",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "8b67fc91d52c8119d3f76aade931e948fe074633f6e30b23add11e192336b0ec",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-recovery-ledger-test-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-recovery-ledger-test.json",
+      "receipt_kind": "RECOVERY_LEDGER_TEST",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "f0fee6227e05ec9df20ee5043216f8bcc8383149d6bbe55f1ef470d7c5b5d10b",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "freeze-three-window-regression-v1",
+      "namespace": "PACK",
+      "path": "arm_readiness.evidence/evidence-three-window-regression.json",
+      "receipt_kind": "THREE_WINDOW_REGRESSION",
+      "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+      "sha256": "272f7603517a0e22ca641a07d2a7130afb6a86977d1f965bfbf1714e004e297a",
+      "status": "PASS"
+    },
+    {
+      "evidence_id": "u11-freeze-projection",
+      "namespace": "PACK",
+      "path": "identity_pin_projection.receipts/projection-0001.json",
+      "receipt_kind": "freeze_projection",
+      "schema_version": "joulewise.identity_pin_projection_receipt.v1",
+      "sha256": "5baacdd46787189b971a04e62c1d19c3d02e0f1edaeccc28342025f65bfd5720",
+      "status": "PASS"
+    }
+  ],
+  "issued_at_utc": "2026-08-20T00:27:50.728143Z",
+  "pack_identity": {
+    "pack_id": "d117_floor_qwen25_1p5b_v3",
+    "pack_root": "/Users/edr/JouleWise-measurement-20260818/configs/campaigns/d117_floor_qwen25_1p5b_v3",
+    "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3",
+    "plan_path": "calibration_plan.json",
+    "plan_sha256": "9ab4776f3c416284d6d01a5a49587eedcdfbcb8ef61428cdc1046e9b9d74a072",
+    "window_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3"
+  },
+  "predecessor": {
+    "evidence_set_sha256": "15c5c24ad1163922fe41c97a9a5af9c733cad593657fa39c4546412beca7a1c6",
+    "freeze_receipt": {
+      "path": "arm_readiness.freeze.receipts/freeze-0002.json",
+      "receipt_id": "freeze-0002",
+      "sha256": "1277103b42090f3ce41df0e030a2a5f2a3998598efec12fef812ca5b36b89666"
+    },
+    "identity_receipt": {
+      "path": "identity_pin_projection.receipts/projection-0001.json",
+      "receipt_id": "d117_floor_qwen25_1p5b_v2/projection-0001",
+      "sha256": "92e2249da501a534140b15ce879c47a2eaa904f711a448c34b5e32843544e3e4"
+    },
+    "pack_digest_algorithm": "joulewise.committed_pack_tree_sha256.v1",
+    "pack_id": "d117_floor_qwen25_1p5b_v2",
+    "pack_path": "configs/campaigns/d117_floor_qwen25_1p5b_v2",
+    "pack_sha256": "95f7c51ca4f2833a69d2767e9a35fcbf028365332edeb36d1b43d73b6eea31b9",
+    "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2",
+    "plan_sha256": "ac7bd19fb538aa678b33d71bfbab6a0893b7ecbd6231323b9e9eebf2e30bb545"
+  },
+  "receipt_id": "freeze-0003",
+  "receipt_kind": "freeze",
+  "refusals": [],
+  "row_registry": {
+    "path": "configs/arm_readiness/d117_row_registry_v1.json",
+    "plan_profile": "ALPHA",
+    "registry_id": "d117-row-registry-v1",
+    "sha256": "d248fdc521cb904b7ad8f1c4ecb834f7810a1d8f39697b462591f2feac39a2e5"
+  },
+  "rows": [
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-doctrine-pin-v1"
+      ],
+      "predicate_id": "clock.restore_recipe.v1",
+      "row_id": "clock.restore_recipe",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-acceptance-owner-v1"
+      ],
+      "predicate_id": "desk.acceptance_owner.v1",
+      "row_id": "desk.acceptance_owner",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "NOT_APPLICABLE",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [],
+      "predicate_id": "desk.acceptance_successor.v1",
+      "row_id": "desk.acceptance_successor",
+      "verdict": "NOT_APPLICABLE"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-doctrine-pin-v1"
+      ],
+      "predicate_id": "desk.arming_procedure.v1",
+      "row_id": "desk.arming_procedure",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-pack-authentication-v1"
+      ],
+      "predicate_id": "desk.current_pack.v1",
+      "row_id": "desk.current_pack",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-estimator-identity-v1"
+      ],
+      "predicate_id": "desk.estimator_identity.v1",
+      "row_id": "desk.estimator_identity",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "u11-freeze-projection"
+      ],
+      "predicate_id": "desk.identity_pin_projection.v1",
+      "row_id": "desk.identity_pin_projection",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-mint-trust-v1"
+      ],
+      "predicate_id": "desk.mint_trust.v1",
+      "row_id": "desk.mint_trust",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-multicell-mint-v1"
+      ],
+      "predicate_id": "desk.multicell_mint.v1",
+      "row_id": "desk.multicell_mint",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-pack-family-v1"
+      ],
+      "predicate_id": "desk.pack_family.v1",
+      "row_id": "desk.pack_family",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-reason-code-coverage-v1"
+      ],
+      "predicate_id": "desk.reason_code_plumbing.v1",
+      "row_id": "desk.reason_code_plumbing",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-receipt-oracle-v1"
+      ],
+      "predicate_id": "desk.receipt_oracle.v1",
+      "row_id": "desk.receipt_oracle",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-recovery-ledger-test-v1"
+      ],
+      "predicate_id": "desk.recovery_ledger_path.v1",
+      "row_id": "desk.recovery_ledger_path",
+      "verdict": "PASS"
+    },
+    {
+      "applicability": "REQUIRED",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "evidence_ids": [
+        "freeze-three-window-regression-v1"
+      ],
+      "predicate_id": "desk.three_window_regression.v1",
+      "row_id": "desk.three_window_regression",
+      "verdict": "PASS"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_freeze_receipt.v2",
+  "status": "PASS"
+}

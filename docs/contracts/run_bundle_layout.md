@@ -642,6 +642,29 @@ replays stay byte-frozen):
   Interval-support traces keep both interpolation terms exactly 0; point
   traces combine conservatively and never double-count.
 
+### D-079 additive era: `p2-038.3` and the rate-aware anchor
+
+Prospective capture records `uncertainty_evidence.schema_version` as
+`p2-038.3` and `clock_anchor.method` as
+`powermetrics_native_second_rate_aware_set_membership_v1`.  The method is the
+sole reconstruction dispatch key: schema labels are checked against its closed
+method-to-schema map and a crossed, missing, or unknown pair refuses with
+`clock_anchor_era_inconsistent`.  The v3 derivation fits the admissible affine
+wall-rate set from native whole-second constraints and paired clock stamps; it
+records the midpoint of the admissible rate-aware anchor interval and retains
+the set-membership bound.  It requires the registered baseline and rollover
+conditions, so insufficient evidence remains `status: unknown` rather than
+silently using a v2 estimate.
+
+Stored `p2-038.1` and `p2-038.2` evidence remains replayable by its recorded
+method and is never relabelled.  It is nevertheless superseded for new
+claim-bearing analysis: only the v3 method is claim-bearing, and consumers
+report `capture_pipeline_superseded` for another stored capture method.  New
+campaign admission requires exact equality with the active v3 schema/method
+identity.  Missing controller evidence is explicitly incomplete and carries
+`capture_pipeline_absent`; readers must not synthesize an era label from
+other metadata.
+
 ## Summary Metrics Minimum Fields
 
 Summary completion is status-specific and enforced by the shared bundle

@@ -51,6 +51,7 @@ from joulewise.powermetrics_fiducial import (
     van_der_corput,
     window_license_min_duration_s,
 )
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
 from scripts.validate_powermetrics_fiducial import (
     trim_trace_after_warmups,
     verify_frozen_protocol,
@@ -197,7 +198,9 @@ class ScheduleTests(unittest.TestCase):
     ) -> None:
         from tests.test_reduce import self_consistent_calibration
 
-        evidence, raw, events = self_consistent_calibration()
+        evidence, raw, events = self_consistent_calibration(
+            protocol_id=PROTOCOL_V2_ID
+        )
         valid = fiducial_module.rederive_detection_from_artifacts(
             raw,
             events,
@@ -244,6 +247,98 @@ class ScheduleTests(unittest.TestCase):
                     monotonic_resolution_s=-2e-6,
                 )
             )
+
+
+class ActiveCaptureMethodTests(unittest.TestCase):
+    def test_capture_clock_dispatch_emits_active_schema_and_tracks_registry(
+        self,
+    ) -> None:
+        from joulewise.uncertainty_evidence import (
+            CLOCK_METHOD_V2,
+            CLOCK_METHOD_V3,
+            SCHEMA_VERSION_V2,
+            SCHEMA_VERSION_V3,
+        )
+        from tests.test_uncertainty_evidence import AnchorV3ExactTests
+
+        fixture = AnchorV3ExactTests()
+        stamps = fixture.stamps()
+        records = fixture.records()
+
+        evidence, point = validation_script._derive_active_capture_clock_evidence(
+            stamps=stamps, records=records
+        )
+        self.assertEqual(evidence["schema_version"], SCHEMA_VERSION_V3)
+        self.assertEqual(evidence["clock_anchor"]["method"], CLOCK_METHOD_V3)
+        self.assertIsNotNone(point)
+        detection = validation_script._label_active_capture_detection(
+            fiducial_module.FiducialDetection(
+                baseline_w=None,
+                robust_sigma_w=None,
+                fits=(),
+                spurious_plateau_count=0,
+                all_pulses_detected=False,
+                b_fiducial_s=None,
+                residual_median_s=None,
+                residual_p95_s=None,
+            ),
+            evidence,
+        )
+        self.assertEqual(detection.anchor_method, CLOCK_METHOD_V3)
+        self.assertEqual(detection.derivation_role, "prospective")
+
+        with patch.object(
+            validation_script, "ACTIVE_CAPTURE_ANCHOR_METHOD", CLOCK_METHOD_V2
+        ):
+            historical, _historical_point = (
+                validation_script._derive_active_capture_clock_evidence(
+                    stamps=stamps, records=records
+                )
+            )
+            historical_detection = (
+                validation_script._label_active_capture_detection(
+                    detection, historical
+                )
+            )
+        self.assertEqual(historical["schema_version"], SCHEMA_VERSION_V2)
+        self.assertEqual(historical["clock_anchor"]["method"], CLOCK_METHOD_V2)
+        self.assertEqual(historical_detection.anchor_method, CLOCK_METHOD_V2)
+
+    def test_planned_t1_projection_tracks_active_capture_method(self) -> None:
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V2, CLOCK_METHOD_V3
+
+        planned_epoch = {
+            "os_build": "test-build",
+            "hardware_model": "test-model",
+        }
+        with patch.object(
+            validation_script,
+            "sha256_path",
+            side_effect=["sampler-digest", "protocol-digest"],
+        ):
+            projected = validation_script._planned_t1_bindings(
+                planned_epoch=planned_epoch,
+                sampler_binary=Path("/test/powermetrics"),
+                mlx_version="test-mlx",
+            )
+        self.assertEqual(projected["anchor_method_version"], CLOCK_METHOD_V3)
+
+        with (
+            patch.object(
+                validation_script, "ACTIVE_CAPTURE_ANCHOR_METHOD", CLOCK_METHOD_V2
+            ),
+            patch.object(
+                validation_script,
+                "sha256_path",
+                side_effect=["sampler-digest", "protocol-digest"],
+            ),
+        ):
+            historical = validation_script._planned_t1_bindings(
+                planned_epoch=planned_epoch,
+                sampler_binary=Path("/test/powermetrics"),
+                mlx_version="test-mlx",
+            )
+        self.assertEqual(historical["anchor_method_version"], CLOCK_METHOD_V2)
 
 
 class DetectorTests(unittest.TestCase):
@@ -585,7 +680,7 @@ class DetectorTests(unittest.TestCase):
             ),
         )
         payload = instrument_evidence(
-            outcomes[0],
+            replace(outcomes[0], anchor_method=CLOCK_METHOD_V2),
             bindings={},
             validation_id="flat-loss-budget",
             artifact_sha256={},
@@ -638,7 +733,7 @@ class DetectorTests(unittest.TestCase):
 
         def evidence_payload(detection):
             return instrument_evidence(
-                detection,
+                replace(detection, anchor_method=CLOCK_METHOD_V2),
                 bindings={},
                 validation_id="wall-pathology-diagnostic",
                 artifact_sha256={},
@@ -827,7 +922,12 @@ class EvidenceTests(unittest.TestCase):
             (on_s + 10.0, off_s + 10.0) for on_s, off_s in pulse_schedule(3)
         ]
         trace = synthetic_trace(true_pulses, end_s=true_pulses[-1][1] + 10.0)
-        return detect_pulses(trace, commanded(true_pulses))
+        # These synthetic detector fixtures model a retained v2 calibration
+        # era.  The serializer now deliberately rejects an unstated era.
+        return replace(
+            detect_pulses(trace, commanded(true_pulses)),
+            anchor_method=CLOCK_METHOD_V2,
+        )
 
     def bindings(self, **overrides):
         base = {
@@ -1446,17 +1546,23 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
 
 class FrozenProtocolTests(unittest.TestCase):
     def test_preflight_screen_is_derived_bit_exactly_from_real_artifact(self) -> None:
-        # The ACTIVE generation since the D-138 reissue.  The estimator-bearing
-        # branch was fail-closed while the issued pin was stale; the atomic
-        # Phase-2 acceptance/pin re-freeze is exactly what cures it, so this
-        # unit now proves the cured state end to end.
-        path = Path("configs/calibration/calibration_acceptance_d079_v2_r2.json")
+        # The ACTIVE generation since the capture-presentation reissue.  The
+        # estimator-bearing branch was fail-closed while the issued pin was
+        # stale; the atomic Phase-2 acceptance/pin re-freeze is exactly what
+        # cures it, so this unit proves the cured state end to end.
+        path = Path(
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+        )
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e",
+            "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
         )
         artifact = json.loads(raw)
+        self.assertEqual(
+            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r6"
+        )
+        self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         derivation = artifact["decimal_derivation"]
         rounding = derivation["rounding"]["preflight_level_screen"]
         expected = Decimal(
@@ -1479,22 +1585,39 @@ class FrozenProtocolTests(unittest.TestCase):
             "the branch-wide convenience value derives from the issued "
             "artifact once its estimator pin is fresh",
         )
-        # The predecessor issuance keeps its own bytes and stays stale-pinned.
-        predecessor = Path("configs/calibration/calibration_acceptance_d079_v2.json")
-        self.assertEqual(
-            hashlib.sha256(predecessor.read_bytes()).hexdigest(),
-            "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
-        )
-        with self.assertRaisesRegex(
-            validation_script._AcceptancePreflightError,
-            "acceptance_artifact_stale",
+        # Every retained predecessor generation keeps its own exact bytes and
+        # stays stale-pinned: a superseded generation must never be able to
+        # serve as live authority just because a caller names its path.
+        for relative, expected_sha256 in (
+            (
+                "configs/calibration/calibration_acceptance_d079_v2.json",
+                "316113960c596a6f927987dbdf8f2bca4b0cca9ee4a59a540bbd32bba9048985",
+            ),
+            (
+                "configs/calibration/calibration_acceptance_d079_v2_r2.json",
+                "3c92dd664cdf138860f2bb29e8dcf8397d5d1608b24d65e3de62a78d279e0d6e",
+            ),
         ):
-            validation_script._derive_preflight_systematic_screen_s(
-                artifact["identity_epoch"], acceptance_path=predecessor
+            predecessor = Path(relative)
+            self.assertEqual(
+                hashlib.sha256(predecessor.read_bytes()).hexdigest(),
+                expected_sha256,
+                relative,
             )
+            with self.assertRaisesRegex(
+                validation_script._AcceptancePreflightError,
+                "acceptance_artifact_stale",
+            ):
+                validation_script._derive_preflight_systematic_screen_s(
+                    artifact["identity_epoch"], acceptance_path=predecessor
+                )
 
     def test_writer_has_no_copied_preflight_scalar_and_comparison_is_derived(self) -> None:
         source = Path(validation_script.__file__).read_text(encoding="utf-8")
+        self.assertNotIn(
+            'PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.032898493715362")',
+            source,
+        )
         self.assertNotIn(
             'PREFLIGHT_SYSTEMATIC_SCREEN_S = Decimal("0.033558756679900")',
             source,
@@ -1623,7 +1746,9 @@ class FrozenProtocolTests(unittest.TestCase):
         from joulewise.powermetrics_fiducial import verify_stored_evidence_physics
         from tests.test_reduce import self_consistent_calibration
 
-        evidence, raw, events = self_consistent_calibration()
+        evidence, raw, events = self_consistent_calibration(
+            anchor_method=CLOCK_METHOD_V2
+        )
         evidence["b_fiducial_s"] = 0.0
         for pulse in evidence["pulses"]:
             for field in (
@@ -1663,7 +1788,9 @@ class FrozenProtocolTests(unittest.TestCase):
     def test_rederive_only_emits_v2_widened_evidence_and_rejects_hash_mismatch(self) -> None:
         from tests.test_reduce import self_consistent_calibration
 
-        evidence, raw, events = self_consistent_calibration()
+        evidence, raw, events = self_consistent_calibration(
+            anchor_method=CLOCK_METHOD_V2
+        )
         stored_only = max(
             abs(float(pulse[field]))
             for pulse in evidence["pulses"]
@@ -2255,6 +2382,134 @@ os._exit(23)
                 ),
             )
             lifecycle.abandon("test_stable_claim_cleanup")
+
+
+class AnchorMethodDispatchTests(unittest.TestCase):
+    @staticmethod
+    def empty_detection(**overrides):
+        value = fiducial_module.FiducialDetection(
+            baseline_w=None,
+            robust_sigma_w=None,
+            fits=(),
+            spurious_plateau_count=0,
+            all_pulses_detected=False,
+            b_fiducial_s=None,
+            residual_median_s=None,
+            residual_p95_s=None,
+        )
+        return replace(value, **overrides)
+
+    def test_fresh_cross_method_derivation_skips_stored_number_comparison(self) -> None:
+        from tests.test_reduce import self_consistent_calibration
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V2, CLOCK_METHOD_V3
+
+        evidence, raw, events = self_consistent_calibration(
+            anchor_method=CLOCK_METHOD_V2
+        )
+        recorded = copy.deepcopy(evidence["clock_anchor"])
+        before = copy.deepcopy(recorded)
+        prospective = {
+            "status": "bounded",
+            "method": CLOCK_METHOD_V3,
+            "first_sample_end_point_epoch_s": (
+                recorded["first_sample_end_point_epoch_s"] + 0.0001
+            ),
+            "effective_clock_anchor_bound_s": 0.003,
+        }
+        detector_result = self.empty_detection()
+        with (
+            patch.object(
+                fiducial_module,
+                "resolve_anchor_deriver",
+                return_value=lambda **_kwargs: prospective,
+            ) as resolver,
+            patch.object(
+                fiducial_module, "detect_pulses", return_value=detector_result
+            ),
+        ):
+            result = fiducial_module.rederive_detection_from_artifacts(
+                raw,
+                events,
+                recorded,
+                protocol_id=PROTOCOL_V2_ID,
+                anchor_method=CLOCK_METHOD_V3,
+                derivation_role="validation_only",
+            )
+        resolver.assert_called_once_with(CLOCK_METHOD_V3)
+        self.assertEqual(recorded, before)
+        self.assertEqual(result.anchor_method, CLOCK_METHOD_V3)
+        self.assertEqual(result.derivation_role, "validation_only")
+
+    def test_authentication_mode_dispatches_stored_method_and_keeps_equality_gate(self) -> None:
+        from tests.test_reduce import self_consistent_calibration
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
+
+        evidence, raw, events = self_consistent_calibration(
+            anchor_method=CLOCK_METHOD_V2
+        )
+        recorded = evidence["clock_anchor"]
+        mismatched = dict(recorded)
+        mismatched["first_sample_end_point_epoch_s"] += 0.01
+        with patch.object(
+            fiducial_module,
+            "resolve_anchor_deriver",
+            return_value=lambda **_kwargs: mismatched,
+        ) as resolver:
+            with self.assertRaisesRegex(ValueError, "disagrees with raw bytes"):
+                fiducial_module.rederive_detection_from_artifacts(
+                    raw, events, recorded, protocol_id=LEGACY_PROTOCOL_ID
+                )
+        resolver.assert_called_once_with(CLOCK_METHOD_V2)
+
+    def test_unregistered_stored_method_and_invalid_roles_fail_closed(self) -> None:
+        from tests.test_reduce import self_consistent_calibration
+
+        evidence, raw, events = self_consistent_calibration()
+        recorded = copy.deepcopy(evidence["clock_anchor"])
+        recorded["method"] = "unregistered"
+        with self.assertRaisesRegex(
+            ValueError, "calibration clock anchor method is unregistered"
+        ):
+            fiducial_module.rederive_detection_from_artifacts(
+                raw, events, recorded, protocol_id=LEGACY_PROTOCOL_ID
+            )
+        with self.assertRaisesRegex(ValueError, "derivation_role"):
+            fiducial_module.rederive_detection_from_artifacts(
+                raw,
+                events,
+                evidence["clock_anchor"],
+                protocol_id=LEGACY_PROTOCOL_ID,
+                derivation_role="claim_bearing",
+            )
+        with self.assertRaisesRegex(ValueError, "derivation_role"):
+            self.empty_detection(derivation_role="claim_bearing")
+
+    def test_evidence_author_stamps_method_that_produced_detection(self) -> None:
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
+
+        payload = instrument_evidence(
+            self.empty_detection(
+                anchor_method=CLOCK_METHOD_V3,
+                derivation_role="prospective",
+            ),
+            bindings={},
+            validation_id="prospective-v3",
+            artifact_sha256={},
+            protocol_pulse_count=0,
+            protocol_id=LEGACY_PROTOCOL_ID,
+        )
+        self.assertEqual(payload["anchor_method_version"], CLOCK_METHOD_V3)
+
+    def test_evidence_author_refuses_absent_detection_method(self) -> None:
+        with self.assertRaisesRegex(ValueError, "anchor method is missing"):
+            instrument_evidence(
+                self.empty_detection(derivation_role="prospective"),
+                bindings={},
+                validation_id="missing-anchor-method",
+                artifact_sha256={},
+                protocol_pulse_count=0,
+                protocol_id=LEGACY_PROTOCOL_ID,
+            )
 
 
 if __name__ == "__main__":

@@ -1640,6 +1640,7 @@ class HappyPathTests(ControllerTestCase):
             _window_thermal_pressure_refusals,
         )
         from joulewise.bundle_read import BundleReader
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
 
         config_payload = json.loads(EXAMPLE_CONFIG_PATH.read_text())
         config_payload["run_id"] = "controller-thermal-admission-handoff"
@@ -1732,15 +1733,35 @@ class HappyPathTests(ControllerTestCase):
         window = reader.measured_window()
         self.assertIsNotNone(window)
         assert window is not None
-        self.assertEqual(
-            _window_thermal_pressure_refusals(
-                reader.metadata(),
-                bundle_path=bundle_path,
-                measured_window_start_s=window.start_s,
-                measured_window_end_s=window.end_s,
-            ),
-            (),
-        )
+        metadata = reader.metadata()
+        anchor = metadata["uncertainty_evidence"]["clock_anchor"]
+        # This process fixture has only a few seconds of native capture, so
+        # current v3 correctly refuses its 60-second rate-fit requirement.
+        # The handoff assertion must instead isolate the coverage consumer's
+        # use of the controller-persisted v3 identity.  A v2/absent controller
+        # presentation makes the dispatch assertion below fail (A9 kill).
+        self.assertEqual(anchor["method"], CLOCK_METHOD_V3)
+
+        def bounded_v3_reconstruction(*, records, **_kwargs):
+            return {
+                "status": "bounded",
+                "first_sample_end_point_epoch_s": records[0].native_timestamp_s,
+            }
+
+        with patch(
+            "joulewise.uncertainty_evidence.resolve_anchor_reconstructor",
+            return_value=bounded_v3_reconstruction,
+        ) as resolver:
+            self.assertEqual(
+                _window_thermal_pressure_refusals(
+                    metadata,
+                    bundle_path=bundle_path,
+                    measured_window_start_s=window.start_s,
+                    measured_window_end_s=window.end_s,
+                ),
+                (),
+            )
+        resolver.assert_called_once_with(CLOCK_METHOD_V3)
 
     def test_powermetrics_abort_before_admission_capture_clears_handoff_state(
         self,

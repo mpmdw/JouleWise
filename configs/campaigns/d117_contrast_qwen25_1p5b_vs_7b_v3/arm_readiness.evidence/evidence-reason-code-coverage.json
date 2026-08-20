@@ -1,0 +1,40 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "reason_code_census",
+      "status": "PASS"
+    },
+    {
+      "check_id": "reason_code_rehearsal",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-reason-code-coverage-v1",
+  "facts": [
+    {
+      "fact_id": "desk.reason_code_plumbing.v1",
+      "source_kind": "PROBE",
+      "source_path": "arm_readiness.sources/reason-code-coverage.json",
+      "source_sha256": "94728a84fa440c4e25ed31dba07b01ed2df351c421248be529d9b6f63afd6b6a",
+      "value": {
+        "all_produced_refusals_are_closed": true,
+        "registry_coverage_test_status": "PASS",
+        "rehearsal_receipt_status": "PASS"
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "1d3873bb7a37e9363202429f14587c85a0b4efc0",
+  "issued_at_utc": "2026-08-19T16:52:23.588950Z",
+  "kind": "REASON_CODE_COVERAGE",
+  "pack_sha256": "07dff08b32006a0fc4be4c2f853a8284c19924fcf241edf0773faad1731a9ce2",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 2468792444508708
+}

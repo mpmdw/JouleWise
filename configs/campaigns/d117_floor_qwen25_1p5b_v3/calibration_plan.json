@@ -1,0 +1,1379 @@
+{
+  "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+  "draft_status": "as_generated_pre_d134_freeze",
+  "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3",
+  "calibration_scope": "production_window",
+  "fixed_n": 10,
+  "authorities": [
+    "D-116",
+    "D-117",
+    "D-123",
+    "D-124"
+  ],
+  "stack_scope": {
+    "hardware_target": "macbook_m3_max",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+    "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "quantization": "int4",
+    "sampling": {
+      "power_hz": 10.0,
+      "idle_seconds": 30.0,
+      "warmup_seconds": 5.0
+    },
+    "decode_condition_family_id": "df-ph-decode",
+    "decode_condition_family_sha256": "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
+    "prefill_condition_family_id": "df-ph-prefill-p128-qwen25-1p5b",
+    "prefill_condition_family_sha256": "974014e096806423b866a167510787482397cb4f68bb9e6f9f0ba7fd34f93f36",
+    "prefill_p256_condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+    "prefill_p256_condition_family_sha256": "93c9ee9b32c8c2b25675cff263e2c98882fe5f0c7f81f3ad6899f55f6f9d3c39"
+  },
+  "replacement_rule": {
+    "policy": "abort_window_on_any_required_member_failure",
+    "predeclared_before_data": true,
+    "calibration_retries": 0,
+    "science_member_replacements": 0,
+    "outcome_dependent_top_up": "forbidden",
+    "missing_failed_or_strict_invalid_member": "abort_non_claim_bearing"
+  },
+  "floor_cells": [
+    {
+      "cell_id": "d117-df-ph-decode-qwen25-1p5b-absolute",
+      "kind": "absolute",
+      "metric": "phase_energy_j.decode",
+      "condition_family_id": "df-ph-decode",
+      "ordered_bundle_ids": [
+        "d117f15-df-ph-decode-abs-r01",
+        "d117f15-df-ph-decode-abs-r02",
+        "d117f15-df-ph-decode-abs-r03",
+        "d117f15-df-ph-decode-abs-r04",
+        "d117f15-df-ph-decode-abs-r05",
+        "d117f15-df-ph-decode-abs-r06",
+        "d117f15-df-ph-decode-abs-r07",
+        "d117f15-df-ph-decode-abs-r08",
+        "d117f15-df-ph-decode-abs-r09",
+        "d117f15-df-ph-decode-abs-r10"
+      ],
+      "estimator": "d054_false_effect_guard.v1"
+    },
+    {
+      "cell_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b",
+      "kind": "comparative_abba",
+      "metric": "phase_energy_j.decode",
+      "condition_family_id": "df-ph-decode",
+      "ordered_blocks": [
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-a2"
+            }
+          ]
+        }
+      ],
+      "estimator": "d124_two_shared_edge_common_mode.v1"
+    },
+    {
+      "cell_id": "d117-df-ph-prefill-p128-qwen25-1p5b-absolute",
+      "kind": "absolute",
+      "metric": "phase_energy_j.prefill",
+      "condition_family_id": "df-ph-prefill-p128-qwen25-1p5b",
+      "ordered_bundle_ids": [
+        "d117f15-df-ph-decode-abs-r01",
+        "d117f15-df-ph-decode-abs-r02",
+        "d117f15-df-ph-decode-abs-r03",
+        "d117f15-df-ph-decode-abs-r04",
+        "d117f15-df-ph-decode-abs-r05",
+        "d117f15-df-ph-decode-abs-r06",
+        "d117f15-df-ph-decode-abs-r07",
+        "d117f15-df-ph-decode-abs-r08",
+        "d117f15-df-ph-decode-abs-r09",
+        "d117f15-df-ph-decode-abs-r10"
+      ],
+      "estimator": "d054_false_effect_guard.v1"
+    },
+    {
+      "cell_id": "d117-df-cmp-abba-ph-prefill-p128-qwen25-1p5b",
+      "kind": "comparative_abba",
+      "metric": "phase_energy_j.prefill",
+      "condition_family_id": "df-ph-prefill-p128-qwen25-1p5b",
+      "ordered_blocks": [
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-decode-qwen25-1p5b-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-decode-b10-a2"
+            }
+          ]
+        }
+      ],
+      "estimator": "d124_two_shared_edge_common_mode.v1"
+    },
+    {
+      "cell_id": "d117-df-ph-prefill-p256-qwen25-1p5b-absolute",
+      "kind": "absolute",
+      "metric": "phase_energy_j.prefill",
+      "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+      "ordered_bundle_ids": [
+        "d117f15-df-ph-prefill-p256-abs-r01",
+        "d117f15-df-ph-prefill-p256-abs-r02",
+        "d117f15-df-ph-prefill-p256-abs-r03",
+        "d117f15-df-ph-prefill-p256-abs-r04",
+        "d117f15-df-ph-prefill-p256-abs-r05",
+        "d117f15-df-ph-prefill-p256-abs-r06",
+        "d117f15-df-ph-prefill-p256-abs-r07",
+        "d117f15-df-ph-prefill-p256-abs-r08",
+        "d117f15-df-ph-prefill-p256-abs-r09",
+        "d117f15-df-ph-prefill-p256-abs-r10"
+      ],
+      "estimator": "d054_false_effect_guard.v1"
+    },
+    {
+      "cell_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b",
+      "kind": "comparative_abba",
+      "metric": "phase_energy_j.prefill",
+      "condition_family_id": "df-ph-prefill-p256-qwen25-1p5b",
+      "ordered_blocks": [
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "d117-df-cmp-abba-ph-prefill-p256-qwen25-1p5b-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "d117f15-df-cmp-abba-ph-prefill-p256-b10-a2"
+            }
+          ]
+        }
+      ],
+      "estimator": "d124_two_shared_edge_common_mode.v1"
+    }
+  ],
+  "reported_energy_cells": [
+    {
+      "cell_id": "d117-reported-mean-ph-decode-qwen25-1p5b",
+      "metric": "phase_energy_j.decode",
+      "measurand": "gross_phase_energy_j",
+      "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+      "ordered_bundle_ids": [
+        "d117f15-df-ph-decode-abs-r01",
+        "d117f15-df-ph-decode-abs-r02",
+        "d117f15-df-ph-decode-abs-r03",
+        "d117f15-df-ph-decode-abs-r04",
+        "d117f15-df-ph-decode-abs-r05",
+        "d117f15-df-ph-decode-abs-r06",
+        "d117f15-df-ph-decode-abs-r07",
+        "d117f15-df-ph-decode-abs-r08",
+        "d117f15-df-ph-decode-abs-r09",
+        "d117f15-df-ph-decode-abs-r10",
+        "d117f15-df-cmp-abba-ph-decode-b01-a1",
+        "d117f15-df-cmp-abba-ph-decode-b01-b1",
+        "d117f15-df-cmp-abba-ph-decode-b01-b2",
+        "d117f15-df-cmp-abba-ph-decode-b01-a2",
+        "d117f15-df-cmp-abba-ph-decode-b02-a1",
+        "d117f15-df-cmp-abba-ph-decode-b02-b1",
+        "d117f15-df-cmp-abba-ph-decode-b02-b2",
+        "d117f15-df-cmp-abba-ph-decode-b02-a2",
+        "d117f15-df-cmp-abba-ph-decode-b03-a1",
+        "d117f15-df-cmp-abba-ph-decode-b03-b1",
+        "d117f15-df-cmp-abba-ph-decode-b03-b2",
+        "d117f15-df-cmp-abba-ph-decode-b03-a2",
+        "d117f15-df-cmp-abba-ph-decode-b04-a1",
+        "d117f15-df-cmp-abba-ph-decode-b04-b1",
+        "d117f15-df-cmp-abba-ph-decode-b04-b2",
+        "d117f15-df-cmp-abba-ph-decode-b04-a2",
+        "d117f15-df-cmp-abba-ph-decode-b05-a1",
+        "d117f15-df-cmp-abba-ph-decode-b05-b1",
+        "d117f15-df-cmp-abba-ph-decode-b05-b2",
+        "d117f15-df-cmp-abba-ph-decode-b05-a2",
+        "d117f15-df-cmp-abba-ph-decode-b06-a1",
+        "d117f15-df-cmp-abba-ph-decode-b06-b1",
+        "d117f15-df-cmp-abba-ph-decode-b06-b2",
+        "d117f15-df-cmp-abba-ph-decode-b06-a2",
+        "d117f15-df-cmp-abba-ph-decode-b07-a1",
+        "d117f15-df-cmp-abba-ph-decode-b07-b1",
+        "d117f15-df-cmp-abba-ph-decode-b07-b2",
+        "d117f15-df-cmp-abba-ph-decode-b07-a2",
+        "d117f15-df-cmp-abba-ph-decode-b08-a1",
+        "d117f15-df-cmp-abba-ph-decode-b08-b1",
+        "d117f15-df-cmp-abba-ph-decode-b08-b2",
+        "d117f15-df-cmp-abba-ph-decode-b08-a2",
+        "d117f15-df-cmp-abba-ph-decode-b09-a1",
+        "d117f15-df-cmp-abba-ph-decode-b09-b1",
+        "d117f15-df-cmp-abba-ph-decode-b09-b2",
+        "d117f15-df-cmp-abba-ph-decode-b09-a2",
+        "d117f15-df-cmp-abba-ph-decode-b10-a1",
+        "d117f15-df-cmp-abba-ph-decode-b10-b1",
+        "d117f15-df-cmp-abba-ph-decode-b10-b2",
+        "d117f15-df-cmp-abba-ph-decode-b10-a2"
+      ]
+    },
+    {
+      "cell_id": "d117-reported-mean-ph-prefill-p128-qwen25-1p5b",
+      "metric": "phase_energy_j.prefill",
+      "measurand": "gross_phase_energy_j",
+      "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+      "ordered_bundle_ids": [
+        "d117f15-df-ph-decode-abs-r01",
+        "d117f15-df-ph-decode-abs-r02",
+        "d117f15-df-ph-decode-abs-r03",
+        "d117f15-df-ph-decode-abs-r04",
+        "d117f15-df-ph-decode-abs-r05",
+        "d117f15-df-ph-decode-abs-r06",
+        "d117f15-df-ph-decode-abs-r07",
+        "d117f15-df-ph-decode-abs-r08",
+        "d117f15-df-ph-decode-abs-r09",
+        "d117f15-df-ph-decode-abs-r10",
+        "d117f15-df-cmp-abba-ph-decode-b01-a1",
+        "d117f15-df-cmp-abba-ph-decode-b01-b1",
+        "d117f15-df-cmp-abba-ph-decode-b01-b2",
+        "d117f15-df-cmp-abba-ph-decode-b01-a2",
+        "d117f15-df-cmp-abba-ph-decode-b02-a1",
+        "d117f15-df-cmp-abba-ph-decode-b02-b1",
+        "d117f15-df-cmp-abba-ph-decode-b02-b2",
+        "d117f15-df-cmp-abba-ph-decode-b02-a2",
+        "d117f15-df-cmp-abba-ph-decode-b03-a1",
+        "d117f15-df-cmp-abba-ph-decode-b03-b1",
+        "d117f15-df-cmp-abba-ph-decode-b03-b2",
+        "d117f15-df-cmp-abba-ph-decode-b03-a2",
+        "d117f15-df-cmp-abba-ph-decode-b04-a1",
+        "d117f15-df-cmp-abba-ph-decode-b04-b1",
+        "d117f15-df-cmp-abba-ph-decode-b04-b2",
+        "d117f15-df-cmp-abba-ph-decode-b04-a2",
+        "d117f15-df-cmp-abba-ph-decode-b05-a1",
+        "d117f15-df-cmp-abba-ph-decode-b05-b1",
+        "d117f15-df-cmp-abba-ph-decode-b05-b2",
+        "d117f15-df-cmp-abba-ph-decode-b05-a2",
+        "d117f15-df-cmp-abba-ph-decode-b06-a1",
+        "d117f15-df-cmp-abba-ph-decode-b06-b1",
+        "d117f15-df-cmp-abba-ph-decode-b06-b2",
+        "d117f15-df-cmp-abba-ph-decode-b06-a2",
+        "d117f15-df-cmp-abba-ph-decode-b07-a1",
+        "d117f15-df-cmp-abba-ph-decode-b07-b1",
+        "d117f15-df-cmp-abba-ph-decode-b07-b2",
+        "d117f15-df-cmp-abba-ph-decode-b07-a2",
+        "d117f15-df-cmp-abba-ph-decode-b08-a1",
+        "d117f15-df-cmp-abba-ph-decode-b08-b1",
+        "d117f15-df-cmp-abba-ph-decode-b08-b2",
+        "d117f15-df-cmp-abba-ph-decode-b08-a2",
+        "d117f15-df-cmp-abba-ph-decode-b09-a1",
+        "d117f15-df-cmp-abba-ph-decode-b09-b1",
+        "d117f15-df-cmp-abba-ph-decode-b09-b2",
+        "d117f15-df-cmp-abba-ph-decode-b09-a2",
+        "d117f15-df-cmp-abba-ph-decode-b10-a1",
+        "d117f15-df-cmp-abba-ph-decode-b10-b1",
+        "d117f15-df-cmp-abba-ph-decode-b10-b2",
+        "d117f15-df-cmp-abba-ph-decode-b10-a2"
+      ]
+    },
+    {
+      "cell_id": "d117-reported-mean-ph-prefill-p256-qwen25-1p5b",
+      "metric": "phase_energy_j.prefill",
+      "measurand": "gross_phase_energy_j",
+      "reducer": "arithmetic_mean_over_fixed_member_universe.v1",
+      "ordered_bundle_ids": [
+        "d117f15-df-ph-prefill-p256-abs-r01",
+        "d117f15-df-ph-prefill-p256-abs-r02",
+        "d117f15-df-ph-prefill-p256-abs-r03",
+        "d117f15-df-ph-prefill-p256-abs-r04",
+        "d117f15-df-ph-prefill-p256-abs-r05",
+        "d117f15-df-ph-prefill-p256-abs-r06",
+        "d117f15-df-ph-prefill-p256-abs-r07",
+        "d117f15-df-ph-prefill-p256-abs-r08",
+        "d117f15-df-ph-prefill-p256-abs-r09",
+        "d117f15-df-ph-prefill-p256-abs-r10",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b01-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b01-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b01-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b01-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b02-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b02-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b02-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b02-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b03-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b03-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b03-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b03-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b04-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b04-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b04-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b04-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b05-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b05-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b05-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b05-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b06-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b06-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b06-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b06-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b07-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b07-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b07-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b07-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b08-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b08-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b08-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b08-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b09-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b09-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b09-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b09-a2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b10-a1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b10-b1",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b10-b2",
+        "d117f15-df-cmp-abba-ph-prefill-p256-b10-a2"
+      ]
+    }
+  ],
+  "execution_mode": {
+    "ordered_science_stage_ids": [
+      "01_phase_decode_absolute",
+      "02_phase_decode_abba_blocks_01_05",
+      "03_phase_decode_abba_blocks_06_10",
+      "04_phase_prefill_p256_absolute",
+      "05_phase_prefill_p256_abba_blocks_01_05",
+      "06_phase_prefill_p256_abba_blocks_06_10"
+    ],
+    "planned_science_bundles": 100,
+    "planned_bound_bundles": 12,
+    "planned_reference_bundles": 7,
+    "planned_calibration_observations": 2
+  },
+  "roots": {
+    "claim_root_leaf": "runs_d117_floor_qwen25_1p5b_v3",
+    "bound_root_leaf": "runs_d117_floor_qwen25_1p5b_v3_bound"
+  },
+  "runs_dir": "runs_d117_floor_qwen25_1p5b_v3",
+  "order_manifest": "order_manifest.json",
+  "campaign_log": "runs_d117_floor_qwen25_1p5b_v3/campaign_log.jsonl",
+  "campaign_policy": {
+    "policy_id": "quiet-mac-p2-production",
+    "path": "configs/campaign_policies/quiet_mac_p2_production.json",
+    "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+  }
+}

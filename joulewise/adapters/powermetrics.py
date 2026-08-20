@@ -20,7 +20,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from xml.parsers.expat import ExpatError
@@ -39,10 +39,11 @@ from joulewise.interfaces import (
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, TelemetryBackend
 from joulewise.validation import finite_float
 from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
     NativeAnchorRecord,
     derive_idle_drift_evidence,
     derive_powermetrics_clock_evidence,
-    derive_powermetrics_clock_evidence_v2,
+    resolve_clock_evidence_deriver,
     unknown_component,
 )
 
@@ -71,10 +72,9 @@ IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD = 0.40
 IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD = 800.0
 TIMESTAMP_DERIVATION = (
     "current-era timestamp_s anchors record 0's window END to the midpoint of "
-    "the admissible interval formed by intersecting the censored native "
-    "whole-second constraints [T_i - q_i, T_i + 1 - q_i) over every record "
-    "with the causal pre-spawn/first-parse interval mapped through the run "
-    "wall-minus-monotonic envelope (p2-038.2); records i>0 advance by "
+    "the admissible rate-aware set-membership interval formed from native "
+    "whole-second constraints and paired clock stamps under the affine wall "
+    "rate model (p2-038.3); records i>0 advance by "
     "elapsed_ns for records 1..i. The old spawn bracket is a causal SET "
     "constraint, never a midpoint estimate. Exact allowlisted legacy bundles "
     "retain plist_anchor_offset_s plus the legacy cumulative-elapsed "
@@ -522,7 +522,9 @@ class PowermetricsTelemetryAdapter:
             data, _ = self._take_measured_capture()
         if data is None:
             self._release_capture(RAW_SAMPLES_NAME)
-            evidence, _ = derive_powermetrics_clock_evidence_v2(
+            evidence, _ = resolve_clock_evidence_deriver(
+                ACTIVE_CAPTURE_ANCHOR_METHOD
+            )(
                 stamps={}, records=[]
             )
             return TelemetryStopResult([], evidence)
@@ -537,7 +539,9 @@ class PowermetricsTelemetryAdapter:
             stamps["pre_spawn"] = self._pre_spawn_stamp
         if self._first_parse_stamp is not None:
             stamps["first_parse"] = self._first_parse_stamp
-        evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
+        evidence, point_anchor_s = resolve_clock_evidence_deriver(
+            ACTIVE_CAPTURE_ANCHOR_METHOD
+        )(
             stamps=stamps,
             records=anchor_records_from_powermetrics(native_records),
         )
@@ -560,7 +564,9 @@ class PowermetricsTelemetryAdapter:
             if bracketed_data is not None:
                 data = bracketed_data
                 native_records, diagnostic = _parse_powermetrics_records(data)
-                evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
+                evidence, point_anchor_s = resolve_clock_evidence_deriver(
+                    ACTIVE_CAPTURE_ANCHOR_METHOD
+                )(
                     stamps=stamps,
                     records=anchor_records_from_powermetrics(native_records),
                 )
@@ -752,7 +758,9 @@ class PowermetricsTelemetryAdapter:
             stamps["first_parse"] = self._first_parse_stamp
         if self._drain_monotonic() >= deadline:
             return False
-        evidence, point_anchor_s = derive_powermetrics_clock_evidence_v2(
+        evidence, point_anchor_s = resolve_clock_evidence_deriver(
+            ACTIVE_CAPTURE_ANCHOR_METHOD
+        )(
             stamps=stamps,
             records=anchor_records_from_powermetrics(native_records),
         )
@@ -1812,6 +1820,9 @@ def _parse_powermetrics_records(
                     "plist_timestamp_s": _timestamp_epoch_utc(
                         _required(document, "timestamp", index)
                     ),
+                    "plist_timestamp_ns": _timestamp_epoch_ns_utc(
+                        _required(document, "timestamp", index)
+                    ),
                     "is_delta": (
                         document["is_delta"]
                         if isinstance(document.get("is_delta"), bool)
@@ -1826,7 +1837,7 @@ def _parse_powermetrics_records(
 def anchor_records_from_powermetrics(
     records: list[PowermetricsRecord],
 ) -> list[NativeAnchorRecord]:
-    """Project parsed records onto the v2 anchor estimator's native evidence."""
+    """Project parsed records onto the p2-038.3 anchor's native evidence."""
 
     anchor_records: list[NativeAnchorRecord] = []
     for record in records:
@@ -1842,6 +1853,8 @@ def anchor_records_from_powermetrics(
                 power_w=record.combined_power_w,
                 energy_j=energy_j,
                 is_delta=record.metadata.get("is_delta"),
+                elapsed_ns=record.elapsed_ns,
+                native_timestamp_ns=record.metadata.get("plist_timestamp_ns"),
             )
         )
     return anchor_records
@@ -2198,6 +2211,20 @@ def _timestamp_epoch_utc(value: object) -> float:
     else:
         value = value.astimezone(timezone.utc)
     return value.timestamp()
+
+
+def _timestamp_epoch_ns_utc(value: object) -> int:
+    """Map a plist date to epoch nanoseconds without a float conversion."""
+
+    if not isinstance(value, datetime):
+        raise ValueError(f"powermetrics timestamp is not a datetime: {value!r}")
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    microseconds = (value - epoch) // timedelta(microseconds=1)
+    return microseconds * 1000
 
 
 def _optional_string(value: object) -> str | None:
