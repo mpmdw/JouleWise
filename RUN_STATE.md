@@ -10,7 +10,55 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-19 night (T14-GO — five-day loop GO issued; /clear-ready)
+Last updated: 2026-08-19 night (T15-PREP active — prep sprint running; Codex full accounts at 23:34 PST)
+
+## ▶▶ T15-PREP (2026-08-19 night) — ACTIVE NOW: 5-HOUR CLAUDE-SIDE PREP SPRINT; CODEX RESETS 23:34 PST (11:34 PM) WITH FULL ACCOUNTS
+
+**Ed's plan (this block + T14-GO below = the complete grasp):** the
+pre-/clear session works the PREP LIST below NOW with ample Claude/Fable
+capacity; at **23:34 PST the Codex pool resets and Ed is providing a FULL
+Fable account AND a FULL Codex account** for maximal fan-out. The prep
+exists so the Codex seats (terra xhigh / luna max / Sol) wake into
+READY-MADE packets — zero cold starts. After prep is checkpointed, Ed
+/clears (possibly twice, with side questions between) and types the
+T14-GO /loop line; the five-day run proceeds per T14-GO's sequence.
+
+**PREP LIST (work down in order; 1+2 are merge gates in their own right):**
+1. Full canonical at the merge head — machine time; a gate input DONE
+   when green. [launched from the pre-/clear session]
+2. Fresh-pass review of d59d36f..HEAD (brief in T13-STOP/T13) — Opus
+   seat; second gate input DONE when clean. [launched]
+3. D-144 pre-merge seat-pass PACKET: scoped S0–S5 artifact diff, brief,
+   debate agenda, the D-146/D-147 clauses it verifies — assembled so the
+   terra+Opus debate fires at pool return. [assembling]
+4. Registry-values council PACKET (D-148.5): the five reserved values —
+   three proposed (= the three _v3 pack ids for successor_pack_ids) —
+   the remaining two enumerated FROM the R1-registry consult custody
+   (docs/process_traces/2026-08-16-grant-identity-consult/ is NOT it —
+   find the registry consult under the 2026-08-15/16 traces; the ed
+   packet lists the five); seat briefs written. [assembling]
+5. READY-candidate council PACKET: evidence rows against the 2026-08-15
+   NOT-READY charter form (docs/process/instrument-readiness-audit-
+   charter.md, verdict-form amendments 11-12), item by item with custody
+   pointers. The heaviest and highest-value prep item.
+6. D-149 GO-receipt tooling: the five GO conditions as a mechanical
+   checklist evaluation (script + receipt template) so every window GO
+   is a written receipt from the first shakedown; pre-stage shakedown
+   run cards + window drivers from the T11 working-notes patterns.
+7. Paper staging: verify every results-fill-registry row is
+   renderable-shaped; number-free figure skeletons per
+   docs/paper/figures-plan.md (D-119 disclosure lines verbatim).
+
+**Assembler discipline:** packet assemblers run read-only and write to
+session scratch; the LEAD lands their outputs into
+docs/process_traces/... serially (one writer per tree). Prep outputs are
+committed and pushed as they land so the post-/clear thread inherits
+everything through git, never through a dead scratchpad.
+
+**At 23:34 PST:** fan out per the standing order — D-144 seat pass and
+registry council first (packets 3+4), gauntlet seats on their outputs,
+then the merge wave when all four gates are green (T14-GO item 1), then
+straight down the T14-GO sequence.
 
 ## ▶▶ T14-GO (2026-08-19 night, FINAL pre-/clear checkpoint) — ED'S FIVE-DAY GO IS ISSUED; THE /loop INVOCATION IS THE TRIGGER
 
