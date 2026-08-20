@@ -2826,6 +2826,38 @@
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
       "stop_card": null
     },
+    "RECEIPT-HISTSEM-01": {
+      "acceptance": {
+        "evidence": [
+          "An external governed verifier or pinset recomputes each legacy frozen PACK receipt's historical pack digest from its recorded head_commit and compares it with the receipt's pack_sha256",
+          "The verifier checks the complete receipt -> sidecar -> freeze -> plan binding for every legacy PACK evidence item",
+          "The verifier runs in CI and again before arm issuance",
+          "A defect-shaped regression proves a coherently rewritten receipt chain with false historical pack_sha256/head_commit is refused"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RECEIPT-HISTSEM-01/acceptance",
+          "label": "RECEIPT-HISTSEM-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Close the C1 gap: legacy frozen PACK evidence replay authenticates exact nested bytes but never validates the receipt's historical pack_sha256/head_commit semantics."
+      },
+      "authority": {
+        "label": "Gate-1 fix gauntlet synthesis, 2026-08-20 (C1, Sol contract-lens refuter)",
+        "path": "docs/process_traces/2026-08-20-go-session/00-fix-gauntlet-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Historical receipt-semantics verifier: validate legacy frozen PACK evidence receipts' recorded pack_sha256/head_commit against the recomputed historical tree, outside the immutable frozen packs (arm_readiness.py supplies expected values only for WINDOW_CUSTODY LAUNCH_RECIPE; freeze minting passes None/None).",
+      "id": "RECEIPT-HISTSEM-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 64,
+      "status": "queued",
+      "status_note": "Minted 2026-08-20 from the gate-1 fix gauntlet's contract-lens refuter (C1); mitigations already in force: D-134 disk/git comparison, published S5 confirmation digests, arm/consume lineage authentication on every claim route.",
+      "stop_card": null
+    },
     "REFREEZE-D147-CLOSE": {
       "acceptance": {
         "evidence": [
