@@ -12,7 +12,15 @@ file instead.
 
 Last updated: 2026-08-19 night (T13-STOP — S5 complete and landed; clean stop; merge gates enumerated, unsatisfied)
 
-## ▶▶ T13-STOP (2026-08-19 night, Ed clean-stop order) — NOTHING IN FLIGHT
+## ▶▶ T13-STOP (2026-08-19 night, Ed stop orders ×2) — NOTHING IN FLIGHT; RESUME ONLY ON ED'S EXPLICIT GO
+
+*(Second stop, later the same night: after the stop below, Ed cleared
+gates — the permission allowlist is live in settings.local.json and
+D-149 standing window automation is minted/pushed — and the gate-input
+reruns were briefly restarted, then Ed ordered a full stop again. Both
+were killed early; the gate-input status below is unchanged: ALL
+UNSATISFIED, rerun from scratch. The successor does NOT self-start the
+pipeline: gates are cleared, but the run begins on Ed's explicit go.)*
 
 All background work stopped cleanly (the final-canonical run and the
 fresh-pass reviewer were killed mid-run — BOTH GATE INPUTS ARE
