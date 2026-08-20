@@ -10,7 +10,67 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-19 night (T13-STOP — S5 complete and landed; clean stop; merge gates enumerated, unsatisfied)
+Last updated: 2026-08-19 night (T14-GO — five-day loop GO issued; /clear-ready)
+
+## ▶▶ T14-GO (2026-08-19 night, FINAL pre-/clear checkpoint) — ED'S FIVE-DAY GO IS ISSUED; THE /loop INVOCATION IS THE TRIGGER
+
+Ed's plan, verbatim intent: gates cleared → this checkpoint → /clear →
+the fresh thread FANS OUT and works a FIVE-DAY LOOP on the paper
+pipeline. **The GO is granted here.** A fresh session that arrives via
+the /loop line below does NOT wait for further permission — it reads
+this file and starts. (A fresh session arriving WITHOUT the loop — plain
+conversation — still treats Ed's messages as the driver.)
+
+**The loop line Ed will type:**
+`/loop work the paper pipeline: read RUN_STATE, continue per the standing orders (D-128 mandate, D-148 gate-authorized merges, D-149 window automation); never idle between blocks`
+Self-paced dynamic mode: match each wakeup to what is actually awaited
+(suite ~50 min; overnight window = hours; desk blocks 20–30 min).
+
+**Cleared gates (all durable):** permission allowlist live in
+.claude/settings.local.json (project scripts both interpreters, the
+measurement checkout incl. its git, caffeinate, unittest); D-148.2
+merges gate-authorized; D-148.4+D-149 full no-hands window automation
+with the five-condition auto-GO (each GO a receipt in window custody);
+D-148.5 registry values to council. Ed's only retained items: hands-on
+hardware, reboots, new sudo, claim publication, exact-byte confirmation
+— batch to ONE day-5 packet unless truly blocking.
+
+**FIVE-DAY SEQUENCE (fan out maximally per the standing fan-out order;
+Codex pool resets ~23:22 nightly — terra xhigh / luna max seats, Opus
+corps when the pool is dry):**
+1. Merge gates: rerun full canonical at the merge head; rerun the
+   fresh-pass over d59d36f..HEAD (brief in the T13 block); run the
+   D-144 BIG-design pre-merge seat pass (terra+Opus debate over the
+   implemented S0–S5 artifact, Fable ruling). All green → MERGE WAVE
+   impl/r2-s0-mint-resolver → integration/phase2-transaction → main.
+2. Registry council (D-148.5): five reserved values (three proposed =
+   the _v3 pack ids) → install the row registry (kernel-transaction
+   discipline).
+3. READY-candidate council: assemble the packet against the 2026-08-15
+   NOT-READY charter form; clear WINDOW-COUNCIL-GATE.
+4. Windows under D-149, shakedown FIRST (D-139): instrument-verification
+   captures, then alpha (1p5b floors), beta (7b floors), gamma
+   (contrast) overnight; every GO receipt custodied; D-078 no-retry.
+5. Reductions → verdicts → floors from issued artifacts → paper §6
+   tables filled ONLY from the results-fill registry → figures per the
+   registered plan with D-119 disclosure lines verbatim → full-draft
+   fidelity + pedagogy passes (the writing standard binds) → day-5
+   packet to Ed (tables, receipts, refusal log, exact-byte
+   confirmation).
+
+**Standing discipline (the short list the loop must never drop):** stop
+means stop; refused captures end lanes (diagnose, never re-arm-and-hope);
+two same-signature failures → consult, not round three; quiet blocks =
+zero tool calls mid-capture; one writer per worktree; the lead verifies
+receipts itself; kernel edits = kernel+regen+pins one transaction;
+explainer prose obeys the global writing standard; keep the remote
+current; count Codex runs (ledger blind).
+
+**Where everything is:** T13/T13-STOP (directly below) = gate-input
+status and the fresh-pass brief; T12-FINAL = the executed-transaction map
+and custody index; docs/process/ed-s5-mint-decision-2026-08-19.md = the
+completed confirmation table awaiting Ed's byte confirmation (day-5
+packet item); decision log D-144..D-149 = tonight's authority set.
 
 ## ▶▶ T13-STOP (2026-08-19 night, Ed stop orders ×2) — NOTHING IN FLIGHT; RESUME ONLY ON ED'S EXPLICIT GO
 
