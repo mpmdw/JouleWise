@@ -1,7 +1,12 @@
 # 🟢 BETWEEN RUNS
-> **RESOLVED (2026-08-19 night):** the S5 freeze-0003 mints LANDED
-> (fresh-pass-verified); the evidence-expiry/no-reboot hazard is closed.
-> Record: docs/process/ed-s5-mint-decision-2026-08-19.md (table complete).
+> **2026-08-20 (B-9 correction):** the S5 freeze-0003 mints LANDED
+> (fresh-pass-verified; record docs/process/ed-s5-mint-decision-2026-08-19.md),
+> but the evidence-expiry hazard was NOT closed by them: the `_v3` arm
+> evidence carried a 24h fuse from authoring, ruled to LAPSE
+> ~2026-08-20T16:51Z (D-148.5 R-2). The `_v3` family is not armable;
+> the compelled `_v4` transaction (V4-TRANSACTION-01, blocked on the
+> mint license) is the path to the next armable family. The no-reboot
+> constraint returns with `_v4` (r5 V-7 item 5).
 
 Terms used here: a *measurement window* is one uninterrupted, calibrated
 collection session; a *pack* is the frozen campaign plan and its authenticated
