@@ -129,6 +129,7 @@ from joulewise.schemas import (
     SummaryMetricsV060,
     TelemetryBackend,
 )
+from joulewise.sampler_teardown import SamplerTeardown
 from joulewise.suite import (
     SuiteManifest,
     canonical_effective_manifest,
@@ -805,6 +806,7 @@ class _Execution:
         self._sampling_active = False
         self._sampling_start_in_progress = False
         self._sampling_stop_claimed = False
+        self._sampler_teardown = SamplerTeardown()
         # Idempotence flags so the failure path writes only what is missing.
         self._outputs_written = False
         self._trace_written = False
@@ -1013,7 +1015,7 @@ class _Execution:
             )
             if callable(begin_sampling):
                 self._sampling_start_in_progress = True
-                result = begin_sampling(self._config, self._context)
+                result = self._start_telemetry_with_parent_adoption(begin_sampling)
                 self._check(
                     result,
                     "idle_baseline",
@@ -1222,7 +1224,9 @@ class _Execution:
         self._thermal_pre = self._telemetry.thermal_state(self._config, self._context)
         self._sampling_start_in_progress = True
         try:
-            start_result = self._telemetry.start_sampling(self._config, self._context)
+            start_result = self._start_telemetry_with_parent_adoption(
+                self._telemetry.start_sampling
+            )
         except BaseException:
             # Finalization must treat the sampler as potentially live if start
             # was interrupted after it created native capture state.
@@ -1619,11 +1623,48 @@ class _Execution:
                 self._samples = self._telemetry.stop_sampling(
                     self._config, self._context
                 )
-        except Exception:
+        except BaseException:
+            self._attach_sampler_teardown_custody()
             # Ordinary failures remain retryable by the failure-salvage path.
             self._sampling_stop_claimed = False
             raise
+        if self._telemetry.name == "powermetrics":
+            self._attach_sampler_teardown_custody()
+            teardown = self._sampler_teardown.report
+            if not isinstance(teardown, dict) or teardown.get("status") != "clean":
+                self._sampling_stop_claimed = False
+                raise _StageFailure(
+                    "measured_run",
+                    FailureReason.UNKNOWN_ERROR,
+                    "powermetrics process-group teardown census reported contamination",
+                )
         return True
+
+    def _start_telemetry_with_parent_adoption(
+        self,
+        start: Callable[[BenchmarkConfig, RunContext | None], AdapterResult],
+    ) -> AdapterResult:
+        """Run the existing adapter start under the parent-owned spawn seam."""
+
+        assert self._telemetry is not None
+        if self._telemetry.name != "powermetrics":
+            return start(self._config, self._context)
+        with self._sampler_teardown.intercept_popen():
+            return start(self._config, self._context)
+
+    def _attach_sampler_teardown_custody(self) -> None:
+        """Merge fail-closed sampler custody into uncertainty evidence."""
+
+        if self._telemetry is None or self._telemetry.name != "powermetrics":
+            return
+        teardown = self._sampler_teardown.report
+        if teardown is None and self._sampler_teardown.spawned:
+            teardown = self._sampler_teardown.teardown()
+        if teardown is None:
+            return
+        if self._uncertainty_evidence is None:
+            self._uncertainty_evidence = {}
+        self._uncertainty_evidence["process_group_teardown"] = dict(teardown)
 
     def _record_trace_window_margins(
         self,
