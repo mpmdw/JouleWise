@@ -10,7 +10,32 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-19 late evening (T13 — D-148 rulings recorded; S5 needs Ed's 30-second settings edit)
+Last updated: 2026-08-19 night (T13-STOP — S5 complete and landed; clean stop; merge gates enumerated, unsatisfied)
+
+## ▶▶ T13-STOP (2026-08-19 night, Ed clean-stop order) — NOTHING IN FLIGHT
+
+All background work stopped cleanly (the final-canonical run and the
+fresh-pass reviewer were killed mid-run — BOTH GATE INPUTS ARE
+UNSATISFIED and must be rerun from scratch). S5 is COMPLETE and landed
+(freeze-0003 ×3 verified; confirmation table filled; branch pushed @
+75cb868 incl. the S6 bookkeeping: kernel transaction green, T12/T13 run
+report, README blurb). NO MERGE HAS OCCURRED.
+
+**The complete pre-merge gate list for the successor (corrected — Ed
+caught the omission):**
+1. Final canonical FULL GREEN at the merge head (rerun; ~46 min).
+2. Fresh-pass review over d59d36f..75cb868 (rerun; the killed brief is
+   reusable verbatim from this block's session transcript or
+   reconstructable from the gate items in the T13 block).
+3. **The D-144 BIG-design pre-merge seat pass** — terra+Opus debate over
+   the implemented S0–S5 artifact, Fable ruling on findings.
+   POOL-GATED (~23:22). This is a ruled requirement of D-146/D-147's own
+   classification, not optional.
+4. Then the merge wave under D-148.2 (gate-authorized; no Ed wait).
+
+Also queued at pool-return: the D-148.5 council pass on the five R1
+row-registry reserved values. The run report's canonical addendum is
+still a placeholder — fill it from gate input 1.
 
 ## ▶▶ T13 CHECKPOINT (2026-08-19 late evening) — CLEARED-CONTEXT RESUME POINT; READ THIS BLOCK THEN docs/process/ed-s5-mint-decision-2026-08-19.md
 
