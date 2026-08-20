@@ -10,7 +10,74 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-19 night (T15-PREP active — prep sprint running; Codex full accounts at 23:34 PST)
+Last updated: 2026-08-19 ~21:00 PDT (T16-FANOUT-READY — all prep landed; stopped; the 23:34 fresh session is the GO)
+
+## ▶▶ T16-FANOUT-READY (2026-08-19 ~21:00 PDT, FINAL checkpoint of the pre-/clear session) — EVERYTHING STOPPED; THE 23:34 SESSION IS THE GO
+
+**TRIGGER SEMANTICS (supersedes T14-GO's loop-line trigger):** Ed starts a
+FRESH SESSION at ~23:34 PST pointed at this file. THAT SESSION HAS THE
+GO — full fresh Fable + Codex accounts, LIBERAL model use across
+terra/luna/Sol/Opus/Fable per the standing fan-out order. It fans out
+immediately; the /loop line (T14-GO) is the recommended self-driving
+harness once running. Nothing is in flight now; nothing self-starts
+before that session.
+
+**GATE SCOREBOARD (four gates to the merge wave, then the T14-GO
+sequence):**
+1. Canonical FULL GREEN — ONE residue: 3 fails, one root
+   (test_unedited_v2_generators_emit_v3_successors × 3 families) — the
+   pre-mint successor-emission test vs the now-frozen `_v3` receipts;
+   details + log in the T12/T13 run-report addendum. FIX FIRST (small,
+   gauntleted), then rerun canonical (~47 min).
+2. Fresh-pass — SATISFIED (CLEAN through b92b43d; report + fixed
+   findings in custody; post-b92b43d commits are custody landings +
+   bookkeeping, focused-verified).
+3. D-144 seat pass — packet READY:
+   docs/process_traces/2026-08-19-r1-r2-codesign/16-d144-seatpass-packet.md
+   (terra xhigh + Opus, debate, Fable ruling).
+4. Merge wave under D-148.2 when 1-3 green: impl/r2-s0-mint-resolver →
+   integration/phase2-transaction → main.
+
+**READY-MADE PACKETS (all in custody under
+docs/process_traces/2026-08-19-prep-sprint/):**
+- ready-packet/ — the full READY-candidate council sitting packet (11
+  seat rows, 14 program rows, charter brief, 17 OPEN-ITEMS; note the
+  dual-assembly reconciliation and the ED-row roll-up 3 closed / 12
+  partial / 8 open). The sitting is SUBSTANTIVE — expect STILL-OPEN rows
+  and conditions, and the packet's P-13 (head identity) is cured by the
+  merge wave FIRST.
+- registry-packet/ — the D-148.5 council packet PLUS the executed
+  byte-pin experiment: **CONFIRMED-BLOCKER** (install breaks the frozen
+  family; no supersession path; windows UNAFFECTED under unchanged v1;
+  recommended disposition to rule: defer install to the `_v4` family
+  boundary — magistrate + cold instance per rule 11).
+- paper-staging/ — registry audit (0/34 locators clean; 8-slot coverage
+  hole; era-codes renderer gap F1 = named work item), refreshed-registry
+  DRAFT (adoption is a reviewed step), 5 STOP_FILL figure skeletons.
+- merge-freshpass.md — gate 2 report.
+
+**ED-DECISION ITEMS the fresh session should surface at the right
+moments (not blockers tonight):** (1) sudoers one-liner adding
+`-getusingnetworktime` — required before any D-149 auto-GO window (the
+T-0 author currently demands an interactive paste; collision documented
+in ready-packet ED rows); (2) A4 markers + env-fingerprint semantics
+(batch packet); (3) day-5 exact-byte confirmations.
+
+**RECOVERED WORK LEDGER (queue these into the plan):** Phase-3 manifest
+supersession (never executed; validator refuses all pack manifests incl.
+_v3 — design custodied in the phase2-plan consult); dress rehearsal
+ED-Q-L8-2 (never ran; mechanism _v2-stale); WO-CENSUS-SEMANTICS cascade
+(ED-Q-L9-3 fixture uncommitted); prewindow_check.sh census patterns;
+window.env/capture_t0_step key-set defect; runbook _v2→_v3 pass;
+generator CURRENT_FROZEN_RECEIPT constants post-mint; era-codes →
+results-renderer closed set; ED-L10-1 re-scope; charter re-baseline +
+amendments; the D-149 automation seat-audit the packet demands.
+
+**Session hygiene notes for the successor:** run tests THEN commit —
+never in one compound (this session pushed 2 reds that way); packet
+assemblers get the CURRENT head pinned at spawn; killed parents can
+leave running children (dual-assembly happened — reconcile, don't
+clobber).
 
 ## ▶▶ T15-PREP (2026-08-19 night) — ACTIVE NOW: 5-HOUR CLAUDE-SIDE PREP SPRINT; CODEX RESETS 23:34 PST (11:34 PM) WITH FULL ACCOUNTS
 
