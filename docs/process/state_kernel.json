@@ -880,10 +880,10 @@
       "fences": [
         {
           "authority": {
-            "label": "2026-08-15 council NOT-READY verdict",
-            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
+            "path": "docs/decision_log.md"
           },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
         }
       ],
       "flags": [
@@ -931,10 +931,10 @@
       "fences": [
         {
           "authority": {
-            "label": "2026-08-15 council NOT-READY verdict",
-            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
+            "path": "docs/decision_log.md"
           },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
         }
       ],
       "flags": [
@@ -982,10 +982,10 @@
       "fences": [
         {
           "authority": {
-            "label": "2026-08-15 council NOT-READY verdict",
-            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
+            "path": "docs/decision_log.md"
           },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
         }
       ],
       "flags": [
