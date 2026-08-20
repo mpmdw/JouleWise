@@ -889,13 +889,13 @@
       "flags": [
         "lead_only"
       ],
-      "goal": "Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v1 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.",
+      "goal": "Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v3 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.",
       "id": "D117-W-ALPHA",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 2,
       "status": "queued",
-      "status_note": "Current identity-projection and freeze receipts are PASS. The pack is frozen but not selectable: WINDOW-COUNCIL-GATE admits no quiet-mac task, and council Phase 2 requires the ruled successor re-freeze before the re-audit and READY-candidate sitting.",
+      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
       "stop_card": null
     },
     "D117-W-BETA": {
@@ -940,13 +940,13 @@
       "flags": [
         "lead_only"
       ],
-      "goal": "Run the frozen BETA pack d117_floor_qwen25_7b_v1 after ALPHA as D-117's fresh 7B decode-floor window with its prefill floor rider and governed close-out.",
+      "goal": "Run the frozen BETA pack d117_floor_qwen25_7b_v3 after ALPHA as D-117's fresh 7B decode-floor window with its prefill floor rider and governed close-out.",
       "id": "D117-W-BETA",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 3,
       "status": "blocked",
-      "status_note": "Current identity-projection and freeze receipts are PASS. The pack remains behind WINDOW-COUNCIL-GATE and the ruled Phase-2 successor re-freeze, Phase-3 re-audit, and READY-candidate sitting.",
+      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
       "stop_card": null
     },
     "D117-W-GAMMA": {
@@ -991,13 +991,13 @@
       "flags": [
         "lead_only"
       ],
-      "goal": "Run the frozen GAMMA pack d117_contrast_qwen25_1p5b_vs_7b_v1 after BETA as D-117's prospective 1.5B-versus-7B contrast window and governed consumption chain.",
+      "goal": "Run the frozen GAMMA pack d117_contrast_qwen25_1p5b_vs_7b_v3 after BETA as D-117's prospective 1.5B-versus-7B contrast window and governed consumption chain.",
       "id": "D117-W-GAMMA",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 4,
       "status": "blocked",
-      "status_note": "Current identity-projection and freeze receipts are PASS. The pack remains behind WINDOW-COUNCIL-GATE and the ruled Phase-2 successor re-freeze, Phase-3 re-audit, and READY-candidate sitting.",
+      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
       "stop_card": null
     },
     "DOC-008": {
@@ -2862,7 +2862,7 @@
       "priority": "p1_phase_gate",
       "rank": 63,
       "status": "active",
-      "status_note": "S0-S5 executed 2026-08-19; freeze-0003 x3 minted and landed (8b2b021); r6 live; canonical at the frozen head in flight",
+      "status_note": "S0-S5 executed 2026-08-19; freeze-0003 x3 minted, landed, fresh-pass-verified clean; gate inputs: canonical NOT yet run at the merge head (was killed on a stop order), fresh-pass CLEAN through b92b43d, D-144 seat pass pending pool return",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {

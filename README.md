@@ -9,14 +9,10 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-> **🟡 MACHINE: BETWEEN RUNS — D-117 pre-window state.** This document
-> does not assert that a measurement window is in flight; verify live
-> machine state directly before acting. Current work is the ten-item U1-U10
-> instrument-readiness repair path, followed by the prospective alpha, beta, and gamma
-> claim windows. Live selection remains owned by the generated
-> state-kernel work-selection tables in [`RUN_STATE.md`](RUN_STATE.md) and
-> [`TASK_QUEUE.md`](TASK_QUEUE.md); machine rules remain in
-> [`WINDOW_STATUS.md`](WINDOW_STATUS.md).
+**Status:** the instrument's clock-anchor correction is complete and the
+successor measurement campaign family is frozen; the work is on the
+integration branch pending its final review gates, after which fresh
+calibration and measurement windows produce the paper's results data.
 
 ## Current activity (refreshed each work block; last: 2026-08-19 night)
 
@@ -38,8 +34,8 @@ mismatches. The instrument guide was rewritten so every term is built
 before it is used, and the paper's methodology now describes the
 corrected instrument with the transition reported as evidence.
 
-**Next:** merge the transaction to main (gates are green-pending the
-final full-suite run), council-rule the readiness-registry reserved
+**Next:** finish the four pre-merge review gates and merge the
+transaction to main, council-rule the readiness-registry reserved
 values, then the first fresh calibration captures and quiet measurement
 windows under the corrected instrument — the data the paper's results
 tables are waiting for.

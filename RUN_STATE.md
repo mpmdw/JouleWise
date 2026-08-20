@@ -55,7 +55,7 @@ docs/process_traces/... serially (one writer per tree). Prep outputs are
 committed and pushed as they land so the post-/clear thread inherits
 everything through git, never through a dead scratchpad.
 
-**At 23:34 PST:** fan out per the standing order — D-144 seat pass and
+**At 23:34 PST:** (GATE COUNT, canonical formulation: FOUR pre-merge gates — canonical FULL GREEN, fresh-pass clean, D-144 seat pass, then the wave itself under D-148.2.) Fan out per the standing order — D-144 seat pass and
 registry council first (packets 3+4), gauntlet seats on their outputs,
 then the merge wave when all four gates are green (T14-GO item 1), then
 straight down the T14-GO sequence.
@@ -120,7 +120,7 @@ and custody index; docs/process/ed-s5-mint-decision-2026-08-19.md = the
 completed confirmation table awaiting Ed's byte confirmation (day-5
 packet item); decision log D-144..D-149 = tonight's authority set.
 
-## ▶▶ T13-STOP (2026-08-19 night, Ed stop orders ×2) — NOTHING IN FLIGHT; RESUME ONLY ON ED'S EXPLICIT GO
+## ▶▶ T13-STOP (2026-08-19 night, Ed stop orders ×2) — NOTHING IN FLIGHT; RESUME ONLY ON ED'S EXPLICIT GO (SUPERSEDED same night: Ed resumed prep — see T15-PREP above; the go-for-pipeline semantics of T14-GO stand)
 
 *(Second stop, later the same night: after the stop below, Ed cleared
 gates — the permission allowlist is live in settings.local.json and
@@ -140,9 +140,12 @@ report, README blurb). NO MERGE HAS OCCURRED.
 **The complete pre-merge gate list for the successor (corrected — Ed
 caught the omission):**
 1. Final canonical FULL GREEN at the merge head (rerun; ~46 min).
-2. Fresh-pass review over d59d36f..75cb868 (rerun; the killed brief is
-   reusable verbatim from this block's session transcript or
-   reconstructable from the gate items in the T13 block).
+2. Fresh-pass review over d59d36f..<the merge head> — SATISFIED
+   2026-08-19 night: CLEAN through b92b43d, all claim-bearing digests
+   recomputed and matched (report:
+   docs/process_traces/2026-08-19-prep-sprint/merge-freshpass.md);
+   commits after b92b43d are the fix-round of that report's own
+   bookkeeping findings + prep landings and carry no pack/receipt bytes.
 3. **The D-144 BIG-design pre-merge seat pass** — terra+Opus debate over
    the implemented S0–S5 artifact, Fable ruling on findings.
    POOL-GATED (~23:22). This is a ruled requirement of D-146/D-147's own
@@ -4063,7 +4066,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [QUIET-MAC]
 
-- GATED — Q2 `D117-W-ALPHA` (excluded by: WINDOW-COUNCIL-GATE): Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v1 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.
+- GATED — Q2 `D117-W-ALPHA` (excluded by: WINDOW-COUNCIL-GATE): Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v3 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.
 
 ### [AGENT]
 

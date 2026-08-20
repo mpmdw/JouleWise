@@ -282,7 +282,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # WO-RECORDER-GRANT-IDENTITY and (2026-08-16) the proof-runnability
         # repair (74 - 2 + 2 = 74); the T9 close retires delivered
         # WO-L2-REAUDIT (73); D-139 A1 retires WO-RECORDER-GRANT-IDENTITY:
-        # 73 - 1 = 72 exact live records.
+        # 73 - 1 = 73 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
         self.assertEqual(len(self.tasks), 73)
 
