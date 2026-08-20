@@ -3914,7 +3914,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-17). Latest report: [T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED](docs/run_reports/2026-08-16-t9-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-19). Latest report: [T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings](docs/run_reports/2026-08-19-t12-t13-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -3926,7 +3926,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A1 `WO-LAUNCH-BINDING`: Bind arm-capability consume to immediate frozen-chain exec and require authenticated launch-consumption provenance at downstream claim consumers.
+- CONTINUE — A63 `REFREEZE-D147-CLOSE`: Close the executed D-147 re-freeze transaction: final canonical FULL GREEN at the frozen head, then the gate-authorized merge wave to main; council pass on the five R1 registry reserved values at pool return.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

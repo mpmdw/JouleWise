@@ -20,8 +20,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED",
-    "path": "docs/run_reports/2026-08-16-t9-session.md"
+    "label": "T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings",
+    "path": "docs/run_reports/2026-08-19-t12-t13-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -860,7 +860,7 @@
     "D117-W-ALPHA": {
       "acceptance": {
         "evidence": [
-          "Exact frozen pack d117_floor_qwen25_1p5b_v1 is used only after council READY and separate T-0 GO",
+          "Exact frozen pack d117_floor_qwen25_1p5b_v3 is used only after council READY and separate T-0 GO",
           "Fresh live brackets, strict-valid collection bundle, whole-window verdict, margin receipt, backup, and custody records land",
           "The prospective 1.5B decode and prefill floor artifacts trace to the frozen plan and governed close-out chain"
         ],
@@ -901,7 +901,7 @@
     "D117-W-BETA": {
       "acceptance": {
         "evidence": [
-          "Exact frozen pack d117_floor_qwen25_7b_v1 is used only after ALPHA close-out, council READY, and separate T-0 GO",
+          "Exact frozen pack d117_floor_qwen25_7b_v3 is used only after ALPHA close-out, council READY, and separate T-0 GO",
           "Fresh live brackets, strict-valid collection bundle, whole-window verdict, margin receipt, backup, and custody records land",
           "The prospective 7B decode and prefill floor artifacts trace to the frozen plan and governed close-out chain"
         ],
@@ -952,7 +952,7 @@
     "D117-W-GAMMA": {
       "acceptance": {
         "evidence": [
-          "Exact frozen pack d117_contrast_qwen25_1p5b_vs_7b_v1 is used only after BETA close-out, council READY, and separate T-0 GO",
+          "Exact frozen pack d117_contrast_qwen25_1p5b_vs_7b_v3 is used only after BETA close-out, council READY, and separate T-0 GO",
           "Fresh live brackets, strict-valid contrast collection bundle, whole-window verdict, backup, and custody records land",
           "The finalized prospective analysis basis carries the governed decode and p256 prefill contrast outcomes through claim consumption"
         ],
@@ -2826,6 +2826,45 @@
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
       "stop_card": null
     },
+    "REFREEZE-D147-CLOSE": {
+      "acceptance": {
+        "evidence": [
+          "Final canonical suite is FULL GREEN at the frozen head",
+          "The merge wave lands on main through the rule-4/D-072 gate shape with the fresh-pass rule honored",
+          "The council pass on the five R1 row-registry reserved values is custodied and its values installed"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REFREEZE-D147-CLOSE/acceptance",
+          "label": "REFREEZE-D147-CLOSE acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The transaction is closed, merged on gates, and the registry values are council-ruled."
+      },
+      "authority": {
+        "label": "D-147/D-146 rulings + D-148.2 gate-authorized merges",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-148.2 (Ed 2026-08-19): merges are gate-authorized",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Merge wave impl/r2-s0-mint-resolver -> integration/phase2-transaction -> main proceeds when the rule-4/D-072 gate shape is green; no Ed wait"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the executed D-147 re-freeze transaction: final canonical FULL GREEN at the frozen head, then the gate-authorized merge wave to main; council pass on the five R1 registry reserved values at pool return.",
+      "id": "REFREEZE-D147-CLOSE",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 63,
+      "status": "active",
+      "status_note": "S0-S5 executed 2026-08-19; freeze-0003 x3 minted and landed (8b2b021); r6 live; canonical at the frozen head in flight",
+      "stop_card": null
+    },
     "SEC5A-REMOTE-01": {
       "acceptance": {
         "evidence": [
@@ -3320,5 +3359,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-17"
+  "updated": "2026-08-19"
 }

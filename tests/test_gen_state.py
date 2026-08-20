@@ -21,6 +21,7 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    "REFREEZE-D147-CLOSE",
     # [AGENT]
     # 2026-08-15 council Phase-1 repair program. The landed U11 identity
     # projection and FLOOR-COMMONMODE rows retired when these successors
@@ -283,7 +284,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # WO-L2-REAUDIT (73); D-139 A1 retires WO-RECORDER-GRANT-IDENTITY:
         # 73 - 1 = 72 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 72)
+        self.assertEqual(len(self.tasks), 73)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -632,6 +633,12 @@ class TestWorkSelectionFidelity(unittest.TestCase):
     def _kernel_with(self, active_global_gates):
         kernel = copy.deepcopy(load_kernel())
         kernel["active_global_gates"] = copy.deepcopy(active_global_gates)
+        # The synthetic-gate oracles predate transient active rows; a live
+        # in-execution task (status "active") legitimately renders CONTINUE
+        # under a select-scoped gate, so normalize it to queued here.
+        close = kernel["tasks"].get("REFREEZE-D147-CLOSE")
+        if close is not None and close.get("status") == "active":
+            close["status"] = "queued"
         gen_state.validate(kernel)
         return kernel
 
