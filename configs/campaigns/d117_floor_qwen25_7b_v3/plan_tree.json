@@ -33,7 +33,10 @@
     "arm_readiness": {
       "arm_receipt_namespace": "arm_readiness.receipts/arm-<4+ digits>.json",
       "contract_id": "D-134",
-      "freeze_receipt": null,
+      "freeze_receipt": {
+        "path": "arm_readiness.freeze.receipts/freeze-0003.json",
+        "sha256": "f232d076d54408851e5728b3f14e9b04e086d809bca3e1cdac0c3641e072578c"
+      },
       "pack_digest_algorithm": "joulewise.committed_pack_tree_sha256.v1",
       "required_before_arm": true,
       "row_registry": {
