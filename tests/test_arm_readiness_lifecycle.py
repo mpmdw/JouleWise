@@ -37,6 +37,7 @@ from scripts import generate_arm_readiness as arm_readiness_cli
 from tests.test_arm_readiness_schemas import (
     sample_arm,
     sample_dry_run,
+    sample_evidence,
     sample_freeze,
     sample_freeze_v2,
     sample_frozen_projection,
@@ -1662,6 +1663,176 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
 
 
+class FreezeReplayExpiryTests(unittest.TestCase):
+    """B-12: every freeze replay authenticates evidence at live time."""
+
+    def setUp(self) -> None:
+        boot = mock.patch.object(
+            readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
+        )
+        boot.start()
+        self.addCleanup(boot.stop)
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.pack = Path(temporary.name) / "pack"
+        evidence_directory = self.pack / "arm_readiness.evidence"
+        evidence_directory.mkdir(parents=True)
+        self.deadline = 1_000
+
+        source_raw = render_json({"probe": "freeze-replay-expiry"})
+        (self.pack / "source.json").write_bytes(source_raw)
+        evidence = sample_evidence()
+        evidence["valid_until_monotonic_ns"] = self.deadline
+        evidence["facts"][0]["source_sha256"] = hashlib.sha256(
+            source_raw
+        ).hexdigest()
+        evidence_raw = render_json(evidence)
+        evidence_name = "evidence-1.json"
+        evidence_path = evidence_directory / evidence_name
+        evidence_path.write_bytes(evidence_raw)
+        evidence_digest = hashlib.sha256(evidence_raw).hexdigest()
+        evidence_path.with_name(f"{evidence_name}.sha256").write_bytes(
+            gnu_sidecar(evidence_digest, evidence_name)
+        )
+        self.item = {
+            "evidence_id": evidence["evidence_id"],
+            "receipt_kind": evidence["kind"],
+            "namespace": "PACK",
+            "path": f"arm_readiness.evidence/{evidence_name}",
+            "sha256": evidence_digest,
+            "schema_version": evidence["schema_version"],
+            "status": evidence["status"],
+        }
+        self.registry_reference = {"plan_profile": "ALPHA"}
+        self.registry = {"schema_version": readiness.ROW_REGISTRY_SCHEMA}
+        self.freeze_reference = {
+            "path": "arm_readiness.freeze.receipts/freeze-0001.json",
+            "sha256": "f" * 64,
+        }
+        self.tree = {
+            "arm_attachments": {
+                "arm_readiness": {"freeze_receipt": self.freeze_reference}
+            }
+        }
+        self.freeze_receipt = {
+            "schema_version": readiness.FREEZE_RECEIPT_SCHEMA,
+            "receipt_id": "freeze-0001",
+            "status": "PASS",
+            "row_registry": self.registry_reference,
+            "pack_identity": {"pack_id": "test"},
+            "evidence": [self.item],
+            "rows": [],
+            "refusals": [],
+        }
+
+    def _load_freeze_reference(self) -> tuple[object, object]:
+        scanned = {
+            "path": Path("freeze-0001.json"),
+            "sha256": self.freeze_reference["sha256"],
+            "receipt": self.freeze_receipt,
+        }
+        with mock.patch.object(
+            readiness, "scan_receipt_namespace", return_value=[scanned]
+        ), mock.patch.object(
+            readiness, "_valid_plan_attachment", return_value=None
+        ), mock.patch.object(
+            readiness,
+            "_pack_identity",
+            return_value=self.freeze_receipt["pack_identity"],
+        ), mock.patch.object(
+            readiness, "_profile_rows", return_value=[]
+        ), mock.patch.object(
+            readiness, "_validate_profile_rows", return_value=None
+        ), mock.patch.object(
+            readiness, "_load_frozen_identity_evidence", return_value=(None, None, [])
+        ), mock.patch.object(
+            readiness, "_evaluate_rows", return_value=([], [])
+        ):
+            return readiness._load_freeze_reference(
+                self.pack,
+                self.tree,
+                self.registry_reference,
+                self.registry,
+            )
+
+    def _freeze_evidence_for_arm(self) -> tuple[object, object]:
+        with mock.patch.object(
+            readiness, "_load_frozen_identity_evidence", return_value=(None, None, [])
+        ):
+            return readiness._freeze_evidence_for_arm(
+                self.pack,
+                self.tree,
+                self.freeze_receipt,
+                self.registry,
+            )
+
+    def test_both_freeze_replay_sites_refuse_expired_evidence(self) -> None:
+        for label, replay in (
+            ("load-freeze-reference", self._load_freeze_reference),
+            ("freeze-evidence-for-arm", self._freeze_evidence_for_arm),
+        ):
+            with self.subTest(call_site=label), mock.patch.object(
+                readiness.time,
+                "monotonic_ns",
+                return_value=self.deadline + 1,
+            ):
+                with self.assertRaises(ArmReadinessError) as caught:
+                    replay()
+                self.assertEqual(
+                    caught.exception.reason_code, "readiness_record_expired"
+                )
+
+    def test_both_freeze_replay_sites_accept_unexpired_evidence(self) -> None:
+        for label, replay in (
+            ("load-freeze-reference", self._load_freeze_reference),
+            ("freeze-evidence-for-arm", self._freeze_evidence_for_arm),
+        ):
+            with self.subTest(call_site=label), mock.patch.object(
+                readiness.time,
+                "monotonic_ns",
+                return_value=self.deadline - 1,
+            ):
+                _items, receipts = replay()
+                if label == "freeze-evidence-for-arm":
+                    self.assertEqual(set(receipts), {self.item["evidence_id"]})
+
+    def test_wrong_expected_head_still_refuses_before_expiry(self) -> None:
+        with self.assertRaises(ArmReadinessError) as caught:
+            readiness._authenticate_generic_evidence_item(
+                self.item,
+                self.pack,
+                self.pack,
+                expected_boot_session_id=TEST_BOOT_SESSION_ID,
+                expected_head_commit="b" * 40,
+                now_monotonic_ns=self.deadline - 1,
+            )
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_evidence_digest_mismatch"
+        )
+        self.assertIn("stale for pack or HEAD", str(caught.exception))
+
+    def test_expiry_bypass_requires_the_explicit_named_opt_out(self) -> None:
+        with mock.patch.object(
+            readiness.time, "monotonic_ns", return_value=self.deadline + 1
+        ):
+            with self.assertRaises(ArmReadinessError) as caught:
+                readiness._authenticate_generic_evidence_item(
+                    self.item,
+                    self.pack,
+                    self.pack,
+                    expected_boot_session_id=TEST_BOOT_SESSION_ID,
+                )
+            authenticated = readiness._authenticate_generic_evidence_item(
+                self.item,
+                self.pack,
+                self.pack,
+                expected_boot_session_id=TEST_BOOT_SESSION_ID,
+                enforce_expiry=False,
+            )
+        self.assertEqual(caught.exception.reason_code, "readiness_record_expired")
+        self.assertEqual(authenticated["evidence_id"], self.item["evidence_id"])
+
+
 class PostSupersessionLayeringTests(unittest.TestCase):
     """The pack/profile map is IMMUTABLE HISTORY, not live vocabulary.
 
@@ -1789,3 +1960,38 @@ class PostSupersessionLayeringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FreezeReplayExpiryOptOutCensusTests(unittest.TestCase):
+    def test_no_production_caller_opts_out_of_expiry_enforcement(self) -> None:
+        """The fail-closed default is the ONE expiry mechanism (FRE-01).
+
+        Explicit per-site time arguments were removed as redundant; this
+        census is the regression that keeps the opt-out out of production:
+        enforce_expiry may appear in joulewise/ only at its definition and
+        enforcement sites inside _authenticate_generic_evidence_item.
+        """
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[1]
+        offenders: list[str] = []
+        for path in sorted((root / "joulewise").rglob("*.py")):
+            for number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                if "enforce_expiry" not in line:
+                    continue
+                stripped = line.strip()
+                if path.name == "arm_readiness.py" and (
+                    stripped.startswith("enforce_expiry: bool")
+                    or stripped.startswith("if enforce_expiry")
+                ):
+                    continue
+                offenders.append(f"{path.name}:{number}: {stripped}")
+        for path in sorted((root / "scripts").rglob("*.py")):
+            for number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                if "enforce_expiry" in line:
+                    offenders.append(f"{path.name}:{number}: {line.strip()}")
+        self.assertEqual(offenders, [])
