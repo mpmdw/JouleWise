@@ -4169,6 +4169,7 @@ def _authenticate_generic_evidence_item(
     expected_head_commit: str | None = None,
     expected_boot_session_id: str | None = None,
     now_monotonic_ns: int | None = None,
+    enforce_expiry: bool = True,
     launch_binding_cache: dict[Path, bytes] | None = None,
     lifecycle_registry: Mapping[str, Any] | None = None,
 ) -> Mapping[str, Any]:
@@ -4268,14 +4269,16 @@ def _authenticate_generic_evidence_item(
         raise ArmReadinessError(
             "readiness_record_expired", "evidence item belongs to a prior boot session"
         )
-    if (
-        now_monotonic_ns is not None
-        and "valid_until_monotonic_ns" in receipt
-        and receipt["valid_until_monotonic_ns"] < now_monotonic_ns
-    ):
-        raise ArmReadinessError(
-            "readiness_record_expired", "evidence item expired"
+    if enforce_expiry and "valid_until_monotonic_ns" in receipt:
+        authentication_now = (
+            time.monotonic_ns()
+            if now_monotonic_ns is None
+            else now_monotonic_ns
         )
+        if receipt["valid_until_monotonic_ns"] < authentication_now:
+            raise ArmReadinessError(
+                "readiness_record_expired", "evidence item expired"
+            )
     source_payloads: dict[str, tuple[bytes, Mapping[str, Any]]] = {}
     for fact in receipt["facts"]:
         source_path = _resolve_namespace_path(
