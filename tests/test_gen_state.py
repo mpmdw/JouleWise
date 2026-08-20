@@ -21,9 +21,20 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    "ARM-PACKET-01",
     "D144-SEATPASS-FOLLOWUPS",
+    "ED-HANDS-BATCH-01",
+    "ED-MINT-LICENSE-01",
+    "EDQ-L9-3-CAPTURE-01",
+    "FREEZE-REPLAY-EXPIRY-01",
+    "PROC-TEARDOWN-01",
+    "REAUTHOR-CLEAN-01",
+    "PREWINDOW-REGEX-01",
+    "READY-WO-BATCH-01",
     "RECEIPT-HISTSEM-01",
-    "REFREEZE-D147-CLOSE",
+    "SITTING2-PRECONDITIONS-01",
+    "UNVERIFIED-REAUDIT-01",
+    "V4-TRANSACTION-01",
     # [AGENT]
     # 2026-08-15 council Phase-1 repair program. The landed U11 identity
     # projection and FLOOR-COMMONMODE rows retired when these successors
@@ -286,9 +297,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # WO-L2-REAUDIT (73); D-139 A1 retires WO-RECORDER-GRANT-IDENTITY:
         # 73 - 1 = 73; the 2026-08-20 gate-1 fix gauntlet mints
         # RECEIPT-HISTSEM-01 (C1): 73 + 1 = 74; the D-144 seat pass mints
-        # D144-SEATPASS-FOLLOWUPS: 74 + 1 = 75 exact live records.
+        # D144-SEATPASS-FOLLOWUPS (75); the 2026-08-20 sitting/plan close
+        # retires REFREEZE-D147-CLOSE (74) and mints V4-TRANSACTION-01,
+        # SITTING2-PRECONDITIONS-01, READY-WO-BATCH-01,
+        # UNVERIFIED-REAUDIT-01, ED-HANDS-BATCH-01, PREWINDOW-REGEX-01:
+        # 74 + 6 = 80; the S-4 refuter round splits out ED-MINT-LICENSE-01,
+        # EDQ-L9-3-CAPTURE-01 and mints FREEZE-REPLAY-EXPIRY-01,
+        # PROC-TEARDOWN-01, REAUTHOR-CLEAN-01, ARM-PACKET-01:
+        # 80 + 6 = 86 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 75)
+        self.assertEqual(len(self.tasks), 86)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

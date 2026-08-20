@@ -26,6 +26,46 @@
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
   "tasks": {
+    "ARM-PACKET-01": {
+      "acceptance": {
+        "evidence": [
+          "Packet regenerated against the _v4 family and the r5-ruled ceremony forms",
+          "The B-7 end-to-end T-0 pass at the reviewed head is custodied FIRST and cited"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ARM-PACKET-01/acceptance",
+          "label": "ARM-PACKET-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A current-family arm packet exists, validated against the executed T-0 pass."
+      },
+      "authority": {
+        "label": "Sitting B-21 (L8/L6/L7, blocker) with the B-7 ordering",
+        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the reviewed _v4 head and the executed end-to-end T-0 pass (B-7) exist first",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V4-TRANSACTION-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Successor arm packet carrying paste-ready E-9a/b/c literals, horizon, fuse, re-author rule, E-14 date literal, F12 ABORT row — sequenced BEHIND the end-to-end T-0 pass at the reviewed _v4 head (B-7).",
+      "id": "ARM-PACKET-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 75,
+      "status": "blocked",
+      "status_note": "Sequenced inside the _v4 program: after V4-TRANSACTION-01's evidence/attestation stages define the reviewed head.",
+      "stop_card": null
+    },
     "AUD-FOLLOWUPS": {
       "acceptance": {
         "evidence": [
@@ -1265,6 +1305,107 @@
       "status": "shelved",
       "stop_card": null
     },
+    "ED-HANDS-BATCH-01": {
+      "acceptance": {
+        "evidence": [
+          "Mint license installed (unblocks S-0)",
+          "Horizon + marker + B-delta + no-reboot + push-freeze rulings recorded in the decision log",
+          "Executed hands-items custodied under window custody"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ED-HANDS-BATCH-01/acceptance",
+          "label": "ED-HANDS-BATCH-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Each item executed by Ed or formally declined/re-homed with the decline recorded."
+      },
+      "authority": {
+        "label": "r5 consolidation section V-7 + VERDICT-PACKET group (d)",
+        "path": "docs/process_traces/2026-08-20-go-session/rulings-r5-consolidation.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Ed's hands/privilege batch from the sitting + r5 (E-1..E-11 as amended: E-1 observability-only; E-11 expired-if-unharvested) plus the r5 packet items 1-10 (mint license FIRST).",
+      "id": "ED-HANDS-BATCH-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 70,
+      "status": "queued",
+      "status_note": "Lane: ed. E-11 expired ~2026-08-20T16:51Z unless harvested. The mint license and ED-Q-L9-3 capture are SPLIT OUT as their own rows (ED-MINT-LICENSE-01, EDQ-L9-3-CAPTURE-01) so the license-first path and the B-16 sequencing are dependency-enforced, not textual.",
+      "stop_card": null
+    },
+    "ED-MINT-LICENSE-01": {
+      "acceptance": {
+        "evidence": [
+          "The rule is installed in the untracked settings.local.json",
+          "S-0's mint steps run unprompted in the throwaway clone"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/ED-MINT-LICENSE-01/acceptance",
+          "label": "ED-MINT-LICENSE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The settings rule exists and a dry invocation of each licensed command form is accepted without a prompt."
+      },
+      "authority": {
+        "label": "r5 consolidation V-7 item 1 (blocks S-0)",
+        "path": "docs/process_traces/2026-08-20-go-session/rulings-r5-consolidation.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Install the D-148.1 freeze-mint permission rule for the six _v4 commands, scoped to the measurement checkout (Ed's hands only; the classifier forbids self-granting).",
+      "id": "ED-MINT-LICENSE-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 8,
+      "status": "queued",
+      "status_note": "THE single blocking item for the _v4 transaction; everything gates on S-0.",
+      "stop_card": null
+    },
+    "EDQ-L9-3-CAPTURE-01": {
+      "acceptance": {
+        "evidence": [
+          "The fixture is committed and referenced by the census tests",
+          "PREWINDOW-REGEX-01 landed BEFORE the capture (sequencing enforced by this row's dependency)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/EDQ-L9-3-CAPTURE-01/acceptance",
+          "label": "EDQ-L9-3-CAPTURE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "An agent-free census capture exists as a committed fixture and WO-CENSUS-SEMANTICS' hard precondition is met."
+      },
+      "authority": {
+        "label": "Sitting group (d) E-5 + ruling S-7(b)",
+        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the tightened check-8 pattern lands before the agent-free capture (ruling S-7(b))",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "PREWINDOW-REGEX-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "ED-Q-L9-3 agent-free recapture + committed regression fixture (the largest unclosed ED dependency; unblocks WO-CENSUS-SEMANTICS).",
+      "id": "EDQ-L9-3-CAPTURE-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 9,
+      "status": "blocked",
+      "status_note": "Depends on PREWINDOW-REGEX-01 so the tightened check precedes the agent-free capture.",
+      "stop_card": null
+    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -1333,6 +1474,36 @@
       "rank": 53,
       "status": "queued",
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
+      "stop_card": null
+    },
+    "FREEZE-REPLAY-EXPIRY-01": {
+      "acceptance": {
+        "evidence": [
+          "Both call sites pass now_monotonic_ns with a defect-shaped regression each",
+          "The scheduler-gate G1 design note (recompute-from-bytes) is updated to record the cure"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FREEZE-REPLAY-EXPIRY-01/acceptance",
+          "label": "FREEZE-REPLAY-EXPIRY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Freeze-replay authentication enforces expiry at both sites; D-149 auto-GO may not trust row verdicts until this lands."
+      },
+      "authority": {
+        "label": "Sitting B-12 (re-graded blocker, ruling C-12); load-bearing for the G1 gate per the schedgate design",
+        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Pass now_monotonic_ns at BOTH freeze-replay authentication call sites (arm_readiness.py:5253-5262 and :5385-5392) so FREEZE_AND_ARM rows cannot report PASS from expired evidence; regression = refusal at valid_until+1.",
+      "id": "FREEZE-REPLAY-EXPIRY-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 72,
+      "status": "queued",
+      "status_note": "BLOCKER: until landed, the only live expiry check in the auto-GO path is the unbuilt G1 gate. Fence semantics: no D-149 auto-GO trusts FREEZE_AND_ARM verdicts before this row closes.",
       "stop_card": null
     },
     "MET-WINDOW-C-01": {
@@ -2814,6 +2985,66 @@
       "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
       "stop_card": null
     },
+    "PREWINDOW-REGEX-01": {
+      "acceptance": {
+        "evidence": [
+          "Pattern widened with a defect-shaped regression (live claude/codex process detected)",
+          "Landed before the ED-Q-L9-3 fixture capture (sequencing recorded)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PREWINDOW-REGEX-01/acceptance",
+          "label": "PREWINDOW-REGEX-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The dwell-admission check refuses live agent sessions; lands before ED-Q-L9-3's agent-free capture."
+      },
+      "authority": {
+        "label": "Sitting ruling C-6(iii), cold-ratified",
+        "path": "docs/process_traces/2026-08-20-go-session/ready-sitting-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Widen prewindow_check.sh check-8's agent-process pattern to the codex/claude/t3/mcp-server alternation (B-16; split from WO-CENSUS-SEMANTICS by ruling C-6.iii — a fail-closed tightening of an operator preflight, not census semantics).",
+      "id": "PREWINDOW-REGEX-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 71,
+      "status": "queued",
+      "status_note": "Owning-seat (L9) assent to be solicited at the next council touch (S-7 residual).",
+      "stop_card": null
+    },
+    "PROC-TEARDOWN-01": {
+      "acceptance": {
+        "evidence": [
+          "Process-group teardown with the F-B falsifier as regression",
+          "Post-run census recorded in window custody"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PROC-TEARDOWN-01/acceptance",
+          "label": "PROC-TEARDOWN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The teardown kills the process group and a census detects survivors; the L3 falsifier no longer reproduces."
+      },
+      "authority": {
+        "label": "Sitting B-14 (L3 F1, escalated blocker)",
+        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Measured-run process census + process-group teardown so a SIGTERM-ignoring sampler grandchild cannot survive _stop_process (executed reproduction at head).",
+      "id": "PROC-TEARDOWN-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 73,
+      "status": "queued",
+      "status_note": "Blocker-class: an orphan sampler contaminates quiet windows undetected under D-149.",
+      "stop_card": null
+    },
     "QUIET-GUARD-01": {
       "acceptance": {
         "evidence": [
@@ -2857,6 +3088,67 @@
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
       "stop_card": null
     },
+    "READY-WO-BATCH-01": {
+      "acceptance": {
+        "evidence": [
+          "Each closed B-row cites its executed evidence in custody",
+          "B-22 (margin-receipt binding + consumer) lands before any claim-window close-out (claim-admission gate checks it; shakedown exempt, no retrospective promotion)",
+          "B-16 regex widening lands BEFORE ED-Q-L9-3's agent-free fixture capture"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/READY-WO-BATCH-01/acceptance",
+          "label": "READY-WO-BATCH-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every group-(b) row is closed, superseded by a ruled disposition, or re-homed with a recorded reason; the UNVERIFIED register is NOT discharged by this row (see UNVERIFIED-REAUDIT-01)."
+      },
+      "authority": {
+        "label": "READY sitting ruling + VERDICT-PACKET group (b)",
+        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Work down the READY sitting's group-(b) work-order enumeration (B-1..B-47, severities and seat sourcing in the sealed verdict packet): coverage re-enumerations, runbook retarget, window.env reconciliation, census/teardown repairs, custody/receipt bindings, doc corrections.",
+      "id": "READY-WO-BATCH-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 68,
+      "status": "queued",
+      "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. B-46/B-9 (paper + WINDOW_STATUS corrections) are immediate desk items.",
+      "stop_card": null
+    },
+    "REAUTHOR-CLEAN-01": {
+      "acceptance": {
+        "evidence": [
+          "Command + receipt + regression exist",
+          "Runbook references only the governed command"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REAUTHOR-CLEAN-01/acceptance",
+          "label": "REAUTHOR-CLEAN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A governed command performs the re-author cleanup with a receipt; the raw rm is removed from the runbook."
+      },
+      "authority": {
+        "label": "Sitting B-17 (L8 WO-L8R-4, blocker)",
+        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Governed reauthor-clean with shape verification + receipt, replacing the raw /bin/rm -r over three PACK_ID-interpolated namespaces at window_runbook.md:1017.",
+      "id": "REAUTHOR-CLEAN-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 74,
+      "status": "queued",
+      "status_note": "Blocker-class in the packet; P2 rank because it gates re-author ceremonies, not the transaction itself.",
+      "stop_card": null
+    },
     "RECEIPT-HISTSEM-01": {
       "acceptance": {
         "evidence": [
@@ -2887,45 +3179,6 @@
       "rank": 64,
       "status": "queued",
       "status_note": "Minted 2026-08-20 from the gate-1 fix gauntlet's contract-lens refuter (C1); mitigations already in force: D-134 disk/git comparison, published S5 confirmation digests, arm/consume lineage authentication on every claim route.",
-      "stop_card": null
-    },
-    "REFREEZE-D147-CLOSE": {
-      "acceptance": {
-        "evidence": [
-          "Final canonical suite is FULL GREEN at the frozen head",
-          "The merge wave lands on main through the rule-4/D-072 gate shape with the fresh-pass rule honored",
-          "The council pass on the five R1 row-registry reserved values is custodied and its values installed"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/REFREEZE-D147-CLOSE/acceptance",
-          "label": "REFREEZE-D147-CLOSE acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The transaction is closed, merged on gates, and the registry values are council-ruled."
-      },
-      "authority": {
-        "label": "D-147/D-146 rulings + D-148.2 gate-authorized merges",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-148.2 (Ed 2026-08-19): merges are gate-authorized",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Merge wave impl/r2-s0-mint-resolver -> integration/phase2-transaction -> main proceeds when the rule-4/D-072 gate shape is green; no Ed wait"
-        }
-      ],
-      "flags": [],
-      "goal": "Close the executed D-147 re-freeze transaction: final canonical FULL GREEN at the frozen head, then the gate-authorized merge wave to main; council pass on the five R1 registry reserved values at pool return.",
-      "id": "REFREEZE-D147-CLOSE",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 63,
-      "status": "active",
-      "status_note": "S0-S5 executed 2026-08-19; freeze-0003 x3 minted, landed, fresh-pass-verified clean; gate inputs: canonical NOT yet run at the merge head (was killed on a stop order), fresh-pass CLEAN through b92b43d, D-144 seat pass pending pool return",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -2977,6 +3230,38 @@
       "rank": 15,
       "status": "shelved",
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). Shelved with the guard's shelved commits: the programmatic substrate this amendment needed lived in the dropped watcher/handoff scope.",
+      "stop_card": null
+    },
+    "SITTING2-PRECONDITIONS-01": {
+      "acceptance": {
+        "evidence": [
+          "All three _v1 manifest digests superseded by a worded supersession at the ruled head",
+          "Charter v3 (or ruled carrier) contains the sitting-type language the kernel clearance cites",
+          "validate_gate_packet.py accepts the next packet incl. the rule-11 finalization-gate enumeration (faithful transcription)",
+          "The next sitting's head is frozen with the fleet quiesced and recorded"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SITTING2-PRECONDITIONS-01/acceptance",
+          "label": "SITTING2-PRECONDITIONS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A charter-conforming READY sitting can be convened at the frozen _v4 head."
+      },
+      "authority": {
+        "label": "READY sitting ruling + VERDICT-PACKET group (a)",
+        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Cure the six gates on HOLDING the next READY sitting (H-1..H-6): next-sitting-at-frozen-_v4-head convening rule (ruled), baseline-manifest supersession, charter v3 + kernel clearance repoint, sealed-packet protocol (validator grammar + extraction script + mechanical recount + cold pairing), frozen-head discipline, and the H-6 packet-finalization gate homed in the charter + validate_gate_packet.py.",
+      "id": "SITTING2-PRECONDITIONS-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 67,
+      "status": "queued",
+      "status_note": "H-1 already resolved by the ruled convening rule; H-6 adoption ruled by the cold pass (charter home; decision-log entry owed; Ed visibility line in the packet).",
       "stop_card": null
     },
     "SUPERSESSION-DUP-REFUSAL-01": {
@@ -3180,6 +3465,80 @@
       "rank": 41,
       "status": "queued",
       "status_note": "lead personal tooling, non-repo",
+      "stop_card": null
+    },
+    "UNVERIFIED-REAUDIT-01": {
+      "acceptance": {
+        "evidence": [
+          "Eleven universe re-enumerations custodied with denominators and attack records",
+          "Sweep ledger adjudicates all 23 findings incl. B7's claim-bearing numbers",
+          "The falsely-clean attack targets the cleanest-reading row"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/UNVERIFIED-REAUDIT-01/acceptance",
+          "label": "UNVERIFIED-REAUDIT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every U-item carries a fresh, attacked enumeration or an executed re-audit at the ruled head; no fix round substitutes."
+      },
+      "authority": {
+        "label": "READY sitting ruling (UNVERIFIED carried distinctly) + VERDICT-PACKET section 4",
+        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Discharge the sitting's UNVERIFIED register (U-1..U-17): re-enumerate all eleven evidence universes at the frozen _v4 head with at least one adversarial falsely-clean attack; re-run the 23-finding sweep with a per-finding ledger; close the named coverage gaps.",
+      "id": "UNVERIFIED-REAUDIT-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 69,
+      "status": "queued",
+      "status_note": "Mandatory re-audit class: work orders cannot discharge these; scheduled against the next sitting's convening.",
+      "stop_card": null
+    },
+    "V4-TRANSACTION-01": {
+      "acceptance": {
+        "evidence": [
+          "S-0 full three-pack clone proof passes all ruled probes (incl. per-class tamper, dual-validator falsifiers, the poison answer)",
+          "Registry bytes + four code-delta sets land in one commit; load-closure check refuses unclosed codes",
+          "freeze-0004 x3 minted at the measurement checkout, predecessor-bound to freeze-0003, consume-by deadlines recorded in run cards",
+          "file-09 probe P1/P2/P3 OK at the _v4 family + one dry-run ceremony (no real arm)",
+          "Ed's step-6 exact-byte confirmation precedes publication; the commit-freeze stop-card is active for the span"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V4-TRANSACTION-01/acceptance",
+          "label": "V4-TRANSACTION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The _v4 family exists, armable past the changed-set gate, registry installed, published on Ed's exact-byte yes, shakedown complete with GO receipts."
+      },
+      "authority": {
+        "label": "D-148.5 r5 FINAL (cold-ratified with two attached sentences)",
+        "path": "docs/process_traces/2026-08-20-go-session/rulings-r5-consolidation.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Ed installs the D-148.1 mint-license settings rule (r5 V-7 item 1; blocks S-0)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "ED-MINT-LICENSE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Execute the _v4 family transaction per the FINAL r5 ruling: S-0 clone proof (lead-executed, magistrate-verified) -> registry install (111-path allowlist, code deltas, load closure) -> marker per Ed's V6 ruling -> family emission + U11 -> evidence + freeze-0004 mints -> publication + shakedown; mechanical commit-freeze and the corrected step order bind.",
+      "id": "V4-TRANSACTION-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 66,
+      "status": "blocked",
+      "status_note": "BLOCKED on ED-MINT-LICENSE-01 (r5 V-7 item 1; blocks S-0). S-0 is lead-executed at the bench; delegated transcript review is ADDITIVE ONLY — the magistrate's own reading of the S-0 transcript remains the final verification gate (cold-attached sentence, verbatim). BIG per D-144: gauntlet + Fable final review + ONE pre-merge two-seat pass over the composed S-1..S-5 merge; the magistrate rules its findings. Horizon (item 2) and marker (item 3) rulings also gate mint-side steps.",
       "stop_card": null
     },
     "WO-CENSUS-SEMANTICS": {
@@ -3422,5 +3781,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-19"
+  "updated": "2026-08-20"
 }
