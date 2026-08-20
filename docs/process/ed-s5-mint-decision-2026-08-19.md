@@ -68,7 +68,7 @@ Claude performs it plus the full receipt verification (path-binding,
 PASS, `freeze-0003`, predecessor triple vs the `_v2` receipts, digests
 for the confirmation table).
 
-## Confirmation table (draft; [PENDING MINT] rows fill at S5)
+## Confirmation table (COMPLETE — S5 executed 2026-08-19 under D-148.1, mints via Ed-approved manual prompts)
 
 | Item | Value |
 |---|---|
@@ -80,9 +80,9 @@ for the confirmation table).
 | 7b `_v2` freeze-0002 sha (predecessor) | `decd8cdc6a589397e28240b33b97e1b38575be860490a2c6de31be51611842d0` |
 | contrast `_v2` freeze-0002 sha (predecessor) | `18855647c38ec8cf521167fcaae62a06914a8ab7087aeded96835cb418f9607e` |
 | S4 evidence rollups (1p5b / 7b / contrast) | `0e353456…` / `1421ea4e…` / `653f22c0…` (full 99-row manifest in session custody) |
-| 1p5b freeze-0003 sha + committed tree digest | [PENDING MINT] |
-| 7b freeze-0003 sha + committed tree digest | [PENDING MINT] |
-| contrast freeze-0003 sha + committed tree digest | [PENDING MINT] |
+| 1p5b freeze-0003 sha + committed tree digest | `0abfddb13fe8c5e69df3e6be5e2e7efe28d3690b6947d5ed850fcb9652f6ec64` / `1e3f1fa31027e57053c7d26bacf2f373cf2c9ed840ee2bb3befafd99302d63f6` |
+| 7b freeze-0003 sha + committed tree digest | `f232d076d54408851e5728b3f14e9b04e086d809bca3e1cdac0c3641e072578c` / `6d0b9b758d6a37a69a88827cb47ac58566d957099a3e714143d2e6508a93e45f` |
+| contrast freeze-0003 sha + committed tree digest | `f32bd3a8e4dbd04bc5b1635818ba34394984d1d201d16f02efc21f0b01f31c73` / `0d07194143702b266267f0faa7b051695ffb5e1c56dc7a69d0b2dca8aaa883ef` |
 
 ## Other accumulated Ed-owed (unchanged priorities, carried from T11/T12)
 
