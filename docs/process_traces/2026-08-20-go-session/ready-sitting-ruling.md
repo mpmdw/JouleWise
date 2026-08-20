@@ -1,5 +1,14 @@
 # READY-candidate council sitting — magistrate ruling (2026-08-20)
 
+> **ERRATUM (2026-08-20, r5 S-3 — cold-ratified):** the tallies in this
+> adjudicated text are corrupted and RULED CORRECTED by
+> rulings-r5-consolidation.md S-3: the sitting produced **12 reports**
+> (10 gating seats L1-L10 + L11 non-gating + seat-P advisory), not
+> "13/13"; the work-order union is ratified AS THE ENUMERATION
+> (H-1..H-6, B-1..B-47, V-1..V-12, E-1..E-11 = 76 rows), not "62".
+> The adjudicated text below is preserved unedited per custody
+> discipline; r5 supersedes where they differ.
+
 Head 5bd7acf; twelve lens reports + program roll-up; mechanical
 aggregation in VERDICT-PACKET.md (this custody dir). Pending one
 bounded cold-pair review of this ruling's discretionary items
