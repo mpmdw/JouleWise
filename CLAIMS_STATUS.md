@@ -35,12 +35,16 @@ D-095 chain, an adjudication); quote verdicts as issued, never
 reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 `WINDOW_STATUS.md` (machine state), `docs/decision_log.md` (policy).
 
-Last updated: **2026-08-16** (T9 close). Since the 2026-08-07 entry below, all
-three D-117 packs were **frozen** (2026-08-13, receipts PASS ×3) with the
-tighter pre-registered floor selector (`d124_two_shared_edge_common_mode.v1`,
-1.869502 J on the retained contrast cell). Issued results in this cycle remain
-under the conservative 8.611855 J composition until the first post-freeze
-mint.
+Last updated: **2026-08-20** (B7 ruling pass). Since the 2026-08-07 entry
+below, all three D-117 packs were **frozen** (2026-08-13, receipts PASS ×3)
+with the tighter pre-registered floor selector
+(`d124_two_shared_edge_common_mode.v1` — the estimator's identity, not any
+floor value, is what is pre-registered). NO results have been issued in this
+cycle; every floor value issues with its own cell at the first post-freeze
+mint. The superseded-era replay magnitudes formerly quoted here were removed
+under the B7 magistrate ruling (D-146 + D-148 cl.7: superseded-era diagnostic
+values are permanently non-claim-bearing and not recomputable under the
+present instrument).
 
 The **readiness council ruled NOT-READY 0/11** (2026-08-15). No window may be
 armed before a READY-candidate verdict, so every prospective claim remains

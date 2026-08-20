@@ -183,6 +183,22 @@ invented here.
 | `[S_decode_joint_J]` | `F_claim_decode_armwise_max_J + B_decode_claim_J`; disclosure only, never an acceptance gate | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; blocked while claim-bound supplier is unknown | TPL, DF |
 | `[CELL_NONPUBLICATION_SUMMARY]` | Fixed-order summary of decode cells that selected terminal or no-exact-floor branches, using already-rendered reasons | gamma Section 7 variant selector | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, LINT |
 
+#### Swap-block tokens (no landed template counterpart)
+
+The two rows below are keyed on the `CONDITIONAL-INSERT-TIGHTER-FLOOR` block in
+`docs/paper/draft-v1.md`, not on `DRAFT-RESULTS_PROSE.md`. They were added under
+the magistrate ruling on sweep finding B7, which removed superseded-era numeric
+literals from that block and required every value in it to arrive through this
+registry. Their absence from the landed template vocabulary is a real gap and is
+recorded here rather than papered over: the template must gain matching tokens
+before the block is applied, or the block's sentences must be rewritten to use
+tokens the template already defines.
+
+| Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
+|---|---|---|---|---|---|
+| `[F_decode_contrast_cmp_two_edge_J]` | Prospective aggregate floor artifact, gamma decode comparative cell `floor_cmp_j`, admissible only when that cell's `estimator` registration names `d124_two_shared_edge_common_mode.v1` | gamma / decode comparative component under the registered two-shared-edge estimator | MEASURED | KEY_FROZEN / VALUE_UNISSUED; STOP_FILL if the estimator registration is absent, names a different estimator, or the cell refused with `common_mode_nonseparable_window_domain`. No historical or superseded-era replay is a supplier | DRAFT, DF, MINT, AUTH |
+| `[F_decode_contrast_cmp_worst_case_J]` | UNKNOWN binding. The mint issues one comparative floor per cell under the estimator that cell selected; no named output field carries a same-cell worst-case counterpart as a diagnostic alongside a two-shared-edge issuance | gamma / decode comparative component under the worst-case composition, quoted for contrast only | STOP_FILL | SUPPLIER_UNKNOWN; resolve by naming a diagnostic output field that carries the worst-case composition for an already-issued two-shared-edge cell, or drop the comparison clause from the swap block | DRAFT, DF, MINT |
+
 ### Characterization campaign
 
 The prose template fixes the semantic names and branch structure, but no
