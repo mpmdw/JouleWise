@@ -40,6 +40,10 @@ from joulewise.calibration_ledger import (
 )
 from joulewise.environment import evaluate_environment_policy
 from joulewise.powermetrics_fiducial import V2_BINDING_FIELDS
+from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+    SCHEMA_FOR_ANCHOR_METHOD,
+)
 from joulewise.calibration_bracketing import discover_calibration_candidates
 from joulewise.whole_window import (
     MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -6804,10 +6808,12 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
         self.config = production_config()
         self.metadata = {
             "uncertainty_evidence": {
-                "schema_version": "p2-038.2",
+                "schema_version": SCHEMA_FOR_ANCHOR_METHOD[
+                    ACTIVE_CAPTURE_ANCHOR_METHOD
+                ],
                 "clock_anchor": {
                     "status": "bounded",
-                    "method": "powermetrics_native_second_censored_intersection_v1",
+                    "method": ACTIVE_CAPTURE_ANCHOR_METHOD,
                 },
                 "sample_phase": {"status": "bounded"},
                 "idle_drift": {
@@ -6862,7 +6868,7 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
                 self.bundle, allow_mock_runtime=True
             )
 
-    def test_current_p2038_2_with_composed_margin_and_envelope_passes(self) -> None:
+    def test_current_p2038_3_with_composed_margin_and_envelope_passes(self) -> None:
         result = self._assertion()
         self.assertEqual(result["clock_method"], self.metadata["uncertainty_evidence"]["clock_anchor"]["method"])
         # Three-term composed bound: bundle + fiducial + wall-minus-monotonic
@@ -6876,6 +6882,15 @@ class ProductionUncertaintyAssertionTests(unittest.TestCase):
         self.metadata["uncertainty_evidence"]["clock_anchor"][
             "method"
         ] = "powermetrics_spawn_ready_wall_monotonic_envelope_v1"
+        with self.assertRaises(run_campaign_module.ShakedownGateError) as raised:
+            self._assertion()
+        self.assertEqual(raised.exception.code, "clock_evidence_missing")
+
+    def test_retained_v2_evidence_is_rejected_at_the_production_gate(self) -> None:
+        self.metadata["uncertainty_evidence"]["schema_version"] = "p2-038.2"
+        self.metadata["uncertainty_evidence"]["clock_anchor"][
+            "method"
+        ] = "powermetrics_native_second_censored_intersection_v1"
         with self.assertRaises(run_campaign_module.ShakedownGateError) as raised:
             self._assertion()
         self.assertEqual(raised.exception.code, "clock_evidence_missing")
@@ -6922,6 +6937,7 @@ class CampaignCalibrationCustodyStoreTests(unittest.TestCase):
             field: f"value-{field}" for field in V2_BINDING_FIELDS
         }
         self.t1_bindings.update(self.identity_epoch)
+        self.t1_bindings["anchor_method_version"] = ACTIVE_CAPTURE_ANCHOR_METHOD
         self.legacy_custody = self._write_custody("attempt-a")
         append_pending_receipt(
             self.ledger,
@@ -8620,7 +8636,17 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             "p2-work-a__r1",
             attempt1_records=_clean_idle_records(),
             attempt2_records=None,
-            expected_strict_valid=False,
+            # At 8018a4b strict verification fired its fresh-reduction
+            # mismatch (the stored precheck lacked
+            # ``environment_admission_missing``).  The stored-method
+            # environment-anchor dispatch hunk makes the writer/replay
+            # prechecks agree; final-attempt pairing remains a whole-window
+            # admission concern, not a generic bundle-layout requirement.
+            expected_strict_valid=True,
+        )
+        self.assertEqual(evaluation.validation_problems, ())
+        self.assertFalse(
+            (evaluation.bundle_path / "rich_telemetry_idle_attempt_2.jsonl").exists()
         )
         section = run_campaign_module.idle_admission_core_verdict(
             [evaluation], binding
@@ -9646,6 +9672,9 @@ def install_real_salvage_window(
         metadata["instrument_calibration"] = {
             **metadata["instrument_calibration"],
             "verified_effective_b_fiducial_s": 0.02,
+        }
+        metadata["uncertainty_evidence"] = {
+            "clock_anchor": {"method": ACTIVE_CAPTURE_ANCHOR_METHOD},
         }
         (evaluation.bundle_path / "metadata.json").write_text(
             json.dumps(metadata, sort_keys=True) + "\n", encoding="utf-8"

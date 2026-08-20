@@ -1,0 +1,599 @@
+....................................................................................................................................................................................................................................................................................................................................................................................................................................................................Note: switching to '4597ad4ba68b29a30d02cc7bdd64ebb993ffd5b4'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+Note: switching to '4597ad4ba68b29a30d02cc7bdd64ebb993ffd5b4'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+...................................................................................................................................................failed draft-off-000 attempt=0: [Errno 2] No such file or directory: '/definitely/missing/joulewise'
+..failed draft-off-000 attempt=0: dispatch_failed_before_bundle_creation
+..............bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+.bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+..................................................................s.....s.............ok draft-off-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpyyv903bv/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+ok draft-off-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp1fmmfh43/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+.........................................................ssssssssssssssssssssssssss....................................................................................................................................................................................s..................P1_DELAYED_WRITERS=1 EVENT_GATED_FINAL_WRITES=1 BOUNDED_RETRIES=0 THREAD_REGISTRY_EMPTY=1 ESCAPED=0
+.P3_SIGSTOP_RUNS=3 IDENTITY=PASS WALL_MUTATION=FAILS_IDENTITY
+.RAW_ENOTEMPTY=0 FATAL_RETRY_DIAGNOSTIC=0 CONTROLS_MUTATION=RACE_EXERCISED
+RACE_EXERCISED=1 NO_RACE_PRE_WRITE=0 TRACE_INCOMPLETE=0
+.P1_CYCLES=4 RAW_ENOTEMPTY=0 RETRY_EXHAUSTION=0 MAX_CLEANUP_S=0.002411
+.......P2_OWNERSHIP_CYCLES=4 TIMEOUTS=2 EXCEPTIONS=2 ESRCH=4 REGISTRY_EMPTY=1
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 123 event-pulse_command_off-23
+CASE STAGE calibration_quiet_mac_auth_required 167 event-pulse_command_off-67
+CASE STAGE calibration_quiet_mac_auth_required 208 event-pulse_command_on-108
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 108 event-pulse_command_on-8
+CASE STAGE calibration_quiet_mac_auth_required 148 event-pulse_command_on-48
+CASE STAGE calibration_quiet_mac_auth_required 191 event-pulse_command_off-91
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+.CASE START calibration_ledger_missing
+CASE PASS calibration_ledger_missing
+CASE START calibration_ledger_malformed
+CASE PASS calibration_ledger_malformed
+CASE START calibration_ledger_chain_conflict
+CASE PASS calibration_ledger_chain_conflict
+CASE START calibration_ledger_attempt_conflict
+CASE PASS calibration_ledger_attempt_conflict
+CASE START calibration_ledger_bracket_session_conflict
+CASE PASS calibration_ledger_bracket_session_conflict
+CASE START calibration_ledger_content_conflict
+CASE PASS calibration_ledger_content_conflict
+CASE START calibration_ledger_rollback
+CASE PASS calibration_ledger_rollback
+CASE START calibration_ledger_operation_conflict
+CASE PASS calibration_ledger_operation_conflict
+CASE START calibration_ledger_ungoverned_business
+CASE PASS calibration_ledger_ungoverned_business
+CASE START calibration_ledger_custody_invalid
+CASE PASS calibration_ledger_custody_invalid
+CASE START calibration_unsafe_lock_inode
+CASE PASS calibration_unsafe_lock_inode
+CASE START calibration_physical_ledger_unreadable
+CASE PASS calibration_physical_ledger_unreadable
+CASE START calibration_legacy_journal_unreadable
+CASE PASS calibration_legacy_journal_unreadable
+CASE START calibration_legacy_journal_archive_conflict
+CASE PASS calibration_legacy_journal_archive_conflict
+CASE START calibration_legacy_journal_archive_failed
+CASE PASS calibration_legacy_journal_archive_failed
+CASE START calibration_intent_target_malformed
+CASE PASS calibration_intent_target_malformed
+CASE START calibration_recovery_nonconvergent
+CASE PASS calibration_recovery_nonconvergent
+CASE START calibration_abandon_not_clean
+CASE PASS calibration_abandon_not_clean
+CASE START calibration_abandon_pin_mismatch
+CASE PASS calibration_abandon_pin_mismatch
+CASE START calibration_head_pin_unreadable
+CASE PASS calibration_head_pin_unreadable
+CASE START calibration_head_pin_malformed
+CASE PASS calibration_head_pin_malformed
+CASE START calibration_custody_unreadable
+CASE PASS calibration_custody_unreadable
+CASE START calibration_tail_requires_abandon
+CASE PASS calibration_tail_requires_abandon
+CASE START calibration_custody_complete_use_resume
+CASE PASS calibration_custody_complete_use_resume
+CASE START calibration_custody_partial
+CASE PASS calibration_custody_partial
+CASE START calibration_live_writer_contention
+CASE PASS calibration_live_writer_contention
+CASE START calibration_ledger_bracket_session_open
+CASE PASS calibration_ledger_bracket_session_open
+CASE START calibration_ledger_pending
+CASE PASS calibration_ledger_pending
+CASE START calibration_ledger_head_uncommitted
+CASE PASS calibration_ledger_head_uncommitted
+CASE START calibration_ledger_head_mismatch
+CASE PASS calibration_ledger_head_mismatch
+CASE START calibration_ledger_recovery_required
+CASE PASS calibration_ledger_recovery_required
+CASE START calibration_ledger_baseline_missing
+CASE PASS calibration_ledger_baseline_missing
+CASE START calibration_observation_unclassifiable
+CASE PASS calibration_observation_unclassifiable
+CASE START calibration_recovery_credentials_invalid
+CASE PASS calibration_recovery_credentials_invalid
+CASE START calibration_abandon_credentials_invalid
+CASE PASS calibration_abandon_credentials_invalid
+CASE START calibration_abandon_active_intent
+CASE PASS calibration_abandon_active_intent
+CASE START calibration_head_pin_not_committed
+CASE PASS calibration_head_pin_not_committed
+CASE START calibration_reservation_input_invalid
+CASE PASS calibration_reservation_input_invalid
+CASE START calibration_reservation_head_mismatch
+CASE PASS calibration_reservation_head_mismatch
+CASE START calibration_reservation_identity_conflict
+CASE PASS calibration_reservation_identity_conflict
+CASE START calibration_session_not_found
+CASE PASS calibration_session_not_found
+CASE START calibration_session_not_open
+CASE PASS calibration_session_not_open
+CASE START calibration_slot_order_conflict
+CASE PASS calibration_slot_order_conflict
+CASE START calibration_claim_id_invalid
+CASE PASS calibration_claim_id_invalid
+CASE START calibration_finalization_binding_conflict
+CASE PASS calibration_finalization_binding_conflict
+CASE START calibration_session_not_terminal
+CASE PASS calibration_session_not_terminal
+CASE START calibration_session_terminal_not_head
+CASE PASS calibration_session_terminal_not_head
+CASE START calibration_plan_unreadable
+CASE PASS calibration_plan_unreadable
+CASE START calibration_plan_hash_mismatch
+CASE PASS calibration_plan_hash_mismatch
+CASE START calibration_pre_reserve_not_ready
+CASE PASS calibration_pre_reserve_not_ready
+CASE START calibration_pre_slot_not_ready
+CASE STAGE calibration_pre_slot_not_ready 0 writer-launched
+CASE STAGE calibration_pre_slot_not_ready 1 custody-created
+CASE STAGE calibration_pre_slot_not_ready 119 event-pulse_command_off-19
+CASE STAGE calibration_pre_slot_not_ready 161 event-pulse_command_off-61
+CASE STAGE calibration_pre_slot_not_ready 203 event-pulse_command_off-103
+CASE STAGE calibration_pre_slot_not_ready 226 event-sampling_stopped-126
+CASE PASS calibration_pre_slot_not_ready
+CASE START calibration_terminal_not_ready
+CASE PASS calibration_terminal_not_ready
+CASE START calibration_pin_advancement_not_needed
+CASE PASS calibration_pin_advancement_not_needed
+CASE START calibration_pin_advancement_unsafe
+CASE PASS calibration_pin_advancement_unsafe
+CASE START calibration_pin_candidate_mismatch
+CASE PASS calibration_pin_candidate_mismatch
+CASE START calibration_reservation_json_invalid
+CASE PASS calibration_reservation_json_invalid
+CASE START calibration_writer_bracket_arguments
+CASE STAGE calibration_writer_bracket_arguments 0 writer-launched
+CASE STAGE calibration_writer_bracket_arguments 1 custody-created
+CASE STAGE calibration_writer_bracket_arguments 122 event-pulse_command_on-22
+CASE STAGE calibration_writer_bracket_arguments 164 event-pulse_command_on-64
+CASE STAGE calibration_writer_bracket_arguments 204 event-pulse_command_on-104
+CASE STAGE calibration_writer_bracket_arguments 226 event-sampling_stopped-126
+CASE STAGE calibration_writer_bracket_arguments 1001 manifest-written
+CASE PASS calibration_writer_bracket_arguments
+CASE START calibration_writer_bracket_rederive_conflict
+CASE STAGE calibration_writer_bracket_rederive_conflict 0 writer-launched
+CASE STAGE calibration_writer_bracket_rederive_conflict 1 custody-created
+CASE STAGE calibration_writer_bracket_rederive_conflict 120 event-pulse_command_on-20
+CASE STAGE calibration_writer_bracket_rederive_conflict 163 event-pulse_command_off-63
+CASE STAGE calibration_writer_bracket_rederive_conflict 202 event-pulse_command_on-102
+CASE STAGE calibration_writer_bracket_rederive_conflict 226 event-sampling_stopped-126
+CASE STAGE calibration_writer_bracket_rederive_conflict 1001 manifest-written
+CASE PASS calibration_writer_bracket_rederive_conflict
+CASE START calibration_frozen_protocol_invalid
+CASE STAGE calibration_frozen_protocol_invalid 0 writer-launched
+CASE STAGE calibration_frozen_protocol_invalid 1 custody-created
+CASE STAGE calibration_frozen_protocol_invalid 112 event-pulse_command_on-12
+CASE STAGE calibration_frozen_protocol_invalid 154 event-pulse_command_on-54
+CASE STAGE calibration_frozen_protocol_invalid 196 event-pulse_command_on-96
+CASE STAGE calibration_frozen_protocol_invalid 226 event-sampling_stopped-126
+CASE STAGE calibration_frozen_protocol_invalid 1001 manifest-written
+CASE PASS calibration_frozen_protocol_invalid
+CASE START calibration_rederive_output_required
+CASE STAGE calibration_rederive_output_required 0 writer-launched
+CASE STAGE calibration_rederive_output_required 1 custody-created
+CASE STAGE calibration_rederive_output_required 124 event-pulse_command_on-24
+CASE STAGE calibration_rederive_output_required 167 event-pulse_command_off-67
+CASE STAGE calibration_rederive_output_required 208 event-pulse_command_on-108
+CASE STAGE calibration_rederive_output_required 226 event-sampling_stopped-126
+CASE PASS calibration_rederive_output_required
+CASE START calibration_rederive_failed
+CASE STAGE calibration_rederive_failed 0 writer-launched
+CASE STAGE calibration_rederive_failed 1 custody-created
+CASE STAGE calibration_rederive_failed 120 event-pulse_command_on-20
+CASE STAGE calibration_rederive_failed 162 event-pulse_command_on-62
+CASE STAGE calibration_rederive_failed 204 event-pulse_command_on-104
+CASE STAGE calibration_rederive_failed 226 event-sampling_stopped-126
+CASE STAGE calibration_rederive_failed 1001 manifest-written
+CASE PASS calibration_rederive_failed
+CASE START calibration_output_requires_rederive
+CASE STAGE calibration_output_requires_rederive 0 writer-launched
+CASE STAGE calibration_output_requires_rederive 1 custody-created
+CASE STAGE calibration_output_requires_rederive 122 event-pulse_command_on-22
+CASE STAGE calibration_output_requires_rederive 164 event-pulse_command_on-64
+CASE STAGE calibration_output_requires_rederive 208 event-pulse_command_on-108
+CASE STAGE calibration_output_requires_rederive 226 event-sampling_stopped-126
+CASE PASS calibration_output_requires_rederive
+CASE START calibration_quiet_mac_auth_required
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 116 event-pulse_command_on-16
+CASE STAGE calibration_quiet_mac_auth_required 157 event-pulse_command_off-57
+CASE STAGE calibration_quiet_mac_auth_required 201 event-pulse_command_off-101
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE STAGE calibration_quiet_mac_auth_required 1001 manifest-written
+CASE PASS calibration_quiet_mac_auth_required
+CASE START calibration_power_policy_required
+CASE STAGE calibration_power_policy_required 0 writer-launched
+CASE STAGE calibration_power_policy_required 1 custody-created
+CASE STAGE calibration_power_policy_required 116 event-pulse_command_on-16
+CASE STAGE calibration_power_policy_required 155 event-pulse_command_off-55
+CASE STAGE calibration_power_policy_required 196 event-pulse_command_on-96
+CASE STAGE calibration_power_policy_required 226 event-sampling_stopped-126
+CASE PASS calibration_power_policy_required
+CASE START calibration_reserved_slot_mismatch
+CASE PASS calibration_reserved_slot_mismatch
+CASE START calibration_display_arm_failed
+CASE PASS calibration_display_arm_failed
+CASE START calibration_sampler_never_ready
+CASE PASS calibration_sampler_never_ready
+CASE START pulse_calibration_rollover_gate_timeout
+CASE PASS pulse_calibration_rollover_gate_timeout
+..CASE CACHED calibration_reservation_input_invalid
+CASE CACHED calibration_plan_unreadable
+CASE CACHED calibration_plan_hash_mismatch
+CASE CACHED calibration_pre_reserve_not_ready
+CASE CACHED calibration_pre_slot_not_ready
+CASE CACHED calibration_terminal_not_ready
+CASE CACHED calibration_reservation_json_invalid
+CASE CACHED calibration_writer_bracket_arguments
+CASE CACHED calibration_writer_bracket_rederive_conflict
+CASE CACHED calibration_frozen_protocol_invalid
+CASE CACHED calibration_rederive_output_required
+CASE CACHED calibration_rederive_failed
+CASE CACHED calibration_output_requires_rederive
+CASE CACHED calibration_quiet_mac_auth_required
+CASE CACHED calibration_power_policy_required
+.CASE CACHED calibration_abandon_pin_mismatch
+CASE CACHED calibration_tail_requires_abandon
+CASE CACHED calibration_custody_complete_use_resume
+CASE CACHED calibration_custody_partial
+CASE CACHED calibration_live_writer_contention
+CASE CACHED calibration_ledger_bracket_session_open
+CASE CACHED calibration_ledger_pending
+CASE CACHED calibration_ledger_head_uncommitted
+CASE CACHED calibration_ledger_head_mismatch
+CASE CACHED calibration_ledger_recovery_required
+CASE CACHED calibration_ledger_baseline_missing
+CASE CACHED calibration_observation_unclassifiable
+CASE CACHED calibration_recovery_credentials_invalid
+CASE CACHED calibration_abandon_credentials_invalid
+CASE CACHED calibration_abandon_active_intent
+CASE CACHED calibration_head_pin_not_committed
+CASE CACHED calibration_reservation_input_invalid
+CASE CACHED calibration_reservation_head_mismatch
+CASE CACHED calibration_reservation_identity_conflict
+CASE CACHED calibration_session_not_found
+CASE CACHED calibration_session_not_open
+CASE CACHED calibration_slot_order_conflict
+CASE CACHED calibration_claim_id_invalid
+CASE CACHED calibration_session_not_terminal
+CASE CACHED calibration_session_terminal_not_head
+CASE CACHED calibration_plan_unreadable
+CASE CACHED calibration_plan_hash_mismatch
+CASE CACHED calibration_pre_reserve_not_ready
+CASE CACHED calibration_pre_slot_not_ready
+CASE CACHED calibration_terminal_not_ready
+CASE CACHED calibration_pin_advancement_not_needed
+CASE CACHED calibration_pin_advancement_unsafe
+CASE CACHED calibration_pin_candidate_mismatch
+CASE CACHED calibration_reservation_json_invalid
+CASE CACHED calibration_writer_bracket_arguments
+CASE CACHED calibration_writer_bracket_rederive_conflict
+CASE CACHED calibration_frozen_protocol_invalid
+CASE CACHED calibration_rederive_output_required
+CASE CACHED calibration_rederive_failed
+CASE CACHED calibration_output_requires_rederive
+CASE CACHED calibration_quiet_mac_auth_required
+CASE CACHED calibration_power_policy_required
+CASE CACHED calibration_reserved_slot_mismatch
+CASE CACHED calibration_display_arm_failed
+CASE CACHED calibration_sampler_never_ready
+CASE CACHED pulse_calibration_rollover_gate_timeout
+CASE CACHED calibration_ledger_missing
+CASE CACHED calibration_ledger_malformed
+CASE CACHED calibration_ledger_chain_conflict
+CASE CACHED calibration_ledger_attempt_conflict
+CASE CACHED calibration_ledger_bracket_session_conflict
+CASE CACHED calibration_ledger_content_conflict
+CASE CACHED calibration_ledger_rollback
+CASE CACHED calibration_ledger_operation_conflict
+CASE CACHED calibration_ledger_ungoverned_business
+CASE CACHED calibration_ledger_custody_invalid
+CASE CACHED calibration_unsafe_lock_inode
+CASE CACHED calibration_physical_ledger_unreadable
+CASE CACHED calibration_legacy_journal_unreadable
+CASE CACHED calibration_legacy_journal_archive_conflict
+CASE CACHED calibration_legacy_journal_archive_failed
+CASE CACHED calibration_intent_target_malformed
+CASE CACHED calibration_recovery_nonconvergent
+CASE CACHED calibration_abandon_not_clean
+CASE CACHED calibration_head_pin_unreadable
+CASE CACHED calibration_head_pin_malformed
+CASE CACHED calibration_custody_unreadable
+CASE CACHED calibration_finalization_binding_conflict
+.CASE CACHED calibration_ledger_missing
+CASE CACHED calibration_ledger_malformed
+CASE CACHED calibration_ledger_chain_conflict
+CASE CACHED calibration_ledger_attempt_conflict
+CASE CACHED calibration_ledger_bracket_session_conflict
+CASE CACHED calibration_ledger_content_conflict
+CASE CACHED calibration_ledger_rollback
+CASE CACHED calibration_ledger_operation_conflict
+CASE CACHED calibration_ledger_ungoverned_business
+CASE CACHED calibration_ledger_custody_invalid
+CASE CACHED calibration_unsafe_lock_inode
+CASE CACHED calibration_physical_ledger_unreadable
+CASE CACHED calibration_legacy_journal_unreadable
+CASE CACHED calibration_legacy_journal_archive_conflict
+CASE CACHED calibration_legacy_journal_archive_failed
+CASE CACHED calibration_recovery_nonconvergent
+CASE CACHED calibration_abandon_not_clean
+CASE CACHED calibration_abandon_pin_mismatch
+CASE CACHED calibration_head_pin_unreadable
+CASE CACHED calibration_head_pin_malformed
+CASE CACHED calibration_custody_unreadable
+CASE CACHED calibration_ledger_pending
+CASE CACHED calibration_ledger_head_uncommitted
+CASE CACHED calibration_ledger_head_mismatch
+CASE CACHED calibration_ledger_baseline_missing
+CASE CACHED calibration_observation_unclassifiable
+CASE CACHED calibration_recovery_credentials_invalid
+CASE CACHED calibration_abandon_credentials_invalid
+CASE CACHED calibration_abandon_active_intent
+CASE CACHED calibration_head_pin_not_committed
+CASE CACHED calibration_reservation_head_mismatch
+CASE CACHED calibration_session_not_found
+CASE CACHED calibration_session_not_open
+CASE CACHED calibration_claim_id_invalid
+CASE CACHED calibration_finalization_binding_conflict
+CASE CACHED calibration_session_not_terminal
+CASE CACHED calibration_session_terminal_not_head
+CASE CACHED calibration_pin_advancement_not_needed
+CASE CACHED calibration_pin_advancement_unsafe
+CASE CACHED calibration_pin_candidate_mismatch
+............F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 DETACHED_GRANDCHILD_CENSUS_REPORTED=1
+.F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3
+.F4_SUCCESS_CAPTURE_BYTES=214524 SHA256=6aa3b1ea3b07ac9230d7c920eccf5d467edc194efceb7d1d1ae3e97041ec315f BYTE_IDENTICAL=1
+.....{"event": "calibration_pre_reserve_authorized", "session_id": "session-cli"}
+........s.......................................usage: python3.13 -m unittest [-h] [--ledger LEDGER] [--head-pin HEAD_PIN]
+                              {inspect,audit,audit-observations,repair,abandon-tail,explain,readiness,session-status,session-refusal,validate-slot,terminal-pin,resume-finalize,abort-session,advance-head-pin} ...
+python3.13 -m unittest: error: unrecognized arguments: --payload foreign.json
+usage: python3.13 -m unittest [-h] [--ledger LEDGER] [--head-pin HEAD_PIN]
+                              {inspect,audit,audit-observations,repair,abandon-tail,explain,readiness,session-status,session-refusal,validate-slot,terminal-pin,resume-finalize,abort-session,advance-head-pin} ...
+python3.13 -m unittest: error: unrecognized arguments: --allow-uncommitted-head-pin
+....................{"attempt_id": "d117-alpha-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-d117-alpha", "slot": "pre"}
+{"attempt_id": "d117-alpha-post", "event": "calibration_writer_arm_authorized", "session_id": "session-d117-alpha", "slot": "post"}
+{"attempt_id": "d117-beta-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-d117-beta", "slot": "pre"}
+{"attempt_id": "d117-beta-post", "event": "calibration_writer_arm_authorized", "session_id": "session-d117-beta", "slot": "post"}
+{"attempt_id": "d117-gamma-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-d117-gamma", "slot": "pre"}
+{"attempt_id": "d117-gamma-post", "event": "calibration_writer_arm_authorized", "session_id": "session-d117-gamma", "slot": "post"}
+...s.........s........s.......{"event":"joulewise_test_writer_crash_hook_inert","reason":"missing_or_invalid_harness_authorization","requested_stage":"before-writer-lease"}
+............................................................................................................................................................................................................................................................................................................................................ACCEPTANCE GATE SKIP: six frozen legacy corpus bundles require the retained runs/ corpus
+s....................................................................................FFF...................................................................................................................................................................................................ACCEPTANCE GATE SKIP: determinism gate requires the retained runs/ corpus
+s.......................s.........................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................s.s......................................................................................................................................................unsafe worker path: artifacts path is not a contained non-root path
+.....................................................................sssssssssssssssssssssssssssssssssssssssssss...................................................................................................................................{"arm_blocked": true, "code": "calibration_frozen_protocol_invalid", "exit_id": "correct-preflight", "next_command": "recover_calibration_ledger.py readiness --phase pre-reserve --session-id SESSION --plan PLAN", "status": "refused"}
+..................{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.{"arm_blocked": true, "code": "calibration_ledger_malformed", "context": {"detail": "stop after custody-path regression observation"}, "exit_id": "hard-stop-preserved", "next_command": "recover_calibration_ledger.py explain calibration_ledger_malformed", "status": "refused", "terminal_result": "night_stopped_preserved"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+{"attempt_id": "session-writer-post", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "post"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+..........................................................................................................s.............................................................................................................................................................................................s......ssssssss.....................s...s..s........................usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --calibration-custody-store requires minted consumption semantics
+..WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+....warning: preserved 27 torn campaign-log bytes at /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpcc1a3aaf/campaign_log.jsonl.torn-20260820T022942853363Z-3b23836bf203
+.........warning: FAILED to preserve 12 torn campaign-log bytes to /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpxnaickgj/campaign_log.jsonl.torn-20260820T022946038073Z-8f5927bdb239 (PermissionError('injected sidecar failure')); append refused, log untouched
+........usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: salvage-dangler semantics require --window-membership-binding and --salvage-closure
+usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --waivers is forbidden under salvage-dangler semantics
+...............................................................................................warning: preserved 7 torn campaign-log bytes at /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp9iwgavag/campaign_log.jsonl.torn-20260820T023044223083Z-e867134bb1b6
+...bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+...............................................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+error: environment preflight failed: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+.............bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+.............................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+ENVIRONMENT PREFLIGHT FAILED: display_power_state='any_awake' (fail)
+override binding: snapshot_sha256=5b63e0cbf4d66ec48f8079ce252379be0cf8695c79ecd857bab10f430f64228a findings_sha256=5f82754478db0b19396360a005dcdc309d3e7d994261b0c31ddab68833771ccf
+..............................................................s.............................................................................................................................................................................................................................................................................................................................................
+======================================================================
+FAIL: test_unedited_v2_generators_emit_v3_successors (test_d117_v3_family.D117V3FamilyTests.test_unedited_v2_generators_emit_v3_successors) (family='d117_floor_qwen25_1p5b_v3')
+The production route begins with untouched v2 successor emission.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtCANON/tests/test_d117_v3_family.py", line 150, in test_unedited_v2_generators_emit_v3_successors
+    self.assertEqual(checked.returncode, 0, checked.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : generation failed: [Errno 2] No such file or directory: '/private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/d117-v2-to-v3-8nddds2p/configs/campaigns/d117_floor_qwen25_1p5b_v3/arm_readiness.freeze.receipts/freeze-0003.json'
+
+
+======================================================================
+FAIL: test_unedited_v2_generators_emit_v3_successors (test_d117_v3_family.D117V3FamilyTests.test_unedited_v2_generators_emit_v3_successors) (family='d117_floor_qwen25_7b_v3')
+The production route begins with untouched v2 successor emission.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtCANON/tests/test_d117_v3_family.py", line 150, in test_unedited_v2_generators_emit_v3_successors
+    self.assertEqual(checked.returncode, 0, checked.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : generation failed: [Errno 2] No such file or directory: '/private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/d117-v2-to-v3-8nddds2p/configs/campaigns/d117_floor_qwen25_7b_v3/arm_readiness.freeze.receipts/freeze-0003.json'
+
+
+======================================================================
+FAIL: test_unedited_v2_generators_emit_v3_successors (test_d117_v3_family.D117V3FamilyTests.test_unedited_v2_generators_emit_v3_successors) (family='d117_contrast_qwen25_1p5b_vs_7b_v3')
+The production route begins with untouched v2 successor emission.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtCANON/tests/test_d117_v3_family.py", line 150, in test_unedited_v2_generators_emit_v3_successors
+    self.assertEqual(checked.returncode, 0, checked.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : generation failed: [Errno 2] No such file or directory: '/private/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/d117-v2-to-v3-8nddds2p/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.freeze.receipts/freeze-0003.json'
+
+
+----------------------------------------------------------------------
+Ran 3759 tests in 2802.713s
+
+FAILED (failures=3, skipped=95)
+Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpj734oeqn/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_ambiguous_reference
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: adapter_observations_missing
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+  condition: whole_window_campaign_membership_unresolved
+NEG-8 WHOLE-WINDOW VERDICT: flagged
+  decision: passed
+ok draft-off-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp503nb6m2/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpz669wggp/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+ok draft-off-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpixvg9mee/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpoks6zby7/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.

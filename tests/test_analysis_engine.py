@@ -378,6 +378,39 @@ class MixedWireAnchorTermIntersectionTests(unittest.TestCase):
             inclusion_status="included",
         )
 
+    def test_window_precheck_refuses_capture_pipeline_presentation(self) -> None:
+        """The analysis precheck independently pins both barrier branches."""
+
+        from joulewise.analysis_engine.inputs import window_evidence_precheck
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
+        from tests.test_floor_extraction import make_summary
+
+        for metadata, expected in (
+            (
+                {
+                    "uncertainty_evidence": {
+                        "clock_anchor": {"method": CLOCK_METHOD_V2}
+                    }
+                },
+                "capture_pipeline_superseded",
+            ),
+            ({"uncertainty_evidence": {"capture_pipeline_absent": True}}, "capture_pipeline_absent"),
+        ):
+            with self.subTest(expected=expected):
+                evidence = self._evidence(
+                    "v2-member", "cell", "block", "condition", make_summary(40.0)
+                )
+                evidence.metadata = metadata
+                result = window_evidence_precheck(
+                    evidence,
+                    {
+                        "metric_tag": "gross_request",
+                        "name": "gross_energy_j",
+                        "window_class": "request",
+                    },
+                )
+                self.assertIn(expected, result["reasons"])
+
     def test_superseded_anchor_wire_refuses_by_version_not_method(self) -> None:
         from unittest import mock
 

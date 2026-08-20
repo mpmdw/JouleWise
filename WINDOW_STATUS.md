@@ -1,4 +1,7 @@
 # 🟢 BETWEEN RUNS
+> **RESOLVED (2026-08-19 night):** the S5 freeze-0003 mints LANDED
+> (fresh-pass-verified); the evidence-expiry/no-reboot hazard is closed.
+> Record: docs/process/ed-s5-mint-decision-2026-08-19.md (table complete).
 
 Terms used here: a *measurement window* is one uninterrupted, calibrated
 collection session; a *pack* is the frozen campaign plan and its authenticated

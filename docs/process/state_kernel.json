@@ -20,8 +20,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T9 session 2026-08-15/16: Phase-1 code wave merged (4 PRs), detect-pulses staged for Phase 2, L2 coverage re-audit VERIFIED",
-    "path": "docs/run_reports/2026-08-16-t9-session.md"
+    "label": "T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings",
+    "path": "docs/run_reports/2026-08-19-t12-t13-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -860,7 +860,7 @@
     "D117-W-ALPHA": {
       "acceptance": {
         "evidence": [
-          "Exact frozen pack d117_floor_qwen25_1p5b_v1 is used only after council READY and separate T-0 GO",
+          "Exact frozen pack d117_floor_qwen25_1p5b_v3 is used only after council READY and separate T-0 GO",
           "Fresh live brackets, strict-valid collection bundle, whole-window verdict, margin receipt, backup, and custody records land",
           "The prospective 1.5B decode and prefill floor artifacts trace to the frozen plan and governed close-out chain"
         ],
@@ -880,28 +880,28 @@
       "fences": [
         {
           "authority": {
-            "label": "2026-08-15 council NOT-READY verdict",
-            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
+            "path": "docs/decision_log.md"
           },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
         }
       ],
       "flags": [
         "lead_only"
       ],
-      "goal": "Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v1 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.",
+      "goal": "Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v3 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.",
       "id": "D117-W-ALPHA",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 2,
       "status": "queued",
-      "status_note": "Current identity-projection and freeze receipts are PASS. The pack is frozen but not selectable: WINDOW-COUNCIL-GATE admits no quiet-mac task, and council Phase 2 requires the ruled successor re-freeze before the re-audit and READY-candidate sitting.",
+      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
       "stop_card": null
     },
     "D117-W-BETA": {
       "acceptance": {
         "evidence": [
-          "Exact frozen pack d117_floor_qwen25_7b_v1 is used only after ALPHA close-out, council READY, and separate T-0 GO",
+          "Exact frozen pack d117_floor_qwen25_7b_v3 is used only after ALPHA close-out, council READY, and separate T-0 GO",
           "Fresh live brackets, strict-valid collection bundle, whole-window verdict, margin receipt, backup, and custody records land",
           "The prospective 7B decode and prefill floor artifacts trace to the frozen plan and governed close-out chain"
         ],
@@ -931,28 +931,28 @@
       "fences": [
         {
           "authority": {
-            "label": "2026-08-15 council NOT-READY verdict",
-            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
+            "path": "docs/decision_log.md"
           },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
         }
       ],
       "flags": [
         "lead_only"
       ],
-      "goal": "Run the frozen BETA pack d117_floor_qwen25_7b_v1 after ALPHA as D-117's fresh 7B decode-floor window with its prefill floor rider and governed close-out.",
+      "goal": "Run the frozen BETA pack d117_floor_qwen25_7b_v3 after ALPHA as D-117's fresh 7B decode-floor window with its prefill floor rider and governed close-out.",
       "id": "D117-W-BETA",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 3,
       "status": "blocked",
-      "status_note": "Current identity-projection and freeze receipts are PASS. The pack remains behind WINDOW-COUNCIL-GATE and the ruled Phase-2 successor re-freeze, Phase-3 re-audit, and READY-candidate sitting.",
+      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
       "stop_card": null
     },
     "D117-W-GAMMA": {
       "acceptance": {
         "evidence": [
-          "Exact frozen pack d117_contrast_qwen25_1p5b_vs_7b_v1 is used only after BETA close-out, council READY, and separate T-0 GO",
+          "Exact frozen pack d117_contrast_qwen25_1p5b_vs_7b_v3 is used only after BETA close-out, council READY, and separate T-0 GO",
           "Fresh live brackets, strict-valid contrast collection bundle, whole-window verdict, backup, and custody records land",
           "The finalized prospective analysis basis carries the governed decode and p256 prefill contrast outcomes through claim consumption"
         ],
@@ -982,22 +982,53 @@
       "fences": [
         {
           "authority": {
-            "label": "2026-08-15 council NOT-READY verdict",
-            "path": "docs/process_traces/2026-08-15-readiness-council/council-verdict.md"
+            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
+            "path": "docs/decision_log.md"
           },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; Ed remains the physical launch authority"
+          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
         }
       ],
       "flags": [
         "lead_only"
       ],
-      "goal": "Run the frozen GAMMA pack d117_contrast_qwen25_1p5b_vs_7b_v1 after BETA as D-117's prospective 1.5B-versus-7B contrast window and governed consumption chain.",
+      "goal": "Run the frozen GAMMA pack d117_contrast_qwen25_1p5b_vs_7b_v3 after BETA as D-117's prospective 1.5B-versus-7B contrast window and governed consumption chain.",
       "id": "D117-W-GAMMA",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 4,
       "status": "blocked",
-      "status_note": "Current identity-projection and freeze receipts are PASS. The pack remains behind WINDOW-COUNCIL-GATE and the ruled Phase-2 successor re-freeze, Phase-3 re-audit, and READY-candidate sitting.",
+      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
+      "stop_card": null
+    },
+    "D144-SEATPASS-FOLLOWUPS": {
+      "acceptance": {
+        "evidence": [
+          "SF-1: a non-gating persisted report channel surfaces capture_pipeline_superseded for mixed-era ledger observations on a production surface, with an end-to-end regression proving both the report and that valid v3 claims are NOT refused for retained history",
+          "SF-3: a registry-sync test binds schema_v2.json's generation->screen conditional to the Python acceptance registries",
+          "SF-5: the no-copied-scalar guard covers the mint lane per R2 S1(i) rather than a 3-file allowlist"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D144-SEATPASS-FOLLOWUPS/acceptance",
+          "label": "D144-SEATPASS-FOLLOWUPS acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Close the three should-fix findings of the D-144 pre-merge seat pass (ruling: docs/process_traces/2026-08-20-go-session/d144-seatpass-ruling.md); SF-1's shape is ruled non-gating (the one-line guard drop was executably refuted as a false-refusal defect)."
+      },
+      "authority": {
+        "label": "D-144 seat-pass ruling 2026-08-20 (GO; SF dispositions post-debate)",
+        "path": "docs/process_traces/2026-08-20-go-session/d144-seatpass-ruling.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "D-144 seat-pass should-fix follow-ups: SF-1 non-gating superseded-era report channel, SF-3 schema/registry sync test, SF-5 mint-lane-wide scalar guard.",
+      "id": "D144-SEATPASS-FOLLOWUPS",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 65,
+      "status": "queued",
+      "status_note": "Minted 2026-08-20 from the D-144 pre-merge seat pass (both seats GO; nits recorded in the ruling, not queued).",
       "stop_card": null
     },
     "DOC-008": {
@@ -2826,6 +2857,77 @@
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
       "stop_card": null
     },
+    "RECEIPT-HISTSEM-01": {
+      "acceptance": {
+        "evidence": [
+          "An external governed verifier or pinset recomputes each legacy frozen PACK receipt's historical pack digest from its recorded head_commit and compares it with the receipt's pack_sha256",
+          "The verifier checks the complete receipt -> sidecar -> freeze -> plan binding for every legacy PACK evidence item",
+          "The verifier runs in CI and again before arm issuance",
+          "A defect-shaped regression proves a coherently rewritten receipt chain with false historical pack_sha256/head_commit is refused"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RECEIPT-HISTSEM-01/acceptance",
+          "label": "RECEIPT-HISTSEM-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Close the C1 gap: legacy frozen PACK evidence replay authenticates exact nested bytes but never validates the receipt's historical pack_sha256/head_commit semantics."
+      },
+      "authority": {
+        "label": "Gate-1 fix gauntlet synthesis, 2026-08-20 (C1, Sol contract-lens refuter)",
+        "path": "docs/process_traces/2026-08-20-go-session/00-fix-gauntlet-synthesis.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Historical receipt-semantics verifier: validate legacy frozen PACK evidence receipts' recorded pack_sha256/head_commit against the recomputed historical tree, outside the immutable frozen packs (arm_readiness.py supplies expected values only for WINDOW_CUSTODY LAUNCH_RECIPE; freeze minting passes None/None).",
+      "id": "RECEIPT-HISTSEM-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 64,
+      "status": "queued",
+      "status_note": "Minted 2026-08-20 from the gate-1 fix gauntlet's contract-lens refuter (C1); mitigations already in force: D-134 disk/git comparison, published S5 confirmation digests, arm/consume lineage authentication on every claim route.",
+      "stop_card": null
+    },
+    "REFREEZE-D147-CLOSE": {
+      "acceptance": {
+        "evidence": [
+          "Final canonical suite is FULL GREEN at the frozen head",
+          "The merge wave lands on main through the rule-4/D-072 gate shape with the fresh-pass rule honored",
+          "The council pass on the five R1 row-registry reserved values is custodied and its values installed"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REFREEZE-D147-CLOSE/acceptance",
+          "label": "REFREEZE-D147-CLOSE acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The transaction is closed, merged on gates, and the registry values are council-ruled."
+      },
+      "authority": {
+        "label": "D-147/D-146 rulings + D-148.2 gate-authorized merges",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-148.2 (Ed 2026-08-19): merges are gate-authorized",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Merge wave impl/r2-s0-mint-resolver -> integration/phase2-transaction -> main proceeds when the rule-4/D-072 gate shape is green; no Ed wait"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the executed D-147 re-freeze transaction: final canonical FULL GREEN at the frozen head, then the gate-authorized merge wave to main; council pass on the five R1 registry reserved values at pool return.",
+      "id": "REFREEZE-D147-CLOSE",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 63,
+      "status": "active",
+      "status_note": "S0-S5 executed 2026-08-19; freeze-0003 x3 minted, landed, fresh-pass-verified clean; gate inputs: canonical NOT yet run at the merge head (was killed on a stop order), fresh-pass CLEAN through b92b43d, D-144 seat pass pending pool return",
+      "stop_card": null
+    },
     "SEC5A-REMOTE-01": {
       "acceptance": {
         "evidence": [
@@ -3320,5 +3422,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-17"
+  "updated": "2026-08-19"
 }

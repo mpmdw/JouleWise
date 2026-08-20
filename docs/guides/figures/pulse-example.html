@@ -1,0 +1,538 @@
+<title>How One Pulse Becomes a Bound</title>
+<style>
+  :root {
+    --ground: #FAFAF7;
+    --ink: #232A31;
+    --ink-soft: #5A646D;
+    --grid: #D9DED9;
+    --amber: #C2661B;
+    --amber-soft: #C2661B22;
+    --keep: #137A6E;
+    --keep-soft: #137A6E1A;
+    --cut: #B0453C;
+    --cut-soft: #B0453C14;
+    --card: #F1F2EC;
+    --rule: #C9CFC9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #15191D;
+      --ink: #E4E8E4;
+      --ink-soft: #9AA4AB;
+      --grid: #2C3338;
+      --amber: #E08A3C;
+      --amber-soft: #E08A3C26;
+      --keep: #3FB3A2;
+      --keep-soft: #3FB3A21F;
+      --cut: #D4756A;
+      --cut-soft: #D4756A1A;
+      --card: #1C2126;
+      --rule: #333B41;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #15191D;
+    --ink: #E4E8E4;
+    --ink-soft: #9AA4AB;
+    --grid: #2C3338;
+    --amber: #E08A3C;
+    --amber-soft: #E08A3C26;
+    --keep: #3FB3A2;
+    --keep-soft: #3FB3A21F;
+    --cut: #D4756A;
+    --cut-soft: #D4756A1A;
+    --card: #1C2126;
+    --rule: #333B41;
+  }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+    font-size: 17px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 1.25rem;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 3rem 0 5rem; }
+  h1, h2 {
+    font-family: "Avenir Next", Avenir, Seravek, "Segoe UI", ui-sans-serif, sans-serif;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+  h1 { font-size: 2rem; font-weight: 600; margin: 0.4rem 0 0.6rem; }
+  h2 { font-size: 1.28rem; font-weight: 600; margin: 2.6rem 0 0.7rem; }
+  .eyebrow {
+    font-family: "Avenir Next", Avenir, Seravek, "Segoe UI", ui-sans-serif, sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--amber);
+    font-weight: 600;
+  }
+  .dek { color: var(--ink-soft); font-size: 1.05rem; margin: 0 0 1rem; }
+  p { margin: 0 0 1rem; }
+  figure {
+    margin: 1.6rem 0 2rem;
+    padding: 1.1rem 1.1rem 0.9rem;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  figcaption {
+    font-family: "Avenir Next", Avenir, Seravek, "Segoe UI", ui-sans-serif, sans-serif;
+    font-size: 0.84rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    margin-top: 0.8rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.7rem;
+  }
+  figcaption b { color: var(--ink); }
+  .num { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 0.92em; }
+  .note {
+    border-left: 3px solid var(--amber);
+    background: var(--amber-soft);
+    padding: 0.7rem 1rem;
+    margin: 1.4rem 0;
+    font-size: 0.95rem;
+    border-radius: 0 4px 4px 0;
+  }
+  .svg-ink { color: var(--ink); }
+</style>
+
+<main>
+<p class="eyebrow">JouleWise · worked example</p>
+<h1>How one pulse becomes a bound</h1>
+<p class="dek">Start to finish for a single calibration pulse: what the samples
+actually say, why the answer is a region rather than a point, what “fits well
+enough” actually means, how the block search maps the region without
+gaps, and what the
+<span class="num">165,000</span>-evaluation boundary is protecting.</p>
+
+<p>The capture below is real in every capture-level number (sampler cadence,
+pulse protocol, budget, corpus demands). The per-rectangle geometry is an
+honest illustration of the algorithm — the detector does not retain its
+internal rectangle log, so the shapes are drawn to teach, not replayed
+from disk.</p>
+
+<h2>1 · What the samples actually say</h2>
+<p>Take pulse #23 of the 59 in a calibration capture. The instrument
+commanded the graphics processor to run a matrix-multiply load for exactly
+<span class="num">1.000&nbsp;s</span>, starting at a known wall-clock time. The power counter
+doesn't see edges — it reports one <em>average</em> per interval, roughly
+every <span class="num">112&nbsp;ms</span>. Samples wholly inside the pulse read the plateau;
+samples wholly outside read the baseline; and the one or two samples that
+<em>straddle</em> each edge read something in between, in proportion to how
+much of their interval the pulse covered.</p>
+
+<figure>
+<svg viewBox="0 0 640 240" role="img" aria-label="Power samples across a commanded pulse: plateau samples, baseline samples, and two straddling samples whose partial heights are the only edge evidence" class="svg-ink">
+  <defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <polygon points="0,0 8,4 0,8" fill="currentColor"/>
+    </marker>
+  </defs>
+  <!-- axes -->
+  <line x1="40" y1="200" x2="620" y2="200" stroke="currentColor" stroke-width="1.2" marker-end="url(#arr)"/>
+  <line x1="40" y1="200" x2="40" y2="20" stroke="currentColor" stroke-width="1.2" marker-end="url(#arr)"/>
+  <text x="612" y="218" font-size="12" text-anchor="end" fill="currentColor">time</text>
+  <text x="30" y="30" font-size="12" text-anchor="end" fill="currentColor" transform="rotate(-90 30 30)">power</text>
+  <!-- commanded pulse window -->
+  <rect x="220" y="28" width="240" height="172" fill="var(--amber-soft)"/>
+  <line x1="220" y1="28" x2="220" y2="200" stroke="var(--amber)" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <line x1="460" y1="28" x2="460" y2="200" stroke="var(--amber)" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <text x="340" y="22" font-size="12" text-anchor="middle" fill="var(--amber)">commanded: on 1.000 s</text>
+  <!-- baseline samples (before) -->
+  <rect x="60"  y="176" width="50" height="24" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <rect x="116" y="176" width="50" height="24" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <rect x="172" y="176" width="50" height="24" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <!-- straddling start sample -->
+  <rect x="228" y="120" width="50" height="80" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.6"/>
+  <!-- plateau samples -->
+  <rect x="284" y="60" width="50" height="140" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <rect x="340" y="60" width="50" height="140" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <rect x="396" y="60" width="50" height="140" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <!-- straddling stop sample -->
+  <rect x="452" y="140" width="50" height="60" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.6"/>
+  <!-- baseline after -->
+  <rect x="508" y="176" width="50" height="24" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <rect x="564" y="176" width="40" height="24" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <!-- labels -->
+  <text x="253" y="112" font-size="11" text-anchor="middle" fill="var(--amber)">straddles</text>
+  <text x="253" y="99"  font-size="11" text-anchor="middle" fill="var(--amber)">start edge</text>
+  <text x="477" y="121" font-size="11" text-anchor="middle" fill="var(--amber)">straddles</text>
+  <text x="477" y="134" font-size="11" text-anchor="middle" fill="var(--amber)">stop edge</text>
+  <text x="365" y="52" font-size="11" text-anchor="middle" fill="currentColor">plateau samples</text>
+  <text x="141" y="168" font-size="11" text-anchor="middle" fill="currentColor">baseline samples</text>
+</svg>
+<figcaption><b>Figure 1 — the evidence for one pulse.</b> Each bar is one
+~<span class="num">112&nbsp;ms</span> power sample. Only the two straddling samples carry any
+information about <em>where</em> the edges fall — their partial heights say
+what fraction of their interval the pulse covered. Everything the detector
+concludes about edge placement comes from making those partial heights come
+out right.</figcaption>
+</figure>
+
+<h2>2 · Two unknowns make a plane of guesses</h2>
+<p>The pulse has exactly two unknowns: how far the <em>start</em> edge
+really was from its commanded time, and how far the <em>stop</em> edge
+really was from its commanded time. A complete guess about the pulse is
+therefore a pair of numbers. <em>“Started
+<span class="num">3.2&nbsp;ms</span> late, stopped
+<span class="num">1.1&nbsp;ms</span> early”</em> is one guess. <em>“Started
+<span class="num">40&nbsp;ms</span> late, stopped
+<span class="num">40&nbsp;ms</span> late”</em> is another.</p>
+<p>Put start-shift on a horizontal axis and stop-shift on a vertical axis
+and every possible guess becomes one point on a plane — the same way every
+possible (voltage, current) operating point of a device is one point on an
+I-V plane. That is the entire meaning of “the plane” here: <b>each point is
+one hypothesis about where the two edges really were.</b></p>
+<p>Any guess can be tested against Figure&nbsp;1's samples. Take the
+<span class="num">(+40&nbsp;ms, +40&nbsp;ms)</span> guess: if the whole pulse
+really sat 40&nbsp;ms late, the sample straddling the start edge would have
+overlapped the pulse for 40&nbsp;ms less, so its measured average should sit
+visibly lower than it actually does — the prediction misses the recorded
+height by far more than sample noise can explain, and the guess is ruled
+out. Now take <span class="num">(+0.3&nbsp;ms, −0.2&nbsp;ms)</span>: shifting an
+edge by a fraction of a millisecond changes the straddling sample's
+predicted height by a fraction of a percent — <em>less</em> than ordinary
+noise. The samples cannot tell that guess apart from the perfect one.</p>
+<p>That second case is the whole problem. It is not one lucky guess that
+survives; it is an entire connected patch of the plane — every guess close
+enough that the straddling samples can't testify against it. Keeping only
+the single best-scoring guess would pretend the samples pinpoint the edges.
+They don't. The honest answer is the whole surviving patch, and the pulse's
+timing bound is the <em>worst edge displacement anywhere in it</em>. Which
+creates the obligation that drives everything in the next section: the
+patch must be found <em>without gaps</em>, because a missed corner of it
+might contain the guess that should have set the bound.</p>
+
+<figure>
+<svg viewBox="0 0 620 300" role="img" aria-label="The plane of candidate edge shifts, the acceptance region of candidates that fit the data, the best-fit point inside it, and the bound taken from the region's farthest extent" class="svg-ink">
+  <defs>
+    <marker id="arr2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <polygon points="0,0 8,4 0,8" fill="currentColor"/>
+    </marker>
+  </defs>
+  <!-- axes centered -->
+  <line x1="60" y1="150" x2="600" y2="150" stroke="var(--grid)" stroke-width="1"/>
+  <line x1="320" y1="285" x2="320" y2="15" stroke="var(--grid)" stroke-width="1"/>
+  <line x1="60" y1="285" x2="600" y2="285" stroke="currentColor" stroke-width="1.2" marker-end="url(#arr2)"/>
+  <line x1="60" y1="285" x2="60" y2="15" stroke="currentColor" stroke-width="1.2" marker-end="url(#arr2)"/>
+  <text x="592" y="278" font-size="12" text-anchor="end" fill="currentColor">start-edge shift</text>
+  <text x="53" y="24" font-size="12" text-anchor="end" fill="currentColor" transform="rotate(-90 53 24)">stop-edge shift</text>
+  <text x="322" y="163" font-size="10" fill="var(--ink-soft)">0,0 = exactly as commanded</text>
+  <!-- ruled-out example guess -->
+  <g>
+    <line x1="443" y1="223" x2="457" y2="237" stroke="var(--cut)" stroke-width="2"/>
+    <line x1="457" y1="223" x2="443" y2="237" stroke="var(--cut)" stroke-width="2"/>
+    <text x="466" y="226" font-size="11.5" fill="var(--cut)">guess: started +40 ms, stopped +40 ms</text>
+    <text x="466" y="240" font-size="11.5" fill="var(--cut)">straddle sample contradicts it → ruled out</text>
+  </g>
+  <!-- acceptance region: irregular blob -->
+  <path d="M 300 105
+           C 340 92, 392 100, 408 128
+           C 424 156, 404 190, 368 198
+           C 332 206, 292 196, 278 168
+           C 264 140, 268 116, 300 105 Z"
+        fill="var(--keep-soft)" stroke="var(--keep)" stroke-width="1.8"/>
+  <text x="345" y="152" font-size="11.5" text-anchor="middle" fill="var(--keep)">guesses the samples</text>
+  <text x="345" y="166" font-size="11.5" text-anchor="middle" fill="var(--keep)">cannot tell apart</text>
+  <!-- surviving example guess -->
+  <g>
+    <line x1="325" y1="130" x2="335" y2="140" stroke="var(--amber)" stroke-width="2"/>
+    <line x1="335" y1="130" x2="325" y2="140" stroke="var(--amber)" stroke-width="2"/>
+    <text x="140" y="106" font-size="11.5" fill="var(--amber)">guess: started +0.3 ms,</text>
+    <text x="140" y="120" font-size="11.5" fill="var(--amber)">stopped −0.2 ms — fits</text>
+    <text x="140" y="134" font-size="11.5" fill="var(--amber)">within noise → survives</text>
+  </g>
+  <!-- worst displacement arrow: from origin to farthest point of region -->
+  <line x1="320" y1="150" x2="408" y2="128" stroke="var(--cut)" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#arr2)"/>
+  <text x="418" y="112" font-size="11.5" fill="var(--cut)">farthest surviving guess</text>
+  <text x="418" y="126" font-size="11.5" fill="var(--cut)">= this pulse's bound</text>
+</svg>
+<figcaption><b>Figure 2 — every point is a guess; the shaded patch is the
+set of guesses that survive testing.</b> The two ×-marks are worked
+examples: the far guess predicts straddle-sample heights the recording
+contradicts, so it dies; the near guess changes the predictions by less
+than noise, so it survives. The teal patch is simply <em>all</em> the
+surviving guesses — the detector does not know its shape in advance, and
+Section&nbsp;3 is about how it finds it. The bound is the farthest
+displacement the patch reaches, not the best-fitting point. Patch shape
+illustrative.</figcaption>
+</figure>
+
+<h2>3 · What “fits well enough” means — the score and the waterline</h2>
+<p>Sections 1–2 said guesses get “ruled out” or “survive.” Here is the
+actual test, so those words carry no hidden weight. Every guess gets a <b>score</b>: for each sample, take the miss
+— measured height minus the height this guess predicts — divide it by the
+sample noise so the units are “how many noise-widths off,” pass it through a
+penalty that grows with the square of small misses but only linearly for big
+ones (so one glitchy sample can't dominate the verdict), and add the
+penalties up. A perfect explanation scores near zero; a guess whose
+straddle-sample predictions are badly wrong piles up penalty fast.</p>
+<p>Two gates use that score. The first asks whether there is a pulse
+<em>at all</em>: the best guess's score must be less than <b>half</b> the
+score of the flat “no pulse happened” explanation, or the pulse is declared
+not detected and the capture is refused. The second gate defines the
+surviving patch. Its threshold is not an absolute number — it is set
+<em>relative to the best guess</em>:</p>
+<p style="text-align:center" class="num">limit&nbsp;=&nbsp;best&nbsp;score&nbsp;+&nbsp;max(&nbsp;1.0,&nbsp;5%&nbsp;of&nbsp;best&nbsp;score&nbsp;)</p>
+<p>In words: a guess survives if it explains the samples essentially as
+well as the best one — within about one sample's worth of ordinary noise,
+or within 5% of the total score when the total is large. That “1.0” floor
+is what makes the patch honest: even if the best fit is nearly perfect, any
+guess whose penalty is within a single noise-width of it cannot be told
+apart from it by this data, so it stays in.</p>
+
+<figure>
+<svg viewBox="0 0 640 250" role="img" aria-label="A cross-section of the score across the plane: a valley dipping to the best score, a waterline at best plus tolerance, and the surviving range where the valley sits below the waterline" class="svg-ink">
+  <defs>
+    <marker id="arr5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <polygon points="0,0 8,4 0,8" fill="currentColor"/>
+    </marker>
+  </defs>
+  <!-- axes -->
+  <line x1="50" y1="210" x2="620" y2="210" stroke="currentColor" stroke-width="1.2" marker-end="url(#arr5)"/>
+  <line x1="50" y1="210" x2="50" y2="20" stroke="currentColor" stroke-width="1.2" marker-end="url(#arr5)"/>
+  <text x="612" y="228" font-size="12" text-anchor="end" fill="currentColor">one slice across the plane of guesses</text>
+  <text x="40" y="28" font-size="12" text-anchor="end" fill="currentColor" transform="rotate(-90 40 28)">score (penalty)</text>
+  <!-- valley curve -->
+  <path d="M 60 40 C 140 60, 200 90, 250 140 C 290 178, 310 186, 335 187 C 360 186, 385 175, 420 140 C 470 92, 540 55, 610 38"
+        fill="none" stroke="currentColor" stroke-width="1.8"/>
+  <!-- waterline -->
+  <line x1="50" y1="168" x2="620" y2="168" stroke="var(--amber)" stroke-width="1.8" stroke-dasharray="6 4"/>
+  <text x="614" y="160" font-size="11.5" text-anchor="end" fill="var(--amber)">limit = best + max(1.0, 5% of best)</text>
+  <!-- best point -->
+  <circle cx="335" cy="187" r="4" fill="var(--amber)"/>
+  <text x="335" y="205" font-size="11" text-anchor="middle" fill="var(--amber)">best score, e.g. 38.0 → limit 39.9</text>
+  <!-- surviving interval: where curve below waterline ~ x 275..405 -->
+  <rect x="277" y="168" width="126" height="42" fill="var(--keep-soft)"/>
+  <line x1="277" y1="168" x2="277" y2="210" stroke="var(--keep)" stroke-width="1.4"/>
+  <line x1="403" y1="168" x2="403" y2="210" stroke="var(--keep)" stroke-width="1.4"/>
+  <text x="340" y="160" font-size="11.5" text-anchor="middle" fill="var(--keep)">below the line = survives</text>
+  <!-- a rejected block whose floor is above the line -->
+  <rect x="90" y="60" width="80" height="14" fill="none" stroke="var(--cut)" stroke-width="1.6"/>
+  <text x="130" y="52" font-size="11" text-anchor="middle" fill="var(--cut)">a block's guaranteed floor</text>
+  <text x="130" y="90" font-size="11" text-anchor="middle" fill="var(--cut)">above the line → whole block out</text>
+</svg>
+<figcaption><b>Figure 3 — the valley and the waterline.</b> Moving across
+the plane of guesses, the score traces a valley whose bottom is the best
+fit. The waterline sits just above the bottom — one noise-width, or 5% for
+large scores. Everything below the waterline survives; the surviving patch
+of Figure&nbsp;2 is exactly the flooded part of this valley, seen from
+above. A block is rejected when its <em>guaranteed floor</em> — the best
+score anything inside it could reach — is provably above the waterline.
+Numbers illustrative; the limit rule is the real one.</figcaption>
+</figure>
+
+<p>One subtlety, stated so nobody discovers it later as a gotcha: the
+waterline depends on the best score, so the detector first finds the best
+fit, then floods the valley around it. And after the patch is mapped, it is
+widened once more by the recorded uncertainty of the pulse's own command
+timestamps — the map bounds what the <em>samples</em> can say, and the
+command stamps carry their own small slop.</p>
+
+<h2>4 · Testing guesses in blocks — what the rectangles are</h2>
+<p>The surviving patch has to be found, and there are infinitely many
+guesses to test. Testing them one at a time is impossible, and testing a
+finite grid of them is worse than it looks: whatever spacing you choose,
+the guesses <em>between</em> your grid points go untested, and the patch's
+true extent could poke out between them.</p>
+<p>So the detector tests guesses <em>in blocks</em>. A rectangle is nothing
+mysterious — it is a range of start-shifts crossed with a range of
+stop-shifts: <em>“every guess where the start was off by between
+<span class="num">−500</span> and <span class="num">−250&nbsp;ms</span> and the stop
+was off by between <span class="num">+250</span> and
+<span class="num">+500&nbsp;ms</span>”</em> is one rectangle, containing
+infinitely many guesses. The reason blocks work is a property of the fit
+itself: because sliding an edge changes a straddling sample's predicted
+height smoothly and in one direction, the detector can compute — exactly,
+not by sampling — <em>the best score any guess inside the block could
+possibly achieve.</em> That one computation is one “evaluation,” and it
+licenses one of three moves:</p>
+<p><b>Reject the block</b> — if even its best possible score sits above the
+waterline of Figure&nbsp;3, every guess inside is ruled out in one stroke. This
+is the move that makes the search finite: one evaluation can eliminate a
+quarter of the plane.
+<b>Split the block</b> — if it can't be rejected (some guess inside might
+fit), cut it in half and evaluate each half. Blocks that straddle the
+patch's edge keep splitting, homing in on the boundary.
+<b>Accept the block</b> — once a surviving block is only
+<span class="num">0.1&nbsp;ms</span> on each side, stop splitting and count its
+<em>entire extent</em> into the patch — the conservative move, since
+nothing inside it could be ruled out.</p>
+
+<figure>
+<svg viewBox="0 0 660 560" role="img" aria-label="Three rounds of the rectangle search: the initial rectangle split into four, far quadrants rejected wholesale, surviving rectangles split further, and fine rectangles accepted along the region's edge" class="svg-ink">
+  <!-- ============ ROUND 1 ============ -->
+  <text x="20" y="26" font-size="13" font-weight="600" fill="currentColor">Round 1 — the whole plane of guesses, four evaluations</text>
+  <g transform="translate(30,40)">
+    <rect x="0" y="0" width="280" height="140" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <line x1="140" y1="0" x2="140" y2="140" stroke="currentColor" stroke-width="1"/>
+    <line x1="0" y1="70" x2="280" y2="70" stroke="currentColor" stroke-width="1"/>
+    <!-- axis labels for the plane -->
+    <text x="140" y="156" font-size="10.5" text-anchor="middle" fill="var(--ink-soft)">start-edge shift, −500 … +500 ms</text>
+    <text x="-10" y="70" font-size="10.5" text-anchor="middle" fill="var(--ink-soft)" transform="rotate(-90 -10 70)">stop-edge shift</text>
+    <!-- true patch: dashed = invisible to the detector -->
+    <path d="M 150 40 C 170 32, 196 36, 204 50 C 212 64, 202 80, 184 84 C 166 88, 146 83, 140 69 C 134 55, 136 46, 150 40 Z"
+          fill="none" stroke="var(--keep)" stroke-width="1.2" stroke-dasharray="4 3"/>
+    <!-- rejected quadrants -->
+    <rect x="0" y="0" width="140" height="70" fill="var(--cut-soft)"/>
+    <rect x="0" y="70" width="140" height="70" fill="var(--cut-soft)"/>
+    <rect x="140" y="70" width="140" height="70" fill="var(--cut-soft)"/>
+    <text x="70" y="38" font-size="11" text-anchor="middle" fill="var(--cut)">best possible score</text>
+    <text x="70" y="51" font-size="11" text-anchor="middle" fill="var(--cut)">6.1× the limit → reject</text>
+    <text x="70" y="108" font-size="11" text-anchor="middle" fill="var(--cut)">reject</text>
+    <text x="210" y="112" font-size="11" text-anchor="middle" fill="var(--cut)">reject</text>
+    <text x="210" y="22" font-size="11" text-anchor="middle" fill="var(--keep)">can't reject → split</text>
+  </g>
+  <text x="330" y="74" font-size="12" fill="var(--ink-soft)">One evaluation rules out an entire</text>
+  <text x="330" y="90" font-size="12" fill="var(--ink-soft)">quadrant — infinitely many guesses —</text>
+  <text x="330" y="106" font-size="12" fill="var(--ink-soft)">because even its best possible score fails.</text>
+  <text x="330" y="130" font-size="12" fill="var(--keep)">Dashed outline = the true surviving patch.</text>
+  <text x="330" y="146" font-size="12" fill="var(--keep)">The detector CANNOT see it — it is drawn</text>
+  <text x="330" y="162" font-size="12" fill="var(--keep)">here so you can watch the search find it.</text>
+
+  <!-- ============ ROUND 2 ============ -->
+  <text x="20" y="222" font-size="13" font-weight="600" fill="currentColor">Round 2 — inside the surviving quadrant, smaller blocks</text>
+  <g transform="translate(30,236)">
+    <!-- zoomed survivor quadrant -->
+    <rect x="0" y="0" width="280" height="140" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <line x1="140" y1="0" x2="140" y2="140" stroke="currentColor" stroke-width="1"/>
+    <line x1="0" y1="70" x2="280" y2="70" stroke="currentColor" stroke-width="1"/>
+    <line x1="70" y1="0" x2="70" y2="140" stroke="currentColor" stroke-width="0.7"/>
+    <line x1="210" y1="0" x2="210" y2="140" stroke="currentColor" stroke-width="0.7"/>
+    <line x1="0" y1="35" x2="280" y2="35" stroke="currentColor" stroke-width="0.7"/>
+    <line x1="0" y1="105" x2="280" y2="105" stroke="currentColor" stroke-width="0.7"/>
+    <!-- blob larger now (zoomed) -->
+    <path d="M 60 45 C 100 28, 170 36, 196 66 C 222 96, 200 126, 150 132 C 100 138, 56 122, 44 92 C 32 62, 36 52, 60 45 Z"
+          fill="none" stroke="var(--keep)" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <!-- reject far cells -->
+    <rect x="210" y="0" width="70" height="35" fill="var(--cut-soft)"/>
+    <rect x="0" y="0" width="70" height="35" fill="var(--cut-soft)"/>
+    <rect x="210" y="105" width="70" height="35" fill="var(--cut-soft)"/>
+    <rect x="0" y="105" width="70" height="35" fill="var(--cut-soft)"/>
+    <text x="245" y="21" font-size="10.5" text-anchor="middle" fill="var(--cut)">reject</text>
+    <text x="35" y="21" font-size="10.5" text-anchor="middle" fill="var(--cut)">reject</text>
+    <text x="245" y="124" font-size="10.5" text-anchor="middle" fill="var(--cut)">reject</text>
+    <text x="35" y="124" font-size="10.5" text-anchor="middle" fill="var(--cut)">reject</text>
+  </g>
+  <text x="330" y="290" font-size="12" fill="var(--ink-soft)">Blocks that straddle the patch's edge</text>
+  <text x="330" y="306" font-size="12" fill="var(--ink-soft)">can be neither rejected (part fits) nor</text>
+  <text x="330" y="322" font-size="12" fill="var(--ink-soft)">accepted (part fails) — they keep</text>
+  <text x="330" y="338" font-size="12" fill="var(--ink-soft)">splitting, homing in on the boundary.</text>
+
+  <!-- ============ ROUND N ============ -->
+  <text x="20" y="418" font-size="13" font-weight="600" fill="currentColor">Round n — the patch, mapped</text>
+  <g transform="translate(30,432)">
+    <rect x="0" y="0" width="280" height="110" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <!-- blob -->
+    <path d="M 60 25 C 100 12, 170 18, 196 44 C 222 70, 200 94, 150 100 C 100 106, 56 92, 44 68 C 32 44, 36 32, 60 25 Z"
+          fill="var(--keep-soft)" stroke="var(--keep)" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <!-- fine accepted boundary cells along edge: small squares -->
+    <g fill="var(--keep)" opacity="0.85">
+      <rect x="193" y="38" width="7" height="7"/>
+      <rect x="200" y="46" width="7" height="7"/>
+      <rect x="204" y="54" width="7" height="7"/>
+      <rect x="206" y="62" width="7" height="7"/>
+      <rect x="203" y="70" width="7" height="7"/>
+      <rect x="197" y="78" width="7" height="7"/>
+    </g>
+    <text x="235" y="34" font-size="10.5" fill="var(--keep)">0.1 ms cells:</text>
+    <text x="235" y="47" font-size="10.5" fill="var(--keep)">accepted whole,</text>
+    <text x="235" y="60" font-size="10.5" fill="var(--keep)">extent counted in</text>
+  </g>
+  <text x="330" y="480" font-size="12" fill="var(--ink-soft)">Every point of the plane is now</text>
+  <text x="330" y="496" font-size="12" fill="var(--ink-soft)">provably out or counted in.</text>
+  <text x="330" y="512" font-size="12" fill="var(--ink-soft)">That completed map is what</text>
+  <text x="330" y="528" font-size="12" fill="var(--ink-soft)">“converged” means for this pulse.</text>
+</svg>
+<figcaption><b>Figure 4 — reject, split, accept.</b> Each rectangle is a
+block of guesses (a range of start-shifts × a range of stop-shifts), and
+each evaluation buys a guarantee about every guess in the block at once.
+The dashed outline is the true surviving patch, which the detector cannot
+see — watch the surviving rectangles converge onto it from outside. Far
+blocks die wholesale; blocks straddling the patch's boundary keep
+splitting down to <span class="num">0.1&nbsp;ms</span>, then their whole extent is
+conservatively counted in. Rectangle sequence illustrative; the moves and
+the <span class="num">0.1&nbsp;ms</span> floor are the real rules.</figcaption>
+</figure>
+
+<p>A typical healthy pulse finishes this in a couple of thousand
+evaluations — the whole 59-pulse capture lands between
+<span class="num">115,449</span> and <span class="num">137,535</span>, roughly
+<span class="num">2,000–2,300</span> per pulse. The capture's
+<span class="num">b_fiducial</span> is then the worst edge displacement across all
+59 completed maps, plus the capture's clock-anchor bound.</p>
+
+<h2>5 · What the 165,000 boundary is</h2>
+<p>The budget is a cap on the <em>total</em> number of rectangle evaluations
+across all 59 maps. It is not a quality threshold — it is two protections
+in one number. It makes the verdict reproducible: the same trace always
+costs the same evaluations and gets the same verdict on any machine, rather
+than depending on machine speed or operator patience. And it makes effort
+itself a diagnosis: crisp steps die cheaply, so a trace that needs far more
+work than any healthy capture ever has is a trace whose edges are physically
+smeared — something on the machine blurred what the map is trying to trace.</p>
+
+<figure>
+<svg viewBox="0 0 640 170" role="img" aria-label="Evaluation counts on a number line: the healthy corpus band from 115,449 to 137,535, the budget at 165,000 with 20 percent headroom, and one pathological capture at 1,282,827 far beyond the break" class="svg-ink">
+  <defs>
+    <marker id="arr3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <polygon points="0,0 8,4 0,8" fill="currentColor"/>
+    </marker>
+  </defs>
+  <!-- axis with break -->
+  <line x1="40" y1="110" x2="480" y2="110" stroke="currentColor" stroke-width="1.4"/>
+  <!-- axis break marks -->
+  <line x1="492" y1="102" x2="504" y2="118" stroke="currentColor" stroke-width="1.4"/>
+  <line x1="504" y1="102" x2="516" y2="118" stroke="currentColor" stroke-width="1.4"/>
+  <line x1="516" y1="110" x2="620" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#arr3)"/>
+  <text x="612" y="132" font-size="11" text-anchor="end" fill="currentColor">evaluations</text>
+  <!-- healthy band: scale 40px=100k → 115k..137.5k -->
+  <rect x="86" y="88" width="9" height="44" fill="var(--keep-soft)" stroke="var(--keep)" stroke-width="1.4"/>
+  <text x="91" y="76" font-size="11" text-anchor="middle" fill="var(--keep)">all 17 healthy captures</text>
+  <text x="91" y="150" font-size="11" text-anchor="middle" fill="var(--keep)" class="num">115,449–137,535</text>
+  <!-- budget line at 165k → x = 40 + 165000*0.0004 = 106 -->
+  <line x1="106" y1="66" x2="106" y2="132" stroke="var(--amber)" stroke-width="2.2"/>
+  <text x="112" y="62" font-size="11.5" fill="var(--amber)">budget 165,000</text>
+  <text x="112" y="76" font-size="11" fill="var(--amber)">= worst healthy + 20%</text>
+  <!-- pathological capture beyond the break -->
+  <circle cx="565" cy="110" r="5" fill="var(--cut)"/>
+  <text x="565" y="90" font-size="11.5" text-anchor="middle" fill="var(--cut)" class="num">1,282,827</text>
+  <text x="565" y="150" font-size="11" text-anchor="middle" fill="var(--cut)">refused: 9.2× any</text>
+  <text x="565" y="163" font-size="11" text-anchor="middle" fill="var(--cut)">healthy demand</text>
+</svg>
+<figcaption><b>Figure 5 — the boundary in context.</b> Every healthy capture
+on this machine finishes all 59 maps between <span class="num">115,449</span>
+and <span class="num">137,535</span> evaluations. The budget sits at
+<span class="num">165,000</span> — the worst healthy demand plus about 20%. One
+real capture, clean by every other check, demanded
+<span class="num">1,282,827</span>; it was refused on the spot with the effort
+count recorded as the reason. Note the axis break: the refusal is not
+marginal.</figcaption>
+</figure>
+
+<div class="note"><b>Why refusal is total, never partial.</b> If the budget
+runs out mid-map, the unexplored territory might contain acceptable
+candidates — including the one that should have set the bound. A bound
+computed from an unfinished map could only err in the dangerous direction:
+too small. So the capture is refused as non-convergent, and the refusal is
+recorded, not discarded.</div>
+
+<p>That is the whole pipeline for one pulse: samples → a scored plane of
+candidates → a gapless rectangle map of what survives → the worst survivor
+as the bound → the effort count checked against a boundary calibrated from
+every healthy capture the machine has ever produced. Multiply by 59, take
+the worst, add the clock-anchor term, and you have the capture's
+<span class="num">b_fiducial</span> — the number the bracket screen, the drift
+ceiling, and every phase-energy interval downstream inherit.</p>
+
+<p class="dek" style="font-size:0.9rem; margin-top:2.5rem;">Capture-level
+numbers from the issued r6 acceptance artifact and the calibration protocol;
+rectangle internals illustrative. Prepared 2026-08-19 for the advisor
+meeting.</p>
+</main>

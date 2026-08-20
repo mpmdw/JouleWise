@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1",
+  "run_id": "d117c15v7-decode-contrast-b01-a1",
+  "model": {
+    "name": "Qwen2.5-1.5B-Instruct-4bit",
+    "family": "qwen2.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "weight_format": "mlx",
+    "context_window": 32768
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "D-117 gamma Qwen2.5 1.5B-versus-7B contrast on the current M3 Max; normal powermetrics sampler set only; pack status as_generated_pre_d134_freeze."
+  },
+  "workload_profile": {
+    "name": "df_ph_decode",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "prompt_tokens": 128,
+    "output_tokens": 512
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "d117-contrast-qwen25-1p5b-vs-7b-v3",
+      "production-window",
+      "comparative-contrast",
+      "measurement-arm=decode",
+      "df-condition=sw-decode-a-qwen25-1p5b",
+      "calibration-plan-sha256=56ed0e534f102ad6e0a1da12a4e2f9856ce4fe17e9d8af546bf2323f9d70bcb5",
+      "calibration-abba-block-id=d117-decode-contrast-b01",
+      "calibration-abba-label=A",
+      "calibration-abba-sequence-index=1",
+      "launch_lineage_required"
+    ]
+  }
+}

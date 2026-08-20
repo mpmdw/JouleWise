@@ -1,0 +1,35 @@
+{
+  "assurance": {
+    "independent_attestation": false,
+    "model": "single_authority_hash_bound_replay.v1"
+  },
+  "boot_session_id": "da90818c-9c31-45d0-8813-deae65fba143",
+  "checks": [
+    {
+      "check_id": "receipt_oracle_byte_equality",
+      "status": "PASS"
+    }
+  ],
+  "evidence_id": "freeze-receipt-oracle-v1",
+  "facts": [
+    {
+      "fact_id": "desk.receipt_oracle.v1",
+      "source_kind": "PROBE",
+      "source_path": "arm_readiness.sources/receipt-oracle.json",
+      "source_sha256": "20ab6d324c7f15ef40e3ec8adff14d68c3aeab8bdfecd44cc0fe36a3d693f2d0",
+      "value": {
+        "derived_from_committed_ledger_implementation": true,
+        "exact_pack_oracle_match": true
+      },
+      "value_type": "OBJECT"
+    }
+  ],
+  "head_commit": "1d3873bb7a37e9363202429f14587c85a0b4efc0",
+  "issued_at_utc": "2026-08-19T16:51:33.551326Z",
+  "kind": "RECEIPT_ORACLE",
+  "pack_sha256": "b170fe0bb02fa29b829203b759030048a1a5442f91603e000e18bb0f23845ddb",
+  "reason_codes": [],
+  "schema_version": "joulewise.arm_readiness_evidence_receipt.v1",
+  "status": "PASS",
+  "valid_until_monotonic_ns": 2468742407178458
+}

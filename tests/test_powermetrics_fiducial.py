@@ -51,6 +51,7 @@ from joulewise.powermetrics_fiducial import (
     van_der_corput,
     window_license_min_duration_s,
 )
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
 from scripts.validate_powermetrics_fiducial import (
     trim_trace_after_warmups,
     verify_frozen_protocol,
@@ -679,7 +680,7 @@ class DetectorTests(unittest.TestCase):
             ),
         )
         payload = instrument_evidence(
-            outcomes[0],
+            replace(outcomes[0], anchor_method=CLOCK_METHOD_V2),
             bindings={},
             validation_id="flat-loss-budget",
             artifact_sha256={},
@@ -732,7 +733,7 @@ class DetectorTests(unittest.TestCase):
 
         def evidence_payload(detection):
             return instrument_evidence(
-                detection,
+                replace(detection, anchor_method=CLOCK_METHOD_V2),
                 bindings={},
                 validation_id="wall-pathology-diagnostic",
                 artifact_sha256={},
@@ -921,7 +922,12 @@ class EvidenceTests(unittest.TestCase):
             (on_s + 10.0, off_s + 10.0) for on_s, off_s in pulse_schedule(3)
         ]
         trace = synthetic_trace(true_pulses, end_s=true_pulses[-1][1] + 10.0)
-        return detect_pulses(trace, commanded(true_pulses))
+        # These synthetic detector fixtures model a retained v2 calibration
+        # era.  The serializer now deliberately rejects an unstated era.
+        return replace(
+            detect_pulses(trace, commanded(true_pulses)),
+            anchor_method=CLOCK_METHOD_V2,
+        )
 
     def bindings(self, **overrides):
         base = {
@@ -1540,21 +1546,21 @@ class CalibrationLaunchAuthenticationTests(unittest.TestCase):
 
 class FrozenProtocolTests(unittest.TestCase):
     def test_preflight_screen_is_derived_bit_exactly_from_real_artifact(self) -> None:
-        # The ACTIVE generation since the anchor-v3 science reissue.  The
+        # The ACTIVE generation since the capture-presentation reissue.  The
         # estimator-bearing branch was fail-closed while the issued pin was
         # stale; the atomic Phase-2 acceptance/pin re-freeze is exactly what
         # cures it, so this unit proves the cured state end to end.
         path = Path(
-            "configs/calibration/calibration_acceptance_d079_v2_n17_r4.json"
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
         )
         raw = path.read_bytes()
         self.assertEqual(
             hashlib.sha256(raw).hexdigest(),
-            "dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb",
+            "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d",
         )
         artifact = json.loads(raw)
         self.assertEqual(
-            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r4"
+            artifact["acceptance_id"], "d079_calibration_acceptance_v2_n17_r6"
         )
         self.assertEqual(artifact["derivation_corpus"]["n"], 17)
         derivation = artifact["decimal_derivation"]
@@ -1740,7 +1746,9 @@ class FrozenProtocolTests(unittest.TestCase):
         from joulewise.powermetrics_fiducial import verify_stored_evidence_physics
         from tests.test_reduce import self_consistent_calibration
 
-        evidence, raw, events = self_consistent_calibration()
+        evidence, raw, events = self_consistent_calibration(
+            anchor_method=CLOCK_METHOD_V2
+        )
         evidence["b_fiducial_s"] = 0.0
         for pulse in evidence["pulses"]:
             for field in (
@@ -1780,7 +1788,9 @@ class FrozenProtocolTests(unittest.TestCase):
     def test_rederive_only_emits_v2_widened_evidence_and_rejects_hash_mismatch(self) -> None:
         from tests.test_reduce import self_consistent_calibration
 
-        evidence, raw, events = self_consistent_calibration()
+        evidence, raw, events = self_consistent_calibration(
+            anchor_method=CLOCK_METHOD_V2
+        )
         stored_only = max(
             abs(float(pulse[field]))
             for pulse in evidence["pulses"]
@@ -2391,9 +2401,11 @@ class AnchorMethodDispatchTests(unittest.TestCase):
 
     def test_fresh_cross_method_derivation_skips_stored_number_comparison(self) -> None:
         from tests.test_reduce import self_consistent_calibration
-        from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
+        from joulewise.uncertainty_evidence import CLOCK_METHOD_V2, CLOCK_METHOD_V3
 
-        evidence, raw, events = self_consistent_calibration()
+        evidence, raw, events = self_consistent_calibration(
+            anchor_method=CLOCK_METHOD_V2
+        )
         recorded = copy.deepcopy(evidence["clock_anchor"])
         before = copy.deepcopy(recorded)
         prospective = {
@@ -2432,7 +2444,9 @@ class AnchorMethodDispatchTests(unittest.TestCase):
         from tests.test_reduce import self_consistent_calibration
         from joulewise.uncertainty_evidence import CLOCK_METHOD_V2
 
-        evidence, raw, events = self_consistent_calibration()
+        evidence, raw, events = self_consistent_calibration(
+            anchor_method=CLOCK_METHOD_V2
+        )
         recorded = evidence["clock_anchor"]
         mismatched = dict(recorded)
         mismatched["first_sample_end_point_epoch_s"] += 0.01
@@ -2485,6 +2499,17 @@ class AnchorMethodDispatchTests(unittest.TestCase):
             protocol_id=LEGACY_PROTOCOL_ID,
         )
         self.assertEqual(payload["anchor_method_version"], CLOCK_METHOD_V3)
+
+    def test_evidence_author_refuses_absent_detection_method(self) -> None:
+        with self.assertRaisesRegex(ValueError, "anchor method is missing"):
+            instrument_evidence(
+                self.empty_detection(derivation_role="prospective"),
+                bindings={},
+                validation_id="missing-anchor-method",
+                artifact_sha256={},
+                protocol_pulse_count=0,
+                protocol_id=LEGACY_PROTOCOL_ID,
+            )
 
 
 if __name__ == "__main__":

@@ -858,6 +858,10 @@ class _Execution:
         self._stage_measured_run()
         self._stage_idle_drift_sentinel()
         self._stage_cleanup()
+        # Current claim reduction consumes the post-run environment/admission
+        # record.  Capture it at the lifecycle boundary immediately before
+        # metadata is persisted and the pure reducer reads that metadata.
+        self._capture_post_run_environment_observation()
         return self._stage_reduce()
 
     # ------------------------------------------------------------------
@@ -1354,8 +1358,8 @@ class _Execution:
             )
         if self._uncertainty_evidence is None:
             self._uncertainty_evidence = {
-                "schema_version": "p2-038.1",
                 "telemetry_backend": self._telemetry.name,
+                "capture_pipeline_absent": True,
             }
         for key in ("idle_drift", "idle_drift_guard"):
             if key in result:
@@ -1420,7 +1424,6 @@ class _Execution:
                 )
             elif result.metadata:
                 metadata.update(_jsonable(result.metadata))
-        self._capture_post_run_environment_observation()
         self._complete_stage("cleanup", metadata)
 
     def _stage_reduce(self) -> SummaryMetrics:

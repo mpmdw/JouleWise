@@ -52,6 +52,10 @@ from joulewise.arm_readiness import (  # noqa: E402
     render_json,
 )
 from joulewise.cli import validate_bundle  # noqa: E402
+from joulewise.uncertainty_evidence import (  # noqa: E402
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+    SCHEMA_FOR_ANCHOR_METHOD,
+)
 from joulewise.bundle_read import (  # noqa: E402
     AXI_VALIDATOR_REASON_CODES,
     BundleReader,
@@ -1632,16 +1636,17 @@ def assert_production_uncertainty(
                 f"missing raw/{name}",
             )
     evidence = metadata.get("uncertainty_evidence")
-    if not isinstance(evidence, dict) or evidence.get("schema_version") != "p2-038.2":
+    active_schema = SCHEMA_FOR_ANCHOR_METHOD[ACTIVE_CAPTURE_ANCHOR_METHOD]
+    if not isinstance(evidence, dict) or evidence.get("schema_version") != active_schema:
         raise _shakedown_fail(
-            "clock_evidence_missing", bundle, "missing p2-038.2 uncertainty evidence"
+            "clock_evidence_missing", bundle, f"missing {active_schema} uncertainty evidence"
         )
     clock = evidence.get("clock_anchor")
     phase = evidence.get("sample_phase")
     idle = evidence.get("idle_drift")
     if not isinstance(clock, dict) or clock.get("status") != "bounded":
         raise _shakedown_fail("clock_evidence_invalid", bundle, "clock evidence is not bounded")
-    if clock.get("method") != "powermetrics_native_second_censored_intersection_v1":
+    if clock.get("method") != ACTIVE_CAPTURE_ANCHOR_METHOD:
         raise _shakedown_fail("clock_evidence_invalid", bundle, "unexpected clock method")
     if not isinstance(phase, dict) or phase.get("status") != "bounded":
         raise _shakedown_fail("phase_evidence_missing", bundle, "phase evidence is not bounded")

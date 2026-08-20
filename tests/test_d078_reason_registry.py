@@ -1,4 +1,4 @@
-"""D-078 stable claim/refusal vocabulary is decision-log registered."""
+"""D-078 stable claim/refusal vocabulary is contract registered."""
 
 from __future__ import annotations
 
@@ -14,8 +14,18 @@ from joulewise.powermetrics_fiducial import FIDUCIAL_DIAGNOSTIC_CODES
 
 # The lead pre-authorized the one D-100 registry append made by this repair.
 # Pending-registration exceptions remain empty: all emitted spellings must be
-# present in the governing decision-log amendments.
+# present in the governing D-078 registry record and additive amendment.
 PENDING_DECISION_LOG_REGISTRATION: set[str] = set()
+
+
+def _d078_registry_text() -> str:
+    """Return the governing registry plus its scoped additive amendment."""
+
+    decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
+    marker = "### D-078 amendment — 2026-07-20"
+    return decision_log.split(marker, 1)[1] + Path(
+        "docs/contracts/d078_reason_registry_amendment.md"
+    ).read_text(encoding="utf-8")
 
 
 class D078ReasonRegistryTests(unittest.TestCase):
@@ -39,10 +49,7 @@ class D078ReasonRegistryTests(unittest.TestCase):
                 self.assertIn(spelling, amendment)
 
     def test_code_vocabularies_are_present_in_d078_amendment(self) -> None:
-        decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
-        marker = "### D-078 amendment — 2026-07-20"
-        self.assertIn(marker, decision_log)
-        amendment = decision_log.split(marker, 1)[1]
+        amendment = _d078_registry_text()
         idle_conditions = {
             value
             for name, value in vars(idle_admission).items()
@@ -100,10 +107,7 @@ class D078ReasonRegistryTests(unittest.TestCase):
                 self.assertTrue(emission_sites[reason], f"no emission site for {reason}")
 
     def test_every_fiducial_serializer_spelling_is_registered(self) -> None:
-        decision_log = Path("docs/decision_log.md").read_text(encoding="utf-8")
-        amendment = decision_log.split(
-            "### D-078 amendment — 2026-07-20", 1
-        )[1]
+        amendment = _d078_registry_text()
         for reason in sorted(FIDUCIAL_DIAGNOSTIC_CODES):
             with self.subTest(reason=reason):
                 self.assertIn(f"`{reason}`", amendment)

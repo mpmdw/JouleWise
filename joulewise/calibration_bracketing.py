@@ -13,6 +13,7 @@ import math
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN, localcontext
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from joulewise.authentication_io import read_authentication_input
@@ -38,7 +39,9 @@ from joulewise.powermetrics_fiducial import (
     verify_stored_evidence_physics,
 )
 from joulewise.schemas import CalibrationBracketingPolicy
-from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
+from joulewise.uncertainty_evidence import (
+    ACTIVE_CAPTURE_ANCHOR_METHOD,
+)
 
 BRACKET_SCHEMA = "joulewise.instrument_calibration_bracket.v1"
 BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
@@ -103,6 +106,25 @@ ANCHOR_V3_R4_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r4"
 ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256 = (
     "dcb3d3ed2fe41a7b637e9fe6ca6dc5be81c3d57574bfcfa1ab3b97df32bd52eb"
 )
+# D-079 anchor-v3 production-capture flip reissue. The member table and
+# D-102 statistics are unchanged; r5 rotates only governed estimator pins.
+ANCHOR_V3_R5_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r5.json"
+)
+ANCHOR_V3_R5_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r5"
+ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256 = (
+    "92b9c0608bc97fbd7769050213b1433c32d3fe060d1292167920363e58b8cf0f"
+)
+# D-079 anchor-v3 capture-presentation reissue.  The member table and D-102
+# statistics are unchanged; r6 rotates only the two governed estimator pins
+# touched by the positive capture-pipeline and calibration-time taxonomy work.
+ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH = (
+    _CALIBRATION_CONFIG_DIR / "calibration_acceptance_d079_v2_n17_r6.json"
+)
+ANCHOR_V3_R6_ACCEPTANCE_ID = "d079_calibration_acceptance_v2_n17_r6"
+ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256 = (
+    "0227bca3f826edc7f0a1baf98a394df01d8f48e9609966088870d712f765697d"
+)
 # Multi-generation registry.  Authentication is indexed by the artifact's own
 # `acceptance_id`, so a caller cannot present one generation's bytes under
 # another generation's pin, and predecessor packs stay verifiable unchanged.
@@ -131,11 +153,27 @@ ISSUED_ACCEPTANCE_REGISTRY: dict[str, dict[str, Any]] = {
         ),
         "file_sha256": ANCHOR_V3_R4_ACCEPTANCE_BOUND_SHA256,
     },
+    ANCHOR_V3_R5_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R5_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r5.json"
+        ),
+        "file_sha256": ANCHOR_V3_R5_ACCEPTANCE_BOUND_SHA256,
+    },
+    ANCHOR_V3_R6_ACCEPTANCE_ID: {
+        "path": ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH,
+        "relative_path": (
+            "configs/calibration/calibration_acceptance_d079_v2_n17_r6.json"
+        ),
+        "file_sha256": ANCHOR_V3_R6_ACCEPTANCE_BOUND_SHA256,
+    },
 }
 # The LIVE surface: what production loads when no artifact is named.
-ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R4_ACCEPTANCE_ID
-DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R4_ACCEPTANCE_BOUND_PATH
-DEFAULT_ACCEPTANCE_BOUND_SHA256 = (
+ACTIVE_ACCEPTANCE_ID = ANCHOR_V3_R6_ACCEPTANCE_ID
+DEFAULT_ACCEPTANCE_BOUND_PATH = ANCHOR_V3_R6_ACCEPTANCE_BOUND_PATH
+# Authenticates the retained ``schema_fixture_unissued`` genesis bytes; this is
+# not the digest of ``DEFAULT_ACCEPTANCE_BOUND_PATH``.
+GENESIS_FIXTURE_ACCEPTANCE_SHA256 = (
     "9a264c57fdc007de473872870f19a5e1c9bd9b11256c25266b0e3e50ebba0ceb"
 )
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -183,7 +221,75 @@ _D102_GENERATION_DERIVATIONS: dict[str, dict[str, Any]] = {
     # r4 is a science-neutral estimator-pin reissue of r3: same corpus, same
     # member table, therefore the same D-102 derivation.
     ANCHOR_V3_R4_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r5 is the science-neutral production-capture flip reissue of r4.
+    ANCHOR_V3_R5_ACCEPTANCE_ID: _D102_N17_DERIVATION,
+    # r6 is the science-neutral capture-presentation reissue of r5.
+    ANCHOR_V3_R6_ACCEPTANCE_ID: _D102_N17_DERIVATION,
 }
+
+
+def acceptance_generation_operatives(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> Mapping[str, str] | None:
+    """Return registered D-102 operatives, refusing an operative crosswire."""
+
+    derivation = _D102_GENERATION_DERIVATIONS.get(acceptance_id)
+    if derivation is None:
+        return None
+    operatives = derivation["operatives"]
+    registered_screen = operatives["bracket_screen_s"]
+    if acceptance is not None and "decimal_derivation" in acceptance:
+        decimal_derivation = acceptance["decimal_derivation"]
+        if not isinstance(decimal_derivation, Mapping):
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: decimal_derivation must be a mapping"
+            )
+        if "ratified_operatives" not in decimal_derivation:
+            return MappingProxyType(operatives)
+        supplied_operatives = decimal_derivation["ratified_operatives"]
+        if not isinstance(supplied_operatives, Mapping):
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: ratified_operatives must be a mapping"
+            )
+        if supplied_operatives.get("bracket_screen_s") != registered_screen:
+            raise ValueError(
+                "supplied acceptance operatives disagree with the registered "
+                "generation: bracket_screen_s "
+                f"{supplied_operatives.get('bracket_screen_s')!r} disagrees with "
+                f"registered bracket_screen_s {registered_screen!r} for "
+                f"acceptance_id {acceptance_id!r}"
+            )
+    return MappingProxyType(operatives)
+
+
+def acceptance_bracket_screen_s(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Resolve the registered bracket screen for an acceptance generation."""
+
+    operatives = acceptance_generation_operatives(
+        acceptance_id, acceptance=acceptance
+    )
+    return operatives["bracket_screen_s"] if operatives is not None else None
+
+
+def acceptance_allowance_rule(
+    acceptance_id: str,
+    *,
+    acceptance: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Render the registered never-zero allowance rule for a generation."""
+
+    screen = acceptance_bracket_screen_s(acceptance_id, acceptance=acceptance)
+    return f"max(observed_drift_s,{screen})" if screen is not None else None
+
+
 # Retained name for the D-116/D-138 n=19 generations' comparators.
 _D102_OPERATIVE_VALUES = _D102_N19_DERIVATION["operatives"]
 
@@ -626,7 +732,7 @@ def _acceptance_bound_from_authenticated_bytes(
     # selected by the document's own `acceptance_id`.
     role = value.get("artifact_role") if isinstance(value, Mapping) else None
     if role == "schema_fixture_unissued":
-        expected_sha256: str | None = DEFAULT_ACCEPTANCE_BOUND_SHA256
+        expected_sha256: str | None = GENESIS_FIXTURE_ACCEPTANCE_SHA256
     elif role == "issued":
         registered = ISSUED_ACCEPTANCE_REGISTRY.get(value.get("acceptance_id"))
         expected_sha256 = registered["file_sha256"] if registered else None
@@ -719,7 +825,7 @@ def _acceptance_artifact_sha256(artifact: Mapping[str, Any]) -> str:
     if artifact.get("artifact_role") == "issued":
         registered = ISSUED_ACCEPTANCE_REGISTRY[artifact["acceptance_id"]]
         return str(registered["file_sha256"])
-    return DEFAULT_ACCEPTANCE_BOUND_SHA256
+    return GENESIS_FIXTURE_ACCEPTANCE_SHA256
 
 
 def _valid_sha256(value: Any) -> bool:
@@ -1162,6 +1268,19 @@ def _candidate_from_observation(
     )
 
 
+def _capture_pipeline_refusal_for_observation(
+    observation: LedgerObservation,
+) -> str | None:
+    """Classify a ledger-valid candidate's capture era before reconciliation."""
+
+    method = observation.t1_bindings.get("anchor_method_version")
+    # This is deliberately an allowlist: every stored era other than the
+    # active claim-bearing method is replay evidence, never a claim candidate.
+    if method != ACTIVE_CAPTURE_ANCHOR_METHOD:
+        return "capture_pipeline_superseded"
+    return None
+
+
 def discover_calibration_candidates(
     ledger_snapshot: CalibrationLedgerSnapshot,
 ) -> tuple[CalibrationCandidate, ...]:
@@ -1191,6 +1310,8 @@ def discover_calibration_candidates(
             or observation.bracket_session_id is not None
             and observation.bracket_session_id not in finalized_session_ids
         ):
+            continue
+        if _capture_pipeline_refusal_for_observation(observation) is not None:
             continue
         candidate = _candidate_from_observation(observation)
         if candidate is None:
@@ -1457,6 +1578,7 @@ def evaluate_calibration_bracket(
         for observation in ledger_snapshot.observations
         if observation.disposition == "valid"
         and not observation.is_historical_import
+        and _capture_pipeline_refusal_for_observation(observation) is None
         and (
             observation.bracket_session_id is None
             or observation.bracket_session_id in finalized_session_ids
@@ -1878,6 +2000,7 @@ def calibration_bracket_for_bundles(
     bracket_plan_id: str | None = None,
     bracket_plan_sha256: str | None = None,
     bracket_evidence_root_id: str | None = None,
+    diagnostics: list[dict[str, str]] | None = None,
     _allow_unissued_fixture: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Use the runs root only for the evaluated window's T1/endpoints."""
@@ -1932,13 +2055,30 @@ def calibration_bracket_for_bundles(
             _allow_unissued_fixture=_allow_unissued_fixture,
         )
         return empty, ("instrument_calibration_mismatch",)
+    superseded_observations: list[LedgerObservation] = []
     if ledger_snapshot is None:
         candidates: tuple[CalibrationCandidate, ...] = ()
     else:
         candidates = discover_calibration_candidates(ledger_snapshot)
+        superseded_observations = [
+            observation
+            for observation in ledger_snapshot.observations
+            if observation.disposition == "valid"
+            and not observation.is_historical_import
+            and (
+                observation.bracket_session_id is None
+                or any(
+                    session.session_id == observation.bracket_session_id
+                    and session.state == "finalized"
+                    for session in ledger_snapshot.bracket_sessions
+                )
+            )
+            and _capture_pipeline_refusal_for_observation(observation) is not None
+        ]
         registered_valid = sum(
             observation.disposition == "valid"
             and not observation.is_historical_import
+            and _capture_pipeline_refusal_for_observation(observation) is None
             and (
                 observation.bracket_session_id is None
                 or any(
@@ -1960,7 +2100,7 @@ def calibration_bracket_for_bundles(
                 _allow_unissued_fixture=_allow_unissued_fixture,
             )
             return empty, ("calibration_ledger_custody_invalid",)
-    return evaluate_calibration_bracket(
+    result, reasons = evaluate_calibration_bracket(
         candidates,
         window_start_s=min(window.start_s for window in windows),
         window_end_s=max(window.end_s for window in windows),
@@ -1975,6 +2115,18 @@ def calibration_bracket_for_bundles(
         bracket_runs_root=runs_root,
         _allow_unissued_fixture=_allow_unissued_fixture,
     )
+    if superseded_observations:
+        if diagnostics is not None:
+            diagnostics.extend(
+                {
+                    "attempt_id": observation.attempt_id,
+                    "reason": "capture_pipeline_superseded",
+                }
+                for observation in superseded_observations
+            )
+        if not candidates:
+            reasons = tuple(dict.fromkeys((*reasons, "capture_pipeline_superseded")))
+    return result, reasons
 
 
 __all__ = [
@@ -1983,6 +2135,9 @@ __all__ = [
     "BRACKET_BINDING_SCHEMA",
     "BRACKET_SCHEMA",
     "CalibrationCandidate",
+    "acceptance_allowance_rule",
+    "acceptance_bracket_screen_s",
+    "acceptance_generation_operatives",
     "build_calibration_bracket_binding",
     "calibration_bracket_for_bundles",
     "discover_calibration_candidates",

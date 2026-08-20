@@ -1,0 +1,215 @@
+b92b43d Shakedown-v3 first-light run card (prep item 6b): turnkey window lane — GO receipt, in-band check against the r6 band, D-078 refusal handling
+4597ad4 Preserve prep item 3 (D-144 seat-pass packet) into custody before pause
+79a4cd0 D-149 GO-receipt template + evidence runbook (prep item 6; evaluator script deferred to gauntlet)
+d10881b T15-PREP: 5-hour Claude-side prep sprint (7-item list) ahead of the 23:34 PST Codex reset with full Fable+Codex accounts; assembler discipline; /clear-and-point-here plan
+f8a8fef T14-GO: final pre-/clear checkpoint — Ed's five-day GO issued, /loop is the trigger; sequence, cleared gates, discipline list, custody map
+c00c7bb T13-STOP amendment: second stop after gate-clearing (allowlist + D-149 live); resume only on Ed's explicit go
+0e96dbb D-149: standing conditional T-0 GO — full no-hands window automation (Ed); kernel fences updated (regen + pins green)
+881e1bd T13-STOP: Ed clean-stop order; S5 complete and landed; gate inputs killed mid-run and enumerated for rerun (incl. the D-144 pre-merge seat pass); no merge occurred
+75cb868 S6 bookkeeping: kernel transaction (window rows -> _v3, REFREEZE-D147-CLOSE row, latest_report; regen + test pins), T12/T13 run report, README blurb refresh
+8b2b021 S5 COMPLETE: confirmation table filled (three freeze-0003 receipts + committed tree digests)
+94dc3b3 D-147 S5: freeze-0003 minted for d117_contrast_qwen25_1p5b_vs_7b_v3 (PASS; predecessor _v2/freeze-0002 18855647…)
+eb7f6c6 D-147 S5: freeze-0003 minted for d117_floor_qwen25_7b_v3 (PASS; predecessor _v2/freeze-0002 decd8cdc…)
+5e38f1e D-147 S5: freeze-0003 minted for d117_floor_qwen25_1p5b_v3 (PASS; predecessor _v2/freeze-0002 1277103b…; receipt 0abfddb1…)
+74632e3 D-147 S5/U11: identity-pin projection frozen for d117_contrast_qwen25_1p5b_vs_7b_v3 (projection-0001, PASS)
+6fd8bce D-147 S5/U11: identity-pin projection frozen for d117_floor_qwen25_7b_v3 (projection-0001, PASS)
+3d05982 D-147 S5/U11: identity-pin projection frozen for d117_floor_qwen25_1p5b_v3 (projection-0001, 2 units, PASS)
+d59d36f T13: D-148 (Ed's seven rulings) minted + registered; S5 packet updated (rule needs Ed's hands); cleared-context resume checkpoint
+94f4685 T12-FINAL checkpoint: execution custody committed (lens/delta/fix reports, r5+r6 issuance proofs, S4 manifest, suite logs); pulse-example page into repo; successor order (S5 Ed-gate + evidence deadline, S6 close, pool reset ~23:22)
+3efea49 Instrument guide: full first-use rewrite (Ed's writing standard) — every term built or glossed at first use; pulse-fit chain folded into §4; lens blockers fixed (evaluation-count gloss, guard scope) + p128-rider reconciliation
+d05d49d Guide: detection budget — why a limit exists (reproducible verdicts, effort-as-diagnosis) with the 1.28M-evaluation refusal as the worked example
+c2f4687 Guide: rebuild the detection-budget passage teach-first (what edge placement asks, why a gapless set, what the rectangles buy)
+85c04c6 Guide: define pulse-fit convergence in plain terms (exhaustive edge-region map, why partial maps are refused)
+2952226 Plain-language pass (Ed directive): unpack stacked jargon across the paper + guide's densest spots; numbers and claims frozen; REPLACE-EXACT anchors preserved
+76f6861 Consistency sweep must-fixes: r5→r6 supersession recorded (ruling amendment 15-amendment-r6.md, D-145/D-147 rows, RUN_STATE banner), README volatile count removed per policy, CLAIMS_STATUS mechanical-barrier note, WINDOW_STATUS evidence-expiry hazard, packet head update, guide bind-at-birth precision
+246167f Merge docs enrichment (guide + paper current-state)
+53e480e Instrument guide + paper: current-state enrichment (anchor falsification arc, capture eras, generation chain, pack lineage; fidelity-lens verified)
+a2f6010 T12b: transaction executed through S4; S5 mint decision packet for Ed (classifier block); confirmation-table draft
+3a75a77 D-147 S4: author D-134 freeze evidence for the three _v3 packs at the measurement checkout (all PASS)
+1d3873b S3: d117 _v3 pack family emitted via unedited _v2 generators, bound to r6 at birth; family tests (successor emission, replay integrity, byte preservation)
+6f00d05 S1 fix 4 (canonical residue): D-078 amendment vocabulary rows, reduce.py re-characterization, floor-fixture v3 presentation, thermal-handoff v3 isolation
+d279bd2 S1 fix 3: live-three-window scenario converted to anchor-v3 (missed census site); v2 pre-filter refusal arm retained
+d8f1202 S2: r6 golden re-derivation via independent fixture oracle; n19 literals generation-derived; six-artifact copy-list
+3038eeb S1 fix round 2: two-lens findings — per-lane barrier pins + capture_pipeline_absent (positive presentation), F1 attack rebuilt on v3, campaign-positive fixture, allowlist era pre-filter, diagnostics outside governed artifact, r5 schema row, D-079 r6 (pins: reduce.py + uncertainty_evidence.py; 19-member neutrality proven)
+1ec5dc4 S1 fix round: v3 production fixtures, whole-window v3 conversion + retained v2 negatives, era fixture repairs, r5 rebinds, test_052 era adjudication + v3 stale pin, A9 kill tests
+b7e5730 S1: anchor-v3 production flip + D-079 r5 (science-neutral, 19-member replay proven) + claim barrier (D-146)
+8018a4b S0 fix round 1: fixture declaring-id threading (B1), immutable resolver operatives (B2), shim removal, malformed-container refusal, schema id-set $defs, N4/N5 guards
+6771924 S0 regressions: no-copied-scalar guard, genesis-fixture authentication test, resolver call-shape updates
+cef3306 S0 kernel: generation-resolved mint policy (D-147 S2/S4); genesis digest rename; schema generation conditionals
+7d4454e R1/R2 co-design rulings ratified (D-146/D-147); D-144/D-145 minted; cycle resumes
+9f7f091 Final cycle state: parked at 003f7187, two co-design rulings open, no confirmation table (honest refusal)
+003f718 Checkpoint addendum: canonical-suite-in-flight location + re-freeze cycle position at session close
+b6d5405 Revert "RUN_STATE: T11 pointer — active successor order lives on integration/phase2-transaction"
+fc3e136 RUN_STATE: T11 pointer — active successor order lives on integration/phase2-transaction
+cbcb5ea T11 checkpoint (Ed-ordered): successor order in RUN_STATE; two-day working notes custodied
+bb81323 D-079 anchor-v3 capture activation + science-neutral r4 reissue
+f4d5ea7 D-079 r3 live-pin migration: arm-readiness routing, live-artifact tests, operator comparators
+2de24b0 D-079 anchor-v3 science generation: issue d079_calibration_acceptance_v2_n17_r3
+afab1a2 Anchor-v3 conditions 2/3/4: price the float64 representation error, state the model condition and span-term dependency
+33da216 Anchor-v3 cold science review custodied: Q1/Q2/Q3 ratified (method sound; two July refusals = active time steering, correct science; corpus deltas = honest correction), seven conditions for the successor acceptance generation
+fa7917b Anchor-method dispatch: rederivation and reducer resolve by stored method
+4efea13 Rate-aware clock anchor: exact set-membership estimator + method identity
+311d801 Merge main into the transaction branch (RUN_STATE: keep the branch's later T10 checkpoint — supersedes main's staged-state checkpoint)
+a894a39 Instrument guide: newcomer-facing methodology explainer (lead-written)
+6f4b553 T10 docs update pass (lead-benched under API overload): README activity blurb; meeting-brief overnight-update section; paper §2 detection-budget gate + §5 executed instrument-verification event (diagnostic/non-claim, first light in-band)
+4db15bd Record hygiene at the confirmation head (T10 report B-1..B-5 dispositions): D-142 (Ed rulings + shakedown authority reading) and D-143 (165k budget) minted with custody home docs/process_traces/2026-08-18-shakedown-first-light/; branch RUN_STATE carries the T10 checkpoint (B-2); runsheet execution status (B-4)
+786183a T10 run report: append the post-drafting overnight arc (Ed ruling -> confirmation head d3aa15f)
+5d09098 Morning packet: exact-byte confirmation summary at head d3aa15f (canonical full green)
+d3aa15f D-117 plan tests: make the successor-generation contract freeze-independent
+c7adadd Morning packet: budget ruling executed, family re-frozen at 75f22a0, first-light b_fiducial in-band
+75f22a0 D-134 freeze-0002 PASS: d117_contrast_qwen25_1p5b_vs_7b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; re-minted on the D-138 detection-budget head, superseding the receipts reverted in eb603a9)
+f153271 D-134 freeze-0002 PASS: d117_floor_qwen25_7b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; re-minted on the D-138 detection-budget head, superseding the receipts reverted in eb603a9)
+1e63568 D-134 freeze-0002 PASS: d117_floor_qwen25_1p5b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; re-minted on the D-138 detection-budget head, superseding the receipts reverted in eb603a9)
+c1045aa U11 identity-pin projection frozen for d117_contrast_qwen25_1p5b_vs_7b_v2 (D-138 budget-ruling head)
+84fec29 U11 identity-pin projection frozen for d117_floor_qwen25_7b_v2 (D-138 budget-ruling head)
+7e9732b U11 identity-pin projection frozen for d117_floor_qwen25_1p5b_v2 (D-138 budget-ruling head)
+d03e0be Phase-2: re-author D-134 freeze evidence for the three _v2 packs at the D-138 budget-ruling head (all PASS)
+54f990d D-138 detection-budget ruling: DETECTION_PROJECTION_CELL_BUDGET 100k -> 165k, D-079 r2 re-issued in place, dual-generation pins and the _v2 family regenerated
+eb603a9 Revert "D-134 freeze-0002 PASS: d117_floor_qwen25_1p5b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; supersedes the path-bound scratchpad mints, reverted 98265d4)"
+bdc5562 Revert "D-134 freeze-0002 PASS: d117_floor_qwen25_7b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; supersedes the path-bound scratchpad mints, reverted 98265d4)"
+db30f41 Revert "D-134 freeze-0002 PASS: d117_contrast_qwen25_1p5b_vs_7b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; supersedes the path-bound scratchpad mints, reverted 98265d4)"
+a3c5c9c Morning packet: overnight-execution update (issuance done, family frozen at the measurement checkout, shakedown first-light + budget root-cause)
+ad14ac4 Dress-rehearsal builder + operator card (terra rounds 1-5): measurement-checkout execution, scratch custody topology, SMOKE/BOUNDARY/ED-FIRST markings, documented E-8 stop boundary
+6cd3830 Merge branch 'impl/bracketing-fixture-rekey' into integration/phase2-transaction
+fb1320b D-134 freeze-0002 PASS: d117_contrast_qwen25_1p5b_vs_7b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; supersedes the path-bound scratchpad mints, reverted 98265d4)
+1b5b16e D-134 freeze-0002 PASS: d117_floor_qwen25_7b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; supersedes the path-bound scratchpad mints, reverted 98265d4)
+3ab56e5 D-134 freeze-0002 PASS: d117_floor_qwen25_1p5b_v2 (minted in the designated measurement checkout /Users/edr/JouleWise-measurement-20260818; supersedes the path-bound scratchpad mints, reverted 98265d4)
+98265d4 Revert "D-134 freeze-0002 PASS: d117_floor_qwen25_1p5b_v2 (authenticated v1 predecessor chain)"
+db8307a Revert "D-134 freeze-0002 PASS: d117_floor_qwen25_7b_v2 (authenticated v1 predecessor chain)"
+55be7d5 Revert "D-134 freeze-0002 PASS: d117_contrast_qwen25_1p5b_vs_7b_v2 (authenticated v1 predecessor chain)"
+88fbf88 tests: insulate the genesis acceptance fixture from estimator-pin drift
+28a0daa D-134 freeze-0002 PASS: d117_contrast_qwen25_1p5b_vs_7b_v2 (authenticated v1 predecessor chain)
+e179b2c D-134 freeze-0002 PASS: d117_floor_qwen25_7b_v2 (authenticated v1 predecessor chain)
+8d854f1 D-134 freeze-0002 PASS: d117_floor_qwen25_1p5b_v2 (authenticated v1 predecessor chain)
+81affb7 U11 identity-pin projection frozen for d117_contrast_qwen25_1p5b_vs_7b_v2 (post-migration head)
+45da431 U11 identity-pin projection frozen for d117_floor_qwen25_7b_v2 (post-migration head)
+db821ed U11 identity-pin projection frozen for d117_floor_qwen25_1p5b_v2 (post-migration head)
+4df6607 Phase-2: author D-134 freeze evidence for the three _v2 packs (all PASS, production authoring flow, post-migration three-window green)
+3e780a1 D-079 successor ISSUED (d079_calibration_acceptance_v2_n19_r2) + dual-generation live-pin migration
+235c5ea Canonical-baseline triage fixes: h2 bodies for D-138..D-141 (docs-freshness contract); plan-test fixture loops skip committed successor artifacts (the round-4 boundary refuses symlinked write targets — each test generates its own successors)
+35badb4 Restore the R1 registry-driven successor-identity design (magistrate ruling)
+3f9d759 Custody follow-ups from the run-report verification pass: freeze-numbering consult trace home, quiet crash-matrix log, anomaly dispositions in the T10 report
+af85c28 T10 run report (dictated fills from magistrate trace)
+62c6a06 RUN_STATE: T10 overnight checkpoint — transaction staged on integration/phase2-transaction; Ed's D-079 identity ruling gates the freeze (morning packet is the intake pointer)
+b352cff Ed morning packet 2026-08-18: D-079 identity ruling (lead item), family-marker ruling, confirmation preview, rehearsal plan, qualification ledger
+844453a Bookkeeping follow-ups: D-138/D-139 index rows (pre-existing gap); window.env example flipped whole to the _v2 family with real generated identities; refusal paragraph updated to the v2-family reading
+de6ccd7 Merge-gate docs batch: D-140/D-141, residual registration, consult amendments, runsheet + runbook corrections (magistrate-drafted)
+6d66439 Phase-2: generate the _v2 successor family (runsheet regeneration step)
+c94e0b0 Post-merge integration round 2: freeze-transaction-shaped registry fixture + in-pack bytecode cure
+b68033b Post-merge integration fixes: gamma freeze-transition test tracks the merged freeze-numbering contract
+a46c4fb Merge freeze-numbering + profile-map stream at closure head 9574fda (rounds 1-9 er, deltas 8-11 clean; D-139 A3 freeze-0002 chain + _v2 supersession)
+0709c3e Merge gens stream at closure head 07c12f3 (rounds 1-7, deltas 3-9 clean, freeze-semantics cold gate applied)
+9574fda WO-FREEZE-NUMBERING delta-10: a validly minted REFUSE freeze receipt replays as its recorded REFUSE
+b6553fd WO-FREEZE-NUMBERING delta-8: replay reauthenticates the successor; v2 freeze sequences carry the predecessor
+07c12f3 Round 7: option-(d) completed for the ratification fields, downgrade-target guard, freeze-variant site + phrase nets
+b071f18 WO-PROFILE-MAP-SUPERSESSION: arm/freeze eligibility flips to the _v2 family
+5292cf7 Round 6: freeze-neutral successor wording, dead frozen-emission branches removed, C1 inverted freeze regression (cold-gate verdict 2026-08-18)
+66a433d WO-FREEZE-NUMBERING: freeze-receipt v2 with chain-monotonic freeze-0002 and an authenticated predecessor
+0cb9bf2 Round 5: register the D-139 A1 post-validation-substitution residual at the write boundary
+b6b5e6d Round 4: symlink-safe closed write inventory (refuse-before-any-write on resolved ancestors/targets) + authenticated freeze-transition regression (genuine on-disk receipts; preservation flag can never flip status)
+7402855 Terminating dual-generation fix (consult-adopted): target identity drives every path/semantic/status emission; preservation is custody replay only
+1500265 qualification-catch hardening: replay script requires an explicit external work dir; fast CI guard resolves decisive-test module references
+e5dc38a ed_session: probe command-scoped sudo authorization, not blanket sudo -n true
+724ea28 decisive-test repair: import STACK_IDENTITY_DOMAIN from its post-#131 home (detection_floor re-export)
+d873f77 ed_session: guard empty-args re-exec against macOS bash 3.2 set -u (unbound ORIGINAL_ARGS[@])
+686ce6b Merge remote-tracking branch 'origin/impl/d079-reissue-prep' into integration/phase2-transaction
+64e94e5 Merge remote-tracking branch 'origin/impl/successor-generator-repairs' into integration/phase2-transaction
+e869a12 Merge remote-tracking branch 'origin/impl/r1-freeze-lifecycle' into integration/phase2-transaction
+2d793a8 Merge pull request #158 from mpmdw/docs/advisor-clarity-pass
+7484fce Phase-2 transaction execution runsheet staged (all lanes delta-ACCEPTED; ordered steps; Ed byte-confirmation = the irreversible point)
+6ddeb7d Fix round (delta B1): successor identity threads through everything the generated pack embeds — generator defaults, README identity + self-check invocation — so a _v2 family is internally consistent and self-authenticates; preserve mode re-proven byte-empty
+e5d173b Successor-generator repairs (Phase-2 prep): R2 plan.path + derived reservation --plan reconciliation (alpha/beta), _v2 identity threading as a generation input, successor-only launch_lineage_required flag — all inert under PRESERVE_CURRENT_FROZEN_BYTES (regeneration diff EMPTY over all three frozen packs, proven)
+9c77923 Fix round 2 (D-139 application, ruled): bounded raw-reader alias detection added where the mechanism extends naturally; honest-limits language (developer-error control under D-139, deliberate circumvention out of scope — no overclaim); the delta's full unexecuted matrix committed as regressions (fail-at-head routing/enforcement pair, non-slot byte-survival hash check, registry-only _v2+horizon install/remove flow, no-grandfathering + per-class probes, dormancy)
+9b063eb Refuter F2 cure: brief state matched to the record (code wave executed and merged, program closes with re-freeze/re-audit/council; re-freeze PREPARATION underway, execution next). F1 overruled with citation: the WINDOW_STATUS date/rules tokens were the prompt's own Part-2 mandate; refuter verified full invariance elsewhere + swap-block byte-identity
+0a216b7 Advisor clarity + paper currency pass (Ed-directed, pre-meeting): D-139 additions (trusted-operator capture provenance limitation; registered Holm m=2 family + dedicated p256 floor), trust-boundary honesty consolidated into the limitations section (pointers from §4/§9), first-use definitions (pack, mint, measurement window), sentence-level clarity across README/PROJECT_STATUS/CLAIMS_STATUS/WINDOW_STATUS, machine rules current, Rivoire meeting brief added — zero number changes, swap-block byte-fenced
+aa90dc3 Ed's hardware-evening ordered checklist (pointers to runbook/qualification ONE homes; evidence-per-item; feeds tonight's READY sitting)
+9e71279 Fix round 1 (both lens sets): IO-boundary read routing (transitive helper reads caught — the lens's bypass probe now refuses); class assignments code-constant with registry validate-only + production-path lifecycle enforcement (TIME_BOUND bypass dead); slot-only plan-tree normalization; D-139 _v2 IDs install via registry alone (proven: d117_contrast_qwen25_1p5b_vs_7b_v2); contradictory-ignored-fields refusal; test-honesty cures
+8fd29f7 R1 freeze-evidence lifecycle (Phase-2 prep): evidence-class taxonomy as code constants + registry validation (RE_DERIVABLE/EXECUTION_BOUND/TIME_BOUND/SESSION_STATE_BOUND/TEMPORAL_CAPABILITY per the ruling's split); changed-set staleness gate (git-diff enumeration vs governed allowlist + dependency-manifest conjunct); test-enforced read-path routing; registered refusal vocabulary; plan-tree enumerated-subtraction normalization; NO-GRANDFATHERING (v1 receipts refuse); Ed-reserved values are fail-closed seams that prevent issuance until D-139/A3 values install at the transaction
+59d9642 RUN_STATE: D-139 rulings reflected in the successor order (shakedown-first; remaining Ed items enumerated)
+856993a D-139: Ed's A1-A3 rulings recorded and executed — adversary family closed (WO-RECORDER-GRANT-IDENTITY retired, kernel+pins one transaction), gamma stats adopted (Holm m=2 family), p256 dedicated floor (cells already frozen), Phase-2 defaults approved, SHAKEDOWN-FIRST sequencing directive; packet marked decided
+e83a61f Discrimination regression pair committed (delta F3): science-mutation → STOP, threshold-mutation → STOP, pure-pin → PROCEED, each with a neutered-detector mutation-kill self-check
+992ce13 D-079 reissue prep tooling (Phase-2): corpus authentication (19/19 PASS on the real corpus), candidate derivation via production code paths, member-delta report with the F3 stop-condition (real run: PROCEED — no science delta, estimator-pin change only), candidate-marked artifact refused by the acceptance loader; deterministic byte-identical reruns
+0f10cb7 RUN_STATE: Phase-2 prep recorded as the successor session's opening program (consult F4 list; calibration stage-2 already done; hold-for-fresh-context rationale recorded)
+7ad2039 Advisor-surface currency (T7-sweep S5/S6 debt): CLAIMS_STATUS current-state header (freeze, NOT-READY verdict, Phase-1 merged, no claim-bearing number changed); PROJECT_STATUS ledger rows for the freeze, the council, and the Phase-1 merge — plain language, pointer-style
+6bc0b4a RUN_STATE: Ed-owed item points at the sitting-ready packet
+80155db Ed batched-session decision packet: A1 in-process-adversary family (one call, three closures, recommendation recorded), A2 gamma scientific rulings, A3 Phase-2 reserved approvals, A4 contrast-pack markers + the B hardware batch — pointers to ONE homes, nothing restated
+9826bbe Post-stamping bookkeeping: staged-branch Phase-2 payload complete (budget + flake + calibration stage-2 @ e22e658, delta-ACCEPTED 9/9 settle 81/81 focused); launch-binding note (only stage 4 remains, in-transaction); RUN_STATE successor line
+e22e658 Merge remote-tracking branch 'origin/main' into impl/wo-detect-pulses-budget
+891af00 Calibration-side stage 2 (Phase-2-plan-sequenced): writer locator derivation (output_root.name check + parent locator), full 8-point authentication incl. bracket-session/attempt-slot matching before any custody claim, authenticated launch_lineage stamped into instrument_evidence.json (manifest hash binds it), six registered refusal codes; dormant/byte-stable for legacy; projection-disposition serializer invariant extended; nine real-settle tests skip on-branch (pre-stage-1 base) and pass in the origin/main overlay — the main-sync rides the Phase-2 transaction
+bdcf1de Custody: Phase-2 re-freeze transaction-plan consult (adopted as planning input; Ed reserved list intact; irreversible point defined; stage-2 calibration stamping sequenced onto the staged branch)
+0409d75 Post-#157 bookkeeping: launch-binding kernel note (stages 1-3 merged; remaining Phase-2-coupled), RUN_STATE successor-order line, regen
+bd333de Merge pull request #157 from mpmdw/impl/wo-launch-stage3
+9f3947d CI cure: mint lineage authenticator made module-private (_authenticate_mint_launch_lineage, out of __all__ — the three-function public-surface pin holds; launch_window underscore-call precedent), call sites updated
+b94ea8c Merge remote-tracking branch 'origin/main' into impl/wo-launch-stage3
+f16037c Fix round 1 (both lens sets): reduce-boundary completion demand removed (carrier-table fidelity — converged blocker), NEG-8 bound lineage reconciled into verdict issuance incl. both production callers, floor-artifact consumer refuses forged minted lineage (receipt reauthentication), extraction profile rejects non-object lineage members, fail-at-head test honesty cures
+b9c7d0a WO-LAUNCH-BINDING stage 3: downstream reauthentication gates (analysis admission, NEG-8 bound, whole-window verdict, extraction, mint) per the F2 carrier table — dormant unless marker-bearing; standalone-reduce CLI-boundary authentication (reduce.py untouched per D-138); detection-floor optional launch_lineage provenance slot (schema-precedent discipline) propagated through both mint constructors; mint-trust T-0 pin supersession note recorded (R-t9-8)
+2adac50 Custody: WO-RECORDER-GRANT-IDENTITY design consult (caller-verified identity verbatim; naive fd/inode formulations rejected on executed REPLAY E evidence; gate-packet input, sequenced behind Ed's risk-appetite call) + kernel note
+0418bfc T9 sweep applied (11 findings): work-selection truth (consumption-edge + detect-pulses → partial, not READY), kernel latest_report → T9 report, RUN_STATE workspace-state currency, 'code complete' → 'code wave merged' (3 surfaces), README now/next currency + volatile count removed, T9 report drafting residues resolved (open-tail RESOLVED record, thrice-counted date lesson), flake-fix applied wording, D-138 minted (R-t9-4 promotion: D-079-pinned changes merge-stage into the atomic re-freeze, inheritance corollary)
+da02f49 T9 close: RUN_STATE T9 checkpoint (Phase-1 code complete, all four PRs merged), WO-L2-REAUDIT kernel retirement + Completed row (+pins, one transaction), third crash-matrix timeout case registered, merged-WO status notes, README blurb refresh, C-059 council index row, T9 report merge-tail patched
+8035bf2 Merge pull request #153 from mpmdw/fix/t8-shouldfix-batch
+24df3df Merge remote-tracking branch 'origin/main' into fix/t8-shouldfix-batch
+f392ff6 Merge pull request #156 from mpmdw/impl/wo-launch-binding
+4831e3d Final-head F1: 'same day' → 'within hours (2026-08-16 PT)' at both queue sites (flip 08-15 PT, deferral 08-16 PT — the PT chronology)
+83de776 T9 run report (mechanic-drafted, magistrate-audited; merge-tail placeholders) + cold-gate packet artifacts 01-11 committed into custody (hashes re-verified against MANIFEST; scratchpad is ephemeral — custody must be self-contained)
+9d3ba21 Handback attestation reconciled with the E-9a/E-9b/E-9c numbering and the E-10 sole-launcher consumption model (integration-review F2)
+e644e40 Merge remote-tracking branch 'origin/main' into impl/wo-launch-binding
+d54db78 Merge pull request #155 from mpmdw/impl/wo-consumption-edge
+a59c795 Merge pull request #154 from mpmdw/impl/t0-f4-honest-contract
+a42da85 Merge remote-tracking branch 'origin/main' into impl/wo-launch-binding
+c416616 Verify-site bounded single-read completion (delta-4 F1): all six launch-binding artifacts route through one stat-checked capped read cache per operation at BOTH sites; enumerated read-site disposition table in the round report; verify-side boundary + replay regressions
+ab800b7 Bounded single-read reconciliation (delta-3 F1): frozen byte caps on evidence receipt/sidecar/T-0 source reads (stat-checked, capped reader), exactly one read per artifact (read-count regression), MemoryError inside the normalization boundary
+fa87666 Fix round 3: two-tier region-structured boundary classification — malformed-input tier (input-walk region families → registered malformed-value code) vs internal-defect tier (distinct registered internal-error code, original type named + chained); injected-internal-bug + malformed-shape regression batteries at both boundaries
+d1e5dfc Fix round 2 (delta residuals): boundary totality — no raw exception crosses either validator/consumer boundary (catch-all mapped to registered malformed-value codes with chained context; fuzz battery over both boundaries); lifecycle-shaped divergence regression (production-writer authenticate runs/nested/x → finalized lineage → runs/x consumption refuses)
+eabe853 Fix round 1 (both lens sets): finalizer invokes the authoritative whole-window + bracket validators (production-writer fixtures replace the hand-authored success object); full transport-group authentication with analysis_manifest_transport_ruling_pending consumer refusal (R-t9-6 — both ruling branches stay implementable); authenticated-path==consumed-path unification with symlink/non-regular rejection + divergence regression; multiplicity policy validated at the frozen edge from the shared adjust_p_values table; closed-vocabulary totality over malformed values; complete frozen-selector authentication; test-honesty cures
+189feab WO-CONSUMPTION-EDGE continuation: manifest-bound family-semantics validation in artifact.py (replaces the historical Holm m=1 hard-pin; historical v3 byte/behavior compatibility proven), frozen cross-arm LOO block-strata mechanism with registered refusal when a multi-contrast family lacks strata
+0cba93d WO-CONSUMPTION-EDGE checkpoint (scoped build complete, NEEDS_SCOPE pause): prospective validator + outcome-blind finalizer + finalized-v3 consumer wire + synthetic end-to-end; open scientific rulings flagged NOT invented (contract cl.5); artifact.py family-semantics validation awaits scope grant
+1604983 Fix round 6: the CLOSED section's own prose carries the same-day deferral (last delta-5 residue)
+f130827 Fix round 5 (delta-4 residues): queue closure + mint-trust cell now state the same-day trigger deferral; kernel provenance date advanced
+b91c03d Round 3 (cold-gate license, amended bar A0-A11): arm-attested launch binding — shared reconciliation helper in both _consume_launch_capability (pre-mkdir, zero side effect on refusal, capability not burned) and verify_consumed_launch; A0 five-hop anchor resolver (evidence receipt facts → T-0 source record input_artifacts); I1-I3 digest+path-bound (A1), I4-I6, A7 anchor uniqueness; LaunchLineageError launch_binding_mismatch (A5) + readiness_usage_invalid on omitted kwargs; R1-R6 fail-at-head regressions + A9 honest end-to-end + held-property battery + delta-2 leftover AXI/mutation checks; decision-log de-overclaimed per A2/A3
+01af200 Fix round 4: D-130 automatic triggering DEFERRED on runnability evidence (closure unchanged) — proof matrix fails at fixture setup on current main (STACK_IDENTITY_DOMAIN drift, 3 failed PR runs cited); workflow back to dispatch; WO-PROOF-RUNNABILITY-REPAIR registered (kernel + pins + regen, one transaction; proof-semantics trust-gauntlet fence); live-id pin method renamed count-free
+32cf987 Final-head pass cures: D-134 amendment blockquote now names E-4's two registered observations (the prior edit had cured only the D-078 paragraph); docstring scoped to 'beyond the step selector and three governed path arguments' (absolute-only overclaim removed)
+262aa34 Custody: WO-LAUNCH-BINDING F3 third-failure cold gate — design affirmed, round 3 licensed under the refuter-amended mechanical bar (A0-A11)
+048f45c Custody: WO-LAUNCH-BINDING F3 escalation consult (private-required-context design + AXI Phase-2 gate, adopted in full)
+66884c6 Fix round 2 (F3 escalation-consult design ADOPTED + NDF1): public consumption wrapper and BOTH caller-frame guards DELETED (forgeable checks must not exist even as decoration); module-private required-context consumer with callee-side reauthentication; atomic no-clobber primary = the only real enforcement; honest registered limitation (in-process forgery = same-UID family, Ed-owed); marker-bearing AXI refuses at dispatch behind the Phase-2 release gate (exact layout projection + authenticated derivation descriptor named); lifecycle module migrated off the deleted symbol with public-absence assertion
+c92deb9 Fix round 3 (CI): kernel-pin transaction completed — gen_state fidelity pins updated for the 2026-08-15 refresh (EXPECTED_IDS 74→73, lane-head oracles → WO-LAUNCH-BINDING, duplicate-rank fixture rank 1), registry row-ID parity restored (4 duplicate citations reworded), README volatile PR literals removed per docs-freshness rule
+5449e58 FLAKE-CALEXITS-311-REDERIVE: event-driven test-only logical clock/pulse driver with durable sampler acknowledgements (command stamps, pulse duration, schedule advancement freed from real scheduling in test mode); deterministic suspension-immunity regression; detector subbranch exposed in witness assertions; production real-time driver and fail-closed detector unchanged
+72cd698 Fix round 1 (lens F2/F3/F4 + B1 + S1/S2/N1; contract-F1 overruled with citation): inner byte-membership config authentication, legacy all-None consumption writer retired (module-private + direct-call refusal), E-10 prose de-overclaimed, outer post-hoc bundle-lineage equality with launch_lineage_conflict, real ceremony-bypass regression, primary-corruption + genuine second-lineage cases, burn-property assertion; four obsolete lifecycle expectations migrated to fail-closed refusal (lead-ruled)
+0f886d3 Custody dir local-date correction (08-16 → 08-15; audit completed 23:29 PDT 08-15)
+bd73d3f WO-L2-REAUDIT custody: independent coverage re-audit — Coverage VERIFIED (251/251 enumerated + probed; 247/251 current-head executed, 4 attributed); L2R-2 folds to the L2-2 batch
+d8d2022 Lens F1 fix: E-4 prose names both registered irreducible operator observations (UTC literal + pasted prior-state output) in the D-134 amendment and the CLI module docstring
+65cc0f3 T-0 F4 honest contract: D-134 cl.6 overclaim superseded (production-interface/ceremony rule, no operator-fabrication-resistance claim), TRUSTED-OPERATOR limitation v1 registered, public execute/monotonic_ns/utc_now injection seam removed from capture_t0_step (module-private test hook), runbook + docstrings corrected
+ac98695 Fix round 1 (lens F1/F2/F3 + S1/S2/N1): deterministic receipt fields uniform across triggers (wall-trigger count/trigger demoted to labeled non-reproducible diagnostics), fail-closed serializer invariant (nonconvergent can never carry fits/bound/valid — refuses, with discriminating regression), bypass-with-resolved-anchor refusal, full-artifact byte-stability hash, wall-path regression, margin comment corrected; pre+post custody probes executed
+e7fa8fd WO-LAUNCH-BINDING stage 1 completion + stage 2 (campaign side): settle-time root-local locator publication (no-clobber, fsynced, sidecars), public standalone consume retired fail-closed, authenticate_launch_lineage pack-root derivation fix, run_campaign outer+inner 8-point authentication with bundle metadata stamping, D-078 launch refusal codes registered; 15 new regressions; calibration writer explicitly deferred (sibling stream owns the file)
+ce39b59 Fix round 2 (delta F5/F6): last 08-16 date corrected; WO-RECORDER-GRANT-IDENTITY added to the state kernel per the recorder-race composed verdict (queued, p2, Ed-weighted status note, own-cold-gate fence) + regen
+c0ee784 Fix round (refuter F1-F5): estimator-not-number preregistration wording (both swap-anchor sites), narrowed queue fence to issued numbers, README #151 limitation qualifier + Ed-session ordering, local-date corrections (08-16→08-15), kernel truth refresh (WO-T0-PRODUCER + WO-MARGIN-RECORDER-AUTHZ removed as completed, Completed-table rows added for #150/#151/#152, regen verified)
+ceda7a6 WO-DETECT-PULSES-BUDGET: deterministic projection budget + anchor-unresolved bypass + governed nonconvergent abort
+36c9d78 Should-fix batch: sweep B1/B2/B3/B6/B7 + council L11 paper corrections
+fac87d1 T8 session record + C-058 addendum: run report (dictated-fills, mechanic-verified, 26-commit span), addendum covering Phase 0 completion, both post-verdict cold gates, #150/#151/#152, wake-source failure class
+14ef6ea Merge remote-tracking branch 'origin/main' into impl/wo-launch-binding
+07d1a78 Checkpoint amendment: PR #152 merged at close (a61ac92) — all three built Phase-1 streams on main; successor starts at WO-CONSUMPTION-EDGE relaunch
+a61ac92 WO-T0-PRODUCER: T-0 acquisition capture tool + R2 resolver + D-127 clock route + dwell/env hardening (#152)
+5cc738c T8 FINAL CHECKPOINT (Ed clear order): /clear-safe — nothing in flight, Phase 0 complete, Phase 1 at 2 merged + 1 PR + 1 staged; successor starts at RUN_STATE
+5fe977d WO-LAUNCH-BINDING F2 lineage-locator mechanism adopted (fixed root-local locator, 8-point writer auth, no argv/env); WO staged 1-4 (stage 4 = Phase 2). Consult custodied
+345bfbb WO-LAUNCH-BINDING checkpoint (WIP — NOT merge-ready): launcher core + verify_consumed_launch + scoped downstream gates; focused-green
+00ec3b7 WO-MARGIN-RECORDER-AUTHZ: narrow governed-vocabulary grant for the plan-tree-pinned floor spec (#151)
+7b31213 F4 T-0 capture provenance: honest-contract fix mandated (correct overclaim + remove injection seam); trusted-operator scope + option-(a) attested architecture DEFERRED to Ed/advisor (paper-scope). Consult custodied
+6475bda RUN_STATE: PR #150 merged, council gate live on main; Phase-1 progress pointer
+47d2645 WO-KERNEL-RECONCILE: council gate installed, P2-006 retired (R3), kernel truth pass (one transaction) (#150)
+5cdec0c Recorder-race gate COMPOSED VERDICT: race registered limitation (receipt integrity intact), threat-model kept in-model (Ed risk-appetite note), real cure = WO-RECORDER-GRANT-IDENTITY (clause-2 amendment, own gate); F-5 lands now; M-2 amendment heading fix
+8c7843a Recorder-race cold-gate adjudicator ruling custodied: race out-of-model (regraded should-fix), magistrate's proposal REJECTED on executed evidence, round 2 licensed as nofollow-read redirect w/ 4 regression obligations
+8b6c872 Recorder-race cold-gate packet (non-author assembly + script)
+a2d4d04 WO-LAUNCH-BINDING contract adopted: atomic consume->revalidate->exec launcher + downstream lineage gates (Sol consult custodied)
+6760a9b M-2 remanded gate COMPOSED VERDICT: engineering core upheld, instrument narrowed (premise + citation duty stricken, retirement corrected, scope pinned to three receipt hashes); packet defects recorded + non-author-assembly protocol adopted
+f758368 M-2 cold-gate adjudicator ruling custodied: override UPHELD, remedy cured by R4, scope order (three receipt hashes, per-pack retirement)
+62d4479 Remanded M-2 cold-gate packet mechanically assembled with primaries attached (cures the council's Opus B3)
+462f8fd WO-MARGIN-RECORDER-AUTHZ contract adopted: reuse mint primitive, narrower invocation, frozen-pack regressions (Sol consult custodied)
+193e533 R1 RULED: content-bound freeze-evidence lifecycle ADOPTED w/ composed amendments (RE_DERIVABLE/EXECUTION_BOUND split, changed-set gate, no grandfathering) — full cold-gate record custodied
+05b6b44 WO-CONSUMPTION-EDGE contract adopted: outcome-blind finalizer + immutable finalized-v3 schema (Sol consult custodied)
+9dd3c34 R2 (council Phase 0): FROZEN_PLAN identity ruled — committed pack calibration_plan.json, pack-relative storage, shared resolver (Sol consult adopted, custodied)
+cd4c136 R3 (council Phase 0): P2-006 formally retired from window selection by supersession; executes via WO-KERNEL-RECONCILE
+44dcff4 R1 freeze-lifecycle consult CUSTODIED (Sol xhigh: content-bound durable evidence, option C) + RUN_STATE progress block
+c0b7068 R4 (council Phase 0): M-2 execution note — remedy shipped forward-only, override standing until re-freeze retires it; soundness remanded to its own cold gate
+af7c23b C-058 LANDED: the T6-late->T8 span record + readiness-council outcome (mechanic draft, magistrate-audited; 7 UNVERIFIED markers retained)
+15d00d2 Council addendum: second-lens refuter clears all four SINGLE-LENS claims (custodied)
+250e73b T8 state: council verdict NOT-READY recorded; repair program is the desk program; README blurb refreshed
+bd7f81c Readiness council sitting CUSTODIED + VERDICT: NOT-READY 0/11 (charter v2 full record)

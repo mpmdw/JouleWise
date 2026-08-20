@@ -76,14 +76,14 @@ CLASSIFIED_NON_AUTHENTICATION_READS = {
     "joulewise/calibration_ledger.py:abandon_calibration_ledger_tail:3963:os.fdopen",
 }
 ISSUED_REDUCE_SHA256 = (
-    "5118849dda9dcb36b4f3c5fa66f017676c6c416bc40622a2fd63052f31114615"
+    "7b9c0d28869040229e113ea2d40ecc69966075fd34052fbb51cfaffbd9ff9fcc"
 )
 ISSUED_REDUCE_DIRECT_READS = (
-    "_derive_anchor_context:1780:read_bytes",
+    "_derive_anchor_context:1794:read_bytes",
     "_verify_instrument_calibration:1229:read_bytes",
     "_verify_instrument_calibration:1252:read_bytes",
     "_verify_instrument_calibration:1295:read_bytes",
-    "_verify_instrument_calibration:1472:read_bytes",
+    "_verify_instrument_calibration:1481:read_bytes",
 )
 
 

@@ -304,7 +304,7 @@ def _window_thermal_pressure_refusals(
             parse_powermetrics_records,
         )
         from joulewise.uncertainty_evidence import (  # noqa: PLC0415
-            derive_powermetrics_anchor_v2,
+            resolve_anchor_reconstructor,
             stamp_from_mapping,
         )
 
@@ -348,7 +348,7 @@ def _window_thermal_pressure_refusals(
             for name, row in stamps_raw.items()
             if isinstance(row, Mapping)
         }
-        anchor = derive_powermetrics_anchor_v2(
+        anchor = resolve_anchor_reconstructor(clock_anchor.get("method"))(
             stamps=stamps,
             records=anchor_records_from_powermetrics(native),
         )

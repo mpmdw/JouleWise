@@ -42,6 +42,7 @@ from joulewise.whole_window import (
     whole_window_refusal_reasons,
 )
 from joulewise.analysis_engine.claims import REDUCER_REASON_CODES
+from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
@@ -1293,8 +1294,8 @@ class MaxBracketConsumptionTests(unittest.TestCase):
 
     """Defect-shaped CAL-REBRACKET-01 reducer/session regressions."""
 
-    EXPECTED_MINTED_ANCHOR_BOUND_S = 0.07799298220062004
-    EXPECTED_OPERATIVE_ANCHOR_BOUND_S = 0.07899298220062004
+    EXPECTED_MINTED_ANCHOR_BOUND_S = 0.07799607349394995
+    EXPECTED_OPERATIVE_ANCHOR_BOUND_S = 0.07899607349394995
     _physics_cache: dict[str, float] = {}
 
     @classmethod
@@ -1303,24 +1304,102 @@ class MaxBracketConsumptionTests(unittest.TestCase):
         fixture_root: Path,
         *,
         protocol_id: str | None = None,
+        v3_measurement: bool = False,
     ) -> tuple[Path, dict, float, float]:
         """Construct an independent real reducer fixture for one defect shape."""
 
         from joulewise.reduce import reduce_bundle
         from tests.test_reduce import D078R01RegressionTests
 
+        v052_root = fixture_root / "v052"
+        v052_root.mkdir()
+        measurement_fixture = None
+        calibration_first_endpoint_s = None
+        calibration_binding_overrides = None
+        if v3_measurement:
+            from joulewise.bundle_read import BundleReader
+            from tests.test_p2038_production_path import P2038ProductionPathTests
+
+            measurement_fixture, source_summary = P2038ProductionPathTests().run_mode(
+                fixture_root / "v3-measurement-source", "normal"
+            )
+            if source_summary.status.value != "succeeded":
+                raise AssertionError(source_summary.to_dict())
+            source_metadata = json.loads(
+                (measurement_fixture / "metadata.json").read_text(encoding="utf-8")
+            )
+            if (
+                source_metadata["uncertainty_evidence"]["clock_anchor"].get("method")
+                != "powermetrics_native_second_rate_aware_set_membership_v1"
+            ):
+                raise AssertionError(source_metadata["uncertainty_evidence"])
+            source_window = BundleReader(measurement_fixture).measured_window()
+            if source_window is None:
+                raise AssertionError("v3 fixture omits a measured window")
+            source_device = source_metadata.get("device")
+            source_preflight = source_metadata.get("campaign_environment_preflight")
+            source_snapshot = (
+                source_preflight.get("snapshot")
+                if isinstance(source_preflight, dict)
+                else None
+            )
+            source_packages = (
+                source_snapshot.get("python_packages")
+                if isinstance(source_snapshot, dict)
+                else None
+            )
+            source_mlx = (
+                source_packages.get("mlx")
+                if isinstance(source_packages, dict)
+                else None
+            )
+            source_sampling = BundleReader(measurement_fixture).raw_config().get(
+                "sampling"
+            )
+            source_power_hz = (
+                source_sampling.get("power_hz")
+                if isinstance(source_sampling, dict)
+                else None
+            )
+            if (
+                not isinstance(source_device, dict)
+                or not isinstance(source_device.get("hw_model"), str)
+                or not isinstance(source_device.get("kern_osversion"), str)
+                or isinstance(source_power_hz, bool)
+                or not isinstance(source_power_hz, int | float)
+                or not isinstance(source_mlx, dict)
+                or not isinstance(source_mlx.get("version"), str)
+            ):
+                raise AssertionError("v3 fixture omits measurement identity")
+            calibration_binding_overrides = {
+                "hardware_model": source_device["hw_model"],
+                "os_build": source_device["kern_osversion"],
+                "sampling_interval_ms": 1000.0 / float(source_power_hz),
+                "mlx_version": source_mlx["version"],
+            }
+            # Keep the instrument calibration within the same current-era
+            # freshness horizon as the generated production measurement.
+            calibration_first_endpoint_s = source_window.start_s - 100.0
         helper = D078R01RegressionTests()
         evidence = helper._valid_instrument_evidence(
-            **({"protocol_id": protocol_id} if protocol_id is not None else {})
+            **({"protocol_id": protocol_id} if protocol_id is not None else {}),
+            **(
+                {"first_endpoint_s": calibration_first_endpoint_s}
+                if calibration_first_endpoint_s is not None
+                else {}
+            ),
+            **(
+                {"bindings": calibration_binding_overrides}
+                if calibration_binding_overrides is not None
+                else {}
+            ),
         )
         minted_fiducial_bound_s = float(evidence["b_fiducial_s"])
         operative_fiducial_bound_s = minted_fiducial_bound_s + 0.001
-
-        v052_root = fixture_root / "v052"
-        v052_root.mkdir()
         bundle = helper._bundle_with_calibration(
             v052_root,
             evidence=evidence,
+            measurement_fixture=measurement_fixture,
         )
         cls._install_suite_shape(bundle)
         minted = reduce_bundle(
@@ -2109,7 +2188,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2183,7 +2265,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2287,7 +2372,11 @@ class MaxBracketConsumptionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             bundle, minted, minted_bound, _old_operative = (
-                self._build_v052_bundle(root, protocol_id=PROTOCOL_ID)
+                self._build_v052_bundle(
+                    root,
+                    protocol_id=PROTOCOL_ID,
+                    v3_measurement=True,
+                )
             )
             window = BundleReader(bundle).measured_window()
             self.assertIsNotNone(window)
@@ -2451,6 +2540,54 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                 places=12,
             )
 
+    def test_d079_measurement_shape_refuses_capture_pipeline_presentation(self) -> None:
+        from joulewise.powermetrics_fiducial import PROTOCOL_ID
+
+        for presentation, expected in (
+            ("superseded", "capture_pipeline_superseded"),
+            ("absent", "capture_pipeline_absent"),
+        ):
+            with self.subTest(presentation=presentation), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                bundle, _minted, _minted_bound, _operative_bound = (
+                    self._build_v052_bundle(root, protocol_id=PROTOCOL_ID)
+                )
+                if presentation == "absent":
+                    metadata_path = bundle / "metadata.json"
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    metadata["uncertainty_evidence"] = {
+                        "capture_pipeline_absent": True
+                    }
+                    metadata_path.write_text(
+                        json.dumps(metadata) + "\n", encoding="utf-8"
+                    )
+                # Isolate the member-era barrier from calibration custody. The
+                # real session must still reach the member loop, so a valid
+                # bracket is supplied rather than letting an earlier ledger
+                # refusal mask this whole-window lane.
+                with patch.object(
+                    whole_window_module,
+                    "calibration_bracket_for_bundles",
+                    return_value=({"b_fiducial_s": 0.024}, ()),
+                ):
+                    session = AuthenticatedConsumptionSession(
+                        root,
+                        {bundle.name},
+                        calibration_ledger_snapshot=_fixture_snapshot([])[0],
+                        _allow_unissued_calibration_fixture=True,
+                    )
+                    session._prepare(
+                        bundle_paths={bundle.name: bundle},
+                        policy=SimpleNamespace(
+                            calibration_bracketing=CalibrationBracketingPolicy(
+                                require_bracket=True,
+                                calibration_bracket_max_drift_s=0.010,
+                            )
+                        ),
+                    )
+                self.assertFalse(session.ready)
+                self.assertIn(expected, session.refusal_reasons)
+
     def test_session_retains_widening_introduced_metric_local_refusal(
         self,
     ) -> None:
@@ -2501,7 +2638,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2561,7 +2701,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.03
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2724,7 +2867,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.01
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",
@@ -2789,7 +2935,10 @@ class MaxBracketConsumptionTests(unittest.TestCase):
                     {
                         "instrument_calibration": {
                             "verified_effective_b_fiducial_s": 0.02
-                        }
+                        },
+                        "uncertainty_evidence": {
+                            "clock_anchor": {"method": CLOCK_METHOD_V3}
+                        },
                     }
                 )
                 + "\n",

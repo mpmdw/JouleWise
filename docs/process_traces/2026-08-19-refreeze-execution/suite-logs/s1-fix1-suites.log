@@ -1,0 +1,511 @@
+......................................................F.............................................................................................................................................usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --calibration-custody-store requires minted consumption semantics
+..WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+....warning: preserved 27 torn campaign-log bytes at /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpjnupc3iz/campaign_log.jsonl.torn-20260819T113830642778Z-3b23836bf203
+.........warning: FAILED to preserve 12 torn campaign-log bytes to /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpcbeyzowu/campaign_log.jsonl.torn-20260819T113833830885Z-8f5927bdb239 (PermissionError('injected sidecar failure')); append refused, log untouched
+........usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: salvage-dangler semantics require --window-membership-binding and --salvage-closure
+usage: python3.13 -m unittest [-h] [--runs-dir RUNS_DIR] [--log LOG]
+                              [--dry-run] [--backup [BACKUP]]
+                              [--shakedown-gate {production_uncertainty_v1}]
+                              [--max-failures MAX_FAILURES]
+                              [--cli-cmd CLI_CMD] [--waivers WAIVERS]
+                              [--ack-config-warnings]
+                              [--campaign-policy CAMPAIGN_POLICY]
+                              [--instrument-calibration-dir INSTRUMENT_CALIBRATION_DIR]
+                              [--instrument-power-policy INSTRUMENT_POWER_POLICY]
+                              [--arm-quiet-mode]
+                              [--arm-countdown-s ARM_COUNTDOWN_S]
+                              [--environment-override ENVIRONMENT_OVERRIDE]
+                              [--check-prompt-hashes BUNDLE_DIR SIDECAR_JSON]
+                              [--whole-window-verdict]
+                              [--calibration-custody-store CALIBRATION_CUSTODY_STORE]
+                              [--consumption-semantics-id {d078_minted_envelopes_v1,d078_authenticated_max_bracket_rederivation_v1,salvage_dangler_exclusion_v1}]
+                              [--window-membership-binding WINDOW_MEMBERSHIP_BINDING]
+                              [--salvage-closure SALVAGE_CLOSURE]
+                              [--neg8-drift-bound NEG8_DRIFT_BOUND]
+                              [--derive-neg8-drift-bound CORPUS_JSON]
+                              [--neg8-drift-bound-output ARTIFACT_JSON]
+                              [--record-supersession BUNDLE_ID]
+                              [--quarantine-path QUARANTINE_PATH]
+                              [--reason REASON]
+                              [config_dir]
+python3.13 -m unittest: error: --waivers is forbidden under salvage-dangler semantics
+...............................................................................................warning: preserved 7 torn campaign-log bytes at /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmplchtkrgb/campaign_log.jsonl.torn-20260819T113931156200Z-e867134bb1b6
+...bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+...............................................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+error: environment preflight failed: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+.............bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template status=succeeded
+bundle: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template status=succeeded
+.............................WARNING: no order_manifest.json found; falling back to sorted config order. D-014 forbids silent sorted model blocks.
+ENVIRONMENT PREFLIGHT FAILED: display_power_state='any_awake' (fail)
+override binding: snapshot_sha256=5b63e0cbf4d66ec48f8079ce252379be0cf8695c79ecd857bab10f430f64228a findings_sha256=5f82754478db0b19396360a005dcdc309d3e7d994261b0c31ddab68833771ccf
+..........................................................................{"arm_blocked": true, "code": "calibration_frozen_protocol_invalid", "exit_id": "correct-preflight", "next_command": "recover_calibration_ledger.py readiness --phase pre-reserve --session-id SESSION --plan PLAN", "status": "refused"}
+..................{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.{"arm_blocked": true, "code": "calibration_ledger_malformed", "context": {"detail": "stop after custody-path regression observation"}, "exit_id": "hard-stop-preserved", "next_command": "recover_calibration_ledger.py explain calibration_ledger_malformed", "status": "refused", "terminal_result": "night_stopped_preserved"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+{"attempt_id": "session-writer-post", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "post"}
+.{"attempt_id": "session-writer-pre", "event": "calibration_writer_arm_authorized", "session_id": "session-writer", "slot": "pre"}
+..Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp93o_6k4o/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: passed
+  decision: passed
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_ambiguous_reference
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+NEG-8 WHOLE-WINDOW VERDICT: failed
+  decision: failed
+  condition: adapter_observations_missing
+  condition: instrument_calibration_bracket_missing
+  condition: neg8_bracket_missing
+  condition: neg8_bracket_reference_invalid
+  condition: neg8_drift_bound_underived
+  condition: neg8_idle_sub_drift_bound_underived
+  condition: whole_window_bundle_invalid
+  condition: whole_window_campaign_membership_unresolved
+NEG-8 WHOLE-WINDOW VERDICT: flagged
+  decision: passed
+ok draft-off-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpgscy__ru/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmp_krcn8be/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+ok draft-off-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-000/a0/axi-ap-spec-draft-template
+ok draft-on-000 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-000/a0/axi-ap-spec-draft-template
+ok draft-on-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-on-001/a0/axi-ap-spec-draft-template
+ok draft-off-001 attempt=0: bundle=/var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_bundles/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/draft-off-001/a0/axi-ap-spec-draft-template
+AXI attempt ledger: /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpljwulssc/runs/axi_attempt_evidence/am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066/attempt_ledger.jsonl sha256=d83a00097b769a35de23d615aa84df365361411b8bafaae26883ae87313560af
+Config files to execute:
+  /var/folders/p3/fpwjrcg55vb0zsn3knm7xk2m0000gn/T/tmpk2adsdh5/configs/one.json
+WARNING: This campaign needs a quiet machine with no other workloads.
+WARNING: Benchmarks are run strictly sequentially; energy measurements must not overlap.
+P1_DELAYED_WRITERS=1 EVENT_GATED_FINAL_WRITES=1 BOUNDED_RETRIES=0 THREAD_REGISTRY_EMPTY=1 ESCAPED=0
+.P3_SIGSTOP_RUNS=3 IDENTITY=PASS WALL_MUTATION=FAILS_IDENTITY
+.RAW_ENOTEMPTY=0 FATAL_RETRY_DIAGNOSTIC=0 CONTROLS_MUTATION=RACE_EXERCISED
+RACE_EXERCISED=1 NO_RACE_PRE_WRITE=0 TRACE_INCOMPLETE=0
+.P1_CYCLES=4 RAW_ENOTEMPTY=0 RETRY_EXHAUSTION=0 MAX_CLEANUP_S=0.002478
+.......P2_OWNERSHIP_CYCLES=4 TIMEOUTS=2 EXCEPTIONS=2 ESRCH=4 REGISTRY_EMPTY=1
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 104 event-warmup_command_on-4
+CASE STAGE calibration_quiet_mac_auth_required 142 event-pulse_command_on-42
+CASE STAGE calibration_quiet_mac_auth_required 184 event-pulse_command_on-84
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 104 event-warmup_command_on-4
+CASE STAGE calibration_quiet_mac_auth_required 108 event-pulse_command_on-8
+CASE STAGE calibration_quiet_mac_auth_required 134 event-pulse_command_on-34
+CASE STAGE calibration_quiet_mac_auth_required 178 event-pulse_command_on-78
+CASE STAGE calibration_quiet_mac_auth_required 220 event-pulse_command_on-120
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+.CASE START calibration_ledger_missing
+CASE PASS calibration_ledger_missing
+CASE START calibration_ledger_malformed
+CASE PASS calibration_ledger_malformed
+CASE START calibration_ledger_chain_conflict
+CASE PASS calibration_ledger_chain_conflict
+CASE START calibration_ledger_attempt_conflict
+CASE PASS calibration_ledger_attempt_conflict
+CASE START calibration_ledger_bracket_session_conflict
+CASE PASS calibration_ledger_bracket_session_conflict
+CASE START calibration_ledger_content_conflict
+CASE PASS calibration_ledger_content_conflict
+CASE START calibration_ledger_rollback
+CASE PASS calibration_ledger_rollback
+CASE START calibration_ledger_operation_conflict
+CASE PASS calibration_ledger_operation_conflict
+CASE START calibration_ledger_ungoverned_business
+CASE PASS calibration_ledger_ungoverned_business
+CASE START calibration_ledger_custody_invalid
+CASE PASS calibration_ledger_custody_invalid
+CASE START calibration_unsafe_lock_inode
+CASE PASS calibration_unsafe_lock_inode
+CASE START calibration_physical_ledger_unreadable
+CASE PASS calibration_physical_ledger_unreadable
+CASE START calibration_legacy_journal_unreadable
+CASE PASS calibration_legacy_journal_unreadable
+CASE START calibration_legacy_journal_archive_conflict
+CASE PASS calibration_legacy_journal_archive_conflict
+CASE START calibration_legacy_journal_archive_failed
+CASE PASS calibration_legacy_journal_archive_failed
+CASE START calibration_intent_target_malformed
+CASE PASS calibration_intent_target_malformed
+CASE START calibration_recovery_nonconvergent
+CASE PASS calibration_recovery_nonconvergent
+CASE START calibration_abandon_not_clean
+CASE PASS calibration_abandon_not_clean
+CASE START calibration_abandon_pin_mismatch
+CASE PASS calibration_abandon_pin_mismatch
+CASE START calibration_head_pin_unreadable
+CASE PASS calibration_head_pin_unreadable
+CASE START calibration_head_pin_malformed
+CASE PASS calibration_head_pin_malformed
+CASE START calibration_custody_unreadable
+CASE PASS calibration_custody_unreadable
+CASE START calibration_tail_requires_abandon
+CASE PASS calibration_tail_requires_abandon
+CASE START calibration_custody_complete_use_resume
+CASE PASS calibration_custody_complete_use_resume
+CASE START calibration_custody_partial
+CASE PASS calibration_custody_partial
+CASE START calibration_live_writer_contention
+CASE PASS calibration_live_writer_contention
+CASE START calibration_ledger_bracket_session_open
+CASE PASS calibration_ledger_bracket_session_open
+CASE START calibration_ledger_pending
+CASE PASS calibration_ledger_pending
+CASE START calibration_ledger_head_uncommitted
+CASE PASS calibration_ledger_head_uncommitted
+CASE START calibration_ledger_head_mismatch
+CASE PASS calibration_ledger_head_mismatch
+CASE START calibration_ledger_recovery_required
+CASE PASS calibration_ledger_recovery_required
+CASE START calibration_ledger_baseline_missing
+CASE PASS calibration_ledger_baseline_missing
+CASE START calibration_observation_unclassifiable
+CASE PASS calibration_observation_unclassifiable
+CASE START calibration_recovery_credentials_invalid
+CASE PASS calibration_recovery_credentials_invalid
+CASE START calibration_abandon_credentials_invalid
+CASE PASS calibration_abandon_credentials_invalid
+CASE START calibration_abandon_active_intent
+CASE PASS calibration_abandon_active_intent
+CASE START calibration_head_pin_not_committed
+CASE PASS calibration_head_pin_not_committed
+CASE START calibration_reservation_input_invalid
+CASE PASS calibration_reservation_input_invalid
+CASE START calibration_reservation_head_mismatch
+CASE PASS calibration_reservation_head_mismatch
+CASE START calibration_reservation_identity_conflict
+CASE PASS calibration_reservation_identity_conflict
+CASE START calibration_session_not_found
+CASE PASS calibration_session_not_found
+CASE START calibration_session_not_open
+CASE PASS calibration_session_not_open
+CASE START calibration_slot_order_conflict
+CASE PASS calibration_slot_order_conflict
+CASE START calibration_claim_id_invalid
+CASE PASS calibration_claim_id_invalid
+CASE START calibration_finalization_binding_conflict
+CASE PASS calibration_finalization_binding_conflict
+CASE START calibration_session_not_terminal
+CASE PASS calibration_session_not_terminal
+CASE START calibration_session_terminal_not_head
+CASE PASS calibration_session_terminal_not_head
+CASE START calibration_plan_unreadable
+CASE PASS calibration_plan_unreadable
+CASE START calibration_plan_hash_mismatch
+CASE PASS calibration_plan_hash_mismatch
+CASE START calibration_pre_reserve_not_ready
+CASE PASS calibration_pre_reserve_not_ready
+CASE START calibration_pre_slot_not_ready
+CASE STAGE calibration_pre_slot_not_ready 0 writer-launched
+CASE STAGE calibration_pre_slot_not_ready 1 custody-created
+CASE STAGE calibration_pre_slot_not_ready 144 event-pulse_command_on-44
+CASE STAGE calibration_pre_slot_not_ready 187 event-pulse_command_off-87
+CASE STAGE calibration_pre_slot_not_ready 226 event-sampling_stopped-126
+CASE STAGE calibration_pre_slot_not_ready 1001 manifest-written
+CASE PASS calibration_pre_slot_not_ready
+CASE START calibration_terminal_not_ready
+CASE PASS calibration_terminal_not_ready
+CASE START calibration_pin_advancement_not_needed
+CASE PASS calibration_pin_advancement_not_needed
+CASE START calibration_pin_advancement_unsafe
+CASE PASS calibration_pin_advancement_unsafe
+CASE START calibration_pin_candidate_mismatch
+CASE PASS calibration_pin_candidate_mismatch
+CASE START calibration_reservation_json_invalid
+CASE PASS calibration_reservation_json_invalid
+CASE START calibration_writer_bracket_arguments
+CASE STAGE calibration_writer_bracket_arguments 0 writer-launched
+CASE STAGE calibration_writer_bracket_arguments 1 custody-created
+CASE STAGE calibration_writer_bracket_arguments 102 event-warmup_command_on-2
+CASE STAGE calibration_writer_bracket_arguments 143 event-pulse_command_off-43
+CASE STAGE calibration_writer_bracket_arguments 186 event-pulse_command_on-86
+CASE STAGE calibration_writer_bracket_arguments 226 event-sampling_stopped-126
+CASE STAGE calibration_writer_bracket_arguments 1001 manifest-written
+CASE PASS calibration_writer_bracket_arguments
+CASE START calibration_writer_bracket_rederive_conflict
+CASE STAGE calibration_writer_bracket_rederive_conflict 0 writer-launched
+CASE STAGE calibration_writer_bracket_rederive_conflict 1 custody-created
+CASE STAGE calibration_writer_bracket_rederive_conflict 143 event-pulse_command_off-43
+CASE STAGE calibration_writer_bracket_rederive_conflict 185 event-pulse_command_off-85
+CASE STAGE calibration_writer_bracket_rederive_conflict 226 event-sampling_stopped-126
+CASE PASS calibration_writer_bracket_rederive_conflict
+CASE START calibration_frozen_protocol_invalid
+CASE STAGE calibration_frozen_protocol_invalid 0 writer-launched
+CASE STAGE calibration_frozen_protocol_invalid 1 custody-created
+CASE STAGE calibration_frozen_protocol_invalid 101 event-sampling_started-1
+CASE STAGE calibration_frozen_protocol_invalid 143 event-pulse_command_off-43
+CASE STAGE calibration_frozen_protocol_invalid 186 event-pulse_command_on-86
+CASE STAGE calibration_frozen_protocol_invalid 226 event-sampling_stopped-126
+CASE PASS calibration_frozen_protocol_invalid
+CASE START calibration_rederive_output_required
+CASE STAGE calibration_rederive_output_required 0 writer-launched
+CASE STAGE calibration_rederive_output_required 1 custody-created
+CASE STAGE calibration_rederive_output_required 105 event-warmup_command_off-5
+CASE STAGE calibration_rederive_output_required 145 event-pulse_command_off-45
+CASE STAGE calibration_rederive_output_required 188 event-pulse_command_on-88
+CASE STAGE calibration_rederive_output_required 226 event-sampling_stopped-126
+CASE STAGE calibration_rederive_output_required 1001 manifest-written
+CASE PASS calibration_rederive_output_required
+CASE START calibration_rederive_failed
+CASE STAGE calibration_rederive_failed 0 writer-launched
+CASE STAGE calibration_rederive_failed 1 custody-created
+CASE STAGE calibration_rederive_failed 104 event-warmup_command_on-4
+CASE STAGE calibration_rederive_failed 144 event-pulse_command_on-44
+CASE STAGE calibration_rederive_failed 186 event-pulse_command_on-86
+CASE STAGE calibration_rederive_failed 226 event-sampling_stopped-126
+CASE PASS calibration_rederive_failed
+CASE START calibration_output_requires_rederive
+CASE STAGE calibration_output_requires_rederive 0 writer-launched
+CASE STAGE calibration_output_requires_rederive 1 custody-created
+CASE STAGE calibration_output_requires_rederive 102 event-warmup_command_on-2
+CASE STAGE calibration_output_requires_rederive 145 event-pulse_command_off-45
+CASE STAGE calibration_output_requires_rederive 188 event-pulse_command_on-88
+CASE STAGE calibration_output_requires_rederive 226 event-sampling_stopped-126
+CASE PASS calibration_output_requires_rederive
+CASE START calibration_quiet_mac_auth_required
+CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+CASE STAGE calibration_quiet_mac_auth_required 103 event-warmup_command_off-3
+CASE STAGE calibration_quiet_mac_auth_required 146 event-pulse_command_on-46
+CASE STAGE calibration_quiet_mac_auth_required 188 event-pulse_command_on-88
+CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+CASE PASS calibration_quiet_mac_auth_required
+CASE START calibration_power_policy_required
+CASE STAGE calibration_power_policy_required 0 writer-launched
+CASE STAGE calibration_power_policy_required 1 custody-created
+CASE STAGE calibration_power_policy_required 103 event-warmup_command_off-3
+CASE STAGE calibration_power_policy_required 142 event-pulse_command_on-42
+CASE STAGE calibration_power_policy_required 187 event-pulse_command_off-87
+CASE STAGE calibration_power_policy_required 226 event-sampling_stopped-126
+CASE PASS calibration_power_policy_required
+CASE START calibration_reserved_slot_mismatch
+CASE PASS calibration_reserved_slot_mismatch
+CASE START calibration_display_arm_failed
+CASE PASS calibration_display_arm_failed
+CASE START calibration_sampler_never_ready
+CASE PASS calibration_sampler_never_ready
+CASE START pulse_calibration_rollover_gate_timeout
+CASE PASS pulse_calibration_rollover_gate_timeout
+..CASE CACHED calibration_reservation_input_invalid
+CASE CACHED calibration_plan_unreadable
+CASE CACHED calibration_plan_hash_mismatch
+CASE CACHED calibration_pre_reserve_not_ready
+CASE CACHED calibration_pre_slot_not_ready
+CASE CACHED calibration_terminal_not_ready
+CASE CACHED calibration_reservation_json_invalid
+CASE CACHED calibration_writer_bracket_arguments
+CASE CACHED calibration_writer_bracket_rederive_conflict
+CASE CACHED calibration_frozen_protocol_invalid
+CASE CACHED calibration_rederive_output_required
+CASE CACHED calibration_rederive_failed
+CASE CACHED calibration_output_requires_rederive
+CASE CACHED calibration_quiet_mac_auth_required
+CASE CACHED calibration_power_policy_required
+.CASE CACHED calibration_abandon_pin_mismatch
+CASE CACHED calibration_tail_requires_abandon
+CASE CACHED calibration_custody_complete_use_resume
+CASE CACHED calibration_custody_partial
+CASE CACHED calibration_live_writer_contention
+CASE CACHED calibration_ledger_bracket_session_open
+CASE CACHED calibration_ledger_pending
+CASE CACHED calibration_ledger_head_uncommitted
+CASE CACHED calibration_ledger_head_mismatch
+CASE CACHED calibration_ledger_recovery_required
+CASE CACHED calibration_ledger_baseline_missing
+CASE CACHED calibration_observation_unclassifiable
+CASE CACHED calibration_recovery_credentials_invalid
+CASE CACHED calibration_abandon_credentials_invalid
+CASE CACHED calibration_abandon_active_intent
+CASE CACHED calibration_head_pin_not_committed
+CASE CACHED calibration_reservation_input_invalid
+CASE CACHED calibration_reservation_head_mismatch
+CASE CACHED calibration_reservation_identity_conflict
+CASE CACHED calibration_session_not_found
+CASE CACHED calibration_session_not_open
+CASE CACHED calibration_slot_order_conflict
+CASE CACHED calibration_claim_id_invalid
+CASE CACHED calibration_session_not_terminal
+CASE CACHED calibration_session_terminal_not_head
+CASE CACHED calibration_plan_unreadable
+CASE CACHED calibration_plan_hash_mismatch
+CASE CACHED calibration_pre_reserve_not_ready
+CASE CACHED calibration_pre_slot_not_ready
+CASE CACHED calibration_terminal_not_ready
+CASE CACHED calibration_pin_advancement_not_needed
+CASE CACHED calibration_pin_advancement_unsafe
+CASE CACHED calibration_pin_candidate_mismatch
+CASE CACHED calibration_reservation_json_invalid
+CASE CACHED calibration_writer_bracket_arguments
+CASE CACHED calibration_writer_bracket_rederive_conflict
+CASE CACHED calibration_frozen_protocol_invalid
+CASE CACHED calibration_rederive_output_required
+CASE CACHED calibration_rederive_failed
+CASE CACHED calibration_output_requires_rederive
+CASE CACHED calibration_quiet_mac_auth_required
+CASE CACHED calibration_power_policy_required
+CASE CACHED calibration_reserved_slot_mismatch
+CASE CACHED calibration_display_arm_failed
+CASE CACHED calibration_sampler_never_ready
+CASE CACHED pulse_calibration_rollover_gate_timeout
+CASE CACHED calibration_ledger_missing
+CASE CACHED calibration_ledger_malformed
+CASE CACHED calibration_ledger_chain_conflict
+CASE CACHED calibration_ledger_attempt_conflict
+CASE CACHED calibration_ledger_bracket_session_conflict
+CASE CACHED calibration_ledger_content_conflict
+CASE CACHED calibration_ledger_rollback
+CASE CACHED calibration_ledger_operation_conflict
+CASE CACHED calibration_ledger_ungoverned_business
+CASE CACHED calibration_ledger_custody_invalid
+CASE CACHED calibration_unsafe_lock_inode
+CASE CACHED calibration_physical_ledger_unreadable
+CASE CACHED calibration_legacy_journal_unreadable
+CASE CACHED calibration_legacy_journal_archive_conflict
+CASE CACHED calibration_legacy_journal_archive_failed
+CASE CACHED calibration_intent_target_malformed
+CASE CACHED calibration_recovery_nonconvergent
+CASE CACHED calibration_abandon_not_clean
+CASE CACHED calibration_head_pin_unreadable
+CASE CACHED calibration_head_pin_malformed
+CASE CACHED calibration_custody_unreadable
+CASE CACHED calibration_finalization_binding_conflict
+.CASE CACHED calibration_ledger_missing
+CASE CACHED calibration_ledger_malformed
+CASE CACHED calibration_ledger_chain_conflict
+CASE CACHED calibration_ledger_attempt_conflict
+CASE CACHED calibration_ledger_bracket_session_conflict
+CASE CACHED calibration_ledger_content_conflict
+CASE CACHED calibration_ledger_rollback
+CASE CACHED calibration_ledger_operation_conflict
+CASE CACHED calibration_ledger_ungoverned_business
+CASE CACHED calibration_ledger_custody_invalid
+CASE CACHED calibration_unsafe_lock_inode
+CASE CACHED calibration_physical_ledger_unreadable
+CASE CACHED calibration_legacy_journal_unreadable
+CASE CACHED calibration_legacy_journal_archive_conflict
+CASE CACHED calibration_legacy_journal_archive_failed
+CASE CACHED calibration_recovery_nonconvergent
+CASE CACHED calibration_abandon_not_clean
+CASE CACHED calibration_abandon_pin_mismatch
+CASE CACHED calibration_head_pin_unreadable
+CASE CACHED calibration_head_pin_malformed
+CASE CACHED calibration_custody_unreadable
+CASE CACHED calibration_ledger_pending
+CASE CACHED calibration_ledger_head_uncommitted
+CASE CACHED calibration_ledger_head_mismatch
+CASE CACHED calibration_ledger_baseline_missing
+CASE CACHED calibration_observation_unclassifiable
+CASE CACHED calibration_recovery_credentials_invalid
+CASE CACHED calibration_abandon_credentials_invalid
+CASE CACHED calibration_abandon_active_intent
+CASE CACHED calibration_head_pin_not_committed
+CASE CACHED calibration_reservation_head_mismatch
+CASE CACHED calibration_session_not_found
+CASE CACHED calibration_session_not_open
+CASE CACHED calibration_claim_id_invalid
+CASE CACHED calibration_finalization_binding_conflict
+CASE CACHED calibration_session_not_terminal
+CASE CACHED calibration_session_terminal_not_head
+CASE CACHED calibration_pin_advancement_not_needed
+CASE CACHED calibration_pin_advancement_unsafe
+CASE CACHED calibration_pin_candidate_mismatch
+............F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 DETACHED_GRANDCHILD_CENSUS_REPORTED=1
+.{"event": "powermetrics_post_teardown_census", "findings": [{"command": "/bin/zsh /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1786289380023-tq2qhk.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'WT=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0\\012SP=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad\\012cd \"$WT\" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_reduce tests.test_whole_window_selection tests.test_run_campaign tests.test_powermetrics_fiducial tests.test_calibration_exits tests.test_p2038_production_path tests.test_capture_pipeline_era > \"$SP/s1-fix1-suites.log\" 2>&1; echo \"exit=$?\"; tail -3 \"$SP/s1-fix1-suites.log\"' < /dev/null && pwd -P >| /tmp/claude-341a-cwd", "pid": 55912}], "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR", "scope": "detect_and_report_only"}
+{"event": "powermetrics_post_teardown_census", "findings": [{"command": "/bin/zsh /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1786289380023-tq2qhk.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'WT=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0\\012SP=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad\\012cd \"$WT\" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_reduce tests.test_whole_window_selection tests.test_run_campaign tests.test_powermetrics_fiducial tests.test_calibration_exits tests.test_p2038_production_path tests.test_capture_pipeline_era > \"$SP/s1-fix1-suites.log\" 2>&1; echo \"exit=$?\"; tail -3 \"$SP/s1-fix1-suites.log\"' < /dev/null && pwd -P >| /tmp/claude-341a-cwd", "pid": 55912}], "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR", "scope": "detect_and_report_only"}
+{"event": "powermetrics_post_teardown_census", "findings": [{"command": "/bin/zsh /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1786289380023-tq2qhk.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'WT=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0\\012SP=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad\\012cd \"$WT\" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_reduce tests.test_whole_window_selection tests.test_run_campaign tests.test_powermetrics_fiducial tests.test_calibration_exits tests.test_p2038_production_path tests.test_capture_pipeline_era > \"$SP/s1-fix1-suites.log\" 2>&1; echo \"exit=$?\"; tail -3 \"$SP/s1-fix1-suites.log\"' < /dev/null && pwd -P >| /tmp/claude-341a-cwd", "pid": 55912}], "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR", "scope": "detect_and_report_only"}
+F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3
+.{"event": "powermetrics_post_teardown_census", "findings": [{"command": "/bin/zsh /bin/zsh -c source /Users/edr/.claude/shell-snapshots/snapshot-zsh-1786289380023-tq2qhk.sh 2>/dev/null || true && setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2>/dev/null || true && { \\builtin unalias -- 'unsetenv'; \\builtin unset -f -- 'unsetenv'; } >/dev/null 2>&1 || true && eval 'WT=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0\\012SP=/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad\\012cd \"$WT\" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_reduce tests.test_whole_window_selection tests.test_run_campaign tests.test_powermetrics_fiducial tests.test_calibration_exits tests.test_p2038_production_path tests.test_capture_pipeline_era > \"$SP/s1-fix1-suites.log\" 2>&1; echo \"exit=$?\"; tail -3 \"$SP/s1-fix1-suites.log\"' < /dev/null && pwd -P >| /tmp/claude-341a-cwd", "pid": 55912}], "lifecycle_ownership": "unsupported_pending_WO-SAMPLER-SUPERVISOR", "scope": "detect_and_report_only"}
+F4_SUCCESS_CAPTURE_BYTES=214524 SHA256=6aa3b1ea3b07ac9230d7c920eccf5d467edc194efceb7d1d1ae3e97041ec315f BYTE_IDENTICAL=1
+............
+======================================================================
+FAIL: test_052_relabelled_capture_time_disagrees_with_hashed_events (tests.test_reduce.D078R01RegressionTests.test_052_relabelled_capture_time_disagrees_with_hashed_events)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/-Users-edr-code-JouleWise/cbd9b7b5-8119-4431-a348-15141e0afab9/scratchpad/wtS0/tests/test_reduce.py", line 3619, in test_052_relabelled_capture_time_disagrees_with_hashed_events
+    self.assertIn(
+    ~~~~~~~~~~~~~^
+        "instrument_calibration_stale",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        summary.window_evidence_precheck["gross_request"]["reasons"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 'instrument_calibration_stale' not found in ['cadence_ratio_below_threshold', 'clock_anchor_unresolved', 'clock_bound_exceeds_quarter_window', 'environment_admission_missing', 'instrument_calibration_invalid']
+
+----------------------------------------------------------------------
+Ran 561 tests in 1273.011s
+
+FAILED (failures=1)

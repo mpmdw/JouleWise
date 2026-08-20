@@ -1,0 +1,839 @@
+{
+  "checks": [
+    {
+      "check_id": "A/decode:shared_mint_projection",
+      "expected": {
+        "config_set_sha256": "604f6e2210e8e7a9ed60b33dd425d4271f3ca0e14b13f521511052efaa1de313",
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "runtime_identity_sha256": "f1347557f4b256b7a5363010143781cd63490fce662b3893b190d049a0d474f2"
+      },
+      "observed": {
+        "config_set_sha256": "604f6e2210e8e7a9ed60b33dd425d4271f3ca0e14b13f521511052efaa1de313",
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "runtime_identity_sha256": "f1347557f4b256b7a5363010143781cd63490fce662b3893b190d049a0d474f2"
+      },
+      "status": "PASS"
+    },
+    {
+      "check_id": "A/prefill_p256:shared_mint_projection",
+      "expected": {
+        "config_set_sha256": "365b4a419e1b804ce7032d38ef31a66baae7ff87475a7185d693d8286bfe5234",
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "runtime_identity_sha256": "f1347557f4b256b7a5363010143781cd63490fce662b3893b190d049a0d474f2"
+      },
+      "observed": {
+        "config_set_sha256": "365b4a419e1b804ce7032d38ef31a66baae7ff87475a7185d693d8286bfe5234",
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "runtime_identity_sha256": "f1347557f4b256b7a5363010143781cd63490fce662b3893b190d049a0d474f2"
+      },
+      "status": "PASS"
+    },
+    {
+      "check_id": "B/decode:shared_mint_projection",
+      "expected": {
+        "config_set_sha256": "fc4b4e766435b76a56d2c0b1231147d75d70c144de1e8476a85659e7361f8f38",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "6dfdc282ad7cf60e06084cd4ee5500053c7d1106b7b745d69e129f028da4427c"
+      },
+      "observed": {
+        "config_set_sha256": "fc4b4e766435b76a56d2c0b1231147d75d70c144de1e8476a85659e7361f8f38",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "6dfdc282ad7cf60e06084cd4ee5500053c7d1106b7b745d69e129f028da4427c"
+      },
+      "status": "PASS"
+    },
+    {
+      "check_id": "B/prefill_p256:shared_mint_projection",
+      "expected": {
+        "config_set_sha256": "9c6fda6f61f5c05c300a8f8c7be584063dd7f4db9848366651f907552e3b660b",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "6dfdc282ad7cf60e06084cd4ee5500053c7d1106b7b745d69e129f028da4427c"
+      },
+      "observed": {
+        "config_set_sha256": "9c6fda6f61f5c05c300a8f8c7be584063dd7f4db9848366651f907552e3b660b",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "6dfdc282ad7cf60e06084cd4ee5500053c7d1106b7b745d69e129f028da4427c"
+      },
+      "status": "PASS"
+    }
+  ],
+  "derivation": {
+    "callables": [
+      "joulewise.provenance.model_artifact_identity",
+      "joulewise.schemas.BenchmarkConfig.from_mapping",
+      "joulewise.identity_pins.scientific_config_identity",
+      "joulewise.identity_pins.build_stack_identity",
+      "joulewise.identity_pins.stack_identity_sha256",
+      "joulewise.identity_pins.derive_model_runtime_config",
+      "joulewise.identity_pins.derive_model_runtime_config_from_metadata",
+      "joulewise.adapters.resolve_runtime",
+      "joulewise.adapters.resolve_telemetry",
+      "joulewise.adapters.powermetrics.PowermetricsTelemetryAdapter.device_metadata",
+      "joulewise.identity_pins._runtime_probe_metadata",
+      "joulewise.adapters.mlx_runtime.MlxRuntimeAdapter.identity_projection_metadata"
+    ],
+    "contract_id": "joulewise.identity_pin_derivation.v1",
+    "git_commit": "6fd8bcef140f3ade4b97eb0ba022e2b9ee2fb708",
+    "source_file_sha256": {
+      "joulewise/adapters/__init__.py": "ccc3710fba6346c4e61e7610cab91de92de68c74d09d66b590ff51aa7a3a9db5",
+      "joulewise/adapters/mlx_runtime.py": "d587a401ae1301c04c7be790371dfc1185d3dc4cb21565d7c440642dc9453254",
+      "joulewise/adapters/powermetrics.py": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4",
+      "joulewise/identity_pins.py": "bb654e7fa88026e20b40123e33025379414b75adc7c4006c18aabf197b9f85f7",
+      "joulewise/provenance.py": "d9323ee6e902b8aea09db2a04276b5260c3865989b146a09f00d68fc857bc67f",
+      "joulewise/schemas.py": "f4a2830e983e78f1a1aa97f9900377a04e03336b5978a395e7e730a552692b66"
+    }
+  },
+  "identity_units": [
+    {
+      "config_inventory": [
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a1.json",
+          "sha256": "a61f839c66e5d15e6a6e5cec3ea4071521d30b207a83c0c96fcff8f44c913995"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-a2.json",
+          "sha256": "e6b727c0dd94e20b29f88fef2cc92313df0bd49f18f2fa8d7a08514f55470d2e"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a1.json",
+          "sha256": "7ee078444b1d8fb135813abbad53587c1d83f8516782eee93b0cb2f0c76eceb5"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-a2.json",
+          "sha256": "7c73b827f46e148063ba0bf6c4ec76808b955fd541d3ddbfe04fef8a1a759f87"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a1.json",
+          "sha256": "4f7b0cd33e89499d73bee5f839725e9c4d167b499a06fee03f27d196daa97ced"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-a2.json",
+          "sha256": "65c9ba126d38810eaba312d4bee2b30f4314347a98c9727425f5bb9ff8bc6bf8"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a1.json",
+          "sha256": "9e8d63fc35e6d2779c3fa52e501cbd03f30cd76805a7eb672acdf54af93ede71"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-a2.json",
+          "sha256": "fe1980711169d29d0ccc9800d2b2bdcf19f7038f0ac48a11b486f40d9512b582"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a1.json",
+          "sha256": "5600a4e803b15af10cf72a1102ac5956ddf37d3b5f65eff04557ca427223e9c5"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-a2.json",
+          "sha256": "4dbd3d704e43210f2042cc498142bc8265300b7740769f683aef9bb895d80c69"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a1.json",
+          "sha256": "43b74b1d676644c004ecbaa942a5b1987bb44336e59b268f97699be11793b1f8"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-a2.json",
+          "sha256": "38b2ce8853c77a2afd148411765838f64944a3bee2e19dc58e4f64d9921c65c9"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a1.json",
+          "sha256": "11eb84f4a3c9816caaf976289566edf1650d7a73dbf70b11278149245b46ed36"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-a2.json",
+          "sha256": "1a7acc6b82d26a6079d534b9480f95eabe672bdc0726b550f71dfb0d1cccd789"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a1.json",
+          "sha256": "1ccdd000ceeba61770d5ae230cd68b28e8abdf03fca250859290be361f5ce71c"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-a2.json",
+          "sha256": "80150dda9220302117080735612ab4e4907ddf213f7bdf82da881b72d7362c05"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a1.json",
+          "sha256": "6ef6f236f7acd602aaa24579b74247b084fd1942f66b474aaba06d3b47bc022e"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-a2.json",
+          "sha256": "4904878942c64854fceb615a91f8fc55fe6120a69d9f7cddf96fcf37909e183a"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a1.json",
+          "sha256": "4a3706f7431bbb716e2bbc9760391c8423a33c4a20763ba53dbd4f919260c8f5"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-a2.json",
+          "sha256": "38a3873231f2c51d116cc55b1a1db634941028ea3cd49ce7097a02f5569b1cff"
+        }
+      ],
+      "consumer_bindings": [
+        {
+          "arm": "A",
+          "family": "sw-decode-a-qwen25-1p5b",
+          "measurement_arm": "decode"
+        }
+      ],
+      "declared_identity": {
+        "hardware_target": "macbook_m3_max",
+        "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+        "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_backend": "mlx",
+        "telemetry_backend": "powermetrics",
+        "workload_profile": {
+          "dataset_ref": null,
+          "name": "df_ph_decode",
+          "output_tokens": 512,
+          "prompt_text": null,
+          "prompt_tokens": 128,
+          "repetitions": 1,
+          "warmup_runs": 1
+        }
+      },
+      "identity_unit_id": "A/decode",
+      "model_file_inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/model.safetensors",
+          "sha256": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717",
+          "size_bytes": 868628559,
+          "symlink": false
+        }
+      ],
+      "model_runtime_config": {
+        "config_set_sha256": "604f6e2210e8e7a9ed60b33dd425d4271f3ca0e14b13f521511052efaa1de313",
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "runtime_identity_sha256": "f1347557f4b256b7a5363010143781cd63490fce662b3893b190d049a0d474f2"
+      },
+      "producer_plan_reference": {
+        "path": "../d117_floor_qwen25_1p5b_v3/calibration_plan.json",
+        "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3"
+      },
+      "realized_stack_identity": {
+        "batching_concurrency_policy": "single-request sequential",
+        "hardware_unit": {
+          "config_id": "macbook_m3_max",
+          "device": "macbook_m3_max",
+          "machine": "arm64"
+        },
+        "kernel_library": "unavailable",
+        "measurement_boundary_label": {
+          "boundary": "Apple SoC CPU + GPU + ANE package power",
+          "rails": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ]
+        },
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_version": {
+          "adapter": "mlx_runtime",
+          "name": "mlx",
+          "version": "0.32.1"
+        },
+        "sampler_output_policy": {
+          "output_policy": {
+            "name": "fixed_budget_exact",
+            "requested_tokens": 512,
+            "stop_condition": "requested_tokens_emitted"
+          },
+          "sampler": {
+            "api": "mlx_lm.sample_utils.make_sampler",
+            "kind": "greedy",
+            "parameter": "temp",
+            "pinned": true,
+            "temperature": 0.0
+          }
+        },
+        "telemetry_backend": "powermetrics",
+        "tokenizer_identity": {
+          "backend": "mlx",
+          "class": "TokenizerWrapper",
+          "identifier": "Qwen2.5-1.5B-Instruct-4bit",
+          "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+          "vocab_size": 151643
+        }
+      }
+    },
+    {
+      "config_inventory": [
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a1.json",
+          "sha256": "a2f5482afc10d1332f95cc9bd00429000b001ca7c1f193b3d13aa161e0c11ae3"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-a2.json",
+          "sha256": "fe0b26ad58185d443be212fd33b92c74cc58ee85d203b783ef9215965dece173"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a1.json",
+          "sha256": "f6e129253c2bdb3d736359011c372ea812bc73c5a6d6b9d8bd1c6845c127c9d8"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-a2.json",
+          "sha256": "67613d0b32c97ce52ec84bdb334efeee2aad2d7fa5084dc78e08ef6b9afe8ca3"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a1.json",
+          "sha256": "6491893a67bf99058112bbc104c241317cf5bff47389d965b1858c1ceebe1a0e"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-a2.json",
+          "sha256": "a7f4f1561712214e91136a35c11f1f165b397290c3b472dbf12f744b44969825"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a1.json",
+          "sha256": "20b90537af5b03416bacaa7c8436b71e69e6ae5e84ea92a210f4b3e85bbe1e66"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-a2.json",
+          "sha256": "e65957d632895713b6d18a590326c0c1295c21eea518acfb3ec5a7709594b419"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a1.json",
+          "sha256": "7622f13c5664d0cb9705062accc0469b20ad46c18d8c006ba7e3d21ffdcc09c4"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-a2.json",
+          "sha256": "d15e7240d4e35847b03b60248b0ca218ffeffcd94c1c350ad538175126af4750"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a1.json",
+          "sha256": "f39c2820403732a641ad601d8aa672b891083ee856895c83bbc0aaf6ee30c0b1"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-a2.json",
+          "sha256": "d53fe3e5dc4145476e412ca84b8817bd18b6442e41ac04cecc14d586903214fb"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a1.json",
+          "sha256": "9561e65ac0f5de99289a191e4f47700cab50afe7ca09054ef491cb3288cddc9c"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-a2.json",
+          "sha256": "029b09b1cc888c25e90abaefcbda0664d7142dcd2eb601192c25165019c4159b"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a1.json",
+          "sha256": "a0b89253edd3b95844062b689156c15ffd167005853f82afee1603077fd458fe"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-a2.json",
+          "sha256": "68cdbfbf01f746b70e282e24a1aff90f41b847d96b1abb6b52afb4c684135187"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a1.json",
+          "sha256": "f83b9ee6af8c6cb6fc9ee4796b7752d84d2ffde085ddd4b3f0fdf44368beac8c"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-a2.json",
+          "sha256": "f79adca7b8af483b7a02403887fcb869285cc570534e71210c22da46d61e73db"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a1.json",
+          "sha256": "d773ec79787819bd24bdc132de4b376686245cd90cb4fa664e550186feaf419a"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-a2.json",
+          "sha256": "fcec8151be037601b09c616460c9c5cc436279aff907051053e8598515f84114"
+        }
+      ],
+      "consumer_bindings": [
+        {
+          "arm": "A",
+          "family": "sw-prefill-p256-a-qwen25-1p5b",
+          "measurement_arm": "prefill_p256"
+        }
+      ],
+      "declared_identity": {
+        "hardware_target": "macbook_m3_max",
+        "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+        "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_backend": "mlx",
+        "telemetry_backend": "powermetrics",
+        "workload_profile": {
+          "dataset_ref": null,
+          "name": "df_ph_prefill_p256_candidate",
+          "output_tokens": 512,
+          "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+          "prompt_tokens": null,
+          "repetitions": 1,
+          "warmup_runs": 1
+        }
+      },
+      "identity_unit_id": "A/prefill_p256",
+      "model_file_inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/model.safetensors",
+          "sha256": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717",
+          "size_bytes": 868628559,
+          "symlink": false
+        }
+      ],
+      "model_runtime_config": {
+        "config_set_sha256": "365b4a419e1b804ce7032d38ef31a66baae7ff87475a7185d693d8286bfe5234",
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "runtime_identity_sha256": "f1347557f4b256b7a5363010143781cd63490fce662b3893b190d049a0d474f2"
+      },
+      "producer_plan_reference": {
+        "path": "../d117_floor_qwen25_1p5b_v3/calibration_plan.json",
+        "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v3"
+      },
+      "realized_stack_identity": {
+        "batching_concurrency_policy": "single-request sequential",
+        "hardware_unit": {
+          "config_id": "macbook_m3_max",
+          "device": "macbook_m3_max",
+          "machine": "arm64"
+        },
+        "kernel_library": "unavailable",
+        "measurement_boundary_label": {
+          "boundary": "Apple SoC CPU + GPU + ANE package power",
+          "rails": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ]
+        },
+        "model_artifact_sha256": "fea4cb940b54448a693c95a0734949cbdca21a39dda990d669b7f615e4a7c712",
+        "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_version": {
+          "adapter": "mlx_runtime",
+          "name": "mlx",
+          "version": "0.32.1"
+        },
+        "sampler_output_policy": {
+          "output_policy": {
+            "name": "fixed_budget_exact",
+            "requested_tokens": 512,
+            "stop_condition": "requested_tokens_emitted"
+          },
+          "sampler": {
+            "api": "mlx_lm.sample_utils.make_sampler",
+            "kind": "greedy",
+            "parameter": "temp",
+            "pinned": true,
+            "temperature": 0.0
+          }
+        },
+        "telemetry_backend": "powermetrics",
+        "tokenizer_identity": {
+          "backend": "mlx",
+          "class": "TokenizerWrapper",
+          "identifier": "Qwen2.5-1.5B-Instruct-4bit",
+          "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+          "vocab_size": 151643
+        }
+      }
+    },
+    {
+      "config_inventory": [
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b1.json",
+          "sha256": "42ea58676f03de5cea469fa389638f9765efdc6708744956c4a0f529c1c86b73"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b01-b2.json",
+          "sha256": "ebe9782a4de3f5a91410f02d882d838c6d46704fb4a34932739607f05a01884f"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b1.json",
+          "sha256": "98e6966766fc881a37a0ef1064781ff778c944db286737d9f035a69e7dfd6bac"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b02-b2.json",
+          "sha256": "60ef57951319802eaa0296c4fd774d95e16a1d68e36244b3b45e5ae1245973c3"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b1.json",
+          "sha256": "300ad3838d6750f8045d8a9696b942604d899ca8412171bf41d4448109a49571"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b03-b2.json",
+          "sha256": "aa102f6f8528c72a1e840e1ef9193f3d0a15e02483ea84524d9592db4294376a"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b1.json",
+          "sha256": "d32d8a5ceee28cd020c80105257549e6ee6e044c3d9ef51d2e386312c735f093"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b04-b2.json",
+          "sha256": "5111899a5c2b7ec02fa6696eef5384922c6fd15584bccf4cb0d2a8d7b3773707"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b1.json",
+          "sha256": "44f41b8f7fff8a36c70a1a20e16f37fc12691fbf9af8087beff639c8a5976fa4"
+        },
+        {
+          "path": "01_decode_contrast_blocks_01_05/d117c15v7-decode-contrast-b05-b2.json",
+          "sha256": "ba7d33f0565b4bb92dad35a21b6ecf507ed02313ead8e61bf5e27e66beb95aec"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b1.json",
+          "sha256": "57681ef098643ddde98f8c0c549fb1b18687f52fb50b76e600ae8b0023446c42"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b06-b2.json",
+          "sha256": "3771587336d708084aabffa0b49edcab01b441dbbd0ca0af8b11e93072f12690"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b1.json",
+          "sha256": "c8daf0d93b42bbaebb12f71d50d7d5e2293490aad582236612c9d39539422cdf"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b07-b2.json",
+          "sha256": "714f42257f0d93e10aee857fa3f9664180282d56342bb3f521bf5aa341467e12"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b1.json",
+          "sha256": "b0abf4111ae07bfbe5aa19c63d92652110d46c2347b549adf2e26ffcf16e3592"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b08-b2.json",
+          "sha256": "790543c7682e4fe6584d43155ce1682af3cd17f8e50c0696ac722e61be4cb883"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b1.json",
+          "sha256": "2562067c1bf4ad2c459f5058077db1d0fc3ab20f662d46aea3d2f1e4885b47af"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b09-b2.json",
+          "sha256": "fb1f4508afbebda7bb613aed6b6ccefbdaa353a1d40697f797c9622787c75bf3"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b1.json",
+          "sha256": "ed236982d63e410319973df8d81878a7efa109c1cf2714ca28ad70842ec38497"
+        },
+        {
+          "path": "02_decode_contrast_blocks_06_10/d117c15v7-decode-contrast-b10-b2.json",
+          "sha256": "76d6e4c141d15dc66d46239813ceb48446ea3bc8761cbd9cd922da4975b61868"
+        }
+      ],
+      "consumer_bindings": [
+        {
+          "arm": "B",
+          "family": "sw-decode-b-qwen25-7b",
+          "measurement_arm": "decode"
+        }
+      ],
+      "declared_identity": {
+        "hardware_target": "macbook_m3_max",
+        "model_name": "Qwen2.5-7B-Instruct-4bit",
+        "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_backend": "mlx",
+        "telemetry_backend": "powermetrics",
+        "workload_profile": {
+          "dataset_ref": null,
+          "name": "df_ph_decode",
+          "output_tokens": 512,
+          "prompt_text": null,
+          "prompt_tokens": 128,
+          "repetitions": 1,
+          "warmup_runs": 1
+        }
+      },
+      "identity_unit_id": "B/decode",
+      "model_file_inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit/model.safetensors",
+          "sha256": "86110f368236b53cf4c2336f991a85703b17bcc60bb75f292b4002ec0219f071",
+          "size_bytes": 4284346255,
+          "symlink": false
+        }
+      ],
+      "model_runtime_config": {
+        "config_set_sha256": "fc4b4e766435b76a56d2c0b1231147d75d70c144de1e8476a85659e7361f8f38",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "6dfdc282ad7cf60e06084cd4ee5500053c7d1106b7b745d69e129f028da4427c"
+      },
+      "producer_plan_reference": {
+        "path": "../d117_floor_qwen25_7b_v3/calibration_plan.json",
+        "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v3"
+      },
+      "realized_stack_identity": {
+        "batching_concurrency_policy": "single-request sequential",
+        "hardware_unit": {
+          "config_id": "macbook_m3_max",
+          "device": "macbook_m3_max",
+          "machine": "arm64"
+        },
+        "kernel_library": "unavailable",
+        "measurement_boundary_label": {
+          "boundary": "Apple SoC CPU + GPU + ANE package power",
+          "rails": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ]
+        },
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_version": {
+          "adapter": "mlx_runtime",
+          "name": "mlx",
+          "version": "0.32.1"
+        },
+        "sampler_output_policy": {
+          "output_policy": {
+            "name": "fixed_budget_exact",
+            "requested_tokens": 512,
+            "stop_condition": "requested_tokens_emitted"
+          },
+          "sampler": {
+            "api": "mlx_lm.sample_utils.make_sampler",
+            "kind": "greedy",
+            "parameter": "temp",
+            "pinned": true,
+            "temperature": 0.0
+          }
+        },
+        "telemetry_backend": "powermetrics",
+        "tokenizer_identity": {
+          "backend": "mlx",
+          "class": "TokenizerWrapper",
+          "identifier": "Qwen2.5-7B-Instruct-4bit",
+          "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+          "vocab_size": 151643
+        }
+      }
+    },
+    {
+      "config_inventory": [
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b1.json",
+          "sha256": "01395b435973acfe9ee05cea620eb126928024b3ddf96bc6efb40b0cc00257b5"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b01-b2.json",
+          "sha256": "39ea4482b014e7ca9a28b4f9d97e2e024079e22054886d2e7f45b04340fc374f"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b1.json",
+          "sha256": "1a579c75d67f1b5469de88223dc4740389e81c683a43c9a4412167cdec767fb2"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b02-b2.json",
+          "sha256": "58791a3283664fa3a10cf84dc79bd157716708a12a5efb93528959e5c28d2f39"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b1.json",
+          "sha256": "1726130a8559e5fad31af51cf5c2f8e3b9ab42977782783e10fc2025bf46fb3f"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b03-b2.json",
+          "sha256": "c2b4075fbf9e54c477e7fa9117f8965d1f49e346e62be8b7dbff0fcd59d35555"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b1.json",
+          "sha256": "653c351fe672fc022316874a0f4477e08111e2d5d5a62bf8ae12e8c7930be2ec"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b04-b2.json",
+          "sha256": "3edad3df1e8d1f4e9c567627e25526bede059d0a09efcad71083a261d6c63694"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b1.json",
+          "sha256": "1ca53ff82fa25ac4a4ade5bcf68526375c04e0a58705c4361b6632fb2e85533e"
+        },
+        {
+          "path": "03_prefill_p256_contrast_blocks_01_05/d117c15v7-prefill-p256-contrast-b05-b2.json",
+          "sha256": "b8f90cb3e5952680650e5ca036ba8e8a82dfe93844cfc7af5df5776e0be93513"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b1.json",
+          "sha256": "133bcba4552167333454a62ced520a432bbfb65b51c7f2024d92cf280e6c0a5b"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b06-b2.json",
+          "sha256": "260eed685556640860e97895e5b17e1959d240c11971a910ee4afa3e548f7093"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b1.json",
+          "sha256": "ad3161bdfc7c86b99e2af3cdfe816d824e989a308807ae6c20900dd70d6c724b"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b07-b2.json",
+          "sha256": "e3763180a94ea657d1586d8a880d3d3d4f3032f8eff1d36b2529bac558f606c4"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b1.json",
+          "sha256": "fdb9d1737ef0043b433f524ddad88e52c34a1225922c504268c1327f6e79981a"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b08-b2.json",
+          "sha256": "9395fc8c361207342efb99164f7f8265fe3cfdb48cfbb71ccc8933f9071c1f75"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b1.json",
+          "sha256": "abb1ca8d66f3b79009a418b39d1fea8cd248c209c75d5b536f1f9fe38114a63a"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b09-b2.json",
+          "sha256": "bd1005ec0397528f88f6956796af140d7b68ae91cdfa7b4201e1fa29bfa07bbc"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b1.json",
+          "sha256": "a221a285faa4ea8139973ca717ba79a3ac6ccf4bca154cb0e4cce2f4be4d84a7"
+        },
+        {
+          "path": "04_prefill_p256_contrast_blocks_06_10/d117c15v7-prefill-p256-contrast-b10-b2.json",
+          "sha256": "b85b796cb312e82a2fc9cf20743d39963bc8c87af7b077cfa8e43ef8b8603647"
+        }
+      ],
+      "consumer_bindings": [
+        {
+          "arm": "B",
+          "family": "sw-prefill-p256-b-qwen25-7b",
+          "measurement_arm": "prefill_p256"
+        }
+      ],
+      "declared_identity": {
+        "hardware_target": "macbook_m3_max",
+        "model_name": "Qwen2.5-7B-Instruct-4bit",
+        "model_revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+        "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_backend": "mlx",
+        "telemetry_backend": "powermetrics",
+        "workload_profile": {
+          "dataset_ref": null,
+          "name": "df_ph_prefill_p256_candidate",
+          "output_tokens": 512,
+          "prompt_text": "The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit. The plan remains easy to audit and simple to review.",
+          "prompt_tokens": null,
+          "repetitions": 1,
+          "warmup_runs": 1
+        }
+      },
+      "identity_unit_id": "B/prefill_p256",
+      "model_file_inventory": [
+        {
+          "path": "model.safetensors",
+          "resolved_path": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit/model.safetensors",
+          "sha256": "86110f368236b53cf4c2336f991a85703b17bcc60bb75f292b4002ec0219f071",
+          "size_bytes": 4284346255,
+          "symlink": false
+        }
+      ],
+      "model_runtime_config": {
+        "config_set_sha256": "9c6fda6f61f5c05c300a8f8c7be584063dd7f4db9848366651f907552e3b660b",
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "runtime_identity_sha256": "6dfdc282ad7cf60e06084cd4ee5500053c7d1106b7b745d69e129f028da4427c"
+      },
+      "producer_plan_reference": {
+        "path": "../d117_floor_qwen25_7b_v3/calibration_plan.json",
+        "plan_id": "plan-d117-floor-qwen25-7b-decode-p128-prefill-rider-v3"
+      },
+      "realized_stack_identity": {
+        "batching_concurrency_policy": "single-request sequential",
+        "hardware_unit": {
+          "config_id": "macbook_m3_max",
+          "device": "macbook_m3_max",
+          "machine": "arm64"
+        },
+        "kernel_library": "unavailable",
+        "measurement_boundary_label": {
+          "boundary": "Apple SoC CPU + GPU + ANE package power",
+          "rails": [
+            "cpu_power",
+            "gpu_power",
+            "ane_power"
+          ]
+        },
+        "model_artifact_sha256": "af17dfa81e0bd4409cc203d3c928849262342abeb8d90d2342e29f1988f6a630",
+        "os_version": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+        "quantization": {
+          "bits": 4,
+          "group_size": null,
+          "name": "int4"
+        },
+        "runtime_version": {
+          "adapter": "mlx_runtime",
+          "name": "mlx",
+          "version": "0.32.1"
+        },
+        "sampler_output_policy": {
+          "output_policy": {
+            "name": "fixed_budget_exact",
+            "requested_tokens": 512,
+            "stop_condition": "requested_tokens_emitted"
+          },
+          "sampler": {
+            "api": "mlx_lm.sample_utils.make_sampler",
+            "kind": "greedy",
+            "parameter": "temp",
+            "pinned": true,
+            "temperature": 0.0
+          }
+        },
+        "telemetry_backend": "powermetrics",
+        "tokenizer_identity": {
+          "backend": "mlx",
+          "class": "TokenizerWrapper",
+          "identifier": "Qwen2.5-7B-Instruct-4bit",
+          "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+          "vocab_size": 151643
+        }
+      }
+    }
+  ],
+  "observations": {
+    "identity_unit_count": 4,
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O"
+  },
+  "pack": {
+    "pack_id": "d117_contrast_qwen25_1p5b_vs_7b_v3",
+    "plan_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v3",
+    "projection_input_sha256": "382e2e2993db1bcfd14b23fdef4fc2434dfb7cf03522fb67bab926fe99537e58",
+    "reviewed_git_commit": "6fd8bcef140f3ade4b97eb0ba022e2b9ee2fb708",
+    "window_id": "plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v3"
+  },
+  "reason_codes": [],
+  "receipt_id": "d117_contrast_qwen25_1p5b_vs_7b_v3/projection-0001",
+  "receipt_kind": "freeze_projection",
+  "schema_version": "joulewise.identity_pin_projection_receipt.v1",
+  "status": "PASS",
+  "supersedes": [],
+  "work_order": "D117-U11-IDPIN-PROJECTION"
+}

@@ -58,6 +58,7 @@ REDUCER_REASON_CODES = frozenset(
         "instrument_calibration_missing",
         "instrument_calibration_mismatch",
         "instrument_calibration_invalid",
+        "instrument_calibration_capture_time_mismatch",
         "instrument_calibration_stale",
         "calibration_acceptance_bound_stale",
         "instrument_calibration_bracket_missing",
@@ -131,6 +132,8 @@ ENGINE_REASON_CODES = frozenset(
         "whole_window_verdict_provenance_invalid",
         "whole_window_verdict_conflict",
         "calibration_bracket_exceeds_minted_bound",
+        "capture_pipeline_absent",
+        "capture_pipeline_superseded",
     }
 )
 
@@ -167,6 +170,8 @@ _NOT_RESOLVABLE = frozenset(
         "whole_window_verdict_provenance_invalid",
         "whole_window_verdict_conflict",
         "calibration_bracket_exceeds_minted_bound",
+        "capture_pipeline_absent",
+        "capture_pipeline_superseded",
         "paired_block_incomplete",
         "fixed_n_plan_incomplete",
         "window_evidence_precheck_missing",
