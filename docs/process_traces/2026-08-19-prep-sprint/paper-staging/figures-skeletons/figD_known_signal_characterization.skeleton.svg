@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="883" viewBox="0 0 1020 883" role="img" aria-labelledby="figDtitle figDdesc">
+  <title id="figDtitle">Figure D (skeleton). Known-signal characterization</title>
+  <desc id="figDdesc">Skeleton for the known-signal characterization figure. Three panels: linearity with output tokens against energy and an unfilled slope annotation; null response with registered output-magnitude conditions against signed A/B/B/A difference about an unlabelled zero rule; and empirical floor with registered micro-difference conditions against a dimensionless effect-to-floor ratio. Every mark is an unissued placeholder keyed by its registry row token. All three panels are marked STOP_FILL because the characterization report schema and every cited output field are supplier-unknown.</desc>
+  <rect x="0" y="0" width="1020" height="883" fill="#ffffff"/>
+  <text x="40" y="32" font-family="sans-serif" font-size="18" fill="#1b1b1b" font-weight="bold">Figure D (skeleton). Known-signal characterization</text>
+  <text x="40" y="54" font-family="sans-serif" font-size="13" fill="#555555">Number-free skeleton, three panels. No slope, band, ratio, or condition value is drawn; the characterization schema does not exist.</text>
+  <rect x="790" y="16" width="190" height="26" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="885.0" y="30" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL - NO PANEL RENDERS</text>
+  <text x="40" y="74" font-family="sans-serif" font-size="11" fill="#a33">Render gate (plan): currently STOP_FILL - the characterization report schema and all cited output fields are SUPPLIER_UNKNOWN in the registry.</text>
+  <g opacity="0.085" transform="rotate(-24 540 265.0)">
+  <text x="540" y="265.0" font-family="sans-serif" font-size="122" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="10">STOP_FILL</text>
+  </g>
+  <g stroke="#ececec" stroke-width="1.5">
+    <line x1="110" y1="400" x2="390" y2="400"/>
+    <line x1="110" y1="346" x2="390" y2="346"/>
+    <line x1="110" y1="292" x2="390" y2="292"/>
+    <line x1="110" y1="238" x2="390" y2="238"/>
+    <line x1="110" y1="130" x2="390" y2="130"/>
+  </g>
+  <line x1="110" y1="130" x2="110" y2="400" stroke="#333333" stroke-width="1.8"/>
+  <text x="70" y="265.0" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 70 265.0)">energy (joules)</text>
+  <text x="86" y="265.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle" transform="rotate(-90 86 265.0)">no numeric scale</text>
+  <line x1="110" y1="400" x2="390" y2="400" stroke="#333333" stroke-width="1.8"/>
+  <text x="250.0" y="108" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold" text-anchor="middle">D1  linearity</text>
+  <rect x="122" y="148" width="256" height="234" fill="#1b6ca8" fill-opacity="0.045" stroke="#1b6ca8" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <line x1="136" y1="374" x2="364" y2="164" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="10 7"/>
+  <circle cx="193.0" cy="321.5" r="6" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <circle cx="250.0" cy="269.0" r="6" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <circle cx="307.0" cy="216.5" r="6" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <text x="250.0" y="136" font-family="sans-serif" font-size="10.5" fill="#1b6ca8" text-anchor="middle">slope placeholder (J per token)</text>
+  <text x="250.0" y="392" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle">residual acceptance band: unissued criterion</text>
+  <text x="250.0" y="426" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">runtime-observed output tokens</text>
+  <text x="250.0" y="448" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[S_C_linearity_request_J_per_token]</text>
+  <text x="250.0" y="461" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[S_C_linearity_decode_J_per_token]</text>
+  <text x="250.0" y="474" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[R_C_linearity_limit_J]</text>
+  <text x="250.0" y="487" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[PLAIN_LANGUAGE_RESULT_linearity]</text>
+  <text x="250.0" y="500" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[D_C_linearity_diagnostic_J_per_token]</text>
+  <text x="110" y="521" font-family="sans-serif" font-size="10" fill="#555555">fitted slope annotated in joules per token; any</text>
+  <text x="110" y="534" font-family="sans-serif" font-size="10" fill="#555555">acceptance band drawn only from a frozen criterion</text>
+  <rect x="208.0" y="88" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="250.0" y="102" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <g stroke="#ececec" stroke-width="1.5">
+    <line x1="430" y1="400" x2="680" y2="400"/>
+    <line x1="430" y1="346" x2="680" y2="346"/>
+    <line x1="430" y1="292" x2="680" y2="292"/>
+    <line x1="430" y1="238" x2="680" y2="238"/>
+    <line x1="430" y1="130" x2="680" y2="130"/>
+  </g>
+  <line x1="430" y1="130" x2="430" y2="400" stroke="#333333" stroke-width="1.8"/>
+  <text x="390" y="265.0" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 390 265.0)">signed ABBA difference (joules)</text>
+  <text x="406" y="265.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle" transform="rotate(-90 406 265.0)">no numeric scale</text>
+  <line x1="430" y1="400" x2="680" y2="400" stroke="#333333" stroke-width="1.8"/>
+  <text x="555.0" y="108" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold" text-anchor="middle">D2  null response</text>
+  <line x1="430" y1="265.0" x2="680" y2="265.0" stroke="#333333" stroke-width="1.8"/>
+  <text x="422" y="269.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="end">zero</text>
+  <line x1="485.0" y1="219.0" x2="485.0" y2="311.0" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <rect x="479.0" y="259.0" width="12" height="12" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="485.0" y1="400" x2="485.0" y2="406" stroke="#333333" stroke-width="1.5"/>
+  <line x1="555.0" y1="219.0" x2="555.0" y2="311.0" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <rect x="549.0" y="259.0" width="12" height="12" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="555.0" y1="400" x2="555.0" y2="406" stroke="#333333" stroke-width="1.5"/>
+  <line x1="625.0" y1="219.0" x2="625.0" y2="311.0" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <rect x="619.0" y="259.0" width="12" height="12" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="625.0" y1="400" x2="625.0" y2="406" stroke="#333333" stroke-width="1.5"/>
+  <text x="555.0" y="426" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">registered output-magnitude condition</text>
+  <text x="555.0" y="448" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[D_C_null_max_abs_J]</text>
+  <text x="555.0" y="461" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[PLAIN_LANGUAGE_RESULT_null]</text>
+  <text x="555.0" y="474" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[D_C_null_diagnostic_J]</text>
+  <text x="430" y="495" font-family="sans-serif" font-size="10" fill="#555555">short, medium, and long registered</text>
+  <text x="430" y="508" font-family="sans-serif" font-size="10" fill="#555555">magnitudes; a null result is read against</text>
+  <text x="430" y="521" font-family="sans-serif" font-size="10" fill="#555555">the floor, never as no difference</text>
+  <rect x="513.0" y="88" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="555.0" y="102" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <g stroke="#ececec" stroke-width="1.5">
+    <line x1="720" y1="400" x2="970" y2="400"/>
+    <line x1="720" y1="346" x2="970" y2="346"/>
+    <line x1="720" y1="292" x2="970" y2="292"/>
+    <line x1="720" y1="238" x2="970" y2="238"/>
+    <line x1="720" y1="130" x2="970" y2="130"/>
+  </g>
+  <line x1="720" y1="130" x2="720" y2="400" stroke="#333333" stroke-width="1.8"/>
+  <text x="680" y="265.0" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 680 265.0)">effect divided by operative floor (dimensionless)</text>
+  <text x="696" y="265.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle" transform="rotate(-90 696 265.0)">no numeric scale</text>
+  <line x1="720" y1="400" x2="970" y2="400" stroke="#333333" stroke-width="1.8"/>
+  <text x="845.0" y="108" font-family="sans-serif" font-size="13" fill="#1b1b1b" font-weight="bold" text-anchor="middle">D3  empirical floor</text>
+  <line x1="800.0" y1="158" x2="800.0" y2="372" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M800.0,257.0 L808.0,272.0 L792.0,272.0 z" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="800.0" y1="400" x2="800.0" y2="406" stroke="#333333" stroke-width="1.5"/>
+  <line x1="890.0" y1="158" x2="890.0" y2="372" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M890.0,257.0 L898.0,272.0 L882.0,272.0 z" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.2"/>
+  <line x1="890.0" y1="400" x2="890.0" y2="406" stroke="#333333" stroke-width="1.5"/>
+  <text x="800.0" y="243.0" font-family="sans-serif" font-size="10" fill="#1b6ca8" text-anchor="middle">min</text>
+  <text x="890.0" y="243.0" font-family="sans-serif" font-size="10" fill="#1b6ca8" text-anchor="middle">max</text>
+  <text x="845.0" y="426" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">registered micro-difference condition</text>
+  <text x="845.0" y="448" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[R_C_micro_min_x_floor]</text>
+  <text x="845.0" y="461" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[R_C_micro_max_x_floor]</text>
+  <text x="845.0" y="474" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[PLAIN_LANGUAGE_RESULT_floor]</text>
+  <text x="845.0" y="487" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[D_C_micro_diagnostic_x_floor]</text>
+  <text x="720" y="508" font-family="sans-serif" font-size="10" fill="#555555">dimensionless ratio; the draft row this</text>
+  <text x="720" y="521" font-family="sans-serif" font-size="10" fill="#555555">serves was rewritten to an internal</text>
+  <text x="720" y="534" font-family="sans-serif" font-size="10" fill="#555555">decision-path challenge - see registry audit</text>
+  <text x="720" y="547" font-family="sans-serif" font-size="10" fill="#555555">row DS-04</text>
+  <rect x="803.0" y="88" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="845.0" y="102" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <line x1="40" y1="620" x2="980" y2="620" stroke="#e2e2e2" stroke-width="1.5"/>
+  <text x="40" y="644" font-family="sans-serif" font-size="12" fill="#555555" font-weight="bold">Number-free caption stub (verbatim from docs/paper/figures-plan.md):</text>
+  <text x="40" y="663" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">Characterization of response linearity, null behavior across registered magnitudes, and empirical behavior around the operative</text>
+  <text x="40" y="680" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">floor. Panels report the issued row outcome and show numeric diagnostics only when the row-specific presence guard licenses them.</text>
+  <text x="40" y="706" font-family="sans-serif" font-size="12" fill="#555555" font-weight="bold">Mandatory D-119 disclosure line (verbatim; may be replaced only by weaker wording):</text>
+  <text x="40" y="725" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">These panels demonstrate instrument behavior only if the separately governed characterization window passes its whole-window verdict</text>
+  <text x="40" y="742" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">and the corresponding registered row is supported; any partial value from a refused or mixed row remains explicitly diagnostic.</text>
+  <text x="40" y="768" font-family="sans-serif" font-size="11" fill="#555555">Registry rows consumed: linearity [S_C_linearity_request_J_per_token] [S_C_linearity_decode_J_per_token] [R_C_linearity_limit_J]; null response</text>
+  <text x="40" y="785" font-family="sans-serif" font-size="11" fill="#555555">[D_C_null_max_abs_J]; empirical floor [R_C_micro_min_x_floor] [R_C_micro_max_x_floor]; mixed/refused branches [PLAIN_LANGUAGE_RESULT_linearity]</text>
+  <text x="40" y="802" font-family="sans-serif" font-size="11" fill="#555555">[PLAIN_LANGUAGE_RESULT_null] [PLAIN_LANGUAGE_RESULT_floor] [D_C_linearity_diagnostic_J_per_token] [D_C_null_diagnostic_J]</text>
+  <text x="40" y="819" font-family="sans-serif" font-size="11" fill="#555555">[D_C_micro_diagnostic_x_floor]. Freeze status at audit: every one of these rows is STOP_FILL / SUPPLIER_UNKNOWN; no repository file in the authority</text>
+  <text x="40" y="836" font-family="sans-serif" font-size="11" fill="#555555">set defines a characterization result schema. A whole-window refusal renders through [REFUSAL_REASON_window_C] with [PRESENT_DIAGNOSTIC_LIST] and</text>
+  <text x="40" y="853" font-family="sans-serif" font-size="11" fill="#555555">[ABSENT_DIAGNOSTIC_ROW_LIST].</text>
+</svg>

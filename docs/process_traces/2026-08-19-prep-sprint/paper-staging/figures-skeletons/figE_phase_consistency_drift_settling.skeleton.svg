@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="858" viewBox="0 0 1020 858" role="img" aria-labelledby="figEtitle figEdesc">
+  <title id="figEtitle">Figure E (skeleton). Phase consistency, drift, and settling</title>
+  <desc id="figEdesc">Skeleton for the phase-consistency and temporal-behaviour figure. Four panels, each with its own vertical scale: additivity residual in joules about an unlabelled zero rule; prompt-invariance slope in joules per token with an unissued frozen acceptance band; reference excursion in joules; and recovery time in seconds. Between-session eligibility is caption context, not an axis. Every mark is an unissued placeholder keyed by its registry row token, and all four panels are marked STOP_FILL.</desc>
+  <rect x="0" y="0" width="1020" height="858" fill="#ffffff"/>
+  <text x="40" y="32" font-family="sans-serif" font-size="18" fill="#1b1b1b" font-weight="bold">Figure E (skeleton). Phase consistency, drift, and settling</text>
+  <text x="40" y="54" font-family="sans-serif" font-size="13" fill="#555555">Number-free skeleton, four separately scaled panels. Joules, joules per token, and seconds never share an axis; no dual-scale overlay.</text>
+  <rect x="790" y="16" width="190" height="26" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="885.0" y="30" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL - NO PANEL RENDERS</text>
+  <text x="40" y="74" font-family="sans-serif" font-size="11" fill="#a33">Render gate (plan): currently STOP_FILL - the characterization schema, row outcomes, presence flags, and numeric fields are all unresolved suppliers.</text>
+  <g opacity="0.085" transform="rotate(-24 540 255.0)">
+  <text x="540" y="255.0" font-family="sans-serif" font-size="118" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="10">STOP_FILL</text>
+  </g>
+  <g stroke="#ececec" stroke-width="1.5">
+    <line x1="110" y1="380" x2="320" y2="380"/>
+    <line x1="110" y1="330" x2="320" y2="330"/>
+    <line x1="110" y1="280" x2="320" y2="280"/>
+    <line x1="110" y1="230" x2="320" y2="230"/>
+    <line x1="110" y1="130" x2="320" y2="130"/>
+  </g>
+  <line x1="110" y1="130" x2="110" y2="380" stroke="#333333" stroke-width="1.8"/>
+  <text x="70" y="255.0" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 70 255.0)">additivity residual (joules)</text>
+  <text x="86" y="255.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle" transform="rotate(-90 86 255.0)">no numeric scale</text>
+  <line x1="110" y1="380" x2="320" y2="380" stroke="#333333" stroke-width="1.8"/>
+  <text x="215.0" y="108" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold" text-anchor="middle">E1  phase additivity</text>
+  <line x1="110" y1="255.0" x2="320" y2="255.0" stroke="#333333" stroke-width="1.8"/>
+  <text x="102" y="259.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="end">zero</text>
+  <line x1="215.0" y1="154" x2="215.0" y2="356" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M215.0,247.0 L223.0,255.0 L215.0,263.0 L207.0,255.0 z" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.4"/>
+  <text x="215.0" y="235.0" font-family="sans-serif" font-size="13" fill="#1b6ca8" font-weight="bold" text-anchor="middle">?</text>
+  <line x1="215.0" y1="380" x2="215.0" y2="386" stroke="#333333" stroke-width="1.5"/>
+  <text x="110" y="406" font-family="sans-serif" font-size="11" fill="#1b1b1b">registered phase-accounting</text>
+  <text x="110" y="420" font-family="sans-serif" font-size="11" fill="#1b1b1b">diagnostic</text>
+  <text x="215.0" y="442" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[D_C_additivity_J]</text>
+  <text x="215.0" y="455" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[PLAIN_LANGUAGE_RESULT_phase]</text>
+  <text x="215.0" y="468" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[D_C_phase_diagnostic_J]</text>
+  <rect x="173.0" y="64" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="215.0" y="78" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <g stroke="#ececec" stroke-width="1.5">
+    <line x1="365" y1="380" x2="575" y2="380"/>
+    <line x1="365" y1="330" x2="575" y2="330"/>
+    <line x1="365" y1="280" x2="575" y2="280"/>
+    <line x1="365" y1="230" x2="575" y2="230"/>
+    <line x1="365" y1="130" x2="575" y2="130"/>
+  </g>
+  <line x1="365" y1="130" x2="365" y2="380" stroke="#333333" stroke-width="1.8"/>
+  <text x="325" y="255.0" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 325 255.0)">prompt-invariance slope (joules per token)</text>
+  <text x="341" y="255.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle" transform="rotate(-90 341 255.0)">no numeric scale</text>
+  <line x1="365" y1="380" x2="575" y2="380" stroke="#333333" stroke-width="1.8"/>
+  <text x="470.0" y="108" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold" text-anchor="middle">E2  prompt invariance</text>
+  <line x1="365" y1="255.0" x2="575" y2="255.0" stroke="#333333" stroke-width="1.8"/>
+  <text x="357" y="259.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="end">zero</text>
+  <rect x="365" y="215.0" width="210" height="80" fill="#bbbbbb" fill-opacity="0.22" stroke="#888888" stroke-width="1.3" stroke-dasharray="5 4"/>
+  <text x="470.0" y="207.0" font-family="sans-serif" font-size="10" fill="#5a5a5a" text-anchor="middle">frozen acceptance band (unissued)</text>
+  <line x1="470.0" y1="154" x2="470.0" y2="356" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M470.0,247.0 L478.0,255.0 L470.0,263.0 L462.0,255.0 z" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.4"/>
+  <text x="470.0" y="235.0" font-family="sans-serif" font-size="13" fill="#1b6ca8" font-weight="bold" text-anchor="middle">?</text>
+  <line x1="470.0" y1="380" x2="470.0" y2="386" stroke="#333333" stroke-width="1.5"/>
+  <text x="365" y="406" font-family="sans-serif" font-size="11" fill="#1b1b1b">registered phase-accounting</text>
+  <text x="365" y="420" font-family="sans-serif" font-size="11" fill="#1b1b1b">diagnostic</text>
+  <text x="470.0" y="442" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[S_C_prompt_invariance_J_per_token]</text>
+  <text x="470.0" y="455" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[B_C_prompt_invariance_J_per_token]</text>
+  <rect x="428.0" y="64" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="470.0" y="78" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <g stroke="#ececec" stroke-width="1.5">
+    <line x1="620" y1="380" x2="790" y2="380"/>
+    <line x1="620" y1="330" x2="790" y2="330"/>
+    <line x1="620" y1="280" x2="790" y2="280"/>
+    <line x1="620" y1="230" x2="790" y2="230"/>
+    <line x1="620" y1="130" x2="790" y2="130"/>
+  </g>
+  <line x1="620" y1="130" x2="620" y2="380" stroke="#333333" stroke-width="1.8"/>
+  <text x="580" y="255.0" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 580 255.0)">reference excursion (joules)</text>
+  <text x="596" y="255.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle" transform="rotate(-90 596 255.0)">no numeric scale</text>
+  <line x1="620" y1="380" x2="790" y2="380" stroke="#333333" stroke-width="1.8"/>
+  <text x="705.0" y="108" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold" text-anchor="middle">E3  reference excursion</text>
+  <line x1="705.0" y1="154" x2="705.0" y2="356" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M705.0,247.0 L713.0,255.0 L705.0,263.0 L697.0,255.0 z" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.4"/>
+  <text x="705.0" y="235.0" font-family="sans-serif" font-size="13" fill="#1b6ca8" font-weight="bold" text-anchor="middle">?</text>
+  <line x1="705.0" y1="380" x2="705.0" y2="386" stroke="#333333" stroke-width="1.5"/>
+  <text x="620" y="406" font-family="sans-serif" font-size="11" fill="#1b1b1b">registered reference</text>
+  <text x="620" y="420" font-family="sans-serif" font-size="11" fill="#1b1b1b">diagnostic</text>
+  <text x="705.0" y="442" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[D_C_reference_excursion_J]</text>
+  <text x="705.0" y="455" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[PLAIN_LANGUAGE_RESULT_drift]</text>
+  <text x="705.0" y="468" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[D_C_drift_diagnostic_J]</text>
+  <rect x="663.0" y="64" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="705.0" y="78" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <g stroke="#ececec" stroke-width="1.5">
+    <line x1="835" y1="380" x2="970" y2="380"/>
+    <line x1="835" y1="330" x2="970" y2="330"/>
+    <line x1="835" y1="280" x2="970" y2="280"/>
+    <line x1="835" y1="230" x2="970" y2="230"/>
+    <line x1="835" y1="130" x2="970" y2="130"/>
+  </g>
+  <line x1="835" y1="130" x2="835" y2="380" stroke="#333333" stroke-width="1.8"/>
+  <text x="795" y="255.0" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" text-anchor="middle" transform="rotate(-90 795 255.0)">recovery time (seconds)</text>
+  <text x="811" y="255.0" font-family="sans-serif" font-size="10" fill="#555555" text-anchor="middle" transform="rotate(-90 811 255.0)">no numeric scale</text>
+  <line x1="835" y1="380" x2="970" y2="380" stroke="#333333" stroke-width="1.8"/>
+  <text x="902.5" y="108" font-family="sans-serif" font-size="12.5" fill="#1b1b1b" font-weight="bold" text-anchor="middle">E4  recovery time</text>
+  <line x1="902.5" y1="154" x2="902.5" y2="356" stroke="#1b6ca8" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M902.5,247.0 L910.5,255.0 L902.5,263.0 L894.5,255.0 z" fill="#ffffff" stroke="#1b6ca8" stroke-width="2.4"/>
+  <text x="902.5" y="235.0" font-family="sans-serif" font-size="13" fill="#1b6ca8" font-weight="bold" text-anchor="middle">?</text>
+  <line x1="902.5" y1="380" x2="902.5" y2="386" stroke="#333333" stroke-width="1.5"/>
+  <text x="835" y="406" font-family="sans-serif" font-size="11" fill="#1b1b1b">registered recovery</text>
+  <text x="835" y="420" font-family="sans-serif" font-size="11" fill="#1b1b1b">diagnostic</text>
+  <text x="902.5" y="442" font-family="monospace" font-size="9" fill="#1b6ca8" text-anchor="middle">[T_C_recovery_s]</text>
+  <rect x="860.5" y="64" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="902.5" y="78" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <text x="110" y="520" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" font-weight="bold">Between-session eligibility is caption context, not a continuous numeric axis:</text>
+  <text x="110" y="538" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="start">[PLAIN_LANGUAGE_RESULT_between_sessions]</text>
+  <text x="420" y="538" font-family="monospace" font-size="9.5" fill="#1b6ca8" text-anchor="start">[N_C_eligible_sessions]</text>
+  <rect x="660" y="524" width="84" height="18" rx="3" fill="#ffffff" stroke="#a33" stroke-width="1.8" stroke-dasharray="5 3"/>
+  <text x="702.0" y="538" font-family="sans-serif" font-size="11.5" fill="#a33" font-weight="bold" text-anchor="middle" letter-spacing="0.8">STOP_FILL</text>
+  <text x="110" y="560" font-family="sans-serif" font-size="11.5" fill="#333333">Joules, joules per token, and seconds are never overlaid on one dual scale; each panel keeps its own vertical axis.</text>
+  <line x1="40" y1="578" x2="980" y2="578" stroke="#e2e2e2" stroke-width="1.5"/>
+  <text x="40" y="602" font-family="sans-serif" font-size="12" fill="#555555" font-weight="bold">Number-free caption stub (verbatim from docs/paper/figures-plan.md):</text>
+  <text x="40" y="621" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">Internal phase-accounting, drift, and settling diagnostics from the governed characterization campaign. Additivity and prompt-</text>
+  <text x="40" y="638" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">invariance test phase assignment; reference excursion and recovery test the admitted temporal regime; between-session language</text>
+  <text x="40" y="655" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">follows only the registered eligibility rule.</text>
+  <text x="40" y="681" font-family="sans-serif" font-size="12" fill="#555555" font-weight="bold">Mandatory D-119 disclosure line (verbatim; may be replaced only by weaker wording):</text>
+  <text x="40" y="700" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">These diagnostics test internal consistency and stability under the recorded stack and admitted sessions; they do not validate the</text>
+  <text x="40" y="717" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">software counter's external gain, establish unrestricted cross-session transfer, or convert a refused window into evidence of</text>
+  <text x="40" y="734" font-family="sans-serif" font-size="12.5" fill="#1b1b1b">stability.</text>
+  <text x="40" y="760" font-family="sans-serif" font-size="11" fill="#555555">Registry rows consumed: phase consistency [D_C_additivity_J] [S_C_prompt_invariance_J_per_token] [B_C_prompt_invariance_J_per_token]; drift and</text>
+  <text x="40" y="777" font-family="sans-serif" font-size="11" fill="#555555">settling [D_C_reference_excursion_J] [T_C_recovery_s]; row outcomes and refused-window diagnostics [PLAIN_LANGUAGE_RESULT_phase]</text>
+  <text x="40" y="794" font-family="sans-serif" font-size="11" fill="#555555">[PLAIN_LANGUAGE_RESULT_drift] [D_C_phase_diagnostic_J] [D_C_drift_diagnostic_J]; between-session context [PLAIN_LANGUAGE_RESULT_between_sessions]</text>
+  <text x="40" y="811" font-family="sans-serif" font-size="11" fill="#555555">[N_C_eligible_sessions]. Freeze status at audit: every one of these rows is STOP_FILL / SUPPLIER_UNKNOWN. [B_C_prompt_invariance_J_per_token] must be</text>
+  <text x="40" y="828" font-family="sans-serif" font-size="11" fill="#555555">pre-registered before any band is drawn.</text>
+</svg>
