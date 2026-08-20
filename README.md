@@ -9,17 +9,38 @@ workload or comparison track; a *verdict* is the final governed decision to
 admit or refuse evidence; and a *refusal* is a recorded decision not to issue a
 result when a required gate or piece of evidence fails.
 
-**Status:** the instrument's clock-anchor correction is complete and the
-successor measurement campaign family is frozen; the work is on the
-integration branch pending its final review gates, after which fresh
-calibration and measurement windows produce the paper's results data.
+**Status:** the instrument's clock-anchor correction is complete, the
+successor measurement campaign family is frozen, and that work has now
+passed all four of its review gates and been merged to this main branch
+(2026-08-20). A council also ruled how the remaining reserved
+configuration values install: together with the next campaign family,
+whose evidence-freshness clock forces it to be built before any new
+measurement windows run. The readiness re-audit and the plan for that
+next family are in progress; measurement windows that produce the
+paper's results data follow them.
 Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-08-19 night)
+## Current activity (refreshed each work block; last: 2026-08-20 morning)
 
-**Just completed (2026-08-19):** the clock-anchor correction became the
+**Just completed (2026-08-20):** the frozen third-generation campaign
+family and its whole instrument correction passed all four review gates
+and merged to main. The last failing test (written before the freeze
+receipts existed) was repaired through an adversarial review cycle that
+also surfaced, and recorded as future work, a gap in how historical
+receipt claims are re-checked. Two councils then ruled: the reserved
+configuration values of the readiness registry were all decided, but
+their installation was proven — by executed experiment — to break the
+just-frozen family, so they install together with the NEXT campaign
+family instead. That next family is unavoidable anyway: the frozen
+family's readiness evidence carries a 24-hour validity clock that
+expires today, and rebuilding evidence for a frozen family is refused
+by the instrument's own code. The lesson is recorded so the next
+family's schedule is planned around the clock rather than surprised by
+it.
+
+**Previously (2026-08-19):** the clock-anchor correction became the
 production instrument, end to end. The estimator whose rate=1 assumption
 was measured and found false is retired from capture; the corrected
 set-membership anchor now labels every new measurement, every stored
@@ -37,11 +58,12 @@ mismatches. The instrument guide was rewritten so every term is built
 before it is used, and the paper's methodology now describes the
 corrected instrument with the transition reported as evidence.
 
-**Next:** finish the four pre-merge review gates and merge the
-transaction to main, council-rule the readiness-registry reserved
-values, then the first fresh calibration captures and quiet measurement
-windows under the corrected instrument — the data the paper's results
-tables are waiting for.
+**Next:** the readiness re-audit (a twelve-seat council sitting over
+the repair program, in progress) and the fourth-generation family
+transaction plan (two independent designs in progress), then building
+that family with the registry installed, then the first fresh
+calibration captures and quiet measurement windows under the corrected
+instrument — the data the paper's results tables are waiting for.
 ## Current State
 
 Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete

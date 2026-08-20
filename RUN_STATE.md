@@ -10,9 +10,67 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-19 ~21:00 PDT (T16-FANOUT-READY — all prep landed; stopped; the 23:34 fresh session is the GO)
+Last updated: 2026-08-20 ~05:50 PDT (T17 — MERGE WAVE LANDED on main; READY sitting + _v4 planning fanned out)
 
-## ▶▶ T16-FANOUT-READY (2026-08-19 ~21:00 PDT, FINAL checkpoint of the pre-/clear session) — EVERYTHING STOPPED; THE 23:34 SESSION IS THE GO
+## ▶▶ T17 (2026-08-20 morning, the GO session, MID-SESSION checkpoint) — THE MERGE WAVE IS ON MAIN; TWO COUNCILS RULED; FAN-OUT LIVE
+
+**STATE IN ONE BREATH:** T16's four merge gates all went GREEN and the
+wave LANDED — main @ 5bd7acf (PR #160) carries the full D-146/D-147
+transaction. Gate custody: docs/process_traces/2026-08-20-go-session/
+(the ONE home for this session's rulings). Gate 1: the canonical
+residue was fixed at 60ddb03 through a two-refuter gauntlet (the
+execution-lens REFUTED verdict was adjudicated non-defect on the
+contract lens's executed evidence; real C1 finding registered as
+kernel row RECEIPT-HISTSEM-01), then canonical FULL GREEN at d33f34f
+(3,760 ran, 0 failures). Gate 3: D-144 seat pass GO from both seats
+(terra xhigh + Opus), zero blockers; post-debate should-fixes queued
+as D144-SEATPASS-FOLLOWUPS (SF-1's one-line fix was executably refuted
+as a false-refusal hazard — the non-gating report channel is the ruled
+shape).
+
+**D-148.5 REGISTRY COUNCIL IS FINAL** (MAGISTRATE-RULING.md + -r2 +
+-r3 + cold-delta-verdicts.md in the session custody): enumeration A;
+INSTALL DEFERRED TO THE `_v4` FAMILY BOUNDARY (byte-pin blocker +
+V1_GRANDFATHERING + the fuse — three independent closures); six
+values ruled (r3's B-sections are the operative bytes/tokens); the
+`_v4` transaction contract carries the Ed publication gate, envelope
+arithmetic, mechanical halt trigger, and BIG classification. The cold
+gauntlet ran three rounds (cold Fable + Opus refuter, split verdicts
+synthesized each round) and ended FINAL-RATIFY.
+
+**THE `_v3` FUSE LAPSED BY RULING:** arm-evidence expiry ~17:00Z
+2026-08-20 (lead-verified); no window race against a closed
+WINDOW-COUNCIL-GATE; the `_v4` re-freeze is compelled by executed code
+mechanics regardless (idempotent freeze replay + directory-name
+generation parsing — see r3 A-4). Windows resume on `_v4` after the
+READY sitting and the `_v4` transaction.
+
+**IN FLIGHT AT CHECKPOINT (all read-only seats):** the READY-candidate
+council sitting — 12 seats over the prep-sprint packet (L1-L11 +
+program rows; 9 terra/codex + 3 Opus), attaching to head 5bd7acf
+(P-13 cured by the merge) — and the `_v4` transaction plan co-design
+pair (Sol xhigh + Opus, blind). Results land in
+scratchpad/ready-sitting/ + v4plan/, then custody.
+
+**ED-DECISION ITEMS (batched; only #2 is time-critical):**
+1. V6 family-publication-marker option — TRANSACTION-BLOCKING for the
+   `_v4` install (ruling r2 A-1; recommendation: build-at-boundary).
+2. OPTIONAL, expires ~10:00 PDT today: pre-fuse `_v3` rehearsal
+   harvest (E-4→E-10, needs hands) — the only pre-commitment V5
+   measurement opportunity.
+3. Envelope plan / possible pre-mint horizon raise (r3 B-5) once the
+   `_v4` arithmetic lands.
+4. Standing batch unchanged (sudoers one-liner for -getusingnetworktime
+   before any D-149 auto-GO; A4 markers; env-fingerprint semantics —
+   note D-148.5 discharged the comparison-semantics piece; day-5
+   exact-byte confirmations).
+
+**Session hygiene (additions):** custody staging lives OUTSIDE the
+canonical-runner worktree (violated twice this session — cost one
+discarded ~25-min run; fix: scratchpad/custody-staging/ pattern, land
+between suite runs); the codex wrapper requires the literal
+WRITE_SCOPE: line in the prompt when --write-scope is passed; the
+`&`-fanout ban caught once (killed before any orphan).
 
 **TRIGGER SEMANTICS (supersedes T14-GO's loop-line trigger):** Ed starts a
 FRESH SESSION at ~23:34 PST pointed at this file. THAT SESSION HAS THE
