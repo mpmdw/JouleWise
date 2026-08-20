@@ -52,18 +52,38 @@ program rows; 9 terra/codex + 3 Opus), attaching to head 5bd7acf
 pair (Sol xhigh + Opus, blind). Results land in
 scratchpad/ready-sitting/ + v4plan/, then custody.
 
-**ED-DECISION ITEMS (batched; only #2 is time-critical):**
-1. V6 family-publication-marker option — TRANSACTION-BLOCKING for the
-   `_v4` install (ruling r2 A-1; recommendation: build-at-boundary).
-2. OPTIONAL, expires ~10:00 PDT today: pre-fuse `_v3` rehearsal
-   harvest (E-4→E-10, needs hands) — the only pre-commitment V5
-   measurement opportunity.
-3. Envelope plan / possible pre-mint horizon raise (r3 B-5) once the
-   `_v4` arithmetic lands.
-4. Standing batch unchanged (sudoers one-liner for -getusingnetworktime
-   before any D-149 auto-GO; A4 markers; env-fingerprint semantics —
-   note D-148.5 discharged the comparison-semantics piece; day-5
-   exact-byte confirmations).
+**ED PACKET (CONSOLIDATED r5 — supersedes the T17 list; the ONE
+list; full text in docs/process_traces/2026-08-20-go-session/
+rulings-r5-consolidation.md §V-7):**
+1. **MINT LICENSE — BLOCKS S-0, the gate on the whole `_v4`
+   transaction.** Install the settings rule for the six `_v4`
+   freeze/projection commands scoped to the measurement checkout
+   (D-148.1: your hands only; the classifier forbids self-granting).
+   EVERYTHING WAITS ON THIS.
+2. HORIZON 168h for the ten generic freeze-time evidence kinds
+   (full three-detector freshness disclosure + idle-cost + the
+   D-139-A3 class distinction in the ruling; transaction unmintable
+   without a ruled number).
+3. V6 marker option (a) build-at-boundary [recommended] / (b)
+   UNBUILT token — transaction-blocking.
+4. B-δ: windows currently REQUIRE your hands at every T-0
+   (CLOCK_ATTESTATION is operator-attestation by construction) —
+   choose attended-T-0 for the `_v4` campaign, or authorize the
+   D-127 scope + code change as its own work order.
+5. NO-REBOOT commitment for the campaign span + pinned boot UUID.
+6. ED-QUAL-L6-1 re-scope + T0 reclassification; ED-L10-1 scope
+   ruling.
+7. Origin-main push freeze during the transaction span (all your
+   machines/sessions; suspends the push-promptly habit for the span
+   via the stop-card).
+8. The sitting's Ed-hands rows E-1..E-11 (E-1 downgraded to
+   observability; E-11 the pre-fuse harvest expires ~09:51 PDT
+   today).
+9. H-6 adoption visibility: the rule-11 packet-finalization gate is
+   homed in the charter + validate_gate_packet.py (decision-log
+   entry to follow; faithful transcription only).
+10. Step-6 exact-byte + terminal-review scheduling — your two
+    in-fuse touchpoints, timed at your convenience post-license.
 
 **Session hygiene (additions):** custody staging lives OUTSIDE the
 canonical-runner worktree (violated twice this session — cost one
