@@ -178,28 +178,29 @@ configs/campaigns/p2_015_floors/03_request_abba
 Do not put the reference directories in those lists; the chain adds the
 governed 3+1+3 references itself.
 
-Example ALPHA `window.env`. This file is a frozen literal input to the T-0
-producer: it has exactly the keys below, every path is absolute, and no value
-contains `$` or a shell expansion. `FROZEN_PLAN` is R2's execution-boundary
-literal for the committed pack-relative `calibration_plan.json`; it is not a
-custody reservation plan. Replace the dated path components before review,
-then freeze the resulting bytes:
+Example next-generation ALPHA `window.env`, prepared while the `_v4` pack is
+committed but **before** that generation receives `freeze-0004.json`. This file
+is a frozen literal input to the T-0 producer: it has exactly the keys below,
+every path is absolute, and no value contains `$` or a shell expansion.
+`FROZEN_PLAN` is R2's execution-boundary literal for the committed pack-relative
+`calibration_plan.json`; it is not a custody reservation plan. Replace the
+dated path components before review, then freeze the resulting bytes:
 
 ```sh
 MEASUREMENT_REPO=/Users/edr/JouleWise-measurement-20260813
-WINDOW_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2
+WINDOW_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v4
 BRACKET_SESSION_ID=d117-alpha-YYYYMMDD-calibration
-FROZEN_PLAN=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v2/calibration_plan.json
-PACK_ROOT=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v2
-PACK_ID=d117_floor_qwen25_1p5b_v2
-PLAN_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v2
-EVIDENCE_ROOT_ID=evidence-d117-floor-qwen25-1p5b-v2
+FROZEN_PLAN=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v4/calibration_plan.json
+PACK_ROOT=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v4
+PACK_ID=d117_floor_qwen25_1p5b_v4
+PLAN_ID=plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v4
+EVIDENCE_ROOT_ID=evidence-d117-floor-qwen25-1p5b-v4
 IDENTITY_EPOCH_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/identity-epoch.json
 T1_BINDINGS_JSON=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/t1-bindings.json
 PRE_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-pre
 POST_ATTEMPT_ID=d117-alpha-YYYYMMDD-calibration-post
-RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v2
-BOUND_RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v2_bound
+RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v4
+BOUND_RUNS_ROOT=/Users/edr/JouleWise-measurement-20260813/runs_d117_floor_qwen25_1p5b_v4_bound
 CALIBRATION_LEDGER=/Users/edr/code/JouleWise/runs/calibration_observation_ledger.jsonl
 LEDGER_HEAD_PIN=/Users/edr/JouleWise-measurement-20260813/configs/calibration/calibration_ledger_head.json
 ARM_READINESS_CUSTODY_ROOT=/Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness
@@ -1009,16 +1010,73 @@ arming; they do not authorize the live night.
    they do not extend the volatile evidence.
 
    A reboot or any HEAD change voids the authored receipts. Before
-   re-authoring, first verify these are the exact three pack-specific T-0
-   namespaces and remove all three so no no-clobber collision can masquerade as a
-   retry:
+   re-authoring, use the governed cleaner for the exact three pack-specific T-0
+   namespaces so no no-clobber collision can masquerade as a retry. The command
+   authenticates `PACK_ROOT` as the committed
+   `configs/campaigns/$PACK_ID` pack, refuses a partial or anomalous namespace
+   set, and refuses before cleanup if the pack's current `_vN` generation has a
+   committed `freeze-NNNN.json`. There is no force mode:
 
    ```sh
-   /bin/rm -r -- \
-     "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.sources" \
-     "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.evidence" \
-     "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.inputs"
+   python3 scripts/reauthor_clean.py \
+     --pack-root "$PACK_ROOT" \
+     --namespace "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.sources" \
+     --namespace "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.evidence" \
+     --namespace "$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.inputs"
    ```
+
+   Before the first namespace rename, the cleaner writes and fsyncs an immutable
+   `state-<state_id>.manifest.json` below
+   `$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/reauthor-clean.operations/`. The state
+   ID is derived from a 32-byte random nonce plus the authenticated pack,
+   request paths, and custody/source inode anchors; wall-clock time is
+   informational only. Progress authority is a no-clobber, fsynced, hash-linked
+   sequence of individual event files, never mutable JSONL. Before any rename,
+   a disposable descriptor sentinel must prove immutable-flag set, clear,
+   post-unlink set, `st_flags` observation, and cleanup; there is no subprocess
+   or path-based fallback.
+
+   A successful clean prints the immutable terminal
+   `state-<state_id>.receipt.json` path and SHA-256. Record both. The receipt
+   binds the manifest, Git/plan/pack identity, exact request, frozen descriptor
+   inventory, and every durable post-unlink verification event. The receipt
+   claims **VERIFIED LOGICAL NAMESPACE DELETION**, never secure erase or
+   hostile-process exclusion. The four pack mint-custody
+   namespaces — `PACK_ROOT/arm_readiness.evidence`,
+   `PACK_ROOT/arm_readiness.freeze.receipts`,
+   `PACK_ROOT/arm_readiness.sources`, and
+   `PACK_ROOT/identity_pin_projection.receipts` — are not cleanup targets and
+   remain untouched; only the separately rooted T-0 `arm_readiness.evidence`
+   path listed above is removed.
+
+   A generation with its committed `freeze-NNNN.json` refuses cleanup because
+   frozen bytes are immutable; the lawful route is to create and commit a new
+   family generation, clean/re-author it before its freeze, and then freeze that
+   successor.
+
+   Cleanup atomically renames the three inode-anchored trees into
+   `$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/.reauthor_clean.quarantine/<state_id>/`,
+   recursively sets `UF_IMMUTABLE` on every quarantined directory and regular
+   file, and inventories the frozen tree through descriptors. It then deletes
+   bottom-up with directory FDs and `O_NOFOLLOW`: each regular-file FD remains
+   open across `unlink`, is re-frozen, hashed through that descriptor, and is
+   closed only after its `DELETE_VERIFIED` event is durable. No `rmtree` is
+   permitted.
+
+   If interrupted before unlink, inspect the named state and repeat the same
+   command with `--resume-removal`; resume revalidates the canonical manifest,
+   current pack tree/unfrozen generation, custody/source/quarantine inode
+   anchors, exact source/quarantine location, complete event chain, and every
+   remaining frozen object. An intent whose object remains is safely re-frozen,
+   rehashed, and retried. An intent whose object is missing permanently returns
+   `reauthor_clean_destroyed_unverified` with an
+   `INCOMPLETE_DESTROYED_UNVERIFIED` incident receipt and never deletes the
+   remainder. A post-unlink hash difference similarly terminates as
+   `INCOMPLETE_DESTROYED_MISMATCH`; neither incomplete state can be upgraded by
+   retry. After all verified events, a missing terminal receipt is rebuilt
+   deterministically; after its fsync, rerun returns `ALREADY_COMPLETE` with the
+   same receipt hash. Legacy partial `rmtree` state is preserved as
+   destroyed-unverified incident custody and is never resumed.
 
    Then repeat E-4 through E-9b; never reuse a pre-reboot or pre-HEAD-change
    receipt. **E-9c** is ARM followed by verify, and ARM must be the next new
