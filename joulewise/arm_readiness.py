@@ -998,6 +998,38 @@ class LaunchLineageError(ValueError):
         self.reason_code = reason_code
 
 
+HISTSEM_REASON_CODES = frozenset(
+    {
+        "histsem_binding_mismatch",
+        "histsem_commit_off_lineage",
+        "histsem_commit_unpublished",
+        "histsem_commit_unresolvable",
+        "histsem_git_unavailable",
+        "histsem_historical_digest_mismatch",
+        "histsem_historical_tree_anomalous",
+        "histsem_historical_tree_not_pre_authoring",
+        "histsem_history_unavailable",
+        "histsem_history_shallow",
+        "histsem_pack_absent_at_commit",
+        "histsem_pinset_absent",
+        "histsem_pinset_invalid",
+        "histsem_pinset_mismatch",
+        "histsem_post_authoring_delta_unexpected",
+        "histsem_receipt_head_malformed",
+    }
+)
+
+
+class HistoricalSemanticsError(ValueError):
+    """A refusal from the disjoint RECEIPT-HISTSEM-01 vocabulary."""
+
+    def __init__(self, reason_code: str, message: str) -> None:
+        if reason_code not in HISTSEM_REASON_CODES:
+            raise ValueError(f"unregistered historical-semantics code {reason_code!r}")
+        super().__init__(message)
+        self.reason_code = reason_code
+
+
 def render_json(value: Any) -> bytes:
     """Return the D-134 canonical bytes, shared with D-131."""
 
@@ -2675,6 +2707,753 @@ def committed_pack_tree_sha256(pack_root: Path | str) -> str:
         framed.extend(sha256_bytes(raw).encode("ascii"))
         framed.extend(b"\n")
     return sha256_bytes(bytes(framed))
+
+
+RECEIPT_HISTSEM_PINSET_RELATIVE_PATH = Path(
+    "configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"
+)
+RECEIPT_HISTSEM_PINSET_SCHEMA = "joulewise.receipt_histsem_pinset.v1"
+_HISTSEM_CUSTODY_DIRECTORIES = frozenset(
+    {
+        "arm_readiness.evidence",
+        "arm_readiness.freeze.receipts",
+        "arm_readiness.sources",
+        "identity_pin_projection.receipts",
+    }
+)
+_HISTSEM_ALLOWED_MODIFICATIONS = frozenset(
+    {
+        "generate_configs.py",
+        "plan_tree.json",
+        "plan_tree.sha256",
+        "producer_contract.json",
+    }
+)
+
+
+def _histsem_git(
+    repository: Path, *args: str
+) -> tuple[int, bytes, bytes]:
+    """Run one bounded, read-only Git query without fetch or repair."""
+
+    try:
+        completed = subprocess.run(
+            ("git", "-C", str(repository), *args),
+            check=False,
+            capture_output=True,
+            timeout=20,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HistoricalSemanticsError(
+            "histsem_git_unavailable", f"cannot execute historical Git proof: {exc}"
+        ) from exc
+    return completed.returncode, completed.stdout, completed.stderr
+
+
+def _histsem_repository_and_pack(pack_root: Path) -> tuple[Path, str]:
+    try:
+        repository, _pack_prefix, pack_relative = _repository_and_pack_relative(
+            pack_root
+        )
+    except (ArmReadinessError, OSError) as exc:
+        raise HistoricalSemanticsError(
+            "histsem_git_unavailable", f"cannot locate historical pack repository: {exc}"
+        ) from exc
+    return repository, pack_relative
+
+
+def _historical_pack_tree(
+    repository: Path | str,
+    pack_path: Path | str,
+    head_commit: str,
+) -> tuple[str, tuple[str, ...]]:
+    """Return the D-134 digest and paths for a tree made only of Git objects."""
+
+    repo = Path(repository).resolve(strict=True)
+    pack_relative = PurePosixPath(str(pack_path).replace(os.sep, "/")).as_posix()
+    if (
+        pack_relative in {"", "."}
+        or pack_relative.startswith("/")
+        or ".." in PurePosixPath(pack_relative).parts
+    ):
+        raise HistoricalSemanticsError(
+            "histsem_historical_tree_anomalous", "historical pack path is not relative"
+        )
+    if head_commit != "HEAD" and re.fullmatch(r"[0-9a-f]{40}", head_commit) is None:
+        raise HistoricalSemanticsError(
+            "histsem_receipt_head_malformed",
+            "historical head_commit must be lowercase full-length SHA-1",
+        )
+    code, shallow_raw, _stderr = _histsem_git(
+        repo, "rev-parse", "--is-shallow-repository"
+    )
+    if code != 0:
+        raise HistoricalSemanticsError(
+            "histsem_git_unavailable", "cannot determine whether Git history is shallow"
+        )
+    if shallow_raw.rstrip(b"\n") == b"true":
+        raise HistoricalSemanticsError(
+            "histsem_history_shallow", "historical semantics require a full-history checkout"
+        )
+    code, _stdout, _stderr = _histsem_git(
+        repo, "cat-file", "-e", f"{head_commit}^{{commit}}"
+    )
+    if code != 0:
+        raise HistoricalSemanticsError(
+            "histsem_commit_unresolvable", f"historical commit {head_commit} is unavailable"
+        )
+    code, tree_raw, _stderr = _histsem_git(
+        repo, "ls-tree", "-rz", "--full-tree", head_commit, "--", pack_relative
+    )
+    if code != 0:
+        raise HistoricalSemanticsError(
+            "histsem_history_unavailable", "historical pack tree cannot be read"
+        )
+    prefix = pack_relative.encode("utf-8") + b"/"
+    entries: dict[bytes, tuple[str, str]] = {}
+    for record in tree_raw.split(b"\0"):
+        if not record:
+            continue
+        try:
+            metadata, repository_path = record.split(b"\t", 1)
+            mode_raw, type_raw, oid_raw = metadata.split(b" ", 2)
+            mode = mode_raw.decode("ascii", errors="strict")
+            object_type = type_raw.decode("ascii", errors="strict")
+            oid = oid_raw.decode("ascii", errors="strict")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise HistoricalSemanticsError(
+                "histsem_historical_tree_anomalous", "malformed historical tree entry"
+            ) from exc
+        if not repository_path.startswith(prefix):
+            raise HistoricalSemanticsError(
+                "histsem_historical_tree_anomalous", "Git returned an out-of-pack path"
+            )
+        relative_raw = repository_path[len(prefix) :]
+        try:
+            relative_raw.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_historical_tree_anomalous", "historical tree has a non-UTF-8 path"
+            ) from exc
+        if (
+            not relative_raw
+            or mode not in {"100644", "100755"}
+            or object_type != "blob"
+            or relative_raw in entries
+        ):
+            raise HistoricalSemanticsError(
+                "histsem_historical_tree_anomalous",
+                f"inadmissible historical tree entry {relative_raw!r}",
+            )
+        entries[relative_raw] = (mode, oid)
+    if not entries:
+        raise HistoricalSemanticsError(
+            "histsem_pack_absent_at_commit",
+            f"pack {pack_relative!r} is absent at {head_commit}",
+        )
+    framed = bytearray(PACK_DIGEST_DOMAIN)
+    decoded_paths: list[str] = []
+    for relative_raw in sorted(entries):
+        mode, oid = entries[relative_raw]
+        code, blob, _stderr = _histsem_git(repo, "cat-file", "blob", oid)
+        if code != 0:
+            raise HistoricalSemanticsError(
+                "histsem_history_unavailable", f"historical blob {oid} cannot be read"
+            )
+        framed.extend(relative_raw)
+        framed.extend(b"\0")
+        framed.extend(mode.encode("ascii"))
+        framed.extend(b"\0")
+        framed.extend(str(len(blob)).encode("ascii"))
+        framed.extend(b"\0")
+        framed.extend(sha256_bytes(blob).encode("ascii"))
+        framed.extend(b"\n")
+        decoded_paths.append(relative_raw.decode("utf-8"))
+    return sha256_bytes(bytes(framed)), tuple(decoded_paths)
+
+
+def historical_pack_tree_sha256(
+    repository: Path | str,
+    pack_path: Path | str,
+    head_commit: str,
+) -> str:
+    """Hash ``pack_path`` at ``head_commit`` using only local Git objects."""
+
+    digest, _paths = _historical_pack_tree(repository, pack_path, head_commit)
+    return digest
+
+
+def _histsem_exact_keys(value: object, keys: set[str], where: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != keys:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_invalid", f"{where} must contain exactly {sorted(keys)!r}"
+        )
+    return value
+
+
+def _validate_histsem_pinset(value: object) -> tuple[Mapping[str, Any], ...]:
+    payload = _histsem_exact_keys(value, {"schema_version", "packs"}, "pinset")
+    if payload["schema_version"] != RECEIPT_HISTSEM_PINSET_SCHEMA:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_invalid", "unsupported receipt-histsem pinset schema"
+        )
+    packs = payload["packs"]
+    if not isinstance(packs, list) or not packs:
+        raise HistoricalSemanticsError("histsem_pinset_invalid", "pinset packs must be nonempty")
+    rows: list[Mapping[str, Any]] = []
+    identities: set[tuple[str, str]] = set()
+    row_keys = {
+        "current_pack_sha256",
+        "freeze_receipt",
+        "head_commit",
+        "historical_pack_sha256",
+        "pack_id",
+        "pack_path",
+        "plan_sha256",
+        "plan_tree_sha256",
+        "post_authoring_delta",
+        "published_anchor",
+        "receipt_count",
+        "receipts",
+    }
+    receipt_keys = {
+        "evidence_id",
+        "namespace",
+        "path",
+        "receipt_kind",
+        "schema_version",
+        "sha256",
+        "status",
+    }
+    for index, candidate in enumerate(packs):
+        row = _histsem_exact_keys(candidate, row_keys, f"pinset.packs[{index}]")
+        identity = (str(row["pack_id"]), str(row["pack_path"]))
+        if identity in identities or identity[0] != PurePosixPath(identity[1]).name:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid", "pinset pack identities must be unique and path-bound"
+            )
+        identities.add(identity)
+        if re.fullmatch(r"[0-9a-f]{40}", str(row["head_commit"])) is None:
+            raise HistoricalSemanticsError("histsem_pinset_invalid", "pinset head is malformed")
+        for field in (
+            "current_pack_sha256",
+            "historical_pack_sha256",
+            "plan_sha256",
+            "plan_tree_sha256",
+        ):
+            if re.fullmatch(r"[0-9a-f]{64}", str(row[field])) is None:
+                raise HistoricalSemanticsError(
+                    "histsem_pinset_invalid", f"pinset {field} is malformed"
+                )
+        freeze = _histsem_exact_keys(
+            row["freeze_receipt"], {"path", "sha256"}, "pinset freeze_receipt"
+        )
+        if re.fullmatch(r"[0-9a-f]{64}", str(freeze["sha256"])) is None:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid", "pinset freeze digest is malformed"
+            )
+        delta = _histsem_exact_keys(
+            row["post_authoring_delta"], {"added", "deleted", "modified"}, "pinset delta"
+        )
+        if any(
+            not isinstance(delta[name], list)
+            or delta[name] != sorted(set(delta[name]))
+            or not all(isinstance(item, str) and item for item in delta[name])
+            for name in ("added", "deleted", "modified")
+        ):
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid", "pinset delta paths must be unique sorted strings"
+            )
+        receipts = row["receipts"]
+        if (
+            not isinstance(receipts, list)
+            or row["receipt_count"] != len(receipts)
+            or not receipts
+        ):
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid", "pinset receipt inventory/count is invalid"
+            )
+        receipt_ids: set[str] = set()
+        for receipt_index, receipt_candidate in enumerate(receipts):
+            receipt = _histsem_exact_keys(
+                receipt_candidate,
+                receipt_keys,
+                f"pinset.packs[{index}].receipts[{receipt_index}]",
+            )
+            evidence_id = str(receipt["evidence_id"])
+            if evidence_id in receipt_ids or re.fullmatch(
+                r"[0-9a-f]{64}", str(receipt["sha256"])
+            ) is None:
+                raise HistoricalSemanticsError(
+                    "histsem_pinset_invalid", "pinset receipt identity/digest is invalid"
+                )
+            receipt_ids.add(evidence_id)
+        rows.append(row)
+    return tuple(rows)
+
+
+def _load_histsem_pinset(
+    repository: Path, pinset_path: Path | str | None = None
+) -> tuple[Mapping[str, Any], ...]:
+    path = (
+        repository / RECEIPT_HISTSEM_PINSET_RELATIVE_PATH
+        if pinset_path is None
+        else Path(pinset_path)
+    )
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_absent", f"receipt-histsem pinset is absent: {path}"
+        ) from exc
+    except OSError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_invalid", f"receipt-histsem pinset is unreadable: {exc}"
+        ) from exc
+    try:
+        value = parse_json_bytes(raw, require_canonical=True)
+    except ArmReadinessError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_invalid", f"receipt-histsem pinset is not canonical: {exc}"
+        ) from exc
+    return _validate_histsem_pinset(value)
+
+
+def _histsem_read_bound_file(
+    repository: Path,
+    pack_root: Path,
+    pack_relative: str,
+    relative: str,
+    expected_sha256: str | None = None,
+) -> bytes:
+    relative_path = PurePosixPath(relative)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", f"bound artifact path escapes the pack: {relative!r}"
+        )
+    path = pack_root / relative_path
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", f"cannot read bound artifact {relative!r}: {exc}"
+        ) from exc
+    digest = sha256_bytes(raw)
+    if expected_sha256 is not None and digest != expected_sha256:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", f"bound artifact digest differs for {relative!r}"
+        )
+    code, committed, _stderr = _histsem_git(
+        repository, "show", f"HEAD:{pack_relative}/{relative}"
+    )
+    if code != 0 or committed != raw:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", f"bound artifact is not the HEAD blob: {relative!r}"
+        )
+    return raw
+
+
+def _histsem_authenticate_legacy_item(
+    repository: Path,
+    pack_root: Path,
+    pack_relative: str,
+    item: Mapping[str, Any],
+    receipt_raw: bytes,
+) -> Mapping[str, Any]:
+    """Authenticate frozen receipt metadata and every mandatory fact source."""
+
+    try:
+        receipt = validate_evidence_receipt(
+            parse_json_bytes(receipt_raw, require_canonical=True)
+        )
+    except ArmReadinessError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", f"legacy receipt is invalid: {exc}"
+        ) from exc
+    if item != {
+        "evidence_id": receipt["evidence_id"],
+        "receipt_kind": receipt["kind"],
+        "namespace": "PACK",
+        "path": item["path"],
+        "sha256": sha256_bytes(receipt_raw),
+        "schema_version": receipt["schema_version"],
+        "status": receipt["status"],
+    }:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", "freeze item metadata differs from receipt bytes"
+        )
+    for fact in receipt["facts"]:
+        source_path = str(fact["source_path"])
+        source_raw = _histsem_read_bound_file(
+            repository, pack_root, pack_relative, source_path
+        )
+        if sha256_bytes(source_raw) != fact["source_sha256"]:
+            raise HistoricalSemanticsError(
+                "histsem_binding_mismatch",
+                f"mandatory fact source digest differs for {source_path!r}",
+            )
+    return receipt
+
+
+def _histsem_delta(
+    repository: Path, pack_relative: str, head_commit: str
+) -> dict[str, list[str]]:
+    code, raw, _stderr = _histsem_git(
+        repository,
+        "diff",
+        "--name-status",
+        "--no-renames",
+        head_commit,
+        "HEAD",
+        "--",
+        pack_relative,
+    )
+    if code != 0:
+        raise HistoricalSemanticsError(
+            "histsem_history_unavailable", "cannot derive the post-authoring delta"
+        )
+    result = {"added": [], "deleted": [], "modified": []}
+    status_field = {"A": "added", "D": "deleted", "M": "modified"}
+    prefix = pack_relative + "/"
+    try:
+        lines = raw.decode("utf-8", errors="strict").splitlines()
+    except UnicodeDecodeError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_post_authoring_delta_unexpected", "Git delta contains a non-UTF-8 path"
+        ) from exc
+    for line in lines:
+        try:
+            status, repository_path = line.split("\t", 1)
+        except ValueError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_post_authoring_delta_unexpected", "malformed Git delta record"
+            ) from exc
+        if status not in status_field or not repository_path.startswith(prefix):
+            raise HistoricalSemanticsError(
+                "histsem_post_authoring_delta_unexpected", "inadmissible Git delta record"
+            )
+        result[status_field[status]].append(repository_path[len(prefix) :])
+    for paths in result.values():
+        paths.sort()
+    added_ok = all(
+        PurePosixPath(path).parts
+        and PurePosixPath(path).parts[0] in _HISTSEM_CUSTODY_DIRECTORIES
+        for path in result["added"]
+    )
+    if (
+        not added_ok
+        or result["deleted"]
+        or not set(result["modified"]) <= _HISTSEM_ALLOWED_MODIFICATIONS
+    ):
+        raise HistoricalSemanticsError(
+            "histsem_post_authoring_delta_unexpected",
+            "post-authoring delta exceeds the code-level custody envelope",
+        )
+    return result
+
+
+def verify_receipt_histsem_pack(
+    pack_root: Path | str,
+    *,
+    pinset_path: Path | str | None = None,
+    require_published: bool = False,
+    _pinset_rows: tuple[Mapping[str, Any], ...] | None = None,
+) -> dict[str, Any]:
+    """Verify one governed pack at historical and current coordinates."""
+
+    root = Path(pack_root).resolve(strict=True)
+    repository, pack_relative = _histsem_repository_and_pack(root)
+    rows = (
+        _load_histsem_pinset(repository, pinset_path)
+        if _pinset_rows is None
+        else _pinset_rows
+    )
+    matches = [
+        row
+        for row in rows
+        if row["pack_id"] == root.name and row["pack_path"] == pack_relative
+    ]
+    if not matches:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_absent", f"pinset has no row for governed pack {pack_relative}"
+        )
+    if len(matches) != 1:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_invalid", f"pinset has duplicate rows for {pack_relative}"
+        )
+    row = matches[0]
+    try:
+        current_digest = committed_pack_tree_sha256(root)
+    except (ArmReadinessError, OSError) as exc:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", f"current committed pack cannot authenticate: {exc}"
+        ) from exc
+    if current_digest != row["current_pack_sha256"]:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_mismatch", "current committed pack differs from the governed pin"
+        )
+    head_commit = str(row["head_commit"])
+    code, _stdout, _stderr = _histsem_git(
+        repository, "merge-base", "--is-ancestor", head_commit, "HEAD"
+    )
+    if code != 0:
+        raise HistoricalSemanticsError(
+            "histsem_commit_off_lineage", "historical receipt commit is not an ancestor of HEAD"
+        )
+    code, _stdout, _stderr = _histsem_git(
+        repository, "merge-base", "--is-ancestor", head_commit, "origin/main"
+    )
+    advisories: list[str] = []
+    if code != 0:
+        if require_published:
+            raise HistoricalSemanticsError(
+                "histsem_commit_unpublished",
+                "historical receipt commit is not an ancestor of origin/main",
+            )
+        advisories.append("histsem_commit_unpublished")
+    historical_digest, historical_paths = _historical_pack_tree(
+        repository, pack_relative, head_commit
+    )
+    if historical_digest != row["historical_pack_sha256"]:
+        raise HistoricalSemanticsError(
+            "histsem_historical_digest_mismatch",
+            "historical pack digest differs from the governed pin",
+        )
+    if any(
+        PurePosixPath(path).parts[0] in _HISTSEM_CUSTODY_DIRECTORIES
+        for path in historical_paths
+    ):
+        raise HistoricalSemanticsError(
+            "histsem_historical_tree_not_pre_authoring",
+            "historical receipt coordinate already contains custody artifacts",
+        )
+    delta = _histsem_delta(repository, pack_relative, head_commit)
+    if delta != row["post_authoring_delta"]:
+        raise HistoricalSemanticsError(
+            "histsem_post_authoring_delta_unexpected",
+            "post-authoring delta differs from the governed per-pack envelope",
+        )
+
+    freeze_reference = row["freeze_receipt"]
+    freeze_path = str(freeze_reference["path"])
+    freeze_raw = _histsem_read_bound_file(
+        repository,
+        root,
+        pack_relative,
+        freeze_path,
+        str(freeze_reference["sha256"]),
+    )
+    freeze_sidecar = _histsem_read_bound_file(
+        repository,
+        root,
+        pack_relative,
+        f"{freeze_path}.sha256",
+    )
+    if freeze_sidecar != gnu_sidecar(str(freeze_reference["sha256"]), Path(freeze_path).name):
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", "freeze receipt sidecar differs from its bytes"
+        )
+    try:
+        freeze = validate_freeze_receipt(
+            parse_json_bytes(freeze_raw, require_canonical=True)
+        )
+    except ArmReadinessError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", f"freeze receipt is invalid: {exc}"
+        ) from exc
+
+    plan_tree_raw = _histsem_read_bound_file(
+        repository,
+        root,
+        pack_relative,
+        "plan_tree.json",
+        str(row["plan_tree_sha256"]),
+    )
+    plan_sidecar = _histsem_read_bound_file(
+        repository, root, pack_relative, "plan_tree.sha256"
+    )
+    if plan_sidecar != gnu_sidecar(sha256_bytes(plan_tree_raw), "plan_tree.json"):
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", "plan-tree sidecar differs from current plan bytes"
+        )
+    try:
+        plan_tree = parse_json_bytes(plan_tree_raw)
+    except ArmReadinessError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", f"plan tree is invalid: {exc}"
+        ) from exc
+    readiness = (
+        plan_tree.get("arm_attachments", {}).get("arm_readiness")
+        if isinstance(plan_tree, Mapping)
+        else None
+    )
+    if not isinstance(readiness, Mapping) or readiness.get("freeze_receipt") != freeze_reference:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", "current plan tree does not bind the pinned freeze receipt"
+        )
+    plan_path = str(freeze["pack_identity"]["plan_path"])
+    plan_raw = _histsem_read_bound_file(repository, root, pack_relative, plan_path)
+    if (
+        sha256_bytes(plan_raw) != row["plan_sha256"]
+        or freeze["pack_identity"]["plan_sha256"] != row["plan_sha256"]
+        or freeze["pack_identity"]["pack_id"] != row["pack_id"]
+    ):
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", "freeze plan/pack identity differs from current pinned bytes"
+        )
+
+    pinned_receipts = list(row["receipts"])
+    freeze_pack_items = [
+        dict(item)
+        for item in freeze["evidence"]
+        if item["namespace"] == "PACK"
+        and item["schema_version"] == EVIDENCE_RECEIPT_SCHEMA
+    ]
+    if freeze_pack_items != pinned_receipts:
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", "freeze PACK evidence inventory differs from the pinset"
+        )
+    disk_receipt_paths = sorted(
+        path.relative_to(root).as_posix()
+        for path in (root / "arm_readiness.evidence").glob("*.json")
+    )
+    if disk_receipt_paths != sorted(str(item["path"]) for item in pinned_receipts):
+        raise HistoricalSemanticsError(
+            "histsem_binding_mismatch", "committed legacy receipt set differs from the pinset"
+        )
+    for item in pinned_receipts:
+        receipt_path = str(item["path"])
+        receipt_raw = _histsem_read_bound_file(
+            repository,
+            root,
+            pack_relative,
+            receipt_path,
+            str(item["sha256"]),
+        )
+        receipt_sidecar = _histsem_read_bound_file(
+            repository, root, pack_relative, f"{receipt_path}.sha256"
+        )
+        if receipt_sidecar != gnu_sidecar(str(item["sha256"]), Path(receipt_path).name):
+            raise HistoricalSemanticsError(
+                "histsem_binding_mismatch", f"receipt sidecar differs for {receipt_path!r}"
+            )
+        receipt = _histsem_authenticate_legacy_item(
+            repository, root, pack_relative, item, receipt_raw
+        )
+        receipt_head = receipt.get("head_commit", receipt.get("derivation_commit"))
+        if (
+            receipt["schema_version"] != EVIDENCE_RECEIPT_SCHEMA
+            or re.fullmatch(r"[0-9a-f]{40}", str(receipt_head)) is None
+            or re.fullmatch(r"[0-9a-f]{64}", str(receipt.get("pack_sha256"))) is None
+        ):
+            raise HistoricalSemanticsError(
+                "histsem_receipt_head_malformed", f"receipt coordinate is malformed: {receipt_path}"
+            )
+        if receipt_head != head_commit or receipt["pack_sha256"] != historical_digest:
+            raise HistoricalSemanticsError(
+                "histsem_historical_digest_mismatch",
+                f"receipt historical coordinate differs from recomputed tree: {receipt_path}",
+            )
+        if sha256_bytes(receipt_raw) != item["sha256"]:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_mismatch", f"receipt differs from its pin: {receipt_path}"
+            )
+
+    predecessor = freeze.get("predecessor")
+    if predecessor is not None:
+        predecessor_relative = str(predecessor["pack_path"])
+        predecessor_root = (repository / PurePosixPath(predecessor_relative)).resolve()
+        try:
+            predecessor_root.relative_to(repository)
+            predecessor_digest = committed_pack_tree_sha256(predecessor_root)
+            predecessor_freeze_raw = (
+                predecessor_root / str(predecessor["freeze_receipt"]["path"])
+            ).read_bytes()
+        except (ArmReadinessError, OSError, ValueError) as exc:
+            raise HistoricalSemanticsError(
+                "histsem_binding_mismatch", f"predecessor binding is unreadable: {exc}"
+            ) from exc
+        if (
+            predecessor_root.name != predecessor["pack_id"]
+            or predecessor_digest != predecessor["pack_sha256"]
+            or sha256_bytes(predecessor_freeze_raw)
+            != predecessor["freeze_receipt"]["sha256"]
+        ):
+            raise HistoricalSemanticsError(
+                "histsem_binding_mismatch", "freeze predecessor binding differs from current bytes"
+            )
+    return {
+        "pack_id": row["pack_id"],
+        "pack_path": pack_relative,
+        "receipts_verified": len(pinned_receipts),
+        "historical_pack_sha256": historical_digest,
+        "current_pack_sha256": current_digest,
+        "advisories": advisories,
+        "status": "PASS",
+    }
+
+
+def verify_all_receipt_histsem(
+    repository_root: Path | str,
+    *,
+    pinset_path: Path | str | None = None,
+    pack_roots: Sequence[Path | str] | None = None,
+    require_published: bool = False,
+) -> dict[str, Any]:
+    """Verify the governed pinset, or an explicitly selected subset of it."""
+
+    repository = Path(repository_root).resolve(strict=True)
+    rows = _load_histsem_pinset(repository, pinset_path)
+    roots = (
+        [repository / str(row["pack_path"]) for row in rows]
+        if pack_roots is None
+        else [Path(path) for path in pack_roots]
+    )
+    results = [
+        verify_receipt_histsem_pack(
+            root,
+            pinset_path=pinset_path,
+            require_published=require_published,
+            _pinset_rows=rows,
+        )
+        for root in roots
+    ]
+    return {
+        "schema_version": "joulewise.receipt_histsem_verification.v1",
+        "status": "PASS",
+        "pack_count": len(results),
+        "receipt_count": sum(int(item["receipts_verified"]) for item in results),
+        "packs": results,
+    }
+
+
+def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -> None:
+    """Gate only packs carrying the governed legacy PACK-receipt namespace."""
+
+    evidence_root = pack_root / "arm_readiness.evidence"
+    if not evidence_root.is_dir():
+        return
+    legacy_receipt_ids: list[str] = []
+    for path in evidence_root.glob("*.json"):
+        try:
+            candidate = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            # The ordinary readiness path owns malformed R1/new-family input.
+            continue
+        if (
+            isinstance(candidate, Mapping)
+            and candidate.get("schema_version") == EVIDENCE_RECEIPT_SCHEMA
+            and isinstance(candidate.get("evidence_id"), str)
+        ):
+            legacy_receipt_ids.append(str(candidate["evidence_id"]))
+    # The governed historical/future freeze inventory is the closed eleven-row
+    # ``freeze-*`` family.  R1 T-0 receipts share the v1 wire schema but are
+    # volatile arm inputs, not the frozen PACK receipts owned by this gate.
+    if len(legacy_receipt_ids) != 11 or not all(
+        evidence_id.startswith("freeze-") for evidence_id in legacy_receipt_ids
+    ):
+        return
+    verify_receipt_histsem_pack(pack_root, require_published=require_published)
 
 
 def _plan_profile(
@@ -5422,6 +6201,19 @@ def generate_freeze_receipt(
     """
 
     root = Path(pack_root).resolve(strict=True)
+    try:
+        if predecessor_pack_root is not None:
+            _gate_receipt_histsem(Path(predecessor_pack_root))
+    except HistoricalSemanticsError as exc:
+        return {
+            "status": "REFUSE",
+            "arm_disposition": "NOT_APPLICABLE",
+            "receipt_path": None,
+            "receipt_sha256": None,
+            "reason_codes": [exc.reason_code],
+            "detail": str(exc),
+            "mutated": False,
+        }
     tree, _tree_raw = _plan_tree(root)
     registry, _registry_raw, registry_reference = _registry_reference(root)
     attachments = tree.get("arm_attachments")
@@ -6104,6 +6896,17 @@ def generate_arm_receipt(
     validity_ns: int = 300_000_000_000,
 ) -> dict[str, Any]:
     root = Path(pack_root).resolve(strict=True)
+    try:
+        _gate_receipt_histsem(root)
+    except HistoricalSemanticsError as exc:
+        return {
+            "status": "REFUSE",
+            "arm_disposition": "NO_GO",
+            "receipt_path": None,
+            "receipt_sha256": None,
+            "reason_codes": [exc.reason_code],
+            "detail": str(exc),
+        }
     context = validate_arm_context(arm_context)
     pack = _pack_record(root)
     reviewed = reviewed_main(root)

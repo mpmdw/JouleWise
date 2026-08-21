@@ -24,6 +24,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: State kernel and generated-view drift
         run: python scripts/gen_state.py --check
+      - name: Historical receipt semantics
+        run: python scripts/verify_receipt_histsem.py --repository-root . --require-published
       - name: Compile Python sources
         run: python -m compileall -q joulewise tests
       - name: Unit tests (stdlib core only, per D-009/D-017)
