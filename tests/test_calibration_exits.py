@@ -1792,7 +1792,11 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             else:
                 sandbox.closed = True
         if raw_enotempty is not None:
-            self.assertEqual(raw_enotempty.errno, errno.ENOTEMPTY)
+            # Detached Git maintenance can remove an object-store child after
+            # rmtree has enumerated it.  Python 3.11 reports that stale child
+            # lookup as ENOENT; the same teardown race can instead leave a
+            # child behind and report ENOTEMPTY.
+            self.assertIn(raw_enotempty.errno, (errno.ENOTEMPTY, errno.ENOENT))
         classification = _classify_pack_cleanup(
             pack_evidence,
             cleanup_started_s=cleanup_started_s,
@@ -1813,7 +1817,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         )
         self.assertFalse(sandbox.root.exists())
         print(
-            f"RAW_ENOTEMPTY={getattr(raw_enotempty, 'errno', 0)} "
+            f"RAW_CLEANUP_ERRNO={getattr(raw_enotempty, 'errno', 0)} "
             f"FATAL_RETRY_DIAGNOSTIC={int(cleanup_diagnostic is not None)} "
             f"CONTROLS_MUTATION={classification}",
             flush=True,
