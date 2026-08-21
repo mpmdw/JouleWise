@@ -676,6 +676,141 @@
       "status": "queued",
       "stop_card": null
     },
+    "CALEXITS-CENSUS-PIDRACE": {
+      "acceptance": {
+        "evidence": [
+          "tests/test_calibration_exits.py:2207 polls for non-empty sampler PID content before converting it to an integer",
+          "A defect-shaped regression covers the file-created-before-written race and the normal gauntlet completes",
+          "The cold-pair-166 ruling and synthesis retain the int('') gate-run failure as a distinct high-severity row"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALEXITS-CENSUS-PIDRACE/acceptance",
+          "label": "CALEXITS-CENSUS-PIDRACE acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The sampler PID census waits for non-empty content so a file-created-before-written race cannot void a canonical gate run."
+      },
+      "authority": {
+        "label": "Cold-pair-166 R2 ruling and synthesis (calexits census PID race)",
+        "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold-pair-166 synthesis + ERRATA E-2/E-3",
+            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-synthesis-166.md"
+          },
+          "rule": "The PID race is a distinct gate-run invalidation and must receive the normal gauntlet; do not wave it through as a generic calexits flake"
+        }
+      ],
+      "flags": [],
+      "goal": "Repair the sampler PID census race at tests/test_calibration_exits.py:2207 by polling for non-empty content before int(), then take the repair through the normal gauntlet.",
+      "id": "CALEXITS-CENSUS-PIDRACE",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 77,
+      "status": "queued",
+      "status_note": "High severity: an empty PID read voided a canonical gate run on 2026-08-20; fix shape is non-empty-content polling, not exists() polling.",
+      "stop_card": null
+    },
+    "CALEXITS-CLEANUP-RACE-CI311": {
+      "acceptance": {
+        "evidence": [
+          "Candidate fix aedf530 is present and is supported by the terra root-cause session's local Python 3.11 reproduction",
+          "calibration-exits-exclusive Python 3.11 is green on CI at a containing head, with the RACE_EXERCISED witness discrimination preserved",
+          "The E-4 light independent retro-review is recorded after the direct-to-main assertion widening",
+          "Cold-pair-166 custody also records ERRATA E-2 and the standing red-check disposition rule in ERRATA E-3"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALEXITS-CLEANUP-RACE-CI311/acceptance",
+          "label": "CALEXITS-CLEANUP-RACE-CI311 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The Python 3.11 forced-auto-maintenance cleanup race closes only after CI is green at a head containing aedf530 and the E-4 retro-review is complete."
+      },
+      "authority": {
+        "label": "Cold-pair-166 R2/R4 ruling and synthesis (calexits CI311 blocker)",
+        "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "CI 3.11 green at a head containing aedf530 and the E-4 retro-review recorded",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "CALEXITS-CI311-green-and-E4-retro-review"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "ERRATA E-4 direct-to-main review disposition",
+            "path": "docs/process_traces/2026-08-20-go-session/ERRATA.md"
+          },
+          "rule": "Do not close the blocker from the candidate patch alone: require containing-head CI 3.11 green plus the light independent E-4 retro-review"
+        },
+        {
+          "authority": {
+            "label": "ERRATA E-2/E-3 and cold-pair-166 synthesis",
+            "path": "docs/process_traces/2026-08-20-go-session/ERRATA.md"
+          },
+          "rule": "The intermittent red shard and the prior red-check merge deviation remain recorded and are not rewritten as clean history"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the Python 3.11 forced-auto-maintenance cleanup race while preserving the test's RACE_EXERCISED discriminating power; candidate fix aedf530 is landed, and closure waits for containing-head CI green plus E-4 retro-review.",
+      "id": "CALEXITS-CLEANUP-RACE-CI311",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 76,
+      "status": "queued",
+      "status_note": "BLOCKER: the hosted Python 3.11 shard is non-informative until the containing-head green and E-4 retro-review closure conditions are met; local root-cause evidence does not substitute for CI confirmation.",
+      "stop_card": null
+    },
+    "CALEXITS-TIMING-HYGIENE": {
+      "acceptance": {
+        "evidence": [
+          "A bounded module-wide timing/synchronization audit enumerates the five-plus mechanisms named by the cold-pair-166 custody",
+          "The CI311 cleanup race, census PID race, and N-5 amendment remain separately registered and are not collapsed into a vague flake label",
+          "ERRATA E-2, E-3, and E-4 are carried as history and deviations in the audit record"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALEXITS-TIMING-HYGIENE/acceptance",
+          "label": "CALEXITS-TIMING-HYGIENE acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A bounded module-wide timing and synchronization audit covers the calexits mechanism family without making the should-fix umbrella a gate."
+      },
+      "authority": {
+        "label": "Cold-pair-166 R2 ruling and synthesis (calexits timing umbrella)",
+        "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-synthesis-166.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold-pair-166 R2.4 should-fix disposition",
+            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
+          },
+          "rule": "This umbrella is should-fix and non-gating; preserve separate defect rows and do not use the audit to erase the blocker or canonical-gate evidence"
+        }
+      ],
+      "flags": [],
+      "goal": "Run one bounded module-wide timing and synchronization audit of tests/test_calibration_exits.py across the historical ENOTEMPTY, REDERIVE, N-5, CI311, census PID, parameterized-witnesses, and 3.14 mechanisms.",
+      "id": "CALEXITS-TIMING-HYGIENE",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 79,
+      "status": "queued",
+      "status_note": "Should-fix umbrella, not gating: the module has five-plus distinct timing mechanisms and the audit must remain bounded.",
+      "stop_card": null
+    },
     "CGV-HARDEN-01": {
       "acceptance": {
         "evidence": [
@@ -1693,6 +1828,45 @@
       "rank": 56,
       "status": "queued",
       "status_note": "Minted 2026-07-29 from Ed's modularity directive. Survey verdict: runtime/telemetry Protocol layer and content-addressed provenance spine are already modular; the gap is campaign authoring above the adapter and literal assertions below the reader. Practical payoff lands with the planned Qwen3 cross-generation follow-up.",
+      "stop_card": null
+    },
+    "N-5-RECORD-AMENDMENT": {
+      "acceptance": {
+        "evidence": [
+          "The record states that 46d710f is an ancestor of the post-fix a8f1549 recurrence observed under concurrent machine load",
+          "The environment is named and the record leaves incomplete-fix versus load-induced causation open",
+          "The cold-pair-166 ruling and synthesis replace the unqualified N-5 resolved wording"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/N-5-RECORD-AMENDMENT/acceptance",
+          "label": "N-5-RECORD-AMENDMENT acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The N-5 evidence record is amended to disclose its post-fix recurrence under concurrent load without claiming unqualified resolution."
+      },
+      "authority": {
+        "label": "Cold-pair-166 R2 ruling and synthesis (N-5 reclassification)",
+        "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold-pair-166 R2.3 N-5 reclassification",
+            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
+          },
+          "rule": "The N-5 record may not continue to say resolved without qualification; preserve the post-fix recurrence and concurrent-load environment"
+        }
+      ],
+      "flags": [],
+      "goal": "Amend the N-5 record so 46d710f's prior resolved wording is qualified by the post-fix recurrence under concurrent machine load at a8f1549, leaving incomplete-fix versus load-induced causation open.",
+      "id": "N-5-RECORD-AMENDMENT",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 78,
+      "status": "queued",
+      "status_note": "Bookkeeping, binding: the recurrence and its concurrent-load environment must remain visible in the evidence record; no new implementation claim is made by this row.",
       "stop_card": null
     },
     "NODE-CUSTODY-DEFAULT-01": {
@@ -3059,38 +3233,6 @@
       "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. B-46/B-9 (paper + WINDOW_STATUS corrections) are immediate desk items.",
       "stop_card": null
     },
-    "RECEIPT-HISTSEM-01": {
-      "acceptance": {
-        "evidence": [
-          "An external governed verifier or pinset recomputes each legacy frozen PACK receipt's historical pack digest from its recorded head_commit and compares it with the receipt's pack_sha256",
-          "The verifier checks the complete receipt -> sidecar -> freeze -> plan binding for every legacy PACK evidence item",
-          "The verifier runs in CI and again before arm issuance",
-          "A defect-shaped regression proves a coherently rewritten receipt chain with false historical pack_sha256/head_commit is refused"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/RECEIPT-HISTSEM-01/acceptance",
-          "label": "RECEIPT-HISTSEM-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Close the C1 gap: legacy frozen PACK evidence replay authenticates exact nested bytes but never validates the receipt's historical pack_sha256/head_commit semantics."
-      },
-      "authority": {
-        "label": "Gate-1 fix gauntlet synthesis, 2026-08-20 (C1, Sol contract-lens refuter)",
-        "path": "docs/process_traces/2026-08-20-go-session/00-fix-gauntlet-synthesis.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Historical receipt-semantics verifier: validate legacy frozen PACK evidence receipts' recorded pack_sha256/head_commit against the recomputed historical tree, outside the immutable frozen packs (arm_readiness.py supplies expected values only for WINDOW_CUSTODY LAUNCH_RECIPE; freeze minting passes None/None).",
-      "id": "RECEIPT-HISTSEM-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 64,
-      "status": "queued",
-      "status_note": "Minted 2026-08-20 from the gate-1 fix gauntlet's contract-lens refuter (C1); mitigations already in force: D-134 disk/git comparison, published S5 confirmation digests, arm/consume lineage authentication on every claim route.",
-      "stop_card": null
-    },
     "SEC5A-REMOTE-01": {
       "acceptance": {
         "evidence": [
@@ -3691,5 +3833,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-20"
+  "updated": "2026-08-21"
 }
