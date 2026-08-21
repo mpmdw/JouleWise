@@ -1,0 +1,28 @@
+Codex run ledger continuation (T19 successor session, 2026-08-20 evening)
+Continues the 50-run GO-session ledger (custodied in the go-session dir).
+run 51: sol high, RECEIPT-HISTSEM fix round 1 (H1 pinset-anchored eligibility + H2 annex-D16 contract doc); OK, scope passed
+run 52: terra xhigh, RH fix-round delta re-audit (in flight)
+run 53: sol high, paper pedagogy review lens (read-only, review round 4); OK — note: ledger position out of order, this ran before run 52
+run 54: sol xhigh, paper pedagogy fix round P01-P21 in wtPAPER (in flight)
+-- Ed pacing correction ~21:15 (20% used, 6d to reset): less sol xhigh, more
+   terra/luna, luna max. Run 54 allowed to finish (was mid-references when
+   the order landed); all subsequent seats terra xhigh / luna max, Sol
+   reserved for rare highest-value opinions.
+run 52 result: NO-GO, one should_fix (lookup-failure fail-open in the new
+   eligibility path); round-1 cure itself confirmed clean, D16 clean
+run 55: luna max, RH fix round 2 (lookup-failure three-way classification,
+   magistrate-ruled disposition; in flight)
+run 54 result: partial/needs_ruling — 12 P-items fixed, 9 evidence-fenced;
+   magistrate ACCEPTED the fenced disposition (values are post-mint by
+   construction); F2 (manifest Holm m=1 vs D-139 m=2) registered for the
+   _v4 boundary; committed 32b5424 on impl/paper-pedagogy-r4, pushed
+run 56: terra xhigh, paper rewrite delta review; NO-GO (F1 boundary
+   semantics blocker, F2 q-mechanism honesty) — both lead-fixed at bench
+   (a8f1549); all fences verified honest, all arithmetic replay exact
+run 55 result: complete, clean — three-way lookup classification + 3
+   defect-shaped regressions (V0 proves R1/R2 fail pre-fix); lead read GO
+run 57: terra xhigh, RH round-2 delta re-audit; GO, one nit (N1
+   preservation-coverage tests) — RH gauntlet COMPLETE; aea77b9 pushed, PR #167
+run 58: terra xhigh, root-cause+fix of the calexits 3.11 CI shard failure
+   (deterministic ENOENT-vs-ENOTEMPTY since 2026-08-20 13:22 PDT, red on
+   main since — predates both open PRs; no merges over red CI; in flight)

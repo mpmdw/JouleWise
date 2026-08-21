@@ -10,7 +10,24 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-20 ~20:05 PDT (T19.1 — successor live; RH refuter still running, being watched)
+Last updated: 2026-08-21 ~03:50 PDT (T19.2 — BOTH PRs MERGED; night arc complete)
+
+**T19.2 (2026-08-21 ~03:50 PDT):** PR #166 MERGED (0c3c1a6) — the paper's
+replication-bar rewrite (pedagogy round 4, 12 fixed + 9 evidence-fenced)
+behind a full D-118 gate ledger. PR #167 MERGED (cd50dc7) —
+RECEIPT-HISTSEM-01, landed BEFORE the _v4 re-freeze per ruling: 4 fix
+rounds, 3 delta re-audits, a rule-11 consult (round 3's design), and an
+Opus counter-review that caught a real blocker (symlinked-predecessor gate
+disengagement) — gate item 6 is not optional. Cold-pair arc on the gate
+question custodied in cold-pair-166/ (the Opus refuter overturned the cold
+severance ruling; gate satisfied directly instead). Calexits: CI 3.11
+errno fix on main (aedf530, ERRATA E-2/E-4 corrections of record); four
+defect rows registered in TASK_QUEUE (CI311 / CENSUS-PIDRACE / N-5
+amendment / TIMING-HYGIENE umbrella). Session envelopes + codex ledger
+(runs 51-62) in t19-envelopes/. OWED NEXT BLOCK: kernel closure rows for
+RECEIPT-HISTSEM-01 + the two paper rows (ONE transaction), run-report
+addendum note for T19.2, skill-usage log. _v4 REMAINS BLOCKED SOLELY ON
+ED PACKET ITEM 1 (mint license). Codex pool ~20% used, resets 08-27.
 
 **T19.1 (successor session, ~20:05 PDT):** the RH refuter survived the
 /clear and is STILL RUNNING (watched; harvest on completion). The T18/T19
