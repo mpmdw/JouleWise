@@ -26,3 +26,11 @@ run 57: terra xhigh, RH round-2 delta re-audit; GO, one nit (N1
 run 58: terra xhigh, root-cause+fix of the calexits 3.11 CI shard failure
    (deterministic ENOENT-vs-ENOTEMPTY since 2026-08-20 13:22 PDT, red on
    main since — predates both open PRs; no merges over red CI; in flight)
+run 59: terra xhigh, rule-11 eligibility design consult (adopted)
+run 60: luna high, RH fix round 3 (consult verbatim)
+run 61: luna high, RH fix round 4 (Opus counter-review cures)
+run 62: terra xhigh, RH delta-4 re-audit (GO after adjudication)
+run 63: luna high, T19 kernel closure transaction
+run 64: terra high, kernel closure refuter (2 findings, both cured)
+run 65: luna high, CALEXITS-CENSUS-PIDRACE fix (b01d9a2)
+run 66: terra high, end-of-session consistency sweep (4 findings, applied)

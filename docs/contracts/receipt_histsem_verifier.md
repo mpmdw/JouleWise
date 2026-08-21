@@ -4,6 +4,11 @@ This document is the one normative home for `RECEIPT-HISTSEM-01`. Its
 authority is the [final D-144 co-design ruling](../process_traces/2026-08-20-go-session/rh-ruling.md),
 including its normative annexes, and the
 [cold delta verdict](../process_traces/2026-08-20-go-session/rh-cold-verdict.md).
+For gate-eligibility semantics on an absent-at-HEAD pinset, the adopted
+rule-11 consult
+(../process_traces/2026-08-20-go-session/t19-envelopes/rh-consult.md)
+SUPERSEDES the ruling's original refusal wording; the ruling text is
+preserved as custody.
 
 ## Governed identity and activation
 
@@ -87,7 +92,7 @@ from `READINESS_REASON_CODES`:
 | `histsem_history_unavailable` | A required historical tree, blob, or delta cannot be read. |
 | `histsem_history_shallow` | The checkout does not contain full history. |
 | `histsem_pack_absent_at_commit` | The governed pack is absent at its historical coordinate. |
-| `histsem_pinset_absent` | The governed pinset or the governed pack's required row is absent. |
+| `histsem_pinset_absent` | The worktree pinset is missing for a pack whose HEAD row engages the gate. An unambiguous absent-at-HEAD path returns to ordinary readiness instead (see Governed identity and activation). |
 | `histsem_pinset_invalid` | The pinset is unreadable, noncanonical, malformed, or internally inconsistent. |
 | `histsem_pinset_mismatch` | Current committed pack or receipt bytes differ from the governed pins. |
 | `histsem_post_authoring_delta_unexpected` | The observed historical-to-HEAD delta violates or differs from the governed envelope. |

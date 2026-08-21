@@ -24,7 +24,7 @@ severance ruling; gate satisfied directly instead). Calexits: CI 3.11
 errno fix on main (aedf530, ERRATA E-2/E-4 corrections of record); four
 defect rows registered in TASK_QUEUE (CI311 / CENSUS-PIDRACE / N-5
 amendment / TIMING-HYGIENE umbrella). Session envelopes + codex ledger
-(runs 51-62) in t19-envelopes/. Kernel closure transaction LANDED this block (RECEIPT-HISTSEM-01 retired; four calexits rows registered); skill-usage log written; run-report T19.2 note owed. _v4 REMAINS BLOCKED SOLELY ON
+(runs 51-66) in t19-envelopes/. Kernel closure transaction LANDED this block (RECEIPT-HISTSEM-01 retired; four calexits rows registered); skill-usage log written; run-report T19.2 note LANDED (2a89ea1). _v4 REMAINS BLOCKED SOLELY ON
 ED PACKET ITEM 1 (mint license). Codex pool ~20% used, resets 08-27.
 
 **T19.1 (successor session, ~20:05 PDT):** the RH refuter survived the
@@ -4320,7 +4320,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-21). Latest report: [T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings](docs/run_reports/2026-08-19-t12-t13-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-21). Latest report: [T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings](docs/run_reports/2026-08-20-t18-t19-session.md).
 
 ### [ED-EXTERNAL]
 

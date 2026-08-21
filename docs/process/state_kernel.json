@@ -21,7 +21,7 @@
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
     "label": "T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings",
-    "path": "docs/run_reports/2026-08-19-t12-t13-session.md"
+    "path": "docs/run_reports/2026-08-20-t18-t19-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -3584,7 +3584,7 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Execute the _v4 family transaction per the FINAL r5 ruling: S-0 clone proof (lead-executed, magistrate-verified) -> registry install (111-path allowlist, code deltas, load closure) -> marker per Ed's V6 ruling -> family emission + U11 -> evidence + freeze-0004 mints -> publication + shakedown; mechanical commit-freeze and the corrected step order bind.",
+      "goal": "Execute the _v4 family transaction per the FINAL r5 ruling: S-0 clone proof (lead-executed, magistrate-verified) -> registry install (112-path allowlist, code deltas, load closure) -> marker per Ed's V6 ruling -> family emission + U11 -> evidence + freeze-0004 mints -> publication + shakedown; mechanical commit-freeze and the corrected step order bind.",
       "id": "V4-TRANSACTION-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
