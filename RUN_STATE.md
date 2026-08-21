@@ -10,7 +10,29 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-20 ~05:50 PDT (T17 — MERGE WAVE LANDED on main; READY sitting + _v4 planning fanned out)
+Last updated: 2026-08-20 ~18:15 PDT (T18 — five PRs merged; queue draining; `_v4` blocked on Ed's mint license)
+
+## ▶▶ T18 (2026-08-20 evening) — AUTONOMOUS DRAIN DAY COMPLETE; EVERYTHING ED-INDEPENDENT ON THE CRITICAL PATH IS DONE
+
+Merged today, each through the full gauntlet + a full-canonical merge
+gate: #160 (the Phase-2 merge wave), #161 (scheduler gates stages 1-2,
+D-144 co-designed + cold-ratified), #162 (FREEZE-REPLAY-EXPIRY-01),
+#163 (PROC-TEARDOWN-01, incl. a frozen-surface remand — see the
+standing hazard below), #164 (REAUTHOR-CLEAN-01 via a rule-11
+escalation consult after two same-signature rounds). Also on main:
+the N-5 order-dependent canonical flake root-caused and fixed
+(46d710f); the B7 claim-integrity ruling (superseded-era magnitudes
+left the paper, stricter reading, b7adb14); WINDOW_STATUS + paper cite
+corrections; the T17 run report; the work-order kernel transaction
+(83 live rows after the evening closure, 0f34a52).
+
+Open lanes: D144-SEATPASS-FOLLOWUPS, RECEIPT-HISTSEM-01,
+PREWINDOW-REGEX-01 (drain continues); the sitting's UNVERIFIED
+re-audits + next-sitting preconditions ride the `_v4` boundary. The
+`_v4` TRANSACTION REMAINS BLOCKED SOLELY ON ED PACKET ITEM 1 (the
+mint-license settings rule); items 2-10 in the consolidated packet
+above. Codex usage ~13-15% of the weekly pool; run ledger in the
+session scratch.
 
 ## ▶▶ T17 (2026-08-20 morning, the GO session, MID-SESSION checkpoint) — THE MERGE WAVE IS ON MAIN; TWO COUNCILS RULED; FAN-OUT LIVE
 
