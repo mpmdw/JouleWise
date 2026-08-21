@@ -35,3 +35,6 @@ site_capsule/node_modules/
 .desk/
 CLAUDE.local.md
 /runs_char_*/
+
+# Local decisive-replay custody store — never tracked (T19.3 erratum E-5)
+.decisive-replay/
