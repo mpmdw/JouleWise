@@ -10,7 +10,18 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-21 ~03:50 PDT (T19.2 — BOTH PRs MERGED; night arc complete)
+Last updated: 2026-08-21 ~06:15 PDT (T19.3 — arc fully discharged; waiting on Ed packet item 1)
+
+**T19.3 (~06:15 PDT):** calexits closures LANDED (1a15172): CI311 retired
+(fix aedf530 CI-green at b01d9a2 + E-4 retro-review UPHELD),
+CENSUS-PIDRACE retired (b01d9a2). Consistency sweep applied (4 findings,
+6649736); ERRATA E-5 filed (39MB tarball transited history via a git
+add -A miss — Ed decides on rewrite; bookkeeping now stages by pathspec
+only). Open low-priority rows: N-5-RECORD-AMENDMENT (substance largely
+satisfied by the T19.2 addendum + cold custody; closure is bookkeeping),
+CALEXITS-TIMING-HYGIENE umbrella. EVERYTHING ED-INDEPENDENT ON THE
+CRITICAL PATH IS DONE — the queue rides the _v4 boundary, which rides
+ED PACKET ITEM 1 (mint license). Ledger: runs 51-69, pool ~21%.
 
 **T19.2 (2026-08-21 ~03:50 PDT):** PR #166 MERGED (0c3c1a6) — the paper's
 replication-bar rewrite (pedagogy round 4, 12 fixed + 9 evidence-fenced)
