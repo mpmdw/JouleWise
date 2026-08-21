@@ -2116,14 +2116,19 @@ def calibration_bracket_for_bundles(
         _allow_unissued_fixture=_allow_unissued_fixture,
     )
     if superseded_observations:
+        recorded_diagnostics = [
+            {
+                "attempt_id": observation.attempt_id,
+                "reason": "capture_pipeline_superseded",
+            }
+            for observation in superseded_observations
+        ]
+        # This assessment is the production-persisted surface.  Keep era
+        # observations visible here without promoting them into the refusal
+        # reasons for an otherwise valid current-era bracket.
+        result["diagnostics"] = recorded_diagnostics
         if diagnostics is not None:
-            diagnostics.extend(
-                {
-                    "attempt_id": observation.attempt_id,
-                    "reason": "capture_pipeline_superseded",
-                }
-                for observation in superseded_observations
-            )
+            diagnostics.extend(recorded_diagnostics)
         if not candidates:
             reasons = tuple(dict.fromkeys((*reasons, "capture_pipeline_superseded")))
     return result, reasons

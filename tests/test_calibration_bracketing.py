@@ -2184,10 +2184,17 @@ class CalibrationBracketingTests(unittest.TestCase):
                 _allow_unissued_fixture=True,
             )
         self.assertNotIn("calibration_ledger_custody_invalid", reasons)
-        self.assertIn(
-            {"attempt_id": "fixture-attempt-0-instrument_validation/retained-v2", "reason": "capture_pipeline_superseded"},
-            diagnostics,
-        )
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(reasons, ())
+        persisted = json.loads(json.dumps(result))
+        expected_diagnostic = {
+            "attempt_id": (
+                "fixture-attempt-0-instrument_validation/retained-v2"
+            ),
+            "reason": "capture_pipeline_superseded",
+        }
+        self.assertIn(expected_diagnostic, diagnostics)
+        self.assertIn(expected_diagnostic, persisted["diagnostics"])
         self.assertNotIn("candidate_discovery", result)
 
     def test_v1_ledger_candidate_reports_era_rejection_not_custody_failure(self) -> None:

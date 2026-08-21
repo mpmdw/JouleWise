@@ -147,7 +147,7 @@ check_once() {
 
   # 8. No agent or measurement process already running.
   local procs
-  procs="$(ps aux | grep -E "codex exec|codex-run|run_campaign|window-chain" | grep -vc grep)"
+  procs="$(ps aux | grep -E "codex|claude|t3|mcp-server|run_campaign|window-chain" | grep -vc grep)"
   if [ "$procs" -gt 0 ]; then
     bad "$procs agent/measurement process(es) already running"
     blocked=1
