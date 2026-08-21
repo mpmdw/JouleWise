@@ -2758,7 +2758,7 @@ def _histsem_repository_and_pack(pack_root: Path) -> tuple[Path, str]:
     except ArmReadinessError as exc:
         reason_code = (
             "histsem_history_unavailable"
-            if str(exc).startswith("Git proof failed:")
+            if exc.reason_code == "readiness_pack_not_committed"
             else "histsem_git_unavailable"
         )
         raise HistoricalSemanticsError(
@@ -2779,18 +2779,6 @@ def _histsem_has_git_metadata(pack_root: Path) -> bool:
     except OSError:
         return False
     return any((candidate / ".git").exists() for candidate in (root, *root.parents))
-
-
-def _histsem_pinset_path_absent_at_head(stderr: bytes) -> bool:
-    """Recognize only Git's unambiguous path-not-in-HEAD diagnostics."""
-
-    detail = stderr.decode("utf-8", errors="replace").strip()
-    relative = re.escape(RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix())
-    return re.fullmatch(
-        rf"fatal: path '{relative}' "
-        rf"(?:does not exist in 'HEAD'|exists on disk, but not in 'HEAD')",
-        detail,
-    ) is not None
 
 
 def _historical_pack_tree(
@@ -3462,6 +3450,12 @@ def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -
     """Gate packs whose immutable repository identity is in the HEAD pinset."""
 
     try:
+        pack_root = Path(pack_root).resolve(strict=True)
+    except OSError:
+        # A nonexistent or unresolvable root is ordinary-readiness input;
+        # its refusal vocabulary owns the missing-path case, as before.
+        return
+    try:
         repository, pack_relative = _histsem_repository_and_pack(pack_root)
     except HistoricalSemanticsError:
         # A root outside a Git worktree has no governed repository-relative
@@ -3470,17 +3464,29 @@ def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -
         if not _histsem_has_git_metadata(pack_root):
             return
         raise
+    code, pinset_entry, _stderr = _histsem_git(
+        repository,
+        "ls-tree",
+        "HEAD",
+        "--",
+        RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix(),
+    )
+    if code != 0:
+        raise HistoricalSemanticsError(
+            "histsem_history_unavailable",
+            "committed receipt-histsem pinset lookup failed",
+        )
+    if not pinset_entry.strip():
+        return
     code, pinset_raw, _stderr = _histsem_git(
         repository,
         "show",
         f"HEAD:{RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix()}",
     )
     if code != 0:
-        if _histsem_pinset_path_absent_at_head(_stderr):
-            return
         raise HistoricalSemanticsError(
             "histsem_history_unavailable",
-            "committed receipt-histsem pinset lookup failed",
+            "committed receipt-histsem pinset read failed",
         )
     try:
         governed_rows = _validate_histsem_pinset(
@@ -3498,6 +3504,7 @@ def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -
     verify_receipt_histsem_pack(
         pack_root,
         require_published=require_published,
+        _pinset_rows=governed_rows,
     )
 
 

@@ -270,11 +270,11 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             self.assertFalse(custody.exists())
 
             # HEAD still defines this pack as governed, so removing the
-            # worktree pinset cannot turn the gate off.
+            # worktree pinset cannot turn the gate off or replace its rows.
             (clone / PINSET.relative_to(ROOT)).unlink()
             with self.assertRaises(HistoricalSemanticsError) as absent:
                 readiness._gate_receipt_histsem(pack)
-            self.assertEqual(absent.exception.reason_code, "histsem_pinset_absent")
+            self.assertEqual(absent.exception.reason_code, "histsem_pinset_mismatch")
 
     def test_twelfth_unreferenced_legacy_receipt_cannot_bypass_gate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -335,7 +335,37 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
                 objects.chmod(original_mode)
             self.assertEqual(caught.exception.reason_code, "histsem_history_unavailable")
 
-    def test_committed_pinset_deletion_refuses_before_arm_custody(self) -> None:
+    def test_symlinked_predecessor_alias_engages_histsem_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            clone = Path(temporary) / "repo"
+            subprocess.run(
+                ("git", "clone", "-q", "--shared", str(ROOT), str(clone)),
+                check=True,
+                capture_output=True,
+            )
+            git(clone, "config", "user.email", "tests@joulewise.invalid")
+            git(clone, "config", "user.name", "JouleWise tests")
+            git(clone, "config", "gc.auto", "0")
+            git(clone, "config", "maintenance.auto", "false")
+            pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
+            alias = pack.parent / "governed-pack-predecessor-alias"
+            alias.symlink_to(pack, target_is_directory=True)
+
+            # Make the governed pack fail its committed HEAD pin.  The alias
+            # must resolve to the governed immutable identity before matching
+            # the HEAD pinset row; an unresolved final component would miss it.
+            producer = pack / "producer_contract.json"
+            producer_value = json.loads(producer.read_bytes())
+            producer_value["histsem_symlink_regression_marker"] = "tampered"
+            producer.write_bytes(render_json(producer_value))
+            git(clone, "add", pack.relative_to(clone).as_posix())
+            git(clone, "commit", "-qm", "tamper governed pack for symlink regression")
+
+            with self.assertRaises(HistoricalSemanticsError) as caught:
+                readiness._gate_receipt_histsem(alias)
+            self.assertEqual(caught.exception.reason_code, "histsem_pinset_mismatch")
+
+    def test_committed_pinset_deletion_gate_returns_normally(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             clone = Path(temporary) / "repo"
             subprocess.run(
