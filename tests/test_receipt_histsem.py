@@ -345,6 +345,10 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             )
             git(clone, "config", "user.email", "tests@joulewise.invalid")
             git(clone, "config", "user.name", "JouleWise tests")
+            # The removal commit below can trigger detached git auto-maintenance,
+            # which races Python 3.11's tempdir teardown on CI (ENOTEMPTY).
+            git(clone, "config", "gc.auto", "0")
+            git(clone, "config", "maintenance.auto", "false")
             pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
             self.assertTrue(list((pack / "arm_readiness.evidence").glob("*.json")))
             pinset = clone / PINSET.relative_to(ROOT)
