@@ -92,7 +92,6 @@ EXPECTED_IDS = {
     # retired to the completed table.
     # 2026-08-02 D-105 registration (C3 gauntlet close-out)
     "C3-RECOGNIZER-EXACT-01",
-    "CALEXITS-CLEANUP-RACE-CI311", "CALEXITS-CENSUS-PIDRACE",
     "CALEXITS-TIMING-HYGIENE", "N-5-RECORD-AMENDMENT",
     # 2026-08-02 two-lens extension consult (Ed ratifies S2)
     "NVIDIA-PORTABILITY-01",
@@ -305,10 +304,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # 80 + 6 = 86; the 2026-08-20 evening closure retires
         # FREEZE-REPLAY-EXPIRY-01, PROC-TEARDOWN-01, REAUTHOR-CLEAN-01
         # (PRs #162/#163/#164): 86 - 3 = 83; T19 registers four calexits
-        # successor rows and retires RECEIPT-HISTSEM-01: 83 - 1 + 4 = 86
+        # successor rows and retires RECEIPT-HISTSEM-01: 83 - 1 + 4 = 86;
+        # T19 closure #2 retires the CI311 and census PID rows: 86 - 2 = 84
         # exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 86)
+        self.assertEqual(len(self.tasks), 84)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

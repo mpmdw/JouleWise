@@ -676,102 +676,6 @@
       "status": "queued",
       "stop_card": null
     },
-    "CALEXITS-CENSUS-PIDRACE": {
-      "acceptance": {
-        "evidence": [
-          "tests/test_calibration_exits.py:2207 polls for non-empty sampler PID content before converting it to an integer",
-          "A defect-shaped regression covers the file-created-before-written race and the normal gauntlet completes",
-          "The cold-pair-166 ruling and synthesis retain the int('') gate-run failure as a distinct high-severity row"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CALEXITS-CENSUS-PIDRACE/acceptance",
-          "label": "CALEXITS-CENSUS-PIDRACE acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The sampler PID census waits for non-empty content so a file-created-before-written race cannot void a canonical gate run."
-      },
-      "authority": {
-        "label": "Cold-pair-166 R2 ruling and synthesis (calexits census PID race)",
-        "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Cold-pair-166 synthesis + ERRATA E-2/E-3",
-            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-synthesis-166.md"
-          },
-          "rule": "The PID race is a distinct gate-run invalidation and must receive the normal gauntlet; do not wave it through as a generic calexits flake"
-        }
-      ],
-      "flags": [],
-      "goal": "Repair the sampler PID census race at tests/test_calibration_exits.py:2207 by polling for non-empty content before int(), then take the repair through the normal gauntlet.",
-      "id": "CALEXITS-CENSUS-PIDRACE",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 77,
-      "status": "queued",
-      "status_note": "High severity: an empty PID read voided a canonical gate run on 2026-08-20; fix shape is non-empty-content polling, not exists() polling.",
-      "stop_card": null
-    },
-    "CALEXITS-CLEANUP-RACE-CI311": {
-      "acceptance": {
-        "evidence": [
-          "Candidate fix aedf530 is present and is supported by the terra root-cause session's local Python 3.11 reproduction",
-          "calibration-exits-exclusive Python 3.11 is green on CI at a containing head, with the RACE_EXERCISED witness discrimination preserved",
-          "The E-4 light independent retro-review is recorded after the direct-to-main assertion widening",
-          "Cold-pair-166 custody also records ERRATA E-2 and the standing red-check disposition rule in ERRATA E-3"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CALEXITS-CLEANUP-RACE-CI311/acceptance",
-          "label": "CALEXITS-CLEANUP-RACE-CI311 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The Python 3.11 forced-auto-maintenance cleanup race closes only after CI is green at a head containing aedf530 and the E-4 retro-review is complete."
-      },
-      "authority": {
-        "label": "Cold-pair-166 R2/R4 ruling and synthesis (calexits CI311 blocker)",
-        "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "external",
-          "required": "CI 3.11 green at a head containing aedf530 and the E-4 retro-review recorded",
-          "scope": "close",
-          "state": "pending",
-          "strength": "hard",
-          "target": "CALEXITS-CI311-green-and-E4-retro-review"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "ERRATA E-4 direct-to-main review disposition",
-            "path": "docs/process_traces/2026-08-20-go-session/ERRATA.md"
-          },
-          "rule": "Do not close the blocker from the candidate patch alone: require containing-head CI 3.11 green plus the light independent E-4 retro-review"
-        },
-        {
-          "authority": {
-            "label": "ERRATA E-2/E-3 and cold-pair-166 synthesis",
-            "path": "docs/process_traces/2026-08-20-go-session/ERRATA.md"
-          },
-          "rule": "The intermittent red shard and the prior red-check merge deviation remain recorded and are not rewritten as clean history"
-        }
-      ],
-      "flags": [],
-      "goal": "Close the Python 3.11 forced-auto-maintenance cleanup race while preserving the test's RACE_EXERCISED discriminating power; candidate fix aedf530 is landed, and closure waits for containing-head CI green plus E-4 retro-review.",
-      "id": "CALEXITS-CLEANUP-RACE-CI311",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 76,
-      "status": "queued",
-      "status_note": "BLOCKER: the hosted Python 3.11 shard is non-informative until the containing-head green and E-4 retro-review closure conditions are met; local root-cause evidence does not substitute for CI confirmation.",
-      "stop_card": null
-    },
     "CALEXITS-TIMING-HYGIENE": {
       "acceptance": {
         "evidence": [
@@ -808,7 +712,7 @@
       "priority": "p3_hardening_candidates",
       "rank": 79,
       "status": "queued",
-      "status_note": "Should-fix umbrella, not gating: the module has five-plus distinct timing mechanisms and the audit must remain bounded.",
+      "status_note": "Should-fix umbrella, not gating: the module has five-plus distinct timing mechanisms and the audit must remain bounded. E-4 confirms the forced-maintenance test cannot use the maintenance-disable technique because it deliberately asserts detached maintenance starts; the umbrella audit should treat assertion-shape review, not maintenance suppression, as the tool for that test.",
       "stop_card": null
     },
     "CGV-HARDEN-01": {
