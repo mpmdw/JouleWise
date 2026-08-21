@@ -28,13 +28,7 @@ complete legacy-receipt inventory. Its bytes are SHA-256-pinned by
 `tests/test_receipt_histsem.py`. There is no update, regenerate, repair, or
 auto-reseal lane; a new governed value requires an explicit versioned change.
 
-Eligibility lookup is fail-closed: lookup failures refuse; a path-absent-at-HEAD
-lookup refuses when the pack is receipt-shaped (its
-`arm_readiness.evidence` directory contains at least one well-formed v1-schema
-evidence receipt) and returns only for repositories with no governed identity
-and no legacy receipt namespace. A membership miss on a successfully read
-pinset returns normally. The committed-pinset byte-pin test and the changed-set
-gate own committed pinset mutation.
+Eligibility is based only on a successful `git show HEAD:<pinset>` read: after canonical validation, membership of `(pack_id, pack_path)` engages the gate and a membership miss returns normally. An unambiguous result that the pinset path does not exist in `HEAD` also returns to ordinary readiness; it is an absence-of-governance answer, not a `histsem_pinset_absent` refusal. In that state the library must not inspect receipt schemas, names, counts, or inventories. Any other failure to obtain the HEAD pinset refuses, and an invalid HEAD pinset refuses. The HEAD read prevents worktree pinset deletion from disengaging a pack whose HEAD row exists. Committed pinset mutation or deletion is owned by the byte-pin and changed-set CI controls. Residual: absent a HEAD pinset, the library cannot distinguish a synthetic/pre-governance repository from a history whose pinset was removed.
 
 ## Coordinates and checks
 

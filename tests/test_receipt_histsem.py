@@ -353,18 +353,9 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             git(clone, "commit", "-qm", "remove committed histsem pinset")
             self.assertFalse(pinset.exists())
 
-            with self.assertRaises(HistoricalSemanticsError) as caught:
-                readiness._gate_receipt_histsem(pack)
-            self.assertEqual(caught.exception.reason_code, "histsem_pinset_absent")
+            self.assertIsNone(readiness._gate_receipt_histsem(pack))
 
-            custody = Path(temporary) / "custody"
-            result = generate_arm_receipt(pack, {}, custody)
-            self.assertEqual(result["status"], "REFUSE")
-            self.assertEqual(result["reason_codes"], ["histsem_pinset_absent"])
-            self.assertIsNone(result["receipt_path"])
-            self.assertFalse(custody.exists())
-
-    def test_synthetic_pack_without_pinset_or_legacy_receipts_stays_ordinary(self) -> None:
+    def test_synthetic_pack_without_pinset_stays_ordinary_with_legacy_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary) / "repo"
             repository.mkdir()
@@ -374,10 +365,29 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             pack = repository / "configs/campaigns/synthetic-pack"
             pack.mkdir(parents=True)
             (pack / "payload.json").write_text("{}", encoding="utf-8")
+            evidence = {
+                "schema_version": readiness.EVIDENCE_RECEIPT_SCHEMA,
+                "evidence_id": "arm-t0-synthetic-v1",
+                "kind": "T0",
+                "status": "PASS",
+                "issued_at_utc": "2026-08-20T00:00:00Z",
+                "boot_session_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "valid_until_monotonic_ns": 10**30,
+                "pack_sha256": "0" * 64,
+                "head_commit": "a" * 40,
+                "facts": [],
+                "checks": [],
+                "reason_codes": [],
+                "assurance": readiness.ASSURANCE.copy(),
+            }
+            evidence_path = pack / "arm_readiness.evidence/arm-t0-synthetic-v1.json"
+            evidence_path.parent.mkdir()
+            evidence_path.write_bytes(render_json(evidence))
+            readiness.validate_evidence_receipt(evidence)
             git(repository, "add", pack.relative_to(repository).as_posix())
-            git(repository, "commit", "-qm", "synthetic pack without histsem identity")
+            git(repository, "commit", "-qm", "synthetic pack with legacy T-0 receipt")
 
-            readiness._gate_receipt_histsem(pack)
+            self.assertIsNone(readiness._gate_receipt_histsem(pack))
 
     def test_fail_ugly_is_caught_at_arm_and_freeze_boundaries(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

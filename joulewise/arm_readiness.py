@@ -2793,30 +2793,6 @@ def _histsem_pinset_path_absent_at_head(stderr: bytes) -> bool:
     ) is not None
 
 
-def _histsem_has_legacy_v1_receipt(pack_root: Path) -> bool:
-    """Detect one well-formed legacy v1 receipt without making it eligibility."""
-
-    evidence_root = pack_root / "arm_readiness.evidence"
-    if not evidence_root.is_dir():
-        return False
-    try:
-        candidates = sorted(evidence_root.glob("*.json"))
-    except OSError:
-        return False
-    for path in candidates:
-        try:
-            candidate = parse_json_bytes(path.read_bytes(), require_canonical=True)
-            if (
-                isinstance(candidate, Mapping)
-                and candidate.get("schema_version") == EVIDENCE_RECEIPT_SCHEMA
-            ):
-                validate_evidence_receipt(candidate)
-        except (ArmReadinessError, OSError, ValueError):
-            continue
-        return True
-    return False
-
-
 def _historical_pack_tree(
     repository: Path | str,
     pack_path: Path | str,
@@ -3501,13 +3477,6 @@ def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -
     )
     if code != 0:
         if _histsem_pinset_path_absent_at_head(_stderr):
-            if _histsem_has_legacy_v1_receipt(pack_root):
-                raise HistoricalSemanticsError(
-                    "histsem_pinset_absent",
-                    "committed receipt-histsem pinset is absent at HEAD",
-                )
-            # A true pre-governance/synthetic repository has neither a
-            # committed governed identity nor the legacy receipt namespace.
             return
         raise HistoricalSemanticsError(
             "histsem_history_unavailable",
