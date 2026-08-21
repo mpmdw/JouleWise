@@ -1476,36 +1476,6 @@
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
     },
-    "FREEZE-REPLAY-EXPIRY-01": {
-      "acceptance": {
-        "evidence": [
-          "Both call sites pass now_monotonic_ns with a defect-shaped regression each",
-          "The scheduler-gate G1 design note (recompute-from-bytes) is updated to record the cure"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FREEZE-REPLAY-EXPIRY-01/acceptance",
-          "label": "FREEZE-REPLAY-EXPIRY-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Freeze-replay authentication enforces expiry at both sites; D-149 auto-GO may not trust row verdicts until this lands."
-      },
-      "authority": {
-        "label": "Sitting B-12 (re-graded blocker, ruling C-12); load-bearing for the G1 gate per the schedgate design",
-        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Pass now_monotonic_ns at BOTH freeze-replay authentication call sites (arm_readiness.py:5253-5262 and :5385-5392) so FREEZE_AND_ARM rows cannot report PASS from expired evidence; regression = refusal at valid_until+1.",
-      "id": "FREEZE-REPLAY-EXPIRY-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 72,
-      "status": "queued",
-      "status_note": "BLOCKER: until landed, the only live expiry check in the auto-GO path is the unbuilt G1 gate. Fence semantics: no D-149 auto-GO trusts FREEZE_AND_ARM verdicts before this row closes.",
-      "stop_card": null
-    },
     "MET-WINDOW-C-01": {
       "acceptance": {
         "evidence": [
@@ -3015,36 +2985,6 @@
       "status_note": "Owning-seat (L9) assent to be solicited at the next council touch (S-7 residual).",
       "stop_card": null
     },
-    "PROC-TEARDOWN-01": {
-      "acceptance": {
-        "evidence": [
-          "Process-group teardown with the F-B falsifier as regression",
-          "Post-run census recorded in window custody"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PROC-TEARDOWN-01/acceptance",
-          "label": "PROC-TEARDOWN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The teardown kills the process group and a census detects survivors; the L3 falsifier no longer reproduces."
-      },
-      "authority": {
-        "label": "Sitting B-14 (L3 F1, escalated blocker)",
-        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Measured-run process census + process-group teardown so a SIGTERM-ignoring sampler grandchild cannot survive _stop_process (executed reproduction at head).",
-      "id": "PROC-TEARDOWN-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 73,
-      "status": "queued",
-      "status_note": "Blocker-class: an orphan sampler contaminates quiet windows undetected under D-149.",
-      "stop_card": null
-    },
     "QUIET-GUARD-01": {
       "acceptance": {
         "evidence": [
@@ -3117,36 +3057,6 @@
       "rank": 68,
       "status": "queued",
       "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. B-46/B-9 (paper + WINDOW_STATUS corrections) are immediate desk items.",
-      "stop_card": null
-    },
-    "REAUTHOR-CLEAN-01": {
-      "acceptance": {
-        "evidence": [
-          "Command + receipt + regression exist",
-          "Runbook references only the governed command"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/REAUTHOR-CLEAN-01/acceptance",
-          "label": "REAUTHOR-CLEAN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A governed command performs the re-author cleanup with a receipt; the raw rm is removed from the runbook."
-      },
-      "authority": {
-        "label": "Sitting B-17 (L8 WO-L8R-4, blocker)",
-        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Governed reauthor-clean with shape verification + receipt, replacing the raw /bin/rm -r over three PACK_ID-interpolated namespaces at window_runbook.md:1017.",
-      "id": "REAUTHOR-CLEAN-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 74,
-      "status": "queued",
-      "status_note": "Blocker-class in the packet; P2 rank because it gates re-author ceremonies, not the transaction itself.",
       "stop_card": null
     },
     "RECEIPT-HISTSEM-01": {

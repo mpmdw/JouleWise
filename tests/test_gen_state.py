@@ -26,9 +26,6 @@ EXPECTED_IDS = {
     "ED-HANDS-BATCH-01",
     "ED-MINT-LICENSE-01",
     "EDQ-L9-3-CAPTURE-01",
-    "FREEZE-REPLAY-EXPIRY-01",
-    "PROC-TEARDOWN-01",
-    "REAUTHOR-CLEAN-01",
     "PREWINDOW-REGEX-01",
     "READY-WO-BATCH-01",
     "RECEIPT-HISTSEM-01",
@@ -304,9 +301,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # 74 + 6 = 80; the S-4 refuter round splits out ED-MINT-LICENSE-01,
         # EDQ-L9-3-CAPTURE-01 and mints FREEZE-REPLAY-EXPIRY-01,
         # PROC-TEARDOWN-01, REAUTHOR-CLEAN-01, ARM-PACKET-01:
-        # 80 + 6 = 86 exact live records.
+        # 80 + 6 = 86; the 2026-08-20 evening closure retires
+        # FREEZE-REPLAY-EXPIRY-01, PROC-TEARDOWN-01, REAUTHOR-CLEAN-01
+        # (PRs #162/#163/#164): 86 - 3 = 83 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 86)
+        self.assertEqual(len(self.tasks), 83)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
