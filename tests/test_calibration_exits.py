@@ -2204,11 +2204,16 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                         ),
                     ) as process:
                         deadline = time.monotonic() + 2.0
-                        while not sampler_pid_path.exists():
+                        while True:
+                            try:
+                                detached_pid = int(sampler_pid_path.read_text())
+                            except (OSError, ValueError):
+                                detached_pid = None
+                            else:
+                                break
                             if time.monotonic() >= deadline:
                                 self.fail("detached sampler did not start")
                             time.sleep(0.001)
-                        detached_pid = int(sampler_pid_path.read_text())
                 assert process is not None
                 self.assertEqual(process.returncode, -signal.SIGKILL)
                 self.assertEqual(
