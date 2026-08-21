@@ -10,7 +10,56 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-20 ~18:15 PDT (T18 — five PRs merged; queue draining; `_v4` blocked on Ed's mint license)
+Last updated: 2026-08-20 ~19:50 PDT (T19-CHECKPOINT — pre-/clear; successor starts HERE)
+
+## ▶▶ T19-CHECKPOINT (2026-08-20 ~19:50 PDT, Ed checkpoint order) — A FRESH SESSION STARTS HERE
+
+**STATE IN ONE BREATH:** SIX gauntleted PRs merged today (#160 merge
+wave, #161 scheduler gates, #162 FRE, #163 PTD, #164 RAC, #165 D-144
+followups+prewindow), each behind a full-canonical gate; three
+councils + four D-144 co-design rulings cold-ratified; the N-5
+canonical flake root-caused and fixed; the B7 paper claim-integrity
+ruling landed (stricter reading); kernel at 83 live rows; the `_v4`
+transaction fully specced (r5 + the RH 112-path amendment) and
+BLOCKED SOLELY ON ED PACKET ITEM 1 (mint license — the consolidated
+10-item packet is in the T17 block above).
+
+**IN FLIGHT AT CHECKPOINT (harvest, don't relaunch):**
+- Branch `impl/receipt-histsem` (pushed): the RECEIPT-HISTSEM-01
+  implementation, owning suites green, GAUNTLET IN PROGRESS — a
+  terra xhigh refuter was mid-run writing to
+  /private/tmp/claude-501/-Users-edr-code-JouleWise/36a806b2-a55e-4823-9a50-f8bbe26e8f31/scratchpad/rh-refuter.md
+  (that path persists on disk after /clear; poll its .status
+  sibling). On SURVIVES: lead full read, add the annex-D16 ONE-home
+  contract doc, PR + full-canonical merge gate, then the kernel
+  closure row. On REFUTED: fix round per the day's pattern (delta
+  re-audit after; two same-signature rounds = consult, rule 11).
+- The ruling authority for that work: rh-ruling.md in the go-session
+  custody (FINAL, cold-ratified, five fixes applied; its normative
+  annexes bind).
+
+**SUCCESSOR ORDER (after harvesting the refuter):**
+1. Finish RECEIPT-HISTSEM (above). 2. Remaining unblocked queue rows
+are thin — the big blocks (UNVERIFIED re-audits, SITTING2
+preconditions, schedgate stages 3-6, the marker co-design) all ride
+the `_v4` boundary or Ed rulings. 3. If Ed has installed the mint
+license: OPEN THE `_v4` TRANSACTION per rulings-r5-consolidation.md
+(S-0 lead-executed clone proof FIRST; the RH pinset + 112-path
+allowlist amendments bind; V-7's packet order). 4. Otherwise: paper
+program desk work (fidelity/pedagogy passes on the enriched draft
+sections under the writing standard; figure-skeleton staging) and the
+T18/T19 run-report addendum (the T17 report covers through midday;
+the afternoon arc — the five later PRs, the RAC escalation, the flake,
+RH — needs its dictated-fills addendum).
+
+**Custody:** everything load-bearing is committed and pushed on main
+through the RH ruling custody (42bd318) + this checkpoint; the
+codex-run ledger (50 runs, ~15% of the weekly pool used, resets
+2026-08-27) is custodied in the go-session dir. All session
+worktrees/scratchpad are DISPOSABLE except as noted above (the
+refuter output path). Standing cautions: the four r6-pinned files
+(hazard block above); custody staging outside canonical-runner trees;
+the WRITE_SCOPE literal line; one codex-run per background call.
 
 ## ▶▶ T18 (2026-08-20 evening) — AUTONOMOUS DRAIN DAY COMPLETE; EVERYTHING ED-INDEPENDENT ON THE CRITICAL PATH IS DONE
 

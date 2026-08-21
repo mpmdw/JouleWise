@@ -1,0 +1,42 @@
+Codex run ledger (2026-08-20 GO session)
+run 1: sol high, gate-1 fix (b6cpmv0xo; first launch bx49i8jh3 died on arg validation, no session)
+run 2: terra xhigh, D-144 seat (benvk1yvg)
+run 3: terra xhigh, registry design seat (be7efgfdg)
+run 4: terra high, gate-1 fix refuter (brddgeo7r)
+run 5: sol high, gate-1 fix 2nd refuter contract lens (pending id)
+run 6: terra xhigh, registry debate round (pending)
+run 7: terra xhigh, D-144 debate response (pending)
+runs 8-16: terra seats L1-L5,L7,L9-L11 READY sitting; run 17: sol xhigh _v4 design (next)
+run 18: sol xhigh _v4 debate response
+run 19: terra xhigh, scheduler-gates co-design seat
+run 20: terra high, kernel-transaction refuter
+run 21: terra xhigh, schedgate debate
+run 22: terra high, kernel-txn delta re-audit
+run 23: sol high, schedgate stages 1-2 implementation
+run 24: terra xhigh, schedgate impl contract lens
+run 25: sol high, schedgate fix round
+run 26: sol high, FREEZE-REPLAY-EXPIRY-01 implementation
+run 27: terra xhigh, FRE refuter
+run 28: sol high, PROC-TEARDOWN-01 implementation
+run 29: sol high, PROC-TEARDOWN-01 relaunch corrected scope
+run 30: terra xhigh, PTD refuter
+run 31: sol high, PTD fix round
+run 32: sol high, PTD restructure (pinned-file remand)
+run 33: terra xhigh, PTD restructure delta re-audit
+run 34: sol high, REAUTHOR-CLEAN-01
+run 35: terra high, RAC refuter
+run 36: sol high, RAC fix round
+run 37: sol high, PTD canonical-red fix
+run 38: terra high, RAC delta re-audit
+run 39: sol high, calexits order-dependence root-cause+fix
+run 40: sol xhigh, RAC escalation design consult
+run 41: sol high, RAC round-3 (consult spec)
+run 42: terra xhigh, RAC round-3 delta
+run 43: sol high, RAC terminal-anchor regression
+run 44: terra high, closure-txn refuter
+run 45: sol high, D144-SEATPASS-FOLLOWUPS + PREWINDOW-REGEX-01 (one session, disjoint files)
+run 46: terra high, two-row refuter
+run 47: terra xhigh, RECEIPT-HISTSEM design seat
+run 48: terra xhigh, RH debate
+run 49: sol high, RECEIPT-HISTSEM implementation
+run 50: terra xhigh, RH refuter
