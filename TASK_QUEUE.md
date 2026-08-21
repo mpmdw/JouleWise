@@ -294,6 +294,28 @@ flight (T4); its adopted design becomes the implementation work order. Until
 landed, shard-4 CI failures in this module are re-run-once-then-investigate,
 never waved through silently.
 
+### Rows registered 2026-08-20 night (cold-pair ruling + synthesis; custody: docs/process_traces/2026-08-20-go-session/cold-pair-166/)
+
+- **CALEXITS-CLEANUP-RACE-CI311** (BLOCKER): the forced-auto-maintenance
+  race test asserted ENOTEMPTY only; Python 3.11 rmtree re-raises a
+  vanished-child ENOENT. Candidate fix aedf530 landed (terra root-cause,
+  local 3.11 repro); row closes on CI 3.11 green at a head containing it
+  PLUS a light independent retro-review of the widening (ERRATA E-4).
+- **CALEXITS-CENSUS-PIDRACE** (high): tests/test_calibration_exits.py:2207
+  reads the sampler PID file guarded only by exists(); an empty read voided
+  a canonical gate run (int('') error, 2026-08-20 quiet run). Fix shape:
+  poll for non-empty content; normal gauntlet.
+- **N-5 RECORD AMENDMENT** (bookkeeping, binding): 46d710f's "N-5 resolved"
+  is falsified as an unqualified claim — the test failed post-fix under
+  concurrent machine load at a8f1549. Record must state the recurrence and
+  environment; open question incomplete-fix vs load-induced.
+- **CALEXITS-TIMING-HYGIENE** (should-fix umbrella, not gating): 5+ distinct
+  timing mechanisms in this module historically (#121 ENOTEMPTY flake,
+  REDERIVE, N-5, CI311 race, census PID race, 2026-08-19
+  parameterized-witnesses failure; #164 also saw 3.14 red). One bounded
+  module-wide timing/synchronization audit.
+
+
 ## WO-SAMPLER-SUPERVISOR (registered 2026-08-11, T4; consult-adopted design)
 
 Privileged-sampler lifecycle ownership for validate_powermetrics_fiducial:
