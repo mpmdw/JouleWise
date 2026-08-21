@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -205,10 +204,7 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             git(clone, "config", "user.email", "tests@joulewise.invalid")
             git(clone, "config", "user.name", "JouleWise tests")
             clone_pinset = clone / PINSET.relative_to(ROOT)
-            clone_pinset.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(PINSET, clone_pinset)
-            git(clone, "add", clone_pinset.relative_to(clone).as_posix())
-            git(clone, "commit", "-qm", "install governed pinset")
+            self.assertEqual(clone_pinset.read_bytes(), PINSET.read_bytes())
 
             pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
             tree_path = pack / "plan_tree.json"
@@ -272,6 +268,116 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             self.assertEqual(result["reason_codes"], ["histsem_pinset_mismatch"])
             self.assertIsNone(result["receipt_path"])
             self.assertFalse(custody.exists())
+
+            # HEAD still defines this pack as governed, so removing the
+            # worktree pinset cannot turn the gate off.
+            (clone / PINSET.relative_to(ROOT)).unlink()
+            with self.assertRaises(HistoricalSemanticsError) as absent:
+                readiness._gate_receipt_histsem(pack)
+            self.assertEqual(absent.exception.reason_code, "histsem_pinset_absent")
+
+    def test_twelfth_unreferenced_legacy_receipt_cannot_bypass_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            clone = Path(temporary) / "repo"
+            subprocess.run(
+                ("git", "clone", "-q", "--shared", str(ROOT), str(clone)),
+                check=True,
+                capture_output=True,
+            )
+            git(clone, "config", "user.email", "tests@joulewise.invalid")
+            git(clone, "config", "user.name", "JouleWise tests")
+            pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
+
+            source_receipt = next((pack / "arm_readiness.evidence").glob("*.json"))
+            rogue = json.loads(source_receipt.read_bytes())
+            rogue["evidence_id"] = "freeze-extra-valid-legacy-v1"
+            rogue["issued_at_utc"] = "2026-08-20T23:59:59Z"
+            readiness.validate_evidence_receipt(rogue)
+            (pack / "arm_readiness.evidence/extra-valid-legacy.json").write_bytes(
+                render_json(rogue)
+            )
+            git(clone, "add", pack.relative_to(clone).as_posix())
+            git(clone, "commit", "-qm", "add unused valid legacy receipt")
+            self.assertEqual(
+                len(list((pack / "arm_readiness.evidence").glob("*.json"))), 12
+            )
+
+            with self.assertRaises(HistoricalSemanticsError) as direct:
+                verify_receipt_histsem_pack(pack)
+            self.assertEqual(direct.exception.reason_code, "histsem_pinset_mismatch")
+            with self.assertRaises(HistoricalSemanticsError) as gate:
+                readiness._gate_receipt_histsem(pack)
+            self.assertEqual(gate.exception.reason_code, "histsem_pinset_mismatch")
+
+            custody = Path(temporary) / "custody"
+            result = generate_arm_receipt(pack, {}, custody)
+            self.assertEqual(result["status"], "REFUSE")
+            self.assertEqual(result["reason_codes"], ["histsem_pinset_mismatch"])
+            self.assertIsNone(result["receipt_path"])
+            self.assertFalse(custody.exists())
+
+    def test_gate_refuses_when_governed_clone_object_store_is_unreadable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            clone = Path(temporary) / "repo"
+            subprocess.run(
+                ("git", "clone", "-q", "--no-local", str(ROOT), str(clone)),
+                check=True,
+                capture_output=True,
+            )
+            pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
+            objects = clone / ".git/objects"
+            original_mode = objects.stat().st_mode
+            objects.chmod(0)
+            try:
+                with self.assertRaises(HistoricalSemanticsError) as caught:
+                    readiness._gate_receipt_histsem(pack)
+            finally:
+                objects.chmod(original_mode)
+            self.assertEqual(caught.exception.reason_code, "histsem_history_unavailable")
+
+    def test_committed_pinset_deletion_refuses_before_arm_custody(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            clone = Path(temporary) / "repo"
+            subprocess.run(
+                ("git", "clone", "-q", "--shared", str(ROOT), str(clone)),
+                check=True,
+                capture_output=True,
+            )
+            git(clone, "config", "user.email", "tests@joulewise.invalid")
+            git(clone, "config", "user.name", "JouleWise tests")
+            pack = clone / REPRESENTATIVE_PACK.relative_to(ROOT)
+            self.assertTrue(list((pack / "arm_readiness.evidence").glob("*.json")))
+            pinset = clone / PINSET.relative_to(ROOT)
+            pinset.unlink()
+            git(clone, "add", "-u", PINSET.relative_to(ROOT).as_posix())
+            git(clone, "commit", "-qm", "remove committed histsem pinset")
+            self.assertFalse(pinset.exists())
+
+            with self.assertRaises(HistoricalSemanticsError) as caught:
+                readiness._gate_receipt_histsem(pack)
+            self.assertEqual(caught.exception.reason_code, "histsem_pinset_absent")
+
+            custody = Path(temporary) / "custody"
+            result = generate_arm_receipt(pack, {}, custody)
+            self.assertEqual(result["status"], "REFUSE")
+            self.assertEqual(result["reason_codes"], ["histsem_pinset_absent"])
+            self.assertIsNone(result["receipt_path"])
+            self.assertFalse(custody.exists())
+
+    def test_synthetic_pack_without_pinset_or_legacy_receipts_stays_ordinary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "repo"
+            repository.mkdir()
+            git(repository, "init", "-q")
+            git(repository, "config", "user.email", "tests@joulewise.invalid")
+            git(repository, "config", "user.name", "JouleWise tests")
+            pack = repository / "configs/campaigns/synthetic-pack"
+            pack.mkdir(parents=True)
+            (pack / "payload.json").write_text("{}", encoding="utf-8")
+            git(repository, "add", pack.relative_to(repository).as_posix())
+            git(repository, "commit", "-qm", "synthetic pack without histsem identity")
+
+            readiness._gate_receipt_histsem(pack)
 
     def test_fail_ugly_is_caught_at_arm_and_freeze_boundaries(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

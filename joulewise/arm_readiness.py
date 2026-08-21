@@ -2755,11 +2755,66 @@ def _histsem_repository_and_pack(pack_root: Path) -> tuple[Path, str]:
         repository, _pack_prefix, pack_relative = _repository_and_pack_relative(
             pack_root
         )
-    except (ArmReadinessError, OSError) as exc:
+    except ArmReadinessError as exc:
+        reason_code = (
+            "histsem_history_unavailable"
+            if str(exc).startswith("Git proof failed:")
+            else "histsem_git_unavailable"
+        )
+        raise HistoricalSemanticsError(
+            reason_code, f"cannot locate historical pack repository: {exc}"
+        ) from exc
+    except OSError as exc:
         raise HistoricalSemanticsError(
             "histsem_git_unavailable", f"cannot locate historical pack repository: {exc}"
         ) from exc
     return repository, pack_relative
+
+
+def _histsem_has_git_metadata(pack_root: Path) -> bool:
+    """Return whether a pack is below a path that advertises Git metadata."""
+
+    try:
+        root = pack_root.resolve(strict=True)
+    except OSError:
+        return False
+    return any((candidate / ".git").exists() for candidate in (root, *root.parents))
+
+
+def _histsem_pinset_path_absent_at_head(stderr: bytes) -> bool:
+    """Recognize only Git's unambiguous path-not-in-HEAD diagnostics."""
+
+    detail = stderr.decode("utf-8", errors="replace").strip()
+    relative = re.escape(RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix())
+    return re.fullmatch(
+        rf"fatal: path '{relative}' "
+        rf"(?:does not exist in 'HEAD'|exists on disk, but not in 'HEAD')",
+        detail,
+    ) is not None
+
+
+def _histsem_has_legacy_v1_receipt(pack_root: Path) -> bool:
+    """Detect one well-formed legacy v1 receipt without making it eligibility."""
+
+    evidence_root = pack_root / "arm_readiness.evidence"
+    if not evidence_root.is_dir():
+        return False
+    try:
+        candidates = sorted(evidence_root.glob("*.json"))
+    except OSError:
+        return False
+    for path in candidates:
+        try:
+            candidate = parse_json_bytes(path.read_bytes(), require_canonical=True)
+            if (
+                isinstance(candidate, Mapping)
+                and candidate.get("schema_version") == EVIDENCE_RECEIPT_SCHEMA
+            ):
+                validate_evidence_receipt(candidate)
+        except (ArmReadinessError, OSError, ValueError):
+            continue
+        return True
+    return False
 
 
 def _historical_pack_tree(
@@ -3428,32 +3483,53 @@ def verify_all_receipt_histsem(
 
 
 def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -> None:
-    """Gate only packs carrying the governed legacy PACK-receipt namespace."""
+    """Gate packs whose immutable repository identity is in the HEAD pinset."""
 
-    evidence_root = pack_root / "arm_readiness.evidence"
-    if not evidence_root.is_dir():
-        return
-    legacy_receipt_ids: list[str] = []
-    for path in evidence_root.glob("*.json"):
-        try:
-            candidate = json.loads(path.read_bytes())
-        except (OSError, ValueError):
-            # The ordinary readiness path owns malformed R1/new-family input.
-            continue
-        if (
-            isinstance(candidate, Mapping)
-            and candidate.get("schema_version") == EVIDENCE_RECEIPT_SCHEMA
-            and isinstance(candidate.get("evidence_id"), str)
-        ):
-            legacy_receipt_ids.append(str(candidate["evidence_id"]))
-    # The governed historical/future freeze inventory is the closed eleven-row
-    # ``freeze-*`` family.  R1 T-0 receipts share the v1 wire schema but are
-    # volatile arm inputs, not the frozen PACK receipts owned by this gate.
-    if len(legacy_receipt_ids) != 11 or not all(
-        evidence_id.startswith("freeze-") for evidence_id in legacy_receipt_ids
+    try:
+        repository, pack_relative = _histsem_repository_and_pack(pack_root)
+    except HistoricalSemanticsError:
+        # A root outside a Git worktree has no governed repository-relative
+        # identity.  The ordinary readiness path owns that non-histsem input;
+        # an advertised but unreadable Git worktree must refuse instead.
+        if not _histsem_has_git_metadata(pack_root):
+            return
+        raise
+    code, pinset_raw, _stderr = _histsem_git(
+        repository,
+        "show",
+        f"HEAD:{RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix()}",
+    )
+    if code != 0:
+        if _histsem_pinset_path_absent_at_head(_stderr):
+            if _histsem_has_legacy_v1_receipt(pack_root):
+                raise HistoricalSemanticsError(
+                    "histsem_pinset_absent",
+                    "committed receipt-histsem pinset is absent at HEAD",
+                )
+            # A true pre-governance/synthetic repository has neither a
+            # committed governed identity nor the legacy receipt namespace.
+            return
+        raise HistoricalSemanticsError(
+            "histsem_history_unavailable",
+            "committed receipt-histsem pinset lookup failed",
+        )
+    try:
+        governed_rows = _validate_histsem_pinset(
+            parse_json_bytes(pinset_raw, require_canonical=True)
+        )
+    except ArmReadinessError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_pinset_invalid", "committed receipt-histsem pinset is invalid"
+        ) from exc
+    if not any(
+        row["pack_id"] == pack_root.name and row["pack_path"] == pack_relative
+        for row in governed_rows
     ):
         return
-    verify_receipt_histsem_pack(pack_root, require_published=require_published)
+    verify_receipt_histsem_pack(
+        pack_root,
+        require_published=require_published,
+    )
 
 
 def _plan_profile(
