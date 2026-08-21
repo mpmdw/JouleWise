@@ -39,6 +39,7 @@ from joulewise.schemas import (
     RunStatus,
     SummaryMetrics,
 )
+from joulewise.sampler_teardown import SamplerTeardown
 from joulewise.suite import (
     SUITE_SCHEMA_VERSION,
     migrate_suite_manifest,
@@ -635,6 +636,22 @@ class FakeProcessPowermetricsRegistry:
             privilege_prefix=(sys.executable,),
         )
         return self.adapter, None
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class NonEngagedPowermetricsRegistry:
+    """Use the mock telemetry lifecycle under the powermetrics controller seam."""
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            telemetry.name = "powermetrics"
+        return telemetry, failure
 
     def resolve_transport(self, config: BenchmarkConfig):
         return adapters.resolve_transport(config)
@@ -1615,6 +1632,39 @@ class HappyPathTests(ControllerTestCase):
         self.assertIsNone(registry.adapter._process)
         self.assertFalse(registry.adapter._admission_sampling_start_requested)
         self.assertFalse(registry.adapter._admission_sampling_handoff_pending)
+        teardown = metadata["uncertainty_evidence"]["process_group_teardown"]
+        self.assertEqual(
+            set(teardown),
+            {
+                "status",
+                "spawn_observed",
+                "isolation_mode",
+                "direct_child_pid",
+                "process_group_id",
+                "spawn_argv",
+                "sampler_argv",
+                "termination_signal",
+                "termination_grace_s",
+                "kill_escalated",
+                "census_method",
+                "census_timeout_s",
+                "census_completed",
+                "survivors_detected",
+                "group_survivors",
+                "escaped_candidates",
+                "signal_attempts",
+                "leader_reaped",
+                "exception_class",
+                "errors",
+            },
+        )
+        self.assertEqual(teardown["status"], "clean")
+        self.assertTrue(teardown["spawn_observed"])
+        self.assertIn(
+            teardown["isolation_mode"], {"isolated_group", "none_direct_child"}
+        )
+        self.assertFalse(teardown["survivors_detected"])
+        self.assertEqual(teardown["termination_grace_s"], 10.0)
         command = metadata["adapters"]["telemetry"]["command"]
         self.assertNotIn("-n", command)
         self.assertEqual(
@@ -1631,6 +1681,75 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(
             fresh.idle_mean_uncertainty["source_sha256"],
             hashlib.sha256(attempt_two.read_bytes()).hexdigest(),
+        )
+
+    def test_powermetrics_without_custodied_spawn_succeeds_not_engaged(
+        self,
+    ) -> None:
+        bundle_path, summary = run_benchmark(
+            make_config("controller-powermetrics-not-engaged"),
+            self.runs_root,
+            self.clock,
+            registry=NonEngagedPowermetricsRegistry(),
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        teardown = metadata["uncertainty_evidence"]["process_group_teardown"]
+        self.assertEqual(teardown["status"], "not_engaged")
+        self.assertFalse(teardown["spawn_observed"])
+        self.assertEqual(teardown["isolation_mode"], "not_spawned")
+        self.assertFalse(teardown["census_completed"])
+
+    def test_powermetrics_contaminated_teardown_census_fails_run_closed(
+        self,
+    ) -> None:
+        escaped = {"pid": 999999, "argv": ["injected", "escaped", "sampler"]}
+        with patch.object(
+            SamplerTeardown, "_wide_argv_census", return_value=[escaped]
+        ):
+            bundle_path, summary = _produce_admission_powermetrics_bundle(
+                self.runs_root,
+                "controller-powermetrics-contaminated-teardown",
+                RetryAdmissionPowermetricsRegistry(),
+            )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("teardown census reported contamination", summary.failure_message)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        teardown = metadata["uncertainty_evidence"]["process_group_teardown"]
+        self.assertEqual(teardown["status"], "contaminated")
+        self.assertTrue(teardown["spawn_observed"])
+        self.assertTrue(teardown["survivors_detected"])
+        self.assertEqual(teardown["escaped_candidates"], [escaped])
+
+    def test_powermetrics_teardown_exception_persists_unknown_custody(
+        self,
+    ) -> None:
+        with patch.object(
+            SamplerTeardown,
+            "_wide_argv_census",
+            side_effect=OSError("injected mid-teardown census failure"),
+        ):
+            bundle_path, summary = _produce_admission_powermetrics_bundle(
+                self.runs_root,
+                "controller-powermetrics-exceptional-teardown",
+                RetryAdmissionPowermetricsRegistry(),
+            )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        teardown = metadata["uncertainty_evidence"]["process_group_teardown"]
+        self.assertEqual(teardown["status"], "contamination_unknown")
+        self.assertNotEqual(teardown["status"], "clean")
+        self.assertEqual(teardown["exception_class"], "OSError")
+        self.assertFalse(teardown["census_completed"])
+        self.assertTrue(
+            any(
+                "injected mid-teardown census failure" in error
+                for error in teardown["errors"]
+            )
         )
 
     def test_powermetrics_thermal_coverage_is_continuous_across_admission_handoff(
