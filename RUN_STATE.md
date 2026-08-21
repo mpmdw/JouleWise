@@ -10,7 +10,15 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-20 ~19:50 PDT (T19-CHECKPOINT — pre-/clear; successor starts HERE)
+Last updated: 2026-08-20 ~20:05 PDT (T19.1 — successor live; RH refuter still running, being watched)
+
+**T19.1 (successor session, ~20:05 PDT):** the RH refuter survived the
+/clear and is STILL RUNNING (watched; harvest on completion). The T18/T19
+run-report addendum is LANDED (`docs/run_reports/2026-08-20-t18-t19-session.md`)
+with a custody erratum (`…go-session/ERRATA.md` E-1: the rh-impl-report
+branch field is wrong — the work is on `impl/receipt-histsem` @ 60ba2e9).
+Corrections of record vs the checkpoint below: codex usage reads 16.0%
+(not ~15%); #164/#165 merged 2026-08-21 in UTC.
 
 ## ▶▶ T19-CHECKPOINT (2026-08-20 ~19:50 PDT, Ed checkpoint order) — A FRESH SESSION STARTS HERE
 
