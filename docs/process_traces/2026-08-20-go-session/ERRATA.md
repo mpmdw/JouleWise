@@ -54,3 +54,16 @@ plus the Opus refuter's post-hoc executed probes (the widened assertion
 opens no RACE_EXERCISED escape hatch; the ENOENT causal account matches the
 3.11-only failure). A light independent retro-review rides the
 CALEXITS-CLEANUP-RACE-CI311 row's closure.
+
+## E-5: a 39MB local custody tarball transited git history (6649736..1d6824c)
+
+The consistency-sweep commit 6649736 used `git add -A` and swept in
+`.decisive-replay/d117_v2_production_custody_store.tar.zst` (39MB, local
+decisive-replay custody, deliberately untracked all session). Corrected
+one commit later (1d6824c: removed from the tree, path gitignored). The
+blob remains reachable in pushed history; expunging it requires a history
+rewrite, which is an irreversible action reserved to Ed (decide whether
+repo-size hygiene warrants it; no secret material is involved — the
+tarball is measurement custody whose ruled home is outside the repo).
+Root cause: `git add -A` in a bookkeeping commit; corrective convention:
+bookkeeping commits stage by explicit pathspec, never -A.
