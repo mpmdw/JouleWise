@@ -676,23 +676,23 @@
       "status": "queued",
       "stop_card": null
     },
-    "CALEXITS-TIMING-HYGIENE": {
+    "CALEXITS-HYGIENE-FIXES-01": {
       "acceptance": {
         "evidence": [
-          "A bounded module-wide timing/synchronization audit enumerates the five-plus mechanisms named by the cold-pair-166 custody",
-          "The CI311 cleanup race, census PID race, and N-5 amendment remain separately registered and are not collapsed into a vague flake label",
-          "ERRATA E-2, E-3, and E-4 are carried as history and deviations in the audit record"
+          "Each implemented item cures the named hazard class with the audit's bounded fix shape or a lead-ratified alternative",
+          "The E-4 constraint holds: the forced-maintenance test still asserts detached maintenance starts, and the ENOTEMPTY/ENOENT errno allowlist is neither narrowed nor widened",
+          "No fix collapses the historical mechanism records or touches the four r6-pinned estimator sources"
         ],
         "pointer": {
-          "json_pointer": "/tasks/CALEXITS-TIMING-HYGIENE/acceptance",
-          "label": "CALEXITS-TIMING-HYGIENE acceptance",
+          "json_pointer": "/tasks/CALEXITS-HYGIENE-FIXES-01/acceptance",
+          "label": "CALEXITS-HYGIENE-FIXES-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "A bounded module-wide timing and synchronization audit covers the calexits mechanism family without making the should-fix umbrella a gate."
+        "summary": "The seven-item non-gating should-fix list from the A79 timing audit is implemented in prioritized order, each item through the normal gauntlet."
       },
       "authority": {
-        "label": "Cold-pair-166 R2 ruling and synthesis (calexits timing umbrella)",
-        "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-synthesis-166.md"
+        "label": "A79 CALEXITS-TIMING-HYGIENE audit record (H1-H9, prioritized list section 4)",
+        "path": "docs/process_traces/2026-08-22-t20/calexits-timing-audit.md"
       },
       "dependencies": [],
       "fallback": null,
@@ -702,17 +702,24 @@
             "label": "Cold-pair-166 R2.4 should-fix disposition",
             "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
           },
-          "rule": "This umbrella is should-fix and non-gating; preserve separate defect rows and do not use the audit to erase the blocker or canonical-gate evidence"
+          "rule": "Non-gating hardening: no item blocks a merge or phase gate; partial implementation is acceptable and each landed item stands alone"
+        },
+        {
+          "authority": {
+            "label": "ERRATA E-4 review (UPHELD-WITH-FOLLOWUP)",
+            "path": "docs/process_traces/2026-08-20-go-session/ERRATA.md"
+          },
+          "rule": "The forced-maintenance test keeps its detached-maintenance-start assertion; assertion-shape hardening only, never maintenance suppression"
         }
       ],
       "flags": [],
-      "goal": "Run one bounded module-wide timing and synchronization audit of tests/test_calibration_exits.py across the historical ENOTEMPTY, REDERIVE, N-5, CI311, census PID, parameterized-witnesses, and 3.14 mechanisms.",
-      "id": "CALEXITS-TIMING-HYGIENE",
+      "goal": "Implement the A79 audit's prioritized seven-item timing/synchronization hardening list for tests/test_calibration_exits.py (pin logical writer origins; remove witness-cache order dependence; bounded semantic readiness reads; identity-safe PID/detached cleanup; E-4 deterministic follow-up with same-domain Trace2 assertions (H2/H9); progress-acked resume; host-speed decoupling).",
+      "id": "CALEXITS-HYGIENE-FIXES-01",
       "lane": "agent",
       "priority": "p3_hardening_candidates",
       "rank": 79,
       "status": "queued",
-      "status_note": "Should-fix umbrella, not gating: the module has five-plus distinct timing mechanisms and the audit must remain bounded. E-4 confirms the forced-maintenance test cannot use the maintenance-disable technique because it deliberately asserts detached maintenance starts; the umbrella audit should treat assertion-shape review, not maintenance suppression, as the tool for that test.",
+      "status_note": "Successor to CALEXITS-TIMING-HYGIENE (closed 2026-08-22 with the audit as deliverable). Items are independent and land through the normal gauntlet; top two by yield are H1 origin pinning and H6 witness-cache ownership.",
       "stop_card": null
     },
     "CGV-HARDEN-01": {

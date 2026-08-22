@@ -92,7 +92,7 @@ EXPECTED_IDS = {
     # retired to the completed table.
     # 2026-08-02 D-105 registration (C3 gauntlet close-out)
     "C3-RECOGNIZER-EXACT-01",
-    "CALEXITS-TIMING-HYGIENE",
+    "CALEXITS-HYGIENE-FIXES-01",
     # 2026-08-02 two-lens extension consult (Ed ratifies S2)
     "NVIDIA-PORTABILITY-01",
     # 2026-08-03 sleep-window: production-default custody hardening deferred
@@ -307,7 +307,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # successor rows and retires RECEIPT-HISTSEM-01: 83 - 1 + 4 = 86;
         # T19 closure #2 retires the CI311 and census PID rows: 86 - 2 = 84;
         # the 2026-08-22 closure retires N-5-RECORD-AMENDMENT (record
-        # amended per cold-pair-166 R2.3): 84 - 1 = 83 exact live records.
+        # amended per cold-pair-166 R2.3): 84 - 1 = 83; the same day closes
+        # CALEXITS-TIMING-HYGIENE (audit delivered) and registers its
+        # successor CALEXITS-HYGIENE-FIXES-01: 83 - 1 + 1 = 83 exact live
+        # records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
         self.assertEqual(len(self.tasks), 83)
 

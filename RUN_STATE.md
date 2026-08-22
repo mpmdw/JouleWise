@@ -10,18 +10,44 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-22 (T20 — Ed-independent drain resumed; still waiting on Ed packet item 1)
+Last updated: 2026-08-22 evening (T20 — THE `_v4` TRANSACTION IS OPEN; mint license granted; next: kernel registrations → S-1 candidate stream → S-0 at the bench)
 
-**T20 (2026-08-22):** N-5-RECORD-AMENDMENT CLOSED (record amended per
-cold-pair-166 R2.3: run-report §2 amendment block + RUN_STATE qualifiers;
-kernel 84→83, gen_state --check green). IN FLIGHT: (a) the A79
-CALEXITS-TIMING-HYGIENE bounded audit (Sol xhigh, read-only →
-scratchpad/calexits-timing-audit.md), (b) the paper results-fill-registry
-re-bind r2 against post-#166 main (Sol high, read-only →
-scratchpad/registry-rebind-r2.md; adoption stays a reviewed step). The
-`_v4` transaction remains BLOCKED SOLELY ON ED PACKET ITEM 1 (mint
-license — settings.local.json unchanged since 08-19, no `_v4` freeze
-rules present).
+**T20 (2026-08-22) — the day the transaction opened.** Ed granted the
+MINT LICENSE in-session and ruled packet items 1-4 (D-150, 73764f0:
+license = live prompts at Ed's hands, NO settings rule exists and none
+is required; HORIZON 168h; V6 marker option (a) custody-external;
+B-δ = unattended-T-0 work order T0-UNATTENDED-01 authorized — `_v4`
+windows gate on its landing). S-0 clone-proof runsheet assembled
+(docs/process_traces/2026-08-22-t20/s0-runsheet-r1.md, lead full read;
+poison question YES → sacrificial pre-mint step; needs r2 revision per
+the rulings below — r1 custodied as-assembled, pre-D-151/marker).
+O-1 (pinset growth vs byte-pin) RULED via a three-round cold gate with
+a full double-crossover: D-151 (2a9257d) — O-1-D versioned-successor
+pinset, successor path = 112th allowlist entry, digest-conditional on
+Ed's step-6 confirmation table, post-window fixation, two-part
+published-green, standing fixed-point rule (no authenticator path ever
+enters any allowlist). Marker co-design RULED (a3f2edf): unified
+step-6 table joins marker + pinset authentication (ONE Ed yes);
+strict four-way head equality; library-boundary publication gate;
+scheduler receipt v2 with G7 (schedgate-ruling amended to seven
+gates). PAPER: results-fill registry RE-BOUND to the post-#166 draft
+and LANDED (1afb9ce, 42 rows, full gauntlet; custody
+docs/process_traces/2026-08-22-t20/registry-rebind-r2.md). CLOSURES:
+A78 N-5-RECORD-AMENDMENT (77f01e5, refuted→cured→delta-ACCEPT);
+CALEXITS-TIMING-HYGIENE (audit
+docs/process_traces/2026-08-22-t20/calexits-timing-audit.md — 7
+mechanisms separate, H1–H9, successor row CALEXITS-HYGIENE-FIXES-01;
+Opus closure refuter SURVIVES with 2 should-fix, both cured + delta-ACCEPT; kernel 83 live). README refreshed
+(1ba04a8). NEXT IN ORDER: (1) kernel txn registering T0-UNATTENDED-01
++ S1-CANDIDATE-01 (= D-151 conds 1/2/6/8 + marker-ruling
+consequences) + S0-RUNSHEET-R2; (2) the S-1 reviewed-candidate
+implementation stream (Sol, worktree, WRITE_SCOPE; marker consumer
+implements the ruled design — co-design DONE, no waiver needed);
+(3) S-0 EXECUTED AT THE LEAD'S BENCH in a throwaway clone (Ed
+approves freeze-command prompts live); (4) S-2..S-5 per r4-7.
+Codex desktop app down → standalone CLI fallback (audited, no pet);
+two Sol background review runs wedged on that transport today —
+prefer MCP route or Opus for reviews until the app returns.
 
 **T19.3 (~06:15 PDT):** calexits closures LANDED (1a15172): CI311 retired
 (fix aedf530 CI-green at b01d9a2 + E-4 retro-review UPHELD),
