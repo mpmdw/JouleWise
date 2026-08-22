@@ -3105,6 +3105,93 @@
       "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. B-46/B-9 (paper + WINDOW_STATUS corrections) are immediate desk items.",
       "stop_card": null
     },
+    "S0-RUNSHEET-R2": {
+      "acceptance": {
+        "evidence": [
+          "Each named revision item is present and cites its ruling",
+          "No step contradicts the D-151 nine-condition set or the marker ruling's ratified baseline",
+          "The lead has read r2 in full before any S-0 command executes"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/S0-RUNSHEET-R2/acceptance",
+          "label": "S0-RUNSHEET-R2 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "An executable r2 runsheet exists whose every step is consistent with D-150, D-151, and the marker ruling, lead-fully-read before S-0 executes."
+      },
+      "authority": {
+        "label": "D-151 consequences + marker ruling consequences",
+        "path": "docs/process_traces/2026-08-22-t20/o1-coldgate/MAGISTRATE-RULING-O1.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the candidate manifest names the successor pinset path",
+          "scope": "close",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "S1-CANDIDATE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Revise the S-0 clone-proof runsheet (r1 custodied at docs/process_traces/2026-08-22-t20/s0-runsheet-r1.md) to r2 per D-151 and the marker ruling: successor-pinset path as the 112th allowlist entry, section 3.7 mints into the successor artifact, the section 4(d) registry-key fix, two-part published-green transcript language, the dead option-(b) marker branch removed per D-150, candidate-mode tool-hash semantics, and the lane/gate_admissible transcript fields.",
+      "id": "S0-RUNSHEET-R2",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 82,
+      "status": "queued",
+      "status_note": "Soft-starts now with the successor filename bound to the candidate manifest; finalizes when S1-CANDIDATE-01 names it.",
+      "stop_card": null
+    },
+    "S1-CANDIDATE-01": {
+      "acceptance": {
+        "evidence": [
+          "Every artifact the S-0 runsheet section 1.3 requires exists with sha256 sidecars and a binding manifest",
+          "D-151 conditions 1, 2, 6, and 8 are each implemented and named in the manifest (chain contract, digest-conditional successor subtraction, chain integrity, registry allowlist key)",
+          "The marker ruling's ratified baseline and all six adjudicated splits are implemented; the regression set is the union of both design seats' lists with a writer-not-reviewer audit"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/S1-CANDIDATE-01/acceptance",
+          "label": "S1-CANDIDATE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The complete S-0 section-1.3 input set exists, lead-reviewed, implementing D-151 conditions 1/2/6/8 and the marker co-design ruling, through the C-028 gauntlet."
+      },
+      "authority": {
+        "label": "D-151 + the marker co-design ruling",
+        "path": "docs/process_traces/2026-08-22-t20/marker-codesign/MAGISTRATE-RULING-MARKER.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-151 fixed-point rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "No authenticator path enters any allowlist; the step-6 confirmation table is an authenticator and may never be allowlisted"
+        },
+        {
+          "authority": {
+            "label": "Standing frozen-surface hazard",
+            "path": "RUN_STATE.md"
+          },
+          "rule": "The four r6-pinned estimator sources stay byte-identical; every WRITE_SCOPE authorization checks that list first"
+        }
+      ],
+      "flags": [],
+      "goal": "Author the lead-reviewed _v4 candidate custody: the R1 candidate registry (112-path allowlist with the successor-pinset path per D-151, refusal vocabulary, D-150 168h horizon values), the pinset chain contract amendment + chain-read code delta, r4-5's two EvidenceLifecycleError catches, and the ruled marker family (schema/builder/verifier, unified step-6 confirmation-table contract doc, reason-code registration + closure check, scheduler gate-receipt v2 with G7, generation-threshold constant, library-boundary publication gate), delivered as s0-candidate.patch + manifest + custody tools with sha256 sidecars.",
+      "id": "S1-CANDIDATE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 81,
+      "status": "queued",
+      "status_note": "The gate on S-0 execution. Design questions are RULED (D-151, marker ruling) — implementation from ruled spec; no re-litigation.",
+      "stop_card": null
+    },
     "SEC5A-REMOTE-01": {
       "acceptance": {
         "evidence": [
@@ -3224,6 +3311,45 @@
       "rank": 17,
       "status": "queued",
       "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
+      "stop_card": null
+    },
+    "T0-UNATTENDED-01": {
+      "acceptance": {
+        "evidence": [
+          "The CLOCK_ATTESTATION evidence path admits the ruled non-operator evidence class in place of operator attestation",
+          "A supervised rehearsal window completes end-to-end with zero operator actions at T-0 and a valid GO receipt",
+          "The D-127 scope amendment is recorded and any Ed-hands sub-item (new sudo) is explicitly surfaced to Ed rather than assumed"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T0-UNATTENDED-01/acceptance",
+          "label": "T0-UNATTENDED-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "D-149 auto-GO executes a complete quiet window with zero operator presence, under the amended D-127 scope, through the full gauntlet."
+      },
+      "authority": {
+        "label": "D-150 item 4 (Ed authorizes the unattended work order) + r4-6 B-delta",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "r4-6 (sudoers item downgraded to observability)",
+            "path": "docs/process_traces/2026-08-20-go-session/v4-plan-ruling-r4draft.md"
+          },
+          "rule": "The sudoers -getusingnetworktime item remains observability-only; hardware/sudo/physical items remain Ed's hands"
+        }
+      ],
+      "flags": [],
+      "goal": "Implement the D-150-authorized unattended-T-0 change: the D-127 privileged-scope amendment plus the code change removing operator attestation from window T-0, so D-149 auto-GO runs fully unattended.",
+      "id": "T0-UNATTENDED-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 80,
+      "status": "queued",
+      "status_note": "Authorized by Ed over attended-T-0. _v4 windows gate on this row's landing (D-150 item 4). Design-bearing: D-144-class consult applies to the evidence-class design.",
       "stop_card": null
     },
     "T3-CHAR-PAIR-01": {

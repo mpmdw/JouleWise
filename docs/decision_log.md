@@ -10156,3 +10156,34 @@ verdict `14-composed-verdict.md`; adopted as D-140 and D-141):
    claims cover ONLY what was actually opened.  Recorded defect: the first
    structural consult's D-7 claimed its anchors resolved while never opening
    `joulewise/arm_readiness.py`.
+
+## D-151: O-1 cold-gate ruling — versioned-successor pinset (O-1-D)
+
+Full ruling and all three cold-pair rounds:
+`docs/process_traces/2026-08-22-t20/o1-coldgate/MAGISTRATE-RULING-O1.md`
+(+ `cold-fable-verdict.md`, `opus-contract-refutation.md`, `o1-packet.md`
+in the same directory — the merged nine-condition set in the Opus
+round-3 §4 is normative). Option 1 (112→113 with the test file
+allowlisted) refuted on V-1(iii)/(vi) mechanism grounds; O-1-D adopted:
+closed code-enumerated pinset chain, successor's exact path as the
+112th allowlist entry, digest-conditional subtraction against Ed's
+step-6 confirmation table, fixation in the first commit after window
+close, two-part published-green recording, mint→fixation registered
+residual. Standing fixed-point rule: no authenticator path ever enters
+any allowlist, in any transaction. The index row carries the operative
+summary; this section exists as the tail-body anchor.
+
+## D-150: Ed rulings 2026-08-22 — the r5 V-7 packet items 1-4
+
+Ed discharged the four transaction-blocking packet items in-session:
+(1) mint license granted, operationalized as live permission prompts at
+Ed's hands (no settings rule exists and none is required under this
+form); (2) horizon 168h for the ten generic freeze-time kinds
+(`r1.execution_bound.freeze_generic_168h.v1`), ruled after the full
+plain-language disclosure chain, with Ed's limitations-section rationale
+recorded; (3) V6 marker = build-at-boundary, custody-external (the
+changed-set contract stays 112); (4) B-δ = the unattended-T-0 D-127
+scope + code change authorized as work order `T0-UNATTENDED-01`;
+`_v4` windows gate on its landing. Items 5-10 of the consolidated
+packet remain open at their own moments. The index row carries the
+operative detail; this section exists as the tail-body anchor.

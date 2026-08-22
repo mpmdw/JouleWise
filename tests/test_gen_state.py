@@ -93,6 +93,9 @@ EXPECTED_IDS = {
     # 2026-08-02 D-105 registration (C3 gauntlet close-out)
     "C3-RECOGNIZER-EXACT-01",
     "CALEXITS-HYGIENE-FIXES-01",
+    # 2026-08-22 T20 _v4-transaction registrations (D-150 item 4; D-151 +
+    # marker-ruling consequences)
+    "T0-UNATTENDED-01", "S1-CANDIDATE-01", "S0-RUNSHEET-R2",
     # 2026-08-02 two-lens extension consult (Ed ratifies S2)
     "NVIDIA-PORTABILITY-01",
     # 2026-08-03 sleep-window: production-default custody hardening deferred
@@ -309,10 +312,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # the 2026-08-22 closure retires N-5-RECORD-AMENDMENT (record
         # amended per cold-pair-166 R2.3): 84 - 1 = 83; the same day closes
         # CALEXITS-TIMING-HYGIENE (audit delivered) and registers its
-        # successor CALEXITS-HYGIENE-FIXES-01: 83 - 1 + 1 = 83 exact live
-        # records.
+        # successor CALEXITS-HYGIENE-FIXES-01: 83 - 1 + 1 = 83; the T20
+        # _v4-transaction wave registers T0-UNATTENDED-01, S1-CANDIDATE-01,
+        # S0-RUNSHEET-R2 (D-150 item 4; D-151 + marker-ruling
+        # consequences): 83 + 3 = 86 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 83)
+        self.assertEqual(len(self.tasks), 86)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
