@@ -1734,45 +1734,6 @@
       "status_note": "Minted 2026-07-29 from Ed's modularity directive. Survey verdict: runtime/telemetry Protocol layer and content-addressed provenance spine are already modular; the gap is campaign authoring above the adapter and literal assertions below the reader. Practical payoff lands with the planned Qwen3 cross-generation follow-up.",
       "stop_card": null
     },
-    "N-5-RECORD-AMENDMENT": {
-      "acceptance": {
-        "evidence": [
-          "The record states that 46d710f is an ancestor of the post-fix a8f1549 recurrence observed under concurrent machine load",
-          "The environment is named and the record leaves incomplete-fix versus load-induced causation open",
-          "The cold-pair-166 ruling and synthesis replace the unqualified N-5 resolved wording"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/N-5-RECORD-AMENDMENT/acceptance",
-          "label": "N-5-RECORD-AMENDMENT acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The N-5 evidence record is amended to disclose its post-fix recurrence under concurrent load without claiming unqualified resolution."
-      },
-      "authority": {
-        "label": "Cold-pair-166 R2 ruling and synthesis (N-5 reclassification)",
-        "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Cold-pair-166 R2.3 N-5 reclassification",
-            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
-          },
-          "rule": "The N-5 record may not continue to say resolved without qualification; preserve the post-fix recurrence and concurrent-load environment"
-        }
-      ],
-      "flags": [],
-      "goal": "Amend the N-5 record so 46d710f's prior resolved wording is qualified by the post-fix recurrence under concurrent machine load at a8f1549, leaving incomplete-fix versus load-induced causation open.",
-      "id": "N-5-RECORD-AMENDMENT",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 78,
-      "status": "queued",
-      "status_note": "Bookkeeping, binding: the recurrence and its concurrent-load environment must remain visible in the evidence record; no new implementation claim is made by this row.",
-      "stop_card": null
-    },
     "NODE-CUSTODY-DEFAULT-01": {
       "acceptance": {
         "evidence": [

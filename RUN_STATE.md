@@ -10,7 +10,18 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-21 ~06:15 PDT (T19.3 — arc fully discharged; waiting on Ed packet item 1)
+Last updated: 2026-08-22 (T20 — Ed-independent drain resumed; still waiting on Ed packet item 1)
+
+**T20 (2026-08-22):** N-5-RECORD-AMENDMENT CLOSED (record amended per
+cold-pair-166 R2.3: run-report §2 amendment block + RUN_STATE qualifiers;
+kernel 84→83, gen_state --check green). IN FLIGHT: (a) the A79
+CALEXITS-TIMING-HYGIENE bounded audit (Sol xhigh, read-only →
+scratchpad/calexits-timing-audit.md), (b) the paper results-fill-registry
+re-bind r2 against post-#166 main (Sol high, read-only →
+scratchpad/registry-rebind-r2.md; adoption stays a reviewed step). The
+`_v4` transaction remains BLOCKED SOLELY ON ED PACKET ITEM 1 (mint
+license — settings.local.json unchanged since 08-19, no `_v4` freeze
+rules present).
 
 **T19.3 (~06:15 PDT):** calexits closures LANDED (1a15172): CI311 retired
 (fix aedf530 CI-green at b01d9a2 + E-4 retro-review UPHELD),
@@ -52,7 +63,8 @@ Corrections of record vs the checkpoint below: codex usage reads 16.0%
 wave, #161 scheduler gates, #162 FRE, #163 PTD, #164 RAC, #165 D-144
 followups+prewindow), each behind a full-canonical gate; three
 councils + four D-144 co-design rulings cold-ratified; the N-5
-canonical flake root-caused and fixed; the B7 paper claim-integrity
+canonical flake root-caused and fixed *(amended 2026-08-22, cold-pair-166
+R2.3: post-fix recurrence at a8f1549 under load; causation open)*; the B7 paper claim-integrity
 ruling landed (stricter reading); kernel at 83 live rows; the `_v4`
 transaction fully specced (r5 + the RH 112-path amendment) and
 BLOCKED SOLELY ON ED PACKET ITEM 1 (mint license — the consolidated
@@ -104,7 +116,10 @@ D-144 co-designed + cold-ratified), #162 (FREEZE-REPLAY-EXPIRY-01),
 standing hazard below), #164 (REAUTHOR-CLEAN-01 via a rule-11
 escalation consult after two same-signature rounds). Also on main:
 the N-5 order-dependent canonical flake root-caused and fixed
-(46d710f); the B7 claim-integrity ruling (superseded-era magnitudes
+(46d710f) *(amended 2026-08-22 per cold-pair-166 R2.3: post-fix
+recurrence at a8f1549 under concurrent load; incomplete-fix vs
+load-induced left open — see the T18/T19 run report §2 amendment)*;
+the B7 claim-integrity ruling (superseded-era magnitudes
 left the paper, stricter reading, b7adb14); WINDOW_STATUS + paper cite
 corrections; the T17 run report; the work-order kernel transaction
 (83 live rows after the evening closure, 0f34a52).
