@@ -74,7 +74,13 @@ a fail-closed replay mismatch, avoided by keeping the vocabularies
 disjoint; mirrored codes carry `mirrored_from`. Gate receipt
 `joulewise.window_scheduler_gate_receipt.v1`, custody-written before
 first capture, bound into the GO receipt by sha. All six gates always
-evaluate (no short-circuit); G5 boot pin evaluates FIRST with
+evaluate (no short-circuit); *(AMENDED 2026-08-22 by the marker
+co-design ruling,
+`docs/process_traces/2026-08-22-t20/marker-codesign/MAGISTRATE-RULING-MARKER.md`:
+the enumeration becomes SEVEN gates — G7 = family-publication — and
+the receipt bumps to `…gate_receipt.v2` with an exact-key
+`family_publication` block; the all-gates-always-evaluate and
+G5-first rules extend to G7 unchanged)* G5 boot pin evaluates FIRST with
 NOT_EVALUATED (never PASS) semantics for monotonic gates across a
 boot mismatch. G1 additionally REFUSES when the :6151 lifecycle check
 is inert (dormant-R1 refusal — the scheduler never trusts a dormant
