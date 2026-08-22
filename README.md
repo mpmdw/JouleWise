@@ -22,48 +22,36 @@ Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-08-20 morning)
+## Current activity (refreshed each work block; last: 2026-08-22)
 
-**Just completed (2026-08-20):** the frozen third-generation campaign
-family and its whole instrument correction passed all four review gates
-and merged to main. The last failing test (written before the freeze
-receipts existed) was repaired through an adversarial review cycle that
-also surfaced, and recorded as future work, a gap in how historical
-receipt claims are re-checked. Two councils then ruled: the reserved
-configuration values of the readiness registry were all decided, but
-their installation was proven — by executed experiment — to break the
-just-frozen family, so they install together with the NEXT campaign
-family instead. That next family is unavoidable anyway: the frozen
-family's readiness evidence carries a 24-hour validity clock that
-expires today, and rebuilding evidence for a frozen family is refused
-by the instrument's own code. The lesson is recorded so the next
-family's schedule is planned around the clock rather than surprised by
-it.
+**Just completed (2026-08-21/22):** the paper's methodology section was
+rewritten to the replication bar — a reader should be able to rebuild
+the mechanism from the text alone — and merged after four review
+rounds. A new verifier landed that re-checks every historical frozen
+pack receipt against the actual repository history it claims, so a
+rewritten or inconsistent receipt chain is refused rather than trusted.
+A family of timing defects in one heavily-raced test module was closed
+out one by one (each with its own recorded cause and fix, none waved
+through as "flaky"), and one earlier "root-caused and fixed" record was
+formally amended after review showed the failure recurred once post-fix
+under heavy machine load — whether the fix was incomplete or the load
+caused it is recorded as an open question, not smoothed over.
 
-**Previously (2026-08-19):** the clock-anchor correction became the
-production instrument, end to end. The estimator whose rate=1 assumption
-was measured and found false is retired from capture; the corrected
-set-membership anchor now labels every new measurement, every stored
-measurement carries a machine-checked record of which capture pipeline
-produced it (old recordings stay auditable forever but can no longer
-support claims — enforced by the instrument, not by policy documents),
-and the calibration policy constants are looked up from the acceptance
-artifact's own registered generation instead of living as copied numbers
-in code. The third generation of campaign packs was produced from the
-frozen second generation without altering a byte of it and is now frozen
-with receipts chaining to its predecessors'. Two science-neutral
-acceptance reissues were forced by the byte-pinning rule along the way;
-each proved itself by replaying all 19 corpus members with zero
-mismatches. The instrument guide was rewritten so every term is built
-before it is used, and the paper's methodology now describes the
-corrected instrument with the transition reported as evidence.
+**In progress (2026-08-22):** two desk audits run while measurement is
+paused — a bounded timing/synchronization sweep of that raced test
+module, and a re-binding of the paper's results-fill registry (the
+document that says exactly which measured artifact is allowed to supply
+each number in the results section) to the current draft, so results
+render the moment real window data exists.
 
-**Next:** the readiness re-audit (a twelve-seat council sitting over
-the repair program, in progress) and the fourth-generation family
-transaction plan (two independent designs in progress), then building
-that family with the registry installed, then the first fresh
-calibration captures and quiet measurement windows under the corrected
-instrument — the data the paper's results tables are waiting for.
+**Next — waiting on one operator action:** building the
+fourth-generation campaign family requires a permission rule that only
+the human operator may install (the instrument's own governance forbids
+the automation from granting itself measurement-freeze rights). Once
+installed: build the family, run the readiness sitting, then the first
+fresh calibration captures and quiet measurement windows under the
+corrected instrument — the data the paper's results tables are waiting
+for.
 ## Current State
 
 Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete
