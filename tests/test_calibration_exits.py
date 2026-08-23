@@ -2710,7 +2710,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "JW_FAKE_HW_MODEL": state["epoch"]["hardware_model"],
             "JW_FAKE_OS_BUILD": state["epoch"]["os_build"],
             "JW_FAKE_TIME_SCALE": "0.025",
-            "JW_FAKE_TIME_ORIGIN": str(time.time()),
+            "JW_FAKE_TIME_ORIGIN": repr(_LOGICAL_WRITER_TEST_ORIGIN_S),
             **self.writer_env_overrides,
         }
 
