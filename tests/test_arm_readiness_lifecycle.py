@@ -56,6 +56,11 @@ PACK_NAME = "d117_floor_qwen25_1p5b_v4"
 # entry that leaves the code: ``_PROFILE_BY_PACK`` keeps it forever (see the
 # ``_plan_profile`` docstring and PostSupersessionLayeringTests below).
 HISTORICAL_PACK_NAME = "d117_floor_qwen25_1p5b_v1"
+_PACK_STEMS_BY_PROFILE = {
+    "ALPHA": "d117_floor_qwen25_1p5b",
+    "BETA": "d117_floor_qwen25_7b",
+    "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b",
+}
 LAUNCH_WINDOW_SPEC = importlib.util.spec_from_file_location(
     "arm_readiness_lifecycle_launch_window",
     ROOT / "scripts/launch_window.py",
@@ -76,6 +81,65 @@ def predecessor_pack_name(pack_name: str) -> str:
     if match is None or int(match.group(1)) < 2:
         raise ValueError(f"{pack_name!r} is not a successor pack ID")
     return f"{pack_name[: match.start()]}_v{int(match.group(1)) - 1}"
+
+
+def fixture_pack_family(pack_name: str) -> dict[str, str]:
+    """Return the three pack IDs at the fixture pack's own generation."""
+
+    generation = readiness._pack_generation(pack_name)
+    return {
+        profile: f"{stem}_v{generation}"
+        for profile, stem in _PACK_STEMS_BY_PROFILE.items()
+    }
+
+
+def fixture_row_registry(pack_name: str) -> bytes:
+    """Render a registry whose exact allowlist names this fixture generation."""
+
+    registry = json.loads((ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes())
+    lifecycle = registry["freeze_evidence_lifecycle"]
+    installed = lifecycle["successor_policy"]["successor_pack_ids"]
+    fixture_family = fixture_pack_family(pack_name)
+    generation = readiness._pack_generation(pack_name)
+    fixture_freeze_ordinal = 2 if generation > 1 else 1
+    replacements = {
+        f"configs/campaigns/{installed[profile]}/": (
+            f"configs/campaigns/{fixture_family[profile]}/"
+        )
+        for profile in fixture_family
+    }
+    rewritten = []
+    for relative in lifecycle["irrelevant_path_allowlist"]:
+        for source, destination in replacements.items():
+            if relative.startswith(source):
+                relative = destination + relative[len(source) :]
+                if relative.endswith(
+                    "/arm_readiness.freeze.receipts/freeze-0004.json"
+                ):
+                    relative = relative.replace(
+                        "freeze-0004.json",
+                        f"freeze-{fixture_freeze_ordinal:04d}.json",
+                    )
+                elif relative.endswith(
+                    "/arm_readiness.freeze.receipts/freeze-0004.json.sha256"
+                ):
+                    relative = relative.replace(
+                        "freeze-0004.json.sha256",
+                        f"freeze-{fixture_freeze_ordinal:04d}.json.sha256",
+                    )
+                break
+        rewritten.append(relative)
+    lifecycle["irrelevant_path_allowlist"] = sorted(rewritten)
+    lifecycle["successor_policy"]["successor_pack_ids"] = fixture_family
+    if generation >= 4:
+        lifecycle["successor_policy"][
+            "family_publication_first_generation"
+        ] = generation
+    else:
+        lifecycle["successor_policy"].pop(
+            "family_publication_first_generation", None
+        )
+    return render_json(registry)
 
 
 def identity_unit_ids_for(profile: str) -> tuple[str, ...]:
@@ -255,10 +319,9 @@ def make_go_fixture(
     schema-valid REFUSE, which is the only lawful way to mint a freeze receipt
     whose recorded REFUSE was caused by a refusing dependency.
 
-    The repository installs the LIVE registry coordinate -- the ruled v2
-    registry, which installs the ``_v4`` successor family.  There is no
-    pre-``_v4`` fixture era: ``load_registry`` reads that one coordinate, so a
-    repository without it cannot be read at all.
+    The repository installs the live registry coordinate with synthetic values
+    rewritten to the fixture's own generation.  That keeps its exact-path
+    allowlist and successor roster coherent with the pack bytes under test.
     """
 
     registry_relative = readiness.ROW_REGISTRY_RELATIVE_PATH
@@ -268,7 +331,7 @@ def make_go_fixture(
     registry_source = ROOT / registry_relative
     registry_target = repo / registry_relative
     registry_target.parent.mkdir(parents=True)
-    registry_target.write_bytes(registry_source.read_bytes())
+    registry_target.write_bytes(fixture_row_registry(pack_name))
     pack.mkdir(parents=True)
     plan_raw = render_json({"plan_id": "plan-test"})
     (pack / "calibration_plan.json").write_bytes(plan_raw)
@@ -580,8 +643,13 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(ArmReadinessError, "arm_readiness.receipts"):
             verify_arm_receipt(pack, wrong_path)
 
-    @unittest.expectedFailure  # S0-BLOCKED: requires minted _v4 packs
+    @unittest.skip(
+        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
+        "R1 requires content/execution receipt schemas"
+    )
     def test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses(self) -> None:
+        """Blocked by legacy-schema evidence installed before ARM generation."""
+
         from tests.test_arm_readiness_dry_run import install_passing_freeze
         from tests.test_arm_readiness_integration import (
             clear_initial_arm,
@@ -676,8 +744,13 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         self.assertEqual(replay.exception.reason_code, "readiness_record_consumed")
         self.assertNotEqual(replay.exception.reason_code, "readiness_lock_unavailable")
 
-    @unittest.expectedFailure  # S0-BLOCKED: requires minted _v4 packs
+    @unittest.skip(
+        "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
+        "R1 requires content/execution receipt schemas"
+    )
     def test_boot_session_change_voids_verification_and_consumption(self) -> None:
+        """Blocked by legacy-schema evidence installed before ARM generation."""
+
         from tests.test_arm_readiness_dry_run import install_passing_freeze
         from tests.test_arm_readiness_integration import (
             clear_initial_arm,
@@ -1245,9 +1318,12 @@ class FreezeSuccessorChainTests(unittest.TestCase):
                 )
 
     # R-6 -------------------------------------------------------------------
-    @unittest.expectedFailure  # S0-BLOCKED: requires minted _v4 packs
+    @unittest.skip(
+        "STRUCTURAL-BLOCKED: synthetic _v4 fixture omits the family-publication "
+        "marker required before self-predecessor validation"
+    )
     def test_self_wrong_role_and_ordinal_violations_refuse(self) -> None:
-        """S0-BLOCKED: requires minted _v4 packs.
+        """Blocked by the synthetic repository's absent family marker.
 
         The self-reference leg mints with the pack as its OWN predecessor.  The
         ruled registry sets ``family_publication_first_generation`` to 4, so a
@@ -1255,8 +1331,9 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         returns a REFUSE record carrying ``readiness_r1_family_publication``
         ("marker_absent: registry-installed family has no marker") instead of
         raising ``readiness_successor_chain_invalid``.  The self-reference
-        property is intact but shadowed until a real ``_v4`` family marker
-        exists, which is S-0's mint.  Confirmed by probe, not inferred.
+        property is intact but shadowed.  ``make_go_fixture`` does not copy a
+        production family marker into its synthetic repository, so minting
+        production pack bytes alone cannot flip this test green.
         """
 
         repo, pack, predecessor = self.successor_fixture()
@@ -2030,19 +2107,32 @@ class PostSupersessionLayeringTests(unittest.TestCase):
                 self.assertTrue(rows)
                 self.assertTrue(kinds)
 
-    @unittest.expectedFailure  # S0-BLOCKED: requires minted _v4 packs
+    @unittest.skip(
+        "STRUCTURAL-BLOCKED: _v3 predecessor is absent from _PROFILE_BY_PACK; "
+        "reconstruction is FIXTURE-MODERNIZATION-01's post-mint item"
+    )
     def test_historical_predecessor_resolves_and_still_anchors_the_chain(
         self,
     ) -> None:
         """Retaining history must not disturb D-139 chain authentication.
 
-        S0-BLOCKED: requires minted _v4 packs.  The assertion below -- that the
-        successor's predecessor is an entry of ``_PROFILE_BY_PACK`` -- holds
+        STRUCTURAL-BLOCKED: the assertion below -- that the successor's
+        predecessor is an entry of ``_PROFILE_BY_PACK`` -- holds
         only for the ``_v2``/``_v1`` pairing.  The ruled registry installs the
         ``_v4`` family, whose predecessor is ``_v3``, and ``_v3`` is neither a
-        historical map entry nor an installed successor.  The pairing cannot be
-        restated until S-0 mints the ``_v4`` generation with its ``_v3``
-        predecessor bytes.
+        historical map entry nor an installed successor.  The `_v3` pack bytes
+        already exist; S-0 cannot add this static code-map entry.
+
+        RULED 2026-08-23 (magistrate): neither retired nor reconstructed now.
+        The property this test names -- that a historical predecessor still
+        anchors the chain across generations -- is real, but reconstructing it
+        needs REAL ``_v4``->``_v3`` receipt chains, which exist only after S-0
+        mints them.  The reconstruction design (replace static map-membership
+        with an authenticated runtime ``_v4``->``_v3`` predecessor proof,
+        supplying a valid synthetic family-publication marker) is assigned to
+        work order FIXTURE-MODERNIZATION-01 as its post-mint item.  This honest
+        structural skip stands until then; do not restate the false
+        map-membership assertion as if it held.
         """
 
         temporary, repo, pack, _custody, _arm = make_go_fixture(PACK_NAME, "ALPHA")

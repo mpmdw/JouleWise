@@ -605,14 +605,6 @@ _R1_SUCCESSOR_POLICY_KEYS = {
     "cross_chain_numbering",
     "freeze_receipt_v2_predecessor_bindings",
     "family_publication_marker_schema",
-}
-_R1_SUCCESSOR_POLICY_OPTIONAL_KEYS = {
-    # Marker-ruling split S-2: the generation at which family publication first
-    # engages is a REVIEWED REGISTRY VALUE, never code prose.  It is optional in
-    # the schema only so that lifecycle registries authored before the `_v4`
-    # transaction still validate; a registry that omits it cannot reach any
-    # family-publication code path, because every reader refuses when it is
-    # absent (see ``_family_first_generation``).
     "family_publication_first_generation",
 }
 _R1_REFUSAL_ENTRY_KEYS = {"role", "code", "type"}
@@ -635,6 +627,9 @@ R1_LIFECYCLE_REGISTRY_PLACEHOLDER = {
         ),
         "family_publication_marker_schema": (
             "ED_RESERVED:family-publication-marker-schema"
+        ),
+        "family_publication_first_generation": (
+            "ED_RESERVED:family-publication-first-generation"
         ),
     },
     "refusal_vocabulary": [
@@ -1835,22 +1830,11 @@ def validate_r1_lifecycle_registry(
         raise ArmReadinessError(
             "readiness_schema_invalid", "R1 successor_policy must be an object"
         )
-    observed_successor_keys = set(raw_successor_policy)
-    if observed_successor_keys - (
-        _R1_SUCCESSOR_POLICY_KEYS | _R1_SUCCESSOR_POLICY_OPTIONAL_KEYS
-    ):
-        raise ArmReadinessError(
-            "readiness_unknown_key",
-            "R1 successor_policy contains keys outside the closed enumeration",
-        )
-    if _R1_SUCCESSOR_POLICY_KEYS - observed_successor_keys:
-        raise ArmReadinessError(
-            "readiness_schema_invalid",
-            "R1 successor_policy is missing required keys",
-        )
-    successor_policy = raw_successor_policy
-    generation = successor_policy.get("family_publication_first_generation")
-    if generation is not None and not (
+    successor_policy = _require_exact_keys(
+        raw_successor_policy, _R1_SUCCESSOR_POLICY_KEYS, "R1 successor_policy"
+    )
+    generation = successor_policy["family_publication_first_generation"]
+    if not (
         (isinstance(generation, str) and generation.startswith(_R1_ED_RESERVED_PREFIX))
         or (
             isinstance(generation, int)
@@ -2033,9 +2017,19 @@ def validate_registry(value: object) -> Mapping[str, Any]:
         )
     if schema == R1_ROW_REGISTRY_SCHEMA:
         _require_string(registry["registry_id"], "registry.registry_id")
-        validate_r1_lifecycle_registry(
+        lifecycle = validate_r1_lifecycle_registry(
             registry["freeze_evidence_lifecycle"], require_registered_codes=True
         )
+        missing_conditional_paths = (
+            R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS
+            - set(lifecycle["irrelevant_path_allowlist"])
+        )
+        if missing_conditional_paths:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                "R1 digest-conditional code paths are absent from the registry "
+                f"allowlist: {sorted(missing_conditional_paths)!r}",
+            )
     profiles = registry["plan_profiles"]
     rows = registry["rows"]
     if not isinstance(profiles, list) or not isinstance(rows, list):
@@ -3174,11 +3168,25 @@ def _validate_histsem_pinset(value: object) -> tuple[Mapping[str, Any], ...]:
 def _load_histsem_pinset(
     repository: Path, pinset_path: Path | str | None = None
 ) -> tuple[Mapping[str, Any], ...]:
-    paths = (
-        tuple(repository / item for item in RECEIPT_HISTSEM_PINSET_RELATIVE_PATH)
-        if pinset_path is None
-        else (Path(pinset_path),)
+    enumerated_paths = tuple(
+        (repository / item).resolve(strict=False)
+        for item in RECEIPT_HISTSEM_PINSET_RELATIVE_PATH
     )
+    if pinset_path is None:
+        paths = enumerated_paths
+    else:
+        supplied_path = Path(pinset_path)
+        supplied = (
+            supplied_path
+            if supplied_path.is_absolute()
+            else repository / supplied_path
+        ).resolve(strict=False)
+        if supplied not in enumerated_paths:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid",
+                "receipt-histsem pinset override is outside the closed enumeration",
+            )
+        paths = (supplied,)
     rows: list[Mapping[str, Any]] = []
     identities: set[tuple[str, str]] = set()
     present = 0
@@ -4194,6 +4202,7 @@ def _require_confirmed_conditional_path(
     registry: Mapping[str, Any],
     confirmation_path: Path | str | None,
     *,
+    expected_confirmation_digest: str | None = None,
     evidence_id: str | None,
 ) -> None:
     """Enforce D-151 condition 2's C -> S edge for one conditional allowlist path.
@@ -4218,21 +4227,17 @@ def _require_confirmed_conditional_path(
             error.__cause__ = cause
         return error
 
-    if confirmation_path is None:
-        raise refuse(
-            "changed at the reviewed HEAD with no step-6 confirmation table supplied"
-        )
     try:
-        table_value, _table_raw = _read_external_canonical(
-            Path(confirmation_path),
-            absent_check="confirmation_missing",
-            invalid_check="confirmation_mismatch",
+        table, _table_raw = _authenticate_confirmation_table(
+            confirmation_path, expected_confirmation_digest
         )
-        table = validate_step6_confirmation_table(table_value)
-    except FamilyPublicationError as exc:
-        raise refuse(
-            f"step-6 confirmation table is inadmissible ({exc.check_id}): {exc}", exc
-        ) from exc
+    except (FamilyPublicationError, ArmReadinessError) as exc:
+        detail = (
+            str(exc)
+            if isinstance(exc, FamilyPublicationError)
+            else f"step-6 confirmation table is inadmissible: {exc}"
+        )
+        raise refuse(detail, exc) from exc
     section = table["successor_pinset"]
     if section["path"] != relative_path:
         raise refuse("the confirmed step-6 table authenticates a different path")
@@ -4258,6 +4263,7 @@ def validate_r1_evidence_lifecycle(
     expected_freshness_class: str,
     plan_tree_path: str,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[str, ...]:
     """Apply R1's changed-set primary gate and manifest conjunct."""
 
@@ -4301,6 +4307,7 @@ def validate_r1_evidence_lifecycle(
             conditional_path,
             governed,
             step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
             evidence_id=str(validated_receipt["evidence_id"]),
         )
         outstanding.discard(conditional_path)
@@ -5269,6 +5276,7 @@ def _authenticate_generic_evidence_item(
     launch_binding_cache: dict[Path, bytes] | None = None,
     lifecycle_registry: Mapping[str, Any] | None = None,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> Mapping[str, Any]:
     _validate_evidence_item(item, "evidence item")
     if item["schema_version"] not in GENERIC_EVIDENCE_RECEIPT_SCHEMAS:
@@ -5462,6 +5470,7 @@ def _authenticate_generic_evidence_item(
             expected_freshness_class=expected_class,
             plan_tree_path=f"{pack_relative}/plan_tree.json",
             step6_confirmation_table=step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
         )
         if expected_class == "RE_DERIVABLE":
             try:
@@ -5488,6 +5497,7 @@ def _discover_evidence(
     launch_binding_cache: dict[Path, bytes] | None = None,
     lifecycle_registry: Mapping[str, Any] | None = None,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]], list[dict[str, Any]]]:
     governed_lifecycle = (
         validate_r1_lifecycle_registry(lifecycle_registry)
@@ -5710,6 +5720,7 @@ def _discover_evidence(
                         now_monotonic_ns=now_monotonic_ns,
                         lifecycle_registry=lifecycle_registry,
                         step6_confirmation_table=step6_confirmation_table,
+                        expected_confirmation_digest=expected_confirmation_digest,
                     )
                 items.append(item)
                 receipts[receipt["evidence_id"]] = receipt
@@ -6259,6 +6270,7 @@ def _load_freeze_reference(
     *,
     require_pass: bool = True,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[Mapping[str, Any], dict[str, Any]]:
     attachments = tree.get("arm_attachments")
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
@@ -6366,6 +6378,7 @@ def _load_freeze_reference(
                 ),
                 lifecycle_registry=lifecycle_registry,
                 step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         )
     identity_items = [
@@ -6469,6 +6482,7 @@ def _freeze_evidence_for_arm(
     registry: Mapping[str, Any] | None = None,
     *,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]]]:
     items = copy.deepcopy(list(freeze_receipt["evidence"]))
     receipts: dict[str, Mapping[str, Any]] = {}
@@ -6497,6 +6511,7 @@ def _freeze_evidence_for_arm(
                 expected_head_commit=expected_head,
                 lifecycle_registry=lifecycle_registry,
                 step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         elif item["schema_version"] == IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA:
             if item != plan_identity_item or plan_identity_receipt is None:
@@ -6519,6 +6534,7 @@ def generate_freeze_receipt(
     predecessor_pack_root: Path | str | None = None,
     family_publication_marker: Path | str | None = None,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Write or idempotently authenticate the pack's non-authorizing receipt.
 
@@ -6526,6 +6542,12 @@ def generate_freeze_receipt(
     its predecessor pack.  Every ID, digest, ordinal, and conclusion in the
     resulting ``predecessor`` binding is derived here from committed bytes; the
     caller supplies paths only.
+
+    During the intended `_v4` ordering the successor histsem pinset does not
+    exist at freeze time, so there is no digest-conditional changed path to
+    subtract and an absent confirmation digest is harmless.  Once that pinset
+    exists, the same replay path requires both the table and its out-of-band
+    expected digest and fails closed without them.
     """
 
     root = Path(pack_root).resolve(strict=True)
@@ -6548,21 +6570,20 @@ def generate_freeze_receipt(
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
     _valid_plan_attachment(readiness, registry_reference)
     generation = _pack_generation(root.name)
-    # Split S-2: engage on the REGISTRY's generation threshold, and only when
-    # the registry actually carries one.  A registry without the reviewed value
-    # never engages family publication (the `_v1`..`_v3` generations).
-    family_first_generation: int | None
-    try:
-        family_first_generation = _family_first_generation(registry)
-    except ArmReadinessError:
-        family_first_generation = None
+    # Split S-2: engage on the REGISTRY's mandatory generation threshold.  A
+    # threshold-less registry is invalid at load time, so freeze can never skip
+    # publication through a dormant configuration.
+    family_first_generation = _family_first_generation(registry)
     # Resolve the predecessor ONCE, and refuse with the governed code rather
     # than letting a bare OSError escape.  The strict resolve used to sit
     # inside the gate condition below, where an absent directory raised
     # FileNotFoundError straight out of generate_freeze_receipt.  That was
     # unreachable while no registry carried a generation threshold (the `and`
     # short-circuited on `family_first_generation is None`); the ruled registry
-    # supplies one, so the expression is now evaluated on every call.
+    # supplies one, so the expression is now evaluated on every call.  This is
+    # an intentional fail-closed scope expansion from predecessor-only guarded
+    # resolution: every supplied predecessor is now resolved before the gate
+    # predicate, even when its generation would not engage publication.
     predecessor_root: Path | None = None
     if predecessor_pack_root is not None:
         try:
@@ -6573,7 +6594,6 @@ def generate_freeze_receipt(
             ) from exc
     if (
         predecessor_root is not None
-        and family_first_generation is not None
         and _pack_generation(predecessor_root.name) >= family_first_generation
     ):
         try:
@@ -6581,6 +6601,7 @@ def generate_freeze_receipt(
                 predecessor_root,
                 marker_path=family_publication_marker,
                 confirmation_path=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         except FamilyPublicationError as exc:
             predecessor_registry, _raw = load_registry(
@@ -6631,14 +6652,26 @@ def generate_freeze_receipt(
         # predecessor chain, so ancestry is never the only thing checked.
         # ``require_pass`` stays False because a recorded REFUSE must replay as
         # the REFUSE it is rather than raise.
-        _load_freeze_reference(
-            root,
-            tree,
-            registry_reference,
-            registry,
-            require_pass=False,
-            step6_confirmation_table=step6_confirmation_table,
-        )
+        try:
+            _load_freeze_reference(
+                root,
+                tree,
+                registry_reference,
+                registry,
+                require_pass=False,
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
+            )
+        except EvidenceLifecycleError as exc:
+            return {
+                "status": "REFUSE",
+                "arm_disposition": "NOT_APPLICABLE",
+                "receipt_path": None,
+                "receipt_sha256": None,
+                "reason_codes": [exc.reason_code],
+                "detail": str(exc),
+                "mutated": False,
+            }
         if (
             latest["receipt"]["schema_version"] == FREEZE_RECEIPT_V2_SCHEMA
             and predecessor_pack_root is not None
@@ -6702,6 +6735,7 @@ def generate_freeze_receipt(
             else None
         ),
         step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     identity_item, identity_receipt, identity_reasons = _load_frozen_identity_evidence(
         root, tree
@@ -7278,6 +7312,7 @@ def generate_arm_receipt(
     validity_ns: int = 300_000_000_000,
     family_publication_marker: Path | str | None = None,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     root = Path(pack_root).resolve(strict=True)
     try:
@@ -7307,14 +7342,25 @@ def generate_arm_receipt(
     reviewed = reviewed_main(root)
     tree, _tree_raw = _plan_tree(root)
     registry, _registry_raw, registry_reference = _registry_reference(root)
-    freeze_receipt, freeze_reference = _load_freeze_reference(
-        root,
-        tree,
-        registry_reference,
-        registry,
-        require_pass=False,
-        step6_confirmation_table=confirmation_path,
-    )
+    try:
+        freeze_receipt, freeze_reference = _load_freeze_reference(
+            root,
+            tree,
+            registry_reference,
+            registry,
+            require_pass=False,
+            step6_confirmation_table=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except EvidenceLifecycleError as exc:
+        return {
+            "status": "REFUSE",
+            "arm_disposition": "NO_GO",
+            "receipt_path": None,
+            "receipt_sha256": None,
+            "reason_codes": [exc.reason_code],
+            "detail": str(exc),
+        }
     custody_root = Path(window_custody_root).resolve()
     custody_pack_root = custody_root / root.name
     arm_namespace = custody_pack_root / "arm_readiness.receipts"
@@ -7338,12 +7384,14 @@ def generate_arm_receipt(
         include_pack=False,
         lifecycle_registry=lifecycle_registry,
         step6_confirmation_table=confirmation_path,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     try:
         _gate_family_publication(
             root,
             marker_path=marker_path,
             confirmation_path=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
         )
     except FamilyPublicationError:
         entry = _family_refusal_entry(registry)
@@ -7362,6 +7410,7 @@ def generate_arm_receipt(
             freeze_receipt,
             registry,
             step6_confirmation_table=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
         )
     except EvidenceLifecycleError as exc:
         evidence_refusals.append(exc.refusal())
@@ -7510,6 +7559,8 @@ def _derive_arm_semantics_for_verification(
     receipt: Mapping[str, Any],
     *,
     launch_binding_cache: dict[Path, bytes] | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     pack = _pack_record(root)
     if receipt["pack"] != pack:
@@ -7531,15 +7582,23 @@ def _derive_arm_semantics_for_verification(
             "arm receipt registry binding differs from committed bytes",
         )
     publication_root = custody_pack_root.parent / "family_publication"
-    confirmation_path = publication_root / STEP6_CONFIRMATION_TABLE_NAME
-    freeze_receipt, freeze_reference = _load_freeze_reference(
-        root,
-        tree,
-        registry_reference,
-        registry,
-        require_pass=False,
-        step6_confirmation_table=confirmation_path,
+    confirmation_path = (
+        Path(step6_confirmation_table)
+        if step6_confirmation_table is not None
+        else publication_root / STEP6_CONFIRMATION_TABLE_NAME
     )
+    try:
+        freeze_receipt, freeze_reference = _load_freeze_reference(
+            root,
+            tree,
+            registry_reference,
+            registry,
+            require_pass=False,
+            step6_confirmation_table=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except EvidenceLifecycleError as exc:
+        raise ArmReadinessError(exc.reason_code, str(exc)) from exc
     if receipt["freeze_receipt"] != freeze_reference:
         raise ArmReadinessError(
             "readiness_freeze_receipt_mismatch",
@@ -7561,12 +7620,14 @@ def _derive_arm_semantics_for_verification(
             else None
         ),
         step6_confirmation_table=confirmation_path,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     try:
         _gate_family_publication(
             root,
             marker_path=publication_root / FAMILY_PUBLICATION_MARKER_NAME,
             confirmation_path=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
         )
     except FamilyPublicationError:
         entry = _family_refusal_entry(registry)
@@ -7585,6 +7646,7 @@ def _derive_arm_semantics_for_verification(
             freeze_receipt,
             registry,
             step6_confirmation_table=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
         )
     except EvidenceLifecycleError as exc:
         evidence_refusals.append(exc.refusal())
@@ -7739,6 +7801,8 @@ def _verify_arm_receipt(
     *,
     require_unconsumed: bool,
     launch_binding_cache: dict[Path, bytes] | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     root = Path(pack_root).resolve(strict=True)
     path = Path(arm_receipt).resolve(strict=True)
@@ -7816,6 +7880,8 @@ def _verify_arm_receipt(
         custody_pack_root,
         receipt,
         launch_binding_cache=launch_binding_cache,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     if receipt["rows"] != expected_rows or receipt["refusals"] != expected_refusals:
         raise ArmReadinessError(
@@ -7840,10 +7906,18 @@ def _verify_arm_receipt(
 
 
 def verify_arm_receipt(
-    pack_root: Path | str, arm_receipt: Path | str
+    pack_root: Path | str,
+    arm_receipt: Path | str,
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     return _verify_arm_receipt(
-        pack_root, arm_receipt, require_unconsumed=True
+        pack_root,
+        arm_receipt,
+        require_unconsumed=True,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
 
 
@@ -8321,6 +8395,8 @@ def _replay_consumed_arm(
     require_unexpired: bool,
     replay_arm_semantics: bool,
     launch_binding_cache: dict[Path, bytes] | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[Mapping[str, Any], Path, Path, Mapping[str, Any]]:
     arm_reference = consumption["arm_receipt"]
     arm_path = consumption_path.parent.parent / str(arm_reference["path"])
@@ -8415,6 +8491,8 @@ def _replay_consumed_arm(
                 consumption_path.parent.parent,
                 arm,
                 launch_binding_cache=launch_binding_cache,
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         except ArmReadinessError as exc:
             raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
@@ -8438,6 +8516,8 @@ def verify_consumed_launch(
     launch_manifest: Path | str | None = None,
     expected_exec_argv: Sequence[str] | None = None,
     require_current_boot: bool = True,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Replay a v2 consumption without treating its arm as unconsumed."""
 
@@ -8457,6 +8537,8 @@ def verify_consumed_launch(
         require_unexpired=require_current_boot,
         replay_arm_semantics=require_current_boot,
         launch_binding_cache=launch_binding_cache,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     expected_identity = {
         "pack_id": pack["pack_id"],
@@ -8564,6 +8646,8 @@ def _consume_launch_capability(
     window_chain_sha256: str = _MISSING_LAUNCH_CONTEXT,
     exec_argv: Sequence[str] = _MISSING_LAUNCH_CONTEXT,
     handoff_token_sha256: str = _MISSING_LAUNCH_CONTEXT,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Reauthenticate complete launch inputs, then atomically claim one GO."""
 
@@ -8629,6 +8713,8 @@ def _consume_launch_capability(
         arm_receipt,
         require_unconsumed=False,
         launch_binding_cache=launch_binding_cache,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     root = Path(pack_root).resolve(strict=True)
     receipt_path = Path(arm_receipt).resolve(strict=True)
@@ -9988,7 +10074,11 @@ def validate_step6_confirmation_table(value: object) -> Mapping[str, Any]:
         or table["family_id"] != "d117-v4"
     ):
         raise FamilyPublicationError("confirmation_mismatch", "confirmation constants differ")
-    _require_string(table["transaction_id"], "confirmation transaction_id")
+    if not isinstance(table["transaction_id"], str) or not table["transaction_id"]:
+        raise FamilyPublicationError(
+            "confirmation_mismatch",
+            "confirmation transaction_id must be a nonempty string",
+        )
     git = _family_exact(
         table["git"], frozenset({"head_commit", "head_tree_oid"}), "confirmation git"
     )
@@ -10178,6 +10268,7 @@ def _family_member(
     registry_reference: Mapping[str, Any],
     *,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[dict[str, Any], set[str]]:
     # A roster member that cannot be resolved or read at all is a family
     # diagnosis too.  Without these two wrappers the failure escapes as a bare
@@ -10204,11 +10295,14 @@ def _family_member(
             registry,
             require_pass=True,
             step6_confirmation_table=step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
         )
+    except EvidenceLifecycleError as exc:
+        raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
     except ArmReadinessError as exc:
         if exc.reason_code == "readiness_successor_chain_invalid":
             raise FamilyPublicationError("predecessor_mismatch", str(exc)) from exc
-        raise
+        raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
     if freeze["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA:
         raise FamilyPublicationError("freeze_binding_mismatch", "family freeze must use schema v2")
     if freeze["receipt_id"] != "freeze-0004" or freeze["status"] != "PASS":
@@ -10220,6 +10314,7 @@ def _family_member(
             freeze,
             registry,
             step6_confirmation_table=step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
         )
     except (ArmReadinessError, EvidenceLifecycleError) as exc:
         raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
@@ -10453,12 +10548,61 @@ def _read_external_canonical(
     return value, raw
 
 
+def _authenticate_confirmation_table(
+    confirmation_path: Path | str | None,
+    expected_confirmation_digest: str | None,
+) -> tuple[Mapping[str, Any], bytes]:
+    """Authenticate Ed's table with the out-of-band digest of record.
+
+    The adjacent sidecar is checked first by ``_read_external_canonical`` as a
+    transport-integrity guard.  It is not an authenticator because it is made
+    from the same bytes it accompanies.  Only the operator-supplied digest can
+    authenticate the table, and no table semantics are parsed or trusted until
+    that digest matches.
+    """
+
+    if expected_confirmation_digest is None:
+        raise FamilyPublicationError(
+            "confirmation_missing", "no expected confirmation digest supplied"
+        )
+    if (
+        not isinstance(expected_confirmation_digest, str)
+        or _LOWER_SHA256_RE.fullmatch(expected_confirmation_digest) is None
+    ):
+        raise FamilyPublicationError(
+            "confirmation_mismatch",
+            "supplied expected confirmation digest is malformed",
+        )
+    if confirmation_path is None:
+        raise FamilyPublicationError(
+            "confirmation_missing", "no step-6 confirmation table supplied"
+        )
+    table_value, table_raw = _read_external_canonical(
+        Path(confirmation_path),
+        absent_check="confirmation_missing",
+        invalid_check="confirmation_mismatch",
+    )
+    if sha256_bytes(table_raw) != expected_confirmation_digest:
+        raise FamilyPublicationError(
+            "confirmation_mismatch",
+            "table bytes differ from the expected confirmation digest",
+        )
+    try:
+        table = validate_step6_confirmation_table(table_value)
+    except ArmReadinessError as exc:
+        # Keep the public family-publication boundary closed even if a shared
+        # primitive validator acquires another ArmReadinessError path later.
+        raise FamilyPublicationError("confirmation_mismatch", str(exc)) from exc
+    return table, table_raw
+
+
 def verify_family_publication_marker(
     repository_root: Path | str,
     marker_path: Path | str,
     *,
     phase: str,
     confirmation_path: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
     target_pack_root: Path | str | None = None,
     consumer_tool: Path | str | None = None,
     candidate_manifest: Path | str | None = None,
@@ -10522,6 +10666,12 @@ def verify_family_publication_marker(
     expected_roster = registry["freeze_evidence_lifecycle"]["successor_policy"]["successor_pack_ids"]
     if {member["profile"]: member["pack_id"] for member in marker["members"]} != dict(expected_roster):
         raise FamilyPublicationError("roster_mismatch", "current registry roster differs from marker")
+    table: Mapping[str, Any] | None = None
+    table_raw: bytes | None = None
+    if phase != "candidate":
+        table, table_raw = _authenticate_confirmation_table(
+            confirmation_path, expected_confirmation_digest
+        )
     common_heads: set[str] = set()
     for expected_member in marker["members"]:
         root = repository / str(expected_member["pack_path"])
@@ -10538,6 +10688,9 @@ def verify_family_publication_marker(
             reference,
             step6_confirmation_table=(
                 confirmation_path if phase != "candidate" else None
+            ),
+            expected_confirmation_digest=(
+                expected_confirmation_digest if phase != "candidate" else None
             ),
         )
         if observed != expected_member:
@@ -10586,14 +10739,7 @@ def verify_family_publication_marker(
 
     confirmation_ref: dict[str, str] | None = None
     if phase != "candidate":
-        if confirmation_path is None:
-            raise FamilyPublicationError("confirmation_missing", "published phase requires step-6 table")
-        table_value, table_raw = _read_external_canonical(
-            Path(confirmation_path),
-            absent_check="confirmation_missing",
-            invalid_check="confirmation_mismatch",
-        )
-        table = validate_step6_confirmation_table(table_value)
+        assert table is not None and table_raw is not None
         expected_members = [
             {
                 "profile": member["profile"],
@@ -10727,33 +10873,48 @@ def _gate_family_publication(
     *,
     marker_path: Path | str | None,
     confirmation_path: Path | str | None,
+    expected_confirmation_digest: str | None = None,
 ) -> None:
     """Engage from the tracked successor roster, never marker presence."""
 
-    repository = _repo_for_pack(pack_root)
-    registry, _raw = load_registry(repository)
-    roster = set(
-        registry["freeze_evidence_lifecycle"]["successor_policy"][
-            "successor_pack_ids"
-        ].values()
-    )
-    if pack_root.name not in roster:
-        return
-    if marker_path is None:
-        raise FamilyPublicationError("marker_absent", "registry-installed family has no marker")
-    require_gate_admissible_verification(
-        verify_family_publication_marker(
-            repository,
-            marker_path,
-            phase="pre-arm",
-            confirmation_path=confirmation_path,
-            target_pack_root=pack_root,
+    try:
+        repository = _repo_for_pack(pack_root)
+        registry, _raw = load_registry(repository)
+        roster = set(
+            registry["freeze_evidence_lifecycle"]["successor_policy"][
+                "successor_pack_ids"
+            ].values()
         )
-    )
+        if pack_root.name not in roster:
+            return
+        if marker_path is None:
+            raise FamilyPublicationError(
+                "marker_absent", "registry-installed family has no marker"
+            )
+        require_gate_admissible_verification(
+            verify_family_publication_marker(
+                repository,
+                marker_path,
+                phase="pre-arm",
+                confirmation_path=confirmation_path,
+                expected_confirmation_digest=expected_confirmation_digest,
+                target_pack_root=pack_root,
+            )
+        )
+    except FamilyPublicationError:
+        raise
+    except EvidenceLifecycleError as exc:
+        raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("registry_mismatch", str(exc)) from exc
 
 
 def verify_receipt(
-    pack_root: Path | str, receipt_path: Path | str
+    pack_root: Path | str,
+    receipt_path: Path | str,
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     path = Path(receipt_path)
     try:
@@ -10776,7 +10937,12 @@ def verify_receipt(
         )
     schema = value.get("schema_version")
     if schema == ARM_RECEIPT_SCHEMA:
-        return verify_arm_receipt(pack_root, path)
+        return verify_arm_receipt(
+            pack_root,
+            path,
+            step6_confirmation_table=step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
     if schema == DRY_RUN_RECEIPT_SCHEMA:
         validate_dry_run_receipt(value)
         raise ArmReadinessError(

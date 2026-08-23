@@ -40,6 +40,27 @@ the final bytes including the literal proposed `YES`, computes `hC`, and
 presents both. Ed's yes names `hC`; publication promotes the same bytes
 without mutation.
 
+The adjacent `.sha256` sidecar is **transport integrity only, never
+authentication**. It is computed from the same bytes it accompanies, so a
+producer who forges `C` can trivially produce a matching sidecar. The sidecar
+detects truncation or corruption in transit and provides a cheap early
+refusal; it does not establish that the bytes are the bytes Ed confirmed.
+
+The authenticator of record is `hC = SHA256(C)`, supplied **out of band** by
+the operator to every consumer through its explicit
+`expected-confirmation-digest` input. “Out of band” means that the expected
+digest comes from transaction custody independently of the repository path
+being checked, rather than from `C` or its sidecar. A consumer that is not
+given `hC` refuses: it performs no changed-set subtraction and authorizes no
+publication. After fixation, the standing source of `hC` is the literal pinned
+in the D-151 fixation commit.
+
+`hC` must never be stored at a repository path that the changed-set allowlist
+could name while the window is open. Under D-151's fixed-point rule, putting an
+authenticator inside the set it authenticates is a tripwire event, not an
+amendment lane: the repository bytes could then replace both the subject and
+its alleged authenticator together.
+
 ## Exact schema
 
 Every object below is exact-key. Integers reject booleans. Digests are 64
@@ -131,20 +152,29 @@ For such a path the gate subtracts it only when all of the following hold:
 1. a step-6 confirmation table path was supplied to the gate (the arm, freeze,
    verification, and marker-replay entry points pass the same custody path they
    already pass to the family-publication gate);
-2. that file and its `.sha256` sidecar are present, readable, canonical, and
-   mutually consistent;
-3. the file validates against this contract in full;
-4. its `successor_pinset.path` equals the path under test; and
-5. the SHA-256 of the bytes **committed at the reviewed HEAD** for that path
+2. the operator supplied `hC` separately through the consumer's explicit
+   `expected-confirmation-digest` input;
+3. that expected digest is exactly 64 lowercase hexadecimal characters;
+4. that file and its `.sha256` sidecar are present, readable, canonical, and
+   mutually consistent (the sidecar check is transport integrity only);
+5. the SHA-256 of the exact table bytes equals the out-of-band `hC`;
+6. only after that equality succeeds, the file validates against this contract
+   in full;
+7. its `successor_pinset.path` equals the path under test; and
+8. the SHA-256 of the bytes **committed at the reviewed HEAD** for that path
    equals `successor_pinset.sha256`.
 
 If any one of those fails, the path stays in the relevant set and the gate
 refuses with the pre-existing `DEPENDENCY_CHANGED_SET` role — no new refusal
-code is introduced (D-151 condition 1e). Worked consequence: once fixation
-commits the minted pinset, an arm whose evidence predates that commit passes
-only while the committed bytes still hash to the digest Ed signed; any later
-rewrite of that file — benign or hostile — turns every such arm into a
-`DEPENDENCY_CHANGED_SET` refusal until Ed signs a new table.
+code is introduced (D-151 condition 1e). The same authenticated table input is
+required at the marker/publication boundary; there absence maps to
+`confirmation_missing`, while a malformed or unequal expected digest maps to
+`confirmation_mismatch`. Worked consequence: once fixation commits the minted
+pinset, an arm whose evidence predates that commit passes only while (a) the
+table bytes hash to the operator-supplied `hC` and (b) the committed pinset
+bytes still hash to the digest inside that authenticated table. Any later
+rewrite of either file refuses until the operator supplies a newly confirmed
+out-of-band digest.
 
 ## Candidate and publication lanes
 

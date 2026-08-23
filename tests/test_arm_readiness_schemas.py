@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import inspect
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any, Callable, Mapping
+from unittest import mock
 
 import joulewise.arm_readiness as readiness
 from joulewise import identity_pins
@@ -397,7 +397,25 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         self.assertEqual(vocabulary["FAMILY_PUBLICATION"], {
             "role": "FAMILY_PUBLICATION", "code": "readiness_r1_family_publication", "type": "CUSTODY"
         })
-        self.assertEqual(set(item["code"] for item in vocabulary.values()), readiness.READINESS_REASON_CODES & set(item["code"] for item in vocabulary.values()))
+        self.assertLessEqual(
+            {item["code"] for item in vocabulary.values()},
+            readiness.READINESS_REASON_CODES,
+        )
+
+    def test_registry_load_closes_conditional_code_paths_against_allowlist(self) -> None:
+        registry, _raw = load_registry(ROOT)
+        with mock.patch.object(
+            readiness,
+            "R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS",
+            readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS
+            | {"configs/arm_readiness/not-in-registry.json"},
+        ):
+            with self.assertRaises(ArmReadinessError) as caught:
+                validate_registry(registry)
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_row_registry_mismatch"
+        )
+        self.assertIn("absent from the registry allowlist", str(caught.exception))
 
     def test_archival_v1_registry_is_sha_pinned(self) -> None:
         raw = (ROOT / "configs/arm_readiness/d117_row_registry_v1.json").read_bytes()
@@ -417,14 +435,52 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             validate_registry(mistyped)
 
     def test_r4_evidence_lifecycle_escape_sites_are_caught(self) -> None:
-        for function in (
-            readiness.generate_arm_receipt,
-            readiness._derive_arm_semantics_for_verification,
-        ):
-            source = inspect.getsource(function)
-            self.assertIn("except EvidenceLifecycleError as exc:", source)
-            self.assertIn("_freeze_evidence_for_arm", source)
-            self.assertIn("evidence_refusals.append(exc.refusal())", source)
+        registry, _raw = load_registry(ROOT)
+        lifecycle = registry["freeze_evidence_lifecycle"]
+        escaped = readiness.EvidenceLifecycleError(
+            lifecycle, "DEPENDENCY_CHANGED_SET", "corrupt confirmation custody"
+        )
+        pack = {"pack_id": "synthetic", "pack_sha256": "a" * 64}
+        reviewed = {"head_commit": "b" * 40}
+        reference = {
+            "registry_id": registry["registry_id"],
+            "path": readiness.ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+            "sha256": "c" * 64,
+            "plan_profile": "ALPHA",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "pack"
+            root.mkdir()
+            with (
+                mock.patch.object(readiness, "_gate_receipt_histsem", return_value=None),
+                mock.patch.object(readiness, "validate_arm_context", return_value={}),
+                mock.patch.object(readiness, "_pack_record", return_value=pack),
+                mock.patch.object(readiness, "reviewed_main", return_value=reviewed),
+                mock.patch.object(readiness, "_plan_tree", return_value=({}, b"{}\n")),
+                mock.patch.object(
+                    readiness,
+                    "_registry_reference",
+                    return_value=(registry, b"{}\n", reference),
+                ),
+                mock.patch.object(
+                    readiness, "_load_freeze_reference", side_effect=escaped
+                ),
+            ):
+                result = readiness.generate_arm_receipt(root, {}, Path(temporary))
+                self.assertEqual(
+                    result["reason_codes"], [escaped.reason_code]
+                )
+
+                receipt = {
+                    "pack": pack,
+                    "reviewed_main": reviewed,
+                    "row_registry": reference,
+                }
+                with self.assertRaises(ArmReadinessError) as caught:
+                    readiness._derive_arm_semantics_for_verification(
+                        root, Path(temporary) / "custody" / root.name, receipt
+                    )
+                self.assertEqual(caught.exception.reason_code, escaped.reason_code)
 
     maxDiff = None
 

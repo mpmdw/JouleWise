@@ -30,6 +30,11 @@ pack_path)` anywhere across present members refuses `histsem_pinset_invalid`.
 Each present member retains schema `joulewise.receipt_histsem_pinset.v1`; the
 chain contract does not mutate that artifact schema.
 
+The optional verifier/CLI pinset-path selector may select one member of this
+same code-enumerated chain for a focused check; it is not an override lane. A
+path outside the enumeration refuses `histsem_pinset_invalid`, even when its
+bytes are an exact copy of an enumerated member.
+
 The in-library gate runs before custody output in both entry points:
 
 - `generate_arm_receipt` verifies the governed pack being armed.

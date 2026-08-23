@@ -25,6 +25,7 @@ def _parser() -> argparse.ArgumentParser:
         default="candidate",
     )
     parser.add_argument("--confirmation", type=Path)
+    parser.add_argument("--expected-confirmation-digest")
     # Split S-5: candidate mode authenticates the executing tools against the
     # reviewed $INPUT manifest; every other phase requires committed-blob
     # equality. Nothing on disk can switch lanes -- only --phase can.
@@ -51,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
             args.marker,
             phase=args.phase,
             confirmation_path=args.confirmation,
+            expected_confirmation_digest=args.expected_confirmation_digest,
             target_pack_root=args.target_pack_root,
             consumer_tool=Path(__file__),
             candidate_manifest=args.candidate_manifest,

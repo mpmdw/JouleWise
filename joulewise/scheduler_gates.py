@@ -855,6 +855,7 @@ def _evaluate_g7(
     family_id: str,
     marker_path: Path,
     confirmation_path: Path,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     observations: dict[str, Any] = {
         "phase": "pre-arm",
@@ -867,6 +868,7 @@ def _evaluate_g7(
             marker_path,
             phase="pre-arm",
             confirmation_path=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
             target_pack_root=pack_root,
         )
         # The receipt must be able to gate before anything downstream records
@@ -889,13 +891,11 @@ def _evaluate_g7(
                 arm_readiness.sha256_bytes(verification_raw), verification_path.name
             ),
         )
-        marker_sha = arm_readiness.sha256_bytes(marker_path.read_bytes())
-        confirmation_sha = arm_readiness.sha256_bytes(confirmation_path.read_bytes())
         block = {
             "family_id": family_id,
-            "marker_path": str(marker_path),
-            "marker_sha256": marker_sha,
-            "confirmation_sha256": confirmation_sha,
+            "marker_path": result["marker"]["path"],
+            "marker_sha256": result["marker"]["sha256"],
+            "confirmation_sha256": result["confirmation"]["sha256"],
             "verification_receipt": {
                 "path": str(verification_path),
                 "sha256": arm_readiness.sha256_bytes(verification_raw),
@@ -933,7 +933,11 @@ def _evaluate_g7(
             ),
             block,
         )
-    except (OSError, arm_readiness.ArmReadinessError) as exc:
+    except (
+        OSError,
+        arm_readiness.ArmReadinessError,
+        arm_readiness.EvidenceLifecycleError,
+    ) as exc:
         wrapped = arm_readiness.FamilyPublicationError("registry_mismatch", str(exc))
         return _evaluate_g7_refusal(family_id, observations, wrapped)
 
@@ -987,6 +991,7 @@ def evaluate_scheduler_gates(
     now_monotonic_ns: int | None = None,
     family_publication_marker: Path | str | None = None,
     step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate every scheduler gate and return a strict staged receipt.
 
@@ -1038,6 +1043,7 @@ def evaluate_scheduler_gates(
         family_id=family_id,
         marker_path=marker_path,
         confirmation_path=confirmation_path,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
 
     # Pack authentication is not a scheduler gate and cannot be represented as

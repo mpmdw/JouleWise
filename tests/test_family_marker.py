@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
-import inspect
 import json
 import subprocess
 import tempfile
@@ -290,16 +290,6 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
             readiness.require_gate_admissible_verification(refused)
         self.assertEqual(caught.exception.check_id, "lane_inadmissible")
 
-        # Both live consumers call it.
-        for function in (
-            readiness._gate_family_publication,
-            scheduler_gates._evaluate_g7,
-        ):
-            self.assertIn(
-                "require_gate_admissible_verification",
-                inspect.getsource(function),
-            )
-
     def test_diagnostic_check_ids_are_exact_closed_enumeration(self) -> None:
         """The set is exact, and every member is reachable.
 
@@ -345,28 +335,67 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
         the two custody tools.
         """
 
-        sources = "\n".join(
-            (ROOT / relative).read_text(encoding="utf-8")
+        trees = [
+            ast.parse((ROOT / relative).read_text(encoding="utf-8"))
             for relative in (
                 "joulewise/arm_readiness.py",
                 "joulewise/scheduler_gates.py",
                 "scripts/build_family_marker.py",
                 "scripts/verify_family_marker.py",
             )
-        )
-        raised = {
-            check_id
-            for check_id in readiness.FAMILY_PUBLICATION_CHECK_IDS
-            if f'FamilyPublicationError(\n            "{check_id}"' in sources
-            or f'FamilyPublicationError("{check_id}"' in sources
-            or f'FamilyPublicationError(\n                "{check_id}"' in sources
-            or f'digest_check="{check_id}"' in sources
-            or f'absent_check="{check_id}"' in sources
-            or f'invalid_check="{check_id}"' in sources
-            or f'noncanonical_check="{check_id}"' in sources
-            or f'FamilyPublicationError(diagnostic' in sources
-            and check_id in {"worktree_dirty", "head_mismatch"}
-        }
+        ]
+        raised: set[str] = set()
+        for tree in trees:
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                callee = (
+                    node.func.attr
+                    if isinstance(node.func, ast.Attribute)
+                    else node.func.id
+                    if isinstance(node.func, ast.Name)
+                    else None
+                )
+                if callee == "FamilyPublicationError" and node.args:
+                    first = node.args[0]
+                    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                        raised.add(first.value)
+                if callee == "_read_external_canonical":
+                    for keyword in node.keywords:
+                        if (
+                            keyword.arg
+                            in {
+                                "absent_check",
+                                "invalid_check",
+                                "noncanonical_check",
+                                "digest_check",
+                            }
+                            and isinstance(keyword.value, ast.Constant)
+                            and isinstance(keyword.value.value, str)
+                        ):
+                            raised.add(keyword.value.value)
+
+            # The builder's reviewed-main split is deliberately dynamic, but
+            # its two alternatives are still closed AST literals rather than a
+            # free-form variable that could launder arbitrary check ids.
+            assignments = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name) and target.id == "diagnostic"
+                    for target in node.targets
+                )
+            ]
+            for assignment in assignments:
+                if isinstance(assignment.value, ast.IfExp):
+                    alternatives = (assignment.value.body, assignment.value.orelse)
+                    if all(
+                        isinstance(item, ast.Constant)
+                        and isinstance(item.value, str)
+                        for item in alternatives
+                    ):
+                        raised.update(item.value for item in alternatives)
         self.assertEqual(
             readiness.FAMILY_PUBLICATION_CHECK_IDS - raised,
             set(),
@@ -375,6 +404,28 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
 
 
 class FamilyMarkerMechanismTests(unittest.TestCase):
+    def test_family_member_converts_lifecycle_escape_to_family_diagnostic(self) -> None:
+        registry, _raw = readiness.load_registry(ROOT)
+        lifecycle = registry["freeze_evidence_lifecycle"]
+        escaped = readiness.EvidenceLifecycleError(
+            lifecycle, "DEPENDENCY_CHANGED_SET", "corrupt confirmation custody"
+        )
+        with (
+            mock.patch.object(readiness, "_plan_profile", return_value="ALPHA"),
+            mock.patch.object(readiness, "_plan_tree", return_value=({}, b"{}\n")),
+            mock.patch.object(
+                readiness, "_load_freeze_reference", side_effect=escaped
+            ),
+        ):
+            with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                readiness._family_member(
+                    ROOT,
+                    ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v4",
+                    registry,
+                    {},
+                )
+        self.assertEqual(caught.exception.check_id, "evidence_set_mismatch")
+
     def test_marker_deletion_cannot_disengage_registry_installed_family(self) -> None:
         registry = json.loads((ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes())
         with (
@@ -425,9 +476,11 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             readiness.ArmReadinessError, "generation threshold"
         ):
             readiness._family_first_generation(dormant)
-        # ...and the registry still validates without it, so pre-_v4 lifecycle
-        # registries are unaffected rather than broken.
-        readiness.validate_registry(dormant)
+        with self.assertRaises(readiness.ArmReadinessError) as invalid:
+            readiness.validate_registry(dormant)
+        self.assertEqual(
+            invalid.exception.reason_code, "readiness_schema_invalid"
+        )
 
     def test_freeze_gate_engages_only_on_the_predecessor_at_or_above_threshold(
         self,
@@ -451,17 +504,38 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for name in ("d117_floor_qwen25_1p5b_v3", "d117_floor_qwen25_1p5b_v4"):
+            for name in (
+                "d117_floor_qwen25_1p5b_v3",
+                "d117_floor_qwen25_1p5b_v4",
+                "d117_floor_qwen25_1p5b_v5",
+            ):
                 (root / name).mkdir()
             with (
                 mock.patch.object(readiness, "_gate_family_publication", record),
                 mock.patch.object(
                     readiness, "_gate_receipt_histsem", return_value=None
                 ),
+                mock.patch.object(readiness, "_plan_tree", return_value=({}, b"{}\n")),
                 mock.patch.object(
-                    readiness, "_plan_tree", side_effect=readiness.ArmReadinessError(
-                        "readiness_schema_invalid", "fixture stops after the gate"
-                    )
+                    readiness,
+                    "_registry_reference",
+                    return_value=(
+                        registry,
+                        readiness.render_json(registry),
+                        {
+                            "registry_id": registry["registry_id"],
+                            "path": readiness.ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+                            "sha256": digest("registry"),
+                            "plan_profile": "ALPHA",
+                        },
+                    ),
+                ),
+                mock.patch.object(readiness, "_valid_plan_attachment", return_value=None),
+                mock.patch.object(readiness, "_repo_for_pack", return_value=ROOT),
+                mock.patch.object(
+                    readiness,
+                    "load_registry",
+                    return_value=(registry, readiness.render_json(registry)),
                 ),
             ):
                 # No predecessor: the gate is not consulted at all -- the
@@ -471,6 +545,17 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
                         root / "d117_floor_qwen25_1p5b_v4"
                     )
                 self.assertEqual(calls, [])
+
+                refusal = readiness.generate_freeze_receipt(
+                    root / "d117_floor_qwen25_1p5b_v5",
+                    predecessor_pack_root=root / "d117_floor_qwen25_1p5b_v4",
+                )
+                self.assertEqual(
+                    refusal["reason_codes"], ["readiness_r1_family_publication"]
+                )
+                self.assertEqual(
+                    calls, [(root / "d117_floor_qwen25_1p5b_v4").resolve()]
+                )
 
         self.assertEqual(
             readiness._family_first_generation(registry), 4,
@@ -510,16 +595,37 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             readiness.REASON_TYPE_BY_CODE["readiness_r1_family_publication"],
             "CUSTODY",
         )
-        for function in (
-            readiness.generate_arm_receipt,
-            readiness._derive_arm_semantics_for_verification,
+        registry_value = json.loads(
+            (ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes()
+        )
+        with (
+            mock.patch.object(readiness, "_repo_for_pack", return_value=ROOT),
+            mock.patch.object(
+                readiness,
+                "load_registry",
+                return_value=(
+                    registry_value,
+                    readiness.render_json(registry_value),
+                ),
+            ),
         ):
-            source = inspect.getsource(function)
-            self.assertIn("_gate_family_publication", source)
-            self.assertNotIn("scheduler_gates", source)
-            self.assertIn('"code": entry["code"]', source)
+            with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                readiness._gate_family_publication(
+                    Path("d117_floor_qwen25_1p5b_v4"),
+                    marker_path=None,
+                    confirmation_path=None,
+                )
+        self.assertEqual(caught.exception.check_id, "marker_absent")
 
     def test_candidate_cli_refuses_absent_marker_without_traceback(self) -> None:
+        help_result = subprocess.run(
+            ("python3", "scripts/verify_family_marker.py", "--help"),
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("--expected-confirmation-digest", help_result.stdout)
         completed = subprocess.run(
             (
                 "python3", "scripts/verify_family_marker.py", "--repository", ".",
@@ -647,9 +753,6 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         )
         for option in ("--repository", "--head", "--pack-root", "--output"):
             self.assertIn(option, completed.stdout)
-        source = inspect.getsource(readiness.build_family_publication_marker)
-        self.assertIn("output.relative_to(repository)", source)
-        self.assertIn("output_collision", source)
 
 
     def test_custody_tool_sidecars_exist_and_are_current(self) -> None:
@@ -754,6 +857,50 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
         )
         return path
 
+    def published_artifacts(
+        self, repository: Path, custody: Path
+    ) -> tuple[dict[str, object], Path, Path, str, dict[str, object]]:
+        value = self.live_marker(repository)
+        live = readiness.reviewed_main(repository)
+        value["common_evidence_git"] = {
+            "head_commit": live["head_commit"],
+            "head_tree_oid": live["head_tree_oid"],
+        }
+        marker_path = self.write_marker(custody, value)
+        table = confirmation(readiness.sha256_bytes(marker_path.read_bytes()))
+        table["git"] = {
+            "head_commit": live["head_commit"],
+            "head_tree_oid": live["head_tree_oid"],
+        }
+        table["registry"]["sha256"] = value["lifecycle_registry"]["sha256"]
+        table["family_publication"]["members"] = [
+            {
+                "profile": item["profile"],
+                "pack_id": item["pack_id"],
+                "pack_sha256": item["pack_sha256"],
+                "freeze_receipt_sha256": item["freeze_receipt"]["sha256"],
+            }
+            for item in value["members"]
+        ]
+        table_path = custody / readiness.STEP6_CONFIRMATION_TABLE_NAME
+        table_raw = readiness.render_json(table)
+        table_path.write_bytes(table_raw)
+        table_path.with_name(f"{table_path.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(
+                readiness.sha256_bytes(table_raw), table_path.name
+            )
+        )
+        for item in value["members"]:
+            (repository / str(item["pack_path"])).mkdir(parents=True, exist_ok=True)
+        by_id = {str(item["pack_id"]): item for item in value["members"]}
+        return (
+            value,
+            marker_path,
+            table_path,
+            readiness.sha256_bytes(table_raw),
+            by_id,
+        )
+
     def verify(self, repository: Path, marker_path: Path):
         return readiness.verify_family_publication_marker(
             repository, marker_path, phase="candidate"
@@ -763,6 +910,120 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
         with self.assertRaises(readiness.FamilyPublicationError) as caught:
             self.verify(repository, marker_path)
         return caught.exception.check_id
+
+    def test_published_verifier_requires_and_authenticates_out_of_band_digest(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository, custody = self.fixture_repository(Path(temporary))
+            value, marker_path, table_path, table_digest, by_id = (
+                self.published_artifacts(repository, custody)
+            )
+            common_head = str(value["common_evidence_git"]["head_commit"])
+
+            def replay(_repository, root, _registry, _reference, **_kwargs):
+                return copy.deepcopy(by_id[root.name]), {common_head}
+
+            with mock.patch.object(readiness, "_family_member", side_effect=replay):
+                # Candidate lane remains independent of C and hC.
+                candidate = readiness.verify_family_publication_marker(
+                    repository, marker_path, phase="candidate"
+                )
+                self.assertFalse(candidate["gate_admissible"])
+
+                for label, expected, check_id in (
+                    (
+                        "self-consistent ED/YES table without hC",
+                        None,
+                        "confirmation_missing",
+                    ),
+                    ("wrong hC", "0" * 64, "confirmation_mismatch"),
+                ):
+                    with self.subTest(case=label):
+                        with self.assertRaises(
+                            readiness.FamilyPublicationError
+                        ) as caught:
+                            readiness.verify_family_publication_marker(
+                                repository,
+                                marker_path,
+                                phase="publication",
+                                confirmation_path=table_path,
+                                expected_confirmation_digest=expected,
+                            )
+                        self.assertEqual(caught.exception.check_id, check_id)
+
+                verified = readiness.verify_family_publication_marker(
+                    repository,
+                    marker_path,
+                    phase="publication",
+                    confirmation_path=table_path,
+                    expected_confirmation_digest=table_digest,
+                )
+                self.assertTrue(verified["gate_admissible"])
+                self.assertEqual(
+                    verified["confirmation"]["sha256"], table_digest
+                )
+
+                malformed = json.loads(table_path.read_bytes())
+                malformed["transaction_id"] = []
+                malformed_raw = readiness.render_json(malformed)
+                table_path.write_bytes(malformed_raw)
+                table_path.with_name(f"{table_path.name}.sha256").write_bytes(
+                    readiness.gnu_sidecar(
+                        readiness.sha256_bytes(malformed_raw), table_path.name
+                    )
+                )
+                with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                    readiness.verify_family_publication_marker(
+                        repository,
+                        marker_path,
+                        phase="publication",
+                        confirmation_path=table_path,
+                        expected_confirmation_digest=readiness.sha256_bytes(
+                            malformed_raw
+                        ),
+                    )
+                self.assertEqual(
+                    caught.exception.check_id, "confirmation_mismatch"
+                )
+
+    def test_library_gate_requires_and_authenticates_out_of_band_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository, custody = self.fixture_repository(Path(temporary))
+            value, marker_path, table_path, table_digest, by_id = (
+                self.published_artifacts(repository, custody)
+            )
+            common_head = str(value["common_evidence_git"]["head_commit"])
+            target = repository / str(value["members"][0]["pack_path"])
+
+            def replay(_repository, root, _registry, _reference, **_kwargs):
+                return copy.deepcopy(by_id[root.name]), {common_head}
+
+            with mock.patch.object(readiness, "_family_member", side_effect=replay):
+                for label, expected, check_id in (
+                    ("digest absent", None, "confirmation_missing"),
+                    ("digest wrong", "0" * 64, "confirmation_mismatch"),
+                ):
+                    with self.subTest(case=label):
+                        with self.assertRaises(
+                            readiness.FamilyPublicationError
+                        ) as caught:
+                            readiness._gate_family_publication(
+                                target,
+                                marker_path=marker_path,
+                                confirmation_path=table_path,
+                                expected_confirmation_digest=expected,
+                            )
+                        self.assertEqual(caught.exception.check_id, check_id)
+
+                self.assertIsNone(
+                    readiness._gate_family_publication(
+                        target,
+                        marker_path=marker_path,
+                        confirmation_path=table_path,
+                        expected_confirmation_digest=table_digest,
+                    )
+                )
 
     def test_live_fixture_tamper_ladder_reaches_each_specific_diagnostic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

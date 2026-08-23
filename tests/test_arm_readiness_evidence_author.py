@@ -480,22 +480,19 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 receipt = readiness.validate_evidence_receipt(
                     readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
                 )
-                # R1 split the single generic receipt in two, and the schema key
-                # sets are the authority (joulewise/arm_readiness.py:463-497):
-                # CONTENT_EVIDENCE_RECEIPT_KEYS omits boot_session_id because a
-                # re-derivable artifact is not bound to a boot session, while
-                # EXECUTION_EVIDENCE_RECEIPT_KEYS adds it back for the
-                # boot-bound kinds.  The old single-shape expectation predates
-                # that split; asserting per-schema is the faithful form.
+                # Exact-key schema validation above already owns the absence of
+                # boot fields from content receipts.  Independently pin the
+                # positive boot binding carried by every execution receipt.
                 if (
                     receipt["schema_version"]
-                    == readiness.CONTENT_EVIDENCE_RECEIPT_SCHEMA
+                    == readiness.EXECUTION_EVIDENCE_RECEIPT_SCHEMA
                 ):
-                    self.assertNotIn("boot_session_id", receipt)
-                else:
                     self.assertEqual(
                         receipt["boot_session_id"], TEST_BOOT_SESSION_ID
                     )
+            git(_repository, "add", ".")
+            git(_repository, "commit", "-qm", "authored evidence")
+            git(_repository, "update-ref", "refs/remotes/origin/main", "HEAD")
             second = author_arm_readiness_evidence(pack)
             self.assertFalse(second["mutated"])
             after = {
@@ -507,13 +504,27 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 for path in directory.iterdir()
             }
             self.assertEqual(before, after)
-            with mock.patch.object(
-                readiness,
-                "_current_boot_session_id",
-                return_value=OTHER_BOOT_SESSION_ID,
-            ):
-                with self.assertRaisesRegex(EvidenceAuthoringError, "stale"):
-                    author_arm_readiness_evidence(pack)
+            execution_receipt = next(
+                readiness.validate_evidence_receipt(
+                    readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
+                )
+                for path in (pack / evidence._EVIDENCE_DIRECTORY).glob("*.json")
+                if readiness.parse_json_bytes(
+                    path.read_bytes(), require_canonical=True
+                )["schema_version"]
+                == readiness.EXECUTION_EVIDENCE_RECEIPT_SCHEMA
+            )
+            with self.assertRaisesRegex(
+                readiness.ArmReadinessError,
+                "EXECUTION_BOUND evidence is outside its boot/horizon binding",
+            ) as stale:
+                readiness.validate_r1_class_lifecycle(
+                    execution_receipt,
+                    execution_receipt["kind"],
+                    current_boot_session_id=OTHER_BOOT_SESSION_ID,
+                    now_monotonic_ns=100,
+                )
+            self.assertEqual(stale.exception.reason_code, "readiness_record_expired")
 
     def test_uncommitted_authoring_file_refuses_before_writing_output(self) -> None:
         temporary, repository, pack, _custody, _arm_path = make_author_fixture()
@@ -568,14 +579,10 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         }
         source = pack / evidence._SOURCE_DIRECTORY / "doctrine-pin.json"
         source.write_bytes(source.read_bytes() + b" ")
-        # Under R1 the division of labour is explicit: the INTEGRITY gates own
-        # an incoherent tamper (untracked directory, disk-vs-committed bytes,
-        # a moved reviewed HEAD), and authoring re-derivation owns the tamper
-        # that survives all of them.  A tamper left uncommitted would therefore
-        # be caught by a gate and never reach the check this test exists to
-        # prove.  The commit_case idiom -- commit, then advance the reviewed
-        # origin ref -- presents the doctored pack the way an operator actually
-        # would, so every integrity gate passes and only re-derivation is left.
+        # Commit and review the tamper so pack custody admits the staged bytes.
+        # The fixture registry's exact allowlist names this fixture generation,
+        # so the authored-path commit reaches the source/receipt integrity check
+        # instead of being misclassified as an unrelated changed dependency.
         git(repository, "add", ".")
         git(repository, "commit", "-qm", "authored evidence, tampered source")
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
@@ -615,6 +622,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         receipt = readiness.parse_json_bytes(
             receipt_path.read_bytes(), require_canonical=True
         )
+        receipt["dependency_manifest_sha256"] = hashlib.sha256(source_raw).hexdigest()
         for fact in receipt["facts"]:
             fact["source_sha256"] = hashlib.sha256(source_raw).hexdigest()
         receipt_raw = readiness.render_json(receipt)
@@ -624,14 +632,10 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 hashlib.sha256(receipt_raw).hexdigest(), receipt_path.name
             )
         )
-        # This is the COHERENT rewrite: source, receipt facts and sidecar are
-        # all rewritten to agree with one another.  Under R1 the integrity
-        # gates own INCOHERENT tampers (untracked directory, disk-vs-committed
-        # bytes, a moved reviewed HEAD); a lie that is internally consistent
-        # passes every one of them, and semantic re-derivation is the only
-        # thing left that can catch it.  The commit_case idiom -- commit, then
-        # advance the reviewed origin ref -- puts the fixture in exactly that
-        # world, which is the adversary this test exists to model.
+        # This is the COHERENT rewrite: source, receipt facts, and sidecar agree.
+        # Committing it creates the authored-path changed set; the fixture's
+        # pack-exact allowlist deliberately admits that set.  Semantic replay
+        # must therefore reject the internally consistent lie.
         git(repository, "add", ".")
         git(repository, "commit", "-qm", "authored evidence, coordinated rewrite")
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
@@ -644,7 +648,8 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             for path in directory.iterdir()
         }
         with self.assertRaisesRegex(
-            EvidenceAuthoringError, "differs from freshly derived bytes"
+            EvidenceAuthoringError,
+            "DOCTRINE_PIN ARM re-derivation differs from authored semantics",
         ):
             author_arm_readiness_evidence(pack)
         self.assertEqual(
@@ -1265,6 +1270,9 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             1,
         )
         self.assertEqual(receipt["receipt_id"], "freeze-0002")
+        git(repository, "add", "--", pack_relative)
+        git(repository, "commit", "-qm", "freeze synthetic successor")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         # F1 (delta-8): idempotent replay must re-authenticate the CURRENT
         # successor in full, not only its ancestry.  One appended byte in any
         # binding the receipt names must refuse instead of replaying PASS with

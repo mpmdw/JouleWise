@@ -158,7 +158,13 @@ class SchedulerGateReceiptTests(unittest.TestCase):
         receipt = self._evaluate()
         by_id = {gate["gate_id"]: gate for gate in receipt["gates"]}
         self.assertEqual(by_id["G7"]["verdict"], "REFUSE")
-        self.assertIn(by_id["G7"]["refusals"][0]["code"], gates.G7_REASON_CODES)
+        self.assertEqual(
+            by_id["G7"]["refusals"][0]["code"],
+            "scheduler_family_marker_invalid",
+        )
+        self.assertEqual(
+            by_id["G7"]["observations"]["diagnostic"], "registry_mismatch"
+        )
         publication = receipt["family_publication"]
         self.assertEqual(publication["verdict"], "REFUSE")
         for name in (
@@ -209,6 +215,14 @@ class SchedulerGateReceiptTests(unittest.TestCase):
             "status": "PASS",
             "family_id": "family-1",
             "consulted_git": reviewed,
+            "marker": {
+                "path": str(marker_path),
+                "sha256": "d" * 64,
+            },
+            "confirmation": {
+                "path": str(confirmation_path),
+                "sha256": "e" * 64,
+            },
         }
         pack = {"pack_id": "pack", "pack_sha256": "c" * 64}
         with (
@@ -229,20 +243,18 @@ class SchedulerGateReceiptTests(unittest.TestCase):
                 window_class="SHAKEDOWN",
                 receipt_boot_session_ids={"evidence-1": BOOT_A},
                 now_monotonic_ns=123,
+                expected_confirmation_digest="e" * 64,
             )
         publication = receipt["family_publication"]
         self.assertEqual(publication["verdict"], "PASS")
         self.assertEqual(publication["marker_path"], str(marker_path))
-        # Gap G-8 item 4: assert digest EQUALITY against the real bytes on
-        # disk, not merely 64-hex shape.  A shape assertion passes against a
-        # block that binds some other artifact's digest entirely.
         self.assertEqual(
             publication["marker_sha256"],
-            hashlib.sha256(marker_path.read_bytes()).hexdigest(),
+            verified["marker"]["sha256"],
         )
         self.assertEqual(
             publication["confirmation_sha256"],
-            hashlib.sha256(confirmation_path.read_bytes()).hexdigest(),
+            verified["confirmation"]["sha256"],
         )
         written = Path(publication["verification_receipt"]["path"])
         self.assertEqual(
@@ -265,6 +277,110 @@ class SchedulerGateReceiptTests(unittest.TestCase):
         )
         self.assertEqual(receipt["gates"][-1]["gate_id"], "G7")
         self.assertEqual(receipt["gates"][-1]["verdict"], "PASS")
+
+    def test_g7_requires_and_threads_the_out_of_band_confirmation_digest(self) -> None:
+        publication_root = self.campaign_root / "family_publication"
+        publication_root.mkdir()
+        marker_path = publication_root / arm_readiness.FAMILY_PUBLICATION_MARKER_NAME
+        confirmation_path = publication_root / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
+        marker_path.write_bytes(b"verified marker bytes")
+        confirmation_path.write_bytes(b"verified confirmation bytes")
+        correct = hashlib.sha256(confirmation_path.read_bytes()).hexdigest()
+        reviewed = {"head_commit": "a" * 40}
+        verified = {
+            "schema_version": arm_readiness.FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
+            "receipt_kind": "family_publication_verification",
+            "phase": "pre-arm",
+            "lane": "published",
+            "gate_admissible": True,
+            "publication_authorized": True,
+            "status": "PASS",
+            "family_id": "family-1",
+            "consulted_git": reviewed,
+            "marker": {
+                "path": str(marker_path),
+                "sha256": hashlib.sha256(marker_path.read_bytes()).hexdigest(),
+            },
+            "confirmation": {
+                "path": str(confirmation_path),
+                "sha256": correct,
+            },
+        }
+
+        def verify(*_args, **kwargs):
+            supplied = kwargs["expected_confirmation_digest"]
+            if supplied is None:
+                raise arm_readiness.FamilyPublicationError(
+                    "confirmation_missing",
+                    "no expected confirmation digest supplied",
+                )
+            if supplied != correct:
+                raise arm_readiness.FamilyPublicationError(
+                    "confirmation_mismatch",
+                    "table bytes differ from the expected confirmation digest",
+                )
+            return verified
+
+        with mock.patch.object(
+            arm_readiness, "verify_family_publication_marker", side_effect=verify
+        ):
+            for label, supplied, expected_code in (
+                ("absent", None, "scheduler_family_confirmation_absent"),
+                ("wrong", "0" * 64, "scheduler_family_confirmation_invalid"),
+            ):
+                with self.subTest(case=label):
+                    gate, block = gates._evaluate_g7(
+                        repository=self.root,
+                        pack_root=self.pack_root,
+                        campaign_root=self.campaign_root,
+                        family_id="family-1",
+                        marker_path=marker_path,
+                        confirmation_path=confirmation_path,
+                        expected_confirmation_digest=supplied,
+                    )
+                    self.assertEqual(gate["verdict"], "REFUSE")
+                    self.assertEqual(gate["refusals"][0]["code"], expected_code)
+                    self.assertEqual(block["verdict"], "REFUSE")
+
+            gate, block = gates._evaluate_g7(
+                repository=self.root,
+                pack_root=self.pack_root,
+                campaign_root=self.campaign_root,
+                family_id="family-1",
+                marker_path=marker_path,
+                confirmation_path=confirmation_path,
+                expected_confirmation_digest=correct,
+            )
+            self.assertEqual(gate["verdict"], "PASS")
+            self.assertEqual(block["confirmation_sha256"], correct)
+
+    def test_g7_converts_evidence_lifecycle_escape_to_governed_refusal(self) -> None:
+        registry, _raw = arm_readiness.load_registry(
+            Path(__file__).resolve().parents[1]
+        )
+        lifecycle = registry["freeze_evidence_lifecycle"]
+        escaped = arm_readiness.EvidenceLifecycleError(
+            lifecycle, "DEPENDENCY_CHANGED_SET", "corrupt confirmation custody"
+        )
+        with mock.patch.object(
+            arm_readiness,
+            "verify_family_publication_marker",
+            side_effect=escaped,
+        ):
+            gate, block = gates._evaluate_g7(
+                repository=self.root,
+                pack_root=self.pack_root,
+                campaign_root=self.campaign_root,
+                family_id="family-1",
+                marker_path=self.root / "marker.json",
+                confirmation_path=self.root / "confirmation.json",
+                expected_confirmation_digest="0" * 64,
+            )
+        self.assertEqual(gate["verdict"], "REFUSE")
+        self.assertEqual(
+            gate["refusals"][0]["code"], "scheduler_family_marker_invalid"
+        )
+        self.assertEqual(block["verdict"], "REFUSE")
 
     def test_candidate_lane_verification_cannot_launder_into_a_g7_pass(self) -> None:
         """Gap G-6 at the scheduler.
@@ -297,17 +413,23 @@ class SchedulerGateReceiptTests(unittest.TestCase):
             "consulted_git": reviewed,
         }
         cases = {
-            "honest candidate receipt": dict(
+            "honest candidate receipt": (
+                dict(
                 base, phase="candidate", lane="candidate",
                 gate_admissible=False, publication_authorized=False,
+                ),
+                "lane_inadmissible",
             ),
-            "candidate receipt relabelled published": dict(
+            "candidate receipt relabelled published": (
+                dict(
                 base, phase="candidate", lane="published",
                 gate_admissible=True, publication_authorized=True,
+                ),
+                "lane_inconsistent",
             ),
         }
         pack = {"pack_id": "pack", "pack_sha256": "c" * 64}
-        for label, verified in cases.items():
+        for label, (verified, expected_diagnostic) in cases.items():
             with self.subTest(case=label):
                 with (
                     mock.patch.object(gates, "_live_boot_session_id", return_value=BOOT_A),
@@ -335,9 +457,8 @@ class SchedulerGateReceiptTests(unittest.TestCase):
                 g7 = receipt["gates"][-1]
                 self.assertEqual(g7["gate_id"], "G7")
                 self.assertEqual(g7["verdict"], "REFUSE")
-                self.assertIn(
-                    g7["observations"]["diagnostic"],
-                    {"lane_inadmissible", "lane_inconsistent"},
+                self.assertEqual(
+                    g7["observations"]["diagnostic"], expected_diagnostic
                 )
 
     def test_g7_scheduler_code_map_covers_every_branch(self) -> None:
@@ -349,23 +470,27 @@ class SchedulerGateReceiptTests(unittest.TestCase):
         """
 
         expected = {
-            "marker_absent": "scheduler_family_marker_absent",
-            "confirmation_missing": "scheduler_family_confirmation_absent",
-            "confirmation_mismatch": "scheduler_family_confirmation_invalid",
-            "head_unpublished": "scheduler_family_unpublished",
-            "family_incoherent": "scheduler_family_boot_pin_mismatch",
-            "marker_schema_mismatch": "scheduler_family_marker_invalid",
+            check_id: "scheduler_family_marker_invalid"
+            for check_id in arm_readiness.FAMILY_PUBLICATION_CHECK_IDS
         }
+        expected.update(
+            {
+                "marker_absent": "scheduler_family_marker_absent",
+                "confirmation_missing": "scheduler_family_confirmation_absent",
+                "confirmation_mismatch": "scheduler_family_confirmation_invalid",
+                "head_unpublished": "scheduler_family_unpublished",
+                "family_incoherent": "scheduler_family_boot_pin_mismatch",
+            }
+        )
         for check_id, code in expected.items():
             with self.subTest(check_id=check_id):
                 self.assertEqual(gates._g7_scheduler_code(check_id), code)
                 self.assertIn(code, gates.G7_REASON_CODES)
         self.assertEqual(set(expected.values()), set(gates.G7_REASON_CODES))
-        # Every closed marker diagnostic maps to a registered G7 reason code,
-        # so no refusal can reach the receipt with an unregistered code.
-        for check_id in arm_readiness.FAMILY_PUBLICATION_CHECK_IDS:
-            with self.subTest(check_id=check_id):
-                self.assertIn(gates._g7_scheduler_code(check_id), gates.G7_REASON_CODES)
+        self.assertEqual(
+            gates._g7_scheduler_code("banana"),
+            "scheduler_family_marker_invalid",
+        )
 
     def test_receipt_rejects_unknown_root_and_gate_keys(self) -> None:
         receipt = self._evaluate()

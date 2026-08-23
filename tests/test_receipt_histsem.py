@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import subprocess
 import tempfile
+import tokenize
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -125,8 +127,13 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         ):
             self.assertIn(option, completed.stdout)
         source = (ROOT / "scripts/build_v4_histsem_pinset.py").read_text(encoding="utf-8")
+        uncommented = "".join(
+            token.string
+            for token in tokenize.generate_tokens(io.StringIO(source).readline)
+            if token.type != tokenize.COMMENT
+        )
         for forbidden in ("fetch", "unshallow", "--update", "checkout"):
-            self.assertNotIn(forbidden, source)
+            self.assertNotIn(forbidden, uncommented)
 
     def test_pinset_is_byte_pinned_and_has_no_update_lane(self) -> None:
         self.assertEqual(hashlib.sha256(PINSET.read_bytes()).hexdigest(), PINSET_SHA256)
@@ -153,7 +160,7 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 2)
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["status"], "REFUSE")
-        self.assertEqual(payload["reason_codes"], ["histsem_pinset_absent"])
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
         self.assertEqual(completed.stdout, render_json(payload))
 
     def test_differential_self_test_all_nine_packs(self) -> None:
@@ -208,9 +215,14 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             for expected, mutate in cases.items():
                 with self.subTest(expected=expected):
                     pinset = write_pinset(root / f"{expected}.json", mutate)
+                    rows = readiness._validate_histsem_pinset(
+                        readiness.parse_json_bytes(
+                            pinset.read_bytes(), require_canonical=True
+                        )
+                    )
                     with self.assertRaises(HistoricalSemanticsError) as caught:
                         verify_receipt_histsem_pack(
-                            REPRESENTATIVE_PACK, pinset_path=pinset
+                            REPRESENTATIVE_PACK, _pinset_rows=rows
                         )
                     self.assertEqual(caught.exception.reason_code, expected)
 
@@ -218,7 +230,17 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
                 verify_receipt_histsem_pack(
                     REPRESENTATIVE_PACK, pinset_path=root / "absent.json"
                 )
-            self.assertEqual(caught.exception.reason_code, "histsem_pinset_absent")
+            self.assertEqual(caught.exception.reason_code, "histsem_pinset_invalid")
+
+            copied = root / "copied-valid-pinset.json"
+            copied.write_bytes(PINSET.read_bytes())
+            with self.assertRaises(HistoricalSemanticsError) as copied_refusal:
+                verify_receipt_histsem_pack(
+                    REPRESENTATIVE_PACK, pinset_path=copied
+                )
+            self.assertEqual(
+                copied_refusal.exception.reason_code, "histsem_pinset_invalid"
+            )
 
     def test_vocabulary_is_disjoint_closed_and_each_code_constructs(self) -> None:
         self.assertFalse(HISTSEM_REASON_CODES & READINESS_REASON_CODES)
@@ -563,6 +585,7 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
         derivation = git(repository, "rev-parse", "HEAD").stdout.strip()
         source, receipt = content_source_and_receipt(repository, derivation)
         registry = lifecycle_registry(allowlist=(self.SUCCESSOR,))
+        registry["successor_policy"]["family_publication_first_generation"] = 4
         return repository, custody, registry, source, receipt
 
     def commit_successor(self, repository: Path, payload: bytes) -> tuple[str, str]:
@@ -583,7 +606,16 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
         value["successor_pinset"].update(overrides)
         return write_custody_json(custody, name, value)
 
-    def gate(self, repository, receipt, source, registry, head, table_path):
+    def gate(
+        self,
+        repository,
+        receipt,
+        source,
+        registry,
+        head,
+        table_path,
+        expected_digest=None,
+    ):
         return readiness.validate_r1_evidence_lifecycle(
             repository,
             receipt,
@@ -593,14 +625,22 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
             expected_freshness_class="RE_DERIVABLE",
             plan_tree_path="pack/plan_tree.json",
             step6_confirmation_table=table_path,
+            expected_confirmation_digest=expected_digest,
         )
 
     def test_confirmed_digest_subtracts_the_successor_path(self) -> None:
         repository, custody, registry, source, receipt = self.build()
         head, digest = self.commit_successor(repository, b'{"packs": []}\n')
         table_path = self.table(custody, "table.json", sha256=digest)
+        expected_digest = hashlib.sha256(table_path.read_bytes()).hexdigest()
         changed = self.gate(
-            repository, receipt, source, registry, head, table_path
+            repository,
+            receipt,
+            source,
+            registry,
+            head,
+            table_path,
+            expected_digest,
         )
         self.assertEqual(changed, (self.SUCCESSOR,))
 
@@ -615,11 +655,63 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
             path="configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json",
         )
         wrong_digest = self.table(custody, "wrong.json", sha256="c" * 64)
+        malformed_transaction = self.table(custody, "malformed-transaction.json")
+        malformed_value = json.loads(malformed_transaction.read_bytes())
+        malformed_value["transaction_id"] = []
+        malformed_raw = render_json(malformed_value)
+        malformed_transaction.write_bytes(malformed_raw)
+        malformed_transaction.with_name(
+            f"{malformed_transaction.name}.sha256"
+        ).write_bytes(
+            gnu_sidecar(
+                hashlib.sha256(malformed_raw).hexdigest(),
+                malformed_transaction.name,
+            )
+        )
+        noncanonical = custody / "noncanonical.json"
+        noncanonical_raw = json.dumps(json.loads(confirmed.read_bytes())).encode() + b"\n"
+        noncanonical.write_bytes(noncanonical_raw)
+        noncanonical.with_name(f"{noncanonical.name}.sha256").write_bytes(
+            gnu_sidecar(
+                hashlib.sha256(noncanonical_raw).hexdigest(), noncanonical.name
+            )
+        )
+        inconsistent_sidecar = self.table(
+            custody, "inconsistent-sidecar.json", sha256=digest
+        )
+        inconsistent_sidecar.with_name(
+            f"{inconsistent_sidecar.name}.sha256"
+        ).write_bytes(gnu_sidecar("0" * 64, inconsistent_sidecar.name))
         cases = {
-            "no table supplied": (None, "no step-6 confirmation table supplied"),
+            "self-consistent ED/YES table without out-of-band digest": (
+                confirmed,
+                None,
+                "no expected confirmation digest supplied",
+            ),
+            "malformed expected digest": (
+                confirmed,
+                "A" * 64,
+                "supplied expected confirmation digest is malformed",
+            ),
+            "non-string expected digest": (
+                confirmed,
+                7,
+                "supplied expected confirmation digest is malformed",
+            ),
+            "digest of other bytes": (
+                confirmed,
+                hashlib.sha256(other_path.read_bytes()).hexdigest(),
+                "table bytes differ from the expected confirmation digest",
+            ),
+            "no table supplied": (
+                None,
+                hashlib.sha256(confirmed.read_bytes()).hexdigest(),
+                "no step-6 confirmation table supplied",
+            ),
             "table absent from custody": (
                 custody / "absent.json",
-                "inadmissible (confirmation_missing)",
+                hashlib.sha256(confirmed.read_bytes()).hexdigest(),
+                "custody artifact is absent",
             ),
             # The table schema itself pins the successor section to the
             # code-enumerated chain member, so a table naming a different path
@@ -628,18 +720,41 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
             # defence for any future growth of the conditional class.
             "table names another path": (
                 other_path,
-                "inadmissible (confirmation_mismatch)",
+                hashlib.sha256(other_path.read_bytes()).hexdigest(),
+                "successor-pinset constants differ",
             ),
             "digest differs": (
                 wrong_digest,
+                hashlib.sha256(wrong_digest.read_bytes()).hexdigest(),
                 "differ from Ed's confirmed step-6 digest",
             ),
+            "non-string transaction id": (
+                malformed_transaction,
+                hashlib.sha256(malformed_transaction.read_bytes()).hexdigest(),
+                "transaction_id must be a nonempty string",
+            ),
+            "noncanonical table": (
+                noncanonical,
+                hashlib.sha256(noncanonical_raw).hexdigest(),
+                "custody JSON is noncanonical",
+            ),
+            "sidecar-inconsistent table": (
+                inconsistent_sidecar,
+                hashlib.sha256(inconsistent_sidecar.read_bytes()).hexdigest(),
+                "custody artifact sidecar differs",
+            ),
         }
-        for label, (table_path, fragment) in cases.items():
+        for label, (table_path, expected_digest, fragment) in cases.items():
             with self.subTest(case=label):
                 with self.assertRaises(readiness.EvidenceLifecycleError) as caught:
                     self.gate(
-                        repository, receipt, source, registry, head, table_path
+                        repository,
+                        receipt,
+                        source,
+                        registry,
+                        head,
+                        table_path,
+                        expected_digest,
                     )
                 self.assertEqual(caught.exception.role, "DEPENDENCY_CHANGED_SET")
                 self.assertIn(self.SUCCESSOR, str(caught.exception))
@@ -652,7 +767,13 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
         )
         with self.assertRaises(readiness.EvidenceLifecycleError) as caught:
             self.gate(
-                repository, receipt, source, registry, mutated_head, confirmed
+                repository,
+                receipt,
+                source,
+                registry,
+                mutated_head,
+                confirmed,
+                hashlib.sha256(confirmed.read_bytes()).hexdigest(),
             )
         self.assertEqual(caught.exception.role, "DEPENDENCY_CHANGED_SET")
 

@@ -2242,6 +2242,9 @@ def _authenticate_existing_r1(
     kinds: Sequence[str],
     lifecycle_registry: Mapping[str, Any],
     policies: Mapping[str, Mapping[str, Any]],
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     source_dir = pack_root / _SOURCE_DIRECTORY
     evidence_dir = pack_root / _EVIDENCE_DIRECTORY
@@ -2313,6 +2316,8 @@ def _authenticate_existing_r1(
                 current_head=current_head,
                 expected_freshness_class=str(policies[kind]["freshness_class"]),
                 plan_tree_path=f"{pack_relative}/plan_tree.json",
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
             if receipt["freshness_class"] == "RE_DERIVABLE":
                 _r1_rederive_at_arm(pack_root, receipt, source)
@@ -2371,7 +2376,12 @@ def _authenticate_existing_r1(
     }
 
 
-def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
+def author_arm_readiness_evidence(
+    pack_root: Path | str,
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
+) -> dict[str, Any]:
     """Author every applicable generic FREEZE_AND_ARM evidence receipt.
 
     Boot identity, clocks, hashes, HEAD, facts, statuses, suite outcomes, and
@@ -2407,6 +2417,8 @@ def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
                 kinds,
                 lifecycle_registry,
                 r1_policies,
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         return _authenticate_existing(
             root,
@@ -2607,10 +2619,19 @@ def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
 
 
 def _assert_public_author_signature() -> None:
-    parameters = tuple(inspect.signature(author_arm_readiness_evidence).parameters)
-    if parameters != ("pack_root",):
+    parameters = inspect.signature(author_arm_readiness_evidence).parameters
+    if tuple(parameters) != (
+        "pack_root",
+        "step6_confirmation_table",
+        "expected_confirmation_digest",
+    ) or any(
+        parameters[name].kind is not inspect.Parameter.KEYWORD_ONLY
+        or parameters[name].default is not None
+        for name in ("step6_confirmation_table", "expected_confirmation_digest")
+    ):
         raise AssertionError(
-            "public evidence author must accept exactly one non-injectable pack_root"
+            "public evidence author accepts only pack_root plus the two "
+            "keyword-only step-6 custody inputs"
         )
 
 

@@ -1230,17 +1230,20 @@ class D117GammaPlanTest(unittest.TestCase):
                 self.assertEqual(regenerated.returncode, 0, regenerated.stderr)
                 self.assertEqual(git_status(output_root), "")
 
-    @unittest.expectedFailure  # S0-BLOCKED: requires minted _v4 packs
+    @unittest.skip(
+        "STRUCTURAL-BLOCKED: generator targets uninstalled _v2 family while "
+        "the registry installs _v4"
+    )
     def test_authenticated_freeze_transition_preserves_frozen_bytes(self) -> None:
-        """S0-BLOCKED: requires minted _v4 packs.
+        """Blocked because this fixture generates an uninstalled `_v2` family.
 
         This drives the committed ``_v1`` generators to build the NEXT
         generation in a temporary checkout, with ``--family-suffix _v2``.  The
         ruled registry installs only the ``_v4`` family, so the generated
         ``_v2`` pack is refused at admission: the recorded refusal is
         ``readiness_row_registry_mismatch`` where this test expects
-        ``readiness_successor_chain_invalid``.  Driving the generators to
-        ``_v4`` needs the intervening ``_v3`` chain, which is S-0's mint.
+        ``readiness_successor_chain_invalid``.  The `_v3` packs already exist;
+        S-0's byte mint does not rewrite this test's explicit `_v2` target.
         """
 
         from tests import test_d117_floor_qwen25_1p5b_plan as alpha_tests

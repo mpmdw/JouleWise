@@ -25,6 +25,10 @@ from joulewise.arm_readiness_evidence import (  # noqa: E402
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pack-root", required=True, type=Path)
+    parser.add_argument(
+        "--expected-confirmation-digest",
+        help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
+    )
     return parser
 
 
@@ -40,7 +44,10 @@ def main(argv: list[str] | None = None) -> int:
                 "evidence_author_repository_mismatch",
                 "pack repository differs from the evidence-author CLI repository",
             )
-        result = author_arm_readiness_evidence(root)
+        result = author_arm_readiness_evidence(
+            root,
+            expected_confirmation_digest=args.expected_confirmation_digest,
+        )
         pack_relative = root.relative_to(cli_repository).as_posix()
         source_path = f"{pack_relative}/{_SOURCE_DIRECTORY}"
         evidence_path = f"{pack_relative}/{_EVIDENCE_DIRECTORY}"

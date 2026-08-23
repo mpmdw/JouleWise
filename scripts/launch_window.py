@@ -48,6 +48,10 @@ def _parser() -> argparse.ArgumentParser:
         choices=("start", "settle", "completion"),
         help="private window-chain operation; omit for Ed's physical launch",
     )
+    parser.add_argument(
+        "--expected-confirmation-digest",
+        help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
+    )
     return parser
 
 
@@ -115,7 +119,10 @@ def _assemble_launch_inputs(args: argparse.Namespace) -> dict[str, object]:
             "launch_consumption_invalid", f"arm receipt is invalid: {exc}"
         ) from exc
     verified_arm = _verify_arm_receipt(
-        pack_root, arm_path, require_unconsumed=False
+        pack_root,
+        arm_path,
+        require_unconsumed=False,
+        expected_confirmation_digest=args.expected_confirmation_digest,
     )
     arm_digest = hashlib.sha256(arm_raw).hexdigest()
     if (
@@ -231,12 +238,14 @@ def launch(args: argparse.Namespace) -> int:
     result = _consume_launch_capability(
         **launch_inputs,
         handoff_token_sha256=hashlib.sha256(token).hexdigest(),
+        expected_confirmation_digest=args.expected_confirmation_digest,
     )
     verified = verify_consumed_launch(
         args.pack_root,
         result["consumption_path"],
         launch_manifest=args.launch_manifest,
         expected_exec_argv=argv,
+        expected_confirmation_digest=args.expected_confirmation_digest,
     )
     if verified["exec_argv"] != argv:
         raise LaunchLineageError(
@@ -258,6 +267,7 @@ def lifecycle(args: argparse.Namespace) -> int:
             args.pack_root,
             consumption,
             launch_manifest=args.launch_manifest,
+            expected_confirmation_digest=args.expected_confirmation_digest,
         )
         token = _read_one_use_handoff()
     else:

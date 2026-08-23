@@ -30,6 +30,7 @@ def lifecycle_registry(
     *,
     allowlist: tuple[str, ...] = (),
     policies: tuple[dict, ...] | None = None,
+    pack_generation: int = 2,
 ) -> dict:
     if policies is None:
         policies = (
@@ -62,9 +63,9 @@ def lifecycle_registry(
         },
         "successor_policy": {
             "successor_pack_ids": {
-                "ALPHA": "d117_floor_qwen25_1p5b_v2",
-                "BETA": "d117_floor_qwen25_7b_v2",
-                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+                "ALPHA": f"d117_floor_qwen25_1p5b_v{pack_generation}",
+                "BETA": f"d117_floor_qwen25_7b_v{pack_generation}",
+                "GAMMA": f"d117_contrast_qwen25_1p5b_vs_7b_v{pack_generation}",
             },
             "cross_chain_numbering": "test.freeze-0002.v1",
             "freeze_receipt_v2_predecessor_bindings": [
@@ -214,6 +215,43 @@ def content_source_and_receipt(
 
 
 class R1EvidenceLifecycleTests(unittest.TestCase):
+    def test_freshness_classes_are_pinned(self) -> None:
+        self.assertEqual(
+            readiness.R1_EVIDENCE_FRESHNESS_CLASSES,
+            {
+                "ACCEPTANCE_OWNER": "EXECUTION_BOUND",
+                "ACCEPTANCE_SUCCESSOR": "EXECUTION_BOUND",
+                "ARM_CAPABILITY": "TEMPORAL_CAPABILITY",
+                "BACKUP_PREFLIGHT": "TIME_BOUND",
+                "CLOCK_ATTESTATION": "TIME_BOUND",
+                "CLOCK_PROBE": "TIME_BOUND",
+                "DOCTRINE_PIN": "RE_DERIVABLE",
+                "DRY_RUN_REHEARSAL": "EXECUTION_BOUND",
+                "ESTIMATOR_IDENTITY": "EXECUTION_BOUND",
+                "GIT_CHECKOUT": "EXECUTION_BOUND",
+                "IDENTITY_PIN_PROJECTION": "EXECUTION_BOUND",
+                "LAUNCH_RECIPE": "SESSION_STATE_BOUND",
+                "LEDGER_RESERVATION": "SESSION_STATE_BOUND",
+                "MACHINE_PREFLIGHT": "TIME_BOUND",
+                "MAINTENANCE_CENSUS": "TIME_BOUND",
+                "MINT_TRUST": "EXECUTION_BOUND",
+                "MULTICELL_MINT": "EXECUTION_BOUND",
+                "OFFLINE_INPUT_INVENTORY": "EXECUTION_BOUND",
+                "PACK_AUTHENTICATION": "EXECUTION_BOUND",
+                "PACK_FAMILY": "RE_DERIVABLE",
+                "POWERMETRICS_PROBE": "TIME_BOUND",
+                "POWER_PREFLIGHT": "TIME_BOUND",
+                "PRIVILEGE_INSTALLATION": "EXECUTION_BOUND",
+                "PROCESS_CENSUS": "TIME_BOUND",
+                "REASON_CODE_COVERAGE": "EXECUTION_BOUND",
+                "RECEIPT_ORACLE": "EXECUTION_BOUND",
+                "RECOVERY_LEDGER_TEST": "EXECUTION_BOUND",
+                "ROOT_PREFLIGHT": "SESSION_STATE_BOUND",
+                "TERMINAL_REVIEW": "EXECUTION_BOUND",
+                "THREE_WINDOW_REGRESSION": "EXECUTION_BOUND",
+            },
+        )
+
     def make_repository(self) -> tuple[tempfile.TemporaryDirectory, Path, str]:
         temporary = tempfile.TemporaryDirectory()
         repository = Path(temporary.name)

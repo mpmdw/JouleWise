@@ -143,11 +143,11 @@ class ArmReadinessRegistryTests(unittest.TestCase):
         # new-family work -- to d117_row_registry_v2.json, and deliberately
         # kept the v1 file in-tree, sha-pinned and otherwise unreferenced, as
         # the archival companion of the _v3 generation.  The frozen packs
-        # (_v1.._v3) were minted against v1, so their plan_tree bytes still
-        # name the ARCHIVAL coordinate; that is the point of keeping v1
-        # pinned, because a frozen recorded reference must keep resolving.
-        # Both halves are asserted: the archival half inside the loop, the
-        # live half after it.
+        # (_v1.._v3) were minted against v1, so their immutable plan_tree bytes
+        # still name that ARCHIVAL coordinate.  The loop is a static-bytes pin:
+        # it proves the recorded path, ID, and digest remain intact, not that a
+        # frozen pack resolves through the live _v4 registry at runtime.  The
+        # live-coordinate half follows the loop.
         registry_sha = hashlib.sha256(self.raw).hexdigest()
         archival_relative = "configs/arm_readiness/d117_row_registry_v1.json"
         archival_sha = hashlib.sha256(
