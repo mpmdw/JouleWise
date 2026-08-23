@@ -1642,7 +1642,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     @unittest.skip(
-        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159"
+        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 (A85); ALSO structurally blocked on fixture R1 schemas (A84) — curing the abort alone turns this red, not green"
     )
     def test_acid_authored_fifteen_then_real_arm_generator_reaches_go(self) -> None:
         """Blocked by pytest SIGABRT in `joulewise/adapters/mlx_runtime.py:1159`."""
@@ -1654,7 +1654,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     @unittest.skip(
-        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159"
+        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 (A85); ALSO structurally blocked on fixture R1 schemas (A84) — curing the abort alone turns this red, not green"
     )
     def test_synthetic_acid_is_hermetic_to_system_timezone(self) -> None:
         """Blocked by pytest SIGABRT in `joulewise/adapters/mlx_runtime.py:1159`."""
@@ -1678,7 +1678,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 time.tzset()
 
     @unittest.skip(
-        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159"
+        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 (A85); ALSO structurally blocked on fixture R1 schemas (A84) — curing the abort alone turns this red, not green"
     )
     def test_synthetic_acid_ignores_wall_clock_48_hours_in_future(self) -> None:
         """Blocked by pytest SIGABRT in `joulewise/adapters/mlx_runtime.py:1159`."""
@@ -1698,7 +1698,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         sys.platform == "darwin", "requires Darwin's real boot-session sysctl command"
     )
     @unittest.skip(
-        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159"
+        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 (A85); ALSO structurally blocked on fixture R1 schemas (A84) — curing the abort alone turns this red, not green"
     )
     def test_acid_real_boot_session_then_real_arm_generator_reaches_go(self) -> None:
         """Blocked by pytest SIGABRT in `joulewise/adapters/mlx_runtime.py:1159`."""

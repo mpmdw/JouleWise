@@ -472,7 +472,13 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             identities[relative], hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
         )
 
-    def test_authoring_is_deterministic_valid_and_boot_bound(self) -> None:
+    def test_authoring_is_deterministic_and_consumer_boot_primitive_pins(self) -> None:
+        # Renamed per delta re-audit S1D-2: the boot leg exercises the
+        # CONSUMER-side primitive (validate_r1_class_lifecycle, called only
+        # from arm_readiness.py), not authoring-path boot binding — R1
+        # authoring does not enforce boot binding; the arm path does, with
+        # live boot context, failing closed without it. The end-to-end
+        # boot-voiding obligation is recorded on row A84.
         temporary, _repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         with mock.patch.object(

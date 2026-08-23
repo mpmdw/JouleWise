@@ -22,18 +22,23 @@ BLOCKED_PREFIXES = (
 
 
 def _skip_reason(decorator: ast.expr) -> str | None:
+    # Recognizes unittest.skip("..."), skipIf(cond, "..."), and
+    # skipUnless(cond, "...") so a blocked-taxonomy reason cannot hide
+    # behind a conditional-skip spelling (delta re-audit condition 6).
     if not (
         isinstance(decorator, ast.Call)
         and isinstance(decorator.func, ast.Attribute)
         and isinstance(decorator.func.value, ast.Name)
         and decorator.func.value.id == "unittest"
-        and decorator.func.attr == "skip"
-        and len(decorator.args) == 1
+        and decorator.func.attr in ("skip", "skipIf", "skipUnless")
         and not decorator.keywords
     ):
         return None
+    index = 0 if decorator.func.attr == "skip" else 1
+    if len(decorator.args) <= index:
+        return None
     try:
-        reason = ast.literal_eval(decorator.args[0])
+        reason = ast.literal_eval(decorator.args[index])
     except (ValueError, TypeError):
         return None
     return reason if isinstance(reason, str) else None
@@ -43,12 +48,12 @@ class S0BlockedEnumerationTests(unittest.TestCase):
     def test_blocked_skip_partition_is_exact_and_machine_readable(self) -> None:
         blocked: list[tuple[str, str, str | None]] = []
         expected_failures: list[str] = []
-        for source_path in sorted((ROOT / "tests").glob("test_*.py")):
+        for source_path in sorted((ROOT / "tests").rglob("test_*.py")):
             tree = ast.parse(source_path.read_text(encoding="utf-8"), source_path)
             for node in ast.walk(tree):
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
-                if source_path.name in TARGET_MODULES and any(
+                if any(
                     isinstance(decorator, ast.Attribute)
                     and isinstance(decorator.value, ast.Name)
                     and decorator.value.id == "unittest"

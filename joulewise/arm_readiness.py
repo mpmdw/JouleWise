@@ -10739,7 +10739,14 @@ def verify_family_publication_marker(
 
     confirmation_ref: dict[str, str] | None = None
     if phase != "candidate":
-        assert table is not None and table_raw is not None
+        if table is None or table_raw is None:
+            # Defensive-unreachable (the published lane authenticated the
+            # table above), but governed rather than an -O-strippable
+            # assert (delta re-audit condition 4).
+            raise FamilyPublicationError(
+                "confirmation_missing",
+                "published lane reached without an authenticated confirmation table",
+            )
         expected_members = [
             {
                 "profile": member["profile"],
