@@ -17,6 +17,7 @@ from unittest import mock
 
 from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 from joulewise.calibration_ledger import (
+
     BRACKET_SESSION_ABORT_EVENT,
     BRACKET_SESSION_FINALIZATION_EVENT,
     BRACKET_SESSION_SCHEMA,
@@ -40,6 +41,15 @@ from tests.owned_process_runner import (
     spawn_spinning_descendant_for_guard_test,
 )
 from tests.test_calibration_exits import _install_fake_writer_dependencies
+
+# Liveness-guard nominal for the shared sampler-ack driver: raised 1.0 -> 4.0
+# after four hosted-runner starvation firings (runs 32578576711, 32601988870,
+# 32607418551, and the e6a6520 merge-head run). The measured hosted/bench
+# ratio is ~2.9x; 4.0 rounds up with 38% margin, and the driver's 4x outer
+# bound still terminates a true hang. Healthy children acknowledge early, so
+# this adds no wall time on the good path. Not a semantic bound.
+_SAMPLER_ACK_TIMEOUT_S = 4.0
+
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -598,7 +608,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             "--time-scale-for-test",
             "0.001",
             "--sampler-ready-timeout-s",
-            "1.0",
+            str(_SAMPLER_ACK_TIMEOUT_S),
             "--rollover-timeout-s",
             "1.0",
             "--identity-epoch-json-for-test",
@@ -1556,6 +1566,8 @@ import time
 from pathlib import Path
 from joulewise.calibration_ledger import CalibrationWriterLease, claim_bracket_session_slot
 ledger = Path({str(ledger)!r})
+
+
 with CalibrationWriterLease(ledger):
     claim_bracket_session_slot(ledger, session_id={session_id!r}, slot='pre', attempt_id={f'{session_id}-pre'!r})
     print('LEASED', flush=True)

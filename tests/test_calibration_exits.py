@@ -28,6 +28,7 @@ from unittest import mock
 
 from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 from joulewise.calibration_exits import (
+
     REFUSAL_BY_CODE,
     REFUSAL_INVENTORY,
     RefusalCode,
@@ -57,6 +58,15 @@ from tests.owned_process_runner import (
     owned_thread_survivors,
 )
 from tests.receipt_corpus import ReceiptCorpus
+
+# Liveness-guard nominal for the shared sampler-ack driver: raised 1.0 -> 4.0
+# after four hosted-runner starvation firings (runs 32578576711, 32601988870,
+# 32607418551, and the e6a6520 merge-head run). The measured hosted/bench
+# ratio is ~2.9x; 4.0 rounds up with 38% margin, and the driver's 4x outer
+# bound still terminates a true hang. Healthy children acknowledge early, so
+# this adds no wall time on the good path. Not a semantic bound.
+_SAMPLER_ACK_TIMEOUT_S = 4.0
+
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -944,6 +954,8 @@ import plistlib
 import signal
 import time
 from xml.sax.saxutils import escape
+
+
 
 running = True
 stop_real_time = None
@@ -3736,7 +3748,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "--identity-epoch-json-for-test",
             str(state["identity_path"]),
             "--sampler-ready-timeout-s",
-            "1.0",
+            str(_SAMPLER_ACK_TIMEOUT_S),
             "--rollover-timeout-s",
             "1.5",
         ]
@@ -4561,7 +4573,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     writer_args = [
                         *self._writer_capture_args(state),
                         "--sampler-ready-timeout-s",
-                        "1.0",
+                        str(_SAMPLER_ACK_TIMEOUT_S),
                     ]
                 else:
                     writer_args = []
