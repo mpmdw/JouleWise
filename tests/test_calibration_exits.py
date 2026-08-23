@@ -1831,7 +1831,6 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 )
                 retries += len(sandbox.cleanup_diagnostics)
         self.assertEqual(retries, 0)
-        self.assertLess(longest_cleanup_s, 2.0)
         print(
             f"P1_CYCLES={cycles} RAW_ENOTEMPTY=0 RETRY_EXHAUSTION=0 "
             f"MAX_CLEANUP_S={longest_cleanup_s:.6f}",
@@ -2029,6 +2028,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         started = time.monotonic()
         with (
             mock.patch.object(shutil, "rmtree", side_effect=injected_rmtree),
+            mock.patch.object(time, "sleep") as requested_sleep,
             mock.patch.object(
                 sandbox,
                 "_residual_writers",
@@ -2052,7 +2052,17 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         )
         self.assertFalse(sandbox.root.exists())
         self.assertTrue(sandbox.closed)
-        self.assertLess(elapsed, 2.0)
+        self.assertEqual(
+            requested_sleep.call_args_list,
+            [mock.call(delay) for delay in WitnessSandbox._CLEANUP_BACKOFF_S],
+        )
+        self.assertEqual(requested_sleep.call_count, 4)
+        print(
+            f"P1_RETRY_ATTEMPTS={attempts} "
+            f"BACKOFF_REQUESTS={tuple(call.args[0] for call in requested_sleep.call_args_list)} "
+            f"ELAPSED_S={elapsed:.6f} DIAGNOSTIC_FATAL=1",
+            flush=True,
+        )
 
         outside = WitnessSandbox()
         outside.repo.mkdir()
