@@ -2330,22 +2330,32 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 (origin + 6.5, "pulse_command_off"),
                 (origin + 8.0, "sampling_stopped"),
             )
-            (custody / "events.jsonl").write_text(
-                "".join(
+            events_path = custody / "events.jsonl"
+
+            def event_record(sequence: int, event: tuple[float, str]) -> str:
+                timestamp, event_type = event
+                return (
                     json.dumps(
                         {
                             "timestamp_s": timestamp,
                             "event_type": event_type,
+                            "test_protocol_sequence": sequence,
                         },
                         sort_keys=True,
                     )
                     + "\n"
-                    for timestamp, event_type in events
+                )
+
+            events_path.write_text(
+                "".join(
+                    event_record(sequence, event)
+                    for sequence, event in enumerate(events[:-1], start=1)
                 ),
                 encoding="utf-8",
             )
             capture = custody / "raw" / "powermetrics.plist"
             result_path = sandbox.root / "result.json"
+            ack_path = sandbox.root / "sampler-progress.jsonl"
             env = _fresh_cli_env() | {
                 "JW_FAKE_SAMPLER_MODE": "normal",
                 "JW_FAKE_HW_MODEL": "Mac15,9",
@@ -2354,6 +2364,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 "JW_FAKE_TIME_SCALE": "1",
                 "JW_FAKE_INITIAL_ENDPOINT": str(origin),
                 "JW_FAKE_SAMPLER_RESULT_PATH": str(result_path),
+                "JW_FAKE_SAMPLER_ACK_PATH": str(ack_path),
             }
             process = sandbox.runner.start_owned(
                 [sys.executable, FIXTURE_ROOT / "fake_sampler.py", "-o", capture],
@@ -2377,11 +2388,49 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 description="event fixture complete capture records",
                 teardown=sandbox.close,
             )
+
+            def acknowledged(sequence: int) -> Callable[[], int | None]:
+                def predicate() -> int | None:
+                    try:
+                        lines = ack_path.read_text(encoding="utf-8").splitlines()
+                    except OSError:
+                        return None
+                    try:
+                        records = [json.loads(line) for line in lines]
+                    except json.JSONDecodeError:
+                        return None
+                    return (
+                        sequence
+                        if any(
+                            record.get("sequence") == sequence
+                            for record in records
+                            if isinstance(record, dict)
+                        )
+                        else None
+                    )
+
+                return predicate
+
+            _wait_for_semantic_readiness(
+                acknowledged(len(events) - 1),
+                process=process,
+                description="event fixture initial progress acknowledgement",
+                teardown=sandbox.close,
+            )
             if stop_s:
                 os.killpg(process.pid, signal.SIGSTOP)
                 time.sleep(stop_s)
                 os.killpg(process.pid, signal.SIGCONT)
-            time.sleep(0.05)
+            with events_path.open("a", encoding="utf-8") as stream:
+                stream.write(event_record(len(events), events[-1]))
+                stream.flush()
+                os.fsync(stream.fileno())
+            _wait_for_semantic_readiness(
+                acknowledged(len(events)),
+                process=process,
+                description="event fixture resumed progress acknowledgement",
+                teardown=sandbox.close,
+            )
             os.killpg(process.pid, signal.SIGTERM)
             process.communicate(timeout=2.0)
             # The process exited normally; runner close drops its ESRCH entry.
@@ -2438,16 +2487,40 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                     env=env,
                     label="wall-derived-mutation",
                 )
-                deadline = time.monotonic() + 2.0
-                while not capture.exists() or capture.stat().st_size == 0:
-                    if time.monotonic() >= deadline:
-                        self.fail("wall mutation did not become ready")
-                    time.sleep(0.001)
+
+                def capture_record_count() -> int | None:
+                    try:
+                        raw = capture.read_bytes()
+                    except OSError:
+                        return None
+                    if not raw.startswith(b'<?xml version="1.0"'):
+                        return None
+                    return len(raw.split(b"\0"))
+
+                initial_count = _wait_for_semantic_readiness(
+                    capture_record_count,
+                    process=process,
+                    description="wall mutation initial capture progress",
+                    teardown=sandbox.close,
+                )
+                assert isinstance(initial_count, int)
                 if suspension:
                     os.killpg(process.pid, signal.SIGSTOP)
                     time.sleep(suspension)
                     os.killpg(process.pid, signal.SIGCONT)
-                time.sleep(0.02)
+                _wait_for_semantic_readiness(
+                    lambda: (
+                        count
+                        if (
+                            (count := capture_record_count()) is not None
+                            and count > initial_count
+                        )
+                        else None
+                    ),
+                    process=process,
+                    description="wall mutation resumed capture progress",
+                    teardown=sandbox.close,
+                )
                 os.killpg(process.pid, signal.SIGTERM)
                 process.communicate(timeout=5.0)
                 raw = capture.read_bytes()
