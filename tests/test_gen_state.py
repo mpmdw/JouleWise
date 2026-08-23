@@ -99,9 +99,9 @@ EXPECTED_IDS = {
     # 2026-08-22 T20 close-out: writer-crash ack-timeout flake row minted on
     # its second same-day firing (run-report CI-incident section).
     "CALWRITER-ACK-TIMEOUT-01",
-    # 2026-08-22 T20 errata: evidence-author git-teardown ENOTEMPTY race
-    # (ERRATA E-1; reds a required shard, hence P2).
-    "EVIDENCE-AUTHOR-GIT-TEARDOWN-01",
+    # (EVIDENCE-AUTHOR-GIT-TEARDOWN-01 registered on ERRATA E-1, fixed
+    # ea90585 at the shared fixture site, closed same day on CI-green
+    # acceptance — run conclusion-field-verified.)
     # 2026-08-02 two-lens extension consult (Ed ratifies S2)
     "NVIDIA-PORTABILITY-01",
     # 2026-08-03 sleep-window: production-default custody hardening deferred
@@ -325,9 +325,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # CALWRITER-ACK-TIMEOUT-01 on the flake's second same-day firing:
         # 86 + 1 = 87; the T20 errata wave registers
         # EVIDENCE-AUTHOR-GIT-TEARDOWN-01 (E-1, required-shard red):
-        # 87 + 1 = 88 exact live records.
+        # 87 + 1 = 88; closed same day at ea90585 (CI green, its
+        # acceptance clause): 88 - 1 = 87 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 88)
+        self.assertEqual(len(self.tasks), 87)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

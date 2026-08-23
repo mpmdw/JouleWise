@@ -1491,45 +1491,6 @@
       "status_note": "Depends on PREWINDOW-REGEX-01 so the tightened check precedes the agent-free capture.",
       "stop_card": null
     },
-    "EVIDENCE-AUTHOR-GIT-TEARDOWN-01": {
-      "acceptance": {
-        "evidence": [
-          "The evidence-author test's temp-git-repo teardown either quiesces detached git maintenance before cleanup (the 5a8a200 shape) or tolerates exactly the causally-explained ENOTEMPTY/ENOENT errnos (the aedf530 shape), with the choice justified against what the test asserts",
-          "A regression exercises the teardown race deterministically or the fix is proven by the same class of causal evidence the calexits cures carried",
-          "CI green at a head containing the fix on the previously failing shard"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/EVIDENCE-AUTHOR-GIT-TEARDOWN-01/acceptance",
-          "label": "EVIDENCE-AUTHOR-GIT-TEARDOWN-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The #121-class ENOTEMPTY git-teardown race in tests/test_arm_readiness_evidence_author is cured with one of the two proven shapes."
-      },
-      "authority": {
-        "label": "T20 ERRATA E-1 (CI run 32605897516 failure analysis)",
-        "path": "docs/process_traces/2026-08-22-t20/ERRATA.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Cold-pair-166 discipline",
-            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
-          },
-          "rule": "Distinct mechanism, distinct row: do not fold into the calexits rows or wave through as a generic flake; carry the #121/aedf530 lineage as precedent, not identity"
-        }
-      ],
-      "flags": [],
-      "goal": "Cure the ENOTEMPTY git-teardown race in tests/test_arm_readiness_evidence_author (OSError Errno 39 on /tmp temp-repo .git during hosted 3.14 shard teardown, first observed run 32605897516 at 6693cfa) using the proven #121-class fix shapes.",
-      "id": "EVIDENCE-AUTHOR-GIT-TEARDOWN-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 84,
-      "status": "queued",
-      "status_note": "P2 not P3: this race reds a required CI shard on main pushes; until cured every push needs a per-run disposition. First observed once; the mechanism (#121 class) is already causally understood from the calexits lineage.",
-      "stop_card": null
-    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
