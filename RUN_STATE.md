@@ -44,8 +44,17 @@ consequences) + S0-RUNSHEET-R2 — DONE at 6693cfa (+ the
 CALWRITER-ACK-TIMEOUT-01 flake row at the T20 close-out; run report
 docs/run_reports/2026-08-22-t20-session.md is THE session record,
 incl. the four-red-run CI incident + dispositions + ERRATA E-1: the 97e0203 SUCCESS claim was false — cure held, but a new #121-class race reds the shard, row EVIDENCE-AUTHOR-GIT-TEARDOWN-01); (2) the S-1 reviewed-candidate
-implementation stream (Sol, worktree, WRITE_SCOPE; marker consumer
-implements the ruled design — co-design DONE, no waiver needed);
+implementation stream — SUBSTANTIALLY IMPLEMENTED and PRESERVED at
+impl/s1-candidate bd7ebc1 (pushed; WIP, NOT reviewed/gauntleted: all
+six new files + ~1,700 modified lines, 87 tests OK lead-run across the
+four touched modules; the implementing Sol thread stalled at the
+manifest stage — the day's FOURTH transport stall; NEEDS_SCOPE arc +
+v2-registry-coordinate ruling + successor-pinset path adjudication all
+recorded in this session). SUCCESSOR: verify the diff against the brief
+(kernel S1-CANDIDATE-01 + D-151 conds 1/2/6/8 + marker ruling), author
+MANIFEST.md, C-028 gauntlet, land. TRANSPORT ADVISORY: MCP codex server
+(up since 08-09) + CLI bridge both degraded — Ed should restart the
+Codex desktop app/server before the next delegated wave;
 (3) S-0 EXECUTED AT THE LEAD'S BENCH in a throwaway clone (Ed
 approves freeze-command prompts live); (4) S-2..S-5 per r4-7.
 Codex desktop app down → standalone CLI fallback (audited, no pet);
