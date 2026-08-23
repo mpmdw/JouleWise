@@ -10,7 +10,32 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-22 evening (T20 — THE `_v4` TRANSACTION IS OPEN; mint license granted; next: kernel registrations → S-1 candidate stream → S-0 at the bench)
+Last updated: 2026-08-23 early AM (T21 overnight fan-out — ALL WORK PRESERVED ON PUSHED BRANCHES; harvest orders below)
+
+**T21 OVERNIGHT (2026-08-23 ~01:00-06:30):** Ed licensed full Codex
+spend + Workflows + the Opus hill-climb directive (memory saved). The
+S-1 gauntlet ran its full arc: conformance audit (10 gaps) -> finish
+round (G-2/3/4 cured) -> G-11 cure (135 red -> 4; S0-BLOCKED measured
+EMPTY — two seats agree the 21-test theory was wrong) -> independent
+Opus seat REFUTED (3 blockers) + Sol G-2 refuter REFUTED
+(impersonation channel) -> COMBINED FIX ROUND: G2-1 impersonation
+channel CLOSED, six-bypass-verified, no-CLI-derivation fence held;
+B-1 re-derivation proven LIVE (V-1(iii) intact); B-2 skips
+machine-readable. PRESERVED: impl/s1-candidate @ d3101d6 (WIP — the
+commit message IS the harvest order: seam cure check, joint
+verification, MANIFEST rewrite, then DELTA RE-AUDIT; packet with
+kernel rows A84/A85 custodied under
+docs/process_traces/2026-08-22-t20/s1-candidate/).
+fix/sampler-ack-timeout @ e2e5605 (WIP, UNVERIFIED — run both consumer
+modules + pinned-file check). fix/calexits-hygiene (7/7 committed,
+re-verify then PR). perf/test-speed (5 commits, CI 41->23.5 min
+measured, lead review pending; register the 6.2x test_reduce memo
+lever + the _WITNESS_RESULTS fragility row; 14-day 2-core CPU leak
+KILLED ~03:15 — all bench timings before that ran 2 cores short).
+Orchestrator deaths overnight were CONTEXT EXHAUSTION, not transport;
+the Sol transport advisory stands until Ed restarts the Codex app.
+
+Last updated (previous): 2026-08-22 evening (T20 — THE `_v4` TRANSACTION IS OPEN; mint license granted; next: kernel registrations → S-1 candidate stream → S-0 at the bench)
 
 **T20 (2026-08-22) — the day the transaction opened.** Ed granted the
 MINT LICENSE in-session and ruled packet items 1-4 (D-150, 73764f0:
