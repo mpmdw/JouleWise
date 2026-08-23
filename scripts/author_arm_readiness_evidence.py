@@ -23,6 +23,10 @@ from joulewise.arm_readiness_evidence import (  # noqa: E402
 
 
 def _parser() -> argparse.ArgumentParser:
+    # The authoring CLI keeps the ruled --pack-root-only surface: the
+    # step-6 confirmation digest is a CONSUMPTION-side attestation
+    # (arm/verify/scheduler), and a digest flag with no table path here
+    # was inert by construction (delta re-audit S1D-1).
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pack-root", required=True, type=Path)
     return parser

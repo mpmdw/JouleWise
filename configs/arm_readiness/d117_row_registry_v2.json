@@ -1,0 +1,978 @@
+{
+  "freeze_evidence_lifecycle": {
+    "arm_policy": {
+      "arm_to_consume_budget_ns": 300000000000,
+      "capability_horizon_ns": 300000000000
+    },
+    "evidence_policies": [
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "ACCEPTANCE_OWNER"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "ACCEPTANCE_SUCCESSOR"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "TIME_BOUND",
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "BACKUP_PREFLIGHT"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "TIME_BOUND",
+        "freshness_policy_id": "r1.time_bound.procedural_6h.v1",
+        "horizon_ns": 21600000000000,
+        "kind": "CLOCK_ATTESTATION"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "TIME_BOUND",
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "CLOCK_PROBE"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "RE_DERIVABLE",
+        "freshness_policy_id": "r1.re_derivable.v1",
+        "horizon_ns": null,
+        "kind": "DOCTRINE_PIN"
+      },
+      {
+        "environment_comparison": "NO_R1_AUTHORING_LANE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "horizon_ns": 86400000000000,
+        "kind": "DRY_RUN_REHEARSAL"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "ESTIMATOR_IDENTITY"
+      },
+      {
+        "environment_comparison": "NO_R1_AUTHORING_LANE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "horizon_ns": 86400000000000,
+        "kind": "GIT_CHECKOUT"
+      },
+      {
+        "environment_comparison": "NO_R1_AUTHORING_LANE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "horizon_ns": 86400000000000,
+        "kind": "IDENTITY_PIN_PROJECTION"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "SESSION_STATE_BOUND",
+        "freshness_policy_id": "r1.session_state_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "LAUNCH_RECIPE"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "SESSION_STATE_BOUND",
+        "freshness_policy_id": "r1.session_state_bound.procedural_6h.v1",
+        "horizon_ns": 21600000000000,
+        "kind": "LEDGER_RESERVATION"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "TIME_BOUND",
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "MACHINE_PREFLIGHT"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "TIME_BOUND",
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "MAINTENANCE_CENSUS"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "MINT_TRUST"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "MULTICELL_MINT"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.t0_procedural_6h.v1",
+        "horizon_ns": 21600000000000,
+        "kind": "OFFLINE_INPUT_INVENTORY"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "PACK_AUTHENTICATION"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "RE_DERIVABLE",
+        "freshness_policy_id": "r1.re_derivable.v1",
+        "horizon_ns": null,
+        "kind": "PACK_FAMILY"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "TIME_BOUND",
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "POWERMETRICS_PROBE"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "TIME_BOUND",
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "POWER_PREFLIGHT"
+      },
+      {
+        "environment_comparison": "NO_R1_AUTHORING_LANE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "horizon_ns": 86400000000000,
+        "kind": "PRIVILEGE_INSTALLATION"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "TIME_BOUND",
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "PROCESS_CENSUS"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "REASON_CODE_COVERAGE"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "RECEIPT_ORACLE"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "RECOVERY_LEDGER_TEST"
+      },
+      {
+        "environment_comparison": "NOT_APPLICABLE",
+        "freshness_class": "SESSION_STATE_BOUND",
+        "freshness_policy_id": "r1.session_state_bound.volatile_20m.v1",
+        "horizon_ns": 1200000000000,
+        "kind": "ROOT_PREFLIGHT"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.t0_procedural_6h.v1",
+        "horizon_ns": 21600000000000,
+        "kind": "TERMINAL_REVIEW"
+      },
+      {
+        "environment_comparison": "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "freshness_class": "EXECUTION_BOUND",
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "horizon_ns": 604800000000000,
+        "kind": "THREE_WINDOW_REGRESSION"
+      }
+    ],
+    "irrelevant_path_allowlist": [
+      "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-acceptance-owner.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-acceptance-owner.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-doctrine-pin.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-doctrine-pin.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-estimator-identity.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-estimator-identity.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-mint-trust.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-mint-trust.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-multicell-mint.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-multicell-mint.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-pack-authentication.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-pack-authentication.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-pack-family.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-pack-family.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-reason-code-coverage.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-reason-code-coverage.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-receipt-oracle.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-receipt-oracle.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-recovery-ledger-test.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-recovery-ledger-test.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-three-window-regression.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.evidence/evidence-three-window-regression.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.freeze.receipts/freeze-0004.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.freeze.receipts/freeze-0004.json.sha256",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/acceptance-owner.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/doctrine-pin.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/estimator-identity.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/mint-trust.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/multicell-mint.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/pack-authentication.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/pack-family.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/reason-code-coverage.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/receipt-oracle.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/recovery-ledger-test.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/arm_readiness.sources/three-window-regression.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/plan_tree.json",
+      "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/plan_tree.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-acceptance-owner.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-acceptance-owner.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-doctrine-pin.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-doctrine-pin.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-estimator-identity.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-estimator-identity.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-mint-trust.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-mint-trust.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-multicell-mint.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-multicell-mint.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-pack-authentication.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-pack-authentication.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-pack-family.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-pack-family.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-reason-code-coverage.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-reason-code-coverage.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-receipt-oracle.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-receipt-oracle.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-recovery-ledger-test.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-recovery-ledger-test.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-three-window-regression.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-three-window-regression.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.freeze.receipts/freeze-0004.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.freeze.receipts/freeze-0004.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/acceptance-owner.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/doctrine-pin.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/estimator-identity.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/mint-trust.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/multicell-mint.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/pack-authentication.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/pack-family.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/reason-code-coverage.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/receipt-oracle.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/recovery-ledger-test.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.sources/three-window-regression.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/plan_tree.json",
+      "configs/campaigns/d117_floor_qwen25_1p5b_v4/plan_tree.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-acceptance-owner.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-acceptance-owner.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-doctrine-pin.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-doctrine-pin.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-estimator-identity.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-estimator-identity.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-mint-trust.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-mint-trust.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-multicell-mint.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-multicell-mint.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-pack-authentication.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-pack-authentication.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-pack-family.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-pack-family.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-reason-code-coverage.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-reason-code-coverage.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-receipt-oracle.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-receipt-oracle.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-recovery-ledger-test.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-recovery-ledger-test.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-three-window-regression.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.evidence/evidence-three-window-regression.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.freeze.receipts/freeze-0004.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.freeze.receipts/freeze-0004.json.sha256",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/acceptance-owner.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/doctrine-pin.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/estimator-identity.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/mint-trust.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/multicell-mint.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/pack-authentication.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/pack-family.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/reason-code-coverage.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/receipt-oracle.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/recovery-ledger-test.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/arm_readiness.sources/three-window-regression.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/plan_tree.json",
+      "configs/campaigns/d117_floor_qwen25_7b_v4/plan_tree.sha256"
+    ],
+    "refusal_vocabulary": [
+      {
+        "code": "readiness_r1_class_mismatch",
+        "role": "CLASS_MISMATCH",
+        "type": "POLICY"
+      },
+      {
+        "code": "readiness_r1_dependency_changed_set",
+        "role": "DEPENDENCY_CHANGED_SET",
+        "type": "LIFECYCLE"
+      },
+      {
+        "code": "readiness_r1_dependency_manifest",
+        "role": "DEPENDENCY_MANIFEST",
+        "type": "LIFECYCLE"
+      },
+      {
+        "code": "readiness_r1_family_publication",
+        "role": "FAMILY_PUBLICATION",
+        "type": "CUSTODY"
+      },
+      {
+        "code": "readiness_r1_successor_chain",
+        "role": "SUCCESSOR_CHAIN",
+        "type": "GIT"
+      },
+      {
+        "code": "readiness_r1_temporal_budget",
+        "role": "TEMPORAL_BUDGET",
+        "type": "LIFECYCLE"
+      },
+      {
+        "code": "readiness_r1_unknown_policy",
+        "role": "UNKNOWN_POLICY",
+        "type": "POLICY"
+      },
+      {
+        "code": "readiness_r1_v1_grandfathering",
+        "role": "V1_GRANDFATHERING",
+        "type": "LIFECYCLE"
+      }
+    ],
+    "registry_id": "d117-r1-lifecycle-v1",
+    "row_policies": [
+      {
+        "freshness_policy_id": "r1.time_bound.procedural_6h.v1",
+        "row_id": "clock.correct_and_prior_state"
+      },
+      {
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "row_id": "clock.network_time_off"
+      },
+      {
+        "freshness_policy_id": "r1.re_derivable.v1",
+        "row_id": "clock.restore_recipe"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.acceptance_owner"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.acceptance_successor"
+      },
+      {
+        "freshness_policy_id": "r1.re_derivable.v1",
+        "row_id": "desk.arming_procedure"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.current_pack"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.estimator_identity"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "row_id": "desk.identity_pin_projection"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.mint_trust"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.multicell_mint"
+      },
+      {
+        "freshness_policy_id": "r1.re_derivable.v1",
+        "row_id": "desk.pack_family"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.reason_code_plumbing"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.receipt_oracle"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.recovery_ledger_path"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "row_id": "desk.reviewed_checkout"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.t0_procedural_6h.v1",
+        "row_id": "desk.terminal_review"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.freeze_generic_168h.v1",
+        "row_id": "desk.three_window_regression"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "row_id": "desk.under_lease_rehearsal"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "row_id": "privilege.activation_fence"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "row_id": "privilege.fresh_authorization"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "row_id": "privilege.installed_bytes"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.no_r1_lane_24h.v1",
+        "row_id": "privilege.isolated_interpreter"
+      },
+      {
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "row_id": "t0.background_quiet"
+      },
+      {
+        "freshness_policy_id": "r1.session_state_bound.volatile_20m.v1",
+        "row_id": "t0.campaign_lock_absent"
+      },
+      {
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "row_id": "t0.display_thermal_idle"
+      },
+      {
+        "freshness_policy_id": "r1.session_state_bound.volatile_20m.v1",
+        "row_id": "t0.fresh_roots_waivers"
+      },
+      {
+        "freshness_policy_id": "r1.session_state_bound.procedural_6h.v1",
+        "row_id": "t0.ledger_reservation"
+      },
+      {
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "row_id": "t0.machine_readiness"
+      },
+      {
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "row_id": "t0.no_stray_keepawake"
+      },
+      {
+        "freshness_policy_id": "r1.execution_bound.t0_procedural_6h.v1",
+        "row_id": "t0.offline_inputs"
+      },
+      {
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "row_id": "t0.passwordless_powermetrics"
+      },
+      {
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "row_id": "t0.power_path"
+      },
+      {
+        "freshness_policy_id": "r1.session_state_bound.volatile_20m.v1",
+        "row_id": "t0.single_launch_capability"
+      },
+      {
+        "freshness_policy_id": "r1.time_bound.volatile_20m.v1",
+        "row_id": "t0.storage_backup_capacity"
+      }
+    ],
+    "schema_version": "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v1",
+    "successor_policy": {
+      "cross_chain_numbering": "joulewise.freeze_chain.monotonic_predecessor_ordinal.v1",
+      "family_publication_first_generation": 4,
+      "family_publication_marker_schema": "joulewise.d117_family_publication_marker.v1",
+      "freeze_receipt_v2_predecessor_bindings": [
+        "evidence_set_sha256",
+        "freeze_receipt",
+        "identity_receipt",
+        "pack_digest_algorithm",
+        "pack_id",
+        "pack_path",
+        "pack_sha256",
+        "plan_id",
+        "plan_sha256"
+      ],
+      "successor_pack_ids": {
+        "ALPHA": "d117_floor_qwen25_1p5b_v4",
+        "BETA": "d117_floor_qwen25_7b_v4",
+        "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4"
+      }
+    }
+  },
+  "plan_profiles": [
+    {
+      "profile_id": "ALPHA",
+      "required_row_ids": [
+        "clock.correct_and_prior_state",
+        "clock.network_time_off",
+        "clock.restore_recipe",
+        "desk.acceptance_owner",
+        "desk.acceptance_successor",
+        "desk.arming_procedure",
+        "desk.current_pack",
+        "desk.estimator_identity",
+        "desk.identity_pin_projection",
+        "desk.mint_trust",
+        "desk.multicell_mint",
+        "desk.pack_family",
+        "desk.reason_code_plumbing",
+        "desk.receipt_oracle",
+        "desk.recovery_ledger_path",
+        "desk.reviewed_checkout",
+        "desk.terminal_review",
+        "desk.three_window_regression",
+        "desk.under_lease_rehearsal",
+        "privilege.activation_fence",
+        "privilege.fresh_authorization",
+        "privilege.installed_bytes",
+        "privilege.isolated_interpreter",
+        "t0.background_quiet",
+        "t0.campaign_lock_absent",
+        "t0.display_thermal_idle",
+        "t0.fresh_roots_waivers",
+        "t0.ledger_reservation",
+        "t0.machine_readiness",
+        "t0.no_stray_keepawake",
+        "t0.offline_inputs",
+        "t0.passwordless_powermetrics",
+        "t0.power_path",
+        "t0.single_launch_capability",
+        "t0.storage_backup_capacity"
+      ],
+      "window_kind": "ALPHA"
+    },
+    {
+      "profile_id": "BETA",
+      "required_row_ids": [
+        "clock.correct_and_prior_state",
+        "clock.network_time_off",
+        "clock.restore_recipe",
+        "desk.acceptance_owner",
+        "desk.acceptance_successor",
+        "desk.arming_procedure",
+        "desk.current_pack",
+        "desk.estimator_identity",
+        "desk.identity_pin_projection",
+        "desk.mint_trust",
+        "desk.multicell_mint",
+        "desk.pack_family",
+        "desk.reason_code_plumbing",
+        "desk.receipt_oracle",
+        "desk.recovery_ledger_path",
+        "desk.reviewed_checkout",
+        "desk.terminal_review",
+        "desk.three_window_regression",
+        "desk.under_lease_rehearsal",
+        "privilege.activation_fence",
+        "privilege.fresh_authorization",
+        "privilege.installed_bytes",
+        "privilege.isolated_interpreter",
+        "t0.background_quiet",
+        "t0.campaign_lock_absent",
+        "t0.display_thermal_idle",
+        "t0.fresh_roots_waivers",
+        "t0.ledger_reservation",
+        "t0.machine_readiness",
+        "t0.no_stray_keepawake",
+        "t0.offline_inputs",
+        "t0.passwordless_powermetrics",
+        "t0.power_path",
+        "t0.single_launch_capability",
+        "t0.storage_backup_capacity"
+      ],
+      "window_kind": "BETA"
+    },
+    {
+      "profile_id": "GAMMA",
+      "required_row_ids": [
+        "clock.correct_and_prior_state",
+        "clock.network_time_off",
+        "clock.restore_recipe",
+        "desk.acceptance_owner",
+        "desk.acceptance_successor",
+        "desk.arming_procedure",
+        "desk.current_pack",
+        "desk.estimator_identity",
+        "desk.identity_pin_projection",
+        "desk.mint_trust",
+        "desk.multicell_mint",
+        "desk.pack_family",
+        "desk.reason_code_plumbing",
+        "desk.receipt_oracle",
+        "desk.recovery_ledger_path",
+        "desk.reviewed_checkout",
+        "desk.terminal_review",
+        "desk.three_window_regression",
+        "desk.under_lease_rehearsal",
+        "privilege.activation_fence",
+        "privilege.fresh_authorization",
+        "privilege.installed_bytes",
+        "privilege.isolated_interpreter",
+        "t0.background_quiet",
+        "t0.campaign_lock_absent",
+        "t0.display_thermal_idle",
+        "t0.fresh_roots_waivers",
+        "t0.ledger_reservation",
+        "t0.machine_readiness",
+        "t0.no_stray_keepawake",
+        "t0.offline_inputs",
+        "t0.passwordless_powermetrics",
+        "t0.power_path",
+        "t0.single_launch_capability",
+        "t0.storage_backup_capacity"
+      ],
+      "window_kind": "GAMMA"
+    }
+  ],
+  "registry_id": "d117-row-registry-v2",
+  "rows": [
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "clock.correct_and_prior_state.v1",
+      "required_evidence_kinds": [
+        "CLOCK_ATTESTATION"
+      ],
+      "row_id": "clock.correct_and_prior_state"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "clock.network_time_off.v1",
+      "required_evidence_kinds": [
+        "CLOCK_PROBE"
+      ],
+      "row_id": "clock.network_time_off"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "clock.restore_recipe.v1",
+      "required_evidence_kinds": [
+        "DOCTRINE_PIN"
+      ],
+      "row_id": "clock.restore_recipe"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.acceptance_owner.v1",
+      "required_evidence_kinds": [
+        "ACCEPTANCE_OWNER"
+      ],
+      "row_id": "desk.acceptance_owner"
+    },
+    {
+      "applicability_rule": "SUCCESSOR_ACCEPTANCE_ONLY",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.acceptance_successor.v1",
+      "required_evidence_kinds": [
+        "ACCEPTANCE_SUCCESSOR"
+      ],
+      "row_id": "desk.acceptance_successor"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.arming_procedure.v1",
+      "required_evidence_kinds": [
+        "DOCTRINE_PIN"
+      ],
+      "row_id": "desk.arming_procedure"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.current_pack.v1",
+      "required_evidence_kinds": [
+        "PACK_AUTHENTICATION"
+      ],
+      "row_id": "desk.current_pack"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.estimator_identity.v1",
+      "required_evidence_kinds": [
+        "ESTIMATOR_IDENTITY"
+      ],
+      "row_id": "desk.estimator_identity"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.identity_pin_projection.v1",
+      "required_evidence_kinds": [
+        "IDENTITY_PIN_PROJECTION"
+      ],
+      "row_id": "desk.identity_pin_projection"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.mint_trust.v1",
+      "required_evidence_kinds": [
+        "MINT_TRUST"
+      ],
+      "row_id": "desk.mint_trust"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.multicell_mint.v1",
+      "required_evidence_kinds": [
+        "MULTICELL_MINT"
+      ],
+      "row_id": "desk.multicell_mint"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.pack_family.v1",
+      "required_evidence_kinds": [
+        "PACK_FAMILY"
+      ],
+      "row_id": "desk.pack_family"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.reason_code_plumbing.v1",
+      "required_evidence_kinds": [
+        "REASON_CODE_COVERAGE"
+      ],
+      "row_id": "desk.reason_code_plumbing"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.receipt_oracle.v1",
+      "required_evidence_kinds": [
+        "RECEIPT_ORACLE"
+      ],
+      "row_id": "desk.receipt_oracle"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.recovery_ledger_path.v1",
+      "required_evidence_kinds": [
+        "RECOVERY_LEDGER_TEST"
+      ],
+      "row_id": "desk.recovery_ledger_path"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "desk.reviewed_checkout.v1",
+      "required_evidence_kinds": [
+        "GIT_CHECKOUT"
+      ],
+      "row_id": "desk.reviewed_checkout"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "desk.terminal_review.v1",
+      "required_evidence_kinds": [
+        "TERMINAL_REVIEW"
+      ],
+      "row_id": "desk.terminal_review"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "FREEZE_AND_ARM",
+      "predicate_id": "desk.three_window_regression.v1",
+      "required_evidence_kinds": [
+        "THREE_WINDOW_REGRESSION"
+      ],
+      "row_id": "desk.three_window_regression"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "desk.under_lease_rehearsal.v1",
+      "required_evidence_kinds": [
+        "DRY_RUN_REHEARSAL"
+      ],
+      "row_id": "desk.under_lease_rehearsal"
+    },
+    {
+      "applicability_rule": "CLOCK_HELPER_ONLY",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "privilege.activation_fence.v1",
+      "required_evidence_kinds": [
+        "PRIVILEGE_INSTALLATION"
+      ],
+      "row_id": "privilege.activation_fence"
+    },
+    {
+      "applicability_rule": "CLOCK_HELPER_ONLY",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "privilege.fresh_authorization.v1",
+      "required_evidence_kinds": [
+        "PRIVILEGE_INSTALLATION"
+      ],
+      "row_id": "privilege.fresh_authorization"
+    },
+    {
+      "applicability_rule": "CLOCK_HELPER_ONLY",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "privilege.installed_bytes.v1",
+      "required_evidence_kinds": [
+        "PRIVILEGE_INSTALLATION"
+      ],
+      "row_id": "privilege.installed_bytes"
+    },
+    {
+      "applicability_rule": "CLOCK_HELPER_ONLY",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "privilege.isolated_interpreter.v1",
+      "required_evidence_kinds": [
+        "PRIVILEGE_INSTALLATION"
+      ],
+      "row_id": "privilege.isolated_interpreter"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.background_quiet.v1",
+      "required_evidence_kinds": [
+        "MAINTENANCE_CENSUS"
+      ],
+      "row_id": "t0.background_quiet"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.campaign_lock_absent.v1",
+      "required_evidence_kinds": [
+        "ROOT_PREFLIGHT"
+      ],
+      "row_id": "t0.campaign_lock_absent"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.display_thermal_idle.v1",
+      "required_evidence_kinds": [
+        "MACHINE_PREFLIGHT"
+      ],
+      "row_id": "t0.display_thermal_idle"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.fresh_roots_waivers.v1",
+      "required_evidence_kinds": [
+        "ROOT_PREFLIGHT"
+      ],
+      "row_id": "t0.fresh_roots_waivers"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.ledger_reservation.v1",
+      "required_evidence_kinds": [
+        "LEDGER_RESERVATION"
+      ],
+      "row_id": "t0.ledger_reservation"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.machine_readiness.v1",
+      "required_evidence_kinds": [
+        "MACHINE_PREFLIGHT"
+      ],
+      "row_id": "t0.machine_readiness"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.no_stray_keepawake.v1",
+      "required_evidence_kinds": [
+        "PROCESS_CENSUS"
+      ],
+      "row_id": "t0.no_stray_keepawake"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.offline_inputs.v1",
+      "required_evidence_kinds": [
+        "OFFLINE_INPUT_INVENTORY"
+      ],
+      "row_id": "t0.offline_inputs"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.passwordless_powermetrics.v1",
+      "required_evidence_kinds": [
+        "POWERMETRICS_PROBE"
+      ],
+      "row_id": "t0.passwordless_powermetrics"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.power_path.v1",
+      "required_evidence_kinds": [
+        "POWER_PREFLIGHT"
+      ],
+      "row_id": "t0.power_path"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.single_launch_capability.v1",
+      "required_evidence_kinds": [
+        "LAUNCH_RECIPE"
+      ],
+      "row_id": "t0.single_launch_capability"
+    },
+    {
+      "applicability_rule": "ALWAYS",
+      "evaluation_phase": "ARM_ONLY",
+      "predicate_id": "t0.storage_backup_capacity.v1",
+      "required_evidence_kinds": [
+        "BACKUP_PREFLIGHT"
+      ],
+      "row_id": "t0.storage_backup_capacity"
+    }
+  ],
+  "schema_version": "joulewise.arm_readiness_row_registry.v2"
+}

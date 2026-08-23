@@ -65,6 +65,14 @@ EXECUTION_EVIDENCE_RECEIPT_SCHEMA = (
 R1_LIFECYCLE_REGISTRY_SCHEMA = (
     "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v1"
 )
+FAMILY_PUBLICATION_MARKER_SCHEMA = "joulewise.d117_family_publication_marker.v1"
+FAMILY_PUBLICATION_VERIFICATION_SCHEMA = (
+    "joulewise.d117_family_publication_verification.v1"
+)
+STEP6_CONFIRMATION_TABLE_SCHEMA = "joulewise.d117_step6_confirmation_table.v1"
+FAMILY_PUBLICATION_MARKER_NAME = "d117_family_publication_v4.json"
+STEP6_CONFIRMATION_TABLE_NAME = "d117_step6_confirmation_table_v4.json"
+S0_CANDIDATE_MANIFEST_NAME = "s0-candidate-manifest.json"
 LEGACY_CONSUMPTION_RECEIPT_SCHEMA = (
     "joulewise.arm_readiness_launch_consumption.v1"
 )
@@ -77,7 +85,7 @@ LAUNCH_START_RECEIPT_SCHEMA = "joulewise.launch_start_receipt.v1"
 LAUNCH_SETTLE_RECEIPT_SCHEMA = "joulewise.launch_settle_receipt.v1"
 LAUNCH_COMPLETION_RECEIPT_SCHEMA = "joulewise.launch_completion_receipt.v1"
 CONTRACT_ID = "D-134"
-ROW_REGISTRY_RELATIVE_PATH = Path("configs/arm_readiness/d117_row_registry_v1.json")
+ROW_REGISTRY_RELATIVE_PATH = Path("configs/arm_readiness/d117_row_registry_v2.json")
 _T0_EVIDENCE_SOURCE_SCHEMA = "joulewise.arm_readiness_t0_evidence_source.v1"
 _T0_INPUT_DIRECTORY = "arm_readiness.t0.inputs"
 # Launch-recipe receipts and sources are canonical JSON records measured in
@@ -178,6 +186,22 @@ ENVIRONMENT_REASON_CODES = frozenset(
 # are never minted into a receipt: an unauthenticated ancestry record is not a
 # legitimate chain member, so it must not become a REFUSE receipt either.
 SUCCESSOR_CHAIN_REASON_CODES = frozenset({"readiness_successor_chain_invalid"})
+# R1's registry-resolved vocabulary is code-enumerated as four typed families.
+# Registry loading checks both membership and type, so deleting a spelling from
+# code cannot leave a dormant registry-only refusal that fails later at mint.
+R1_POLICY_REASON_CODES = frozenset(
+    {"readiness_r1_class_mismatch", "readiness_r1_unknown_policy"}
+)
+R1_LIFECYCLE_REASON_CODES = frozenset(
+    {
+        "readiness_r1_dependency_changed_set",
+        "readiness_r1_dependency_manifest",
+        "readiness_r1_temporal_budget",
+        "readiness_r1_v1_grandfathering",
+    }
+)
+R1_CUSTODY_REASON_CODES = frozenset({"readiness_r1_family_publication"})
+R1_GIT_REASON_CODES = frozenset({"readiness_r1_successor_chain"})
 LAUNCH_LINEAGE_REASON_CODES = frozenset(
     {
         "launch_consumption_missing",
@@ -198,6 +222,10 @@ READINESS_REASON_CODES = frozenset().union(
     IDENTITY_PIN_PROJECTION_REASON_CODES,
     ENVIRONMENT_REASON_CODES,
     SUCCESSOR_CHAIN_REASON_CODES,
+    R1_POLICY_REASON_CODES,
+    R1_LIFECYCLE_REASON_CODES,
+    R1_CUSTODY_REASON_CODES,
+    R1_GIT_REASON_CODES,
 )
 REASON_TYPE_BY_CODE = {
     **{code: "STRUCTURE" for code in STRUCTURE_REASON_CODES},
@@ -208,6 +236,10 @@ REASON_TYPE_BY_CODE = {
     **{code: "IDENTITY" for code in IDENTITY_PIN_PROJECTION_REASON_CODES},
     **{code: "ENVIRONMENT" for code in ENVIRONMENT_REASON_CODES},
     **{code: "SUCCESSOR_CHAIN" for code in SUCCESSOR_CHAIN_REASON_CODES},
+    **{code: "POLICY" for code in R1_POLICY_REASON_CODES},
+    **{code: "LIFECYCLE" for code in R1_LIFECYCLE_REASON_CODES},
+    **{code: "CUSTODY" for code in R1_CUSTODY_REASON_CODES},
+    **{code: "GIT" for code in R1_GIT_REASON_CODES},
 }
 
 WINDOW_KINDS = frozenset({"ALPHA", "BETA", "GAMMA"})
@@ -497,6 +529,58 @@ R1_REFUSAL_ROLES = frozenset(
         "V1_GRANDFATHERING",
     }
 )
+FAMILY_PUBLICATION_CHECK_IDS = frozenset(
+    {
+        "marker_absent",
+        "marker_unreadable",
+        "marker_noncanonical",
+        "marker_schema_mismatch",
+        "marker_self_digest_mismatch",
+        "lane_inconsistent",
+        "lane_inadmissible",
+        "registry_mismatch",
+        "registry_dormant",
+        "roster_mismatch",
+        "roster_incomplete",
+        "pack_not_member",
+        "family_incoherent",
+        "head_mismatch",
+        "head_unpublished",
+        "head_unresolvable",
+        "worktree_dirty",
+        "pack_digest_mismatch",
+        "plan_binding_mismatch",
+        "evidence_set_mismatch",
+        "freeze_binding_mismatch",
+        "freeze_not_pass",
+        "predecessor_mismatch",
+        "terminal_review_mismatch",
+        "confirmation_missing",
+        "confirmation_mismatch",
+        "tool_mismatch",
+        "output_in_tree",
+        "output_collision",
+    }
+)
+"""The closed, code-enumerated diagnostic vocabulary (marker ruling item 4).
+
+Closed means: ``FamilyPublicationError`` refuses to construct an id outside
+this set, so a diagnostic can never be invented at a call site.  It also means
+a member with no raise site is dead weight that the exactness regression would
+lock in forever, so every member must have one.
+
+Finish round (2026-08-22, gap G-5) retired three members that had none and
+could not honestly acquire one: ``history_shallow`` and ``git_unavailable``
+(nothing in this path consults history depth, and an unavailable Git surfaces
+through ``head_unresolvable``), and ``internal_error`` (an unhandled fault is
+not a family-publication diagnosis and must propagate, not be relabelled).
+Three others acquired real raise sites in the same round: ``registry_dormant``
+(a registry with no reviewed generation threshold), ``lane_inconsistent`` (a
+verification receipt whose lane fields contradict its own phase), and
+``marker_self_digest_mismatch`` (marker bytes disagreeing with their sidecar,
+previously reported as the vaguer ``marker_unreadable``).  ``head_unpublished``
+acquired one by splitting the rollback case out of ``head_mismatch``.
+"""
 _R1_REGISTRY_KEYS = {
     "schema_version",
     "registry_id",
@@ -521,6 +605,7 @@ _R1_SUCCESSOR_POLICY_KEYS = {
     "cross_chain_numbering",
     "freeze_receipt_v2_predecessor_bindings",
     "family_publication_marker_schema",
+    "family_publication_first_generation",
 }
 _R1_REFUSAL_ENTRY_KEYS = {"role", "code", "type"}
 _R1_ED_RESERVED_PREFIX = "ED_RESERVED:"
@@ -542,6 +627,9 @@ R1_LIFECYCLE_REGISTRY_PLACEHOLDER = {
         ),
         "family_publication_marker_schema": (
             "ED_RESERVED:family-publication-marker-schema"
+        ),
+        "family_publication_first_generation": (
+            "ED_RESERVED:family-publication-first-generation"
         ),
     },
     "refusal_vocabulary": [
@@ -1541,13 +1629,26 @@ def _r1_contains_reserved(value: object) -> bool:
 
 
 def validate_r1_lifecycle_registry(
-    value: object, *, require_resolved: bool = True
+    value: object,
+    *,
+    require_resolved: bool = True,
+    require_registered_codes: bool = False,
 ) -> Mapping[str, Any]:
     """Validate the single R1 lifecycle-policy input.
 
     Clause-6 values may exist as explicit ``ED_RESERVED:`` placeholders for
     dry construction only.  Every issuance/consumption caller uses the
     default ``require_resolved=True`` and therefore fails closed.
+
+    ``require_registered_codes`` is the marker ruling's REGISTRY-LOAD closure
+    check: every refusal code the registry declares must already exist in
+    ``READINESS_REASON_CODES`` with the same ``REASON_TYPE_BY_CODE`` type.  It
+    is enabled on exactly one path -- ``validate_registry``, i.e. the tracked
+    registry that ``load_registry`` reads and that ``_receipt_refusal``
+    actually consults, where an unregistered code would explode into
+    ``readiness_internal_error``.  Callers that hand this validator a synthetic
+    lifecycle registry of their own construction are not on that path and are
+    not closed against the production vocabulary.
     """
 
     registry = _require_exact_keys(value, _R1_REGISTRY_KEYS, "R1 lifecycle registry")
@@ -1724,11 +1825,27 @@ def validate_r1_lifecycle_registry(
                 "readiness_row_registry_mismatch", f"R1 arm_policy.{name} is invalid"
             )
 
+    raw_successor_policy = registry["successor_policy"]
+    if not isinstance(raw_successor_policy, Mapping):
+        raise ArmReadinessError(
+            "readiness_schema_invalid", "R1 successor_policy must be an object"
+        )
     successor_policy = _require_exact_keys(
-        registry["successor_policy"],
-        _R1_SUCCESSOR_POLICY_KEYS,
-        "R1 successor_policy",
+        raw_successor_policy, _R1_SUCCESSOR_POLICY_KEYS, "R1 successor_policy"
     )
+    generation = successor_policy["family_publication_first_generation"]
+    if not (
+        (isinstance(generation, str) and generation.startswith(_R1_ED_RESERVED_PREFIX))
+        or (
+            isinstance(generation, int)
+            and not isinstance(generation, bool)
+            and generation >= 1
+        )
+    ):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 successor_policy.family_publication_first_generation is invalid",
+        )
     pack_ids = successor_policy["successor_pack_ids"]
     if not (
         (isinstance(pack_ids, str) and pack_ids.startswith(_R1_ED_RESERVED_PREFIX))
@@ -1810,6 +1927,18 @@ def validate_r1_lifecycle_registry(
                 "readiness_row_registry_mismatch",
                 f"R1 refusal_vocabulary[{index}].type is invalid",
             )
+        if (
+            require_registered_codes
+            and not code.startswith(_R1_ED_RESERVED_PREFIX)
+            and (
+                code not in READINESS_REASON_CODES
+                or REASON_TYPE_BY_CODE.get(code) != reason_type
+            )
+        ):
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                f"R1 refusal_vocabulary[{index}] is not closed by code/type authority",
+            )
     if roles != sorted(R1_REFUSAL_ROLES) or len(codes) != len(set(codes)):
         raise ArmReadinessError(
             "readiness_row_registry_mismatch",
@@ -1888,7 +2017,19 @@ def validate_registry(value: object) -> Mapping[str, Any]:
         )
     if schema == R1_ROW_REGISTRY_SCHEMA:
         _require_string(registry["registry_id"], "registry.registry_id")
-        validate_r1_lifecycle_registry(registry["freeze_evidence_lifecycle"])
+        lifecycle = validate_r1_lifecycle_registry(
+            registry["freeze_evidence_lifecycle"], require_registered_codes=True
+        )
+        missing_conditional_paths = (
+            R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS
+            - set(lifecycle["irrelevant_path_allowlist"])
+        )
+        if missing_conditional_paths:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                "R1 digest-conditional code paths are absent from the registry "
+                f"allowlist: {sorted(missing_conditional_paths)!r}",
+            )
     profiles = registry["plan_profiles"]
     rows = registry["rows"]
     if not isinstance(profiles, list) or not isinstance(rows, list):
@@ -2709,10 +2850,23 @@ def committed_pack_tree_sha256(pack_root: Path | str) -> str:
     return sha256_bytes(bytes(framed))
 
 
-RECEIPT_HISTSEM_PINSET_RELATIVE_PATH = Path(
-    "configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"
+RECEIPT_HISTSEM_PINSET_RELATIVE_PATH = (
+    Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"),
+    Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"),
 )
 RECEIPT_HISTSEM_PINSET_SCHEMA = "joulewise.receipt_histsem_pinset.v1"
+R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS = frozenset(
+    {RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1].as_posix()}
+)
+"""Allowlist entries D-151 condition 2 forgives only under a digest condition.
+
+Membership in ``irrelevant_path_allowlist`` names a path as *eligible* for
+subtraction from the R1 changed set.  For every path in this set that eligibility
+is not sufficient: the bytes committed at the reviewed HEAD must additionally
+hash to the digest Ed recorded in the step-6 confirmation table's matching
+section (the C -> S edge).  Without that confirmation the path stays in the
+relevant set and the gate refuses ``DEPENDENCY_CHANGED_SET``.
+"""
 _HISTSEM_CUSTODY_DIRECTORIES = frozenset(
     {
         "arm_readiness.evidence",
@@ -3014,28 +3168,64 @@ def _validate_histsem_pinset(value: object) -> tuple[Mapping[str, Any], ...]:
 def _load_histsem_pinset(
     repository: Path, pinset_path: Path | str | None = None
 ) -> tuple[Mapping[str, Any], ...]:
-    path = (
-        repository / RECEIPT_HISTSEM_PINSET_RELATIVE_PATH
-        if pinset_path is None
-        else Path(pinset_path)
+    enumerated_paths = tuple(
+        (repository / item).resolve(strict=False)
+        for item in RECEIPT_HISTSEM_PINSET_RELATIVE_PATH
     )
-    try:
-        raw = path.read_bytes()
-    except FileNotFoundError as exc:
+    if pinset_path is None:
+        paths = enumerated_paths
+    else:
+        supplied_path = Path(pinset_path)
+        supplied = (
+            supplied_path
+            if supplied_path.is_absolute()
+            else repository / supplied_path
+        ).resolve(strict=False)
+        if supplied not in enumerated_paths:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid",
+                "receipt-histsem pinset override is outside the closed enumeration",
+            )
+        paths = (supplied,)
+    rows: list[Mapping[str, Any]] = []
+    identities: set[tuple[str, str]] = set()
+    present = 0
+    for path in paths:
+        try:
+            raw = path.read_bytes()
+        except FileNotFoundError:
+            # Rule-11 absence semantics are per enumerated member: a future
+            # successor that has not yet been minted contributes no rows.
+            continue
+        except OSError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid", f"receipt-histsem pinset is unreadable: {exc}"
+            ) from exc
+        present += 1
+        try:
+            member_rows = _validate_histsem_pinset(
+                parse_json_bytes(raw, require_canonical=True)
+            )
+        except ArmReadinessError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid",
+                f"receipt-histsem pinset is not canonical: {exc}",
+            ) from exc
+        for row in member_rows:
+            identity = (str(row["pack_id"]), str(row["pack_path"]))
+            if identity in identities:
+                raise HistoricalSemanticsError(
+                    "histsem_pinset_invalid",
+                    f"duplicate pack identity across pinset chain: {identity!r}",
+                )
+            identities.add(identity)
+            rows.append(row)
+    if present == 0:
+        label = ", ".join(str(path) for path in paths)
         raise HistoricalSemanticsError(
-            "histsem_pinset_absent", f"receipt-histsem pinset is absent: {path}"
-        ) from exc
-    except OSError as exc:
-        raise HistoricalSemanticsError(
-            "histsem_pinset_invalid", f"receipt-histsem pinset is unreadable: {exc}"
-        ) from exc
-    try:
-        value = parse_json_bytes(raw, require_canonical=True)
-    except ArmReadinessError as exc:
-        raise HistoricalSemanticsError(
-            "histsem_pinset_invalid", f"receipt-histsem pinset is not canonical: {exc}"
-        ) from exc
-    return _validate_histsem_pinset(value)
+            "histsem_pinset_absent", f"receipt-histsem pinset is absent: {label}"
+        )
+    return tuple(rows)
 
 
 def _histsem_read_bound_file(
@@ -3326,7 +3516,7 @@ def verify_receipt_histsem_pack(
         dict(item)
         for item in freeze["evidence"]
         if item["namespace"] == "PACK"
-        and item["schema_version"] == EVIDENCE_RECEIPT_SCHEMA
+        and item["schema_version"] in GENERIC_EVIDENCE_RECEIPT_SCHEMAS
     ]
     if freeze_pack_items != pinned_receipts:
         raise HistoricalSemanticsError(
@@ -3361,7 +3551,7 @@ def verify_receipt_histsem_pack(
         )
         receipt_head = receipt.get("head_commit", receipt.get("derivation_commit"))
         if (
-            receipt["schema_version"] != EVIDENCE_RECEIPT_SCHEMA
+            receipt["schema_version"] not in GENERIC_EVIDENCE_RECEIPT_SCHEMAS
             or re.fullmatch(r"[0-9a-f]{40}", str(receipt_head)) is None
             or re.fullmatch(r"[0-9a-f]{64}", str(receipt.get("pack_sha256"))) is None
         ):
@@ -3464,38 +3654,47 @@ def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -
         if not _histsem_has_git_metadata(pack_root):
             return
         raise
-    code, pinset_entry, _stderr = _histsem_git(
-        repository,
-        "ls-tree",
-        "HEAD",
-        "--",
-        RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix(),
-    )
-    if code != 0:
-        raise HistoricalSemanticsError(
-            "histsem_history_unavailable",
-            "committed receipt-histsem pinset lookup failed",
+    governed_rows_list: list[Mapping[str, Any]] = []
+    identities: set[tuple[str, str]] = set()
+    for relative_path in RECEIPT_HISTSEM_PINSET_RELATIVE_PATH:
+        code, pinset_entry, _stderr = _histsem_git(
+            repository, "ls-tree", "HEAD", "--", relative_path.as_posix()
         )
-    if not pinset_entry.strip():
+        if code != 0:
+            raise HistoricalSemanticsError(
+                "histsem_history_unavailable",
+                "committed receipt-histsem pinset lookup failed",
+            )
+        if not pinset_entry.strip():
+            continue
+        code, pinset_raw, _stderr = _histsem_git(
+            repository, "show", f"HEAD:{relative_path.as_posix()}"
+        )
+        if code != 0:
+            raise HistoricalSemanticsError(
+                "histsem_history_unavailable",
+                "committed receipt-histsem pinset read failed",
+            )
+        try:
+            member_rows = _validate_histsem_pinset(
+                parse_json_bytes(pinset_raw, require_canonical=True)
+            )
+        except ArmReadinessError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid", "committed receipt-histsem pinset is invalid"
+            ) from exc
+        for row in member_rows:
+            identity = (str(row["pack_id"]), str(row["pack_path"]))
+            if identity in identities:
+                raise HistoricalSemanticsError(
+                    "histsem_pinset_invalid",
+                    f"duplicate pack identity across pinset chain: {identity!r}",
+                )
+            identities.add(identity)
+            governed_rows_list.append(row)
+    governed_rows = tuple(governed_rows_list)
+    if not governed_rows:
         return
-    code, pinset_raw, _stderr = _histsem_git(
-        repository,
-        "show",
-        f"HEAD:{RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix()}",
-    )
-    if code != 0:
-        raise HistoricalSemanticsError(
-            "histsem_history_unavailable",
-            "committed receipt-histsem pinset read failed",
-        )
-    try:
-        governed_rows = _validate_histsem_pinset(
-            parse_json_bytes(pinset_raw, require_canonical=True)
-        )
-    except ArmReadinessError as exc:
-        raise HistoricalSemanticsError(
-            "histsem_pinset_invalid", "committed receipt-histsem pinset is invalid"
-        ) from exc
     if not any(
         row["pack_id"] == pack_root.name and row["pack_path"] == pack_relative
         for row in governed_rows
@@ -3996,6 +4195,64 @@ def _r1_manifest_dependencies(source: Mapping[str, Any]) -> list[dict[str, str]]
     ]
 
 
+def _require_confirmed_conditional_path(
+    root: Path,
+    current_head: str,
+    relative_path: str,
+    registry: Mapping[str, Any],
+    confirmation_path: Path | str | None,
+    *,
+    expected_confirmation_digest: str | None = None,
+    evidence_id: str | None,
+) -> None:
+    """Enforce D-151 condition 2's C -> S edge for one conditional allowlist path.
+
+    Returns normally only when Ed's step-6 confirmation table is present, valid,
+    names this exact path in its ``successor_pinset`` section, and records the
+    SHA-256 of the bytes committed at ``current_head``.  Every other outcome --
+    no table, an unreadable/noncanonical/invalid table, a table naming a
+    different path, an absent blob, or a digest mismatch -- raises
+    ``DEPENDENCY_CHANGED_SET``, which is the pre-existing refusal role the
+    changed-set gate already owns (D-151 condition 1e: no new refusal codes).
+    """
+
+    def refuse(detail: str, cause: BaseException | None = None) -> EvidenceLifecycleError:
+        error = EvidenceLifecycleError(
+            registry,
+            "DEPENDENCY_CHANGED_SET",
+            f"digest-conditional allowlist path {relative_path!r}: {detail}",
+            evidence_id=evidence_id,
+        )
+        if cause is not None:
+            error.__cause__ = cause
+        return error
+
+    try:
+        table, _table_raw = _authenticate_confirmation_table(
+            confirmation_path, expected_confirmation_digest
+        )
+    except (FamilyPublicationError, ArmReadinessError) as exc:
+        detail = (
+            str(exc)
+            if isinstance(exc, FamilyPublicationError)
+            else f"step-6 confirmation table is inadmissible: {exc}"
+        )
+        raise refuse(detail, exc) from exc
+    section = table["successor_pinset"]
+    if section["path"] != relative_path:
+        raise refuse("the confirmed step-6 table authenticates a different path")
+    try:
+        committed = _git_blob_at_commit(root, current_head, relative_path, registry)
+    except EvidenceLifecycleError as exc:
+        raise refuse(
+            f"no committed bytes at the reviewed HEAD to authenticate: {exc}", exc
+        ) from exc
+    if sha256_bytes(committed) != section["sha256"]:
+        raise refuse(
+            "bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest"
+        )
+
+
 def validate_r1_evidence_lifecycle(
     repository: Path | str,
     receipt: Mapping[str, Any],
@@ -4005,6 +4262,8 @@ def validate_r1_evidence_lifecycle(
     current_head: str,
     expected_freshness_class: str,
     plan_tree_path: str,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[str, ...]:
     """Apply R1's changed-set primary gate and manifest conjunct."""
 
@@ -4039,7 +4298,20 @@ def validate_r1_evidence_lifecycle(
         root, derivation_commit, current_head, governed
     )
     allowlist = set(governed["irrelevant_path_allowlist"])
-    relevant = sorted(set(changed_paths) - allowlist)
+    conditional = allowlist & R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS
+    outstanding = set(changed_paths) - (allowlist - conditional)
+    for conditional_path in sorted(outstanding & conditional):
+        _require_confirmed_conditional_path(
+            root,
+            current_head,
+            conditional_path,
+            governed,
+            step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
+            evidence_id=str(validated_receipt["evidence_id"]),
+        )
+        outstanding.discard(conditional_path)
+    relevant = sorted(outstanding)
     if relevant:
         raise EvidenceLifecycleError(
             governed,
@@ -5003,6 +5275,8 @@ def _authenticate_generic_evidence_item(
     enforce_expiry: bool = True,
     launch_binding_cache: dict[Path, bytes] | None = None,
     lifecycle_registry: Mapping[str, Any] | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> Mapping[str, Any]:
     _validate_evidence_item(item, "evidence item")
     if item["schema_version"] not in GENERIC_EVIDENCE_RECEIPT_SCHEMAS:
@@ -5195,6 +5469,8 @@ def _authenticate_generic_evidence_item(
             current_head=current_head,
             expected_freshness_class=expected_class,
             plan_tree_path=f"{pack_relative}/plan_tree.json",
+            step6_confirmation_table=step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
         )
         if expected_class == "RE_DERIVABLE":
             try:
@@ -5220,6 +5496,8 @@ def _discover_evidence(
     include_pack: bool = True,
     launch_binding_cache: dict[Path, bytes] | None = None,
     lifecycle_registry: Mapping[str, Any] | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]], list[dict[str, Any]]]:
     governed_lifecycle = (
         validate_r1_lifecycle_registry(lifecycle_registry)
@@ -5441,6 +5719,8 @@ def _discover_evidence(
                         expected_boot_session_id=boot_session_id,
                         now_monotonic_ns=now_monotonic_ns,
                         lifecycle_registry=lifecycle_registry,
+                        step6_confirmation_table=step6_confirmation_table,
+                        expected_confirmation_digest=expected_confirmation_digest,
                     )
                 items.append(item)
                 receipts[receipt["evidence_id"]] = receipt
@@ -5989,6 +6269,8 @@ def _load_freeze_reference(
     registry: Mapping[str, Any],
     *,
     require_pass: bool = True,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[Mapping[str, Any], dict[str, Any]]:
     attachments = tree.get("arm_attachments")
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
@@ -6095,6 +6377,8 @@ def _load_freeze_reference(
                     else None
                 ),
                 lifecycle_registry=lifecycle_registry,
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         )
     identity_items = [
@@ -6196,6 +6480,9 @@ def _freeze_evidence_for_arm(
     tree: Mapping[str, Any],
     freeze_receipt: Mapping[str, Any],
     registry: Mapping[str, Any] | None = None,
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]]]:
     items = copy.deepcopy(list(freeze_receipt["evidence"]))
     receipts: dict[str, Mapping[str, Any]] = {}
@@ -6223,6 +6510,8 @@ def _freeze_evidence_for_arm(
                 expected_boot_session_id=boot_session_id,
                 expected_head_commit=expected_head,
                 lifecycle_registry=lifecycle_registry,
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         elif item["schema_version"] == IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA:
             if item != plan_identity_item or plan_identity_receipt is None:
@@ -6243,6 +6532,9 @@ def generate_freeze_receipt(
     pack_root: Path | str,
     *,
     predecessor_pack_root: Path | str | None = None,
+    family_publication_marker: Path | str | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Write or idempotently authenticate the pack's non-authorizing receipt.
 
@@ -6250,6 +6542,12 @@ def generate_freeze_receipt(
     its predecessor pack.  Every ID, digest, ordinal, and conclusion in the
     resulting ``predecessor`` binding is derived here from committed bytes; the
     caller supplies paths only.
+
+    During the intended `_v4` ordering the successor histsem pinset does not
+    exist at freeze time, so there is no digest-conditional changed path to
+    subtract and an absent confirmation digest is harmless.  Once that pinset
+    exists, the same replay path requires both the table and its out-of-band
+    expected digest and fails closed without them.
     """
 
     root = Path(pack_root).resolve(strict=True)
@@ -6272,6 +6570,53 @@ def generate_freeze_receipt(
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
     _valid_plan_attachment(readiness, registry_reference)
     generation = _pack_generation(root.name)
+    # Split S-2: engage on the REGISTRY's mandatory generation threshold.  A
+    # threshold-less registry is invalid at load time, so freeze can never skip
+    # publication through a dormant configuration.
+    family_first_generation = _family_first_generation(registry)
+    # Resolve the predecessor ONCE, and refuse with the governed code rather
+    # than letting a bare OSError escape.  The strict resolve used to sit
+    # inside the gate condition below, where an absent directory raised
+    # FileNotFoundError straight out of generate_freeze_receipt.  That was
+    # unreachable while no registry carried a generation threshold (the `and`
+    # short-circuited on `family_first_generation is None`); the ruled registry
+    # supplies one, so the expression is now evaluated on every call.  This is
+    # an intentional fail-closed scope expansion from predecessor-only guarded
+    # resolution: every supplied predecessor is now resolved before the gate
+    # predicate, even when its generation would not engage publication.
+    predecessor_root: Path | None = None
+    if predecessor_pack_root is not None:
+        try:
+            predecessor_root = Path(predecessor_pack_root).resolve(strict=True)
+        except OSError as exc:
+            raise _successor_chain_refusal(
+                f"predecessor pack root is unreadable: {exc}"
+            ) from exc
+    if (
+        predecessor_root is not None
+        and _pack_generation(predecessor_root.name) >= family_first_generation
+    ):
+        try:
+            _gate_family_publication(
+                predecessor_root,
+                marker_path=family_publication_marker,
+                confirmation_path=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
+            )
+        except FamilyPublicationError as exc:
+            predecessor_registry, _raw = load_registry(
+                _repo_for_pack(Path(predecessor_pack_root))
+            )
+            entry = _family_refusal_entry(predecessor_registry)
+            return {
+                "status": "REFUSE",
+                "arm_disposition": "NOT_APPLICABLE",
+                "receipt_path": None,
+                "receipt_sha256": None,
+                "reason_codes": [entry["code"]],
+                "detail": f"{exc.check_id}: {exc}",
+                "mutated": False,
+            }
     if generation > 1 and predecessor_pack_root is None:
         raise _successor_chain_refusal(
             "a successor pack requires an authenticated predecessor pack root"
@@ -6307,9 +6652,26 @@ def generate_freeze_receipt(
         # predecessor chain, so ancestry is never the only thing checked.
         # ``require_pass`` stays False because a recorded REFUSE must replay as
         # the REFUSE it is rather than raise.
-        _load_freeze_reference(
-            root, tree, registry_reference, registry, require_pass=False
-        )
+        try:
+            _load_freeze_reference(
+                root,
+                tree,
+                registry_reference,
+                registry,
+                require_pass=False,
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
+            )
+        except EvidenceLifecycleError as exc:
+            return {
+                "status": "REFUSE",
+                "arm_disposition": "NOT_APPLICABLE",
+                "receipt_path": None,
+                "receipt_sha256": None,
+                "reason_codes": [exc.reason_code],
+                "detail": str(exc),
+                "mutated": False,
+            }
         if (
             latest["receipt"]["schema_version"] == FREEZE_RECEIPT_V2_SCHEMA
             and predecessor_pack_root is not None
@@ -6372,6 +6734,8 @@ def generate_freeze_receipt(
             if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
             else None
         ),
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     identity_item, identity_receipt, identity_reasons = _load_frozen_identity_evidence(
         root, tree
@@ -6946,6 +7310,9 @@ def generate_arm_receipt(
     window_custody_root: Path | str,
     *,
     validity_ns: int = 300_000_000_000,
+    family_publication_marker: Path | str | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     root = Path(pack_root).resolve(strict=True)
     try:
@@ -6960,17 +7327,40 @@ def generate_arm_receipt(
             "detail": str(exc),
         }
     context = validate_arm_context(arm_context)
+    publication_root = Path(window_custody_root).resolve() / "family_publication"
+    marker_path = (
+        Path(family_publication_marker)
+        if family_publication_marker is not None
+        else publication_root / FAMILY_PUBLICATION_MARKER_NAME
+    )
+    confirmation_path = (
+        Path(step6_confirmation_table)
+        if step6_confirmation_table is not None
+        else publication_root / STEP6_CONFIRMATION_TABLE_NAME
+    )
     pack = _pack_record(root)
     reviewed = reviewed_main(root)
     tree, _tree_raw = _plan_tree(root)
     registry, _registry_raw, registry_reference = _registry_reference(root)
-    freeze_receipt, freeze_reference = _load_freeze_reference(
-        root,
-        tree,
-        registry_reference,
-        registry,
-        require_pass=False,
-    )
+    try:
+        freeze_receipt, freeze_reference = _load_freeze_reference(
+            root,
+            tree,
+            registry_reference,
+            registry,
+            require_pass=False,
+            step6_confirmation_table=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except EvidenceLifecycleError as exc:
+        return {
+            "status": "REFUSE",
+            "arm_disposition": "NO_GO",
+            "receipt_path": None,
+            "receipt_sha256": None,
+            "reason_codes": [exc.reason_code],
+            "detail": str(exc),
+        }
     custody_root = Path(window_custody_root).resolve()
     custody_pack_root = custody_root / root.name
     arm_namespace = custody_pack_root / "arm_readiness.receipts"
@@ -6993,10 +7383,38 @@ def generate_arm_receipt(
         now_monotonic_ns=evaluated_at_monotonic_ns,
         include_pack=False,
         lifecycle_registry=lifecycle_registry,
+        step6_confirmation_table=confirmation_path,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
-    freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
-        root, tree, freeze_receipt, registry
-    )
+    try:
+        _gate_family_publication(
+            root,
+            marker_path=marker_path,
+            confirmation_path=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except FamilyPublicationError:
+        entry = _family_refusal_entry(registry)
+        evidence_refusals.append(
+            {
+                "type": entry["type"],
+                "code": entry["code"],
+                "row_id": None,
+                "evidence_id": None,
+            }
+        )
+    try:
+        freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
+            root,
+            tree,
+            freeze_receipt,
+            registry,
+            step6_confirmation_table=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except EvidenceLifecycleError as exc:
+        evidence_refusals.append(exc.refusal())
+        freeze_items, freeze_evidence_receipts = [], {}
     duplicate_ids = set(evidence_receipts).intersection(freeze_evidence_receipts)
     if duplicate_ids:
         raise ArmReadinessError(
@@ -7141,6 +7559,8 @@ def _derive_arm_semantics_for_verification(
     receipt: Mapping[str, Any],
     *,
     launch_binding_cache: dict[Path, bytes] | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     pack = _pack_record(root)
     if receipt["pack"] != pack:
@@ -7161,13 +7581,24 @@ def _derive_arm_semantics_for_verification(
             "readiness_row_registry_mismatch",
             "arm receipt registry binding differs from committed bytes",
         )
-    freeze_receipt, freeze_reference = _load_freeze_reference(
-        root,
-        tree,
-        registry_reference,
-        registry,
-        require_pass=False,
+    publication_root = custody_pack_root.parent / "family_publication"
+    confirmation_path = (
+        Path(step6_confirmation_table)
+        if step6_confirmation_table is not None
+        else publication_root / STEP6_CONFIRMATION_TABLE_NAME
     )
+    try:
+        freeze_receipt, freeze_reference = _load_freeze_reference(
+            root,
+            tree,
+            registry_reference,
+            registry,
+            require_pass=False,
+            step6_confirmation_table=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except EvidenceLifecycleError as exc:
+        raise ArmReadinessError(exc.reason_code, str(exc)) from exc
     if receipt["freeze_receipt"] != freeze_reference:
         raise ArmReadinessError(
             "readiness_freeze_receipt_mismatch",
@@ -7188,10 +7619,38 @@ def _derive_arm_semantics_for_verification(
             if registry["schema_version"] == R1_ROW_REGISTRY_SCHEMA
             else None
         ),
+        step6_confirmation_table=confirmation_path,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
-    freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
-        root, tree, freeze_receipt, registry
-    )
+    try:
+        _gate_family_publication(
+            root,
+            marker_path=publication_root / FAMILY_PUBLICATION_MARKER_NAME,
+            confirmation_path=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except FamilyPublicationError:
+        entry = _family_refusal_entry(registry)
+        evidence_refusals.append(
+            {
+                "type": entry["type"],
+                "code": entry["code"],
+                "row_id": None,
+                "evidence_id": None,
+            }
+        )
+    try:
+        freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
+            root,
+            tree,
+            freeze_receipt,
+            registry,
+            step6_confirmation_table=confirmation_path,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except EvidenceLifecycleError as exc:
+        evidence_refusals.append(exc.refusal())
+        freeze_items, freeze_evidence_receipts = [], {}
     if set(evidence_receipts).intersection(freeze_evidence_receipts):
         raise ArmReadinessError(
             "readiness_evidence_reference_invalid",
@@ -7342,6 +7801,8 @@ def _verify_arm_receipt(
     *,
     require_unconsumed: bool,
     launch_binding_cache: dict[Path, bytes] | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     root = Path(pack_root).resolve(strict=True)
     path = Path(arm_receipt).resolve(strict=True)
@@ -7419,6 +7880,8 @@ def _verify_arm_receipt(
         custody_pack_root,
         receipt,
         launch_binding_cache=launch_binding_cache,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     if receipt["rows"] != expected_rows or receipt["refusals"] != expected_refusals:
         raise ArmReadinessError(
@@ -7443,10 +7906,18 @@ def _verify_arm_receipt(
 
 
 def verify_arm_receipt(
-    pack_root: Path | str, arm_receipt: Path | str
+    pack_root: Path | str,
+    arm_receipt: Path | str,
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     return _verify_arm_receipt(
-        pack_root, arm_receipt, require_unconsumed=True
+        pack_root,
+        arm_receipt,
+        require_unconsumed=True,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
 
 
@@ -7924,6 +8395,8 @@ def _replay_consumed_arm(
     require_unexpired: bool,
     replay_arm_semantics: bool,
     launch_binding_cache: dict[Path, bytes] | None = None,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> tuple[Mapping[str, Any], Path, Path, Mapping[str, Any]]:
     arm_reference = consumption["arm_receipt"]
     arm_path = consumption_path.parent.parent / str(arm_reference["path"])
@@ -8018,6 +8491,8 @@ def _replay_consumed_arm(
                 consumption_path.parent.parent,
                 arm,
                 launch_binding_cache=launch_binding_cache,
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         except ArmReadinessError as exc:
             raise LaunchLineageError("launch_binding_mismatch", str(exc)) from exc
@@ -8041,6 +8516,8 @@ def verify_consumed_launch(
     launch_manifest: Path | str | None = None,
     expected_exec_argv: Sequence[str] | None = None,
     require_current_boot: bool = True,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Replay a v2 consumption without treating its arm as unconsumed."""
 
@@ -8060,6 +8537,8 @@ def verify_consumed_launch(
         require_unexpired=require_current_boot,
         replay_arm_semantics=require_current_boot,
         launch_binding_cache=launch_binding_cache,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     expected_identity = {
         "pack_id": pack["pack_id"],
@@ -8167,6 +8646,8 @@ def _consume_launch_capability(
     window_chain_sha256: str = _MISSING_LAUNCH_CONTEXT,
     exec_argv: Sequence[str] = _MISSING_LAUNCH_CONTEXT,
     handoff_token_sha256: str = _MISSING_LAUNCH_CONTEXT,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Reauthenticate complete launch inputs, then atomically claim one GO."""
 
@@ -8232,6 +8713,8 @@ def _consume_launch_capability(
         arm_receipt,
         require_unconsumed=False,
         launch_binding_cache=launch_binding_cache,
+        step6_confirmation_table=step6_confirmation_table,
+        expected_confirmation_digest=expected_confirmation_digest,
     )
     root = Path(pack_root).resolve(strict=True)
     receipt_path = Path(arm_receipt).resolve(strict=True)
@@ -9263,8 +9746,1182 @@ def authenticate_bundle_launch_lineage(
     )
 
 
+class FamilyPublicationError(ValueError):
+    """A closed diagnostic at the custody-external publication boundary."""
+
+    def __init__(self, check_id: str, detail: str) -> None:
+        if check_id not in FAMILY_PUBLICATION_CHECK_IDS:
+            raise ValueError(f"unregistered family-publication check_id {check_id!r}")
+        super().__init__(detail)
+        self.check_id = check_id
+
+
+_FAMILY_MARKER_KEYS = frozenset(
+    {
+        "schema_version",
+        "marker_kind",
+        "family_id",
+        "family_generation",
+        "publication_state",
+        "publication_git",
+        "common_evidence_git",
+        "lifecycle_registry",
+        "members",
+        "terminal_review",
+        "publication_authority",
+        "authoring_context",
+        "assurance",
+    }
+)
+_FAMILY_MEMBER_KEYS = frozenset(
+    {
+        "profile",
+        "pack_id",
+        "pack_path",
+        "pack_digest_algorithm",
+        "pack_sha256",
+        "plan_tree",
+        "frozen_plan",
+        "freeze_receipt",
+    }
+)
+_STEP6_TABLE_KEYS = frozenset(
+    {
+        "schema_version",
+        "table_kind",
+        "transaction_id",
+        "family_id",
+        "git",
+        "registry",
+        "family_publication",
+        "successor_pinset",
+        "confirmation",
+    }
+)
+
+
+def _family_exact(value: object, keys: frozenset[str], where: str) -> Mapping[str, Any]:
+    try:
+        return _require_exact_keys(value, keys, where)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("marker_schema_mismatch", str(exc)) from exc
+
+
+def _family_first_generation(registry: Mapping[str, Any]) -> int:
+    """Read split S-2's generation threshold out of the tracked registry.
+
+    ``registry`` is the whole row registry (the object ``load_registry``
+    returns).  The threshold is the pack generation at which family publication
+    first engages -- 4 for the ``_v4`` family.  It lives in
+    ``freeze_evidence_lifecycle.successor_policy.family_publication_first_generation``
+    precisely so that advancing to ``_v5`` is a REVIEWED REGISTRY EDIT rather
+    than a code change, which is what the marker ruling adopted in place of the
+    literal predecessor-in-current-roster predicate.  A registry that does not
+    carry the value cannot engage the mechanism at all: this refuses.
+    """
+
+    lifecycle = registry.get("freeze_evidence_lifecycle")
+    value = (
+        lifecycle.get("successor_policy", {}).get(
+            "family_publication_first_generation"
+        )
+        if isinstance(lifecycle, Mapping)
+        else None
+    )
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "registry does not carry a resolved family-publication generation threshold",
+        )
+    return value
+
+
+def _family_refusal_entry(registry: Mapping[str, Any]) -> dict[str, str]:
+    entry = _r1_refusal_entry(registry["freeze_evidence_lifecycle"], "FAMILY_PUBLICATION")
+    return {
+        "role": "FAMILY_PUBLICATION",
+        "code": str(entry["code"]),
+        "type": str(entry["type"]),
+    }
+
+
+def _family_git_oid(value: object, where: str) -> str:
+    if not isinstance(value, str) or _LOWER_GIT_OID_RE.fullmatch(value) is None:
+        raise FamilyPublicationError("marker_schema_mismatch", f"{where} is not a Git OID")
+    return value
+
+
+def _family_sha(value: object, where: str) -> str:
+    if not isinstance(value, str) or _LOWER_SHA256_RE.fullmatch(value) is None:
+        raise FamilyPublicationError("marker_schema_mismatch", f"{where} is not a SHA-256")
+    return value
+
+
+def validate_family_publication_marker(
+    value: object, *, first_generation: int
+) -> Mapping[str, Any]:
+    """Validate the immutable-from-build marker's exact schema.
+
+    ``first_generation`` is the reviewed registry threshold (split S-2); the
+    caller reads it from the tracked registry with ``_family_first_generation``
+    so that no code literal names a family generation.
+    """
+
+    marker = _family_exact(value, _FAMILY_MARKER_KEYS, "family marker")
+    if (
+        marker["schema_version"] != FAMILY_PUBLICATION_MARKER_SCHEMA
+        or marker["marker_kind"] != "FAMILY_PUBLICATION"
+        or marker["family_id"] != "d117-v4"
+        or marker["family_generation"] != first_generation
+        or isinstance(marker["family_generation"], bool)
+        or marker["publication_state"] != "PUBLISHED"
+    ):
+        raise FamilyPublicationError("marker_schema_mismatch", "family marker constants differ")
+    publication_git = _family_exact(
+        marker["publication_git"],
+        frozenset(
+            {
+                "head_commit",
+                "head_tree_oid",
+                "local_main_commit",
+                "origin_main_commit",
+                "clean",
+                "exact_match",
+            }
+        ),
+        "family marker.publication_git",
+    )
+    head = _family_git_oid(publication_git["head_commit"], "publication head")
+    _family_git_oid(publication_git["head_tree_oid"], "publication tree")
+    if (
+        publication_git["local_main_commit"] != head
+        or publication_git["origin_main_commit"] != head
+        or publication_git["clean"] is not True
+        or publication_git["exact_match"] is not True
+    ):
+        raise FamilyPublicationError("head_mismatch", "publication Git values are not four-way exact")
+    common_git = _family_exact(
+        marker["common_evidence_git"],
+        frozenset({"head_commit", "head_tree_oid"}),
+        "family marker.common_evidence_git",
+    )
+    _family_git_oid(common_git["head_commit"], "common evidence head")
+    _family_git_oid(common_git["head_tree_oid"], "common evidence tree")
+    lifecycle = _family_exact(
+        marker["lifecycle_registry"],
+        frozenset(
+            {
+                "path",
+                "schema_version",
+                "registry_id",
+                "sha256",
+                "lifecycle_registry_id",
+                "family_publication_marker_schema",
+                "family_publication_refusal",
+            }
+        ),
+        "family marker.lifecycle_registry",
+    )
+    if (
+        lifecycle["path"] != ROW_REGISTRY_RELATIVE_PATH.as_posix()
+        or lifecycle["schema_version"] != R1_ROW_REGISTRY_SCHEMA
+        or lifecycle["registry_id"] != "d117-row-registry-v2"
+        or lifecycle["lifecycle_registry_id"] != "d117-r1-lifecycle-v1"
+        or lifecycle["family_publication_marker_schema"]
+        != FAMILY_PUBLICATION_MARKER_SCHEMA
+    ):
+        raise FamilyPublicationError("registry_mismatch", "marker registry constants differ")
+    _family_sha(lifecycle["sha256"], "marker registry digest")
+    refusal = _family_exact(
+        lifecycle["family_publication_refusal"],
+        frozenset({"role", "code", "type"}),
+        "family marker family-publication refusal",
+    )
+    if refusal != {
+        "role": "FAMILY_PUBLICATION",
+        "code": "readiness_r1_family_publication",
+        "type": "CUSTODY",
+    }:
+        raise FamilyPublicationError("registry_mismatch", "marker refusal entry differs")
+
+    members = marker["members"]
+    if not isinstance(members, list) or len(members) != 3:
+        raise FamilyPublicationError("roster_incomplete", "marker must carry three members")
+    expected = (
+        ("ALPHA", "d117_floor_qwen25_1p5b_v4"),
+        ("BETA", "d117_floor_qwen25_7b_v4"),
+        ("GAMMA", "d117_contrast_qwen25_1p5b_vs_7b_v4"),
+    )
+    for index, (raw_member, (profile, pack_id)) in enumerate(zip(members, expected, strict=True)):
+        member = _family_exact(raw_member, _FAMILY_MEMBER_KEYS, f"family marker.members[{index}]")
+        if (
+            member["profile"] != profile
+            or member["pack_id"] != pack_id
+            or member["pack_path"] != f"configs/campaigns/{pack_id}"
+            or member["pack_digest_algorithm"] != PACK_DIGEST_ALGORITHM
+        ):
+            raise FamilyPublicationError("roster_mismatch", f"member {index} identity differs")
+        _family_sha(member["pack_sha256"], f"member {index} pack digest")
+        plan_tree = _family_exact(
+            member["plan_tree"],
+            frozenset({"path", "sha256", "sidecar_path", "sidecar_sha256"}),
+            f"member {index} plan tree",
+        )
+        if plan_tree["path"] != "plan_tree.json" or plan_tree["sidecar_path"] != "plan_tree.sha256":
+            raise FamilyPublicationError("plan_binding_mismatch", "plan-tree paths differ")
+        _family_sha(plan_tree["sha256"], "plan-tree digest")
+        _family_sha(plan_tree["sidecar_sha256"], "plan-tree sidecar digest")
+        frozen_plan = _family_exact(
+            member["frozen_plan"],
+            frozenset({"plan_id", "window_id", "path", "sha256"}),
+            f"member {index} frozen plan",
+        )
+        for name in ("plan_id", "window_id", "path"):
+            _require_string(frozen_plan[name], f"member {index} frozen_plan.{name}")
+        _family_sha(frozen_plan["sha256"], "frozen-plan digest")
+        freeze = _family_exact(
+            member["freeze_receipt"],
+            frozenset(
+                {
+                    "schema_version",
+                    "receipt_id",
+                    "ordinal",
+                    "path",
+                    "sha256",
+                    "sidecar_path",
+                    "sidecar_sha256",
+                    "status",
+                }
+            ),
+            f"member {index} freeze receipt",
+        )
+        if (
+            freeze["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA
+            or freeze["receipt_id"] != "freeze-0004"
+            or freeze["ordinal"] != 4
+            or isinstance(freeze["ordinal"], bool)
+            or freeze["path"] != "arm_readiness.freeze.receipts/freeze-0004.json"
+            or freeze["sidecar_path"]
+            != "arm_readiness.freeze.receipts/freeze-0004.json.sha256"
+            or freeze["status"] != "PASS"
+        ):
+            raise FamilyPublicationError("freeze_binding_mismatch", "freeze-0004 constants differ")
+        _family_sha(freeze["sha256"], "freeze digest")
+        _family_sha(freeze["sidecar_sha256"], "freeze sidecar digest")
+    terminal = _family_exact(
+        marker["terminal_review"],
+        frozenset({"evidence_kind", "head_tree_oid"}),
+        "family marker.terminal_review",
+    )
+    if terminal["evidence_kind"] != "TERMINAL_REVIEW":
+        raise FamilyPublicationError("terminal_review_mismatch", "terminal-review kind differs")
+    terminal_tree = _family_git_oid(terminal["head_tree_oid"], "terminal-review tree")
+    if terminal_tree != publication_git["head_tree_oid"]:
+        raise FamilyPublicationError("terminal_review_mismatch", "terminal review binds another tree")
+    authority = _family_exact(
+        marker["publication_authority"],
+        frozenset({"confirmation_schema", "required_decision"}),
+        "family marker.publication_authority",
+    )
+    if authority != {
+        "confirmation_schema": STEP6_CONFIRMATION_TABLE_SCHEMA,
+        "required_decision": "YES",
+    }:
+        raise FamilyPublicationError("marker_schema_mismatch", "confirmation contract differs")
+    context = _family_exact(
+        marker["authoring_context"],
+        frozenset(
+            {
+                "transaction_id",
+                "source_commit_time_utc",
+                "construction_phase",
+                "custody_class",
+                "builder",
+                "consumer",
+            }
+        ),
+        "family marker.authoring_context",
+    )
+    if (
+        context["transaction_id"] != f"d117-v4@{head}"
+        or context["construction_phase"] != "POST_FREEZE_FAMILY_BOUNDARY"
+        or context["custody_class"] != "TRANSACTION_EXTERNAL"
+    ):
+        raise FamilyPublicationError("marker_schema_mismatch", "authoring constants differ")
+    _require_string(context["source_commit_time_utc"], "marker source commit time")
+    for role, expected_path in (
+        ("builder", "scripts/build_family_marker.py"),
+        ("consumer", "scripts/verify_family_marker.py"),
+    ):
+        tool = _family_exact(
+            context[role], frozenset({"path", "sha256"}), f"marker {role}"
+        )
+        if tool["path"] != expected_path:
+            raise FamilyPublicationError("tool_mismatch", f"marker {role} path differs")
+        _family_sha(tool["sha256"], f"marker {role} digest")
+    if marker["assurance"] != ASSURANCE:
+        raise FamilyPublicationError("marker_schema_mismatch", "marker assurance differs")
+    return marker
+
+
+def validate_step6_confirmation_table(value: object) -> Mapping[str, Any]:
+    """Validate the one-home, two-consumer step-6 confirmation artifact."""
+
+    table = _family_exact(value, _STEP6_TABLE_KEYS, "step-6 confirmation table")
+    if (
+        table["schema_version"] != STEP6_CONFIRMATION_TABLE_SCHEMA
+        or table["table_kind"] != "D117_STEP6_CONFIRMATION"
+        or table["family_id"] != "d117-v4"
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "confirmation constants differ")
+    if not isinstance(table["transaction_id"], str) or not table["transaction_id"]:
+        raise FamilyPublicationError(
+            "confirmation_mismatch",
+            "confirmation transaction_id must be a nonempty string",
+        )
+    git = _family_exact(
+        table["git"], frozenset({"head_commit", "head_tree_oid"}), "confirmation git"
+    )
+    _family_git_oid(git["head_commit"], "confirmation head")
+    _family_git_oid(git["head_tree_oid"], "confirmation tree")
+    registry = _family_exact(
+        table["registry"],
+        frozenset({"path", "schema_version", "registry_id", "sha256"}),
+        "confirmation registry",
+    )
+    if (
+        registry["path"] != ROW_REGISTRY_RELATIVE_PATH.as_posix()
+        or registry["schema_version"] != R1_ROW_REGISTRY_SCHEMA
+        or registry["registry_id"] != "d117-row-registry-v2"
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "confirmation registry differs")
+    _family_sha(registry["sha256"], "confirmation registry digest")
+    family = _family_exact(
+        table["family_publication"],
+        frozenset({"marker", "members"}),
+        "confirmation family-publication section",
+    )
+    marker_ref = _family_exact(
+        family["marker"],
+        frozenset({"path", "schema_version", "sha256"}),
+        "confirmation marker reference",
+    )
+    if (
+        marker_ref["path"] != FAMILY_PUBLICATION_MARKER_NAME
+        or marker_ref["schema_version"] != FAMILY_PUBLICATION_MARKER_SCHEMA
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "confirmation marker constants differ")
+    _family_sha(marker_ref["sha256"], "confirmation marker digest")
+    members = family["members"]
+    if not isinstance(members, list) or len(members) != 3:
+        raise FamilyPublicationError("confirmation_mismatch", "confirmation member table is incomplete")
+    for index, member in enumerate(members):
+        row = _family_exact(
+            member,
+            frozenset({"profile", "pack_id", "pack_sha256", "freeze_receipt_sha256"}),
+            f"confirmation member {index}",
+        )
+        _family_sha(row["pack_sha256"], "confirmation member pack digest")
+        _family_sha(row["freeze_receipt_sha256"], "confirmation member freeze digest")
+    successor = _family_exact(
+        table["successor_pinset"],
+        frozenset({"path", "schema_version", "sha256", "pack_count", "receipt_count", "fact_count"}),
+        "confirmation successor-pinset section",
+    )
+    if (
+        successor["path"] != RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1].as_posix()
+        or successor["schema_version"] != RECEIPT_HISTSEM_PINSET_SCHEMA
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "successor-pinset constants differ")
+    _family_sha(successor["sha256"], "confirmation successor pinset digest")
+    for name in ("pack_count", "receipt_count", "fact_count"):
+        if not isinstance(successor[name], int) or isinstance(successor[name], bool) or successor[name] < 0:
+            raise FamilyPublicationError("confirmation_mismatch", f"confirmation {name} is invalid")
+    # The contract fixes both counts for the _v4 family (contract doc
+    # "successor_pinset section"); only fact_count is recomputed and free.
+    if successor["pack_count"] != 3 or successor["receipt_count"] != 33:
+        raise FamilyPublicationError(
+            "confirmation_mismatch",
+            "confirmation successor counts differ from the _v4 contract (3 packs, 33 receipts)",
+        )
+    confirmation = _family_exact(
+        table["confirmation"],
+        frozenset({"authority", "decision", "statement"}),
+        "confirmation decision",
+    )
+    if (
+        confirmation["authority"] != "ED"
+        or confirmation["decision"] != "YES"
+        or not isinstance(confirmation["statement"], str)
+        or not confirmation["statement"]
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "Ed confirmation is not exact YES")
+    return table
+
+
+def _candidate_manifest_tool_digest(
+    manifest_path: Path, relative_path: str
+) -> str:
+    """Read one tool's reviewed digest out of the S-0 ``$INPUT`` manifest.
+
+    The manifest is ``s0-candidate-manifest.json`` from S-0 runsheet section
+    1.3 -- the lead-reviewed custody record that names the candidate patch, its
+    changed paths, and the exact bytes of every custody tool.  The binding this
+    function reads is::
+
+        {"custody_tools": {"<repo-relative tool path>": "<64 hex sha256>"}}
+
+    Reading it is what makes candidate mode non-tautological: the digest comes
+    from a document written and reviewed BEFORE the tool is executed, so a
+    modified tool cannot authenticate itself by regenerating its own sidecar.
+    """
+
+    try:
+        raw = manifest_path.resolve(strict=True).read_bytes()
+    except OSError as exc:
+        raise FamilyPublicationError(
+            "tool_mismatch",
+            f"reviewed candidate manifest is unreadable at {manifest_path}: {exc}",
+        ) from exc
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise FamilyPublicationError(
+            "tool_mismatch", f"reviewed candidate manifest is not JSON: {exc}"
+        ) from exc
+    tools = value.get("custody_tools") if isinstance(value, Mapping) else None
+    if not isinstance(tools, Mapping):
+        raise FamilyPublicationError(
+            "tool_mismatch",
+            "reviewed candidate manifest has no custody_tools object",
+        )
+    recorded = tools.get(relative_path)
+    if not isinstance(recorded, str) or _LOWER_SHA256_RE.fullmatch(recorded) is None:
+        raise FamilyPublicationError(
+            "tool_mismatch",
+            f"reviewed candidate manifest records no SHA-256 for {relative_path}",
+        )
+    return recorded
+
+
+def _family_tool_reference(
+    repository: Path,
+    head: str,
+    relative_path: str,
+    executing_path: Path,
+    *,
+    phase: str,
+    candidate_manifest: Path | str | None = None,
+) -> dict[str, str]:
+    """Authenticate the executing custody tool under the lane's own rule.
+
+    PRODUCTION (``phase`` is anything but ``"candidate"``): the executing bytes
+    must equal the blob committed at ``head``.  This is the ruled rule and the
+    only one that can gate a publication.
+
+    CANDIDATE (``phase == "candidate"``): the tools deliberately do not exist at
+    the pinned HEAD of the S-0 clone, so committed-blob equality would refuse
+    the clone proof.  The executing bytes are instead compared against the
+    digest recorded in the reviewed ``$INPUT`` manifest (marker ruling, split
+    S-5).  The lane is chosen by this argument alone -- never by the presence of
+    a file on disk, which would let a dropped sidecar silently downgrade a
+    production consult.
+    """
+
+    if phase not in {"candidate", "publication", "pre-arm", "t0"}:
+        raise FamilyPublicationError(
+            "lane_inadmissible", f"unsupported tool-authentication phase {phase!r}"
+        )
+    try:
+        raw = executing_path.resolve(strict=True).read_bytes()
+    except OSError as exc:
+        raise FamilyPublicationError("tool_mismatch", f"cannot read {relative_path}: {exc}") from exc
+    digest = sha256_bytes(raw)
+    if phase == "candidate":
+        manifest_path = (
+            Path(candidate_manifest)
+            if candidate_manifest is not None
+            else executing_path.resolve(strict=True).with_name(
+                S0_CANDIDATE_MANIFEST_NAME
+            )
+        )
+        if _candidate_manifest_tool_digest(manifest_path, relative_path) != digest:
+            raise FamilyPublicationError(
+                "tool_mismatch",
+                f"{relative_path} differs from the digest the reviewed candidate "
+                "manifest records for it",
+            )
+    else:
+        code, committed, _stderr = _histsem_git(repository, "show", f"{head}:{relative_path}")
+        if code != 0 or committed != raw:
+            raise FamilyPublicationError(
+                "tool_mismatch",
+                f"{relative_path} is not the blob committed at the reviewed head",
+            )
+    return {"path": relative_path, "sha256": digest}
+
+
+def _family_member(
+    repository: Path,
+    root: Path,
+    registry: Mapping[str, Any],
+    registry_reference: Mapping[str, Any],
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
+) -> tuple[dict[str, Any], set[str]]:
+    # A roster member that cannot be resolved or read at all is a family
+    # diagnosis too.  Without these two wrappers the failure escapes as a bare
+    # ArmReadinessError, which the CLI then reports as `registry_mismatch` --
+    # naming the wrong artifact entirely (found by the G-7 live fixture).
+    try:
+        profile = _plan_profile(root, registry)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("roster_mismatch", str(exc)) from exc
+    try:
+        tree, tree_raw = _plan_tree(root)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("plan_binding_mismatch", str(exc)) from exc
+    # Loading a v2 freeze receipt also authenticates its recorded D-139
+    # predecessor chain.  That failure is a family diagnosis, not a generic
+    # readiness error: give it the closed id the verification receipt reports,
+    # so a marker consult can never say "predecessor_mismatch: PASS" for a
+    # check whose refusal would have escaped as something else (gap G-5/G-9).
+    try:
+        freeze, freeze_ref = _load_freeze_reference(
+            root,
+            tree,
+            registry_reference,
+            registry,
+            require_pass=True,
+            step6_confirmation_table=step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except EvidenceLifecycleError as exc:
+        raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
+    except ArmReadinessError as exc:
+        if exc.reason_code == "readiness_successor_chain_invalid":
+            raise FamilyPublicationError("predecessor_mismatch", str(exc)) from exc
+        raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
+    if freeze["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA:
+        raise FamilyPublicationError("freeze_binding_mismatch", "family freeze must use schema v2")
+    if freeze["receipt_id"] != "freeze-0004" or freeze["status"] != "PASS":
+        raise FamilyPublicationError("freeze_not_pass", "family freeze must be PASS freeze-0004")
+    try:
+        _items, receipts = _freeze_evidence_for_arm(
+            root,
+            tree,
+            freeze,
+            registry,
+            step6_confirmation_table=step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
+    except (ArmReadinessError, EvidenceLifecycleError) as exc:
+        raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
+    derivation_heads = {
+        str(receipt["derivation_commit"])
+        for receipt in receipts.values()
+        if "derivation_commit" in receipt
+    }
+    try:
+        _repo, _prefix, pack_path = _repository_and_pack_relative(root)
+        plan_sidecar_raw = (root / "plan_tree.sha256").read_bytes()
+        freeze_raw = (root / str(freeze_ref["path"])).read_bytes()
+        freeze_sidecar_raw = (root / f"{freeze_ref['path']}.sha256").read_bytes()
+        plan_path = str(freeze["pack_identity"]["plan_path"])
+        plan_raw = (root / plan_path).read_bytes()
+    except (OSError, ArmReadinessError) as exc:
+        raise FamilyPublicationError("plan_binding_mismatch", str(exc)) from exc
+    pack = _pack_record(root)
+    return (
+        {
+            "profile": profile,
+            "pack_id": root.name,
+            "pack_path": pack_path,
+            "pack_digest_algorithm": PACK_DIGEST_ALGORITHM,
+            "pack_sha256": pack["pack_sha256"],
+            "plan_tree": {
+                "path": "plan_tree.json",
+                "sha256": sha256_bytes(tree_raw),
+                "sidecar_path": "plan_tree.sha256",
+                "sidecar_sha256": sha256_bytes(plan_sidecar_raw),
+            },
+            "frozen_plan": {
+                "plan_id": freeze["pack_identity"]["plan_id"],
+                "window_id": tree["window_identity"]["window_id"],
+                "path": plan_path,
+                "sha256": sha256_bytes(plan_raw),
+            },
+            "freeze_receipt": {
+                "schema_version": freeze["schema_version"],
+                "receipt_id": freeze["receipt_id"],
+                "ordinal": _freeze_receipt_ordinal(str(freeze["receipt_id"]), "family freeze receipt_id"),
+                "path": freeze_ref["path"],
+                "sha256": sha256_bytes(freeze_raw),
+                "sidecar_path": f"{freeze_ref['path']}.sha256",
+                "sidecar_sha256": sha256_bytes(freeze_sidecar_raw),
+                "status": freeze["status"],
+            },
+        },
+        derivation_heads,
+    )
+
+
+def build_family_publication_marker(
+    repository_root: Path | str,
+    head: str,
+    pack_roots: Sequence[Path | str],
+    output_path: Path | str,
+    *,
+    builder_tool: Path | str,
+    consumer_tool: Path | str,
+    phase: str = "publication",
+    candidate_manifest: Path | str | None = None,
+) -> dict[str, Any]:
+    """Construct deterministic marker bytes in external create-only custody.
+
+    ``phase`` selects the tool-authentication lane (split S-5) and defaults to
+    the strict production rule, so candidate semantics are always an explicit
+    opt-in rather than something a stray file on disk can turn on.
+    """
+
+    repository = Path(repository_root).resolve(strict=True)
+    output = Path(output_path).resolve(strict=False)
+    try:
+        output.relative_to(repository)
+    except ValueError:
+        pass
+    else:
+        raise FamilyPublicationError("output_in_tree", "marker output must be outside the repository")
+    if output.exists() or output.with_name(f"{output.name}.sha256").exists():
+        raise FamilyPublicationError("output_collision", "marker output or sidecar already exists")
+    if len(pack_roots) != 3:
+        raise FamilyPublicationError("roster_incomplete", "exactly three pack roots are required")
+    roots = [
+        (Path(item) if Path(item).is_absolute() else repository / Path(item)).resolve(strict=True)
+        for item in pack_roots
+    ]
+    reviewed = reviewed_main(roots[0])
+    if reviewed["head_commit"] != head or reviewed["exact_match"] is not True:
+        diagnostic = "worktree_dirty" if reviewed["clean"] is not True else "head_mismatch"
+        raise FamilyPublicationError(diagnostic, "marker build requires strict four-way reviewed main")
+    registry, registry_raw = load_registry(repository)
+    try:
+        first_generation = _family_first_generation(registry)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("registry_dormant", str(exc)) from exc
+    lifecycle = registry["freeze_evidence_lifecycle"]
+    expected = lifecycle["successor_policy"]["successor_pack_ids"]
+    if {root.name for root in roots} != set(expected.values()):
+        raise FamilyPublicationError("roster_mismatch", "pack roots differ from registry successor roster")
+    registry_reference = {
+        "registry_id": registry["registry_id"],
+        "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+        "sha256": sha256_bytes(registry_raw),
+        "plan_profile": None,
+    }
+    members: list[dict[str, Any]] = []
+    derivation_heads: set[str] = set()
+    for root in roots:
+        reference = dict(registry_reference)
+        reference["plan_profile"] = _plan_profile(root, registry)
+        member, heads = _family_member(repository, root, registry, reference)
+        members.append(member)
+        derivation_heads.update(heads)
+    members.sort(key=lambda member: ("ALPHA", "BETA", "GAMMA").index(member["profile"]))
+    if len(derivation_heads) != 1:
+        raise FamilyPublicationError("evidence_set_mismatch", "family evidence has no single derivation head")
+    common_head = next(iter(derivation_heads))
+    code, common_tree_raw, _stderr = _histsem_git(repository, "rev-parse", f"{common_head}^{{tree}}")
+    if code != 0:
+        raise FamilyPublicationError("head_unresolvable", "common evidence head is unavailable")
+    common_tree = common_tree_raw.decode("ascii", errors="strict").strip()
+    family_refusal = _family_refusal_entry(registry)
+    builder_ref = _family_tool_reference(
+        repository,
+        head,
+        "scripts/build_family_marker.py",
+        Path(builder_tool),
+        phase=phase,
+        candidate_manifest=candidate_manifest,
+    )
+    consumer_ref = _family_tool_reference(
+        repository,
+        head,
+        "scripts/verify_family_marker.py",
+        Path(consumer_tool),
+        phase=phase,
+        candidate_manifest=candidate_manifest,
+    )
+    code, commit_time_raw, _stderr = _histsem_git(repository, "show", "-s", "--format=%cI", head)
+    if code != 0:
+        raise FamilyPublicationError("head_unresolvable", "publication commit time is unavailable")
+    commit_time = datetime.fromisoformat(commit_time_raw.decode().strip()).astimezone(UTC)
+    marker = {
+        "schema_version": FAMILY_PUBLICATION_MARKER_SCHEMA,
+        "marker_kind": "FAMILY_PUBLICATION",
+        "family_id": "d117-v4",
+        "family_generation": first_generation,
+        "publication_state": "PUBLISHED",
+        "publication_git": dict(reviewed),
+        "common_evidence_git": {
+            "head_commit": common_head,
+            "head_tree_oid": common_tree,
+        },
+        "lifecycle_registry": {
+            "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+            "schema_version": registry["schema_version"],
+            "registry_id": registry["registry_id"],
+            "sha256": sha256_bytes(registry_raw),
+            "lifecycle_registry_id": lifecycle["registry_id"],
+            "family_publication_marker_schema": lifecycle["successor_policy"]["family_publication_marker_schema"],
+            "family_publication_refusal": family_refusal,
+        },
+        "members": members,
+        "terminal_review": {
+            "evidence_kind": "TERMINAL_REVIEW",
+            "head_tree_oid": reviewed["head_tree_oid"],
+        },
+        "publication_authority": {
+            "confirmation_schema": STEP6_CONFIRMATION_TABLE_SCHEMA,
+            "required_decision": "YES",
+        },
+        "authoring_context": {
+            "transaction_id": f"d117-v4@{head}",
+            "source_commit_time_utc": commit_time.isoformat().replace("+00:00", "Z"),
+            "construction_phase": "POST_FREEZE_FAMILY_BOUNDARY",
+            "custody_class": "TRANSACTION_EXTERNAL",
+            "builder": builder_ref,
+            "consumer": consumer_ref,
+        },
+        "assurance": copy.deepcopy(ASSURANCE),
+    }
+    validate_family_publication_marker(marker, first_generation=first_generation)
+    raw = render_json(marker)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    _exclusive_write(output, raw)
+    _exclusive_write(output.with_name(f"{output.name}.sha256"), gnu_sidecar(sha256_bytes(raw), output.name))
+    return {
+        "schema_version": "joulewise.d117_family_publication_build.v1",
+        "status": "PASS",
+        "marker_path": str(output),
+        "marker_sha256": sha256_bytes(raw),
+        "sidecar_path": str(output.with_name(f"{output.name}.sha256")),
+        "sidecar_sha256": sha256_bytes(gnu_sidecar(sha256_bytes(raw), output.name)),
+        "family_id": marker["family_id"],
+        "head_commit": head,
+        "head_tree_oid": reviewed["head_tree_oid"],
+    }
+
+
+def _read_external_canonical(
+    path: Path,
+    *,
+    absent_check: str,
+    invalid_check: str,
+    noncanonical_check: str | None = None,
+    digest_check: str | None = None,
+) -> tuple[Mapping[str, Any], bytes]:
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise FileNotFoundError(path)
+        raw = path.read_bytes()
+        sidecar = path.with_name(f"{path.name}.sha256").read_bytes()
+    except FileNotFoundError as exc:
+        raise FamilyPublicationError(absent_check, f"custody artifact is absent: {path}") from exc
+    except OSError as exc:
+        raise FamilyPublicationError(invalid_check, f"custody artifact is unreadable: {exc}") from exc
+    digest = sha256_bytes(raw)
+    if sidecar != gnu_sidecar(digest, path.name):
+        raise FamilyPublicationError(
+            digest_check or invalid_check, "custody artifact sidecar differs"
+        )
+    try:
+        value = parse_json_bytes(raw, require_canonical=True)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError(
+            noncanonical_check or invalid_check,
+            f"custody JSON is noncanonical: {exc}",
+        ) from exc
+    if not isinstance(value, Mapping):
+        raise FamilyPublicationError(invalid_check, "custody JSON must be an object")
+    return value, raw
+
+
+def _authenticate_confirmation_table(
+    confirmation_path: Path | str | None,
+    expected_confirmation_digest: str | None,
+) -> tuple[Mapping[str, Any], bytes]:
+    """Authenticate Ed's table with the out-of-band digest of record.
+
+    The adjacent sidecar is checked first by ``_read_external_canonical`` as a
+    transport-integrity guard.  It is not an authenticator because it is made
+    from the same bytes it accompanies.  Only the operator-supplied digest can
+    authenticate the table, and no table semantics are parsed or trusted until
+    that digest matches.
+    """
+
+    if expected_confirmation_digest is None:
+        raise FamilyPublicationError(
+            "confirmation_missing", "no expected confirmation digest supplied"
+        )
+    if (
+        not isinstance(expected_confirmation_digest, str)
+        or _LOWER_SHA256_RE.fullmatch(expected_confirmation_digest) is None
+    ):
+        raise FamilyPublicationError(
+            "confirmation_mismatch",
+            "supplied expected confirmation digest is malformed",
+        )
+    if confirmation_path is None:
+        raise FamilyPublicationError(
+            "confirmation_missing", "no step-6 confirmation table supplied"
+        )
+    table_value, table_raw = _read_external_canonical(
+        Path(confirmation_path),
+        absent_check="confirmation_missing",
+        invalid_check="confirmation_mismatch",
+    )
+    if sha256_bytes(table_raw) != expected_confirmation_digest:
+        raise FamilyPublicationError(
+            "confirmation_mismatch",
+            "table bytes differ from the expected confirmation digest",
+        )
+    try:
+        table = validate_step6_confirmation_table(table_value)
+    except ArmReadinessError as exc:
+        # Keep the public family-publication boundary closed even if a shared
+        # primitive validator acquires another ArmReadinessError path later.
+        raise FamilyPublicationError("confirmation_mismatch", str(exc)) from exc
+    return table, table_raw
+
+
+def verify_family_publication_marker(
+    repository_root: Path | str,
+    marker_path: Path | str,
+    *,
+    phase: str,
+    confirmation_path: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
+    target_pack_root: Path | str | None = None,
+    consumer_tool: Path | str | None = None,
+    candidate_manifest: Path | str | None = None,
+) -> dict[str, Any]:
+    """Replay marker semantics; candidate PASS is never gate-admissible."""
+
+    if phase not in {"candidate", "publication", "pre-arm", "t0"}:
+        raise FamilyPublicationError("lane_inadmissible", f"unsupported marker phase {phase!r}")
+    repository = Path(repository_root).resolve(strict=True)
+    marker_file = Path(marker_path).resolve(strict=False)
+    try:
+        marker_file.relative_to(repository)
+    except ValueError:
+        pass
+    else:
+        raise FamilyPublicationError(
+            "marker_unreadable", "published marker custody must be outside the repository"
+        )
+    registry, registry_raw = load_registry(repository)
+    refusal = _family_refusal_entry(registry)
+    marker_value, marker_raw = _read_external_canonical(
+        marker_file,
+        absent_check="marker_absent",
+        invalid_check="marker_unreadable",
+        noncanonical_check="marker_noncanonical",
+        digest_check="marker_self_digest_mismatch",
+    )
+    try:
+        marker = validate_family_publication_marker(
+            marker_value, first_generation=_family_first_generation(registry)
+        )
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("registry_dormant", str(exc)) from exc
+    live = reviewed_main(repository)
+    if live["clean"] is not True:
+        raise FamilyPublicationError("worktree_dirty", "live marker consult requires a clean tree")
+    # Split S-1 is STRICT FOUR-WAY equality.  Separate the two ways it can
+    # fail, because they mean different things to an operator: the marker names
+    # a head that is not the published head (`head_unpublished` -- the rollback
+    # case the Sol refuter used to decide S-1: a checkout of an old published
+    # head is trivially an ancestor of origin/main, so ancestry would admit it
+    # and equality does not), versus the live coordinates simply disagreeing.
+    if marker["publication_git"]["head_commit"] != live["origin_main_commit"]:
+        raise FamilyPublicationError(
+            "head_unpublished",
+            "marker publication head is not the current origin/main -- an old "
+            "published head or an unpushed head cannot gate",
+        )
+    if live["exact_match"] is not True or marker["publication_git"] != live:
+        raise FamilyPublicationError("head_mismatch", "marker and live four-way Git coordinates differ")
+    if marker["lifecycle_registry"] != {
+        "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+        "schema_version": registry["schema_version"],
+        "registry_id": registry["registry_id"],
+        "sha256": sha256_bytes(registry_raw),
+        "lifecycle_registry_id": registry["freeze_evidence_lifecycle"]["registry_id"],
+        "family_publication_marker_schema": registry["freeze_evidence_lifecycle"]["successor_policy"]["family_publication_marker_schema"],
+        "family_publication_refusal": refusal,
+    }:
+        raise FamilyPublicationError("registry_mismatch", "current registry differs from marker authority")
+    expected_roster = registry["freeze_evidence_lifecycle"]["successor_policy"]["successor_pack_ids"]
+    if {member["profile"]: member["pack_id"] for member in marker["members"]} != dict(expected_roster):
+        raise FamilyPublicationError("roster_mismatch", "current registry roster differs from marker")
+    table: Mapping[str, Any] | None = None
+    table_raw: bytes | None = None
+    if phase != "candidate":
+        table, table_raw = _authenticate_confirmation_table(
+            confirmation_path, expected_confirmation_digest
+        )
+    common_heads: set[str] = set()
+    for expected_member in marker["members"]:
+        root = repository / str(expected_member["pack_path"])
+        reference = {
+            "registry_id": registry["registry_id"],
+            "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+            "sha256": sha256_bytes(registry_raw),
+            "plan_profile": expected_member["profile"],
+        }
+        observed, heads = _family_member(
+            repository,
+            root,
+            registry,
+            reference,
+            step6_confirmation_table=(
+                confirmation_path if phase != "candidate" else None
+            ),
+            expected_confirmation_digest=(
+                expected_confirmation_digest if phase != "candidate" else None
+            ),
+        )
+        if observed != expected_member:
+            raise FamilyPublicationError("pack_digest_mismatch", f"member replay differs: {root.name}")
+        common_heads.update(heads)
+    if len(common_heads) != 1:
+        raise FamilyPublicationError("evidence_set_mismatch", "replayed family has mixed derivation heads")
+    common_head = next(iter(common_heads))
+    code, tree_raw, _stderr = _histsem_git(repository, "rev-parse", f"{common_head}^{{tree}}")
+    if code != 0 or marker["common_evidence_git"] != {
+        "head_commit": common_head,
+        "head_tree_oid": tree_raw.decode("ascii", errors="strict").strip(),
+    }:
+        raise FamilyPublicationError("evidence_set_mismatch", "common evidence Git binding differs")
+    if target_pack_root is not None:
+        target = Path(target_pack_root).resolve(strict=True)
+        _repo, _prefix, target_relative = _repository_and_pack_relative(target)
+        if not any(
+            member["pack_id"] == target.name and member["pack_path"] == target_relative
+            for member in marker["members"]
+        ):
+            raise FamilyPublicationError("pack_not_member", "target pack is outside the published roster")
+    if consumer_tool is not None:
+        builder_path = Path(consumer_tool).with_name("build_family_marker.py")
+        expected_builder = _family_tool_reference(
+            repository,
+            str(live["head_commit"]),
+            "scripts/build_family_marker.py",
+            builder_path,
+            phase=phase,
+            candidate_manifest=candidate_manifest,
+        )
+        expected_consumer = _family_tool_reference(
+            repository,
+            str(live["head_commit"]),
+            "scripts/verify_family_marker.py",
+            Path(consumer_tool),
+            phase=phase,
+            candidate_manifest=candidate_manifest,
+        )
+        if (
+            marker["authoring_context"]["builder"] != expected_builder
+            or marker["authoring_context"]["consumer"] != expected_consumer
+        ):
+            raise FamilyPublicationError("tool_mismatch", "executing tool pair differs from marker")
+
+    confirmation_ref: dict[str, str] | None = None
+    if phase != "candidate":
+        if table is None or table_raw is None:
+            # Defensive-unreachable (the published lane authenticated the
+            # table above), but governed rather than an -O-strippable
+            # assert (delta re-audit condition 4).
+            raise FamilyPublicationError(
+                "confirmation_missing",
+                "published lane reached without an authenticated confirmation table",
+            )
+        expected_members = [
+            {
+                "profile": member["profile"],
+                "pack_id": member["pack_id"],
+                "pack_sha256": member["pack_sha256"],
+                "freeze_receipt_sha256": member["freeze_receipt"]["sha256"],
+            }
+            for member in marker["members"]
+        ]
+        if (
+            table["git"]
+            != {
+                "head_commit": marker["publication_git"]["head_commit"],
+                "head_tree_oid": marker["publication_git"]["head_tree_oid"],
+            }
+            or table["registry"]["sha256"] != marker["lifecycle_registry"]["sha256"]
+            or table["family_publication"]["marker"]["sha256"] != sha256_bytes(marker_raw)
+            or table["family_publication"]["members"] != expected_members
+        ):
+            raise FamilyPublicationError("confirmation_mismatch", "table C-to-M edge differs")
+        confirmation_ref = {
+            "path": str(Path(confirmation_path)),
+            "sha256": sha256_bytes(table_raw),
+        }
+    # The checks array records the checks this run ACTUALLY executed, in the
+    # order the code performs them.  It was previously a hardcoded literal that
+    # reported PASS for checks that never ran (notably predecessor_mismatch),
+    # which made a PASS receipt overstate what had been verified (gap G-9).
+    executed = [
+        "marker_self_digest_mismatch",
+        "marker_noncanonical",
+        "marker_schema_mismatch",
+        "worktree_dirty",
+        "head_unpublished",
+        "head_mismatch",
+        "registry_mismatch",
+        "roster_mismatch",
+        "predecessor_mismatch",
+        "freeze_binding_mismatch",
+        "freeze_not_pass",
+        "plan_binding_mismatch",
+        "pack_digest_mismatch",
+        "evidence_set_mismatch",
+        "terminal_review_mismatch",
+    ]
+    if target_pack_root is not None:
+        executed.append("pack_not_member")
+    if consumer_tool is not None:
+        executed.append("tool_mismatch")
+    if phase != "candidate":
+        executed.append("confirmation_missing")
+        executed.append("confirmation_mismatch")
+    checks = [{"check_id": check_id, "status": "PASS"} for check_id in executed]
+    return {
+        "schema_version": FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
+        "receipt_kind": "family_publication_verification",
+        "phase": phase,
+        "lane": "candidate" if phase == "candidate" else "published",
+        "gate_admissible": phase != "candidate",
+        "checked_at_utc": _utc_now(),
+        "status": "PASS",
+        "publication_authorized": phase != "candidate",
+        "family_id": marker["family_id"],
+        "marker": {"path": str(Path(marker_path)), "sha256": sha256_bytes(marker_raw)},
+        "confirmation": confirmation_ref,
+        "consulted_git": dict(live),
+        "checks": checks,
+        "refusals": [],
+        "detail": None,
+        "assurance": copy.deepcopy(ASSURANCE),
+    }
+
+
+def require_gate_admissible_verification(
+    receipt: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Refuse a verification receipt that cannot lawfully gate an arm.
+
+    A family-publication verification receipt records the lane it was produced
+    in.  Candidate-lane receipts are produced inside the S-0 clone, whose
+    ``origin/main`` ref is deliberately forged, so a candidate PASS is
+    forged-ref-conditional and must never be consumed as publication proof
+    (D-151 condition 4, extended to this verifier by the marker ruling).
+
+    Two distinct failures are separated here:
+
+    * ``lane_inconsistent`` -- the receipt's own ``lane`` / ``gate_admissible``
+      / ``publication_authorized`` fields disagree with its ``phase``.  Such a
+      document is forged or corrupt: no honest run can emit it.
+    * ``lane_inadmissible`` -- the receipt is internally coherent but is a
+      candidate-lane or non-PASS receipt, which cannot gate.
+
+    Call this on any verification receipt before letting it authorise anything,
+    including one just produced in-process: it costs nothing and it is the only
+    thing standing between a laundered candidate receipt and an arm.
+    """
+
+    if not isinstance(receipt, Mapping):
+        raise FamilyPublicationError(
+            "lane_inconsistent", "verification receipt is not an object"
+        )
+    phase = receipt.get("phase")
+    if (
+        receipt.get("schema_version") != FAMILY_PUBLICATION_VERIFICATION_SCHEMA
+        or receipt.get("receipt_kind") != "family_publication_verification"
+        or phase not in {"candidate", "publication", "pre-arm", "t0"}
+    ):
+        raise FamilyPublicationError(
+            "lane_inconsistent", "verification receipt identity is not the governed one"
+        )
+    published = phase != "candidate"
+    if (
+        receipt.get("lane") != ("published" if published else "candidate")
+        or receipt.get("gate_admissible") is not published
+        or receipt.get("publication_authorized") is not published
+    ):
+        raise FamilyPublicationError(
+            "lane_inconsistent",
+            "verification receipt lane fields disagree with its own phase",
+        )
+    if receipt.get("gate_admissible") is not True or receipt.get("status") != "PASS":
+        raise FamilyPublicationError(
+            "lane_inadmissible",
+            "a candidate-lane or non-PASS verification receipt cannot gate an arm",
+        )
+    return receipt
+
+
+def _gate_family_publication(
+    pack_root: Path,
+    *,
+    marker_path: Path | str | None,
+    confirmation_path: Path | str | None,
+    expected_confirmation_digest: str | None = None,
+) -> None:
+    """Engage from the tracked successor roster, never marker presence."""
+
+    try:
+        repository = _repo_for_pack(pack_root)
+        registry, _raw = load_registry(repository)
+        roster = set(
+            registry["freeze_evidence_lifecycle"]["successor_policy"][
+                "successor_pack_ids"
+            ].values()
+        )
+        if pack_root.name not in roster:
+            return
+        if marker_path is None:
+            raise FamilyPublicationError(
+                "marker_absent", "registry-installed family has no marker"
+            )
+        require_gate_admissible_verification(
+            verify_family_publication_marker(
+                repository,
+                marker_path,
+                phase="pre-arm",
+                confirmation_path=confirmation_path,
+                expected_confirmation_digest=expected_confirmation_digest,
+                target_pack_root=pack_root,
+            )
+        )
+    except FamilyPublicationError:
+        raise
+    except EvidenceLifecycleError as exc:
+        raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("registry_mismatch", str(exc)) from exc
+
+
 def verify_receipt(
-    pack_root: Path | str, receipt_path: Path | str
+    pack_root: Path | str,
+    receipt_path: Path | str,
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     path = Path(receipt_path)
     try:
@@ -9287,7 +10944,12 @@ def verify_receipt(
         )
     schema = value.get("schema_version")
     if schema == ARM_RECEIPT_SCHEMA:
-        return verify_arm_receipt(pack_root, path)
+        return verify_arm_receipt(
+            pack_root,
+            path,
+            step6_confirmation_table=step6_confirmation_table,
+            expected_confirmation_digest=expected_confirmation_digest,
+        )
     if schema == DRY_RUN_RECEIPT_SCHEMA:
         validate_dry_run_receipt(value)
         raise ArmReadinessError(
@@ -9324,6 +10986,11 @@ __all__ = [
     "EVIDENCE_RECEIPT_SCHEMA",
     "EXECUTION_EVIDENCE_RECEIPT_SCHEMA",
     "EvidenceLifecycleError",
+    "FAMILY_PUBLICATION_CHECK_IDS",
+    "FAMILY_PUBLICATION_MARKER_NAME",
+    "FAMILY_PUBLICATION_MARKER_SCHEMA",
+    "FAMILY_PUBLICATION_VERIFICATION_SCHEMA",
+    "FamilyPublicationError",
     "FREEZE_RECEIPT_SCHEMA",
     "FREEZE_RECEIPT_V1_SCHEMA",
     "FREEZE_RECEIPT_V2_SCHEMA",
@@ -9343,15 +11010,20 @@ __all__ = [
     "R1_LIFECYCLE_REGISTRY_SCHEMA",
     "R1_REFUSAL_ROLES",
     "R1_ROW_REGISTRY_SCHEMA",
+    "RECEIPT_HISTSEM_PINSET_RELATIVE_PATH",
+    "RECEIPT_HISTSEM_PINSET_SCHEMA",
     "ROW_REGISTRY_ID",
     "ROW_REGISTRY_SCHEMA",
     "SYNTHETIC_DOMAINS",
+    "STEP6_CONFIRMATION_TABLE_NAME",
+    "STEP6_CONFIRMATION_TABLE_SCHEMA",
     "applicability_for_row",
     "authenticate_bundle_launch_lineage",
     "authenticate_campaign_launch_lineage",
     "authenticate_launch_lineage",
     "authenticate_r1_lifecycle_registry",
     "committed_pack_tree_sha256",
+    "build_family_publication_marker",
     "generate_arm_receipt",
     "generate_dry_run_receipt",
     "generate_freeze_receipt",
@@ -9373,13 +11045,16 @@ __all__ = [
     "validate_dry_run_receipt",
     "validate_evidence_receipt",
     "validate_freeze_receipt",
+    "validate_family_publication_marker",
     "validate_r1_class_lifecycle",
     "validate_r1_evidence_lifecycle",
     "validate_r1_lifecycle_registry",
     "validate_r1_temporal_budget",
     "validate_registry",
     "validate_terminal_review_head_tree",
+    "validate_step6_confirmation_table",
     "verify_arm_receipt",
     "verify_consumed_launch",
     "verify_receipt",
+    "verify_family_publication_marker",
 ]

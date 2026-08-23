@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify governed legacy receipt semantics from local Git objects."""
+"""Verify the closed versioned receipt-histsem chain from local Git objects."""
 
 from __future__ import annotations
 

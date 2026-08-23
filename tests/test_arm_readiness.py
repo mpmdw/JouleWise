@@ -218,6 +218,15 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
             arm: object,
             *,
             launch_binding_cache: dict[Path, bytes] | None = None,
+            # Mirrors the production signature, which now threads Ed's step-6
+            # confirmation custody through verification.  A double that does
+            # not accept what its caller passes is not a double: it raises
+            # TypeError from inside the mock, and the test then fails for a
+            # reason unrelated to what it asserts.  Named explicitly rather
+            # than swallowed by **kwargs, so the NEXT signature change fails
+            # loudly here instead of drifting silently.
+            step6_confirmation_table: Path | str | None = None,
+            expected_confirmation_digest: str | None = None,
         ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
             self.assertIsNotNone(launch_binding_cache)
             self.assertIsInstance(arm, dict)
