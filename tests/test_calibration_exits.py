@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 import errno
+import fcntl
 import hashlib
 import io
 import json
@@ -255,7 +256,7 @@ def _classify_pack_cleanup(
 def _wait_for_semantic_readiness(
     predicate: Callable[[], object | None],
     *,
-    process: subprocess.Popen,
+    process: subprocess.Popen | None,
     description: str,
     timeout_s: float = 2.0,
     teardown: Callable[[], None] | None = None,
@@ -268,8 +269,8 @@ def _wait_for_semantic_readiness(
             ready = predicate()
             if ready is not None:
                 return ready
-            returncode = process.poll()
-            if returncode is not None:
+            returncode = process.poll() if process is not None else None
+            if process is not None and returncode is not None:
                 raise AssertionError(
                     f"{description} process exited before readiness: "
                     f"returncode={returncode}"
@@ -429,6 +430,69 @@ class CleanupDiagnostic:
     residual_path: str
     residual_snapshot: tuple[str, ...]
     writers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DetachedProcessIdentity:
+    """Stable detached-fixture identity held live by an exclusive file lock."""
+
+    pid: int
+    start_token: str
+    executable: str
+    argv: tuple[str, ...]
+
+
+def _read_detached_identity(path: Path) -> DetachedProcessIdentity | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or set(payload) != {
+        "pid",
+        "start_token",
+        "executable",
+        "argv",
+    }:
+        return None
+    pid = payload["pid"]
+    start_token = payload["start_token"]
+    executable = payload["executable"]
+    argv = payload["argv"]
+    if (
+        not isinstance(pid, int)
+        or isinstance(pid, bool)
+        or pid <= 0
+        or not isinstance(start_token, str)
+        or not start_token
+        or not isinstance(executable, str)
+        or not executable
+        or not isinstance(argv, list)
+        or not argv
+        or any(not isinstance(argument, str) for argument in argv)
+    ):
+        return None
+    return DetachedProcessIdentity(pid, start_token, executable, tuple(argv))
+
+
+def _detached_identity_is_live(
+    path: Path,
+    identity: DetachedProcessIdentity,
+) -> bool:
+    """Revalidate exact metadata and the original process-held start lock."""
+
+    if _read_detached_identity(path) != identity:
+        return False
+    try:
+        with path.open("r+", encoding="utf-8") as stream:
+            try:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+                return False
+    except OSError:
+        return False
 
 
 class WitnessSandbox:
@@ -2086,10 +2150,11 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 finally:
                     sandbox.close()
             sandbox.close()
+            self.assertIsNotNone(process.poll())
         self.assertEqual(owned_process_group_survivors(), ())
         print(
             f"P2_OWNERSHIP_CYCLES={cycles} TIMEOUTS={timeout_cycles} "
-            f"EXCEPTIONS={exception_cycles} ESRCH={cycles} REGISTRY_EMPTY=1"
+            f"EXCEPTIONS={exception_cycles} DIRECT_REAPED={cycles} REGISTRY_EMPTY=1"
         )
 
     def _run_event_fixture(self, stop_s: float) -> dict:
@@ -2374,8 +2439,7 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                     self.assertEqual(raised, exit_path == "exception")
                     assert process is not None
                     self.assertEqual(process.returncode, -signal.SIGKILL)
-                    with self.assertRaises(ProcessLookupError):
-                        os.kill(process.pid, 0)
+                    self.assertIsNotNone(process.poll())
         print(
             "F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3",
             flush=True,
@@ -2384,11 +2448,23 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
     def test_detached_grandchild_is_reported_by_post_teardown_census(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            sampler_pid_path = root / "sampler.pid"
+            identity_path = root / "sampler.identity.json"
             detached_sampler = root / "powermetrics_detached_sampler.py"
             detached_sampler.write_text(
-                "import signal,time\n"
+                "import fcntl,json,os,signal,sys,time\n"
+                "from pathlib import Path\n"
                 "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+                "identity_path=Path(sys.argv[1])\n"
+                "stream=identity_path.open('x+',encoding='utf-8')\n"
+                "fcntl.flock(stream.fileno(),fcntl.LOCK_EX)\n"
+                "identity={\n"
+                " 'pid':os.getpid(),\n"
+                " 'start_token':f'{time.monotonic_ns()}-{os.getpid()}',\n"
+                " 'executable':str(Path(sys.executable).resolve()),\n"
+                " 'argv':sys.argv,\n"
+                "}\n"
+                "stream.write(json.dumps(identity,sort_keys=True)+'\\n')\n"
+                "stream.flush(); os.fsync(stream.fileno())\n"
                 "time.sleep(60)\n",
                 encoding="utf-8",
             )
@@ -2398,18 +2474,30 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                 (
                     "import signal,subprocess,sys,time; "
                     "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
-                    "child=subprocess.Popen([sys.executable,sys.argv[1]],"
+                    "subprocess.Popen([sys.executable,sys.argv[1],sys.argv[2]],"
                     "start_new_session=True); "
-                    "open(sys.argv[2],'w').write(str(child.pid)); "
                     "time.sleep(60)"
                 ),
                 str(detached_sampler),
-                str(sampler_pid_path),
+                str(identity_path),
             ]
             process = None
-            detached_pid: int | None = None
+            detached_identity: DetachedProcessIdentity | None = None
             reported_events: list[tuple[str, dict]] = []
             stderr = io.StringIO()
+
+            def mocked_census(args, **_kwargs):
+                assert detached_identity is not None
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=(
+                        f"{detached_identity.pid} Python "
+                        f"{detached_identity.executable} "
+                        f"{' '.join(detached_identity.argv)}\n"
+                    ),
+                )
+
             try:
                 with mock.patch.object(
                     validation_script,
@@ -2418,14 +2506,7 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                 ), mock.patch.object(
                     validation_script.subprocess,
                     "run",
-                    side_effect=lambda args, **_kwargs: subprocess.CompletedProcess(
-                        args,
-                        0,
-                        stdout=(
-                            f"{detached_pid} Python {sys.executable} "
-                            f"{detached_sampler}\n"
-                        ),
-                    ),
+                    side_effect=mocked_census,
                 ), mock.patch.object(validation_script.sys, "stderr", stderr):
                     with validation_script._sampler_lifetime(
                         command,
@@ -2433,38 +2514,72 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                             (event, metadata)
                         ),
                     ) as process:
-                        deadline = time.monotonic() + 2.0
-                        while True:
-                            try:
-                                detached_pid = int(sampler_pid_path.read_text())
-                            except (OSError, ValueError):
-                                detached_pid = None
-                            else:
-                                break
-                            if time.monotonic() >= deadline:
-                                self.fail("detached sampler did not start")
-                            time.sleep(0.001)
+                        ready = _wait_for_semantic_readiness(
+                            lambda: _read_detached_identity(identity_path),
+                            process=process,
+                            description="detached sampler stable identity",
+                            teardown=lambda: validation_script._terminate_powermetrics(
+                                process
+                            ),
+                        )
+                        assert isinstance(ready, DetachedProcessIdentity)
+                        detached_identity = ready
+                        self.assertEqual(
+                            detached_identity.executable,
+                            str(Path(sys.executable).resolve()),
+                        )
+                        self.assertEqual(
+                            detached_identity.argv,
+                            (str(detached_sampler), str(identity_path)),
+                        )
+                        self.assertTrue(
+                            _detached_identity_is_live(
+                                identity_path,
+                                detached_identity,
+                            )
+                        )
                 assert process is not None
                 self.assertEqual(process.returncode, -signal.SIGKILL)
+                self.assertIsNotNone(process.poll())
                 self.assertEqual(
                     [event for event, _metadata in reported_events],
                     [validation_script.SAMPLER_CENSUS_DIAGNOSTIC],
                 )
                 findings = reported_events[0][1]["findings"]
-                self.assertIn(detached_pid, [finding["pid"] for finding in findings])
+                self.assertIn(
+                    detached_identity.pid,
+                    [finding["pid"] for finding in findings],
+                )
                 self.assertIn(
                     validation_script.SAMPLER_CENSUS_DIAGNOSTIC,
                     stderr.getvalue(),
                 )
             finally:
-                if detached_pid is not None:
+                if detached_identity is not None and _detached_identity_is_live(
+                    identity_path,
+                    detached_identity,
+                ):
                     try:
-                        os.kill(detached_pid, signal.SIGKILL)
+                        os.kill(detached_identity.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
+                if detached_identity is not None:
+                    _wait_for_semantic_readiness(
+                        lambda: (
+                            True
+                            if not _detached_identity_is_live(
+                                identity_path,
+                                detached_identity,
+                            )
+                            else None
+                        ),
+                        process=None,
+                        description="detached sampler identity gone",
+                        timeout_s=2.0,
+                    )
         print(
             "F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 "
-            "DETACHED_GRANDCHILD_CENSUS_REPORTED=1",
+            "DETACHED_GRANDCHILD_CENSUS_REPORTED=1 IDENTITY_GONE=1",
             flush=True,
         )
 
