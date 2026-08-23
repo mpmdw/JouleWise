@@ -74,6 +74,12 @@ _RACE_EXERCISED = "RACE_EXERCISED"
 _NO_RACE_PRE_WRITE = "NO_RACE_PRE_WRITE"
 _TRACE_INCOMPLETE = "TRACE_INCOMPLETE"
 _LOGICAL_WRITER_TEST_ORIGIN_S = 1_784_490_850.05
+# The writer's nominal acknowledgement timeout is a liveness guard, not a
+# latency assertion.  Hosted starvation exceeded the old 1 s window in runs
+# 32578576711, 32601988870, 32607418551, and the e6a6520 merge-head run.
+# 1 s * the measured ~2.9x hosted/bench ratio, rounded to 4 s, leaves 38%
+# margin; the driver's 4x outer bound still terminates a true hang.
+_SAMPLER_ACK_TIMEOUT_S = 4.0
 
 
 @dataclass(frozen=True)
@@ -3736,7 +3742,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "--identity-epoch-json-for-test",
             str(state["identity_path"]),
             "--sampler-ready-timeout-s",
-            "1.0",
+            str(_SAMPLER_ACK_TIMEOUT_S),
             "--rollover-timeout-s",
             "1.5",
         ]
@@ -4561,7 +4567,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
                     writer_args = [
                         *self._writer_capture_args(state),
                         "--sampler-ready-timeout-s",
-                        "1.0",
+                        str(_SAMPLER_ACK_TIMEOUT_S),
                     ]
                 else:
                     writer_args = []

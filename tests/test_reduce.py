@@ -59,7 +59,10 @@ DEFAULT_IDLE = {
     "telemetry_backend": "mock",
 }
 
-_SELF_CONSISTENT_CALIBRATIONS: dict[str, tuple[dict, bytes, bytes]] = {}
+_SELF_CONSISTENT_CALIBRATIONS: dict[
+    tuple[float, tuple[tuple[float, float], ...], str, str],
+    tuple[dict, bytes, bytes],
+] = {}
 
 
 def self_consistent_calibration(
@@ -74,15 +77,6 @@ def self_consistent_calibration(
     from joulewise.uncertainty_evidence import (
         resolve_anchor_deriver,
     )
-    use_cache = (
-        first_endpoint_s is None
-        and commanded_edges is None
-        and protocol_id is None
-    )
-    if use_cache and anchor_method in _SELF_CONSISTENT_CALIBRATIONS:
-        evidence, raw, events = _SELF_CONSISTENT_CALIBRATIONS[anchor_method]
-        return json.loads(json.dumps(evidence)), raw, events
-
     from joulewise.adapters.powermetrics import (
         anchor_records_from_powermetrics,
         parse_powermetrics_records,
@@ -122,6 +116,15 @@ def self_consistent_calibration(
             protocol_pulse_count(protocol_id),
             start_s=first_endpoint_s + 14.95,
         )
+    cache_key = (
+        first_endpoint_s,
+        tuple(commanded_edges),
+        protocol_id,
+        anchor_method,
+    )
+    if cache_key in _SELF_CONSISTENT_CALIBRATIONS:
+        evidence, raw, events = _SELF_CONSISTENT_CALIBRATIONS[cache_key]
+        return json.loads(json.dumps(evidence)), raw, events
     true_edges = [(on_s + 0.02, off_s + 0.02) for on_s, off_s in commanded_edges]
     capture_end_s = true_edges[-1][1] + 5.0
 
@@ -270,8 +273,7 @@ def self_consistent_calibration(
     evidence["clock_anchor_resolved"] = True
     if evidence["status"] != "valid":
         raise AssertionError(evidence["reasons"])
-    if use_cache:
-        _SELF_CONSISTENT_CALIBRATIONS[anchor_method] = (evidence, raw, events)
+    _SELF_CONSISTENT_CALIBRATIONS[cache_key] = (evidence, raw, events)
     return json.loads(json.dumps(evidence)), raw, events
 
 
