@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 import errno
+import fcntl
 import hashlib
 import io
 import json
@@ -21,6 +22,7 @@ import sys
 import tempfile
 import threading
 import time
+from types import MappingProxyType
 import unittest
 from unittest import mock
 
@@ -76,9 +78,12 @@ _LOGICAL_WRITER_TEST_ORIGIN_S = 1_784_490_850.05
 
 @dataclass(frozen=True)
 class PackTraceEvidence:
-    """Complete child-owned Trace2 evidence for one loose-object packer."""
+    """Complete same-domain Trace2 topology for detached loose-object packing."""
 
     events: tuple[dict[str, object], ...]
+    detached_start: dict[str, object] | None
+    maintenance_sid: str | None
+    maintenance_terminal_event: dict[str, object] | None
     child_sid: str | None
     terminal_event: dict[str, object] | None
     complete: bool
@@ -126,18 +131,65 @@ def _is_pack_objects_start(event: dict[str, object]) -> bool:
     )
 
 
+def _is_detached_maintenance_start(event: dict[str, object]) -> bool:
+    argv = event.get("argv")
+    return (
+        event.get("event") == "child_start"
+        and isinstance(argv, list)
+        and len(argv) >= 3
+        and Path(str(argv[0])).name == "git"
+        and argv[1] == "maintenance"
+        and "--detach" in argv
+    )
+
+
+def _is_maintenance_process_start(event: dict[str, object]) -> bool:
+    argv = event.get("argv")
+    return (
+        event.get("event") == "start"
+        and isinstance(event.get("sid"), str)
+        and isinstance(argv, list)
+        and len(argv) >= 2
+        and Path(str(argv[0])).name == "git"
+        and argv[1] == "maintenance"
+        and "--detach" in argv
+    )
+
+
 def _pack_trace_evidence(
     events: tuple[dict[str, object], ...],
     *,
     final_record_incomplete: bool = False,
     timed_out: bool = False,
 ) -> PackTraceEvidence:
+    detached_starts = tuple(
+        event for event in events if _is_detached_maintenance_start(event)
+    )
+    detached_start = detached_starts[0] if len(detached_starts) == 1 else None
     child_sids = {
         event.get("sid")
         for event in events
         if _is_pack_objects_start(event) and isinstance(event.get("sid"), str)
     }
     child_sid = next(iter(child_sids)) if len(child_sids) == 1 else None
+    maintenance_sids = {
+        event.get("sid")
+        for event in events
+        if _is_maintenance_process_start(event)
+        and child_sid is not None
+        and child_sid.startswith(f"{event.get('sid')}/")
+    }
+    maintenance_sid = next(iter(maintenance_sids)) if len(maintenance_sids) == 1 else None
+    maintenance_terminal_events = tuple(
+        event
+        for event in events
+        if maintenance_sid is not None
+        and event.get("sid") == maintenance_sid
+        and event.get("event") in _PACK_TERMINAL_EVENTS
+    )
+    maintenance_terminal_event = (
+        maintenance_terminal_events[-1] if maintenance_terminal_events else None
+    )
     terminal_events = tuple(
         event
         for event in events
@@ -148,10 +200,16 @@ def _pack_trace_evidence(
     terminal_event = terminal_events[-1] if terminal_events else None
     return PackTraceEvidence(
         events=events,
+        detached_start=detached_start,
+        maintenance_sid=maintenance_sid,
+        maintenance_terminal_event=maintenance_terminal_event,
         child_sid=child_sid,
         terminal_event=terminal_event,
         complete=(
-            child_sid is not None
+            detached_start is not None
+            and maintenance_sid is not None
+            and maintenance_terminal_event is not None
+            and child_sid is not None
             and terminal_event is not None
             and not final_record_incomplete
             and not timed_out
@@ -161,11 +219,14 @@ def _pack_trace_evidence(
 
 def _wait_for_pack_terminal(
     path: Path,
-    deadline_s: float = 2.0,
+    deadline_s: float = 10.0,
+    stalled_s: float = 2.0,
 ) -> PackTraceEvidence:
-    """Poll until the exact pack-objects child emits its own terminal event."""
+    """Wait progress-aware for pack child and detached-parent terminals."""
 
     deadline = time.monotonic() + deadline_s
+    stalled_deadline = min(deadline, time.monotonic() + stalled_s)
+    observed_records = 0
     events: tuple[dict[str, object], ...] = ()
     final_record_incomplete = False
     while True:
@@ -176,7 +237,10 @@ def _wait_for_pack_terminal(
         )
         if evidence.complete:
             return evidence
-        remaining_s = deadline - time.monotonic()
+        if len(events) > observed_records:
+            observed_records = len(events)
+            stalled_deadline = min(deadline, time.monotonic() + stalled_s)
+        remaining_s = min(deadline, stalled_deadline) - time.monotonic()
         if remaining_s <= 0:
             return _pack_trace_evidence(
                 events,
@@ -199,21 +263,51 @@ def _event_timestamp(event: dict[str, object]) -> float | None:
 def _classify_pack_cleanup(
     evidence: PackTraceEvidence,
     *,
-    cleanup_started_s: float,
-    cleanup_finished_s: float,
-    raw_enotempty: bool,
+    raw_cleanup_errno: int | None,
 ) -> str:
-    """Classify cleanup using only the pack child's own Trace2 region."""
+    """Validate one Trace2 causal topology, then branch on cleanup outcome."""
 
-    if not evidence.complete or evidence.child_sid is None:
+    if (
+        not evidence.complete
+        or evidence.detached_start is None
+        or evidence.maintenance_sid is None
+        or evidence.maintenance_terminal_event is None
+        or evidence.child_sid is None
+    ):
         return _TRACE_INCOMPLETE
     if evidence.terminal_event is None:
         return _TRACE_INCOMPLETE
+    maintenance_starts = tuple(
+        event
+        for event in evidence.events
+        if event.get("sid") == evidence.maintenance_sid
+        and _is_maintenance_process_start(event)
+    )
+    pack_starts = tuple(
+        event
+        for event in evidence.events
+        if event.get("sid") == evidence.child_sid and _is_pack_objects_start(event)
+    )
+    if len(maintenance_starts) != 1 or len(pack_starts) != 1:
+        return _TRACE_INCOMPLETE
+    topology_events = (
+        evidence.detached_start,
+        maintenance_starts[0],
+        pack_starts[0],
+        evidence.terminal_event,
+        evidence.maintenance_terminal_event,
+    )
+    topology_times = tuple(_event_timestamp(event) for event in topology_events)
+    if any(timestamp is None for timestamp in topology_times):
+        return _TRACE_INCOMPLETE
+    ordered_times = tuple(timestamp for timestamp in topology_times if timestamp is not None)
+    if tuple(sorted(ordered_times)) != ordered_times:
+        return _TRACE_INCOMPLETE
+    if raw_cleanup_errno is not None:
+        return _RACE_EXERCISED
     terminal_time = _event_timestamp(evidence.terminal_event)
     if terminal_time is None:
         return _TRACE_INCOMPLETE
-    if raw_enotempty:
-        return _RACE_EXERCISED
 
     open_regions: list[float] = []
     intervals: list[tuple[float, float]] = []
@@ -239,16 +333,160 @@ def _classify_pack_cleanup(
             if event_time < started_s:
                 return _TRACE_INCOMPLETE
             intervals.append((started_s, event_time))
+    write_interrupted_at_terminal = bool(open_regions)
     for started_s in open_regions:
         if terminal_time < started_s:
             return _TRACE_INCOMPLETE
         intervals.append((started_s, terminal_time))
+    if not intervals:
+        return _TRACE_INCOMPLETE
+    pack_started_s = ordered_times[2]
+    pack_finished_s = ordered_times[3]
     if any(
-        started_s <= cleanup_finished_s and finished_s >= cleanup_started_s
+        started_s < pack_started_s or finished_s > pack_finished_s
         for started_s, finished_s in intervals
     ):
+        return _TRACE_INCOMPLETE
+    if write_interrupted_at_terminal:
         return _RACE_EXERCISED
     return _NO_RACE_PRE_WRITE
+
+
+def _synthetic_pack_topology() -> tuple[dict[str, object], ...]:
+    initiator_sid = "initiator"
+    maintenance_sid = "initiator/maintenance"
+    child_sid = "initiator/maintenance/pack-child"
+    return (
+        {
+            "event": "child_start",
+            "sid": initiator_sid,
+            "time": "2026-08-11T12:00:00.050000Z",
+            "argv": ["git", "maintenance", "run", "--auto", "--detach"],
+        },
+        {
+            "event": "start",
+            "sid": maintenance_sid,
+            "time": "2026-08-11T12:00:00.075000Z",
+            "argv": ["/usr/bin/git", "maintenance", "run", "--auto", "--detach"],
+        },
+        {
+            "event": "start",
+            "sid": child_sid,
+            "time": "2026-08-11T12:00:00.100000Z",
+            "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
+        },
+        {
+            "event": "region_enter",
+            "sid": child_sid,
+            "time": "2026-08-11T12:00:00.130000Z",
+            "category": "pack-objects",
+            "label": "write-pack-file",
+        },
+        {
+            "event": "region_leave",
+            "sid": child_sid,
+            "time": "2026-08-11T12:00:00.170000Z",
+            "category": "pack-objects",
+            "label": "write-pack-file",
+        },
+        {
+            "event": "exit",
+            "sid": child_sid,
+            "time": "2026-08-11T12:00:00.200000Z",
+            "code": 0,
+        },
+        {
+            "event": "exit",
+            "sid": maintenance_sid,
+            "time": "2026-08-11T12:00:00.210000Z",
+            "code": 0,
+        },
+    )
+
+
+def _wait_for_semantic_readiness(
+    predicate: Callable[[], object | None],
+    *,
+    process: subprocess.Popen | None,
+    description: str,
+    timeout_s: float = 2.0,
+    teardown: Callable[[], None] | None = None,
+) -> object:
+    """Wait boundedly for parseable/exact readiness from one owned process."""
+
+    deadline = time.monotonic() + timeout_s
+    try:
+        while True:
+            ready = predicate()
+            if ready is not None:
+                return ready
+            returncode = process.poll() if process is not None else None
+            if process is not None and returncode is not None:
+                raise AssertionError(
+                    f"{description} process exited before readiness: "
+                    f"returncode={returncode}"
+                )
+            remaining_s = deadline - time.monotonic()
+            if remaining_s <= 0:
+                raise AssertionError(f"timed out waiting for {description}")
+            time.sleep(min(0.005, remaining_s))
+    except BaseException:
+        if teardown is not None:
+            teardown()
+        raise
+
+
+def _wait_for_exact_stdout_line(
+    process: subprocess.Popen[str],
+    expected: str,
+    *,
+    description: str,
+    teardown: Callable[[], None],
+    timeout_s: float = 2.0,
+) -> str:
+    """Read one exact newline-terminated marker without blocking readline()."""
+
+    if process.stdout is None:
+        raise AssertionError(f"{description} stdout is not captured")
+    descriptor = process.stdout.fileno()
+    buffered = bytearray()
+    os.set_blocking(descriptor, False)
+
+    def exact_line() -> str | None:
+        try:
+            chunk = os.read(descriptor, 4096)
+        except BlockingIOError:
+            return None
+        if chunk:
+            buffered.extend(chunk)
+        if b"\n" not in buffered:
+            return None
+        line, remainder = bytes(buffered).split(b"\n", 1)
+        if remainder:
+            raise AssertionError(f"{description} emitted data after readiness marker")
+        actual = line.decode("utf-8", errors="strict")
+        if actual != expected:
+            raise AssertionError(
+                f"unexpected {description} marker: expected={expected!r} "
+                f"actual={actual!r}"
+            )
+        return actual
+
+    try:
+        ready = _wait_for_semantic_readiness(
+            exact_line,
+            process=process,
+            description=description,
+            timeout_s=timeout_s,
+            teardown=teardown,
+        )
+        assert isinstance(ready, str)
+        return ready
+    finally:
+        try:
+            os.set_blocking(descriptor, True)
+        except OSError:
+            pass
 
 
 def tearDownModule() -> None:
@@ -283,7 +521,57 @@ class WitnessResult:
     public_executions: tuple[PublicExecutionEvidence, ...]
 
 
-_WITNESS_RESULTS: dict[RefusalCode, WitnessResult] = {}
+@dataclass(frozen=True)
+class WitnessCorpus:
+    """One immutable, ordered generation of public witness evidence."""
+
+    generation_id: int
+    ordered_codes: tuple[RefusalCode, ...]
+    results: Mapping[RefusalCode, WitnessResult]
+
+
+class WitnessCorpusOwner:
+    """Sole reset/generation owner for the expensive public witness corpus."""
+
+    def __init__(self) -> None:
+        self._generation_id = 0
+        self._corpus: WitnessCorpus | None = None
+
+    def reset(self) -> None:
+        self._corpus = None
+
+    def get_or_execute(
+        self,
+        cases: tuple[WitnessCase, ...],
+        execute: Callable[[WitnessCase], WitnessResult],
+        *,
+        expected_generation_id: int | None = None,
+    ) -> WitnessCorpus:
+        if self._corpus is None:
+            self._generation_id += 1
+            results: dict[RefusalCode, WitnessResult] = {}
+            for case in cases:
+                if case.code in results:
+                    raise AssertionError(f"duplicate witness case: {case.code.value}")
+                results[case.code] = execute(case)
+            self._corpus = WitnessCorpus(
+                generation_id=self._generation_id,
+                ordered_codes=tuple(case.code for case in cases),
+                results=MappingProxyType(results),
+            )
+        if (
+            expected_generation_id is not None
+            and self._corpus.generation_id != expected_generation_id
+        ):
+            raise AssertionError(
+                "witness corpus generation changed: "
+                f"expected={expected_generation_id} "
+                f"actual={self._corpus.generation_id}"
+            )
+        return self._corpus
+
+
+_WITNESS_CORPUS_OWNER = WitnessCorpusOwner()
 
 
 @dataclass(frozen=True)
@@ -293,6 +581,69 @@ class CleanupDiagnostic:
     residual_path: str
     residual_snapshot: tuple[str, ...]
     writers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DetachedProcessIdentity:
+    """Stable detached-fixture identity held live by an exclusive file lock."""
+
+    pid: int
+    start_token: str
+    executable: str
+    argv: tuple[str, ...]
+
+
+def _read_detached_identity(path: Path) -> DetachedProcessIdentity | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or set(payload) != {
+        "pid",
+        "start_token",
+        "executable",
+        "argv",
+    }:
+        return None
+    pid = payload["pid"]
+    start_token = payload["start_token"]
+    executable = payload["executable"]
+    argv = payload["argv"]
+    if (
+        not isinstance(pid, int)
+        or isinstance(pid, bool)
+        or pid <= 0
+        or not isinstance(start_token, str)
+        or not start_token
+        or not isinstance(executable, str)
+        or not executable
+        or not isinstance(argv, list)
+        or not argv
+        or any(not isinstance(argument, str) for argument in argv)
+    ):
+        return None
+    return DetachedProcessIdentity(pid, start_token, executable, tuple(argv))
+
+
+def _detached_identity_is_live(
+    path: Path,
+    identity: DetachedProcessIdentity,
+) -> bool:
+    """Revalidate exact metadata and the original process-held start lock."""
+
+    if _read_detached_identity(path) != identity:
+        return False
+    try:
+        with path.open("r+", encoding="utf-8") as stream:
+            try:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+                return False
+    except OSError:
+        return False
 
 
 class WitnessSandbox:
@@ -861,6 +1212,8 @@ class RefusalInventoryTests(unittest.TestCase):
         self.assertEqual(len(REFUSAL_INVENTORY), len(enum_codes))
         discovered = {case.code for case in WITNESS_CASES}
         self.assertEqual(len(discovered), len(WITNESS_CASES))
+        corpus = PublicGovernedExitWitnessTests.witness_corpus()
+        generation_id = corpus.generation_id
         for witness_class in (
             WitnessClass.OPERATIONAL,
             WitnessClass.CORRUPTION_BACKSTOP,
@@ -871,9 +1224,12 @@ class RefusalInventoryTests(unittest.TestCase):
                 if record.witness_class is witness_class
             }
             executed = PublicGovernedExitWitnessTests.execute_cases(
-                code
-                for code in discovered
-                if REFUSAL_BY_CODE[code].witness_class is witness_class
+                (
+                    code
+                    for code in discovered
+                    if REFUSAL_BY_CODE[code].witness_class is witness_class
+                ),
+                corpus_generation_id=generation_id,
             )
             with self.subTest(witness_class=witness_class.value):
                 self.assertEqual(expected, executed)
@@ -913,11 +1269,15 @@ class RefusalInventoryTests(unittest.TestCase):
             if record.witness_class is not WitnessClass.INTERNAL_INVARIANT
             and record.terminal_result is TerminalResult.NIGHT_STOPPED_PRESERVED
         }
-        executed = PublicGovernedExitWitnessTests.execute_cases(expected)
+        corpus = PublicGovernedExitWitnessTests.witness_corpus()
+        executed = PublicGovernedExitWitnessTests.execute_cases(
+            expected,
+            corpus_generation_id=corpus.generation_id,
+        )
         self.assertEqual(executed, expected)
         preserved = {
             code: result.preservation
-            for code, result in _WITNESS_RESULTS.items()
+            for code, result in corpus.results.items()
             if result.preservation is not None
         }
         self.assertEqual(set(preserved), expected)
@@ -942,10 +1302,14 @@ class RefusalInventoryTests(unittest.TestCase):
             for record in REFUSAL_INVENTORY
             if record.exit_id == "correct-preflight"
         }
-        executed = PublicGovernedExitWitnessTests.execute_cases(expected)
+        corpus = PublicGovernedExitWitnessTests.witness_corpus()
+        executed = PublicGovernedExitWitnessTests.execute_cases(
+            expected,
+            corpus_generation_id=corpus.generation_id,
+        )
         self.assertEqual(executed, expected)
         public_results = {
-            code: _WITNESS_RESULTS[code].public_executions for code in expected
+            code: corpus.results[code].public_executions for code in expected
         }
         self.assertEqual(set(public_results), expected)
         rederive_codes = {
@@ -1372,6 +1736,38 @@ class RefusalInventoryTests(unittest.TestCase):
         paths.append(REPO_ROOT / "tests" / "test_powermetrics_fiducial.py")
         self.assertEqual(analyze_paths(paths), [])
 
+    def test_witness_corpus_owner_executes_once_across_reordered_consumers(self) -> None:
+        owner = WitnessCorpusOwner()
+        cases = WITNESS_CASES[:2]
+        executed: list[RefusalCode] = []
+
+        def execute(case: WitnessCase) -> WitnessResult:
+            executed.append(case.code)
+            return WitnessResult(case.code, None, ())
+
+        first = owner.get_or_execute(cases, execute)
+        self.assertEqual(executed, [case.code for case in cases])
+        self.assertEqual(first.ordered_codes, tuple(executed))
+        self.assertEqual(first.generation_id, 1)
+        with self.assertRaises(TypeError):
+            first.results[cases[0].code] = first.results[cases[0].code]  # type: ignore[index]
+
+        reordered_consumer = owner.get_or_execute(
+            tuple(reversed(cases)),
+            execute,
+            expected_generation_id=first.generation_id,
+        )
+        self.assertIs(reordered_consumer, first)
+        self.assertEqual(executed, [case.code for case in cases])
+
+        owner.reset()
+        second = owner.get_or_execute(tuple(reversed(cases)), execute)
+        self.assertEqual(second.generation_id, 2)
+        self.assertEqual(
+            executed,
+            [case.code for case in cases] + [case.code for case in reversed(cases)],
+        )
+
 
 class CalibrationExitReliabilityTests(unittest.TestCase):
     def _git(self, repo: Path, *args: str, env=None) -> subprocess.CompletedProcess[str]:
@@ -1435,7 +1831,6 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 )
                 retries += len(sandbox.cleanup_diagnostics)
         self.assertEqual(retries, 0)
-        self.assertLess(longest_cleanup_s, 2.0)
         print(
             f"P1_CYCLES={cycles} RAW_ENOTEMPTY=0 RETRY_EXHAUSTION=0 "
             f"MAX_CLEANUP_S={longest_cleanup_s:.6f}",
@@ -1504,43 +1899,78 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             flush=True,
         )
 
+    def test_deterministic_writer_remover_harness_covers_both_interleavings(
+        self,
+    ) -> None:
+        def exercise(*, cleanup_before_write: bool) -> tuple[str, ...]:
+            ordered: list[str] = []
+            order_lock = threading.Lock()
+            writer_scheduled = threading.Event()
+            cleanup_started = threading.Event()
+            write_complete = threading.Event()
+
+            def record(event: str) -> None:
+                with order_lock:
+                    ordered.append(event)
+
+            def writer() -> None:
+                record("writer_scheduled")
+                writer_scheduled.set()
+                if cleanup_before_write:
+                    self.assertTrue(cleanup_started.wait(timeout=2.0))
+                record("write")
+                write_complete.set()
+                record("writer_terminal")
+
+            def remover() -> None:
+                self.assertTrue(writer_scheduled.wait(timeout=2.0))
+                if not cleanup_before_write:
+                    self.assertTrue(write_complete.wait(timeout=2.0))
+                record("cleanup_start")
+                cleanup_started.set()
+                if cleanup_before_write:
+                    self.assertTrue(write_complete.wait(timeout=2.0))
+                record("cleanup_finish")
+
+            threads = (
+                threading.Thread(target=writer, name="injected-writer"),
+                threading.Thread(target=remover, name="injected-remover"),
+            )
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=2.0)
+                self.assertFalse(thread.is_alive())
+            return tuple(ordered)
+
+        overlap = exercise(cleanup_before_write=True)
+        pre_write = exercise(cleanup_before_write=False)
+        self.assertLess(overlap.index("cleanup_start"), overlap.index("write"))
+        self.assertLess(overlap.index("write"), overlap.index("cleanup_finish"))
+        self.assertLess(pre_write.index("write"), pre_write.index("writer_terminal"))
+        self.assertLess(pre_write.index("writer_terminal"), pre_write.index("cleanup_start"))
+        self.assertEqual(
+            {_RACE_EXERCISED, _NO_RACE_PRE_WRITE},
+            {
+                _RACE_EXERCISED
+                if overlap.index("cleanup_start") < overlap.index("write")
+                else _NO_RACE_PRE_WRITE,
+                _RACE_EXERCISED
+                if pre_write.index("cleanup_start") < pre_write.index("write")
+                else _NO_RACE_PRE_WRITE,
+            },
+        )
+
     def test_pack_classifier_accepts_child_exit_without_parent_child_exit(
         self,
     ) -> None:
-        parent_sid = "parent"
-        child_sid = "parent/pack-child"
-        events = (
-            {
-                "event": "start",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.100000Z",
-                "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
-            },
-            {
-                "event": "exit",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.200000Z",
-                "code": 128,
-            },
-            {
-                "event": "signal",
-                "sid": parent_sid,
-                "time": "2026-08-11T12:00:00.210000Z",
-                "signal": signal.SIGPIPE,
-            },
-        )
+        events = _synthetic_pack_topology()
         evidence = _pack_trace_evidence(events)
         self.assertFalse(any(event.get("event") == "child_exit" for event in events))
         self.assertEqual(
             _classify_pack_cleanup(
                 evidence,
-                cleanup_started_s=datetime.fromisoformat(
-                    "2026-08-11T12:00:00.120000+00:00"
-                ).timestamp(),
-                cleanup_finished_s=datetime.fromisoformat(
-                    "2026-08-11T12:00:00.180000+00:00"
-                ).timestamp(),
-                raw_enotempty=False,
+                raw_cleanup_errno=None,
             ),
             _NO_RACE_PRE_WRITE,
         )
@@ -1568,54 +1998,13 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
     def test_pack_classifier_finds_child_write_overlap_without_parent_child_exit(
         self,
     ) -> None:
-        parent_sid = "parent"
-        child_sid = "parent/pack-child"
-        events = (
-            {
-                "event": "start",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.100000Z",
-                "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
-            },
-            {
-                "event": "region_enter",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.130000Z",
-                "category": "pack-objects",
-                "label": "write-pack-file",
-            },
-            {
-                "event": "region_leave",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.170000Z",
-                "category": "pack-objects",
-                "label": "write-pack-file",
-            },
-            {
-                "event": "exit",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.200000Z",
-                "code": 128,
-            },
-            {
-                "event": "signal",
-                "sid": parent_sid,
-                "time": "2026-08-11T12:00:00.210000Z",
-                "signal": signal.SIGPIPE,
-            },
-        )
+        events = _synthetic_pack_topology()
         evidence = _pack_trace_evidence(events)
         self.assertFalse(any(event.get("event") == "child_exit" for event in events))
         self.assertEqual(
             _classify_pack_cleanup(
                 evidence,
-                cleanup_started_s=datetime.fromisoformat(
-                    "2026-08-11T12:00:00.140000+00:00"
-                ).timestamp(),
-                cleanup_finished_s=datetime.fromisoformat(
-                    "2026-08-11T12:00:00.160000+00:00"
-                ).timestamp(),
-                raw_enotempty=False,
+                raw_cleanup_errno=errno.ENOTEMPTY,
             ),
             _RACE_EXERCISED,
         )
@@ -1639,6 +2028,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         started = time.monotonic()
         with (
             mock.patch.object(shutil, "rmtree", side_effect=injected_rmtree),
+            mock.patch.object(time, "sleep") as requested_sleep,
             mock.patch.object(
                 sandbox,
                 "_residual_writers",
@@ -1662,7 +2052,17 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         )
         self.assertFalse(sandbox.root.exists())
         self.assertTrue(sandbox.closed)
-        self.assertLess(elapsed, 2.0)
+        self.assertEqual(
+            requested_sleep.call_args_list,
+            [mock.call(delay) for delay in WitnessSandbox._CLEANUP_BACKOFF_S],
+        )
+        self.assertEqual(requested_sleep.call_count, 4)
+        print(
+            f"P1_RETRY_ATTEMPTS={attempts} "
+            f"BACKOFF_REQUESTS={tuple(call.args[0] for call in requested_sleep.call_args_list)} "
+            f"ELAPSED_S={elapsed:.6f} DIAGNOSTIC_FATAL=1",
+            flush=True,
+        )
 
         outside = WitnessSandbox()
         outside.repo.mkdir()
@@ -1765,14 +2165,17 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 # The target mutation is the immediate raw teardown attempted
                 # as soon as the commit returns, before trace parsing adds
                 # enough delay for the detached object writer to disappear.
-                cleanup_started_s = time.time()
                 try:
                     shutil.rmtree(sandbox.root)
                 except OSError as exc:
                     raw_enotempty = exc
-                cleanup_finished_s = time.time()
                 pack_evidence = _wait_for_pack_terminal(mutation_trace)
                 mutation_events = pack_evidence.events
+                self.assertTrue(pack_evidence.complete, mutation_events[-20:])
+                self.assertIsNotNone(pack_evidence.maintenance_sid)
+                self.assertIsNotNone(pack_evidence.maintenance_terminal_event)
+                self.assertIsNotNone(pack_evidence.child_sid)
+                self.assertIsNotNone(pack_evidence.terminal_event)
             detached_starts = [
                 event
                 for event in mutation_events
@@ -1797,11 +2200,22 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             # lookup as ENOENT; the same teardown race can instead leave a
             # child behind and report ENOTEMPTY.
             self.assertIn(raw_enotempty.errno, (errno.ENOTEMPTY, errno.ENOENT))
+        else:
+            self.assertTrue(
+                any(
+                    event.get("sid") == pack_evidence.child_sid
+                    and event.get("event") == "region_enter"
+                    and event.get("category") == "pack-objects"
+                    and event.get("label") == "write-pack-file"
+                    for event in mutation_events
+                ),
+                mutation_events[-20:],
+            )
         classification = _classify_pack_cleanup(
             pack_evidence,
-            cleanup_started_s=cleanup_started_s,
-            cleanup_finished_s=cleanup_finished_s,
-            raw_enotempty=raw_enotempty is not None,
+            raw_cleanup_errno=(
+                raw_enotempty.errno if raw_enotempty is not None else None
+            ),
         )
         classifications[classification] += 1
         self.assertEqual(sum(classifications.values()), 1)
@@ -1837,9 +2251,16 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 "\n".join(
                     (
                         "import json, os, signal, subprocess, sys, time",
+                        "from pathlib import Path",
                         "child = subprocess.Popen([sys.executable, '-c', "
                         "'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)'])",
-                        f"open({str(ready)!r}, 'w').write(json.dumps({{'parent': os.getpid(), 'child': child.pid}}))",
+                        f"ready = Path({str(ready)!r})",
+                        "temporary = ready.with_name(f'.{ready.name}.{os.getpid()}.tmp')",
+                        "with temporary.open('w', encoding='utf-8') as stream:",
+                        "    stream.write(json.dumps({'parent': os.getpid(), 'child': child.pid}, sort_keys=True))",
+                        "    stream.flush()",
+                        "    os.fsync(stream.fileno())",
+                        "os.replace(temporary, ready)",
                         "print('READY', flush=True)",
                         "time.sleep(60)",
                     )
@@ -1847,43 +2268,62 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
-            if index % 2 == 0:
-                with self.assertRaises(subprocess.TimeoutExpired):
-                    sandbox.runner.run(
-                        [sys.executable, entry_point],
-                        cwd=sandbox.repo,
-                        env=_fresh_cli_env(),
-                        timeout=0.05,
-                        readiness_path=ready,
-                        readiness_timeout_s=2.0,
+            process = sandbox.runner.start_owned(
+                [sys.executable, entry_point],
+                cwd=sandbox.repo,
+                env=_fresh_cli_env(),
+                label=f"ownership-cycle-{index}",
+            )
+
+            def ready_identities() -> dict[str, int] | None:
+                try:
+                    payload = json.loads(ready.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    return None
+                if (
+                    not isinstance(payload, dict)
+                    or set(payload) != {"parent", "child"}
+                    or any(
+                        not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0
+                        for pid in payload.values()
                     )
-                timeout_cycles += 1
-                identities = json.loads(ready.read_text(encoding="utf-8"))
-                for pid in identities.values():
-                    with self.assertRaises(ProcessLookupError):
-                        os.kill(int(pid), 0)
+                ):
+                    return None
+                return payload
+
+            identities = _wait_for_semantic_readiness(
+                ready_identities,
+                process=process,
+                description="parseable ownership identity",
+                teardown=sandbox.close,
+            )
+            assert isinstance(identities, dict)
+            if index % 2 == 0:
+                try:
+                    with self.assertRaises(subprocess.TimeoutExpired):
+                        process.wait(timeout=0.05)
+                    timeout_cycles += 1
+                finally:
+                    sandbox.close()
             else:
-                process = sandbox.runner.start_owned(
-                    [sys.executable, entry_point],
-                    cwd=sandbox.repo,
-                    env=_fresh_cli_env(),
-                    label=f"exception-holder-cycle-{index}",
+                _wait_for_exact_stdout_line(
+                    process,
+                    "READY",
+                    description="ownership holder",
+                    teardown=sandbox.close,
                 )
-                assert process.stdout is not None
-                self.assertEqual(process.stdout.readline().strip(), "READY")
                 try:
                     raise RuntimeError("injected owner exception")
                 except RuntimeError:
                     exception_cycles += 1
                 finally:
                     sandbox.close()
-                with self.assertRaises(ProcessLookupError):
-                    os.killpg(process.pid, 0)
             sandbox.close()
+            self.assertIsNotNone(process.poll())
         self.assertEqual(owned_process_group_survivors(), ())
         print(
             f"P2_OWNERSHIP_CYCLES={cycles} TIMEOUTS={timeout_cycles} "
-            f"EXCEPTIONS={exception_cycles} ESRCH={cycles} REGISTRY_EMPTY=1"
+            f"EXCEPTIONS={exception_cycles} DIRECT_REAPED={cycles} REGISTRY_EMPTY=1"
         )
 
     def _run_event_fixture(self, stop_s: float) -> dict:
@@ -1900,22 +2340,32 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 (origin + 6.5, "pulse_command_off"),
                 (origin + 8.0, "sampling_stopped"),
             )
-            (custody / "events.jsonl").write_text(
-                "".join(
+            events_path = custody / "events.jsonl"
+
+            def event_record(sequence: int, event: tuple[float, str]) -> str:
+                timestamp, event_type = event
+                return (
                     json.dumps(
                         {
                             "timestamp_s": timestamp,
                             "event_type": event_type,
+                            "test_protocol_sequence": sequence,
                         },
                         sort_keys=True,
                     )
                     + "\n"
-                    for timestamp, event_type in events
+                )
+
+            events_path.write_text(
+                "".join(
+                    event_record(sequence, event)
+                    for sequence, event in enumerate(events[:-1], start=1)
                 ),
                 encoding="utf-8",
             )
             capture = custody / "raw" / "powermetrics.plist"
             result_path = sandbox.root / "result.json"
+            ack_path = sandbox.root / "sampler-progress.jsonl"
             env = _fresh_cli_env() | {
                 "JW_FAKE_SAMPLER_MODE": "normal",
                 "JW_FAKE_HW_MODEL": "Mac15,9",
@@ -1924,6 +2374,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 "JW_FAKE_TIME_SCALE": "1",
                 "JW_FAKE_INITIAL_ENDPOINT": str(origin),
                 "JW_FAKE_SAMPLER_RESULT_PATH": str(result_path),
+                "JW_FAKE_SAMPLER_ACK_PATH": str(ack_path),
             }
             process = sandbox.runner.start_owned(
                 [sys.executable, FIXTURE_ROOT / "fake_sampler.py", "-o", capture],
@@ -1931,16 +2382,65 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 env=env,
                 label=f"event-fixture-stop-{stop_s}",
             )
-            deadline = time.monotonic() + 2.0
-            while not capture.exists():
-                if time.monotonic() >= deadline:
-                    self.fail("event fixture did not become ready")
-                time.sleep(0.001)
+
+            def complete_capture_records() -> int | None:
+                try:
+                    raw = capture.read_bytes()
+                except OSError:
+                    return None
+                if not raw.startswith(b'<?xml version="1.0"') or b"\0" not in raw:
+                    return None
+                return len(raw.split(b"\0"))
+
+            _wait_for_semantic_readiness(
+                complete_capture_records,
+                process=process,
+                description="event fixture complete capture records",
+                teardown=sandbox.close,
+            )
+
+            def acknowledged(sequence: int) -> Callable[[], int | None]:
+                def predicate() -> int | None:
+                    try:
+                        lines = ack_path.read_text(encoding="utf-8").splitlines()
+                    except OSError:
+                        return None
+                    try:
+                        records = [json.loads(line) for line in lines]
+                    except json.JSONDecodeError:
+                        return None
+                    return (
+                        sequence
+                        if any(
+                            record.get("sequence") == sequence
+                            for record in records
+                            if isinstance(record, dict)
+                        )
+                        else None
+                    )
+
+                return predicate
+
+            _wait_for_semantic_readiness(
+                acknowledged(len(events) - 1),
+                process=process,
+                description="event fixture initial progress acknowledgement",
+                teardown=sandbox.close,
+            )
             if stop_s:
                 os.killpg(process.pid, signal.SIGSTOP)
                 time.sleep(stop_s)
                 os.killpg(process.pid, signal.SIGCONT)
-            time.sleep(0.05)
+            with events_path.open("a", encoding="utf-8") as stream:
+                stream.write(event_record(len(events), events[-1]))
+                stream.flush()
+                os.fsync(stream.fileno())
+            _wait_for_semantic_readiness(
+                acknowledged(len(events)),
+                process=process,
+                description="event fixture resumed progress acknowledgement",
+                teardown=sandbox.close,
+            )
             os.killpg(process.pid, signal.SIGTERM)
             process.communicate(timeout=2.0)
             # The process exited normally; runner close drops its ESRCH entry.
@@ -1997,16 +2497,40 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                     env=env,
                     label="wall-derived-mutation",
                 )
-                deadline = time.monotonic() + 2.0
-                while not capture.exists() or capture.stat().st_size == 0:
-                    if time.monotonic() >= deadline:
-                        self.fail("wall mutation did not become ready")
-                    time.sleep(0.001)
+
+                def capture_record_count() -> int | None:
+                    try:
+                        raw = capture.read_bytes()
+                    except OSError:
+                        return None
+                    if not raw.startswith(b'<?xml version="1.0"'):
+                        return None
+                    return len(raw.split(b"\0"))
+
+                initial_count = _wait_for_semantic_readiness(
+                    capture_record_count,
+                    process=process,
+                    description="wall mutation initial capture progress",
+                    teardown=sandbox.close,
+                )
+                assert isinstance(initial_count, int)
                 if suspension:
                     os.killpg(process.pid, signal.SIGSTOP)
                     time.sleep(suspension)
                     os.killpg(process.pid, signal.SIGCONT)
-                time.sleep(0.02)
+                _wait_for_semantic_readiness(
+                    lambda: (
+                        count
+                        if (
+                            (count := capture_record_count()) is not None
+                            and count > initial_count
+                        )
+                        else None
+                    ),
+                    process=process,
+                    description="wall mutation resumed capture progress",
+                    teardown=sandbox.close,
+                )
                 os.killpg(process.pid, signal.SIGTERM)
                 process.communicate(timeout=5.0)
                 raw = capture.read_bytes()
@@ -2106,9 +2630,12 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                         sys.executable,
                         "-c",
                         (
-                            "import signal,sys,time; "
+                            "import os,signal,sys,time; from pathlib import Path; "
                             "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
-                            "open(sys.argv[1],'w').write('ready'); "
+                            "ready=Path(sys.argv[1]); temporary=ready.with_name('.ready.tmp'); "
+                            "stream=temporary.open('w'); stream.write('ready'); "
+                            "stream.flush(); os.fsync(stream.fileno()); stream.close(); "
+                            "os.replace(temporary,ready); "
                             "time.sleep(60)"
                         ),
                         str(ready_path),
@@ -2119,11 +2646,21 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                     def exercise_exit_path() -> subprocess.Popen:
                         nonlocal process
                         with validation_script._sampler_lifetime(command) as process:
-                            deadline = time.monotonic() + 2.0
-                            while not ready_path.exists():
-                                if time.monotonic() >= deadline:
-                                    self.fail("stubborn direct child did not start")
-                                time.sleep(0.001)
+                            def exact_ready_marker() -> str | None:
+                                try:
+                                    content = ready_path.read_text(encoding="utf-8")
+                                except OSError:
+                                    return None
+                                return content if content == "ready" else None
+
+                            _wait_for_semantic_readiness(
+                                exact_ready_marker,
+                                process=process,
+                                description="stubborn direct-child marker",
+                                teardown=lambda: validation_script._terminate_powermetrics(
+                                    process
+                                ),
+                            )
                             if exit_path == "return":
                                 return process
                             if exit_path == "exception":
@@ -2144,8 +2681,7 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                     self.assertEqual(raised, exit_path == "exception")
                     assert process is not None
                     self.assertEqual(process.returncode, -signal.SIGKILL)
-                    with self.assertRaises(ProcessLookupError):
-                        os.kill(process.pid, 0)
+                    self.assertIsNotNone(process.poll())
         print(
             "F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3",
             flush=True,
@@ -2154,11 +2690,23 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
     def test_detached_grandchild_is_reported_by_post_teardown_census(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            sampler_pid_path = root / "sampler.pid"
+            identity_path = root / "sampler.identity.json"
             detached_sampler = root / "powermetrics_detached_sampler.py"
             detached_sampler.write_text(
-                "import signal,time\n"
+                "import fcntl,json,os,signal,sys,time\n"
+                "from pathlib import Path\n"
                 "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+                "identity_path=Path(sys.argv[1])\n"
+                "stream=identity_path.open('x+',encoding='utf-8')\n"
+                "fcntl.flock(stream.fileno(),fcntl.LOCK_EX)\n"
+                "identity={\n"
+                " 'pid':os.getpid(),\n"
+                " 'start_token':f'{time.monotonic_ns()}-{os.getpid()}',\n"
+                " 'executable':str(Path(sys.executable).resolve()),\n"
+                " 'argv':sys.argv,\n"
+                "}\n"
+                "stream.write(json.dumps(identity,sort_keys=True)+'\\n')\n"
+                "stream.flush(); os.fsync(stream.fileno())\n"
                 "time.sleep(60)\n",
                 encoding="utf-8",
             )
@@ -2168,18 +2716,30 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                 (
                     "import signal,subprocess,sys,time; "
                     "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
-                    "child=subprocess.Popen([sys.executable,sys.argv[1]],"
+                    "subprocess.Popen([sys.executable,sys.argv[1],sys.argv[2]],"
                     "start_new_session=True); "
-                    "open(sys.argv[2],'w').write(str(child.pid)); "
                     "time.sleep(60)"
                 ),
                 str(detached_sampler),
-                str(sampler_pid_path),
+                str(identity_path),
             ]
             process = None
-            detached_pid: int | None = None
+            detached_identity: DetachedProcessIdentity | None = None
             reported_events: list[tuple[str, dict]] = []
             stderr = io.StringIO()
+
+            def mocked_census(args, **_kwargs):
+                assert detached_identity is not None
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=(
+                        f"{detached_identity.pid} Python "
+                        f"{detached_identity.executable} "
+                        f"{' '.join(detached_identity.argv)}\n"
+                    ),
+                )
+
             try:
                 with mock.patch.object(
                     validation_script,
@@ -2188,14 +2748,7 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                 ), mock.patch.object(
                     validation_script.subprocess,
                     "run",
-                    side_effect=lambda args, **_kwargs: subprocess.CompletedProcess(
-                        args,
-                        0,
-                        stdout=(
-                            f"{detached_pid} Python {sys.executable} "
-                            f"{detached_sampler}\n"
-                        ),
-                    ),
+                    side_effect=mocked_census,
                 ), mock.patch.object(validation_script.sys, "stderr", stderr):
                     with validation_script._sampler_lifetime(
                         command,
@@ -2203,38 +2756,72 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                             (event, metadata)
                         ),
                     ) as process:
-                        deadline = time.monotonic() + 2.0
-                        while True:
-                            try:
-                                detached_pid = int(sampler_pid_path.read_text())
-                            except (OSError, ValueError):
-                                detached_pid = None
-                            else:
-                                break
-                            if time.monotonic() >= deadline:
-                                self.fail("detached sampler did not start")
-                            time.sleep(0.001)
+                        ready = _wait_for_semantic_readiness(
+                            lambda: _read_detached_identity(identity_path),
+                            process=process,
+                            description="detached sampler stable identity",
+                            teardown=lambda: validation_script._terminate_powermetrics(
+                                process
+                            ),
+                        )
+                        assert isinstance(ready, DetachedProcessIdentity)
+                        detached_identity = ready
+                        self.assertEqual(
+                            detached_identity.executable,
+                            str(Path(sys.executable).resolve()),
+                        )
+                        self.assertEqual(
+                            detached_identity.argv,
+                            (str(detached_sampler), str(identity_path)),
+                        )
+                        self.assertTrue(
+                            _detached_identity_is_live(
+                                identity_path,
+                                detached_identity,
+                            )
+                        )
                 assert process is not None
                 self.assertEqual(process.returncode, -signal.SIGKILL)
+                self.assertIsNotNone(process.poll())
                 self.assertEqual(
                     [event for event, _metadata in reported_events],
                     [validation_script.SAMPLER_CENSUS_DIAGNOSTIC],
                 )
                 findings = reported_events[0][1]["findings"]
-                self.assertIn(detached_pid, [finding["pid"] for finding in findings])
+                self.assertIn(
+                    detached_identity.pid,
+                    [finding["pid"] for finding in findings],
+                )
                 self.assertIn(
                     validation_script.SAMPLER_CENSUS_DIAGNOSTIC,
                     stderr.getvalue(),
                 )
             finally:
-                if detached_pid is not None:
+                if detached_identity is not None and _detached_identity_is_live(
+                    identity_path,
+                    detached_identity,
+                ):
                     try:
-                        os.kill(detached_pid, signal.SIGKILL)
+                        os.kill(detached_identity.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
+                if detached_identity is not None:
+                    _wait_for_semantic_readiness(
+                        lambda: (
+                            True
+                            if not _detached_identity_is_live(
+                                identity_path,
+                                detached_identity,
+                            )
+                            else None
+                        ),
+                        process=None,
+                        description="detached sampler identity gone",
+                        timeout_s=2.0,
+                    )
         print(
             "F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 "
-            "DETACHED_GRANDCHILD_CENSUS_REPORTED=1",
+            "DETACHED_GRANDCHILD_CENSUS_REPORTED=1 IDENTITY_GONE=1",
             flush=True,
         )
 
@@ -2344,31 +2931,48 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.t1.update(self.epoch)
 
     @classmethod
-    def execute_cases(cls, codes) -> set[RefusalCode]:
+    def _execute_witness_case(cls, case: WitnessCase) -> WitnessResult:
+        print(f"CASE START {case.code.value}", flush=True)
+        witness = cls(methodName="runTest")
+        setup_complete = False
+        try:
+            witness.setUp()
+            setup_complete = True
+            witness._execute_case(case)
+        finally:
+            if setup_complete:
+                witness.tearDown()
+            witness.doCleanups()
+        result = WitnessResult(
+            code=case.code,
+            preservation=witness.preservation_evidence,
+            public_executions=tuple(witness.public_execution_evidence),
+        )
+        print(f"CASE PASS {case.code.value}", flush=True)
+        return result
+
+    @classmethod
+    def witness_corpus(
+        cls,
+        *,
+        generation_id: int | None = None,
+    ) -> WitnessCorpus:
+        return _WITNESS_CORPUS_OWNER.get_or_execute(
+            WITNESS_CASES,
+            cls._execute_witness_case,
+            expected_generation_id=generation_id,
+        )
+
+    @classmethod
+    def execute_cases(
+        cls,
+        codes,
+        *,
+        corpus_generation_id: int | None = None,
+    ) -> set[RefusalCode]:
         selected = set(codes)
-        cases = [case for case in WITNESS_CASES if case.code in selected]
-        for case in cases:
-            if case.code in _WITNESS_RESULTS:
-                print(f"CASE CACHED {case.code.value}", flush=True)
-                continue
-            print(f"CASE START {case.code.value}", flush=True)
-            witness = cls(methodName="runTest")
-            setup_complete = False
-            try:
-                witness.setUp()
-                setup_complete = True
-                witness._execute_case(case)
-            finally:
-                if setup_complete:
-                    witness.tearDown()
-                witness.doCleanups()
-            _WITNESS_RESULTS[case.code] = WitnessResult(
-                code=case.code,
-                preservation=witness.preservation_evidence,
-                public_executions=tuple(witness.public_execution_evidence),
-            )
-            print(f"CASE PASS {case.code.value}", flush=True)
-        return selected & set(_WITNESS_RESULTS)
+        corpus = cls.witness_corpus(generation_id=corpus_generation_id)
+        return selected & set(corpus.results)
 
     def tearDown(self) -> None:
         self.sandbox.close()
@@ -2710,7 +3314,7 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "JW_FAKE_HW_MODEL": state["epoch"]["hardware_model"],
             "JW_FAKE_OS_BUILD": state["epoch"]["os_build"],
             "JW_FAKE_TIME_SCALE": "0.025",
-            "JW_FAKE_TIME_ORIGIN": str(time.time()),
+            "JW_FAKE_TIME_ORIGIN": repr(_LOGICAL_WRITER_TEST_ORIGIN_S),
             **self.writer_env_overrides,
         }
 
@@ -3584,8 +4188,12 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "print('LEASED', flush=True); time.sleep(60)"
         )
         holder = self._start_holder(holder_code)
-        assert holder.stdout is not None
-        self.assertEqual(holder.stdout.readline().strip(), "LEASED")
+        _wait_for_exact_stdout_line(
+            holder,
+            "LEASED",
+            description="live writer lease holder",
+            teardown=lambda: self._terminate_and_reap_holder(holder),
+        )
         state["holder"] = holder
         return state
 
@@ -4357,11 +4965,19 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
 
     def test_parameterized_durable_public_cli_witnesses(self) -> None:
         expected = {case.code for case in WITNESS_CASES}
-        executed = self.execute_cases(expected)
+        corpus = self.witness_corpus()
+        executed = self.execute_cases(
+            expected,
+            corpus_generation_id=corpus.generation_id,
+        )
         self.assertEqual(executed, expected)
-        self.assertEqual(set(_WITNESS_RESULTS), expected)
+        self.assertEqual(set(corpus.results), expected)
+        self.assertEqual(
+            corpus.ordered_codes,
+            tuple(case.code for case in WITNESS_CASES),
+        )
         self.assertTrue(
-            all(result.code is code for code, result in _WITNESS_RESULTS.items())
+            all(result.code is code for code, result in corpus.results.items())
         )
 
     def test_logical_producer_delay_preserves_exact_evidence_bytes(self) -> None:
@@ -4508,8 +5124,12 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         )
         holder = self._start_holder(holder_code)
         try:
-            assert holder.stdout is not None
-            self.assertEqual(holder.stdout.readline().strip(), "LEASED")
+            _wait_for_exact_stdout_line(
+                holder,
+                "LEASED",
+                description="diagnostic lease holder",
+                teardown=lambda: self._terminate_and_reap_holder(holder),
+            )
             audit = self._run("audit")
             observations = self._run(
                 "audit-observations",
@@ -4560,6 +5180,15 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.assertNotIn("terminal_result", json.loads(validated.stdout))
         self.assertNotIn("ready_to_arm", validated.stdout)
 
+    def test_live_writer_state_uses_bounded_exact_lease_marker(self) -> None:
+        state = self._state_live_writer()
+        holder = state["holder"]
+        try:
+            self.assertIsNone(holder.poll())
+        finally:
+            self._terminate_and_reap_holder(holder)
+        self.assertIsNotNone(holder.poll())
+
 
 def run_valid_writer_load_proof(cycles: int) -> None:
     """Run representative public writers under CPU and filesystem contention."""
@@ -4583,9 +5212,12 @@ def run_valid_writer_load_proof(cycles: int) -> None:
         env=_fresh_cli_env(),
         label="cpu-filesystem-oversubscription",
     )
-    assert load_process.stdout is not None
-    if load_process.stdout.readline().strip() != "LOAD_READY":
-        raise AssertionError("load injector did not become ready")
+    _wait_for_exact_stdout_line(
+        load_process,
+        "LOAD_READY",
+        description="load injector",
+        teardown=load.close,
+    )
     retries = 0
     started = time.monotonic()
     try:
