@@ -975,6 +975,8 @@ def _evaluate_g7_refusal(
         ),
         block,
     )
+
+
 def evaluate_scheduler_gates(
     *,
     pack_root: Path | str,
@@ -1039,7 +1041,7 @@ def evaluate_scheduler_gates(
     )
 
     # Pack authentication is not a scheduler gate and cannot be represented as
-    # a successful placeholder.  All six gate evaluations above still run;
+    # a successful placeholder.  All seven gate evaluations above still run;
     # then the owning arm-readiness loader fails closed if the pack is invalid.
     pack = arm_readiness._pack_record(pack_path)
 
