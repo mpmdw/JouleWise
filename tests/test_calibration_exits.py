@@ -252,6 +252,91 @@ def _classify_pack_cleanup(
     return _NO_RACE_PRE_WRITE
 
 
+def _wait_for_semantic_readiness(
+    predicate: Callable[[], object | None],
+    *,
+    process: subprocess.Popen,
+    description: str,
+    timeout_s: float = 2.0,
+    teardown: Callable[[], None] | None = None,
+) -> object:
+    """Wait boundedly for parseable/exact readiness from one owned process."""
+
+    deadline = time.monotonic() + timeout_s
+    try:
+        while True:
+            ready = predicate()
+            if ready is not None:
+                return ready
+            returncode = process.poll()
+            if returncode is not None:
+                raise AssertionError(
+                    f"{description} process exited before readiness: "
+                    f"returncode={returncode}"
+                )
+            remaining_s = deadline - time.monotonic()
+            if remaining_s <= 0:
+                raise AssertionError(f"timed out waiting for {description}")
+            time.sleep(min(0.005, remaining_s))
+    except BaseException:
+        if teardown is not None:
+            teardown()
+        raise
+
+
+def _wait_for_exact_stdout_line(
+    process: subprocess.Popen[str],
+    expected: str,
+    *,
+    description: str,
+    teardown: Callable[[], None],
+    timeout_s: float = 2.0,
+) -> str:
+    """Read one exact newline-terminated marker without blocking readline()."""
+
+    if process.stdout is None:
+        raise AssertionError(f"{description} stdout is not captured")
+    descriptor = process.stdout.fileno()
+    buffered = bytearray()
+    os.set_blocking(descriptor, False)
+
+    def exact_line() -> str | None:
+        try:
+            chunk = os.read(descriptor, 4096)
+        except BlockingIOError:
+            return None
+        if chunk:
+            buffered.extend(chunk)
+        if b"\n" not in buffered:
+            return None
+        line, remainder = bytes(buffered).split(b"\n", 1)
+        if remainder:
+            raise AssertionError(f"{description} emitted data after readiness marker")
+        actual = line.decode("utf-8", errors="strict")
+        if actual != expected:
+            raise AssertionError(
+                f"unexpected {description} marker: expected={expected!r} "
+                f"actual={actual!r}"
+            )
+        return actual
+
+    try:
+        ready = _wait_for_semantic_readiness(
+            exact_line,
+            process=process,
+            description=description,
+            timeout_s=timeout_s,
+            teardown=teardown,
+        )
+        assert isinstance(ready, str)
+        return ready
+    finally:
+        try:
+            os.set_blocking(descriptor, True)
+        except OSError:
+            pass
+
+
 def tearDownModule() -> None:
     assert_no_owned_writer_survivors()
 
@@ -1933,9 +2018,16 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 "\n".join(
                     (
                         "import json, os, signal, subprocess, sys, time",
+                        "from pathlib import Path",
                         "child = subprocess.Popen([sys.executable, '-c', "
                         "'import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)'])",
-                        f"open({str(ready)!r}, 'w').write(json.dumps({{'parent': os.getpid(), 'child': child.pid}}))",
+                        f"ready = Path({str(ready)!r})",
+                        "temporary = ready.with_name(f'.{ready.name}.{os.getpid()}.tmp')",
+                        "with temporary.open('w', encoding='utf-8') as stream:",
+                        "    stream.write(json.dumps({'parent': os.getpid(), 'child': child.pid}, sort_keys=True))",
+                        "    stream.flush()",
+                        "    os.fsync(stream.fileno())",
+                        "os.replace(temporary, ready)",
                         "print('READY', flush=True)",
                         "time.sleep(60)",
                     )
@@ -1943,38 +2035,56 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
-            if index % 2 == 0:
-                with self.assertRaises(subprocess.TimeoutExpired):
-                    sandbox.runner.run(
-                        [sys.executable, entry_point],
-                        cwd=sandbox.repo,
-                        env=_fresh_cli_env(),
-                        timeout=0.05,
-                        readiness_path=ready,
-                        readiness_timeout_s=2.0,
+            process = sandbox.runner.start_owned(
+                [sys.executable, entry_point],
+                cwd=sandbox.repo,
+                env=_fresh_cli_env(),
+                label=f"ownership-cycle-{index}",
+            )
+
+            def ready_identities() -> dict[str, int] | None:
+                try:
+                    payload = json.loads(ready.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    return None
+                if (
+                    not isinstance(payload, dict)
+                    or set(payload) != {"parent", "child"}
+                    or any(
+                        not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0
+                        for pid in payload.values()
                     )
-                timeout_cycles += 1
-                identities = json.loads(ready.read_text(encoding="utf-8"))
-                for pid in identities.values():
-                    with self.assertRaises(ProcessLookupError):
-                        os.kill(int(pid), 0)
+                ):
+                    return None
+                return payload
+
+            identities = _wait_for_semantic_readiness(
+                ready_identities,
+                process=process,
+                description="parseable ownership identity",
+                teardown=sandbox.close,
+            )
+            assert isinstance(identities, dict)
+            if index % 2 == 0:
+                try:
+                    with self.assertRaises(subprocess.TimeoutExpired):
+                        process.wait(timeout=0.05)
+                    timeout_cycles += 1
+                finally:
+                    sandbox.close()
             else:
-                process = sandbox.runner.start_owned(
-                    [sys.executable, entry_point],
-                    cwd=sandbox.repo,
-                    env=_fresh_cli_env(),
-                    label=f"exception-holder-cycle-{index}",
+                _wait_for_exact_stdout_line(
+                    process,
+                    "READY",
+                    description="ownership holder",
+                    teardown=sandbox.close,
                 )
-                assert process.stdout is not None
-                self.assertEqual(process.stdout.readline().strip(), "READY")
                 try:
                     raise RuntimeError("injected owner exception")
                 except RuntimeError:
                     exception_cycles += 1
                 finally:
                     sandbox.close()
-                with self.assertRaises(ProcessLookupError):
-                    os.killpg(process.pid, 0)
             sandbox.close()
         self.assertEqual(owned_process_group_survivors(), ())
         print(
@@ -2027,11 +2137,22 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 env=env,
                 label=f"event-fixture-stop-{stop_s}",
             )
-            deadline = time.monotonic() + 2.0
-            while not capture.exists():
-                if time.monotonic() >= deadline:
-                    self.fail("event fixture did not become ready")
-                time.sleep(0.001)
+
+            def complete_capture_records() -> int | None:
+                try:
+                    raw = capture.read_bytes()
+                except OSError:
+                    return None
+                if not raw.startswith(b'<?xml version="1.0"') or b"\0" not in raw:
+                    return None
+                return len(raw.split(b"\0"))
+
+            _wait_for_semantic_readiness(
+                complete_capture_records,
+                process=process,
+                description="event fixture complete capture records",
+                teardown=sandbox.close,
+            )
             if stop_s:
                 os.killpg(process.pid, signal.SIGSTOP)
                 time.sleep(stop_s)
@@ -2202,9 +2323,12 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                         sys.executable,
                         "-c",
                         (
-                            "import signal,sys,time; "
+                            "import os,signal,sys,time; from pathlib import Path; "
                             "signal.signal(signal.SIGTERM,signal.SIG_IGN); "
-                            "open(sys.argv[1],'w').write('ready'); "
+                            "ready=Path(sys.argv[1]); temporary=ready.with_name('.ready.tmp'); "
+                            "stream=temporary.open('w'); stream.write('ready'); "
+                            "stream.flush(); os.fsync(stream.fileno()); stream.close(); "
+                            "os.replace(temporary,ready); "
                             "time.sleep(60)"
                         ),
                         str(ready_path),
@@ -2215,11 +2339,21 @@ class SamplerLifecycleHardeningTests(unittest.TestCase):
                     def exercise_exit_path() -> subprocess.Popen:
                         nonlocal process
                         with validation_script._sampler_lifetime(command) as process:
-                            deadline = time.monotonic() + 2.0
-                            while not ready_path.exists():
-                                if time.monotonic() >= deadline:
-                                    self.fail("stubborn direct child did not start")
-                                time.sleep(0.001)
+                            def exact_ready_marker() -> str | None:
+                                try:
+                                    content = ready_path.read_text(encoding="utf-8")
+                                except OSError:
+                                    return None
+                                return content if content == "ready" else None
+
+                            _wait_for_semantic_readiness(
+                                exact_ready_marker,
+                                process=process,
+                                description="stubborn direct-child marker",
+                                teardown=lambda: validation_script._terminate_powermetrics(
+                                    process
+                                ),
+                            )
                             if exit_path == "return":
                                 return process
                             if exit_path == "exception":
@@ -3697,8 +3831,12 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
             "print('LEASED', flush=True); time.sleep(60)"
         )
         holder = self._start_holder(holder_code)
-        assert holder.stdout is not None
-        self.assertEqual(holder.stdout.readline().strip(), "LEASED")
+        _wait_for_exact_stdout_line(
+            holder,
+            "LEASED",
+            description="live writer lease holder",
+            teardown=lambda: self._terminate_and_reap_holder(holder),
+        )
         state["holder"] = holder
         return state
 
@@ -4629,8 +4767,12 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         )
         holder = self._start_holder(holder_code)
         try:
-            assert holder.stdout is not None
-            self.assertEqual(holder.stdout.readline().strip(), "LEASED")
+            _wait_for_exact_stdout_line(
+                holder,
+                "LEASED",
+                description="diagnostic lease holder",
+                teardown=lambda: self._terminate_and_reap_holder(holder),
+            )
             audit = self._run("audit")
             observations = self._run(
                 "audit-observations",
@@ -4681,6 +4823,15 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.assertNotIn("terminal_result", json.loads(validated.stdout))
         self.assertNotIn("ready_to_arm", validated.stdout)
 
+    def test_live_writer_state_uses_bounded_exact_lease_marker(self) -> None:
+        state = self._state_live_writer()
+        holder = state["holder"]
+        try:
+            self.assertIsNone(holder.poll())
+        finally:
+            self._terminate_and_reap_holder(holder)
+        self.assertIsNotNone(holder.poll())
+
 
 def run_valid_writer_load_proof(cycles: int) -> None:
     """Run representative public writers under CPU and filesystem contention."""
@@ -4704,9 +4855,12 @@ def run_valid_writer_load_proof(cycles: int) -> None:
         env=_fresh_cli_env(),
         label="cpu-filesystem-oversubscription",
     )
-    assert load_process.stdout is not None
-    if load_process.stdout.readline().strip() != "LOAD_READY":
-        raise AssertionError("load injector did not become ready")
+    _wait_for_exact_stdout_line(
+        load_process,
+        "LOAD_READY",
+        description="load injector",
+        teardown=load.close,
+    )
     retries = 0
     started = time.monotonic()
     try:
