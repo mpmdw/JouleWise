@@ -7,13 +7,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET_MODULES = {
-    "test_arm_readiness_dry_run.py",
-    "test_arm_readiness_evidence_t0.py",
-    "test_arm_readiness_integration.py",
-    "test_arm_readiness_lifecycle.py",
-    "test_d117_decode_contrast_plan.py",
-}
 BLOCKED_PREFIXES = (
     "S0-BLOCKED:",
     "STRUCTURAL-BLOCKED:",
@@ -23,25 +16,32 @@ BLOCKED_PREFIXES = (
 
 def _skip_reason(decorator: ast.expr) -> str | None:
     # Recognizes unittest.skip("..."), skipIf(cond, "..."), and
-    # skipUnless(cond, "...") so a blocked-taxonomy reason cannot hide
-    # behind a conditional-skip spelling (delta re-audit condition 6).
+    # skipUnless(cond, "...") in both positional and reason= keyword
+    # spellings, so a blocked-taxonomy reason cannot hide behind a
+    # conditional-skip or keyword spelling (delta cond 6 + final-head nit).
     if not (
         isinstance(decorator, ast.Call)
         and isinstance(decorator.func, ast.Attribute)
         and isinstance(decorator.func.value, ast.Name)
         and decorator.func.value.id == "unittest"
         and decorator.func.attr in ("skip", "skipIf", "skipUnless")
-        and not decorator.keywords
     ):
         return None
+    candidates: list[ast.expr] = []
     index = 0 if decorator.func.attr == "skip" else 1
-    if len(decorator.args) <= index:
-        return None
-    try:
-        reason = ast.literal_eval(decorator.args[index])
-    except (ValueError, TypeError):
-        return None
-    return reason if isinstance(reason, str) else None
+    if len(decorator.args) > index:
+        candidates.append(decorator.args[index])
+    candidates.extend(
+        keyword.value for keyword in decorator.keywords if keyword.arg == "reason"
+    )
+    for candidate in candidates:
+        try:
+            reason = ast.literal_eval(candidate)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(reason, str):
+            return reason
+    return None
 
 
 class S0BlockedEnumerationTests(unittest.TestCase):

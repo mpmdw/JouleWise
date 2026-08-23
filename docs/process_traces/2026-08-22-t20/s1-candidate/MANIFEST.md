@@ -825,7 +825,7 @@ because they abort the interpreter rather than fail. The fixtures author
 legacy-schema PACK evidence. Under the R1 registry a PASSING freeze requires
 R1-schema evidence, so authoring refuses with
 `legacy generic freeze evidence may not enter the R1 lifecycle`
-(`joulewise/arm_readiness.py:5322`).
+(`joulewise/arm_readiness.py:5330`).
 
 **Why this is NOT an S-0 blocker — the correction.** That refusal has two
 conjuncts, and both are properties of THIS BRANCH: its own registry repoint,
@@ -1386,7 +1386,7 @@ READY [AGENT]**, and both are **NON-GATING for S-0**.
   fixtures so `make_go_fixture` authors R1 content/execution receipt schemas
   instead of legacy generic freeze evidence, unblocking the 14
   `STRUCTURAL-BLOCKED` fixture-schema tests that stop at
-  `joulewise/arm_readiness.py:5322`; and, as its POST-MINT item, reconstruct
+  `joulewise/arm_readiness.py:5330`; and, as its POST-MINT item, reconstruct
   `test_historical_predecessor_resolves_and_still_anchors_the_chain` as an
   authenticated runtime `_v4`→`_v3` predecessor proof with a valid synthetic
   family-publication marker, REPLACING (never preserving) the false
