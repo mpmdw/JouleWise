@@ -411,8 +411,13 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
 
     @staticmethod
     def _captured_stdout(module: object) -> tuple[io.BytesIO, object]:
+        # A real text stream, not a Mock: Python 3.14's argparse probes
+        # sys.stdout.fileno() for colorization at parser construction, and
+        # os.isatty(Mock) is a TypeError. TextIOWrapper.fileno() raises
+        # io.UnsupportedOperation, which _colorize handles by disabling
+        # color — the supported non-tty path on every version we test.
         sink = io.BytesIO()
-        stream = mock.Mock(buffer=sink)
+        stream = io.TextIOWrapper(sink, encoding="utf-8", write_through=True)
         return sink, mock.patch.object(module.sys, "stdout", stream)
 
     def test_generate_cli_threads_digest_to_freeze_arm_and_verify(self) -> None:
