@@ -76,6 +76,11 @@ def lifecycle_registry(
                 "pack_id",
             ],
             "family_publication_marker_schema": "test.family-marker.v1",
+            # Family policy, not a per-pack knob: the threshold is DECLARED
+            # here and this builder's packs (default generation 2) fall BELOW
+            # it, so the family-publication gate stays disengaged without the
+            # key being absent — R1 now requires it (exact-keys validation).
+            "family_publication_first_generation": 4,
         },
         "refusal_vocabulary": [
             {
@@ -124,8 +129,14 @@ def resolved_r1_row_registry() -> dict:
     policy_by_kind = {
         item["kind"]: item["freshness_policy_id"] for item in policies
     }
+    # The registry-LOAD closure check also requires every digest-conditional
+    # code path to appear in the allowlist it governs — the S-1 cure for the
+    # fail-OPEN drift where an empty intersection silently subtracted the path
+    # unconditionally.  A synthetic ROW registry must therefore carry the real
+    # conditional paths, for the same reason it carries the real vocabulary.
     registry["freeze_evidence_lifecycle"] = lifecycle_registry(
-        policies=tuple(policies)
+        allowlist=tuple(sorted(readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)),
+        policies=tuple(policies),
     )
     registry["freeze_evidence_lifecycle"]["row_policies"] = [
         {

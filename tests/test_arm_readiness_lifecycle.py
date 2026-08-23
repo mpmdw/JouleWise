@@ -135,10 +135,10 @@ def fixture_row_registry(pack_name: str) -> bytes:
         lifecycle["successor_policy"][
             "family_publication_first_generation"
         ] = generation
-    else:
-        lifecycle["successor_policy"].pop(
-            "family_publication_first_generation", None
-        )
+    # Pre-``_v4`` fixtures deliberately leave the ruled family threshold in
+    # place and fall BELOW it: the threshold is family policy, not a per-pack
+    # knob, and R1 now requires the key to be present (exact-keys validation of
+    # ``successor_policy``).  Popping it would author an invalid registry.
     return render_json(registry)
 
 
@@ -498,6 +498,10 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             arm_readiness_custody_root=custody,
             launch_manifest=manifest_path,
             lifecycle_event=None,
+            # Mirrors the CLI parser, whose ``--expected-confirmation-digest``
+            # has no explicit default and so supplies ``None``: Ed's confirmed
+            # table digest is threaded, never derived by the launcher.
+            expected_confirmation_digest=None,
         )
         return args, exec_argv
 

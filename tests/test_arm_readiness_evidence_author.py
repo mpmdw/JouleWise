@@ -384,10 +384,27 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                         )
 
     def test_public_author_signature_has_no_execution_injection(self) -> None:
+        # The cold-gate fence is that authoring admits no OUTCOME-BEARING seam:
+        # boot identity, clocks, hashes, HEAD, facts, statuses and suite
+        # outcomes are always derived here and can never be supplied.  The
+        # S-1 step-6 threading widened this signature by exactly two
+        # keyword-only CUSTODY INPUTS (a table path and Ed's out-of-band
+        # digest), which carry no outcome and are defaulted to None so an
+        # omitted table still fails closed rather than being derived.  The
+        # library asserts the same tuple at import
+        # (`_assert_public_author_signature`); this test mirrors it so the
+        # fence cannot be relaxed on one side only.
+        parameters = inspect.signature(author_arm_readiness_evidence).parameters
         self.assertEqual(
-            tuple(inspect.signature(author_arm_readiness_evidence).parameters),
-            ("pack_root",),
+            tuple(parameters),
+            ("pack_root", "step6_confirmation_table", "expected_confirmation_digest"),
         )
+        for name in ("step6_confirmation_table", "expected_confirmation_digest"):
+            with self.subTest(parameter=name):
+                self.assertIs(
+                    parameters[name].kind, inspect.Parameter.KEYWORD_ONLY
+                )
+                self.assertIsNone(parameters[name].default)
         for keyword in ("runner", "outcome", "_suite_runner"):
             with self.subTest(keyword=keyword), self.assertRaises(TypeError):
                 author_arm_readiness_evidence(Path("unused"), **{keyword: object()})
