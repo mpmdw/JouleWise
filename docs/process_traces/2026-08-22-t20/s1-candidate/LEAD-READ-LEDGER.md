@@ -8,7 +8,7 @@ changed line is covered by exactly one slice.
 
 | # | Slice | Lines | Status |
 |---|---|---|---|
-| 1 | joulewise/arm_readiness.py (cond-2 channel, chain-read, library gate, family-publication) | ~2298 diff | PENDING |
+| 1 | joulewise/arm_readiness.py (cond-2 channel, chain-read, library gate, family-publication) | ~2298 diff | READ ✓ SOUND (2026-08-23: cond-2 subtraction order correct; chain closed-enumeration + duplicate refusal; digest-first table auth, no pre-match parsing; strict 4-way + head_unpublished rollback split; registry-roster engagement; candidate lane non-tautological via reviewed manifest; laundering defense present; executed-checks-only receipts; all four G2 cures and all six delta conditions verified in place) |
 | 2 | joulewise/scheduler_gates.py (G7/v2) + joulewise/arm_readiness_evidence.py | ~330 | PENDING |
 | 3 | scripts/: build/verify marker, pinset builder, verify_receipt_histsem, author CLI | ~large | PENDING |
 | 4 | configs/arm_readiness/d117_row_registry_v2.json (112 literal, horizons, vocabulary) | full file | PENDING |
