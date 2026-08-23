@@ -84,6 +84,125 @@ def _applicable_slots(stage: WriterStage) -> tuple[str, ...]:
     return ("pre", "post")
 
 
+class LogicalPulseAcknowledgementDeadlineTests(unittest.TestCase):
+    class _Clock:
+        def __init__(self) -> None:
+            self.now_s = 0.0
+            self.sleep_calls: list[float] = []
+
+        def monotonic(self) -> float:
+            return self.now_s
+
+        def sleep(self, seconds: float) -> None:
+            self.sleep_calls.append(seconds)
+            self.now_s += seconds
+
+    class _RunningProcess:
+        @staticmethod
+        def poll() -> None:
+            return None
+
+    @staticmethod
+    def _ack(sequence: int, event_type: str) -> bytes:
+        return (
+            json.dumps(
+                {
+                    "schema": fiducial_validator.TEST_LOGICAL_ACK_SCHEMA,
+                    "sequence": sequence,
+                    "event_type": event_type,
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+
+    def _driver(
+        self,
+        fake_clock: _Clock,
+        reader,
+        *,
+        timeout_s: float = 0.004,
+        hard_timeout_s: float = 0.020,
+    ):
+        return fiducial_validator._LogicalTestPulseDriver(
+            fiducial_validator._LogicalTestClock(0.0),
+            Path("unused-injected-acknowledgement-path"),
+            timeout_s=timeout_s,
+            hard_timeout_s=hard_timeout_s,
+            monotonic=fake_clock.monotonic,
+            sleep=fake_clock.sleep,
+            acknowledgement_reader=reader,
+        )
+
+    def test_progress_extends_stall_deadline_past_nominal_timeout(self) -> None:
+        fake_clock = self._Clock()
+        first_progress = self._ack(7, "pulse_command_on")
+        second_progress = self._ack(8, "pulse_command_off")
+        target = self._ack(9, "pulse_command_on")
+
+        def reader() -> bytes:
+            if fake_clock.now_s >= 0.007:
+                return first_progress + second_progress + target
+            if fake_clock.now_s >= 0.006:
+                return first_progress + second_progress
+            if fake_clock.now_s >= 0.003:
+                return first_progress
+            return b""
+
+        row = self._driver(fake_clock, reader).await_acknowledgement(
+            self._RunningProcess(),
+            sequence=9,
+            event_type="pulse_command_on",
+        )
+
+        self.assertEqual(row["sequence"], 9)
+        self.assertGreater(fake_clock.now_s, 0.004)
+        self.assertTrue(fake_clock.sleep_calls)
+
+    def test_true_stall_refuses_before_outer_hard_bound(self) -> None:
+        fake_clock = self._Clock()
+        stalled = self._ack(7, "pulse_command_on")
+        driver = self._driver(fake_clock, lambda: stalled, hard_timeout_s=0.050)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"test sampler acknowledgement timeout: pulse_command_off:9",
+        ):
+            driver.await_acknowledgement(
+                self._RunningProcess(),
+                sequence=9,
+                event_type="pulse_command_off",
+            )
+
+        self.assertGreaterEqual(fake_clock.now_s, 0.004)
+        self.assertLess(fake_clock.now_s, 0.050)
+
+    def test_outer_hard_bound_refuses_continuous_progress(self) -> None:
+        fake_clock = self._Clock()
+
+        def reader() -> bytes:
+            event_count = int(fake_clock.now_s / 0.001) + 1
+            return b"".join(
+                self._ack(index, "pulse_command_on")
+                for index in range(event_count)
+            )
+
+        driver = self._driver(fake_clock, reader, hard_timeout_s=0.009)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"test sampler acknowledgement timeout: pulse_command_off:99",
+        ):
+            driver.await_acknowledgement(
+                self._RunningProcess(),
+                sequence=99,
+                event_type="pulse_command_off",
+            )
+
+        self.assertGreaterEqual(fake_clock.now_s, 0.009)
+        self.assertLess(fake_clock.now_s, 0.013)
+
+
 class CalibrationWriterCrashMatrixTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
