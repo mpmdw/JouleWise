@@ -12,7 +12,7 @@ changed line is covered by exactly one slice.
 | 2 | joulewise/scheduler_gates.py (G7/v2) + joulewise/arm_readiness_evidence.py | ~574 diff | READ ✓ SOUND (2026-08-23: B-2 tokens ruled-exact; role-resolved census w/ authority comment; fence assertion as adjudicated; v2 seven-gate G5-first; G7 disjoint scheduler vocabulary typed CUSTODY + single mirrored R1 refusal shape; PASS/REFUSE binding discipline incl. nulls-on-refusal; GO requires family PASS; laundering defense pre-recording) |
 | 3 | scripts/: build/verify marker, pinset builder, verify_receipt_histsem, author CLI | ~large | PENDING |
 | 4 | configs/arm_readiness/d117_row_registry_v2.json | full file | READ ✓ SOUND (2026-08-23: 112 = 3x37+pinset sorted-unique, zero authenticator paths; threshold 4; ruled roster; horizons exact per D-150/tiers 10x168h + 4x24h + 2x6h EB + T-0 tiers + 2 RE_DERIVABLE; 8-role vocabulary with r4-5 POLICY/LIFECYCLE/CUSTODY/GIT typing, FAMILY_PUBLICATION=CUSTODY, SUCCESSOR_CHAIN=GIT) |
-| 5 | docs/contracts/: d117_step6_confirmation_table.md + receipt_histsem_verifier.md delta | full | PENDING |
+| 5 | docs/contracts/: step6 table + histsem delta | 278 diff | READ ✓ SOUND (2026-08-23: acyclic C->M/C->S graph normative; sidecar = transport-only made contract text; 8-condition C->S enforcement w/ worked consequence; fixed-point embedded; chain semantics exact to code, zero drift; ONE-home discipline held) |
 | 6 | tests/: family_marker + receipt_histsem + scheduler_gates + schemas deltas | ~2040 | PENDING |
 | 7 | tests/: lifecycle + evidence_author + evidence_t0 + others + enumeration | ~rest | PENDING |
 | 8 | MANIFEST.md final + cross-slice coherence pass | full | PENDING |
