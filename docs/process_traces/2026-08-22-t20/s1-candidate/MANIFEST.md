@@ -23,7 +23,7 @@ Kernel row: `S1-CANDIDATE-01` (TASK_QUEUE.md rank A81; acceptance at
 | Worktree | `/Users/edr/code/JouleWise-wt-s1` |
 | Branch | `impl/s1-candidate` |
 | Audited commit (§8 verdicts) | `bd7ebc13f6f631f73a64b54b5b13ae29a4d491dc` |
-| Finish-round head (§9 verdicts) | `b1c6beedc363d7bf57b3035068a11190ccb55a4e` |
+| Finish-round head (§9 verdicts) | `b1c6beedc363d7bf57b3035068a11190ccb55a4e` — the last COMMIT BEARING CODE; the commit adding §9 itself is documentation-only and changes no digest recorded here |
 | Finish-round tree | `d36e8b9d7b3f24f937ce0202665b14eff0cebc7b` |
 | Baseline (merge-base with `main`) | `55230038dd517e250e47d0685b093110f610b3e8` |
 | Diff under audit | `git diff 5523003...bd7ebc1` (14 files, +3578 / -78) |
