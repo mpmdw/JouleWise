@@ -10,7 +10,35 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-23 early AM (T21 overnight fan-out — ALL WORK PRESERVED ON PUSHED BRANCHES; harvest orders below)
+Last updated: 2026-08-23 morning (T21 — S-1 GAUNTLET-COMPLETE at impl/s1-candidate b5f97c3; ONE gate left: the lead's full read)
+
+**T21 MORNING CLOSE:** the S-1 candidate finished its complete
+adversarial arc: conformance audit → finish round → G-11 cure →
+independent Opus seat (REFUTED, 3 blockers) + Sol G-2 refuter
+(REFUTED, impersonation channel) → combined fix round (all four
+blockers cured; G2-1 six-bypass-verified) → close-out (repo radius
+3746 passed / 0 failures; 4 fix-round defects self-found via AST
+sweep) → DELTA RE-AUDIT: ACCEPT, no blockers, 6 bench conditions —
+ALL APPLIED at b5f97c3 (pushed). Delta rulings of record: the widened
+authoring fence ADMISSIBLE (2026-08-12 cold-gate semantic boundary +
+D-134 cl.6 + T-0 precedent); the hC operator-residual must NOT be
+mechanized (D-151 fixed-point tripwire — S-0 runsheet carries the
+operator-discipline line; literal pins at post-window fixation);
+S0-BLOCKED partition independently confirmed 0/17/4 honest. NEXT, in
+order: (1) THE LEAD'S FULL READ of main...impl/s1-candidate (rule 1;
+fresh context required — do NOT skim it at the end of a long session);
+(2) merge-ability/overbuild prune at the same read; (3) kernel wave:
+register A84 FIXTURE-MODERNIZATION-01 + A85 MLX-ACID-SIGABRT-01
+(paste-ready rows in docs/process_traces/2026-08-22-t20/s1-candidate/
+s1-fixround-packet.md, corrected a500378) + close S1-CANDIDATE-01 on
+its acceptance; (4) merge under D-148.2 gates; (5) my full pre-S-0
+read of s0-runsheet-r2 (closes S0-RUNSHEET-R2) + pin update to the
+merged head + strike the 21-test addendum per ruling; (6) S-0 AT THE
+BENCH with Ed live prompts. Parallel harvests pending: ack-fix
+e2e5605 (UNVERIFIED), calexits 7/7 (re-verify + PR), perf/test-speed
+(lead review; register the 6.2x memo lever + _WITNESS_RESULTS rows).
+
+Last updated (previous): 2026-08-23 early AM (T21 overnight fan-out — ALL WORK PRESERVED ON PUSHED BRANCHES; harvest orders below)
 
 **T21 OVERNIGHT (2026-08-23 ~01:00-06:30):** Ed licensed full Codex
 spend + Workflows + the Opus hill-climb directive (memory saved). The
