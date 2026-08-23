@@ -326,6 +326,13 @@ def make_go_fixture(
     git(repo, "init", "-q")
     git(repo, "config", "user.email", "tests@joulewise.invalid")
     git(repo, "config", "user.name", "JouleWise tests")
+    # EVIDENCE-AUTHOR-GIT-TEARDOWN-01: detached git maintenance spawned by
+    # fixture commits can outlive the test and race TemporaryDirectory
+    # cleanup under .git (ENOTEMPTY — the #121 mechanism class). Disable it
+    # at creation so nothing races cleanup; prevention over errno tolerance
+    # because no test in this fixture family asserts maintenance behavior.
+    git(repo, "config", "gc.auto", "0")
+    git(repo, "config", "maintenance.auto", "false")
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "pack")
     git(repo, "branch", "-M", "main")
@@ -443,6 +450,21 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             "window_environment": reference(window_root / "window.env"),
             "window_chain": reference(window_root / "window-chain.zsh"),
         }
+
+    def test_fixture_repos_disable_git_maintenance_at_creation(self) -> None:
+        # EVIDENCE-AUTHOR-GIT-TEARDOWN-01 regression: fixture repos must never
+        # spawn detached maintenance that can race TemporaryDirectory cleanup.
+        temporary, repository, _pack, _custody, _arm = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        for key, want in (("gc.auto", "0"), ("maintenance.auto", "false")):
+            got = subprocess.run(
+                ["git", "config", "--get", key],
+                cwd=repository,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            self.assertEqual(got, want, key)
 
     def test_freeze_receipts_can_never_carry_go(self) -> None:
         receipt = sample_freeze()
