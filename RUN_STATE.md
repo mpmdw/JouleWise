@@ -50,9 +50,17 @@ six new files + ~1,700 modified lines, 87 tests OK lead-run across the
 four touched modules; the implementing Sol thread stalled at the
 manifest stage — the day's FOURTH transport stall; NEEDS_SCOPE arc +
 v2-registry-coordinate ruling + successor-pinset path adjudication all
-recorded in this session). SUCCESSOR: verify the diff against the brief
-(kernel S1-CANDIDATE-01 + D-151 conds 1/2/6/8 + marker ruling), author
-MANIFEST.md, C-028 gauntlet, land. TRANSPORT ADVISORY: MCP codex server
+recorded in this session). GAUNTLET IN PROGRESS: conformance
+audit DONE (Opus; 10 gaps G-1..G-10); finish round DONE (G-2/3/4
+blockers cured, 7 commits); G-11 round DONE (the ruled v1->v2 repoint
+red 135 tests -> 4; head c1b87f6 PUSHED; whole 28-module radius 1368
+tests / 2F+2E / 21 enumerated S0-BLOCKED expected failures; frozen
+surfaces IDENTICAL). OPEN FINDING for the independent seat (MANIFEST
+9.3.6): R1 reviewed-HEAD gates make the authoring re-derivation
+refusal (:5470 family) fixture-unreachable — subsumed-by-design vs
+over-broad-gate, 4 staged failing tests as fixtures. INDEPENDENT
+writer-not-reviewer SEAT RUNNING (Opus). Then: lead full read ->
+patch+sidecar export -> land -> S0-RUNSHEET-R2 -> S-0 at the bench. TRANSPORT ADVISORY: MCP codex server
 (up since 08-09) + CLI bridge both degraded — Ed should restart the
 Codex desktop app/server before the next delegated wave;
 (3) S-0 EXECUTED AT THE LEAD'S BENCH in a throwaway clone (Ed
