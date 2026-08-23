@@ -34,9 +34,14 @@ s1-fixround-packet.md, corrected a500378) + close S1-CANDIDATE-01 on
 its acceptance; (4) merge under D-148.2 gates; (5) my full pre-S-0
 read of s0-runsheet-r2 (closes S0-RUNSHEET-R2) + pin update to the
 merged head + strike the 21-test addendum per ruling; (6) S-0 AT THE
-BENCH with Ed live prompts. Parallel harvests pending: ack-fix
-e2e5605 (UNVERIFIED), calexits 7/7 (re-verify + PR), perf/test-speed
-(lead review; register the 6.2x memo lever + _WITNESS_RESULTS rows).
+BENCH with Ed live prompts. Parallel harvests COMPLETE: ack-fix
+e2e5605 VERIFIED-READY (H4 protocol confirmed, 4-mutant kill matrix,
+pinset hash-verified) + calexits 0202ce9 VERIFIED-READY (7/7, E-4
+fence byte-held) + COMBINED-GREEN integration run (both coupled
+modules pass in the merged state; shared harness same-blob on all four
+refs). ALL FOUR BRANCHES now wait ONLY on lead gates: S-1 full read,
+speed-branch review, then the merge wave (D-148.2) + kernel wave
+(A84/A85 + closures + the 6.2x memo lever and _WITNESS_RESULTS rows).
 
 Last updated (previous): 2026-08-23 early AM (T21 overnight fan-out — ALL WORK PRESERVED ON PUSHED BRANCHES; harvest orders below)
 
