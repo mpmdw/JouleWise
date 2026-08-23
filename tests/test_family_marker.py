@@ -477,10 +477,47 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             "the threshold the gate compares against is the registry's",
         )
 
-    def test_arm_library_boundary_has_no_scheduler_dependency(self) -> None:
-        source = inspect.getsource(readiness.generate_arm_receipt)
-        self.assertIn("_gate_family_publication", source)
-        self.assertNotIn("scheduler_gates", source)
+    def test_arm_library_boundary_refuses_with_the_governed_custody_code(self) -> None:
+        """Split S-3, as far as it can honestly be proven at S-1.
+
+        A direct arm invocation must refuse an unpublished family without the
+        scheduler's help.  Three legs are proven here behaviourally:
+
+        1. the gate ENGAGES from the tracked registry roster and refuses
+           ``marker_absent`` when a roster pack has no marker (deleting the
+           marker refuses; it does not disengage);
+        2. the refusal record the arm and verification paths append is the
+           registry's own FAMILY_PUBLICATION entry -- the typed CUSTODY code
+           ``readiness_r1_family_publication``, not an improvised string; and
+        3. both library entry points call the gate, and neither imports the
+           scheduler.
+
+        NOT proven here: the full end-to-end arm receipt carrying that code,
+        which needs the three `_v4` packs (unbuilt until S-0).  Recorded as an
+        open item in the S-1 manifest rather than papered over.
+        """
+
+        registry, _raw = readiness.load_registry(ROOT)
+        self.assertEqual(
+            readiness._family_refusal_entry(registry),
+            {
+                "role": "FAMILY_PUBLICATION",
+                "code": "readiness_r1_family_publication",
+                "type": "CUSTODY",
+            },
+        )
+        self.assertEqual(
+            readiness.REASON_TYPE_BY_CODE["readiness_r1_family_publication"],
+            "CUSTODY",
+        )
+        for function in (
+            readiness.generate_arm_receipt,
+            readiness._derive_arm_semantics_for_verification,
+        ):
+            source = inspect.getsource(function)
+            self.assertIn("_gate_family_publication", source)
+            self.assertNotIn("scheduler_gates", source)
+            self.assertIn('"code": entry["code"]', source)
 
     def test_candidate_cli_refuses_absent_marker_without_traceback(self) -> None:
         completed = subprocess.run(
@@ -613,6 +650,36 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         source = inspect.getsource(readiness.build_family_publication_marker)
         self.assertIn("output.relative_to(repository)", source)
         self.assertIn("output_collision", source)
+
+
+    def test_custody_tool_sidecars_exist_and_are_current(self) -> None:
+        """Gap G-1: the kernel row's named sidecar deliverables.
+
+        A sidecar committed beside its tool is documentation, not a gate -- the
+        S-5 lane is chosen by phase, and candidate mode authenticates against
+        the reviewed $INPUT manifest, so nothing downstream reads these files.
+        They exist because S-0 runsheet 1.3 runs `shasum -a 256 -c` on them.
+        This test is what stops them going stale: edit a tool without
+        regenerating its sidecar and the suite goes red.
+        """
+
+        for name in (
+            "build_family_marker.py",
+            "verify_family_marker.py",
+            "build_v4_histsem_pinset.py",
+            "verify_receipt_histsem.py",
+        ):
+            with self.subTest(tool=name):
+                tool = ROOT / "scripts" / name
+                sidecar = tool.with_name(f"{name}.sha256")
+                self.assertTrue(sidecar.is_file(), f"missing sidecar for {name}")
+                self.assertEqual(
+                    sidecar.read_bytes(),
+                    readiness.gnu_sidecar(
+                        readiness.sha256_bytes(tool.read_bytes()), name
+                    ),
+                    f"{name}.sha256 is stale -- regenerate it",
+                )
 
 
 class FamilyMarkerLiveFixtureTests(unittest.TestCase):
