@@ -46,7 +46,7 @@ from dataclasses import asdict, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 from enum import Enum
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -217,10 +217,24 @@ class _LogicalTestPulseDriver:
         acknowledgement_path: Path,
         *,
         timeout_s: float,
+        hard_timeout_s: float | None = None,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+        acknowledgement_reader: Callable[[], bytes] | None = None,
     ) -> None:
         self.clock = clock
         self.acknowledgement_path = acknowledgement_path
         self.timeout_s = timeout_s
+        self.hard_timeout_s = (
+            timeout_s * 4.0 if hard_timeout_s is None else hard_timeout_s
+        )
+        self._monotonic = monotonic
+        self._sleep = sleep
+        self._acknowledgement_reader = (
+            acknowledgement_path.read_bytes
+            if acknowledgement_reader is None
+            else acknowledgement_reader
+        )
         self._next_sequence = TEST_LOGICAL_READY_SEQUENCE + 1
 
     def next_sequence(self, event_type: str) -> int:
@@ -237,14 +251,28 @@ class _LogicalTestPulseDriver:
         sequence: int,
         event_type: str,
     ) -> dict[str, Any]:
-        deadline = time.monotonic() + self.timeout_s
-        while time.monotonic() < deadline:
+        started_at = self._monotonic()
+        stall_deadline = started_at + self.timeout_s
+        hard_deadline = started_at + self.hard_timeout_s
+        observed_byte_count = 0
+        observed_acknowledgements: set[str] = set()
+        while True:
+            now = self._monotonic()
+            if now >= stall_deadline or now >= hard_deadline:
+                break
             try:
-                lines = self.acknowledgement_path.read_text(
-                    encoding="utf-8"
-                ).splitlines()
+                acknowledgement_bytes = self._acknowledgement_reader()
             except (OSError, UnicodeDecodeError):
+                acknowledgement_bytes = b""
+            try:
+                lines = acknowledgement_bytes.decode("utf-8").splitlines()
+            except UnicodeDecodeError:
                 lines = []
+            made_progress = len(acknowledgement_bytes) > observed_byte_count
+            observed_byte_count = max(
+                observed_byte_count,
+                len(acknowledgement_bytes),
+            )
             for line in lines:
                 try:
                     row = json.loads(line)
@@ -253,14 +281,26 @@ class _LogicalTestPulseDriver:
                 if (
                     isinstance(row, Mapping)
                     and row.get("schema") == TEST_LOGICAL_ACK_SCHEMA
+                    and line not in observed_acknowledgements
+                ):
+                    observed_acknowledgements.add(line)
+                    made_progress = True
+                if (
+                    isinstance(row, Mapping)
+                    and row.get("schema") == TEST_LOGICAL_ACK_SCHEMA
                     and row.get("sequence") == sequence
                 ):
                     if row.get("event_type") != event_type:
                         raise RuntimeError("test sampler acknowledgement event mismatch")
                     return dict(row)
+            if made_progress:
+                stall_deadline = min(
+                    self._monotonic() + self.timeout_s,
+                    hard_deadline,
+                )
             if process.poll() is not None:
                 raise RuntimeError("test sampler exited before acknowledgement")
-            time.sleep(min(0.001, self.timeout_s / 4))
+            self._sleep(min(0.001, self.timeout_s / 4))
         raise RuntimeError(
             f"test sampler acknowledgement timeout: {event_type}:{sequence}"
         )
