@@ -425,6 +425,36 @@ sharding strategy can go below it, because a test method is indivisible.
 The scheduling levers are now exhausted — which is exactly why §7 matters
 more than anything in this file.
 
+### 6.1 Exactly which CI check names change
+
+Adding a shard dimension to a matrix **renames** its jobs, so this is
+recorded explicitly rather than left to be discovered.
+
+| Check name | change |
+| --- | --- |
+| `test (3.11, 1..4)`, `test (3.14, 1..4)` | **unchanged** (same matrix dimensions) |
+| `calibration-exits-exclusive (3.11 / 3.14)` | **unchanged** |
+| `build`, `installed-wheel` | **unchanged** |
+| `calibration-writer-crash-matrix-exclusive (3.11)` | **renamed** → `(3.11, 1)` and `(3.11, 2)` |
+| `calibration-writer-crash-matrix-exclusive (3.14)` | **renamed** → `(3.14, 1)` and `(3.14, 2)` |
+| `pr-fast (1)`, `pr-fast (2)` | **new**, additive, pull-request only |
+
+**No required status check is broken, because this repository configures
+none.** Verified 2026-08-23: `repos/:owner/:repo/branches/main/protection`
+returns *"Branch not protected"* (404) and `repos/:owner/:repo/rulesets`
+returns `[]`. Merge gating is by convention and lead review, not by GitHub
+branch protection.
+
+That is why the rename was applied rather than proposed. **If branch
+protection is ever introduced, the two renamed crash-matrix checks are the
+ones to re-register**, and promoting `pr-fast` to required would be a
+separate, lead-gated decision that §5 argues against.
+
+One further behavioural change in that job: `fail-fast: false` is now set,
+so a failure on one interpreter or shard no longer cancels its siblings.
+That trades a little runner time for complete failure information, which is
+the right side of the trade for a module whose failures are load-dependent.
+
 ---
 
 ## 7. The finding worth more than everything above — NOT APPLIED
