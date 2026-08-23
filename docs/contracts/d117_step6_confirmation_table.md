@@ -115,6 +115,37 @@ consumer validates the entire table and the `C → S` edge. `pack_count` is
 exactly three and `receipt_count` is exactly 33 for the `_v4` family; the
 fact count is recomputed from the 33 receipts.
 
+### Where the `C → S` edge is enforced
+
+The R1 changed-set gate (`validate_r1_evidence_lifecycle` in
+`joulewise/arm_readiness.py`) computes the set of repository paths that changed
+between an evidence receipt's derivation commit and the reviewed HEAD, then
+subtracts the registry's `irrelevant_path_allowlist`. The successor pinset path
+is one of the 112 allowlist entries, but it is subtracted on a *condition*
+rather than on membership alone. The allowlist entries carrying that condition
+are named by the code constant `R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS`, which
+currently holds exactly the successor pinset path.
+
+For such a path the gate subtracts it only when all of the following hold:
+
+1. a step-6 confirmation table path was supplied to the gate (the arm, freeze,
+   verification, and marker-replay entry points pass the same custody path they
+   already pass to the family-publication gate);
+2. that file and its `.sha256` sidecar are present, readable, canonical, and
+   mutually consistent;
+3. the file validates against this contract in full;
+4. its `successor_pinset.path` equals the path under test; and
+5. the SHA-256 of the bytes **committed at the reviewed HEAD** for that path
+   equals `successor_pinset.sha256`.
+
+If any one of those fails, the path stays in the relevant set and the gate
+refuses with the pre-existing `DEPENDENCY_CHANGED_SET` role — no new refusal
+code is introduced (D-151 condition 1e). Worked consequence: once fixation
+commits the minted pinset, an arm whose evidence predates that commit passes
+only while the committed bytes still hash to the digest Ed signed; any later
+rewrite of that file — benign or hostile — turns every such arm into a
+`DEPENDENCY_CHANGED_SET` refusal until Ed signs a new table.
+
 ## Candidate and publication lanes
 
 Candidate verification may prove marker-intrinsic and pinset-intrinsic

@@ -42,6 +42,19 @@ def git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def write_custody_json(directory: Path, name: str, value: object) -> Path:
+    """Write a canonical custody artifact plus its GNU sha256 sidecar."""
+
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / name
+    raw = render_json(value)
+    path.write_bytes(raw)
+    path.with_name(f"{name}.sha256").write_bytes(
+        gnu_sidecar(hashlib.sha256(raw).hexdigest(), name)
+    )
+    return path
+
+
 def write_pinset(path: Path, mutate: callable) -> Path:
     value = json.loads(PINSET.read_bytes())
     row = next(item for item in value["packs"] if item["pack_id"] == REPRESENTATIVE_PACK.name)
@@ -510,6 +523,151 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             self.assertIsNone(arm["receipt_path"])
             self.assertIsNone(freeze["receipt_path"])
             self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
+
+
+class SuccessorPinsetDigestConditionTests(unittest.TestCase):
+    """D-151 condition 2 — the C -> S edge, exercised in both directions.
+
+    Allowlist MEMBERSHIP makes the successor pinset path eligible for
+    subtraction from the R1 changed set; it is not sufficient.  The bytes
+    committed at the reviewed HEAD must also hash to the digest Ed recorded in
+    the step-6 confirmation table's ``successor_pinset`` section.  These tests
+    prove both arms: a matching digest subtracts, and every non-matching
+    condition (no table, wrong digest, table naming another path, table absent
+    from custody) leaves the path relevant and refuses DEPENDENCY_CHANGED_SET.
+    """
+
+    SUCCESSOR = readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1].as_posix()
+
+    def build(self) -> tuple[Path, Path, dict, dict, dict]:
+        from tests.test_arm_readiness_evidence import (
+            content_source_and_receipt,
+            lifecycle_registry,
+            plan_tree,
+        )
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name) / "repository"
+        custody = Path(temporary.name) / "custody"
+        repository.mkdir()
+        custody.mkdir()
+        git(repository, "init", "-q")
+        git(repository, "config", "user.email", "test@example.invalid")
+        git(repository, "config", "user.name", "S1 Finish Round")
+        (repository / "dependency.txt").write_text("stable\n")
+        (repository / "pack").mkdir()
+        (repository / "pack/plan_tree.json").write_bytes(plan_tree(frozen=False))
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "derivation")
+        derivation = git(repository, "rev-parse", "HEAD").stdout.strip()
+        source, receipt = content_source_and_receipt(repository, derivation)
+        registry = lifecycle_registry(allowlist=(self.SUCCESSOR,))
+        return repository, custody, registry, source, receipt
+
+    def commit_successor(self, repository: Path, payload: bytes) -> tuple[str, str]:
+        path = repository / self.SUCCESSOR
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        git(repository, "add", self.SUCCESSOR)
+        git(repository, "commit", "-qm", "mint successor pinset")
+        return (
+            git(repository, "rev-parse", "HEAD").stdout.strip(),
+            hashlib.sha256(payload).hexdigest(),
+        )
+
+    def table(self, custody: Path, name: str, **overrides: object) -> Path:
+        from tests.test_family_marker import confirmation
+
+        value = confirmation()
+        value["successor_pinset"].update(overrides)
+        return write_custody_json(custody, name, value)
+
+    def gate(self, repository, receipt, source, registry, head, table_path):
+        return readiness.validate_r1_evidence_lifecycle(
+            repository,
+            receipt,
+            source,
+            registry,
+            current_head=head,
+            expected_freshness_class="RE_DERIVABLE",
+            plan_tree_path="pack/plan_tree.json",
+            step6_confirmation_table=table_path,
+        )
+
+    def test_confirmed_digest_subtracts_the_successor_path(self) -> None:
+        repository, custody, registry, source, receipt = self.build()
+        head, digest = self.commit_successor(repository, b'{"packs": []}\n')
+        table_path = self.table(custody, "table.json", sha256=digest)
+        changed = self.gate(
+            repository, receipt, source, registry, head, table_path
+        )
+        self.assertEqual(changed, (self.SUCCESSOR,))
+
+    def test_unconfirmed_successor_bytes_refuse_dependency_changed_set(self) -> None:
+        repository, custody, registry, source, receipt = self.build()
+        head, digest = self.commit_successor(repository, b'{"packs": []}\n')
+        confirmed = self.table(custody, "confirmed.json", sha256=digest)
+        other_path = self.table(
+            custody,
+            "other-path.json",
+            sha256=digest,
+            path="configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json",
+        )
+        wrong_digest = self.table(custody, "wrong.json", sha256="c" * 64)
+        cases = {
+            "no table supplied": (None, "no step-6 confirmation table supplied"),
+            "table absent from custody": (
+                custody / "absent.json",
+                "inadmissible (confirmation_missing)",
+            ),
+            # The table schema itself pins the successor section to the
+            # code-enumerated chain member, so a table naming a different path
+            # is refused one layer earlier, as an inadmissible table.  The
+            # helper's own path equality check stays as the second line of
+            # defence for any future growth of the conditional class.
+            "table names another path": (
+                other_path,
+                "inadmissible (confirmation_mismatch)",
+            ),
+            "digest differs": (
+                wrong_digest,
+                "differ from Ed's confirmed step-6 digest",
+            ),
+        }
+        for label, (table_path, fragment) in cases.items():
+            with self.subTest(case=label):
+                with self.assertRaises(readiness.EvidenceLifecycleError) as caught:
+                    self.gate(
+                        repository, receipt, source, registry, head, table_path
+                    )
+                self.assertEqual(caught.exception.role, "DEPENDENCY_CHANGED_SET")
+                self.assertIn(self.SUCCESSOR, str(caught.exception))
+                self.assertIn(fragment, str(caught.exception))
+
+        # A later mutation of the same path is refused against the same table:
+        # the condition is on bytes at HEAD, never on the path alone.
+        mutated_head, _digest = self.commit_successor(
+            repository, b'{"packs": [], "mutated": true}\n'
+        )
+        with self.assertRaises(readiness.EvidenceLifecycleError) as caught:
+            self.gate(
+                repository, receipt, source, registry, mutated_head, confirmed
+            )
+        self.assertEqual(caught.exception.role, "DEPENDENCY_CHANGED_SET")
+
+    def test_conditional_class_is_exactly_the_successor_pinset(self) -> None:
+        self.assertEqual(
+            readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS,
+            frozenset({self.SUCCESSOR}),
+        )
+        registry, _raw = readiness.load_registry(ROOT)
+        allowlist = set(
+            registry["freeze_evidence_lifecycle"]["irrelevant_path_allowlist"]
+        )
+        self.assertLessEqual(
+            readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS, allowlist
+        )
 
 
 if __name__ == "__main__":

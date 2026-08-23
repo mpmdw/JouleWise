@@ -368,7 +368,14 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         self.assertEqual(len(allowlist), 112)
         self.assertEqual(allowlist, sorted(set(allowlist)))
         successor = "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
+        # Membership is the ruled 112th entry (D-151 condition 1) and is NOT a
+        # licence to subtract: the successor class is digest-conditional
+        # (condition 2).  The behavioural proof that membership alone does not
+        # subtract lives in
+        # tests.test_receipt_histsem.SuccessorPinsetDigestConditionTests
+        # (finish round, gap G-2).
         self.assertIn(successor, allowlist)
+        self.assertIn(successor, readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
         self.assertFalse(any("d117_step6_confirmation" in path for path in allowlist))
         self.assertFalse(any("family_publication" in path for path in allowlist))
         policies = {item["kind"]: item for item in lifecycle["evidence_policies"]}
