@@ -722,6 +722,45 @@
       "status_note": "Successor to CALEXITS-TIMING-HYGIENE (closed 2026-08-22 with the audit as deliverable). Items are independent and land through the normal gauntlet; top two by yield are H1 origin pinning and H6 witness-cache ownership.",
       "stop_card": null
     },
+    "CALWRITER-ACK-TIMEOUT-01": {
+      "acceptance": {
+        "evidence": [
+          "The writer-crash-matrix ack protocol no longer couples pass/fail to fixed wall-clock ack deadlines under host load (the A79 audit's H4 bounded-fix shape: progress acknowledgement, monotonic deadline, owned teardown)",
+          "Both observed 2026-08-22 failure stages (after-sampler-teardown/pre and finalization-intent-write/post classes) are covered by regressions that fail on the old fixed-deadline shape",
+          "No byte of the four r6-pinned estimator sources changes"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALWRITER-ACK-TIMEOUT-01/acceptance",
+          "label": "CALWRITER-ACK-TIMEOUT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The calibration-writer-crash-matrix sampler-acknowledgement timeout flake class is cured with the H4 bounded-fix shape, non-gating."
+      },
+      "authority": {
+        "label": "T20 run report CI-incident section (two same-day firings: runs 32578576711 + 32601988870) + A79 audit H4/H9",
+        "path": "docs/run_reports/2026-08-22-t20-session.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Standing frozen-surface hazard (r6 pinset)",
+            "path": "RUN_STATE.md"
+          },
+          "rule": "scripts/validate_powermetrics_fiducial.py is adjacent to the pinned joulewise/powermetrics_fiducial.py — any fix stays test/script-side and every WRITE_SCOPE authorization checks the four pinned sources first"
+        }
+      ],
+      "flags": [],
+      "goal": "Cure the sampler-acknowledgement timeout flake class in tests/test_calibration_writer_crash_matrix (AssertionError 1 != -9 after RuntimeError 'test sampler acknowledgement timeout' at scripts/validate_powermetrics_fiducial.py:264) by applying the A79 audit's H4 bounded-fix shape to its ack protocol.",
+      "id": "CALWRITER-ACK-TIMEOUT-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 83,
+      "status": "queued",
+      "status_note": "Registered on the second same-day firing (magistrate override of the run-report drafter's row-on-next-recurrence recommendation, with grounds: mechanism-class identity is the row identity; stage variation is what H4 predicts). Non-gating.",
+      "stop_card": null
+    },
     "CGV-HARDEN-01": {
       "acceptance": {
         "evidence": [

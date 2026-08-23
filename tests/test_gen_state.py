@@ -96,6 +96,9 @@ EXPECTED_IDS = {
     # 2026-08-22 T20 _v4-transaction registrations (D-150 item 4; D-151 +
     # marker-ruling consequences)
     "T0-UNATTENDED-01", "S1-CANDIDATE-01", "S0-RUNSHEET-R2",
+    # 2026-08-22 T20 close-out: writer-crash ack-timeout flake row minted on
+    # its second same-day firing (run-report CI-incident section).
+    "CALWRITER-ACK-TIMEOUT-01",
     # 2026-08-02 two-lens extension consult (Ed ratifies S2)
     "NVIDIA-PORTABILITY-01",
     # 2026-08-03 sleep-window: production-default custody hardening deferred
@@ -315,9 +318,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # successor CALEXITS-HYGIENE-FIXES-01: 83 - 1 + 1 = 83; the T20
         # _v4-transaction wave registers T0-UNATTENDED-01, S1-CANDIDATE-01,
         # S0-RUNSHEET-R2 (D-150 item 4; D-151 + marker-ruling
-        # consequences): 83 + 3 = 86 exact live records.
+        # consequences): 83 + 3 = 86; the T20 close-out registers
+        # CALWRITER-ACK-TIMEOUT-01 on the flake's second same-day firing:
+        # 86 + 1 = 87 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 86)
+        self.assertEqual(len(self.tasks), 87)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

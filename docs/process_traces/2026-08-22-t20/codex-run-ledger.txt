@@ -1,0 +1,10 @@
+# T20 codex-run ledger (RECONSTRUCTED post-hoc from .codex-bridge filenames; MCP-route runs listed from session records — see the T20 run report's operational notes for method; pool ~22.0% used at close, resets 08-27)
+
+## Bridge-transport runs (from /Users/edr/code/JouleWise/.codex-bridge/*.log, 2026-08-22):
+- 20260822T214200Z-15661-new: FAILED rc=1
+- 20260822T214218Z-16024-new: OK
+- 20260822T220627Z-17830-review: FAILED rc=1
+- 20260822T220659Z-18189-review: RUNNING (stale — process died without wrapper status update; killed after 70-min silent log; disposition: superseded by the Opus A79 refuter, see the T20 run report)
+
+## MCP-route Sol sessions (from session records; thread ids in the run report/custody):
+- calexits timing audit (xhigh) DONE; registry re-bind r2 (high) DONE; S-0 runsheet assembly (xhigh) DONE; marker design seat + debate (xhigh, 2 turns) DONE; A78 closure refuter + delta (high, 2 turns) DONE; registry composition adjudications; registry refuter (high) DONE

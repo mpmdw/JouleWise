@@ -40,7 +40,10 @@ mechanisms separate, H1–H9, successor row CALEXITS-HYGIENE-FIXES-01;
 Opus closure refuter SURVIVES with 2 should-fix, both cured + delta-ACCEPT; kernel 83 live). README refreshed
 (1ba04a8). NEXT IN ORDER: (1) kernel txn registering T0-UNATTENDED-01
 + S1-CANDIDATE-01 (= D-151 conds 1/2/6/8 + marker-ruling
-consequences) + S0-RUNSHEET-R2; (2) the S-1 reviewed-candidate
+consequences) + S0-RUNSHEET-R2 — DONE at 6693cfa (+ the
+CALWRITER-ACK-TIMEOUT-01 flake row at the T20 close-out; run report
+docs/run_reports/2026-08-22-t20-session.md is THE session record,
+incl. the four-red-run CI incident + dispositions); (2) the S-1 reviewed-candidate
 implementation stream (Sol, worktree, WRITE_SCOPE; marker consumer
 implements the ruled design — co-design DONE, no waiver needed);
 (3) S-0 EXECUTED AT THE LEAD'S BENCH in a throwaway clone (Ed
