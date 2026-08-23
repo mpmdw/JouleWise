@@ -1,17 +1,29 @@
 # S-1 CANDIDATE MANIFEST — the `_v4` reviewed candidate custody (2026-08-22)
 
-**Status: FINISH ROUND COMPLETE FOR THE TEN AUDITED GAPS; STILL NOT
-LEAD-REVIEWED, STILL NOT ACCEPTED.** This manifest is the binding record of
-what the S-1 implementation contains and what it does not. §8's verdicts were
-authored by the conformance-audit seat against `bd7ebc1`; §9 records the
-finish round that closed them, re-verified at source, and it flips a §8 verdict
-only where the mechanism genuinely changed.
+**Status: COMBINED FIX ROUND COMPLETE; REVIEWED TWICE AND REFUTED BOTH TIMES;
+FIXES APPLIED AND MEASURED; NOT YET DELTA-RE-AUDITED, NOT ACCEPTED.** This
+manifest is the binding record of what the S-1 implementation contains and what
+it does not. §8's verdicts were authored by the conformance-audit seat against
+`bd7ebc1`; §9 records the finish round that closed them; **§10 records the
+combined fix round of 2026-08-23**, which answered two independent reviews of
+`c1b87f6` — an independent writer≠reviewer seat verdict (REFUTED: 3 blockers,
+12 should-fix, 4 nits) and a fresh read-only G-2 security refuter (REFUTED:
+1 blocker, 3 should-fix, 1 nit). A §8 verdict flips only where the mechanism
+genuinely changed.
 
-**One NEW blocker, larger than any of the ten gaps, was found during the
-finish round and is NOT cured: the candidate is red on 149 tests outside the
-four modules it was ever run against (§9.3, gap G-11).** The cure is
-mechanical but lies outside the finish round's write lease. This candidate
-still cannot be handed to S-0.
+**G-11 (red outside the four reviewed modules) is CURED and re-measured, and
+all four blockers across the two reviews are cured.** What remains open is
+stated as open and counted in §10.1: of the 21 review findings, 15 are cured,
+4 are partial, 1 is NOT addressed, and 1 was never a branch regression. The
+round also INTRODUCED defects of its own, in two groups: **four** that it
+found by running the code and CURED within the round (§10.4, including one
+24-failure regression that only the repository-radius run could see), and
+**three** plus two prose defects that a source-level audit found and that
+remain OPEN (§10.1). All are recorded here rather than left for the next
+reviewer to find. Two structural partials (§10.3) await artifacts only S-0 can
+produce. **A delta re-audit of this round has NOT been performed.**
+This candidate still cannot be handed to S-0 on this document's authority
+alone.
 
 Kernel row: `S1-CANDIDATE-01` (TASK_QUEUE.md rank A81; acceptance at
 `docs/process/state_kernel.json` `/tasks/S1-CANDIDATE-01/acceptance`).
@@ -23,7 +35,9 @@ Kernel row: `S1-CANDIDATE-01` (TASK_QUEUE.md rank A81; acceptance at
 | Worktree | `/Users/edr/code/JouleWise-wt-s1` |
 | Branch | `impl/s1-candidate` |
 | Audited commit (§8 verdicts) | `bd7ebc13f6f631f73a64b54b5b13ae29a4d491dc` |
-| Finish-round head (§9 verdicts) | `b1c6beedc363d7bf57b3035068a11190ccb55a4e` — the last COMMIT BEARING CODE; the commit adding §9 itself is documentation-only and changes no digest recorded here |
+| Finish-round head (§9 verdicts) | `b1c6beedc363d7bf57b3035068a11190ccb55a4e`. **The claim previously made here — that this was "the last COMMIT BEARING CODE" — was FALSE (nit 16)**, and it mattered: it is why §9.4's frozen-surface check had never been run at a head that actually bore code. `c1b87f6` changed `joulewise/arm_readiness.py` and `joulewise/arm_readiness_evidence.py`, and the 2026-08-23 fix round changed code again. |
+| Reviewed head (§10 verdicts) | `c1b87f63fd47507dd1504693ad45347a4f2c55aa` — the head both independent reviews audited |
+| Fix-round head (§10) | `8d51f76fa532607da45e45789e343fcf31fc8bce` — the last commit bearing code. The commit adding §10 is documentation-only and changes no digest recorded here; §10.5's frozen-surface re-verification was run at this commit. |
 | Finish-round tree | `d36e8b9d7b3f24f937ce0202665b14eff0cebc7b` |
 | Baseline (merge-base with `main`) | `55230038dd517e250e47d0685b093110f610b3e8` |
 | Diff under audit | `git diff 5523003...bd7ebc1` (14 files, +3578 / -78) |
@@ -169,25 +183,34 @@ Two cautions that belong on this record:
 
 ## 6. Tool digests
 
-SHA-256, GNU coreutils form (`<64 hex><two spaces><basename>`), computed at
-the **finish-round head `b1c6bee`**. Three of the four tools changed in the
-finish round; the digests recorded against `bd7ebc1` are superseded and are
-preserved only in this repository's history.
+SHA-256, GNU coreutils form (`<64 hex><two spaces><basename>`), **recomputed at
+the fix-round head on 2026-08-23** and superseding the values this section
+carried at `b1c6bee`. Those earlier values had gone stale for three artifacts
+that later rounds edited — a hand-transcribed digest block does not update
+itself, which is precisely the drift the `.sha256` sidecar regression exists to
+catch for the tools. Digests marked **(changed)** moved after `b1c6bee`:
 
 ```
 e51617f9cdbbcac2e8e5558c5422c701e3091476c267d11427189bfc3a82f50b  build_family_marker.py
-9a4d9d10c4f5c07df81a3673efeb1b3d14787c93a42292a074a2e00d1c1e10b9  verify_family_marker.py
+68be9c6e76eaa17fec49d1b72597189f89c5f80587fa2b5a1e270e1b48e49b19  verify_family_marker.py   (changed)
 29335e6fcfe8e97a78212f44e44a96e869d3179afb3411cda74f2a8070b978fa  build_v4_histsem_pinset.py
 394ed1992c26cff150c8a9bfe026ba787e99a37428e3ee4010fe381a29b0d860  verify_receipt_histsem.py
 ```
 
-Governance artifacts, same form and commit:
+`verify_family_marker.py` changed because the fix round gave it the
+`--expected-confirmation-digest` flag; its tracked `.sha256` sidecar was
+regenerated in the same commit and verifies.
+
+Governance artifacts, same form and head:
 
 ```
 7a1642130eedaa528059c59304fa32813cc884b5f0b9c338634946ef105297b7  d117_row_registry_v2.json
-2316688a29285a0778d5d7134e55aee73568c561a17695a1913d32ef5e7766f6  d117_step6_confirmation_table.md
-23e75396b14ebd28b11c49e1e7346259594e3d4d363ec590d4cc26dabdf2d63f  receipt_histsem_verifier.md
+246e48f411172ef7b3b5c4754c288002b2e51bddf7d55d9f51393ee77896e6d3  d117_step6_confirmation_table.md   (changed)
+a1773f7c3696d11267a644c9310c052b02c2499c5498ce92036977501c48417c  receipt_histsem_verifier.md        (changed)
 ```
+
+Both contracts changed because the fix round amended them; the registry is
+unchanged since `b1c6bee`.
 
 **The four `.sha256` sidecars now exist** beside their tools
 (`scripts/<tool>.py.sha256`), in the same GNU form, and verify with
@@ -206,8 +229,11 @@ than against any sidecar. Nothing in the gating path now reads these files.
 
 **`s0-candidate.patch` is still not in either tree, by design.** The patch is
 the export of this branch against the merge-base
-(`git diff --binary 5523003..b1c6bee`), and exporting it before gauntlet close
-would pin a digest that every subsequent fix invalidates. The lead exports it —
+(`git diff --binary 5523003..<accepted head>`), and exporting it before
+gauntlet close would pin a digest that every subsequent fix invalidates —
+demonstrated twice over since this paragraph was written, as the head moved
+from `b1c6bee` to `c1b87f6` and then through the 2026-08-23 fix round. The
+head in that command is deliberately left unbound here for the same reason. The lead exports it —
 with its GNU sidecar — at gauntlet close, from the accepted head, and records
 that head's OID beside it in `$INPUT`. Nothing in this round fabricates one.
 
@@ -527,8 +553,8 @@ where it did not, it says so.
 | Gap | Was | Now | What actually changed |
 | --- | --- | --- | --- |
 | **G-1** named deliverables | PARTIAL | **CURED (patch deferred by design)** | Four `.sha256` sidecars minted beside their tools, GNU form, `shasum -c` clean, with a regression that fails on staleness. `s0-candidate.patch` is exported by the lead at gauntlet close from the accepted head (§6) — deliberately not fabricated here. |
-| **G-2** D-151 condition 2 | **ABSENT** | **PRESENT** | `R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS` names the conditional class; `_require_confirmed_conditional_path` enforces the C→S edge (table present, canonical, sidecar-consistent, schema-valid, naming this path, and the bytes **committed at the reviewed HEAD** hashing to Ed's confirmed digest); every other outcome refuses `DEPENDENCY_CHANGED_SET`. The confirmation path is threaded from the arm, freeze, verification, and marker-replay entry points; absent, it fails closed. The contracts' claims are now true. |
-| **G-3** split S-2 | **ABSENT** | **PRESENT** | `FAMILY_PUBLICATION_FIRST_GENERATION` is deleted. The threshold is a reviewed registry value at `freeze_evidence_lifecycle.successor_policy.family_publication_first_generation` (= 4), read by `_family_first_generation`. `successor_policy` validation is a required core plus one named optional key, so pre-`_v4` lifecycle registries still validate and a registry without the value refuses (`registry_dormant`) rather than defaulting. |
+| **G-2** D-151 condition 2 | **ABSENT** | **PRESENT** | `R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS` names the conditional class; `_require_confirmed_conditional_path` enforces the C→S edge (table present, canonical, sidecar-consistent, schema-valid, naming this path, and the bytes **committed at the reviewed HEAD** hashing to Ed's confirmed digest); every other outcome refuses `DEPENDENCY_CHANGED_SET`. **Corrected 2026-08-23 (§10, seat should-fix 6 + refuter G2-1):** the confirmation path is threaded from the arm, freeze, verification, marker-replay, scheduler-G7, launcher-CLI and evidence-authoring (`_authenticate_existing_r1`) entry points, and Ed's out-of-band digest `hC` is threaded beside it as `expected_confirmation_digest` and never derived by any consumer. The threading is NOT uniform and the asymmetry is recorded rather than claimed away: arm, verification and the scheduler default a missing path to campaign custody (`<window_custody_root>/family_publication/<STEP6_CONFIRMATION_TABLE_NAME>`), while `generate_freeze_receipt` passes the argument through without a default. All branches fail closed, so there is no bypass; the freeze asymmetry is harmless in the intended order (the pinset does not exist at freeze time) and remains an ordering fragility, NOT a cure. The contracts' claims are true as qualified here. |
+| **G-3** split S-2 | **ABSENT** | **PRESENT** | `FAMILY_PUBLICATION_FIRST_GENERATION` is deleted. The threshold is a reviewed registry value at `freeze_evidence_lifecycle.successor_policy.family_publication_first_generation` (= 4), read by `_family_first_generation`. **Corrected 2026-08-23 (§10, refuter G2-4):** the threshold was optional, and a registry that simply omitted it validated, whereupon freeze set `None` and SKIPPED publication — a dormant fail-OPEN edge. The key is now MANDATORY: `successor_policy` is validated by exact-key match over all five keys, so an omitted threshold is refused at registry load (`readiness_schema_invalid`) instead of disengaging the gate. Pre-`_v4` fixtures therefore DECLARE the family threshold and fall BELOW it — the threshold is family policy, not a per-pack knob — rather than deleting the key. |
 | **G-4** split S-5 | **PARTIAL — bypassable** | **PRESENT** | Lane selection by explicit `phase`, never by file presence. Candidate mode opens the reviewed `$INPUT` manifest and compares against the digest recorded there before the tool ran; the tautology is gone. Both CLIs gain `--phase` (default: the strict production rule) and `--candidate-manifest`. |
 | **G-5** dead check_ids | 8 named dead | **CURED, and the list was wrong** | Set 32 → 29. Real raise sites for `registry_dormant`, `lane_inconsistent`, `marker_self_digest_mismatch`, `head_unpublished`, and `predecessor_mismatch` — a **ninth** dead id the audit's list missed, found by a new mechanical test that asserts every member has a raise site. Retired with grounds, citing this round in code and in the exactness test: `history_shallow`, `git_unavailable`, `internal_error`. |
 | **G-6** candidate-lane laundering | undefended | **PRESENT** | `require_gate_admissible_verification()` checks a verification receipt's `lane` / `gate_admissible` / `publication_authorized` against its own `phase`: incoherent → `lane_inconsistent`; coherent but candidate or non-PASS → `lane_inadmissible`. Called by **both** consumers — the library arm gate and scheduler G7. |
@@ -599,36 +625,59 @@ the two figures are NOT interchangeable and the original 149 is **not**
 like-for-like with anything below. The honest comparison is therefore the
 per-module before/after table, measured by this seat on both sides:
 
-| module | before | after |
-|---|---|---|
-| `test_arm_readiness_lifecycle` | 46 tests, 14F+26E = 40 | 47 tests, **OK**, 4 expected |
-| `test_arm_readiness_evidence_t0` | 25 tests, 49E | 25 tests, **OK**, 7 expected |
-| `test_arm_readiness_integration` | 9 tests, 1F+9E = 10 | 9 tests, **OK**, 5 expected |
-| `test_d117_decode_contrast_plan` | 22 tests, 13F | 22 tests, **OK**, 1 expected |
-| `test_arm_readiness_dry_run` | 5 tests, 4E | 5 tests, **OK**, 4 expected |
-| `test_arm_readiness_registry` | 5 tests, 3F | 5 tests, **OK** |
-| `test_arm_readiness_evidence` | 11 tests, 1F+1E = 2 | 11 tests, **OK** |
-| `test_arm_readiness_evidence_author` | 24 tests, 2F+12E = 14 | 24 tests, 2F+2E = 4 |
+The "after (fix round)" column is measured at the fix-round head by the
+close-out seat on 2026-08-23, one module per `python3 -m unittest` invocation
+with `PYTHONDONTWRITEBYTECODE=1`. "skipped" replaces the earlier "expected"
+because `@unittest.expectedFailure` has been eliminated entirely (§10.2).
 
-**135 failing → 4 across the eight modules that carried the defect**, and those
-4 are the single OPEN FINDING of §9.3.6, not regressions. Whole-radius
-measurement at this head, in ONE lead-run:
+| module | before | after (finish round) | after (fix round, measured 2026-08-23) |
+|---|---|---|---|
+| `test_arm_readiness_lifecycle` | 46 tests, 14F+26E = 40 | 47 tests, **OK**, 4 expected | 47 tests, **OK**, 4 skipped |
+| `test_arm_readiness_evidence_t0` | 25 tests, 49E | 25 tests, **OK**, 7 expected | 25 tests, **OK**, 7 skipped |
+| `test_arm_readiness_integration` | 9 tests, 1F+9E = 10 | 9 tests, **OK**, 5 expected | 9 tests, **OK**, 5 skipped |
+| `test_d117_decode_contrast_plan` | 22 tests, 13F | 22 tests, **OK**, 1 expected | 22 tests, **OK**, 1 skipped |
+| `test_arm_readiness_dry_run` | 5 tests, 4E | 5 tests, **OK**, 4 expected | 5 tests, **OK**, 4 skipped |
+| `test_arm_readiness_registry` | 5 tests, 3F | 5 tests, **OK** | 5 tests, **OK** |
+| `test_arm_readiness_evidence` | 11 tests, 1F+1E = 2 | 11 tests, **OK** | 12 tests, **OK** |
+| `test_arm_readiness_evidence_author` | 24 tests, 2F+12E = 14 | 24 tests, 2F+2E = 4 | 24 tests, **OK** |
 
-```
-Ran 1368 tests in 781.691s
-FAILED (failures=2, errors=2, expected failures=21)
-```
+**135 failing → 0 across the eight modules that carried the defect.** The four
+that remained red at the finish-round head were §9.3.6's "open finding"; that
+finding was a MISDIAGNOSIS and is retracted in full below (§9.3.6 as rewritten),
+and the four tests are now ordinary green. One test was added in the finish
+round (lifecycle 46 → 47) and one in the fix round (evidence 11 → 12).
 
-The 21 expected failures are the enumerated **S0-BLOCKED** set, each carrying
-the reason string `S0-BLOCKED: requires minted _v4 packs` and a docstring
-stating what unblocks it; they are part of S-0 acceptance and must flip green in
-the clone proof. One test was ADDED (lifecycle 46 → 47): the regression that
-pins the §9.3.4 item-1 cure.
+The four candidate modules and the two enumeration/launcher modules, measured
+in the same way at the same head: `test_receipt_histsem` 21 tests **OK**;
+`test_arm_readiness_schemas` 23 tests **OK**; `test_family_marker` 21 tests
+**OK**; `test_scheduler_gates` 40 tests **OK**; `test_launch_window` 16 tests
+**OK**; `test_s0_blocked_enumeration` 1 test **OK**. Total across all fourteen
+modules: **275 tests, zero failures, zero errors, 21 skips** — and those 21
+skips are exactly the enumerated partition of §10.2, asserted mechanically.
+
+**The former whole-radius figure is STRUCK.** This section previously recorded
+`Ran 1368 tests ... FAILED (failures=2, errors=2, expected failures=21)` and
+called the 21 an S-0 acceptance criterion that "must flip green in the clone
+proof." Both statements are withdrawn:
+
+- The 1368-test figure was a `unittest` run over a narrower radius (28 modules,
+  13 min) and does **not** characterise the repository (~3,880 tests plus
+  ~19,700 subtests). It is not like-for-like with any other count in this
+  manifest and must not be compared to one. The repository-radius measurement
+  is §9.3.7 below.
+- The 21-must-flip addendum encoded the **disproven** S0-BLOCKED theory. The
+  measured `S0-BLOCKED` set is **empty** (§10.2), so the addendum gated
+  nothing. It is STRUCK from S-0's acceptance by magistrate ruling R1 of
+  2026-08-23; S-0's acceptance reverts to its primary, always-authoritative
+  form — the runsheet r2 §5 proving-obligations checklist, which never depended
+  on fixtures.
 
 Two cautions carry forward unchanged. This is a LOCAL run and must never be
 reported as D-151 condition 4's published green; and §9 remains a self-report
-from the implementing seat, so E3's writer≠reviewer audit of THIS round has not
-been performed.
+from the implementing seat. E3's writer≠reviewer audit HAS now been performed
+for the finish round (the independent seat verdict of 2026-08-23, answered in
+§10) — but NOT for the fix round itself, which is what the pending delta
+re-audit must cover.
 
 #### 9.3.1 What was actually wrong — three causes, not one
 
@@ -738,26 +787,60 @@ Both files are the candidate's own and neither is in the r6-pinned set
    applied to `dynamic_or_defensive` in
    `tests/test_arm_readiness_integration.py`. The two sets must stay in step.
 
-#### 9.3.5 The S0-BLOCKED set (21 tests) — S-0 acceptance
+#### 9.3.5 The 21 blocked tests — RECLASSIFIED BY MEASUREMENT (2026-08-23)
 
-Every entry is marked `@unittest.expectedFailure` with the reason string
-`S0-BLOCKED: requires minted _v4 packs`. They must flip green in the S-0 clone
-proof; an entry that passes before S-0 mints is itself a finding.
+**This section's original claim was false and is retracted.** It stated that
+every entry was marked `@unittest.expectedFailure` with the reason string
+`S0-BLOCKED: requires minted _v4 packs` and a docstring, and that all 21 must
+flip green in the S-0 clone proof. The independent seat refuted this and the
+refutation was reproduced. What was wrong, precisely:
 
-**Dominant cause — V1_GRANDFATHERING (18 of 21).** The fixtures author
+1. **`@unittest.expectedFailure` passes on ANY exception**, so all 21 asserted
+   nothing — an import error and a security-relevant refusal ceasing to fire
+   both read as "expected."
+2. **There was no reason string at all.** `unittest.expectedFailure` has
+   signature `(test_item)` and sets exactly one attribute,
+   `__unittest_expecting_failure__`. The quoted text was a trailing SOURCE
+   COMMENT on the decorator line, attached to nothing, absent from every
+   report, and invisible to tooling — so the set could not be mechanically
+   enumerated at all, while being made an S-0 acceptance criterion.
+3. **The reason was measured-wrong for the dominant cause** (see below).
+4. **3 of 21 had a docstring**, not 21 of 21.
+5. **One entry could never flip green** under any mint (it asserts membership
+   of a static code dict, and S-0 mints bytes, not source-map entries).
+
+The cure and the measured partition are recorded in §10.2. In summary: every
+`@unittest.expectedFailure` is gone (zero remain anywhere in `tests/`),
+replaced by `@unittest.skip("<CLASS>: <measured cause>")`, which takes a real
+reportable argument and cannot swallow arbitrary exceptions; and the measured
+partition is **`S0-BLOCKED` = 0, `STRUCTURAL-BLOCKED` = 17,
+`CRASH-BLOCKED` = 4**. No test in this repository is unblocked by S-0's byte
+mint. The groups below are preserved for their per-test detail, RELABELLED to
+the measured classes.
+
+**Group 1 — STRUCTURAL-BLOCKED, fixture schema (14).** Originally filed as
+"V1_GRANDFATHERING (18 of 21)"; the four ACID tests listed under
+`test_arm_readiness_evidence_t0.py` are excluded here and appear as Group 4,
+because they abort the interpreter rather than fail. The fixtures author
 legacy-schema PACK evidence. Under the R1 registry a PASSING freeze requires
 R1-schema evidence, so authoring refuses with
-`legacy generic freeze evidence may not enter the R1 lifecycle`. This is the
-"complete pack fixture with a passing freeze receipt" §9.2 already assigned to
-S-0.
+`legacy generic freeze evidence may not enter the R1 lifecycle`
+(`joulewise/arm_readiness.py:5322`).
 
-- `tests/test_arm_readiness_evidence_t0.py` (7): `test_arm_consumes_volatile_receipts_within_short_horizon`,
+**Why this is NOT an S-0 blocker — the correction.** That refusal has two
+conjuncts, and both are properties of THIS BRANCH: its own registry repoint,
+and `make_go_fixture` authoring legacy generic freeze evidence while R1
+requires content/execution receipt schemas. **Minting `_v4` pack bytes changes
+neither conjunct**, so no byte S-0 produces can flip these tests — independently
+reproduced by two seats. The original text attributed them to the "complete
+pack fixture with a passing freeze receipt" work item §9.2 assigned to S-0;
+that attribution is withdrawn. The real cure is fixture modernization, tracked
+as kernel row `FIXTURE-MODERNIZATION-01` (A84) and NON-GATING for S-0, because
+S-0 proves the transaction on REAL R1 artifacts in its clone, not on fixtures.
+
+- `tests/test_arm_readiness_evidence_t0.py` (3): `test_arm_consumes_volatile_receipts_within_short_horizon`,
   `test_mocked_forbidden_process_evidence_expires_before_arm`,
-  `test_forbidden_process_started_after_authoring_expires_before_arm`,
-  `test_acid_authored_fifteen_then_real_arm_generator_reaches_go`,
-  `test_acid_real_boot_session_then_real_arm_generator_reaches_go`,
-  `test_synthetic_acid_is_hermetic_to_system_timezone`,
-  `test_synthetic_acid_ignores_wall_clock_48_hours_in_future`
+  `test_forbidden_process_started_after_authoring_expires_before_arm`
 - `tests/test_arm_readiness_integration.py` (5): `test_alpha_beta_gamma_end_to_end_pass_and_no_hash_cycle`,
   `test_same_head_pack_terminal_evidence_and_final_arm_bindings_go_stale`,
   `test_verification_recomputes_current_pack_bytes_despite_skip_worktree`,
@@ -770,7 +853,7 @@ S-0.
 - `tests/test_arm_readiness_lifecycle.py` (2): `test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses`,
   `test_boot_session_change_voids_verification_and_consumption`
 
-**Gate shadowing (1).** `tests/test_arm_readiness_lifecycle.py::test_self_wrong_role_and_ordinal_violations_refuse`.
+**Group 2 — STRUCTURAL-BLOCKED, gate shadowing (1).** `tests/test_arm_readiness_lifecycle.py::test_self_wrong_role_and_ordinal_violations_refuse`.
 Its self-reference leg mints with the pack as its OWN predecessor; with
 `family_publication_first_generation: 4` a `_v4` self-predecessor engages the
 family-publication gate FIRST, so the mint RETURNS a REFUSE record carrying
@@ -779,84 +862,182 @@ has no marker") instead of RAISING `readiness_successor_chain_invalid`.
 Confirmed by direct probe. The property is intact but shadowed until a real
 `_v4` family marker exists.
 
-**Historical pairing (1).** `tests/test_arm_readiness_lifecycle.py::test_historical_predecessor_resolves_and_still_anchors_the_chain`
+**Group 3 — STRUCTURAL-BLOCKED, historical pairing (1).**
+`tests/test_arm_readiness_lifecycle.py::test_historical_predecessor_resolves_and_still_anchors_the_chain`
 asserts the successor's predecessor is a `_PROFILE_BY_PACK` entry — true only
 of the `_v2`/`_v1` pairing. The ruled family's predecessor is `_v3`, which is
-neither a map entry nor an installed successor.
+neither a map entry nor an installed successor. `_PROFILE_BY_PACK`
+(`joulewise/arm_readiness.py:287-291`) is a **static code dict** holding only
+the three `_v1` ids, so **this test can never flip green under any mint**: S-0
+mints bytes, not source-map entries. It was therefore wrong to list it as
+S0-BLOCKED under any theory.
 
-**Generator chain (1).** `tests/test_d117_decode_contrast_plan.py::test_authenticated_freeze_transition_preserves_frozen_bytes`
+**Disposition (magistrate ruling R2, 2026-08-23): neither retired nor
+reconstructed now.** The property under test — predecessor-chain
+authentication — is real and safety-relevant, so the test must be reconstructed
+rather than deleted; but reconstruction needs real `_v4`→`_v3` receipt chains
+that exist only AFTER S-0 mints. The honest STRUCTURAL skip therefore stands,
+carrying a pointer to its owning row. **Recorded design for that
+reconstruction:** replace the static `_PROFILE_BY_PACK` map-membership
+assertion with an authenticated runtime `_v4`→`_v3` predecessor proof supplying
+a valid synthetic family-publication marker. The false map-membership assertion
+must be REPLACED, never preserved in any form. Assigned to
+`FIXTURE-MODERNIZATION-01` (A84) as its post-mint item.
+
+**Group 4 — CRASH-BLOCKED (4).** The four ACID tests in
+`tests/test_arm_readiness_evidence_t0.py`:
+`test_acid_authored_fifteen_then_real_arm_generator_reaches_go`,
+`test_acid_real_boot_session_then_real_arm_generator_reaches_go`,
+`test_synthetic_acid_is_hermetic_to_system_timezone`,
+`test_synthetic_acid_ignores_wall_clock_48_hours_in_future`. These ride a
+**pre-existing process-level `SIGABRT` (exit 134)** at
+`joulewise/adapters/mlx_runtime.py:1159`, reached under pytest, which aborts
+the interpreter at ~9% of a full-suite run. **Not a branch regression:** it
+reproduces at merge-base `5523003`, verified by extracting the base tree with
+`git archive`. They are `skip` and not `xfail` for a mechanical reason: an
+`expectedFailure` marker cannot contain a process-level abort — a test that
+kills the interpreter does not make the suite green, it makes the suite
+UNCOLLECTABLE. Tracked as kernel row `MLX-ACID-SIGABRT-01` (A85).
+
+**Group 5 — STRUCTURAL-BLOCKED, generator chain (1).** `tests/test_d117_decode_contrast_plan.py::test_authenticated_freeze_transition_preserves_frozen_bytes`
 drives the committed `_v1` generators with `--family-suffix _v2`; the generated
 `_v2` pack is refused at admission, yielding
 `readiness_row_registry_mismatch` where the test expects
 `readiness_successor_chain_invalid`. Driving them to `_v4` needs the
 intervening `_v3` chain, which is S-0's mint.
 
-#### 9.3.6 OPEN FINDING — the re-derivation refusals are unreachable from a fixture
+#### 9.3.6 RETRACTED FINDING — "the re-derivation refusals are unreachable from a fixture"
 
-Curing the closed refusal census (§9.3.4 item 2) unmasked eight tests in
-`tests/test_arm_readiness_evidence_author.py` whose code paths had been
-unreachable behind the earlier refusal. Three were resolved on ruled grounds and
-are green (per-schema `boot_session_id`, the message->code assertion, and the
-`_v4` id adoption); one more was already counted elsewhere. **Four remain, and
-they share one cause.**
+**This section previously escalated a dilemma to the gauntlet's independent
+seat: was the reviewed-HEAD gate over-broad (a candidate DEFECT), or does HEAD
+custody legitimately subsume the semantic re-derivation check (a CONTRACT
+change)? The independent seat answered: NEITHER. The finding was a
+misdiagnosis — a fixture defect — and it is retracted in full.**
 
-**The finding.** Under R1 the authoring and ARM re-derivation refusals appear to
-be **unreachable from a fixture**: every route that presents authored or
-doctored pack artifacts trips an earlier HEAD-comparison gate first. This was
-established by walking all four gates under ruling, not by inference.
+**What was actually wrong.** The 112-entry changed-set allowlist is
+**pack-name-exact** to the three `_v4` packs, deliberately and with no globs
+(`docs/contracts/receipt_histsem_verifier.md:145-146`). Three of the four
+staged tests built a pack named `d117_floor_qwen25_1p5b_v1` — the default at
+`tests/test_arm_readiness_evidence_author.py:103`. Those 33 paths are absent
+from the allowlist **the candidate itself authored**, so gate 4
+(`joulewise/arm_readiness.py:4308-4314`) fired. The walk through four gates
+never checked whether the fixture's pack was in that allowlist.
 
-The ruled adversary model is that the INTEGRITY gates own an incoherent tamper
-while re-derivation owns the COHERENT one -- source, receipt and sidecars
-rewritten to agree, committed, reviewed ref advanced, so every integrity gate
-passes and only semantics can catch the lie. Variant 4 built exactly that world.
-**The re-derivation refusal still did not fire.** The four gates, in order:
+**Proven by execution, not argument.** Rename the fixture pack to an
+allowlisted `_v4` one and run the *identical* variant-4 coherent rewrite: gate
+4 does not fire, control reaches `_r1_rederive_at_arm`, and it refuses with
+`DOCTRINE_PIN ARM re-derivation differs from authored semantics`
+(`joulewise/arm_readiness_evidence.py:1852`). The candidate's own fourth test
+already used `_v4` and landed exactly on the re-derivation raise at
+`arm_readiness.py:5470`; the original text recorded that and failed to draw the
+inference. An alternative hypothesis — that the fixture merely failed to
+repoint the receipt's own `derivation_commit` — was tested and **refuted**: the
+construction is circular, since rewriting the receipts is itself a change to
+those same paths, so `git diff N..N+1` returns the same 33 paths and gate 4
+fires again.
 
-1. `readiness_pack_not_committed` -- `untracked pack directory:
-   b'arm_readiness.evidence'`, because authoring CREATES that directory.
-2. After committing the authored bytes: `disk and committed bytes/mode differ
-   for b'arm_readiness.sources/doctrine-pin.json'` -- the tamper itself.
-3. After committing the tamper too: `reviewed HEAD changed relevant path(s)`,
-   because committing moves HEAD.
-4. After also advancing `refs/remotes/origin/main` to HEAD (the sanctioned
-   `commit_case` idiom): **still** `reviewed HEAD changed relevant path(s)`,
-   now listing all 33 authored evidence and source paths.
+**Why this was a blocker and not a nit.** Per the S-0 runsheet's mechanism
+proof, the listed authenticator for the 99 allowlisted source/evidence/sidecar
+paths is `readiness_evidence_digest_mismatch` — a digest check, which a
+coherent rewrite defeats **by construction**. Semantic replay is the ONLY
+remaining authenticator for those paths. Adopting the "legitimately subsumed"
+horn would have removed the independent authentication that makes the 112-path
+allowlist lawful under V-1(iii) — the exact ground on which D-151 refused
+Option 1. The misdiagnosis would have propagated a false conclusion into the
+ruling this candidate implements.
 
-Gate 4 is the substantive result. Advancing the reviewed ref cannot satisfy the
-check, because committing the authored evidence **is itself** a change to
-pack-relevant paths -- the very act of making the artifacts presentable is what
-the gate refuses. On this evidence the coherent-rewrite adversary cannot be
-staged at all, and the re-derivation path has no reachable refusal left to
-prove. Whether that is a candidate DEFECT (the gate is too broad and swallows
-the semantic check) or a CONTRACT change (re-derivation is legitimately
-subsumed by HEAD custody under R1) is **for the gauntlet's independent seat**,
-not this one. Per ruling it was not forced further.
+**Cure applied (§10).** The fixtures were retargeted to an allowlisted pack;
+the wrong-expectation at `tests/test_arm_readiness_evidence_author.py:645` (it
+expected `"differs from freshly derived bytes"`, the **legacy v1-path**
+message at `joulewise/arm_readiness_evidence.py:2194`, where the R1 path emits
+`"ARM re-derivation differs from authored semantics"`) was corrected; and the
+variant-4 in-test comments at `:569-578` and `:627-633`, which asserted as
+FACT the claim this retraction refutes ("every integrity gate passes and only
+re-derivation is left" — when measured, the added commit is what *creates* the
+`DEPENDENCY_CHANGED_SET` refusal), were rewritten to state what the fixture
+actually does. **All four tests are now ordinary green**, measured at the
+fix-round head; `test_arm_readiness_evidence_author` runs 24 tests, OK.
 
-The affected tests, each with the evidence that classifies it:
+**Meta-observation carried forward (from the independent seat).** Both of that
+seat's cheap-to-fix blockers shared one signature: the implementer reasoned
+carefully to a conclusion and never ran the cheapest falsifier. §9.3.6 walked
+four gates without checking whether the fixture's pack was in the allowlist it
+had itself authored; the 21 markings were written without running one of them
+to see what actually raised. That is a two-round same-signature pattern, and it
+is why this fix round was conducted **measurement-first**: every claim in §10 is
+backed by a run recorded in this document, and the fix round's own three
+defects (§10.4) were likewise found by running the modules, not by reasoning
+about them.
 
-- `test_source_tamper_refuses_without_overwriting_any_receipt` -- expects
-  `"invalid"`, gets `reviewed HEAD changed relevant path(s)`.
-- `test_coordinated_source_receipt_rewrite_refuses_without_overwrite` -- expects
-  `"differs from freshly derived bytes"`, gets the same.
-- `test_authoring_is_deterministic_valid_and_boot_bound` -- gate 1,
-  `untracked pack directory: b'arm_readiness.evidence'`.
-- `test_authored_evidence_makes_synthetic_pack_freeze_pass` -- **probed to
-  conclusion, and it is NOT the R1-evidence-schema class.** The traceback is
-  `EvidenceLifecycleError: ARM re-derivation refused: primary artifact is not
-  byte-identical to HEAD:
-  configs/campaigns/d117_floor_qwen25_1p5b_v4/plan_tree.json`, raised at
-  `joulewise/arm_readiness.py:5470` in `_authenticate_generic_evidence_item`.
-  That is the same HEAD-comparison family as the other three, so it is
-  classified here and **not** listed S0-BLOCKED. The earlier suspicion that it
-  needed minted R1-schema evidence was not borne out by the probe.
+#### 9.3.7 Repository-radius measurement at the fix-round head
 
-These four are NOT marked `expectedFailure` and NOT counted in the 21: their
-disposition is a live question, and a wrongly listed entry would corrupt the
-S-0 acceptance gate. The two tamper tests carry variant 4 as ruled, so the
-next seat inherits the fixture already staged at the coherent-rewrite adversary.
+This replaces the struck 1,368-test figure with a measurement over the **whole
+repository**, taken at the fix-round head on 2026-08-23 by the close-out seat:
 
-### 9.4 Frozen surfaces, re-verified at `b1c6bee`
+```
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -q          # whole repository, no -k, no deselection
 
-SHA-256 against merge-base `5523003`; all five **IDENTICAL**:
+3746 passed, 116 skipped, 19692 subtests passed in 2679.33s (0:44:39)
+exit code 0
+```
+
+**Zero failures, zero errors, and nothing deselected.** Two properties of that
+line are worth stating explicitly, because each answers a specific finding:
+
+1. **The suite now runs to completion under pytest.** Seat item 15 recorded
+   that it could not: a process-level `SIGABRT` at
+   `joulewise/adapters/mlx_runtime.py:1159`, reached through the four ACID
+   tests, aborted the interpreter partway through and made those tests
+   *uncollectable* rather than merely red — so the seat's own completing run
+   required `--deselect` on all four. Those four now carry `CRASH-BLOCKED`
+   skip decorators, and a skipped test never reaches the aborting code, so the
+   run completes with no deselection and no special invocation.
+   **This is NOT a cure for A85.** The abort still exists in the adapter and
+   still reproduces at merge-base; it is merely no longer *reached*. A85
+   remains open, and its acceptance still requires the abort itself to stop
+   firing.
+2. **The branch is green at repository radius, which it was not before this
+   round's final repair.** The first full run at this head returned
+   `24 failed`. Every one of those 24 — 18 test failures plus 6 subtest
+   failures — was the single stale test double of §10.4 item 4, and **nothing
+   else in the repository failed**. That is why the figure above is quoted
+   from the run made AFTER that repair (commit `8d51f76`); the earlier
+   24-failure run is recorded here rather than discarded, because it is the
+   evidence that the repair was needed and that its blast radius was exactly
+   what §10.4 claims.
+
+**On comparing this to the independent seat's number.** The seat measured
+`6 failed, 3763 passed, 95 skipped, 4 deselected, 17 xfailed, 19674 subtests
+passed in 2904.34s` at **base parity** — a different tree from this branch,
+which adds and modifies tests. The two totals are therefore **not
+like-for-like** and must not be subtracted from one another; that is the exact
+error the struck 1,368-test figure committed. What can be said without
+arithmetic sleight of hand is qualitative and still strong: this branch needs
+no deselection where the base required four, and it reports no failures where
+the base reported six — two of which the seat identified as a pre-existing
+non-deterministic flake in `tests/test_calibration_exits.py` that captures an
+ambient process command line. That flake did not fire in either full run made
+during this round, which is a property of the flake, not evidence that it is
+cured.
+
+The two cautions of §9.3 continue to govern this figure: it is a LOCAL run and
+must never be reported as D-151 condition 4's published green.
+
+### 9.4 Frozen surfaces
+
+**Correction (nit 16).** This section originally recorded a re-verification at
+`b1c6bee`, described in §1 as "the last COMMIT BEARING CODE." That was false:
+`c1b87f6` changed both `joulewise/arm_readiness.py` and
+`joulewise/arm_readiness_evidence.py`, so the frozen-surface check had never
+been run at the actual head. It has since been re-run twice at a real head —
+independently by the seat at `c1b87f6`, and by the close-out seat at the
+fix-round head (§10.5) — and all five surfaces are IDENTICAL by **blob OID**
+against merge-base `5523003` at both, which is a stronger check than the
+recorded SHA-256 because it compares the committed objects rather than the
+working tree.
+
+SHA-256 against merge-base `5523003`; all five **IDENTICAL** (unchanged, and
+re-confirmed byte-for-byte at the fix-round head):
 
 ```
 386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92  joulewise/powermetrics_fiducial.py
@@ -882,12 +1063,415 @@ b1c6bee  G-10: seven-gate comment, blank lines before evaluate_scheduler_gates
 ```
 
 Four-module test record at `b1c6bee`: **99 tests, OK** (was 87 at `bd7ebc1`
-— a net +12 test methods). Four tests that were `inspect.getsource` +
-`assertIn` string greps were rewritten as behavioural tests and renamed to say
-what they now prove; no test was deleted, and no assertion was weakened. The
-two-part-green caution of §5 is unchanged and still governs:
-this is a LOCAL run and must never be reported as D-151 condition 4's
-published green.
+— a net +12 test methods). No test was deleted, and no assertion was weakened.
+
+**Correction (seat should-fix 11).** This section claimed that "four tests that
+were `inspect.getsource` + `assertIn` string greps were rewritten as
+behavioural tests." Measured across `tests/`, `getsource` occurrences went
+**9 at merge-base `5523003` → 13 at `c1b87f6`** — the finish round added source
+greps on net while claiming to have removed them. The fix round cured this:
+measured at the fix-round head the count is **10**, i.e. three of the four were
+genuinely converted to behavioural assertions, and exactly **one net-new grep
+remains** versus merge-base, at
+`tests/test_arm_readiness_integration.py:597`
+(`inspect.getsource(evidence_author._derive_reason_code_coverage)`). That one
+is recorded here rather than claimed away. `tests/test_family_marker.py` now
+contains **zero** `getsource` greps: the two source-string assertions the seat
+flagged as redundant with the behavioural test were deleted, and the test that
+carried them survives as what it always genuinely proved — that the builder
+CLI exposes its four runsheet-exact options.
+
+The two-part-green caution of §5 is unchanged and still governs: this is a
+LOCAL run and must never be reported as D-151 condition 4's published green.
+
+---
+
+## 10. COMBINED FIX ROUND (2026-08-23)
+
+This section is the record of the round that answered two independent reviews
+of `c1b87f6`. Unlike §9 it is **measurement-first**: every count below was
+produced by a run made during this round and recorded here, and the round's own
+defects (§10.4) were found by running the code rather than by reasoning about
+it. Where a finding is not cured, this section says so and says what remains.
+
+### 10.1 What was reviewed, and by whom
+
+| Review | Seat | Verdict | Findings |
+|---|---|---|---|
+| Whole-candidate audit | Independent writer≠reviewer seat, deliberately not the implementer, read-only | **REFUTED** | 3 blockers, 12 should-fix, 4 nits, 2 observations |
+| G-2 security lens | Fresh read-only refuter, distinct lens (contract vs execution) | **REFUTED** | 1 blocker, 3 should-fix, 1 nit |
+
+Both documents are custodied beside this manifest as `s1-seat-verdict.md` and
+`s1-refuter-g2.md`. Their finding IDs are used verbatim below.
+
+**Per-finding disposition.** Every verdict below was checked at source against
+the mechanism, not accepted from a report; "CURED" means the code or the test
+demonstrably does the thing, and a cure that only moved a claim into prose is
+labelled as such. **The round did NOT close everything, and this table is the
+honest count. Of the 21 review findings: 15 CURED, 4 PARTIAL (items 4, 6, 11,
+12), 1 NOT ADDRESSED (item 10), 1 N/A as not a branch regression (item 15).
+The round additionally INTRODUCED 3 defects and left 2 prose defects of the
+B-3 class — all five recorded below rather than left for the delta reviewer to
+find. Eight items are therefore open, plus the structural historical-pairing
+skip of §10.3.**
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| **B-1** re-derivation "unreachable" | **CURED** | Fixtures retargeted registry-side (`tests/test_arm_readiness_lifecycle.py:96-142`); the variant-4 test now lands on the R1 re-derivation raise (`tests/test_arm_readiness_evidence_author.py:667-670`). §9.3.6 retracted in full. |
+| **B-2** vacuous S0-BLOCKED markings | **CURED** | §10.2; `tests/test_s0_blocked_enumeration.py` asserts the partition mechanically. |
+| **B-3** in-test comments assert the refuted claim | **CURED** | `tests/test_arm_readiness_evidence_author.py:599-602,652-655` now say the commit CREATES the changed set. |
+| **G2-1** Ed's digest never authenticated | **CURED** | §10.1.1 below — traced and adversarially replayed. |
+| 5 wrong-expectation | CURED | Now expects `ARM re-derivation differs from authored semantics`. |
+| 7 no closure check on conditional paths | CURED | `joulewise/arm_readiness.py:2025-2032` refuses at registry load; falsified by a patched-constant test, not a literal. |
+| 8 tautological/vacuous scheduler tests | CURED | Per-`check_id` `assertEqual` over the full map; catch-all pinned separately. |
+| 9 dead predecessor-refusal stub | CURED | `tests/test_family_marker.py:549-557` runs the v5-over-v4 case; the stub's `raise` is now live. |
+| 13 implied assertion / unpinned classes | CURED | Positive boot-binding assertion; the full 30-entry freshness map is pinned. |
+| 14 dual-coordinate archival pin | CURED (prose) | The false "must keep resolving" comment is replaced by an accurate one. Correct fix: the finding WAS the false comment. |
+| 17 hand-mirrored `dynamic` sets | CURED | `tests/test_arm_readiness_integration.py:593-635` derives the set by AST parse; the mirrored literal is gone. |
+| 18 unnamed scope expansion | CURED (prose) | `joulewise/arm_readiness.py:6583-6586` names it an intentional fail-closed expansion. |
+| 19 minor test nits | CURED | Exact per-case diagnostics; `assertLessEqual`; comments tokenize-stripped before the grep. |
+| 16 "last COMMIT BEARING CODE" false | CURED | §1 coordinate table and §9.4 corrected; frozen surfaces re-verified at a real code-bearing head (§10.5). |
+| **G2-2** conditional refusal escapes raw | **CURED** | All five anchors converted to governed refusals, incl. `scheduler_gates.py:936-941`. |
+| **G2-3** unenumerated pinset override | **CURED** | `joulewise/arm_readiness.py:3176-3189` refuses any `pinset_path` resolving outside the enumerated coordinate; the refuter's exact probe is now a test. |
+| **G2-4** dormant threshold fails open | **CURED** | Threshold mandatory; `generate_freeze_receipt` no longer swallows the missing-threshold error. |
+| **G2-5** G7 post-verify re-read TOCTOU | **CURED** | `scheduler_gates.py:894-898` binds the digests computed inside the verifier; both re-reads deleted. |
+| 15 pytest `SIGABRT` | **N/A — not a branch regression** | Reproduces at merge-base; the four tests carry `CRASH-BLOCKED` skips; tracked as A85. |
+| **10 G7 PASS never exercised against a real marker** | **NOT ADDRESSED** | Still mocked in every G7 PASS test. Structural — see §10.3 partial 1. |
+| 4 ungoverned escape at the library boundary | **PARTIAL** | The named leak is closed at its root (`validate_step6_confirmation_table` no longer calls the `ArmReadinessError`-raising primitive) plus a defensive conversion. **But `generate_arm_receipt` still has no `ArmReadinessError` catch-all**, so the library boundary remains strictly weaker than `scheduler_gates.py:936-941`. |
+| 6 confirmation-table defaulting asymmetry | **PARTIAL** | `_authenticate_existing_r1` is now threaded and the misleading claim is corrected (§9.1 G-2 row). **The asymmetry itself is unchanged:** arm/verification/scheduler default to campaign custody; freeze, `_verify_arm_receipt`, `verify_consumed_launch` and the authoring entry point pass a bare `None`. All fail closed. |
+| 11 source greps went 9 → 13 | **PARTIAL** | 10 at this head; one net-new remains (§9.5). |
+| 12 `test_every_check_id_has_a_raise_site` | **PARTIAL** | Now an AST walk, so comments and docstrings no longer satisfy it. Still a PRESENCE scan, not reachability, and its `IfExp` clause harvests both branches of any conditional diagnostic assignment whether or not it feeds a raise. |
+
+**Three defects the round INTRODUCED** (found by the same source-level audit,
+verified by this seat, recorded as open rather than left for the delta reviewer
+to discover):
+
+- `joulewise/arm_readiness.py:10742` — `assert table is not None and table_raw
+  is not None` is load-bearing control flow in the published lane. Under
+  `python -O` the assert is stripped and `table["git"]` raises a bare
+  `TypeError` — an ungoverned escape of exactly the class findings 4 and G2-2
+  were written to cure. Reachable only if the invariant breaks, but the project
+  does not accept bare exceptions at this boundary.
+- `joulewise/arm_readiness.py:10302-10305` — `_family_member` now converts
+  every residual `ArmReadinessError` into
+  `FamilyPublicationError("evidence_set_mismatch")`. Fail-closed and governed,
+  but registry/schema/structural faults are now DIAGNOSED as an evidence-set
+  mismatch, widening what that check_id means inside a closed enumeration.
+- `joulewise/arm_readiness.py:3369` — `verify_receipt_histsem_pack` gained a
+  private `_pinset_rows` keyword that bypasses `_load_histsem_pinset` entirely.
+  It is underscore-private, reached only from two internal call sites and one
+  test, and is NOT exposed by any CLI — so it is not the G2-3 lane reopened —
+  but it is an in-process override of the enumeration G2-3 just closed, and
+  nothing asserts it is unreachable from an external caller.
+
+Two further prose defects of the B-3 class were noted and are recorded, not
+cured: `_require_confirmed_conditional_path`'s docstring
+(`joulewise/arm_readiness.py:4207-4217`) still enumerates only the old
+admission conditions and never mentions the out-of-band digest that is now the
+authenticator; and `generate_freeze_receipt:6572` calls
+`_family_first_generation` unguarded, a fail-ugly path defended only by a check
+in a different module.
+
+#### 10.1.1 G2-1 — the blocker, traced
+
+Both and only both consumers of the confirmation table `C` route through
+`_authenticate_confirmation_table` (`joulewise/arm_readiness.py:10551`): the
+changed-set subtraction at `:4231` and the marker/publication verifier at
+`:10672`. That function, **in this order**:
+
+1. `:10564-10567` — a `None` expected digest refuses `confirmation_missing`.
+   Nothing is read.
+2. `:10569-10575` — a non-64-hex digest refuses `confirmation_mismatch`.
+3. `:10578-10584` — only NOW are `C` and its sidecar read, the sidecar being a
+   transport-integrity guard and explicitly **not** an authenticator, since it
+   is made from the same bytes it accompanies.
+4. `:10585-10589` — `sha256(C) != expected_confirmation_digest` refuses.
+5. `:10590-10595` — only after that equality holds is
+   `validate_step6_confirmation_table` called. **No table semantics — including
+   the literal `authority == "ED"` and `decision == "YES"` — are parsed or
+   trusted before the digest matches.**
+
+The subtraction ordering is unchanged and still correct: `outstanding.discard`
+runs only on a clean return (`:4302-4313`). **No consumer derives `hC`**: every
+entry point defaults it to `None` and fails closed, and it arrives only from an
+explicit operator flag on the four CLIs. The refuter's attack is replayed as a
+test at `tests/test_launch_window.py:511-689` — a real repository, committed
+attacker pinset bytes, a canonical `C` carrying the actual successor digest
+with literal `ED`/`YES` and a matching sidecar — and the launcher exits 2 with
+`readiness_r1_dependency_changed_set`, subtracting nothing and never reaching
+`execve`, both with no digest and with a wrong one; only the true `sha256(C)`
+subtracts.
+
+**Residual risk, stated plainly.** `hC` is an **unauthenticated
+operator-supplied string**. The trust root moved from repository bytes —
+forgeable by whoever writes `C` — to an out-of-band input, which is what the
+refuter demanded. But nothing in code binds that string to Ed.
+`docs/contracts/d117_step6_confirmation_table.md:52-56` says the post-fixation
+standing source is the literal pinned in the D-151 fixation commit; **no code
+pins that literal**, so that half of the contract is prose. An adversary who
+also controls the invocation, or an operator who computes `hC` from the file
+rather than from transaction custody, still forges. This is the honest boundary
+of the cure and belongs in the S-0 runsheet's operator discipline.
+
+### 10.2 The blocked-test partition — measured and machine-readable
+
+This is the cure for seat blocker **B-2**, whose five distinct defects are
+enumerated and retracted in §9.3.5.
+
+**`@unittest.expectedFailure` is eliminated.** Zero decorators remain anywhere
+in `tests/`. It was the wrong tool twice over: it passes on ANY exception (so a
+security-relevant refusal ceasing to fire reads as "expected"), and it takes no
+argument, so the reason it was documented with was a source comment attached to
+nothing and invisible to every report and every tool.
+
+Each blocked test now carries `@unittest.skip("<CLASS>: <measured cause>")`,
+which takes a real reportable argument, plus a docstring. The classes are:
+
+| Class | Count | Meaning |
+|---|---|---|
+| `S0-BLOCKED:` | **0** | No test in this repository is unblocked by S-0's byte mint. |
+| `STRUCTURAL-BLOCKED:` | 17 | 14 fixture-schema + 3 named singletons (§9.3.5 groups 1, 2, 3, 5). |
+| `CRASH-BLOCKED:` | 4 | The ACID tests riding the pre-existing `SIGABRT` (§9.3.5 group 4). |
+
+**The measured `S0-BLOCKED` set is EMPTY.** That is the substantive result of
+this round, and it is why magistrate ruling R1 of 2026-08-23 STRUCK the 21-test
+flip addendum from S-0's acceptance: the addendum encoded a theory that
+measurement disproved, and since the set is empty it gated nothing. S-0's
+acceptance reverts to its primary, always-authoritative form — the runsheet r2
+§5 proving-obligations checklist (r4-2/V-2 obligations, the full probe battery,
+and the D-151/marker additions), which never depended on fixtures at all. The
+runsheet r2 §5.1 amendment recording that strike is a lead edit applied at the
+pre-execution read of the runsheet; this round does not touch the runsheet.
+
+The partition is not a prose claim. `tests/test_s0_blocked_enumeration.py`
+asserts it mechanically by AST parse over every `tests/test_*.py`: it requires
+zero `expectedFailure` decorators, the exact counts 0/17/4 totalling 21, and —
+for every blocked test — exactly one class prefix, a non-empty cause clause
+after the prefix, and a non-empty docstring. A future edit that reintroduces an
+`expectedFailure`, or adds a blocked test without a machine-readable cause,
+fails that test.
+
+### 10.3 The two honest partials
+
+Recorded as OPEN, not as cured.
+
+**Partial 1 — FIX-10 (G-7's PASS direction) is a post-S-0 item.** The seat's
+item 10 is that G7's PASS path has never been exercised against a real family
+marker; `verify_family_publication_marker` is mocked and the on-disk marker in
+those tests is the literal `b"marker"`. This cannot be closed at this head for
+a structural reason, not a scheduling one: a genuine PASS requires the three
+real `_v4` packs and a real published marker, which are **S-0's outputs and do
+not exist yet**. Recorded as a post-S-0 obligation rather than papered over
+with a better mock.
+
+**Partial 2 — the historical-pairing test remains a STRUCTURAL skip.**
+`test_historical_predecessor_resolves_and_still_anchors_the_chain` can never
+flip green under any mint, because it asserts membership of a static code dict
+(`_PROFILE_BY_PACK`) and S-0 mints bytes, not source-map entries. Per
+magistrate ruling R2 it is **neither retired nor reconstructed now**: the
+property is real and safety-relevant, so it must be reconstructed rather than
+deleted, but reconstruction needs real `_v4`→`_v3` receipt chains that exist
+only post-S-0. The skip carries a pointer to the row that owns the
+reconstruction, and the design is recorded in §9.3.5 group 3.
+
+### 10.4 The fix round's OWN defects, found by measurement
+
+Fix rounds introduce defects. This section records the **four of ONE CLASS**
+that were found by **running** the code rather than by reasoning about the diff
+— the discipline the seat's meta-observation demanded. All four share a single
+signature: **a surface the round moved on ONE SIDE ONLY.** Three further
+defects of a different class, found by source-level audit rather than by
+execution, are recorded in §10.1 and remain OPEN. These four are recorded here
+because a reader who sees only the green result would not know the round had to
+be corrected to reach it.
+
+1. **A stale hand-built argument namespace.**
+   `tests/test_arm_readiness_lifecycle.py::install_launch_manifest` constructs
+   an `argparse.Namespace` by hand for `launch_window.launch()`. The round
+   added `expected_confirmation_digest` to that CLI and updated the sibling
+   builder in `tests/test_launch_window.py`, but not this one, so the launcher
+   raised `AttributeError`. Cured by mirroring the parser, which supplies
+   `None`.
+2. **A signature fence pinned on one side.**
+   `tests/test_arm_readiness_evidence_author.py` asserted the public authoring
+   signature was exactly `("pack_root",)`, while the library had already
+   RE-FOUNDED that same fence at import time
+   (`_assert_public_author_signature`) around the widened three-tuple. The test
+   now mirrors the library exactly and additionally pins that both step-6
+   parameters are keyword-only with a `None` default; the anti-injection
+   assertions are untouched. **This one widens a fence originally established
+   by a cold-gate synthesis, and is flagged as the first item for the delta
+   re-audit** — see §10.7.
+3. **A synthetic registry that predates a new closure check.**
+   `tests/test_arm_readiness_evidence.py::resolved_r1_row_registry` shipped an
+   empty allowlist, which the round's new registry-load closure check —
+   the cure for the fail-OPEN `R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS` drift —
+   correctly refuses. Cured by having the synthetic ROW registry carry the real
+   conditional paths, for the same reason it already carries the real refusal
+   vocabulary. Note that the check behaved exactly as designed: it failed
+   CLOSED on a registry that did not enumerate the path it governs.
+
+4. **A test DOUBLE whose signature no longer matched the function it stands
+   in for — and the one defect the module-level verification could not see.**
+   `tests/test_arm_readiness.py::_verify_with_launch_recipe_replay` patches
+   `_derive_arm_semantics_for_verification` with a `side_effect=` double whose
+   signature accepted only `launch_binding_cache`. Production now also passes
+   `step6_confirmation_table` and `expected_confirmation_digest`, so `TypeError`
+   was raised **from inside the mock** and the tests failed for a reason
+   unrelated to what they assert. Blast radius **24**: 18 test failures plus 6
+   subtest failures, being 3 methods across the 6 modules that inherit the
+   shared `LaunchConsumptionV2Tests` mixin. Cured by mirroring the production
+   signature, naming both parameters explicitly rather than swallowing them
+   with `**kwargs`, so the next signature change fails loudly at the double
+   instead of drifting silently.
+
+   **Why this one matters out of proportion to its size.** It was invisible to
+   the twelve-module joint verification because `tests/test_arm_readiness.py`
+   — the module that DEFINES the shared mixin — was not in that set, which had
+   been derived from the reviews' scope. Only the repository-radius run found
+   it. It was also the ENTIRE delta between this branch and the independent
+   seat's baseline: of the 24 failures in the first full run, all 24 were this
+   one defect and **nothing else in the repository failed**.
+
+**The systematic response, because this was the FOURTH of one class.** Rather
+than fix a fourth instance and re-run — the shape the standing escalation
+trigger exists to interrupt — every signature-bearing double was
+cross-referenced against every changed signature mechanically: all functions in
+the eight touched modules were AST-diffed between `c1b87f6` and the fix-round
+head, yielding **22 functions whose signature changed** and **9
+`side_effect=<named function>` doubles targeting them**. The other 8 accept
+`*args, **kwargs` or `**_kwargs` — and `tests/test_scheduler_gates.py:310`
+deliberately reads `expected_confirmation_digest` — so the one repaired above
+was the only broken one. No further instances remain.
+
+An earlier mechanical sweep for the other shapes of this class — every
+hand-built namespace feeding an `args.<attr>` reader, every `inspect.signature`
+and arity pin, every `__all__` census, every CLI flag-list assertion, and every
+"these two sets must stay in step" pair — found **no others** that are
+test-enforced. It did find three stale hand-transcribed digests in §2.4 of this
+manifest, which are corrected there. **Note the gap it left:** that sweep did
+not cover mock doubles, which is exactly where defect 4 was hiding. The lesson
+is recorded rather than smoothed over.
+
+**These four are not the whole story.** A separate source-level audit of the
+round's diff against both review documents found three further defects the
+round introduced, of a DIFFERENT class — not one-sided mirrors but new code
+paths — together with two prose defects. They are recorded in §10.1 and are
+open, not cured.
+
+### 10.5 Frozen surfaces, re-verified at the fix-round head
+
+The four r6-pinned estimator sources and the archival v1 registry, compared to
+merge-base `5523003` **by blob OID** — the committed objects, not the working
+tree — at the fix-round head. All five **IDENTICAL**:
+
+```
+9a552db781ab  joulewise/powermetrics_fiducial.py             IDENTICAL
+bc2b4544fc4b  joulewise/uncertainty_evidence.py              IDENTICAL
+8fa6db3c444f  joulewise/adapters/powermetrics.py             IDENTICAL
+82449d582092  joulewise/reduce.py                            IDENTICAL
+434f1f6d33fe  configs/arm_readiness/d117_row_registry_v1.json IDENTICAL
+```
+
+Their SHA-256 values are unchanged from those recorded in §9.4 and re-confirmed
+byte-for-byte at this head. This closes nit 16's real consequence: the check
+had never been run at a commit that actually bore code.
+
+### 10.6 Kernel rows to register in the next kernel wave
+
+Two rows are drafted and carried forward by this round. Both are **P3 Backlog,
+READY [AGENT]**, and both are **NON-GATING for S-0**.
+
+- **A84 `FIXTURE-MODERNIZATION-01`** — modernize the arm-readiness test
+  fixtures so `make_go_fixture` authors R1 content/execution receipt schemas
+  instead of legacy generic freeze evidence, unblocking the 14
+  `STRUCTURAL-BLOCKED` fixture-schema tests that stop at
+  `joulewise/arm_readiness.py:5322`; and, as its POST-MINT item, reconstruct
+  `test_historical_predecessor_resolves_and_still_anchors_the_chain` as an
+  authenticated runtime `_v4`→`_v3` predecessor proof with a valid synthetic
+  family-publication marker, REPLACING (never preserving) the false
+  `_PROFILE_BY_PACK` map-membership assertion. Non-gating because S-0 proves
+  the transaction on REAL R1 artifacts in its clone, not on fixtures.
+- **A85 `MLX-ACID-SIGABRT-01`** — cure the pre-existing process-level `SIGABRT`
+  (exit 134) at `joulewise/adapters/mlx_runtime.py:1159`, reached under pytest
+  via the four ACID tests, which aborts the interpreter partway through a
+  full-suite run and makes those tests uncollectable rather than merely red.
+  NOT a branch regression: it reproduces at merge-base `5523003`, verified by
+  extracting the base tree with `git archive`. Any cure is adapter-side and
+  must not touch the four r6-pinned estimator sources.
+
+The full paste-ready row text for both, with acceptance evidence and fences, is
+carried in the round's lead packet (`s1-fixround-packet.md`, custodied beside
+this manifest).
+
+### 10.6b Fix-round commits, and the state they leave
+
+```
+d3101d6  WIP: combined fix round — streams A+B reconciled, pre-final-verification
+134c05d  S-1 fix round: ruled seam cure + three defects found by joint verification
+8d51f76  S-1 fix round: repair the fourth one-sided mirror — a test double's signature
+<this>   S-1 fix round: MANIFEST rewritten from measured results  (documentation-only)
+```
+
+State at `8d51f76`, all measured during this round:
+
+- **Repository radius:** `3746 passed, 116 skipped, 19692 subtests passed`,
+  exit 0 — zero failures, zero errors, nothing deselected (§9.3.7).
+- **The fourteen review-scope modules:** 275 tests, zero failures, zero errors,
+  21 skips, one `unittest` invocation per module (§9.3).
+- **The blocked partition:** `S0-BLOCKED` 0, `STRUCTURAL-BLOCKED` 17,
+  `CRASH-BLOCKED` 4, asserted mechanically (§10.2).
+- **Frozen surfaces:** all five IDENTICAL to merge-base `5523003` by blob OID
+  at this exact head (§10.5).
+
+### 10.7 What the delta re-audit must check
+
+This section is a **self-report by the seat that ran the fix round**, and by
+the same rule §9 was held to, it cannot grade itself. The round has NOT been
+independently audited. A delta re-audit over the whole range
+`c1b87f6..<fix-round head>` is required before acceptance, and these are its
+charges, in priority order:
+
+1. **The widened authoring-signature fence (§10.4 item 2) — FIRST ITEM.** The
+   public `author_arm_readiness_evidence` signature grew from `("pack_root",)`
+   to a three-tuple, and BOTH the library's import-time assertion and the
+   mirroring test were written by the seats that widened it. Confirm against
+   the 2026-08-12 cold-gate synthesis that two keyword-only, `None`-defaulted
+   CUSTODY inputs are admissible under a fence whose stated purpose is to admit
+   no OUTCOME-BEARING seam — and that they carry no outcome. If that reading is
+   wrong, the correct cure is to revert the authoring-path threading, not to
+   relax the fence.
+2. **G2-1's closure, adversarially.** The cure makes the operator-supplied
+   digest mandatory and refuses before parsing any table semantics. Re-run the
+   refuter's own attack and the six bypasses. Confirm in particular that the
+   expected digest is NEVER derived from the table it authenticates, on any
+   path, and that every consumer that omits it REFUSES rather than proceeding.
+3. **The fix round's edits to the reviews' own findings.** Every disposition in
+   §10.1 was verified at source by this seat, but the seat is the interested
+   party. Spot-check the CURED verdicts against the mechanism, and confirm that
+   nothing recorded as cured is merely a prose claim.
+4. **The retraction of §9.3.6.** Confirm that retargeting the fixtures to an
+   allowlisted pack genuinely reaches the re-derivation refusal — that the four
+   tests are green for the RIGHT reason and not because an assertion was
+   weakened.
+5. **The struck 21-flip addendum.** Confirm the measured `S0-BLOCKED` set is
+   genuinely empty — i.e. that no test now carrying `STRUCTURAL-BLOCKED` would
+   in fact flip on S-0's mint. A misfiled test here would silently remove a
+   real S-0 acceptance obligation.
+6. **The two honest partials (§10.3)** are genuinely structural, not
+   scheduling convenience.
+7. **The three defects this round introduced and the two prose defects**
+   (§10.1). They are recorded, not cured. Decide whether the `-O`-strippable
+   `assert` in the published lane, the widened `evidence_set_mismatch`
+   diagnosis, and the private `_pinset_rows` override are acceptable at this
+   head or must be cured before acceptance. None is a blocker in this seat's
+   judgement; that judgement is exactly what wants an independent check.
+8. **The residual on G2-1** (§10.1.1): `hC` is an unauthenticated
+   operator-supplied string, and the contract's "literal pinned in the D-151
+   fixation commit" is prose that no code enforces. Decide whether that pin
+   must become code before S-0, or whether it is operator discipline recorded
+   in the runsheet.
+
 
 ---
 
@@ -899,4 +1483,15 @@ by the audit seat rather than accepted from a delegated report.*
 *§9 authored by the finish-round implementer seat, 2026-08-22, against
 `b1c6bee`. It is a self-report and is marked as one: E3's writer≠reviewer
 audit has NOT been performed for this round, and acceptance requires an
-independent seat over §9's claims.*
+independent seat over §9's claims. That audit HAS since been performed — the
+independent seat verdict of 2026-08-23 — and its findings are dispositioned in
+§10.1; §9's corrected regions carry their corrections inline.*
+
+*§10 authored by the fix-round close-out seat, 2026-08-23, against
+`8d51f76`. **It is a self-report and is marked as one.** Every count in it was
+produced by a run made during the round and recorded in it, and every finding
+disposition was checked at source rather than accepted from a delegated report
+— but the seat that ran the round cannot grade the round. The delta re-audit
+charged in §10.7 is required before acceptance, and §10.1 deliberately records
+the three defects this round introduced, plus the four it introduced and
+cured, rather than leaving any of them to be found.*
