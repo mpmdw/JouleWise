@@ -59,11 +59,34 @@ jobs:
               assert seconds >= threshold, (module, seconds, threshold)
               timings[module] = seconds
           ordinary = tuple(module for module in discovered if module not in exclusive)
-          partitions = shard_tests.partition_modules(ordinary, timings, 4)
-          totals = shard_tests.partition_totals(partitions, timings)
+
+          # UNIT-atomic, not module-atomic. A shard's floor used to be the
+          # single largest MODULE, and tests.test_reduce alone is 1544 s --
+          # larger than an even four-way share -- so NO shard count could
+          # get below it. Modules named in split_modules are spread across
+          # shards at test granularity instead. This edits no test file and
+          # skips nothing: expand_units emits one unit per declared heavy
+          # test plus ONE remainder unit holding every other test in that
+          # module, and verify_split_declaration fails the build closed if
+          # a declared id no longer exists.
+          splits = {
+              module: declaration
+              for module, declaration in shard_tests.load_split_declarations().items()
+              if module in set(ordinary)
+          }
+          unknown = shard_tests.conservative_unknown_weight()
+          units, weights = shard_tests.expand_units(
+              ordinary, timings, splits, unknown_weight=unknown
+          )
+          partitions = shard_tests.partition_modules(
+              units, weights, 4, unknown_weight=unknown
+          )
+          totals = shard_tests.partition_totals(
+              partitions, weights, unknown_weight=unknown
+          )
           print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
           index = int(os.environ["SHARD_INDEX"])
-          raise SystemExit(shard_tests.run_shard(partitions[index - 1], 4, index))
+          raise SystemExit(shard_tests.run_units(partitions[index - 1], 4, index))
           PY
       - name: CLI smoke - validate example configs
         run: |
@@ -116,28 +139,45 @@ jobs:
 
   calibration-writer-crash-matrix-exclusive:
     # Exclusive because fallback-weight shard placement is unsound for this
-    # module: it is absent from the ordinary timing map and its hosted
-    # runtime is dominated by its own subprocess-heavy cases (2026-08-11
-    # hosted shard observation 5317.216 s, run 31536564643; a standalone
-    # hosted attempt exceeded a 60-min ceiling; bench standalone is
-    # 145.911 s — the slowness is hosted-runner-specific, the same
-    # CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY fixed for
-    # test_calibration_exits, registered as WO-CRASHMATRIX-RELIABILITY).
-    # Exclusivity buys FASTER ordinary-shard signal; it does not shorten
-    # this module's own job — the 120-minute
-    # NOTE (TEST-SPEED-01, 2026-08-23): the "~175 s estimated per shard"
-    # figure previously claimed here was an artifact of the superseded
-    # 2026-08-03 quiet-bench timing map, which understated hosted cost by
-    # up to 68x. Measured ordinary shards under that map were 41/14/7/6
-    # minutes, not ~3. The map is now hosted-measured; see
-    # docs/process_traces/2026-08-23-speed/.
-    # ceiling covers the observed ~89-minute hosted runtime with ~1.35x
-    # headroom until the reliability rework lands.
+    # module: its hosted runtime is dominated by its own subprocess-heavy
+    # cases — the same CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY
+    # fixed for test_calibration_exits, registered as
+    # WO-CRASHMATRIX-RELIABILITY. Exclusivity buys FASTER ordinary-shard
+    # signal; it does not shorten this module's own job.
+    #
+    # TEST-SPEED-01 (2026-08-23) changed two things here.
+    #
+    # 1. THE EVIDENCE PIN WAS STALE BY 2.7x. This job used to assert the
+    #    module costs 5317.216 s, and its comment cited "~89 minutes". That
+    #    figure was a 2026-08-11 observation of the module running inside a
+    #    SHARED shard, taken BEFORE it was made exclusive; exclusivity is
+    #    exactly what cured it. Measured today in its own job: 2005 s on
+    #    3.11 and 1370 s on 3.14 (run 32621080380). The declaration now
+    #    carries the current figure, and the 120-minute ceiling stands
+    #    unchanged as headroom.
+    #
+    # 2. THE JOB IS NOW SPLIT IN TWO. Two of the 15 tests are 95.5% of the
+    #    cost, so max-job time is floored at ~1385 s for EVERY split count
+    #    >= 2 — K=3 and beyond buy literally zero wall clock and only burn
+    #    concurrent-job budget, which is capped at 20. K=2 it is: ~33 min
+    #    becomes ~23 min. The split is runner-side only, edits no test file,
+    #    and skips nothing (see split_modules in scripts/test_timings.json:
+    #    one declared heavy test, plus a remainder unit computed at run time
+    #    that holds every other test in the module). Independence was
+    #    audited AND the K=2 split was executed with both shards running
+    #    concurrently on one machine — harsher than CI — with both passing.
+    #
+    # The residual ~23 min is ONE indivisible test method. No sharding
+    # strategy goes below it; removing it is WO-CRASHMATRIX-RELIABILITY,
+    # which changes test semantics and is out of TEST-SPEED-01's fence.
+    # See docs/process_traces/2026-08-23-speed/.
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.14"]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -151,16 +191,155 @@ jobs:
           import json
           from pathlib import Path
           payload = json.loads(Path("scripts/test_timings.json").read_text())
-          row = payload["exclusive_modules"]["tests.test_calibration_writer_crash_matrix"]
-          assert row["evidence_range_seconds"] == [145.911, 5317.216]
-          assert row["seconds"] == 5317.216
-          assert payload["seconds_by_module"]["tests.test_calibration_writer_crash_matrix"] == row["seconds"]
+          module = "tests.test_calibration_writer_crash_matrix"
+          row = payload["exclusive_modules"][module]
+          assert row["evidence_range_seconds"] == [145.911, 2005.0]
+          assert row["seconds"] == 1990.65
+          assert payload["seconds_by_module"][module] == row["seconds"]
           assert row["seconds"] >= row["fallback_rejection_threshold_seconds"]
+          # The split must account for the whole module: one declared heavy
+          # test plus a remainder, summing to the declared cost.
+          split = payload["split_modules"][module]
+          declared = sum(float(value) for value in split["declared"].values())
+          assert abs(declared + float(split["remainder_weight_seconds"]) - row["seconds"]) < 0.01
           PY
       - name: Compile calibration sources
         run: python -m compileall -q joulewise tests scripts/validate_powermetrics_fiducial.py
-      - name: Exclusive calibration-writer crash-matrix module
-        run: python -m unittest -v tests.test_calibration_writer_crash_matrix
+      - name: Exclusive calibration-writer crash-matrix module (shard ${{ matrix.shard }} of 2)
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          sys.path.insert(0, "scripts")
+          import shard_tests
+
+          module = "tests.test_calibration_writer_crash_matrix"
+          timings = shard_tests.load_timing_map()
+          splits = shard_tests.load_split_declarations()
+          unknown = shard_tests.conservative_unknown_weight()
+          # expand_units runs verify_split_declaration, which fails closed if
+          # the declared heavy test id no longer exists. That is the case a
+          # computed remainder would otherwise absorb in silence, handing one
+          # shard ~20 minutes of unaccounted work while the weights disagree.
+          units, weights = shard_tests.expand_units(
+              (module,), timings, {module: splits[module]}, unknown_weight=unknown
+          )
+          partitions = shard_tests.partition_modules(
+              units, weights, 2, unknown_weight=unknown
+          )
+          totals = shard_tests.partition_totals(
+              partitions, weights, unknown_weight=unknown
+          )
+          print("CRASH-MATRIX SHARD ESTIMATES", ",".join(f"{v:.3f}" for v in totals))
+          index = int(os.environ["SHARD_INDEX"])
+          raise SystemExit(shard_tests.run_units(partitions[index - 1], 2, index))
+          PY
+
+  pr-fast:
+    # ==================================================================
+    # ADDITIVE EARLY SIGNAL. THIS JOB IS NOT A GATE AND NEVER SUBSTITUTES
+    # FOR THE FULL SUITE.
+    #
+    # Read this before touching anything below. The authoritative gate for
+    # every merge, every whole-window verdict, and every audited head
+    # remains the FULL suite: the `test` shard matrix plus both exclusive
+    # module jobs, all of which continue to run on this same pull request
+    # exactly as they did before this job existed. Nothing was removed from
+    # them and no required check changed. This job only reports an obvious
+    # breakage sooner — roughly 4 minutes instead of roughly 17 — so a
+    # contributor is not left waiting on the full matrix to learn they
+    # broke an import.
+    #
+    # Consequently a GREEN pr-fast means nothing on its own. A RED pr-fast
+    # is real information (something is definitely broken); a green one is
+    # merely the absence of early bad news. Do not promote this job to a
+    # required status check, and do not let its result stand in for the
+    # full suite in any merge, verdict, or audit decision. If you ever want
+    # it to gate, that is a lead-gated required-check change and must be
+    # proposed, not applied here.
+    #
+    # WHAT IT RUNS: every ordinary module whose measured hosted weight is
+    # at or below scripts/test_timings.json's pr_fast_tier.max_module_seconds
+    # (30 s). At the 2026-08-23 hosted measurement that is 126 of 138
+    # modules and 2848 of 3804 test methods — 74.9% of the suite's tests
+    # for 10.7% of its runtime. The excluded modules are the measured heavy
+    # tail; they carry 25.1% of the tests but 89.3% of the cost, which is
+    # exactly why they are the ones the full suite keeps and this job drops.
+    #
+    # The module list is DERIVED AT RUN TIME from the timing map, never
+    # checked in, so a newly added test module cannot silently fall out of
+    # it. An unmeasured module takes the conservative unknown weight
+    # (29.834 s), which is below the cutoff, so new modules are INCLUDED by
+    # default — for an additive tier the safe failure is running too much.
+    # ==================================================================
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          # 3.11 only. The full suite covers 3.11 and 3.14; this tier is a
+          # latency device, not a compatibility matrix, and 3.11 is the
+          # consistently slower (therefore binding) interpreter.
+          python-version: "3.11"
+      - name: Compile Python sources
+        run: python -m compileall -q joulewise tests
+      - name: Fast tier - light modules only (NOT A GATE; full suite still runs)
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, "scripts")
+          import shard_tests
+
+          payload = json.loads(Path("scripts/test_timings.json").read_text())
+          policy = payload["pr_fast_tier"]
+          cutoff = float(policy["max_module_seconds"])
+          shards = int(policy["shards"])
+          exclusive = frozenset(payload["exclusive_modules"])
+          timings = shard_tests.load_timing_map()
+          unknown = shard_tests.conservative_unknown_weight()
+
+          discovered = shard_tests.discover_test_modules()
+          selected = tuple(
+              module
+              for module in discovered
+              if module not in exclusive and timings.get(module, unknown) <= cutoff
+          )
+          dropped = [
+              module
+              for module in discovered
+              if module not in exclusive and module not in selected
+          ]
+          print(f"FAST TIER selected={len(selected)} dropped={len(dropped)} of {len(discovered)}")
+          print("FAST TIER dropped heavy tail: " + ", ".join(sorted(dropped)))
+          if not selected:
+              raise SystemExit("fast tier selected zero modules; refusing to report success")
+
+          partitions = shard_tests.partition_modules(
+              selected, timings, shards, unknown_weight=unknown
+          )
+          totals = shard_tests.partition_totals(
+              partitions, timings, unknown_weight=unknown
+          )
+          print("FAST SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
+          index = int(os.environ["SHARD_INDEX"])
+          raise SystemExit(shard_tests.run_shard(partitions[index - 1], shards, index))
+          PY
 
   build:
     runs-on: ubuntu-latest

@@ -1,8 +1,16 @@
 {
- "_provenance": "RE-MEASURED 2026-08-23 from GitHub-hosted ubuntu-latest CI logs (TEST-SPEED-01 lever 1). Weights are per-module wall seconds printed by scripts/shard_tests.py's own 'MODULE PASS ... seconds=' line, harvested from every ordinary shard job of runs 32621080380 and 32609926884 (python 3.11 and 3.14, four observations per module). Each weight is the MAXIMUM observation across both runs and both interpreters, because shard packing must not underestimate the binding interpreter (3.11 is consistently the slower one). Superseded map: quiet-bench serial timings of 2026-08-03, which covered 93 of the 140 modules and understated the hosted cost of the heavy tail by up to 68x (tests.test_whole_window_selection 7.292 s bench vs 498.9 s hosted; tests.test_reduce 48.386 s vs 1544.5 s). That understatement is what produced the observed 41-minute shard-3 job against a 175-second estimate. Bench numbers are NOT interchangeable with hosted numbers for this purpose and the bench corpus is retained separately under docs/process_traces/2026-08-23-speed/ rather than in this scheduling map.",
+ "_provenance": "RE-MEASURED 2026-08-23 from GitHub-hosted ubuntu-latest CI logs (TEST-SPEED-01 lever 1). Weights are per-module wall seconds printed by scripts/shard_tests.py's own 'MODULE PASS ... seconds=' line, harvested from every ordinary shard job of runs 32621080380 and 32609926884 (python 3.11 and 3.14, four observations per module). Each weight is the MAXIMUM observation across both runs and both interpreters, because shard packing must not underestimate the binding interpreter (3.11 is consistently the slower one). WHY THE PREDECESSOR FAILED: the superseded map was quiet-bench serial timings of 2026-08-03. It failed for two INDEPENDENT reasons. (a) COVERAGE: it held 93 entries against 140 discovered modules, and the 45 unmeasured modules each took the MEDIAN fallback of 0.868 s, which on this heavy-tailed distribution prices an unmeasured module as free. (b) IT NO LONGER REPRODUCES: its numbers cannot be re-measured on the same bench today. tests.test_p2038_production_path is recorded there as 133.364 s but measures 227.3 s on the bench now; tests.test_powermetrics_fiducial is recorded as 29.557 s and measures 49.4 s. The tests genuinely became slower after that corpus was taken. COVERAGE TODAY: 140 of the 141 currently discovered modules are measured. The one exception is tests.test_shard_split, added by this same change to cover the new split mechanism; it has never run in CI, so it correctly takes unknown_module_weight_seconds until the next harvest. That is the fallback behaving as designed rather than a gap. NOTE ON THE HOSTED/BENCH GAP, corrected 2026-08-23: an earlier draft of this provenance attributed the whole error to bench-versus-hosted and quoted ratios up to 68x. THAT WAS WRONG and is retracted. Measured hosted/bench today is only about 2.8x-3.2x (test_reduce 3.21x, p2038 2.82x, whole_window_selection 3.23x, run_campaign 2.94x, with eleven per-test pairs falling between 2.74x and 3.27x). The large apparent ratios came from comparing hosted seconds against the STALE 2026-08-03 figures, not against the bench as it is. Both facts independently justify scheduling CI from hosted measurements, but they are different faults and are recorded here as such.",
  "unknown_module_weight_seconds": 29.834,
  "_unknown_module_weight_rationale": "Arithmetic MEAN of the measured hosted weights, used by scripts/shard_tests.py's conservative_unknown_weight() for a module that is discovered but not yet measured. The historical fallback was the MEDIAN (0.868 s); on a distribution this heavy-tailed the median asserts that an unmeasured module is free, so a newly added heavy module is packed into an already-full shard and the job overruns silently. The mean reserves the cost of an average module instead. default_module_weight() retains median semantics because tests/test_shard_tests.py pins them.",
  "_zero_observation_floor": "2 modules completed faster than the runner's millisecond print resolution and were recorded as 0.000 s; they are floored to 0.001 s because load_timing_map() requires a strictly positive weight. The floor is scheduling-irrelevant (these modules are ~0% of a 4117-second suite). Floored: tests.test_audit_clock, tests.test_audit_report",
+ "pr_fast_tier": {
+  "max_module_seconds": 30.0,
+  "shards": 2,
+  "python_version": "3.11",
+  "_what_this_is": "Module-selection criterion for the ADDITIVE pull-request fast tier. It is NOT a gate and never substitutes for the full suite: every job that gates a merge still runs every test. The fast tier exists only to surface an obvious breakage in ~4 minutes instead of ~17.",
+  "_selection_rule": "Include every discovered ordinary module whose weight in seconds_by_module is <= max_module_seconds. The list is DERIVED AT RUN TIME rather than checked in, so adding a test module cannot silently drop it from the fast tier. A module that is discovered but not yet measured takes unknown_module_weight_seconds (29.834), which is below the 30.0 cutoff, so a NEW MODULE IS INCLUDED BY DEFAULT. That direction is deliberate: for a tier that only ever adds signal, the safe failure is running too much, not too little.",
+  "_measured_selectivity": "At the 2026-08-23 hosted weights this keeps 126 of 138 ordinary modules and 2848 of 3804 test methods (74.9% of the suite's tests) for 442 of 4117 seconds (10.7% of its cost). The 12 excluded modules are the measured heavy tail, led by tests.test_reduce (1544.5 s), tests.test_p2038_production_path (652.1 s) and tests.test_whole_window_selection (498.9 s). Cost per unit of signal is the whole point: the excluded 12 carry 25.1% of the tests but 89.3% of the runtime."
+ },
  "exclusive_modules": {
   "tests.test_calibration_exits": {
    "seconds": 2036.0,
@@ -13,12 +21,37 @@
    "fallback_rejection_threshold_seconds": 300.0
   },
   "tests.test_calibration_writer_crash_matrix": {
-   "seconds": 5317.216,
+   "seconds": 1990.65,
    "evidence_range_seconds": [
     145.911,
-    5317.216
+    2005.0
    ],
-   "fallback_rejection_threshold_seconds": 300.0
+   "fallback_rejection_threshold_seconds": 300.0,
+   "_evidence": "CORRECTED 2026-08-23 (TEST-SPEED-01). The previous declaration carried 5317.216 s with range [145.911, 5317.216]. That upper figure was a 2026-08-11 observation of this module running inside a SHARED ordinary shard, BEFORE it was made exclusive -- exclusivity (commit 5be5b78) is precisely what cured it, so continuing to pin the pre-cure number overstated the module by 2.7x. Measured in its own exclusive job on 2026-08-23: 2005 s wall on python 3.11 and 1370 s on 3.14 (run 32621080380); 1990.65 s is the 3.11 in-process test total, which is the figure the split partition is built from. Lower bound 145.911 s is the 2026-08-12 bench standalone and is retained. Exclusivity remains justified: 1990.65 s is far above the 300 s fallback-rejection threshold."
+  }
+ },
+ "split_modules": {
+  "_what_this_is": "Modules that scripts/shard_tests.py may spread across parallel jobs at TEST granularity. Splitting is a RUNNER-side decision only: no test file is edited, no test is skipped, and every declared test plus the computed remainder still runs exactly once per suite. Only modules whose tests were AUDITED as mutually independent appear here. tests.test_calibration_exits is deliberately ABSENT despite being expensive: its _WITNESS_RESULTS memo cache means splitting makes both shards re-run the same 68-case sweep, and its RefusalInventoryTests passes only because an alphabetically earlier method primes that cache - an unpinned accident this lane does not disturb.",
+  "_why_declared_plus_remainder": "Only the heavy test ids are named. Everything else is gathered at run time into one remainder unit. A test ADDED to a split module therefore lands in the remainder automatically - it cannot be silently dropped from the suite. A DECLARED id that disappears (a rename) fails the build closed, which is the case a computed complement would otherwise absorb silently while handing one shard ~20 minutes of unaccounted work.",
+  "tests.test_reduce": {
+   "granularity": "test",
+   "reason": "1544.5 s hosted, 37.5% of the ordinary suite and larger than an even 4-way share (1029 s), so module-atomic packing cannot produce a shard shorter than this module. Audited SPLITTABLE-AT-METHOD: the file defines no setUpModule/tearDownModule/setUpClass/tearDownClass at all, so the per-process fixture duplication concern does not arise; a 4-process split of D078R01RegressionTests was executed and ran all 63 tests with 0 failures. Splitting does re-fill two module-level memo caches per process (~17 s and ~14 s hosted), which is why only three units are carved out rather than many.",
+   "declared": {
+    "tests.test_reduce.D078R01RegressionTests.test_052_v3_relabelled_capture_time_refuses_its_own_taxonomy": 218.2,
+    "tests.test_reduce.SelfConsistentCalibrationTests.test_clock_anchor_resolves_around_every_cadence_boundary": 215.7,
+    "tests.test_reduce.D078R01RegressionTests.test_052_v3_measurement_stale_calibration_still_refuses_stale": 108.0
+   },
+   "remainder_weight_seconds": 1002.56,
+   "_attribution_note": "Only the three per-test attributions confirmed by TWO independent methods (docstring-aware CI-log timestamp parsing, and a direct bench harness) are declared. Two further ~87 s tests were attributed differently by the two methods and are deliberately LEFT IN THE REMAINDER rather than declared on a disputed identity: the remainder at 1002.6 s already sits below the 1029 s even-share target, so naming them would buy no wall clock while risking a weight pinned to the wrong test."
+  },
+  "tests.test_calibration_writer_crash_matrix": {
+   "granularity": "test",
+   "reason": "Runs as its own exclusive job. Two of its 15 tests are 95.5%% of its cost, so max-job time is floored at ~1385 s for EVERY split count >= 2: K=3 and beyond buy literally zero wall clock and only consume concurrent-job budget. Audited independent (all cls. writes confined to setUpClass, zero class-attribute writes from test bodies, process-local registry keyed distinctly per test, per-case roots created with mkdir(parents=True) and no exist_ok so collision is structurally impossible), and the K=2 split was EXECUTED with both shards running concurrently on one machine - harsher than CI - and both passed. Per-shard setUpClass duplication measures 0.44 s, so it is not the constraint; an indivisible test method is.",
+   "declared": {
+    "tests.test_calibration_writer_crash_matrix.CalibrationWriterCrashMatrixTests.test_every_exact_stage_pre_and_post_sigkill_reaches_fresh_governed_exit": 1385.32
+   },
+   "remainder_weight_seconds": 605.33,
+   "_cross_check": "Attribution corroborated by two independent methods: the CI-log split is 1385.32 s vs 605.33 s (ratio 2.29), and an executed bench split of the same partition measured 440.699 s vs 193.428 s (ratio 2.28)."
   }
  },
  "seconds_by_module": {
@@ -70,7 +103,7 @@
   "tests.test_calibration_exits": 2036.0,
   "tests.test_calibration_ledger": 2.681,
   "tests.test_calibration_live_three_window": 2.717,
-  "tests.test_calibration_writer_crash_matrix": 5317.216,
+  "tests.test_calibration_writer_crash_matrix": 1990.65,
   "tests.test_capture_pipeline_era": 2.455,
   "tests.test_capture_t0_step": 3.051,
   "tests.test_claims_index_lint": 3.391,
