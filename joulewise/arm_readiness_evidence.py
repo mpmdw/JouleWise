@@ -114,9 +114,16 @@ _ENVIRONMENT_FINGERPRINT_KINDS = frozenset(
         "THREE_WINDOW_REGRESSION",
     }
 )
-# Ed has not ruled the comparison semantics yet.  An empty implementation
-# allowlist is intentional: recording exists now; issuance stays fail closed.
-_SUPPORTED_ENVIRONMENT_COMPARISONS = frozenset()
+# D-148.5 r3/B-2: generic execution evidence re-use compares the complete
+# builder-emitted fingerprint digest.  The four specialized/no-generic-lane
+# kinds carry a distinct truthful token even though this generic author never
+# emits them.
+_SUPPORTED_ENVIRONMENT_COMPARISONS = frozenset(
+    {
+        "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "NO_R1_AUTHORING_LANE",
+    }
+)
 _DERIVER_DIRECT_READ_CALLS = frozenset(
     {
         "open",
@@ -2249,6 +2256,13 @@ def _authenticate_existing_r1(
     _repository, _prefix, pack_relative = _readiness._repository_and_pack_relative(
         pack_root
     )
+    context = _DerivationContext(
+        pack_root=pack_root,
+        repository=repository,
+        tree=tree,
+        pack_sha256=_readiness.committed_pack_tree_sha256(pack_root),
+        head_commit=current_head,
+    )
     receipts: dict[str, Mapping[str, Any]] = {}
     paths: list[str] = []
     for kind in kinds:
@@ -2288,6 +2302,17 @@ def _authenticate_existing_r1(
             )
             if receipt["freshness_class"] == "RE_DERIVABLE":
                 _r1_rederive_at_arm(pack_root, receipt, source)
+            elif (
+                policies[kind]["environment_comparison"]
+                == "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE"
+                and receipt["environment_fingerprint"]
+                != _execution_environment_fingerprint(context, kind)
+            ):
+                raise _refuse(
+                    kind,
+                    "evidence_author_environment_changed",
+                    "execution-environment fingerprint differs at re-use",
+                )
         except _readiness.EvidenceLifecycleError as exc:
             raise _refuse(kind, exc.reason_code, str(exc)) from exc
         except ValueError as exc:

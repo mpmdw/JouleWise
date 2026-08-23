@@ -27,7 +27,7 @@ from joulewise import arm_readiness
 from joulewise.arm_readiness import _fsync_directory
 
 
-SCHEDULER_GATE_RECEIPT_SCHEMA = "joulewise.window_scheduler_gate_receipt.v1"
+SCHEDULER_GATE_RECEIPT_SCHEMA = "joulewise.window_scheduler_gate_receipt.v2"
 CAMPAIGN_BOOT_PIN_SCHEMA = "joulewise.campaign_boot_pin.v1"
 CAMPAIGN_BOOT_PIN_NAME = "campaign_boot_pin.v1"
 CAMPAIGN_BOOT_PIN_SIDECAR_NAME = f"{CAMPAIGN_BOOT_PIN_NAME}.sha256"
@@ -35,9 +35,9 @@ CAMPAIGN_BOOT_PIN_SIDECAR_NAME = f"{CAMPAIGN_BOOT_PIN_NAME}.sha256"
 # writer uses this constant); the missing-pin history predicate keys on it.
 SCHEDULER_GATE_RECEIPT_FILE_PREFIX = "window_scheduler_gate_receipt"
 
-GATE_IDS = ("G1", "G2", "G3", "G4", "G5", "G6")
+GATE_IDS = ("G1", "G2", "G3", "G4", "G5", "G6", "G7")
 # Receipt order is evaluation order.  G5 must precede monotonic-clock gates.
-GATE_EVALUATION_ORDER = ("G5", "G1", "G2", "G3", "G4", "G6")
+GATE_EVALUATION_ORDER = ("G5", "G1", "G2", "G3", "G4", "G6", "G7")
 MONOTONIC_GATE_IDS = frozenset({"G1", "G2"})
 WINDOW_CLASSES = frozenset({"SHAKEDOWN", "CLAIM"})
 GATE_VERDICTS = frozenset(
@@ -97,6 +97,16 @@ G6_REASON_CODES = frozenset(
         "scheduler_c5_refusal_log_unreadable",
     }
 )
+G7_REASON_CODES = frozenset(
+    {
+        "scheduler_family_unpublished",
+        "scheduler_family_marker_absent",
+        "scheduler_family_marker_invalid",
+        "scheduler_family_confirmation_absent",
+        "scheduler_family_confirmation_invalid",
+        "scheduler_family_boot_pin_mismatch",
+    }
+)
 SCHEDULER_ENVIRONMENT_REASON_CODES = frozenset({"scheduler_environment_error"})
 
 SCHEDULER_GATE_REASON_CODES = frozenset().union(
@@ -106,6 +116,7 @@ SCHEDULER_GATE_REASON_CODES = frozenset().union(
     G4_REASON_CODES,
     G5_REASON_CODES,
     G6_REASON_CODES,
+    G7_REASON_CODES,
     SCHEDULER_ENVIRONMENT_REASON_CODES,
 )
 
@@ -116,6 +127,7 @@ _REASON_CODES_BY_GATE = {
     "G4": G4_REASON_CODES,
     "G5": G5_REASON_CODES,
     "G6": G6_REASON_CODES,
+    "G7": G7_REASON_CODES,
 }
 
 _REASON_TYPE_BY_CODE = {
@@ -125,6 +137,7 @@ _REASON_TYPE_BY_CODE = {
     **{code: "GIT" for code in G4_REASON_CODES},
     **{code: "IDENTITY" for code in G5_REASON_CODES},
     **{code: "CONDITION" for code in G6_REASON_CODES},
+    **{code: "CUSTODY" for code in G7_REASON_CODES},
     **{code: "ENVIRONMENT" for code in SCHEDULER_ENVIRONMENT_REASON_CODES},
 }
 _MIRRORED_FROM_BY_CODE = {code: "arm_readiness" for code in G4_REASON_CODES}
@@ -145,6 +158,7 @@ RECEIPT_KEYS = frozenset(
         "verdict",
         "claim_admissible",
         "assurance",
+        "family_publication",
     }
 )
 GATE_RESULT_KEYS = frozenset(
@@ -155,6 +169,20 @@ MIRRORED_REFUSAL_KEYS = REFUSAL_KEYS | {"mirrored_from"}
 BOOT_PIN_KEYS = frozenset(
     {"schema_version", "family_id", "boot_session_id", "created_at_utc"}
 )
+FAMILY_PUBLICATION_KEYS = frozenset(
+    {
+        "family_id",
+        "marker_path",
+        "marker_sha256",
+        "confirmation_sha256",
+        "verification_receipt",
+        "publication_head",
+        "verdict",
+        "refusals",
+    }
+)
+FAMILY_VERIFICATION_REFERENCE_KEYS = frozenset({"path", "sha256"})
+FAMILY_LIFECYCLE_REFUSAL_KEYS = frozenset({"role", "code", "type"})
 
 
 class SchedulerGateError(ValueError):
@@ -273,7 +301,7 @@ def _not_evaluated(gate_id: str) -> dict[str, Any]:
 
 
 def validate_scheduler_gate_receipt(receipt: object) -> Mapping[str, Any]:
-    """Validate the exact v1 receipt shape and staged verdict invariants."""
+    """Validate the exact v2 receipt shape and staged verdict invariants."""
 
     value = _require_exact_keys(receipt, RECEIPT_KEYS, "scheduler gate receipt")
     if value["schema_version"] != SCHEDULER_GATE_RECEIPT_SCHEMA:
@@ -310,7 +338,7 @@ def validate_scheduler_gate_receipt(receipt: object) -> Mapping[str, Any]:
 
     gates = value["gates"]
     if not isinstance(gates, list) or len(gates) != len(GATE_EVALUATION_ORDER):
-        raise SchedulerGateError("scheduler_environment_error", "all six gates must be present")
+        raise SchedulerGateError("scheduler_environment_error", "all seven gates must be present")
     observed_order: list[str] = []
     for index, raw_gate in enumerate(gates):
         gate = _require_exact_keys(raw_gate, GATE_RESULT_KEYS, f"gates[{index}]")
@@ -406,6 +434,96 @@ def validate_scheduler_gate_receipt(receipt: object) -> Mapping[str, Any]:
                 "scheduler_environment_error",
                 f"{gate_id} must be NOT_IMPLEMENTED in stages 1-2",
             )
+    if gates_by_id["G7"]["verdict"] not in {"PASS", "REFUSE"}:
+        raise SchedulerGateError(
+            "scheduler_environment_error", "G7 must be PASS or REFUSE"
+        )
+
+    family = _require_exact_keys(
+        value["family_publication"],
+        FAMILY_PUBLICATION_KEYS,
+        "family_publication",
+    )
+    if family["verdict"] != gates_by_id["G7"]["verdict"]:
+        raise SchedulerGateError(
+            "scheduler_environment_error",
+            "family_publication verdict differs from G7",
+        )
+    _require_nonempty_string(family["family_id"], "family_publication.family_id")
+    verification = _require_exact_keys(
+        family["verification_receipt"],
+        FAMILY_VERIFICATION_REFERENCE_KEYS,
+        "family_publication.verification_receipt",
+    )
+    lifecycle_refusals = family["refusals"]
+    if not isinstance(lifecycle_refusals, list):
+        raise SchedulerGateError(
+            "scheduler_environment_error", "family_publication.refusals must be a list"
+        )
+    for index, raw_refusal in enumerate(lifecycle_refusals):
+        refusal = _require_exact_keys(
+            raw_refusal,
+            FAMILY_LIFECYCLE_REFUSAL_KEYS,
+            f"family_publication.refusals[{index}]",
+        )
+        if refusal != {
+            "role": "FAMILY_PUBLICATION",
+            "code": "readiness_r1_family_publication",
+            "type": "CUSTODY",
+        }:
+            raise SchedulerGateError(
+                "scheduler_environment_error",
+                "family publication lifecycle refusal differs from R1",
+            )
+    if family["verdict"] == "PASS":
+        for name in (
+            "marker_path",
+            "marker_sha256",
+            "confirmation_sha256",
+            "publication_head",
+        ):
+            if family[name] is None:
+                raise SchedulerGateError(
+                    "scheduler_environment_error", f"passing family publication omits {name}"
+                )
+        _require_nonempty_string(family["marker_path"], "family_publication.marker_path")
+        _require_lower_sha256(family["marker_sha256"], "family_publication.marker_sha256")
+        _require_lower_sha256(
+            family["confirmation_sha256"], "family_publication.confirmation_sha256"
+        )
+        _require_nonempty_string(
+            family["publication_head"], "family_publication.publication_head"
+        )
+        _require_nonempty_string(verification["path"], "family verification path")
+        _require_lower_sha256(verification["sha256"], "family verification digest")
+        if lifecycle_refusals:
+            raise SchedulerGateError(
+                "scheduler_environment_error", "passing family publication carries refusals"
+            )
+    else:
+        if any(
+            family[name] is not None
+            for name in (
+                "marker_path",
+                "marker_sha256",
+                "confirmation_sha256",
+                "publication_head",
+            )
+        ) or any(verification[name] is not None for name in ("path", "sha256")):
+            raise SchedulerGateError(
+                "scheduler_environment_error",
+                "refused family publication must null unverifiable bindings",
+            )
+        if lifecycle_refusals != [
+            {
+                "role": "FAMILY_PUBLICATION",
+                "code": "readiness_r1_family_publication",
+                "type": "CUSTODY",
+            }
+        ]:
+            raise SchedulerGateError(
+                "scheduler_environment_error", "refused family publication needs one R1 refusal"
+            )
 
     g5_observations = gates_by_id["G5"]["observations"]
     if "pin_sha256" not in g5_observations:
@@ -431,7 +549,7 @@ def validate_scheduler_gate_receipt(receipt: object) -> Mapping[str, Any]:
 
     go_eligible = all(
         gate["verdict"] in {"PASS", "RECORD_ONLY"} for gate in gates
-    )
+    ) and family["verdict"] == "PASS"
     if (value["verdict"] == "GO") is not go_eligible:
         raise SchedulerGateError(
             "scheduler_environment_error", "composed verdict disagrees with gate verdicts"
@@ -715,6 +833,144 @@ def _evaluate_g4(pack_root: Path) -> tuple[dict[str, Any], Mapping[str, Any]]:
     )
 
 
+def _g7_scheduler_code(check_id: str) -> str:
+    if check_id == "marker_absent":
+        return "scheduler_family_marker_absent"
+    if check_id == "confirmation_missing":
+        return "scheduler_family_confirmation_absent"
+    if check_id.startswith("confirmation_"):
+        return "scheduler_family_confirmation_invalid"
+    if check_id == "head_unpublished":
+        return "scheduler_family_unpublished"
+    if check_id == "family_incoherent":
+        return "scheduler_family_boot_pin_mismatch"
+    return "scheduler_family_marker_invalid"
+
+
+def _evaluate_g7(
+    *,
+    repository: Path,
+    pack_root: Path,
+    campaign_root: Path,
+    family_id: str,
+    marker_path: Path,
+    confirmation_path: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    observations: dict[str, Any] = {
+        "phase": "pre-arm",
+        "diagnostic": None,
+        "lifecycle_refusal": None,
+    }
+    try:
+        result = arm_readiness.verify_family_publication_marker(
+            repository,
+            marker_path,
+            phase="pre-arm",
+            confirmation_path=confirmation_path,
+            target_pack_root=pack_root,
+        )
+        if result["family_id"] != family_id:
+            raise arm_readiness.FamilyPublicationError(
+                "family_incoherent",
+                "published marker family differs from campaign boot-pin family",
+            )
+        verification_root = campaign_root / "family_publication"
+        verification_root.mkdir(parents=True, exist_ok=True)
+        verification_path = verification_root / f"pre-arm-verification-{uuid.uuid4()}.json"
+        verification_raw = render_json(result)
+        arm_readiness._exclusive_write(verification_path, verification_raw)
+        arm_readiness._exclusive_write(
+            verification_path.with_name(f"{verification_path.name}.sha256"),
+            arm_readiness.gnu_sidecar(
+                arm_readiness.sha256_bytes(verification_raw), verification_path.name
+            ),
+        )
+        marker_sha = arm_readiness.sha256_bytes(marker_path.read_bytes())
+        confirmation_sha = arm_readiness.sha256_bytes(confirmation_path.read_bytes())
+        block = {
+            "family_id": family_id,
+            "marker_path": str(marker_path),
+            "marker_sha256": marker_sha,
+            "confirmation_sha256": confirmation_sha,
+            "verification_receipt": {
+                "path": str(verification_path),
+                "sha256": arm_readiness.sha256_bytes(verification_raw),
+            },
+            "publication_head": result["consulted_git"]["head_commit"],
+            "verdict": "PASS",
+            "refusals": [],
+        }
+        return _gate_result("G7", "PASS", observations=observations), block
+    except arm_readiness.FamilyPublicationError as exc:
+        code = _g7_scheduler_code(exc.check_id)
+        lifecycle = {
+            "role": "FAMILY_PUBLICATION",
+            "code": "readiness_r1_family_publication",
+            "type": "CUSTODY",
+        }
+        observations["diagnostic"] = exc.check_id
+        observations["lifecycle_refusal"] = lifecycle
+        block = {
+            "family_id": family_id,
+            "marker_path": None,
+            "marker_sha256": None,
+            "confirmation_sha256": None,
+            "verification_receipt": {"path": None, "sha256": None},
+            "publication_head": None,
+            "verdict": "REFUSE",
+            "refusals": [lifecycle],
+        }
+        return (
+            _gate_result(
+                "G7",
+                "REFUSE",
+                observations=observations,
+                refusals=[_gate_refusal(code, gate_id="G7", detail=str(exc))],
+            ),
+            block,
+        )
+    except (OSError, arm_readiness.ArmReadinessError) as exc:
+        wrapped = arm_readiness.FamilyPublicationError("registry_mismatch", str(exc))
+        return _evaluate_g7_refusal(family_id, observations, wrapped)
+
+
+def _evaluate_g7_refusal(
+    family_id: str,
+    observations: dict[str, Any],
+    exc: arm_readiness.FamilyPublicationError,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    lifecycle = {
+        "role": "FAMILY_PUBLICATION",
+        "code": "readiness_r1_family_publication",
+        "type": "CUSTODY",
+    }
+    observations["diagnostic"] = exc.check_id
+    observations["lifecycle_refusal"] = lifecycle
+    block = {
+        "family_id": family_id,
+        "marker_path": None,
+        "marker_sha256": None,
+        "confirmation_sha256": None,
+        "verification_receipt": {"path": None, "sha256": None},
+        "publication_head": None,
+        "verdict": "REFUSE",
+        "refusals": [lifecycle],
+    }
+    return (
+        _gate_result(
+            "G7",
+            "REFUSE",
+            observations=observations,
+            refusals=[
+                _gate_refusal(
+                    _g7_scheduler_code(exc.check_id),
+                    gate_id="G7",
+                    detail=str(exc),
+                )
+            ],
+        ),
+        block,
+    )
 def evaluate_scheduler_gates(
     *,
     pack_root: Path | str,
@@ -723,6 +979,8 @@ def evaluate_scheduler_gates(
     window_class: str,
     receipt_boot_session_ids: Mapping[str, str],
     now_monotonic_ns: int | None = None,
+    family_publication_marker: Path | str | None = None,
+    step6_confirmation_table: Path | str | None = None,
 ) -> dict[str, Any]:
     """Evaluate every scheduler gate and return a strict staged receipt.
 
@@ -752,13 +1010,36 @@ def evaluate_scheduler_gates(
     g3 = _not_implemented("G3")
     g4, reviewed = _evaluate_g4(pack_path)
     g6 = _not_implemented("G6")
+    try:
+        repository = arm_readiness._repo_for_pack(pack_path)
+    except arm_readiness.ArmReadinessError:
+        repository = pack_path
+    publication_root = campaign_path / "family_publication"
+    marker_path = (
+        Path(family_publication_marker)
+        if family_publication_marker is not None
+        else publication_root / arm_readiness.FAMILY_PUBLICATION_MARKER_NAME
+    )
+    confirmation_path = (
+        Path(step6_confirmation_table)
+        if step6_confirmation_table is not None
+        else publication_root / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
+    )
+    g7, family_publication = _evaluate_g7(
+        repository=repository,
+        pack_root=pack_path,
+        campaign_root=campaign_path,
+        family_id=family_id,
+        marker_path=marker_path,
+        confirmation_path=confirmation_path,
+    )
 
     # Pack authentication is not a scheduler gate and cannot be represented as
     # a successful placeholder.  All six gate evaluations above still run;
     # then the owning arm-readiness loader fails closed if the pack is invalid.
     pack = arm_readiness._pack_record(pack_path)
 
-    gates = [g5, g1, g2, g3, g4, g6]
+    gates = [g5, g1, g2, g3, g4, g6, g7]
     receipt = {
         "schema_version": SCHEDULER_GATE_RECEIPT_SCHEMA,
         "receipt_kind": "window_scheduler_gate",
@@ -779,6 +1060,7 @@ def evaluate_scheduler_gates(
         # G3 owns claim admission and is not implemented in this stage.
         "claim_admissible": False,
         "assurance": dict(arm_readiness.ASSURANCE),
+        "family_publication": family_publication,
     }
     validate_scheduler_gate_receipt(receipt)
     return receipt

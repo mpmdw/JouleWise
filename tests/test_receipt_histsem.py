@@ -51,6 +51,70 @@ def write_pinset(path: Path, mutate: callable) -> Path:
 
 
 class ReceiptHistoricalSemanticsTests(unittest.TestCase):
+    def test_pinset_chain_is_closed_ordered_and_absent_successor_is_unchanged(self) -> None:
+        self.assertEqual(
+            readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH,
+            (
+                Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"),
+                Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            directory = repository / "configs/arm_readiness"
+            directory.mkdir(parents=True)
+            (directory / "legacy_receipt_histsem_pinset_v1.json").write_bytes(PINSET.read_bytes())
+            rows = readiness._load_histsem_pinset(repository)
+            self.assertEqual(len(rows), 9)
+
+            unenumerated = json.loads(PINSET.read_bytes())
+            unenumerated["packs"][0]["pack_id"] = "not-governed-by-an-unenumerated-file"
+            (directory / "receipt_histsem_pinset_rogue.json").write_bytes(render_json(unenumerated))
+            self.assertEqual(len(readiness._load_histsem_pinset(repository)), 9)
+
+    def test_pinset_chain_unions_successor_and_refuses_cross_member_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            directory = repository / "configs/arm_readiness"
+            directory.mkdir(parents=True)
+            (directory / "legacy_receipt_histsem_pinset_v1.json").write_bytes(PINSET.read_bytes())
+            successor_path = directory / "legacy_receipt_histsem_pinset_v4_v1.json"
+            successor = json.loads(PINSET.read_bytes())
+            row = copy.deepcopy(successor["packs"][0])
+            row["pack_id"] = "d117_synthetic_v4"
+            row["pack_path"] = "configs/campaigns/d117_synthetic_v4"
+            successor["packs"] = [row]
+            successor_path.write_bytes(render_json(successor))
+            rows = readiness._load_histsem_pinset(repository)
+            self.assertEqual(len(rows), 10)
+            self.assertEqual(rows[-1]["pack_id"], "d117_synthetic_v4")
+
+            successor_path.write_bytes(PINSET.read_bytes())
+            with self.assertRaises(HistoricalSemanticsError) as caught:
+                readiness._load_histsem_pinset(repository)
+            self.assertEqual(caught.exception.reason_code, "histsem_pinset_invalid")
+
+    def test_v4_builder_interface_is_exact_and_has_no_network_or_update_lane(self) -> None:
+        completed = subprocess.run(
+            ("python3", "scripts/build_v4_histsem_pinset.py", "--help"),
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        for option in (
+            "--repository",
+            "--base-pinset",
+            "--historical-head",
+            "--current-head",
+            "--pack-root",
+            "--output",
+        ):
+            self.assertIn(option, completed.stdout)
+        source = (ROOT / "scripts/build_v4_histsem_pinset.py").read_text(encoding="utf-8")
+        for forbidden in ("fetch", "unshallow", "--update", "checkout"):
+            self.assertNotIn(forbidden, source)
+
     def test_pinset_is_byte_pinned_and_has_no_update_lane(self) -> None:
         self.assertEqual(hashlib.sha256(PINSET.read_bytes()).hexdigest(), PINSET_SHA256)
         script = (ROOT / "scripts/verify_receipt_histsem.py").read_text(encoding="utf-8")

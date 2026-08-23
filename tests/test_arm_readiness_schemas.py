@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
 import tempfile
 import unittest
@@ -356,6 +357,68 @@ def sample_frozen_projection(
 
 
 class ArmReadinessSchemaTests(unittest.TestCase):
+    def test_resolved_r1_registry_coordinate_allowlist_horizons_and_vocabulary(self) -> None:
+        registry, raw = load_registry(ROOT)
+        self.assertEqual(readiness.ROW_REGISTRY_RELATIVE_PATH.as_posix(), "configs/arm_readiness/d117_row_registry_v2.json")
+        self.assertEqual(registry["registry_id"], "d117-row-registry-v2")
+        self.assertEqual(registry["schema_version"], readiness.R1_ROW_REGISTRY_SCHEMA)
+        self.assertEqual(raw, render_json(registry))
+        lifecycle = registry["freeze_evidence_lifecycle"]
+        allowlist = lifecycle["irrelevant_path_allowlist"]
+        self.assertEqual(len(allowlist), 112)
+        self.assertEqual(allowlist, sorted(set(allowlist)))
+        successor = "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
+        self.assertIn(successor, allowlist)
+        self.assertFalse(any("d117_step6_confirmation" in path for path in allowlist))
+        self.assertFalse(any("family_publication" in path for path in allowlist))
+        policies = {item["kind"]: item for item in lifecycle["evidence_policies"]}
+        generic = {
+            "ACCEPTANCE_OWNER", "ACCEPTANCE_SUCCESSOR", "ESTIMATOR_IDENTITY",
+            "MINT_TRUST", "MULTICELL_MINT", "PACK_AUTHENTICATION",
+            "REASON_CODE_COVERAGE", "RECEIPT_ORACLE", "RECOVERY_LEDGER_TEST",
+            "THREE_WINDOW_REGRESSION",
+        }
+        for kind in generic:
+            self.assertEqual(policies[kind]["horizon_ns"], 604800000000000)
+            self.assertEqual(policies[kind]["freshness_policy_id"], "r1.execution_bound.freeze_generic_168h.v1")
+        for kind in {"DRY_RUN_REHEARSAL", "GIT_CHECKOUT", "IDENTITY_PIN_PROJECTION", "PRIVILEGE_INSTALLATION"}:
+            self.assertEqual(policies[kind]["horizon_ns"], 86400000000000)
+            self.assertEqual(policies[kind]["environment_comparison"], "NO_R1_AUTHORING_LANE")
+        for kind in {"OFFLINE_INPUT_INVENTORY", "TERMINAL_REVIEW"}:
+            self.assertEqual(policies[kind]["horizon_ns"], 21600000000000)
+        vocabulary = {item["role"]: item for item in lifecycle["refusal_vocabulary"]}
+        self.assertEqual(vocabulary["FAMILY_PUBLICATION"], {
+            "role": "FAMILY_PUBLICATION", "code": "readiness_r1_family_publication", "type": "CUSTODY"
+        })
+        self.assertEqual(set(item["code"] for item in vocabulary.values()), readiness.READINESS_REASON_CODES & set(item["code"] for item in vocabulary.values()))
+
+    def test_archival_v1_registry_is_sha_pinned(self) -> None:
+        raw = (ROOT / "configs/arm_readiness/d117_row_registry_v1.json").read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), "d248fdc521cb904b7ad8f1c4ecb834f7810a1d8f39697b462591f2feac39a2e5")
+
+    def test_registry_load_closes_resolved_refusal_code_and_type(self) -> None:
+        registry, _raw = load_registry(ROOT)
+        missing = copy.deepcopy(registry)
+        entry = missing["freeze_evidence_lifecycle"]["refusal_vocabulary"][0]
+        entry["code"] = "readiness_r1_not_registered"
+        with self.assertRaisesRegex(ArmReadinessError, "closed by code/type"):
+            validate_registry(missing)
+        mistyped = copy.deepcopy(registry)
+        entry = next(item for item in mistyped["freeze_evidence_lifecycle"]["refusal_vocabulary"] if item["role"] == "FAMILY_PUBLICATION")
+        entry["type"] = "POLICY"
+        with self.assertRaisesRegex(ArmReadinessError, "closed by code/type"):
+            validate_registry(mistyped)
+
+    def test_r4_evidence_lifecycle_escape_sites_are_caught(self) -> None:
+        for function in (
+            readiness.generate_arm_receipt,
+            readiness._derive_arm_semantics_for_verification,
+        ):
+            source = inspect.getsource(function)
+            self.assertIn("except EvidenceLifecycleError as exc:", source)
+            self.assertIn("_freeze_evidence_for_arm", source)
+            self.assertIn("evidence_refusals.append(exc.refusal())", source)
+
     maxDiff = None
 
     def test_r2_shared_resolver_uses_real_pack_relative_reference(self) -> None:
@@ -1000,7 +1063,7 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                 "independent_attestation": False,
             },
         )
-        self.assertEqual(len(READINESS_REASON_CODES), 47)
+        self.assertEqual(len(READINESS_REASON_CODES), 55)
         self.assertNotIn("GO", READINESS_REASON_CODES)
         self.assertNotIn("UNKNOWN", READINESS_REASON_CODES)
         upstream_refusal = sample_evidence()

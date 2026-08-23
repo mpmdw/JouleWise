@@ -65,6 +65,13 @@ EXECUTION_EVIDENCE_RECEIPT_SCHEMA = (
 R1_LIFECYCLE_REGISTRY_SCHEMA = (
     "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v1"
 )
+FAMILY_PUBLICATION_MARKER_SCHEMA = "joulewise.d117_family_publication_marker.v1"
+FAMILY_PUBLICATION_VERIFICATION_SCHEMA = (
+    "joulewise.d117_family_publication_verification.v1"
+)
+STEP6_CONFIRMATION_TABLE_SCHEMA = "joulewise.d117_step6_confirmation_table.v1"
+FAMILY_PUBLICATION_MARKER_NAME = "d117_family_publication_v4.json"
+STEP6_CONFIRMATION_TABLE_NAME = "d117_step6_confirmation_table_v4.json"
 LEGACY_CONSUMPTION_RECEIPT_SCHEMA = (
     "joulewise.arm_readiness_launch_consumption.v1"
 )
@@ -77,7 +84,7 @@ LAUNCH_START_RECEIPT_SCHEMA = "joulewise.launch_start_receipt.v1"
 LAUNCH_SETTLE_RECEIPT_SCHEMA = "joulewise.launch_settle_receipt.v1"
 LAUNCH_COMPLETION_RECEIPT_SCHEMA = "joulewise.launch_completion_receipt.v1"
 CONTRACT_ID = "D-134"
-ROW_REGISTRY_RELATIVE_PATH = Path("configs/arm_readiness/d117_row_registry_v1.json")
+ROW_REGISTRY_RELATIVE_PATH = Path("configs/arm_readiness/d117_row_registry_v2.json")
 _T0_EVIDENCE_SOURCE_SCHEMA = "joulewise.arm_readiness_t0_evidence_source.v1"
 _T0_INPUT_DIRECTORY = "arm_readiness.t0.inputs"
 # Launch-recipe receipts and sources are canonical JSON records measured in
@@ -178,6 +185,22 @@ ENVIRONMENT_REASON_CODES = frozenset(
 # are never minted into a receipt: an unauthenticated ancestry record is not a
 # legitimate chain member, so it must not become a REFUSE receipt either.
 SUCCESSOR_CHAIN_REASON_CODES = frozenset({"readiness_successor_chain_invalid"})
+# R1's registry-resolved vocabulary is code-enumerated as four typed families.
+# Registry loading checks both membership and type, so deleting a spelling from
+# code cannot leave a dormant registry-only refusal that fails later at mint.
+R1_POLICY_REASON_CODES = frozenset(
+    {"readiness_r1_class_mismatch", "readiness_r1_unknown_policy"}
+)
+R1_LIFECYCLE_REASON_CODES = frozenset(
+    {
+        "readiness_r1_dependency_changed_set",
+        "readiness_r1_dependency_manifest",
+        "readiness_r1_temporal_budget",
+        "readiness_r1_v1_grandfathering",
+    }
+)
+R1_CUSTODY_REASON_CODES = frozenset({"readiness_r1_family_publication"})
+R1_GIT_REASON_CODES = frozenset({"readiness_r1_successor_chain"})
 LAUNCH_LINEAGE_REASON_CODES = frozenset(
     {
         "launch_consumption_missing",
@@ -198,6 +221,10 @@ READINESS_REASON_CODES = frozenset().union(
     IDENTITY_PIN_PROJECTION_REASON_CODES,
     ENVIRONMENT_REASON_CODES,
     SUCCESSOR_CHAIN_REASON_CODES,
+    R1_POLICY_REASON_CODES,
+    R1_LIFECYCLE_REASON_CODES,
+    R1_CUSTODY_REASON_CODES,
+    R1_GIT_REASON_CODES,
 )
 REASON_TYPE_BY_CODE = {
     **{code: "STRUCTURE" for code in STRUCTURE_REASON_CODES},
@@ -208,6 +235,10 @@ REASON_TYPE_BY_CODE = {
     **{code: "IDENTITY" for code in IDENTITY_PIN_PROJECTION_REASON_CODES},
     **{code: "ENVIRONMENT" for code in ENVIRONMENT_REASON_CODES},
     **{code: "SUCCESSOR_CHAIN" for code in SUCCESSOR_CHAIN_REASON_CODES},
+    **{code: "POLICY" for code in R1_POLICY_REASON_CODES},
+    **{code: "LIFECYCLE" for code in R1_LIFECYCLE_REASON_CODES},
+    **{code: "CUSTODY" for code in R1_CUSTODY_REASON_CODES},
+    **{code: "GIT" for code in R1_GIT_REASON_CODES},
 }
 
 WINDOW_KINDS = frozenset({"ALPHA", "BETA", "GAMMA"})
@@ -495,6 +526,43 @@ R1_REFUSAL_ROLES = frozenset(
         "TEMPORAL_BUDGET",
         "UNKNOWN_POLICY",
         "V1_GRANDFATHERING",
+    }
+)
+FAMILY_PUBLICATION_FIRST_GENERATION = 4
+FAMILY_PUBLICATION_CHECK_IDS = frozenset(
+    {
+        "marker_absent",
+        "marker_unreadable",
+        "marker_noncanonical",
+        "marker_schema_mismatch",
+        "marker_self_digest_mismatch",
+        "lane_inconsistent",
+        "lane_inadmissible",
+        "registry_mismatch",
+        "registry_dormant",
+        "roster_mismatch",
+        "roster_incomplete",
+        "pack_not_member",
+        "family_incoherent",
+        "head_mismatch",
+        "head_unpublished",
+        "head_unresolvable",
+        "history_shallow",
+        "git_unavailable",
+        "worktree_dirty",
+        "pack_digest_mismatch",
+        "plan_binding_mismatch",
+        "evidence_set_mismatch",
+        "freeze_binding_mismatch",
+        "freeze_not_pass",
+        "predecessor_mismatch",
+        "terminal_review_mismatch",
+        "confirmation_missing",
+        "confirmation_mismatch",
+        "tool_mismatch",
+        "output_in_tree",
+        "output_collision",
+        "internal_error",
     }
 )
 _R1_REGISTRY_KEYS = {
@@ -1810,6 +1878,14 @@ def validate_r1_lifecycle_registry(
                 "readiness_row_registry_mismatch",
                 f"R1 refusal_vocabulary[{index}].type is invalid",
             )
+        if not code.startswith(_R1_ED_RESERVED_PREFIX) and (
+            code not in READINESS_REASON_CODES
+            or REASON_TYPE_BY_CODE.get(code) != reason_type
+        ):
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                f"R1 refusal_vocabulary[{index}] is not closed by code/type authority",
+            )
     if roles != sorted(R1_REFUSAL_ROLES) or len(codes) != len(set(codes)):
         raise ArmReadinessError(
             "readiness_row_registry_mismatch",
@@ -2709,8 +2785,9 @@ def committed_pack_tree_sha256(pack_root: Path | str) -> str:
     return sha256_bytes(bytes(framed))
 
 
-RECEIPT_HISTSEM_PINSET_RELATIVE_PATH = Path(
-    "configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"
+RECEIPT_HISTSEM_PINSET_RELATIVE_PATH = (
+    Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"),
+    Path("configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"),
 )
 RECEIPT_HISTSEM_PINSET_SCHEMA = "joulewise.receipt_histsem_pinset.v1"
 _HISTSEM_CUSTODY_DIRECTORIES = frozenset(
@@ -3014,28 +3091,50 @@ def _validate_histsem_pinset(value: object) -> tuple[Mapping[str, Any], ...]:
 def _load_histsem_pinset(
     repository: Path, pinset_path: Path | str | None = None
 ) -> tuple[Mapping[str, Any], ...]:
-    path = (
-        repository / RECEIPT_HISTSEM_PINSET_RELATIVE_PATH
+    paths = (
+        tuple(repository / item for item in RECEIPT_HISTSEM_PINSET_RELATIVE_PATH)
         if pinset_path is None
-        else Path(pinset_path)
+        else (Path(pinset_path),)
     )
-    try:
-        raw = path.read_bytes()
-    except FileNotFoundError as exc:
+    rows: list[Mapping[str, Any]] = []
+    identities: set[tuple[str, str]] = set()
+    present = 0
+    for path in paths:
+        try:
+            raw = path.read_bytes()
+        except FileNotFoundError:
+            # Rule-11 absence semantics are per enumerated member: a future
+            # successor that has not yet been minted contributes no rows.
+            continue
+        except OSError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid", f"receipt-histsem pinset is unreadable: {exc}"
+            ) from exc
+        present += 1
+        try:
+            member_rows = _validate_histsem_pinset(
+                parse_json_bytes(raw, require_canonical=True)
+            )
+        except ArmReadinessError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid",
+                f"receipt-histsem pinset is not canonical: {exc}",
+            ) from exc
+        for row in member_rows:
+            identity = (str(row["pack_id"]), str(row["pack_path"]))
+            if identity in identities:
+                raise HistoricalSemanticsError(
+                    "histsem_pinset_invalid",
+                    f"duplicate pack identity across pinset chain: {identity!r}",
+                )
+            identities.add(identity)
+            rows.append(row)
+    if present == 0:
+        label = ", ".join(str(path) for path in paths)
         raise HistoricalSemanticsError(
-            "histsem_pinset_absent", f"receipt-histsem pinset is absent: {path}"
-        ) from exc
-    except OSError as exc:
-        raise HistoricalSemanticsError(
-            "histsem_pinset_invalid", f"receipt-histsem pinset is unreadable: {exc}"
-        ) from exc
-    try:
-        value = parse_json_bytes(raw, require_canonical=True)
-    except ArmReadinessError as exc:
-        raise HistoricalSemanticsError(
-            "histsem_pinset_invalid", f"receipt-histsem pinset is not canonical: {exc}"
-        ) from exc
-    return _validate_histsem_pinset(value)
+            "histsem_pinset_absent", f"receipt-histsem pinset is absent: {label}"
+        )
+    return tuple(rows)
 
 
 def _histsem_read_bound_file(
@@ -3326,7 +3425,7 @@ def verify_receipt_histsem_pack(
         dict(item)
         for item in freeze["evidence"]
         if item["namespace"] == "PACK"
-        and item["schema_version"] == EVIDENCE_RECEIPT_SCHEMA
+        and item["schema_version"] in GENERIC_EVIDENCE_RECEIPT_SCHEMAS
     ]
     if freeze_pack_items != pinned_receipts:
         raise HistoricalSemanticsError(
@@ -3361,7 +3460,7 @@ def verify_receipt_histsem_pack(
         )
         receipt_head = receipt.get("head_commit", receipt.get("derivation_commit"))
         if (
-            receipt["schema_version"] != EVIDENCE_RECEIPT_SCHEMA
+            receipt["schema_version"] not in GENERIC_EVIDENCE_RECEIPT_SCHEMAS
             or re.fullmatch(r"[0-9a-f]{40}", str(receipt_head)) is None
             or re.fullmatch(r"[0-9a-f]{64}", str(receipt.get("pack_sha256"))) is None
         ):
@@ -3464,38 +3563,47 @@ def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -
         if not _histsem_has_git_metadata(pack_root):
             return
         raise
-    code, pinset_entry, _stderr = _histsem_git(
-        repository,
-        "ls-tree",
-        "HEAD",
-        "--",
-        RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix(),
-    )
-    if code != 0:
-        raise HistoricalSemanticsError(
-            "histsem_history_unavailable",
-            "committed receipt-histsem pinset lookup failed",
+    governed_rows_list: list[Mapping[str, Any]] = []
+    identities: set[tuple[str, str]] = set()
+    for relative_path in RECEIPT_HISTSEM_PINSET_RELATIVE_PATH:
+        code, pinset_entry, _stderr = _histsem_git(
+            repository, "ls-tree", "HEAD", "--", relative_path.as_posix()
         )
-    if not pinset_entry.strip():
+        if code != 0:
+            raise HistoricalSemanticsError(
+                "histsem_history_unavailable",
+                "committed receipt-histsem pinset lookup failed",
+            )
+        if not pinset_entry.strip():
+            continue
+        code, pinset_raw, _stderr = _histsem_git(
+            repository, "show", f"HEAD:{relative_path.as_posix()}"
+        )
+        if code != 0:
+            raise HistoricalSemanticsError(
+                "histsem_history_unavailable",
+                "committed receipt-histsem pinset read failed",
+            )
+        try:
+            member_rows = _validate_histsem_pinset(
+                parse_json_bytes(pinset_raw, require_canonical=True)
+            )
+        except ArmReadinessError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_pinset_invalid", "committed receipt-histsem pinset is invalid"
+            ) from exc
+        for row in member_rows:
+            identity = (str(row["pack_id"]), str(row["pack_path"]))
+            if identity in identities:
+                raise HistoricalSemanticsError(
+                    "histsem_pinset_invalid",
+                    f"duplicate pack identity across pinset chain: {identity!r}",
+                )
+            identities.add(identity)
+            governed_rows_list.append(row)
+    governed_rows = tuple(governed_rows_list)
+    if not governed_rows:
         return
-    code, pinset_raw, _stderr = _histsem_git(
-        repository,
-        "show",
-        f"HEAD:{RECEIPT_HISTSEM_PINSET_RELATIVE_PATH.as_posix()}",
-    )
-    if code != 0:
-        raise HistoricalSemanticsError(
-            "histsem_history_unavailable",
-            "committed receipt-histsem pinset read failed",
-        )
-    try:
-        governed_rows = _validate_histsem_pinset(
-            parse_json_bytes(pinset_raw, require_canonical=True)
-        )
-    except ArmReadinessError as exc:
-        raise HistoricalSemanticsError(
-            "histsem_pinset_invalid", "committed receipt-histsem pinset is invalid"
-        ) from exc
     if not any(
         row["pack_id"] == pack_root.name and row["pack_path"] == pack_relative
         for row in governed_rows
@@ -6243,6 +6351,8 @@ def generate_freeze_receipt(
     pack_root: Path | str,
     *,
     predecessor_pack_root: Path | str | None = None,
+    family_publication_marker: Path | str | None = None,
+    step6_confirmation_table: Path | str | None = None,
 ) -> dict[str, Any]:
     """Write or idempotently authenticate the pack's non-authorizing receipt.
 
@@ -6272,6 +6382,31 @@ def generate_freeze_receipt(
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
     _valid_plan_attachment(readiness, registry_reference)
     generation = _pack_generation(root.name)
+    if (
+        predecessor_pack_root is not None
+        and _pack_generation(Path(predecessor_pack_root).resolve(strict=True).name)
+        >= FAMILY_PUBLICATION_FIRST_GENERATION
+    ):
+        try:
+            _gate_family_publication(
+                Path(predecessor_pack_root).resolve(strict=True),
+                marker_path=family_publication_marker,
+                confirmation_path=step6_confirmation_table,
+            )
+        except FamilyPublicationError as exc:
+            predecessor_registry, _raw = load_registry(
+                _repo_for_pack(Path(predecessor_pack_root))
+            )
+            entry = _family_refusal_entry(predecessor_registry)
+            return {
+                "status": "REFUSE",
+                "arm_disposition": "NOT_APPLICABLE",
+                "receipt_path": None,
+                "receipt_sha256": None,
+                "reason_codes": [entry["code"]],
+                "detail": f"{exc.check_id}: {exc}",
+                "mutated": False,
+            }
     if generation > 1 and predecessor_pack_root is None:
         raise _successor_chain_refusal(
             "a successor pack requires an authenticated predecessor pack root"
@@ -6946,6 +7081,8 @@ def generate_arm_receipt(
     window_custody_root: Path | str,
     *,
     validity_ns: int = 300_000_000_000,
+    family_publication_marker: Path | str | None = None,
+    step6_confirmation_table: Path | str | None = None,
 ) -> dict[str, Any]:
     root = Path(pack_root).resolve(strict=True)
     try:
@@ -6994,9 +7131,40 @@ def generate_arm_receipt(
         include_pack=False,
         lifecycle_registry=lifecycle_registry,
     )
-    freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
-        root, tree, freeze_receipt, registry
+    publication_root = Path(window_custody_root).resolve() / "family_publication"
+    marker_path = (
+        Path(family_publication_marker)
+        if family_publication_marker is not None
+        else publication_root / FAMILY_PUBLICATION_MARKER_NAME
     )
+    confirmation_path = (
+        Path(step6_confirmation_table)
+        if step6_confirmation_table is not None
+        else publication_root / STEP6_CONFIRMATION_TABLE_NAME
+    )
+    try:
+        _gate_family_publication(
+            root,
+            marker_path=marker_path,
+            confirmation_path=confirmation_path,
+        )
+    except FamilyPublicationError as exc:
+        entry = _family_refusal_entry(registry)
+        evidence_refusals.append(
+            {
+                "type": entry["type"],
+                "code": entry["code"],
+                "row_id": None,
+                "evidence_id": None,
+            }
+        )
+    try:
+        freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
+            root, tree, freeze_receipt, registry
+        )
+    except EvidenceLifecycleError as exc:
+        evidence_refusals.append(exc.refusal())
+        freeze_items, freeze_evidence_receipts = [], {}
     duplicate_ids = set(evidence_receipts).intersection(freeze_evidence_receipts)
     if duplicate_ids:
         raise ArmReadinessError(
@@ -7189,9 +7357,30 @@ def _derive_arm_semantics_for_verification(
             else None
         ),
     )
-    freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
-        root, tree, freeze_receipt, registry
-    )
+    publication_root = custody_pack_root.parent / "family_publication"
+    try:
+        _gate_family_publication(
+            root,
+            marker_path=publication_root / FAMILY_PUBLICATION_MARKER_NAME,
+            confirmation_path=publication_root / STEP6_CONFIRMATION_TABLE_NAME,
+        )
+    except FamilyPublicationError:
+        entry = _family_refusal_entry(registry)
+        evidence_refusals.append(
+            {
+                "type": entry["type"],
+                "code": entry["code"],
+                "row_id": None,
+                "evidence_id": None,
+            }
+        )
+    try:
+        freeze_items, freeze_evidence_receipts = _freeze_evidence_for_arm(
+            root, tree, freeze_receipt, registry
+        )
+    except EvidenceLifecycleError as exc:
+        evidence_refusals.append(exc.refusal())
+        freeze_items, freeze_evidence_receipts = [], {}
     if set(evidence_receipts).intersection(freeze_evidence_receipts):
         raise ArmReadinessError(
             "readiness_evidence_reference_invalid",
@@ -9263,6 +9452,826 @@ def authenticate_bundle_launch_lineage(
     )
 
 
+class FamilyPublicationError(ValueError):
+    """A closed diagnostic at the custody-external publication boundary."""
+
+    def __init__(self, check_id: str, detail: str) -> None:
+        if check_id not in FAMILY_PUBLICATION_CHECK_IDS:
+            raise ValueError(f"unregistered family-publication check_id {check_id!r}")
+        super().__init__(detail)
+        self.check_id = check_id
+
+
+_FAMILY_MARKER_KEYS = frozenset(
+    {
+        "schema_version",
+        "marker_kind",
+        "family_id",
+        "family_generation",
+        "publication_state",
+        "publication_git",
+        "common_evidence_git",
+        "lifecycle_registry",
+        "members",
+        "terminal_review",
+        "publication_authority",
+        "authoring_context",
+        "assurance",
+    }
+)
+_FAMILY_MEMBER_KEYS = frozenset(
+    {
+        "profile",
+        "pack_id",
+        "pack_path",
+        "pack_digest_algorithm",
+        "pack_sha256",
+        "plan_tree",
+        "frozen_plan",
+        "freeze_receipt",
+    }
+)
+_STEP6_TABLE_KEYS = frozenset(
+    {
+        "schema_version",
+        "table_kind",
+        "transaction_id",
+        "family_id",
+        "git",
+        "registry",
+        "family_publication",
+        "successor_pinset",
+        "confirmation",
+    }
+)
+
+
+def _family_exact(value: object, keys: frozenset[str], where: str) -> Mapping[str, Any]:
+    try:
+        return _require_exact_keys(value, keys, where)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("marker_schema_mismatch", str(exc)) from exc
+
+
+def _family_refusal_entry(registry: Mapping[str, Any]) -> dict[str, str]:
+    entry = _r1_refusal_entry(registry["freeze_evidence_lifecycle"], "FAMILY_PUBLICATION")
+    return {
+        "role": "FAMILY_PUBLICATION",
+        "code": str(entry["code"]),
+        "type": str(entry["type"]),
+    }
+
+
+def _family_git_oid(value: object, where: str) -> str:
+    if not isinstance(value, str) or _LOWER_GIT_OID_RE.fullmatch(value) is None:
+        raise FamilyPublicationError("marker_schema_mismatch", f"{where} is not a Git OID")
+    return value
+
+
+def _family_sha(value: object, where: str) -> str:
+    if not isinstance(value, str) or _LOWER_SHA256_RE.fullmatch(value) is None:
+        raise FamilyPublicationError("marker_schema_mismatch", f"{where} is not a SHA-256")
+    return value
+
+
+def validate_family_publication_marker(value: object) -> Mapping[str, Any]:
+    """Validate the immutable-from-build marker's exact schema."""
+
+    marker = _family_exact(value, _FAMILY_MARKER_KEYS, "family marker")
+    if (
+        marker["schema_version"] != FAMILY_PUBLICATION_MARKER_SCHEMA
+        or marker["marker_kind"] != "FAMILY_PUBLICATION"
+        or marker["family_id"] != "d117-v4"
+        or marker["family_generation"] != FAMILY_PUBLICATION_FIRST_GENERATION
+        or isinstance(marker["family_generation"], bool)
+        or marker["publication_state"] != "PUBLISHED"
+    ):
+        raise FamilyPublicationError("marker_schema_mismatch", "family marker constants differ")
+    publication_git = _family_exact(
+        marker["publication_git"],
+        frozenset(
+            {
+                "head_commit",
+                "head_tree_oid",
+                "local_main_commit",
+                "origin_main_commit",
+                "clean",
+                "exact_match",
+            }
+        ),
+        "family marker.publication_git",
+    )
+    head = _family_git_oid(publication_git["head_commit"], "publication head")
+    _family_git_oid(publication_git["head_tree_oid"], "publication tree")
+    if (
+        publication_git["local_main_commit"] != head
+        or publication_git["origin_main_commit"] != head
+        or publication_git["clean"] is not True
+        or publication_git["exact_match"] is not True
+    ):
+        raise FamilyPublicationError("head_mismatch", "publication Git values are not four-way exact")
+    common_git = _family_exact(
+        marker["common_evidence_git"],
+        frozenset({"head_commit", "head_tree_oid"}),
+        "family marker.common_evidence_git",
+    )
+    _family_git_oid(common_git["head_commit"], "common evidence head")
+    _family_git_oid(common_git["head_tree_oid"], "common evidence tree")
+    lifecycle = _family_exact(
+        marker["lifecycle_registry"],
+        frozenset(
+            {
+                "path",
+                "schema_version",
+                "registry_id",
+                "sha256",
+                "lifecycle_registry_id",
+                "family_publication_marker_schema",
+                "family_publication_refusal",
+            }
+        ),
+        "family marker.lifecycle_registry",
+    )
+    if (
+        lifecycle["path"] != ROW_REGISTRY_RELATIVE_PATH.as_posix()
+        or lifecycle["schema_version"] != R1_ROW_REGISTRY_SCHEMA
+        or lifecycle["registry_id"] != "d117-row-registry-v2"
+        or lifecycle["lifecycle_registry_id"] != "d117-r1-lifecycle-v1"
+        or lifecycle["family_publication_marker_schema"]
+        != FAMILY_PUBLICATION_MARKER_SCHEMA
+    ):
+        raise FamilyPublicationError("registry_mismatch", "marker registry constants differ")
+    _family_sha(lifecycle["sha256"], "marker registry digest")
+    refusal = _family_exact(
+        lifecycle["family_publication_refusal"],
+        frozenset({"role", "code", "type"}),
+        "family marker family-publication refusal",
+    )
+    if refusal != {
+        "role": "FAMILY_PUBLICATION",
+        "code": "readiness_r1_family_publication",
+        "type": "CUSTODY",
+    }:
+        raise FamilyPublicationError("registry_mismatch", "marker refusal entry differs")
+
+    members = marker["members"]
+    if not isinstance(members, list) or len(members) != 3:
+        raise FamilyPublicationError("roster_incomplete", "marker must carry three members")
+    expected = (
+        ("ALPHA", "d117_floor_qwen25_1p5b_v4"),
+        ("BETA", "d117_floor_qwen25_7b_v4"),
+        ("GAMMA", "d117_contrast_qwen25_1p5b_vs_7b_v4"),
+    )
+    for index, (raw_member, (profile, pack_id)) in enumerate(zip(members, expected, strict=True)):
+        member = _family_exact(raw_member, _FAMILY_MEMBER_KEYS, f"family marker.members[{index}]")
+        if (
+            member["profile"] != profile
+            or member["pack_id"] != pack_id
+            or member["pack_path"] != f"configs/campaigns/{pack_id}"
+            or member["pack_digest_algorithm"] != PACK_DIGEST_ALGORITHM
+        ):
+            raise FamilyPublicationError("roster_mismatch", f"member {index} identity differs")
+        _family_sha(member["pack_sha256"], f"member {index} pack digest")
+        plan_tree = _family_exact(
+            member["plan_tree"],
+            frozenset({"path", "sha256", "sidecar_path", "sidecar_sha256"}),
+            f"member {index} plan tree",
+        )
+        if plan_tree["path"] != "plan_tree.json" or plan_tree["sidecar_path"] != "plan_tree.sha256":
+            raise FamilyPublicationError("plan_binding_mismatch", "plan-tree paths differ")
+        _family_sha(plan_tree["sha256"], "plan-tree digest")
+        _family_sha(plan_tree["sidecar_sha256"], "plan-tree sidecar digest")
+        frozen_plan = _family_exact(
+            member["frozen_plan"],
+            frozenset({"plan_id", "window_id", "path", "sha256"}),
+            f"member {index} frozen plan",
+        )
+        for name in ("plan_id", "window_id", "path"):
+            _require_string(frozen_plan[name], f"member {index} frozen_plan.{name}")
+        _family_sha(frozen_plan["sha256"], "frozen-plan digest")
+        freeze = _family_exact(
+            member["freeze_receipt"],
+            frozenset(
+                {
+                    "schema_version",
+                    "receipt_id",
+                    "ordinal",
+                    "path",
+                    "sha256",
+                    "sidecar_path",
+                    "sidecar_sha256",
+                    "status",
+                }
+            ),
+            f"member {index} freeze receipt",
+        )
+        if (
+            freeze["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA
+            or freeze["receipt_id"] != "freeze-0004"
+            or freeze["ordinal"] != 4
+            or isinstance(freeze["ordinal"], bool)
+            or freeze["path"] != "arm_readiness.freeze.receipts/freeze-0004.json"
+            or freeze["sidecar_path"]
+            != "arm_readiness.freeze.receipts/freeze-0004.json.sha256"
+            or freeze["status"] != "PASS"
+        ):
+            raise FamilyPublicationError("freeze_binding_mismatch", "freeze-0004 constants differ")
+        _family_sha(freeze["sha256"], "freeze digest")
+        _family_sha(freeze["sidecar_sha256"], "freeze sidecar digest")
+    terminal = _family_exact(
+        marker["terminal_review"],
+        frozenset({"evidence_kind", "head_tree_oid"}),
+        "family marker.terminal_review",
+    )
+    if terminal["evidence_kind"] != "TERMINAL_REVIEW":
+        raise FamilyPublicationError("terminal_review_mismatch", "terminal-review kind differs")
+    terminal_tree = _family_git_oid(terminal["head_tree_oid"], "terminal-review tree")
+    if terminal_tree != publication_git["head_tree_oid"]:
+        raise FamilyPublicationError("terminal_review_mismatch", "terminal review binds another tree")
+    authority = _family_exact(
+        marker["publication_authority"],
+        frozenset({"confirmation_schema", "required_decision"}),
+        "family marker.publication_authority",
+    )
+    if authority != {
+        "confirmation_schema": STEP6_CONFIRMATION_TABLE_SCHEMA,
+        "required_decision": "YES",
+    }:
+        raise FamilyPublicationError("marker_schema_mismatch", "confirmation contract differs")
+    context = _family_exact(
+        marker["authoring_context"],
+        frozenset(
+            {
+                "transaction_id",
+                "source_commit_time_utc",
+                "construction_phase",
+                "custody_class",
+                "builder",
+                "consumer",
+            }
+        ),
+        "family marker.authoring_context",
+    )
+    if (
+        context["transaction_id"] != f"d117-v4@{head}"
+        or context["construction_phase"] != "POST_FREEZE_FAMILY_BOUNDARY"
+        or context["custody_class"] != "TRANSACTION_EXTERNAL"
+    ):
+        raise FamilyPublicationError("marker_schema_mismatch", "authoring constants differ")
+    _require_string(context["source_commit_time_utc"], "marker source commit time")
+    for role, expected_path in (
+        ("builder", "scripts/build_family_marker.py"),
+        ("consumer", "scripts/verify_family_marker.py"),
+    ):
+        tool = _family_exact(
+            context[role], frozenset({"path", "sha256"}), f"marker {role}"
+        )
+        if tool["path"] != expected_path:
+            raise FamilyPublicationError("tool_mismatch", f"marker {role} path differs")
+        _family_sha(tool["sha256"], f"marker {role} digest")
+    if marker["assurance"] != ASSURANCE:
+        raise FamilyPublicationError("marker_schema_mismatch", "marker assurance differs")
+    return marker
+
+
+def validate_step6_confirmation_table(value: object) -> Mapping[str, Any]:
+    """Validate the one-home, two-consumer step-6 confirmation artifact."""
+
+    table = _family_exact(value, _STEP6_TABLE_KEYS, "step-6 confirmation table")
+    if (
+        table["schema_version"] != STEP6_CONFIRMATION_TABLE_SCHEMA
+        or table["table_kind"] != "D117_STEP6_CONFIRMATION"
+        or table["family_id"] != "d117-v4"
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "confirmation constants differ")
+    _require_string(table["transaction_id"], "confirmation transaction_id")
+    git = _family_exact(
+        table["git"], frozenset({"head_commit", "head_tree_oid"}), "confirmation git"
+    )
+    _family_git_oid(git["head_commit"], "confirmation head")
+    _family_git_oid(git["head_tree_oid"], "confirmation tree")
+    registry = _family_exact(
+        table["registry"],
+        frozenset({"path", "schema_version", "registry_id", "sha256"}),
+        "confirmation registry",
+    )
+    if (
+        registry["path"] != ROW_REGISTRY_RELATIVE_PATH.as_posix()
+        or registry["schema_version"] != R1_ROW_REGISTRY_SCHEMA
+        or registry["registry_id"] != "d117-row-registry-v2"
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "confirmation registry differs")
+    _family_sha(registry["sha256"], "confirmation registry digest")
+    family = _family_exact(
+        table["family_publication"],
+        frozenset({"marker", "members"}),
+        "confirmation family-publication section",
+    )
+    marker_ref = _family_exact(
+        family["marker"],
+        frozenset({"path", "schema_version", "sha256"}),
+        "confirmation marker reference",
+    )
+    if (
+        marker_ref["path"] != FAMILY_PUBLICATION_MARKER_NAME
+        or marker_ref["schema_version"] != FAMILY_PUBLICATION_MARKER_SCHEMA
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "confirmation marker constants differ")
+    _family_sha(marker_ref["sha256"], "confirmation marker digest")
+    members = family["members"]
+    if not isinstance(members, list) or len(members) != 3:
+        raise FamilyPublicationError("confirmation_mismatch", "confirmation member table is incomplete")
+    for index, member in enumerate(members):
+        row = _family_exact(
+            member,
+            frozenset({"profile", "pack_id", "pack_sha256", "freeze_receipt_sha256"}),
+            f"confirmation member {index}",
+        )
+        _family_sha(row["pack_sha256"], "confirmation member pack digest")
+        _family_sha(row["freeze_receipt_sha256"], "confirmation member freeze digest")
+    successor = _family_exact(
+        table["successor_pinset"],
+        frozenset({"path", "schema_version", "sha256", "pack_count", "receipt_count", "fact_count"}),
+        "confirmation successor-pinset section",
+    )
+    if (
+        successor["path"] != RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1].as_posix()
+        or successor["schema_version"] != RECEIPT_HISTSEM_PINSET_SCHEMA
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "successor-pinset constants differ")
+    _family_sha(successor["sha256"], "confirmation successor pinset digest")
+    for name in ("pack_count", "receipt_count", "fact_count"):
+        if not isinstance(successor[name], int) or isinstance(successor[name], bool) or successor[name] < 0:
+            raise FamilyPublicationError("confirmation_mismatch", f"confirmation {name} is invalid")
+    confirmation = _family_exact(
+        table["confirmation"],
+        frozenset({"authority", "decision", "statement"}),
+        "confirmation decision",
+    )
+    if (
+        confirmation["authority"] != "ED"
+        or confirmation["decision"] != "YES"
+        or not isinstance(confirmation["statement"], str)
+        or not confirmation["statement"]
+    ):
+        raise FamilyPublicationError("confirmation_mismatch", "Ed confirmation is not exact YES")
+    return table
+
+
+def _family_tool_reference(
+    repository: Path, head: str, relative_path: str, executing_path: Path
+) -> dict[str, str]:
+    try:
+        raw = executing_path.resolve(strict=True).read_bytes()
+    except OSError as exc:
+        raise FamilyPublicationError("tool_mismatch", f"cannot read {relative_path}: {exc}") from exc
+    digest = sha256_bytes(raw)
+    sidecar_path = executing_path.with_name(f"{executing_path.name}.sha256")
+    if sidecar_path.exists():
+        try:
+            if sidecar_path.read_bytes() != gnu_sidecar(digest, executing_path.name):
+                raise FamilyPublicationError("tool_mismatch", f"candidate sidecar differs for {relative_path}")
+        except OSError as exc:
+            raise FamilyPublicationError("tool_mismatch", f"cannot read candidate tool sidecar: {exc}") from exc
+    else:
+        code, committed, _stderr = _histsem_git(repository, "show", f"{head}:{relative_path}")
+        if code != 0 or committed != raw:
+            raise FamilyPublicationError(
+                "tool_mismatch",
+                f"{relative_path} is neither candidate-sidecar authenticated nor the committed blob",
+            )
+    return {"path": relative_path, "sha256": digest}
+
+
+def _family_member(
+    repository: Path,
+    root: Path,
+    registry: Mapping[str, Any],
+    registry_reference: Mapping[str, Any],
+) -> tuple[dict[str, Any], set[str]]:
+    profile = _plan_profile(root, registry)
+    tree, tree_raw = _plan_tree(root)
+    freeze, freeze_ref = _load_freeze_reference(
+        root, tree, registry_reference, registry, require_pass=True
+    )
+    if freeze["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA:
+        raise FamilyPublicationError("freeze_binding_mismatch", "family freeze must use schema v2")
+    if freeze["receipt_id"] != "freeze-0004" or freeze["status"] != "PASS":
+        raise FamilyPublicationError("freeze_not_pass", "family freeze must be PASS freeze-0004")
+    try:
+        _items, receipts = _freeze_evidence_for_arm(root, tree, freeze, registry)
+    except (ArmReadinessError, EvidenceLifecycleError) as exc:
+        raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
+    derivation_heads = {
+        str(receipt["derivation_commit"])
+        for receipt in receipts.values()
+        if "derivation_commit" in receipt
+    }
+    try:
+        _repo, _prefix, pack_path = _repository_and_pack_relative(root)
+        plan_sidecar_raw = (root / "plan_tree.sha256").read_bytes()
+        freeze_raw = (root / str(freeze_ref["path"])).read_bytes()
+        freeze_sidecar_raw = (root / f"{freeze_ref['path']}.sha256").read_bytes()
+        plan_path = str(freeze["pack_identity"]["plan_path"])
+        plan_raw = (root / plan_path).read_bytes()
+    except (OSError, ArmReadinessError) as exc:
+        raise FamilyPublicationError("plan_binding_mismatch", str(exc)) from exc
+    pack = _pack_record(root)
+    return (
+        {
+            "profile": profile,
+            "pack_id": root.name,
+            "pack_path": pack_path,
+            "pack_digest_algorithm": PACK_DIGEST_ALGORITHM,
+            "pack_sha256": pack["pack_sha256"],
+            "plan_tree": {
+                "path": "plan_tree.json",
+                "sha256": sha256_bytes(tree_raw),
+                "sidecar_path": "plan_tree.sha256",
+                "sidecar_sha256": sha256_bytes(plan_sidecar_raw),
+            },
+            "frozen_plan": {
+                "plan_id": freeze["pack_identity"]["plan_id"],
+                "window_id": tree["window_identity"]["window_id"],
+                "path": plan_path,
+                "sha256": sha256_bytes(plan_raw),
+            },
+            "freeze_receipt": {
+                "schema_version": freeze["schema_version"],
+                "receipt_id": freeze["receipt_id"],
+                "ordinal": _freeze_receipt_ordinal(str(freeze["receipt_id"]), "family freeze receipt_id"),
+                "path": freeze_ref["path"],
+                "sha256": sha256_bytes(freeze_raw),
+                "sidecar_path": f"{freeze_ref['path']}.sha256",
+                "sidecar_sha256": sha256_bytes(freeze_sidecar_raw),
+                "status": freeze["status"],
+            },
+        },
+        derivation_heads,
+    )
+
+
+def build_family_publication_marker(
+    repository_root: Path | str,
+    head: str,
+    pack_roots: Sequence[Path | str],
+    output_path: Path | str,
+    *,
+    builder_tool: Path | str,
+    consumer_tool: Path | str,
+) -> dict[str, Any]:
+    """Construct deterministic marker bytes in external create-only custody."""
+
+    repository = Path(repository_root).resolve(strict=True)
+    output = Path(output_path).resolve(strict=False)
+    try:
+        output.relative_to(repository)
+    except ValueError:
+        pass
+    else:
+        raise FamilyPublicationError("output_in_tree", "marker output must be outside the repository")
+    if output.exists() or output.with_name(f"{output.name}.sha256").exists():
+        raise FamilyPublicationError("output_collision", "marker output or sidecar already exists")
+    if len(pack_roots) != 3:
+        raise FamilyPublicationError("roster_incomplete", "exactly three pack roots are required")
+    roots = [
+        (Path(item) if Path(item).is_absolute() else repository / Path(item)).resolve(strict=True)
+        for item in pack_roots
+    ]
+    reviewed = reviewed_main(roots[0])
+    if reviewed["head_commit"] != head or reviewed["exact_match"] is not True:
+        diagnostic = "worktree_dirty" if reviewed["clean"] is not True else "head_mismatch"
+        raise FamilyPublicationError(diagnostic, "marker build requires strict four-way reviewed main")
+    registry, registry_raw = load_registry(repository)
+    lifecycle = registry["freeze_evidence_lifecycle"]
+    expected = lifecycle["successor_policy"]["successor_pack_ids"]
+    if {root.name for root in roots} != set(expected.values()):
+        raise FamilyPublicationError("roster_mismatch", "pack roots differ from registry successor roster")
+    registry_reference = {
+        "registry_id": registry["registry_id"],
+        "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+        "sha256": sha256_bytes(registry_raw),
+        "plan_profile": None,
+    }
+    members: list[dict[str, Any]] = []
+    derivation_heads: set[str] = set()
+    for root in roots:
+        reference = dict(registry_reference)
+        reference["plan_profile"] = _plan_profile(root, registry)
+        member, heads = _family_member(repository, root, registry, reference)
+        members.append(member)
+        derivation_heads.update(heads)
+    members.sort(key=lambda member: ("ALPHA", "BETA", "GAMMA").index(member["profile"]))
+    if len(derivation_heads) != 1:
+        raise FamilyPublicationError("evidence_set_mismatch", "family evidence has no single derivation head")
+    common_head = next(iter(derivation_heads))
+    code, common_tree_raw, _stderr = _histsem_git(repository, "rev-parse", f"{common_head}^{{tree}}")
+    if code != 0:
+        raise FamilyPublicationError("head_unresolvable", "common evidence head is unavailable")
+    common_tree = common_tree_raw.decode("ascii", errors="strict").strip()
+    family_refusal = _family_refusal_entry(registry)
+    builder_ref = _family_tool_reference(
+        repository, head, "scripts/build_family_marker.py", Path(builder_tool)
+    )
+    consumer_ref = _family_tool_reference(
+        repository, head, "scripts/verify_family_marker.py", Path(consumer_tool)
+    )
+    code, commit_time_raw, _stderr = _histsem_git(repository, "show", "-s", "--format=%cI", head)
+    if code != 0:
+        raise FamilyPublicationError("head_unresolvable", "publication commit time is unavailable")
+    commit_time = datetime.fromisoformat(commit_time_raw.decode().strip()).astimezone(UTC)
+    marker = {
+        "schema_version": FAMILY_PUBLICATION_MARKER_SCHEMA,
+        "marker_kind": "FAMILY_PUBLICATION",
+        "family_id": "d117-v4",
+        "family_generation": FAMILY_PUBLICATION_FIRST_GENERATION,
+        "publication_state": "PUBLISHED",
+        "publication_git": dict(reviewed),
+        "common_evidence_git": {
+            "head_commit": common_head,
+            "head_tree_oid": common_tree,
+        },
+        "lifecycle_registry": {
+            "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+            "schema_version": registry["schema_version"],
+            "registry_id": registry["registry_id"],
+            "sha256": sha256_bytes(registry_raw),
+            "lifecycle_registry_id": lifecycle["registry_id"],
+            "family_publication_marker_schema": lifecycle["successor_policy"]["family_publication_marker_schema"],
+            "family_publication_refusal": family_refusal,
+        },
+        "members": members,
+        "terminal_review": {
+            "evidence_kind": "TERMINAL_REVIEW",
+            "head_tree_oid": reviewed["head_tree_oid"],
+        },
+        "publication_authority": {
+            "confirmation_schema": STEP6_CONFIRMATION_TABLE_SCHEMA,
+            "required_decision": "YES",
+        },
+        "authoring_context": {
+            "transaction_id": f"d117-v4@{head}",
+            "source_commit_time_utc": commit_time.isoformat().replace("+00:00", "Z"),
+            "construction_phase": "POST_FREEZE_FAMILY_BOUNDARY",
+            "custody_class": "TRANSACTION_EXTERNAL",
+            "builder": builder_ref,
+            "consumer": consumer_ref,
+        },
+        "assurance": copy.deepcopy(ASSURANCE),
+    }
+    validate_family_publication_marker(marker)
+    raw = render_json(marker)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    _exclusive_write(output, raw)
+    _exclusive_write(output.with_name(f"{output.name}.sha256"), gnu_sidecar(sha256_bytes(raw), output.name))
+    return {
+        "schema_version": "joulewise.d117_family_publication_build.v1",
+        "status": "PASS",
+        "marker_path": str(output),
+        "marker_sha256": sha256_bytes(raw),
+        "sidecar_path": str(output.with_name(f"{output.name}.sha256")),
+        "sidecar_sha256": sha256_bytes(gnu_sidecar(sha256_bytes(raw), output.name)),
+        "family_id": marker["family_id"],
+        "head_commit": head,
+        "head_tree_oid": reviewed["head_tree_oid"],
+    }
+
+
+def _read_external_canonical(
+    path: Path,
+    *,
+    absent_check: str,
+    invalid_check: str,
+    noncanonical_check: str | None = None,
+) -> tuple[Mapping[str, Any], bytes]:
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise FileNotFoundError(path)
+        raw = path.read_bytes()
+        sidecar = path.with_name(f"{path.name}.sha256").read_bytes()
+    except FileNotFoundError as exc:
+        raise FamilyPublicationError(absent_check, f"custody artifact is absent: {path}") from exc
+    except OSError as exc:
+        raise FamilyPublicationError(invalid_check, f"custody artifact is unreadable: {exc}") from exc
+    digest = sha256_bytes(raw)
+    if sidecar != gnu_sidecar(digest, path.name):
+        raise FamilyPublicationError(invalid_check, "custody artifact sidecar differs")
+    try:
+        value = parse_json_bytes(raw, require_canonical=True)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError(
+            noncanonical_check or invalid_check,
+            f"custody JSON is noncanonical: {exc}",
+        ) from exc
+    if not isinstance(value, Mapping):
+        raise FamilyPublicationError(invalid_check, "custody JSON must be an object")
+    return value, raw
+
+
+def verify_family_publication_marker(
+    repository_root: Path | str,
+    marker_path: Path | str,
+    *,
+    phase: str,
+    confirmation_path: Path | str | None = None,
+    target_pack_root: Path | str | None = None,
+    consumer_tool: Path | str | None = None,
+) -> dict[str, Any]:
+    """Replay marker semantics; candidate PASS is never gate-admissible."""
+
+    if phase not in {"candidate", "publication", "pre-arm", "t0"}:
+        raise FamilyPublicationError("lane_inadmissible", f"unsupported marker phase {phase!r}")
+    repository = Path(repository_root).resolve(strict=True)
+    marker_file = Path(marker_path).resolve(strict=False)
+    try:
+        marker_file.relative_to(repository)
+    except ValueError:
+        pass
+    else:
+        raise FamilyPublicationError(
+            "marker_unreadable", "published marker custody must be outside the repository"
+        )
+    registry, registry_raw = load_registry(repository)
+    refusal = _family_refusal_entry(registry)
+    marker_value, marker_raw = _read_external_canonical(
+        marker_file,
+        absent_check="marker_absent",
+        invalid_check="marker_unreadable",
+        noncanonical_check="marker_noncanonical",
+    )
+    try:
+        marker = validate_family_publication_marker(marker_value)
+    except FamilyPublicationError:
+        raise
+    live = reviewed_main(repository)
+    if live["clean"] is not True:
+        raise FamilyPublicationError("worktree_dirty", "live marker consult requires a clean tree")
+    if live["exact_match"] is not True or marker["publication_git"] != live:
+        raise FamilyPublicationError("head_mismatch", "marker and live four-way Git coordinates differ")
+    if marker["lifecycle_registry"] != {
+        "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+        "schema_version": registry["schema_version"],
+        "registry_id": registry["registry_id"],
+        "sha256": sha256_bytes(registry_raw),
+        "lifecycle_registry_id": registry["freeze_evidence_lifecycle"]["registry_id"],
+        "family_publication_marker_schema": registry["freeze_evidence_lifecycle"]["successor_policy"]["family_publication_marker_schema"],
+        "family_publication_refusal": refusal,
+    }:
+        raise FamilyPublicationError("registry_mismatch", "current registry differs from marker authority")
+    expected_roster = registry["freeze_evidence_lifecycle"]["successor_policy"]["successor_pack_ids"]
+    if {member["profile"]: member["pack_id"] for member in marker["members"]} != dict(expected_roster):
+        raise FamilyPublicationError("roster_mismatch", "current registry roster differs from marker")
+    common_heads: set[str] = set()
+    for expected_member in marker["members"]:
+        root = repository / str(expected_member["pack_path"])
+        reference = {
+            "registry_id": registry["registry_id"],
+            "path": ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+            "sha256": sha256_bytes(registry_raw),
+            "plan_profile": expected_member["profile"],
+        }
+        observed, heads = _family_member(repository, root, registry, reference)
+        if observed != expected_member:
+            raise FamilyPublicationError("pack_digest_mismatch", f"member replay differs: {root.name}")
+        common_heads.update(heads)
+    if len(common_heads) != 1:
+        raise FamilyPublicationError("evidence_set_mismatch", "replayed family has mixed derivation heads")
+    common_head = next(iter(common_heads))
+    code, tree_raw, _stderr = _histsem_git(repository, "rev-parse", f"{common_head}^{{tree}}")
+    if code != 0 or marker["common_evidence_git"] != {
+        "head_commit": common_head,
+        "head_tree_oid": tree_raw.decode("ascii", errors="strict").strip(),
+    }:
+        raise FamilyPublicationError("evidence_set_mismatch", "common evidence Git binding differs")
+    if target_pack_root is not None:
+        target = Path(target_pack_root).resolve(strict=True)
+        _repo, _prefix, target_relative = _repository_and_pack_relative(target)
+        if not any(
+            member["pack_id"] == target.name and member["pack_path"] == target_relative
+            for member in marker["members"]
+        ):
+            raise FamilyPublicationError("pack_not_member", "target pack is outside the published roster")
+    if consumer_tool is not None:
+        builder_path = Path(consumer_tool).with_name("build_family_marker.py")
+        expected_builder = _family_tool_reference(
+            repository,
+            str(live["head_commit"]),
+            "scripts/build_family_marker.py",
+            builder_path,
+        )
+        expected_consumer = _family_tool_reference(
+            repository,
+            str(live["head_commit"]),
+            "scripts/verify_family_marker.py",
+            Path(consumer_tool),
+        )
+        if (
+            marker["authoring_context"]["builder"] != expected_builder
+            or marker["authoring_context"]["consumer"] != expected_consumer
+        ):
+            raise FamilyPublicationError("tool_mismatch", "executing tool pair differs from marker")
+
+    confirmation_ref: dict[str, str] | None = None
+    if phase != "candidate":
+        if confirmation_path is None:
+            raise FamilyPublicationError("confirmation_missing", "published phase requires step-6 table")
+        table_value, table_raw = _read_external_canonical(
+            Path(confirmation_path),
+            absent_check="confirmation_missing",
+            invalid_check="confirmation_mismatch",
+        )
+        table = validate_step6_confirmation_table(table_value)
+        expected_members = [
+            {
+                "profile": member["profile"],
+                "pack_id": member["pack_id"],
+                "pack_sha256": member["pack_sha256"],
+                "freeze_receipt_sha256": member["freeze_receipt"]["sha256"],
+            }
+            for member in marker["members"]
+        ]
+        if (
+            table["git"]
+            != {
+                "head_commit": marker["publication_git"]["head_commit"],
+                "head_tree_oid": marker["publication_git"]["head_tree_oid"],
+            }
+            or table["registry"]["sha256"] != marker["lifecycle_registry"]["sha256"]
+            or table["family_publication"]["marker"]["sha256"] != sha256_bytes(marker_raw)
+            or table["family_publication"]["members"] != expected_members
+        ):
+            raise FamilyPublicationError("confirmation_mismatch", "table C-to-M edge differs")
+        confirmation_ref = {
+            "path": str(Path(confirmation_path)),
+            "sha256": sha256_bytes(table_raw),
+        }
+    checks = [
+        {"check_id": check_id, "status": "PASS"}
+        for check_id in sorted(
+            {
+                "marker_schema_mismatch",
+                "registry_mismatch",
+                "roster_mismatch",
+                "head_mismatch",
+                "pack_digest_mismatch",
+                "plan_binding_mismatch",
+                "evidence_set_mismatch",
+                "freeze_binding_mismatch",
+                "predecessor_mismatch",
+                "terminal_review_mismatch",
+                "tool_mismatch",
+                *( {"confirmation_mismatch"} if phase != "candidate" else set() ),
+            }
+        )
+    ]
+    return {
+        "schema_version": FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
+        "receipt_kind": "family_publication_verification",
+        "phase": phase,
+        "lane": "candidate" if phase == "candidate" else "published",
+        "gate_admissible": phase != "candidate",
+        "checked_at_utc": _utc_now(),
+        "status": "PASS",
+        "publication_authorized": phase != "candidate",
+        "family_id": marker["family_id"],
+        "marker": {"path": str(Path(marker_path)), "sha256": sha256_bytes(marker_raw)},
+        "confirmation": confirmation_ref,
+        "consulted_git": dict(live),
+        "checks": checks,
+        "refusals": [],
+        "detail": None,
+        "assurance": copy.deepcopy(ASSURANCE),
+    }
+
+
+def _gate_family_publication(
+    pack_root: Path,
+    *,
+    marker_path: Path | str | None,
+    confirmation_path: Path | str | None,
+) -> None:
+    """Engage from the tracked successor roster, never marker presence."""
+
+    repository = _repo_for_pack(pack_root)
+    registry, _raw = load_registry(repository)
+    roster = set(
+        registry["freeze_evidence_lifecycle"]["successor_policy"][
+            "successor_pack_ids"
+        ].values()
+    )
+    if pack_root.name not in roster:
+        return
+    if marker_path is None:
+        raise FamilyPublicationError("marker_absent", "registry-installed family has no marker")
+    verify_family_publication_marker(
+        repository,
+        marker_path,
+        phase="pre-arm",
+        confirmation_path=confirmation_path,
+        target_pack_root=pack_root,
+    )
+
+
 def verify_receipt(
     pack_root: Path | str, receipt_path: Path | str
 ) -> dict[str, Any]:
@@ -9324,6 +10333,12 @@ __all__ = [
     "EVIDENCE_RECEIPT_SCHEMA",
     "EXECUTION_EVIDENCE_RECEIPT_SCHEMA",
     "EvidenceLifecycleError",
+    "FAMILY_PUBLICATION_CHECK_IDS",
+    "FAMILY_PUBLICATION_FIRST_GENERATION",
+    "FAMILY_PUBLICATION_MARKER_NAME",
+    "FAMILY_PUBLICATION_MARKER_SCHEMA",
+    "FAMILY_PUBLICATION_VERIFICATION_SCHEMA",
+    "FamilyPublicationError",
     "FREEZE_RECEIPT_SCHEMA",
     "FREEZE_RECEIPT_V1_SCHEMA",
     "FREEZE_RECEIPT_V2_SCHEMA",
@@ -9343,15 +10358,20 @@ __all__ = [
     "R1_LIFECYCLE_REGISTRY_SCHEMA",
     "R1_REFUSAL_ROLES",
     "R1_ROW_REGISTRY_SCHEMA",
+    "RECEIPT_HISTSEM_PINSET_RELATIVE_PATH",
+    "RECEIPT_HISTSEM_PINSET_SCHEMA",
     "ROW_REGISTRY_ID",
     "ROW_REGISTRY_SCHEMA",
     "SYNTHETIC_DOMAINS",
+    "STEP6_CONFIRMATION_TABLE_NAME",
+    "STEP6_CONFIRMATION_TABLE_SCHEMA",
     "applicability_for_row",
     "authenticate_bundle_launch_lineage",
     "authenticate_campaign_launch_lineage",
     "authenticate_launch_lineage",
     "authenticate_r1_lifecycle_registry",
     "committed_pack_tree_sha256",
+    "build_family_publication_marker",
     "generate_arm_receipt",
     "generate_dry_run_receipt",
     "generate_freeze_receipt",
@@ -9373,13 +10393,16 @@ __all__ = [
     "validate_dry_run_receipt",
     "validate_evidence_receipt",
     "validate_freeze_receipt",
+    "validate_family_publication_marker",
     "validate_r1_class_lifecycle",
     "validate_r1_evidence_lifecycle",
     "validate_r1_lifecycle_registry",
     "validate_r1_temporal_budget",
     "validate_registry",
     "validate_terminal_review_head_tree",
+    "validate_step6_confirmation_table",
     "verify_arm_receipt",
     "verify_consumed_launch",
     "verify_receipt",
+    "verify_family_publication_marker",
 ]

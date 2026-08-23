@@ -65,6 +65,12 @@ class SchedulerGateVocabularyTests(unittest.TestCase):
                 "scheduler_c4_privilege_absent",
                 "scheduler_c5_undiagnosed_retry",
                 "scheduler_c5_refusal_log_unreadable",
+                "scheduler_family_unpublished",
+                "scheduler_family_marker_absent",
+                "scheduler_family_marker_invalid",
+                "scheduler_family_confirmation_absent",
+                "scheduler_family_confirmation_invalid",
+                "scheduler_family_boot_pin_mismatch",
                 "scheduler_environment_error",
             }
         )
@@ -139,6 +145,93 @@ class SchedulerGateReceiptTests(unittest.TestCase):
             tuple(gate["gate_id"] for gate in receipt["gates"]),
             gates.GATE_EVALUATION_ORDER,
         )
+        self.assertEqual(
+            receipt["schema_version"],
+            "joulewise.window_scheduler_gate_receipt.v2",
+        )
+        self.assertEqual(
+            set(receipt["family_publication"]), gates.FAMILY_PUBLICATION_KEYS
+        )
+
+    def test_g7_refusal_is_explicit_with_null_unverified_bindings(self) -> None:
+        receipt = self._evaluate()
+        by_id = {gate["gate_id"]: gate for gate in receipt["gates"]}
+        self.assertEqual(by_id["G7"]["verdict"], "REFUSE")
+        self.assertIn(by_id["G7"]["refusals"][0]["code"], gates.G7_REASON_CODES)
+        publication = receipt["family_publication"]
+        self.assertEqual(publication["verdict"], "REFUSE")
+        for name in (
+            "marker_path",
+            "marker_sha256",
+            "confirmation_sha256",
+            "publication_head",
+        ):
+            self.assertIsNone(publication[name])
+        self.assertEqual(
+            publication["verification_receipt"], {"path": None, "sha256": None}
+        )
+        self.assertEqual(
+            publication["refusals"],
+            [
+                {
+                    "role": "FAMILY_PUBLICATION",
+                    "code": "readiness_r1_family_publication",
+                    "type": "CUSTODY",
+                }
+            ],
+        )
+
+    def test_g7_pass_binds_marker_table_and_verification_receipt(self) -> None:
+        publication_root = self.campaign_root / "family_publication"
+        publication_root.mkdir()
+        marker_path = publication_root / arm_readiness.FAMILY_PUBLICATION_MARKER_NAME
+        confirmation_path = publication_root / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
+        marker_path.write_bytes(b"marker")
+        confirmation_path.write_bytes(b"confirmation")
+        reviewed = {
+            "head_commit": "a" * 40,
+            "head_tree_oid": "b" * 40,
+            "local_main_commit": "a" * 40,
+            "origin_main_commit": "a" * 40,
+            "clean": True,
+            "exact_match": True,
+        }
+        verified = {
+            "schema_version": arm_readiness.FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
+            "status": "PASS",
+            "family_id": "family-1",
+            "consulted_git": reviewed,
+        }
+        pack = {"pack_id": "pack", "pack_sha256": "c" * 64}
+        with (
+            mock.patch.object(gates, "_live_boot_session_id", return_value=BOOT_A),
+            mock.patch.object(arm_readiness, "reviewed_main", return_value=reviewed),
+            mock.patch.object(arm_readiness, "_pack_record", return_value=pack),
+            mock.patch.object(arm_readiness, "_repo_for_pack", return_value=self.root),
+            mock.patch.object(
+                arm_readiness,
+                "verify_family_publication_marker",
+                return_value=verified,
+            ),
+        ):
+            receipt = gates.evaluate_scheduler_gates(
+                pack_root=self.pack_root,
+                campaign_root=self.campaign_root,
+                family_id="family-1",
+                window_class="SHAKEDOWN",
+                receipt_boot_session_ids={"evidence-1": BOOT_A},
+                now_monotonic_ns=123,
+            )
+        publication = receipt["family_publication"]
+        self.assertEqual(publication["verdict"], "PASS")
+        self.assertEqual(publication["marker_path"], str(marker_path))
+        self.assertRegex(publication["marker_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(publication["confirmation_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(
+            publication["verification_receipt"]["sha256"], r"^[0-9a-f]{64}$"
+        )
+        self.assertEqual(receipt["gates"][-1]["gate_id"], "G7")
+        self.assertEqual(receipt["gates"][-1]["verdict"], "PASS")
 
     def test_receipt_rejects_unknown_root_and_gate_keys(self) -> None:
         receipt = self._evaluate()
@@ -577,7 +670,7 @@ class CampaignBootPinGateTests(unittest.TestCase):
                 receipt_boot_session_ids={"e2": BOOT_B},
             )
         reviewed_call.assert_called_once_with(self.pack_root)
-        self.assertEqual(len(receipt["gates"]), 6)
+        self.assertEqual(len(receipt["gates"]), 7)
         self.assertEqual(receipt["verdict"], "NO-GO")
 
     def test_evaluator_never_writes_the_pack(self) -> None:
