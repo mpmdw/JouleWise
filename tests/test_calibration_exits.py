@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 import errno
@@ -21,6 +21,7 @@ import sys
 import tempfile
 import threading
 import time
+from types import MappingProxyType
 import unittest
 from unittest import mock
 
@@ -283,7 +284,57 @@ class WitnessResult:
     public_executions: tuple[PublicExecutionEvidence, ...]
 
 
-_WITNESS_RESULTS: dict[RefusalCode, WitnessResult] = {}
+@dataclass(frozen=True)
+class WitnessCorpus:
+    """One immutable, ordered generation of public witness evidence."""
+
+    generation_id: int
+    ordered_codes: tuple[RefusalCode, ...]
+    results: Mapping[RefusalCode, WitnessResult]
+
+
+class WitnessCorpusOwner:
+    """Sole reset/generation owner for the expensive public witness corpus."""
+
+    def __init__(self) -> None:
+        self._generation_id = 0
+        self._corpus: WitnessCorpus | None = None
+
+    def reset(self) -> None:
+        self._corpus = None
+
+    def get_or_execute(
+        self,
+        cases: tuple[WitnessCase, ...],
+        execute: Callable[[WitnessCase], WitnessResult],
+        *,
+        expected_generation_id: int | None = None,
+    ) -> WitnessCorpus:
+        if self._corpus is None:
+            self._generation_id += 1
+            results: dict[RefusalCode, WitnessResult] = {}
+            for case in cases:
+                if case.code in results:
+                    raise AssertionError(f"duplicate witness case: {case.code.value}")
+                results[case.code] = execute(case)
+            self._corpus = WitnessCorpus(
+                generation_id=self._generation_id,
+                ordered_codes=tuple(case.code for case in cases),
+                results=MappingProxyType(results),
+            )
+        if (
+            expected_generation_id is not None
+            and self._corpus.generation_id != expected_generation_id
+        ):
+            raise AssertionError(
+                "witness corpus generation changed: "
+                f"expected={expected_generation_id} "
+                f"actual={self._corpus.generation_id}"
+            )
+        return self._corpus
+
+
+_WITNESS_CORPUS_OWNER = WitnessCorpusOwner()
 
 
 @dataclass(frozen=True)
@@ -861,6 +912,8 @@ class RefusalInventoryTests(unittest.TestCase):
         self.assertEqual(len(REFUSAL_INVENTORY), len(enum_codes))
         discovered = {case.code for case in WITNESS_CASES}
         self.assertEqual(len(discovered), len(WITNESS_CASES))
+        corpus = PublicGovernedExitWitnessTests.witness_corpus()
+        generation_id = corpus.generation_id
         for witness_class in (
             WitnessClass.OPERATIONAL,
             WitnessClass.CORRUPTION_BACKSTOP,
@@ -871,9 +924,12 @@ class RefusalInventoryTests(unittest.TestCase):
                 if record.witness_class is witness_class
             }
             executed = PublicGovernedExitWitnessTests.execute_cases(
-                code
-                for code in discovered
-                if REFUSAL_BY_CODE[code].witness_class is witness_class
+                (
+                    code
+                    for code in discovered
+                    if REFUSAL_BY_CODE[code].witness_class is witness_class
+                ),
+                corpus_generation_id=generation_id,
             )
             with self.subTest(witness_class=witness_class.value):
                 self.assertEqual(expected, executed)
@@ -913,11 +969,15 @@ class RefusalInventoryTests(unittest.TestCase):
             if record.witness_class is not WitnessClass.INTERNAL_INVARIANT
             and record.terminal_result is TerminalResult.NIGHT_STOPPED_PRESERVED
         }
-        executed = PublicGovernedExitWitnessTests.execute_cases(expected)
+        corpus = PublicGovernedExitWitnessTests.witness_corpus()
+        executed = PublicGovernedExitWitnessTests.execute_cases(
+            expected,
+            corpus_generation_id=corpus.generation_id,
+        )
         self.assertEqual(executed, expected)
         preserved = {
             code: result.preservation
-            for code, result in _WITNESS_RESULTS.items()
+            for code, result in corpus.results.items()
             if result.preservation is not None
         }
         self.assertEqual(set(preserved), expected)
@@ -942,10 +1002,14 @@ class RefusalInventoryTests(unittest.TestCase):
             for record in REFUSAL_INVENTORY
             if record.exit_id == "correct-preflight"
         }
-        executed = PublicGovernedExitWitnessTests.execute_cases(expected)
+        corpus = PublicGovernedExitWitnessTests.witness_corpus()
+        executed = PublicGovernedExitWitnessTests.execute_cases(
+            expected,
+            corpus_generation_id=corpus.generation_id,
+        )
         self.assertEqual(executed, expected)
         public_results = {
-            code: _WITNESS_RESULTS[code].public_executions for code in expected
+            code: corpus.results[code].public_executions for code in expected
         }
         self.assertEqual(set(public_results), expected)
         rederive_codes = {
@@ -1371,6 +1435,38 @@ class RefusalInventoryTests(unittest.TestCase):
         paths = sorted((REPO_ROOT / "tests").glob("test_calibration*.py"))
         paths.append(REPO_ROOT / "tests" / "test_powermetrics_fiducial.py")
         self.assertEqual(analyze_paths(paths), [])
+
+    def test_witness_corpus_owner_executes_once_across_reordered_consumers(self) -> None:
+        owner = WitnessCorpusOwner()
+        cases = WITNESS_CASES[:2]
+        executed: list[RefusalCode] = []
+
+        def execute(case: WitnessCase) -> WitnessResult:
+            executed.append(case.code)
+            return WitnessResult(case.code, None, ())
+
+        first = owner.get_or_execute(cases, execute)
+        self.assertEqual(executed, [case.code for case in cases])
+        self.assertEqual(first.ordered_codes, tuple(executed))
+        self.assertEqual(first.generation_id, 1)
+        with self.assertRaises(TypeError):
+            first.results[cases[0].code] = first.results[cases[0].code]  # type: ignore[index]
+
+        reordered_consumer = owner.get_or_execute(
+            tuple(reversed(cases)),
+            execute,
+            expected_generation_id=first.generation_id,
+        )
+        self.assertIs(reordered_consumer, first)
+        self.assertEqual(executed, [case.code for case in cases])
+
+        owner.reset()
+        second = owner.get_or_execute(tuple(reversed(cases)), execute)
+        self.assertEqual(second.generation_id, 2)
+        self.assertEqual(
+            executed,
+            [case.code for case in cases] + [case.code for case in reversed(cases)],
+        )
 
 
 class CalibrationExitReliabilityTests(unittest.TestCase):
@@ -2344,31 +2440,48 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
         self.t1.update(self.epoch)
 
     @classmethod
-    def execute_cases(cls, codes) -> set[RefusalCode]:
+    def _execute_witness_case(cls, case: WitnessCase) -> WitnessResult:
+        print(f"CASE START {case.code.value}", flush=True)
+        witness = cls(methodName="runTest")
+        setup_complete = False
+        try:
+            witness.setUp()
+            setup_complete = True
+            witness._execute_case(case)
+        finally:
+            if setup_complete:
+                witness.tearDown()
+            witness.doCleanups()
+        result = WitnessResult(
+            code=case.code,
+            preservation=witness.preservation_evidence,
+            public_executions=tuple(witness.public_execution_evidence),
+        )
+        print(f"CASE PASS {case.code.value}", flush=True)
+        return result
+
+    @classmethod
+    def witness_corpus(
+        cls,
+        *,
+        generation_id: int | None = None,
+    ) -> WitnessCorpus:
+        return _WITNESS_CORPUS_OWNER.get_or_execute(
+            WITNESS_CASES,
+            cls._execute_witness_case,
+            expected_generation_id=generation_id,
+        )
+
+    @classmethod
+    def execute_cases(
+        cls,
+        codes,
+        *,
+        corpus_generation_id: int | None = None,
+    ) -> set[RefusalCode]:
         selected = set(codes)
-        cases = [case for case in WITNESS_CASES if case.code in selected]
-        for case in cases:
-            if case.code in _WITNESS_RESULTS:
-                print(f"CASE CACHED {case.code.value}", flush=True)
-                continue
-            print(f"CASE START {case.code.value}", flush=True)
-            witness = cls(methodName="runTest")
-            setup_complete = False
-            try:
-                witness.setUp()
-                setup_complete = True
-                witness._execute_case(case)
-            finally:
-                if setup_complete:
-                    witness.tearDown()
-                witness.doCleanups()
-            _WITNESS_RESULTS[case.code] = WitnessResult(
-                code=case.code,
-                preservation=witness.preservation_evidence,
-                public_executions=tuple(witness.public_execution_evidence),
-            )
-            print(f"CASE PASS {case.code.value}", flush=True)
-        return selected & set(_WITNESS_RESULTS)
+        corpus = cls.witness_corpus(generation_id=corpus_generation_id)
+        return selected & set(corpus.results)
 
     def tearDown(self) -> None:
         self.sandbox.close()
@@ -4357,11 +4470,19 @@ class PublicGovernedExitWitnessTests(unittest.TestCase):
 
     def test_parameterized_durable_public_cli_witnesses(self) -> None:
         expected = {case.code for case in WITNESS_CASES}
-        executed = self.execute_cases(expected)
+        corpus = self.witness_corpus()
+        executed = self.execute_cases(
+            expected,
+            corpus_generation_id=corpus.generation_id,
+        )
         self.assertEqual(executed, expected)
-        self.assertEqual(set(_WITNESS_RESULTS), expected)
+        self.assertEqual(set(corpus.results), expected)
+        self.assertEqual(
+            corpus.ordered_codes,
+            tuple(case.code for case in WITNESS_CASES),
+        )
         self.assertTrue(
-            all(result.code is code for code, result in _WITNESS_RESULTS.items())
+            all(result.code is code for code, result in corpus.results.items())
         )
 
     def test_logical_producer_delay_preserves_exact_evidence_bytes(self) -> None:
