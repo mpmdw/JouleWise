@@ -1430,10 +1430,24 @@ def _derive_reason_code_coverage(context: _DerivationContext) -> _DerivedKind:
             kind,
             f"unregistered produced refusals: {sorted(produced-registered)!r}",
         )
+    # Codes that are registered but never appear as literals in the runtime
+    # source, each for a stated reason.  The R1 entries are resolved BY ROLE
+    # from the ruled registry's freeze_evidence_lifecycle.refusal_vocabulary at
+    # the moment of refusal: the registry, not this module, is the code/type
+    # authority, and the registry-load closure check is what keeps them
+    # registered.  This set mirrors `dynamic_or_defensive` in
+    # tests/test_arm_readiness_integration.py and must stay in step with it.
     dynamic = {
         "readiness_identity_projection_mint_divergence",
         "readiness_identity_receipt_namespace_anomalous",
         "readiness_lock_unavailable",
+        "readiness_r1_class_mismatch",
+        "readiness_r1_dependency_changed_set",
+        "readiness_r1_dependency_manifest",
+        "readiness_r1_successor_chain",
+        "readiness_r1_temporal_budget",
+        "readiness_r1_unknown_policy",
+        "readiness_r1_v1_grandfathering",
     }
     if registered - produced != dynamic:
         raise _underivable(

@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from joulewise.arm_readiness import (
+    ROW_REGISTRY_RELATIVE_PATH,
     ArmReadinessError,
     applicability_for_row,
     gnu_sidecar,
@@ -137,7 +138,21 @@ class ArmReadinessRegistryTests(unittest.TestCase):
             )
 
     def test_plan_tree_slots_bind_profiles_and_never_name_future_arm_receipt(self) -> None:
+        # Dual-coordinate semantics, per MAGISTRATE-RULING.md:124-131.  The
+        # ruled repoint moved the LIVE registry -- the one the code loads for
+        # new-family work -- to d117_row_registry_v2.json, and deliberately
+        # kept the v1 file in-tree, sha-pinned and otherwise unreferenced, as
+        # the archival companion of the _v3 generation.  The frozen packs
+        # (_v1.._v3) were minted against v1, so their plan_tree bytes still
+        # name the ARCHIVAL coordinate; that is the point of keeping v1
+        # pinned, because a frozen recorded reference must keep resolving.
+        # Both halves are asserted: the archival half inside the loop, the
+        # live half after it.
         registry_sha = hashlib.sha256(self.raw).hexdigest()
+        archival_relative = "configs/arm_readiness/d117_row_registry_v1.json"
+        archival_sha = hashlib.sha256(
+            (ROOT / archival_relative).read_bytes()
+        ).hexdigest()
         for profile, pack_name in PACKS.items():
             pack_root = ROOT / "configs/campaigns" / pack_name
             tree = json.loads(
@@ -159,7 +174,13 @@ class ArmReadinessRegistryTests(unittest.TestCase):
                 self.assertEqual(slot["contract_id"], "D-134")
                 self.assertTrue(slot["required_before_arm"])
                 self.assertEqual(slot["row_registry"]["plan_profile"], profile)
-                self.assertEqual(slot["row_registry"]["sha256"], registry_sha)
+                # Archival half: a frozen pack keeps the v1 coordinate it was
+                # minted against, by design.
+                self.assertEqual(slot["row_registry"]["path"], archival_relative)
+                self.assertEqual(
+                    slot["row_registry"]["registry_id"], "d117-row-registry-v1"
+                )
+                self.assertEqual(slot["row_registry"]["sha256"], archival_sha)
                 self.assertEqual(
                     slot["arm_receipt_namespace"],
                     "arm_readiness.receipts/arm-<4+ digits>.json",
@@ -202,6 +223,15 @@ class ArmReadinessRegistryTests(unittest.TestCase):
                 serialized = json.dumps(slot, sort_keys=True)
                 self.assertNotIn("arm_receipt_path", serialized)
                 self.assertNotIn("arm_receipt_sha256", serialized)
+        # Live half: new-family work loads the v2 coordinate, and its bytes are
+        # a genuinely different registry from the archival one the frozen packs
+        # name -- so the two coordinates can never be silently collapsed.
+        self.assertEqual(
+            ROW_REGISTRY_RELATIVE_PATH.as_posix(),
+            "configs/arm_readiness/d117_row_registry_v2.json",
+        )
+        self.assertEqual(self.registry["registry_id"], "d117-row-registry-v2")
+        self.assertNotEqual(registry_sha, archival_sha)
 
     def test_generators_check_both_without_and_with_committed_freeze_receipts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -212,7 +242,7 @@ class ArmReadinessRegistryTests(unittest.TestCase):
             )
             overlay = [
                 "joulewise/arm_readiness.py",
-                "configs/arm_readiness/d117_row_registry_v1.json",
+                "configs/arm_readiness/d117_row_registry_v2.json",
             ]
             for pack_name in PACKS.values():
                 pack_relative = Path("configs/campaigns") / pack_name

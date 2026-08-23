@@ -6556,15 +6556,29 @@ def generate_freeze_receipt(
         family_first_generation = _family_first_generation(registry)
     except ArmReadinessError:
         family_first_generation = None
+    # Resolve the predecessor ONCE, and refuse with the governed code rather
+    # than letting a bare OSError escape.  The strict resolve used to sit
+    # inside the gate condition below, where an absent directory raised
+    # FileNotFoundError straight out of generate_freeze_receipt.  That was
+    # unreachable while no registry carried a generation threshold (the `and`
+    # short-circuited on `family_first_generation is None`); the ruled registry
+    # supplies one, so the expression is now evaluated on every call.
+    predecessor_root: Path | None = None
+    if predecessor_pack_root is not None:
+        try:
+            predecessor_root = Path(predecessor_pack_root).resolve(strict=True)
+        except OSError as exc:
+            raise _successor_chain_refusal(
+                f"predecessor pack root is unreadable: {exc}"
+            ) from exc
     if (
-        predecessor_pack_root is not None
+        predecessor_root is not None
         and family_first_generation is not None
-        and _pack_generation(Path(predecessor_pack_root).resolve(strict=True).name)
-        >= family_first_generation
+        and _pack_generation(predecessor_root.name) >= family_first_generation
     ):
         try:
             _gate_family_publication(
-                Path(predecessor_pack_root).resolve(strict=True),
+                predecessor_root,
                 marker_path=family_publication_marker,
                 confirmation_path=step6_confirmation_table,
             )

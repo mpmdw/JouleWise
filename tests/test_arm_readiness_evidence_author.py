@@ -480,7 +480,22 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 receipt = readiness.validate_evidence_receipt(
                     readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
                 )
-                self.assertEqual(receipt["boot_session_id"], TEST_BOOT_SESSION_ID)
+                # R1 split the single generic receipt in two, and the schema key
+                # sets are the authority (joulewise/arm_readiness.py:463-497):
+                # CONTENT_EVIDENCE_RECEIPT_KEYS omits boot_session_id because a
+                # re-derivable artifact is not bound to a boot session, while
+                # EXECUTION_EVIDENCE_RECEIPT_KEYS adds it back for the
+                # boot-bound kinds.  The old single-shape expectation predates
+                # that split; asserting per-schema is the faithful form.
+                if (
+                    receipt["schema_version"]
+                    == readiness.CONTENT_EVIDENCE_RECEIPT_SCHEMA
+                ):
+                    self.assertNotIn("boot_session_id", receipt)
+                else:
+                    self.assertEqual(
+                        receipt["boot_session_id"], TEST_BOOT_SESSION_ID
+                    )
             second = author_arm_readiness_evidence(pack)
             self.assertFalse(second["mutated"])
             after = {
@@ -537,7 +552,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         self.assertFalse((pack / evidence._EVIDENCE_DIRECTORY).exists())
 
     def test_source_tamper_refuses_without_overwriting_any_receipt(self) -> None:
-        temporary, _repository, pack, _custody, _arm_path = make_author_fixture()
+        temporary, repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         suite_patch = mock.patch.object(
             evidence,
@@ -553,6 +568,17 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         }
         source = pack / evidence._SOURCE_DIRECTORY / "doctrine-pin.json"
         source.write_bytes(source.read_bytes() + b" ")
+        # Under R1 the division of labour is explicit: the INTEGRITY gates own
+        # an incoherent tamper (untracked directory, disk-vs-committed bytes,
+        # a moved reviewed HEAD), and authoring re-derivation owns the tamper
+        # that survives all of them.  A tamper left uncommitted would therefore
+        # be caught by a gate and never reach the check this test exists to
+        # prove.  The commit_case idiom -- commit, then advance the reviewed
+        # origin ref -- presents the doctored pack the way an operator actually
+        # would, so every integrity gate passes and only re-derivation is left.
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "authored evidence, tampered source")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         with self.assertRaisesRegex(EvidenceAuthoringError, "invalid"):
             author_arm_readiness_evidence(pack)
         self.assertEqual(
@@ -564,7 +590,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         )
 
     def test_coordinated_source_receipt_rewrite_refuses_without_overwrite(self) -> None:
-        temporary, _repository, pack, _custody, _arm_path = make_author_fixture()
+        temporary, repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         suite_patch = mock.patch.object(
             evidence,
@@ -598,6 +624,17 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 hashlib.sha256(receipt_raw).hexdigest(), receipt_path.name
             )
         )
+        # This is the COHERENT rewrite: source, receipt facts and sidecar are
+        # all rewritten to agree with one another.  Under R1 the integrity
+        # gates own INCOHERENT tampers (untracked directory, disk-vs-committed
+        # bytes, a moved reviewed HEAD); a lie that is internally consistent
+        # passes every one of them, and semantic re-derivation is the only
+        # thing left that can catch it.  The commit_case idiom -- commit, then
+        # advance the reviewed origin ref -- puts the fixture in exactly that
+        # world, which is the adversary this test exists to model.
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "authored evidence, coordinated rewrite")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         tampered = {
             path.relative_to(pack).as_posix(): path.read_bytes()
             for directory in (
@@ -1040,10 +1077,18 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 readiness, "_discover_evidence", side_effect=discover_then_mutate
             ),
         ):
-            with self.assertRaisesRegex(
-                readiness.ArmReadinessError, "evidence status is invalid"
-            ):
+            # Refusal CODES are the closed contract surface; detail MESSAGES
+            # are diagnostic and code-authoritative.  Under R1 this mutation is
+            # caught by the execution-receipt validator
+            # (joulewise/arm_readiness.py:2259, "execution evidence receipt
+            # status is invalid") rather than by the legacy generic validator
+            # (:2143, "evidence status is invalid").  The message moved; the
+            # governed code did not, so the code is what is asserted.
+            with self.assertRaises(readiness.ArmReadinessError) as caught:
                 author_arm_readiness_evidence(pack)
+            self.assertEqual(
+                caught.exception.reason_code, "readiness_schema_invalid"
+            )
         self.assertFalse((pack / evidence._SOURCE_DIRECTORY).exists())
         self.assertFalse((pack / evidence._EVIDENCE_DIRECTORY).exists())
 
@@ -1124,15 +1169,16 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         family = mock.patch.dict(
             evidence._PACKS_BY_PROFILE,
             {
-                "ALPHA": "d117_floor_qwen25_1p5b_v2",
-                "BETA": "d117_floor_qwen25_7b_v2",
-                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+                # The ruled successor family (MAGISTRATE-RULING.md:124-131).
+                "ALPHA": "d117_floor_qwen25_1p5b_v4",
+                "BETA": "d117_floor_qwen25_7b_v4",
+                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
             },
         )
         family.start()
         self.addCleanup(family.stop)
         temporary, repository, pack, _custody, _arm_path = make_author_fixture(
-            "d117_floor_qwen25_1p5b_v2"
+            "d117_floor_qwen25_1p5b_v4"
         )
         self.addCleanup(temporary.cleanup)
         author_output = io.BytesIO()

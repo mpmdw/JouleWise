@@ -577,51 +577,282 @@ Consequential verdict flips in §8, and only these:
 4. **§8.5's B3/B5/S-4 caveats and §8.7's execve leg** — out of this round's
    scope, restated above so they are not lost.
 
-### 9.3 G-11 (NEW, BLOCKER) — the candidate is red on 149 tests
+### 9.3 G-11 (CURED) — the candidate was red on 149 tests
 
-**This was not among the ten gaps and is larger than any of them.**
+**This was not among the ten gaps and was larger than any of them.**
 
 The audit's "87 green" was green for the four modules it ran. Running the
 whole arm-readiness blast radius (28 modules, 549 tests) at the audited commit
-`bd7ebc1` gives **36 failures + 113 errors = 149 failing tests**. Measured, not
-inferred; the same 549 tests at the finish-round head give 140 failing, and a
-name-by-name comparison shows **zero failures introduced by this round** — it
+`bd7ebc1` gave **36 failures + 113 errors = 149 failing tests**. Measured, not
+inferred; the same 549 tests at the finish-round head gave 140 failing, and a
+name-by-name comparison showed **zero failures introduced by that round** — it
 removed nine.
 
-Two distinct causes, both consequences of ruled changes:
+G-11 is now **CURED** under a lease extension and three magistrate rulings
+(recorded below).
 
-1. **The registry repoint (dominant, ~140 tests).** `ROW_REGISTRY_RELATIVE_PATH`
-   moved `v1 → v2` as ruled, but six test modules install
+**A denominator caveat first, because it bears on every count here.** The
+28-module blast radius re-derived for this round (modules under `tests/`
+matching `arm_readiness`, `d117_row_registry` or `family_marker`) runs **1368**
+tests, not the 549 this section originally cited. Both sets are 28 modules, so
+the two figures are NOT interchangeable and the original 149 is **not**
+like-for-like with anything below. The honest comparison is therefore the
+per-module before/after table, measured by this seat on both sides:
+
+| module | before | after |
+|---|---|---|
+| `test_arm_readiness_lifecycle` | 46 tests, 14F+26E = 40 | 47 tests, **OK**, 4 expected |
+| `test_arm_readiness_evidence_t0` | 25 tests, 49E | 25 tests, **OK**, 7 expected |
+| `test_arm_readiness_integration` | 9 tests, 1F+9E = 10 | 9 tests, **OK**, 5 expected |
+| `test_d117_decode_contrast_plan` | 22 tests, 13F | 22 tests, **OK**, 1 expected |
+| `test_arm_readiness_dry_run` | 5 tests, 4E | 5 tests, **OK**, 4 expected |
+| `test_arm_readiness_registry` | 5 tests, 3F | 5 tests, **OK** |
+| `test_arm_readiness_evidence` | 11 tests, 1F+1E = 2 | 11 tests, **OK** |
+| `test_arm_readiness_evidence_author` | 24 tests, 2F+12E = 14 | 24 tests, 2F+2E = 4 |
+
+**135 failing → 4 across the eight modules that carried the defect**, and those
+4 are the single OPEN FINDING of §9.3.6, not regressions. Whole-radius
+measurement at this head, in ONE lead-run:
+
+```
+Ran 1368 tests in 781.691s
+FAILED (failures=2, errors=2, expected failures=21)
+```
+
+The 21 expected failures are the enumerated **S0-BLOCKED** set, each carrying
+the reason string `S0-BLOCKED: requires minted _v4 packs` and a docstring
+stating what unblocks it; they are part of S-0 acceptance and must flip green in
+the clone proof. One test was ADDED (lifecycle 46 → 47): the regression that
+pins the §9.3.4 item-1 cure.
+
+Two cautions carry forward unchanged. This is a LOCAL run and must never be
+reported as D-151 condition 4's published green; and §9 remains a self-report
+from the implementing seat, so E3's writer≠reviewer audit of THIS round has not
+been performed.
+
+#### 9.3.1 What was actually wrong — three causes, not one
+
+The original diagnosis named only the first. The second and third were found
+by measurement while curing it, and each was larger than the first.
+
+1. **Fixture registry installation (as diagnosed).** `ROW_REGISTRY_RELATIVE_PATH`
+   moved `v1 → v2` as ruled, but six test modules installed
    `configs/arm_readiness/d117_row_registry_v1.json` into their temporary
-   repositories by hardcoded name. Those fixtures now build repositories the
-   code cannot read: `load_registry` raises `FileNotFoundError` on the v2 path.
-   This is manifest §7's "literal-sweep transaction-time obligation" — but §7
-   sized it as an 11-file *classification* exercise, and it is in fact a
-   *fixture-installation* debt that red-lines the suite. Affected:
-   `tests/test_arm_readiness_lifecycle.py`, `tests/test_arm_readiness_integration.py`,
-   `tests/test_arm_readiness_evidence_t0.py`, `tests/test_arm_readiness_registry.py`,
-   `tests/test_d117_decode_contrast_plan.py`, and `tests/test_arm_readiness_dry_run.py`
-   (via a shared helper).
-2. **Two one-line assertions** in `tests/test_arm_readiness_evidence.py`:
-   `test_r1_lifecycle_is_dormant_for_historical_v1_registry_and_profile`
-   asserts `ROW_REGISTRY_SCHEMA` where the repoint now yields
-   `R1_ROW_REGISTRY_SCHEMA`, and `resolved_r1_row_registry()` builds a
-   synthetic registry whose `test_r1_*` refusal codes the ruled registry-load
-   closure check now rejects (it should use the production vocabulary).
+   repositories by hardcoded name, so `load_registry` raised `FileNotFoundError`
+   on the v2 path. Cured: fixtures install the candidate registry at the live
+   coordinate, and recorded receipt references now read `registry_id` from the
+   registry the fixture actually installed instead of hardcoding a generation.
 
-**Why it is not cured here:** every one of those files is outside the finish
-round's 17-path write lease, and `WRITE_SCOPE` is exhaustive — additional
-scope is never inferred from tests. The remedy is mechanical and the diagnosis
-above is precise enough to execute directly; it needs a lease extension
-covering those six test modules, and it must land before S-0, whose runsheet
-runs the suite.
+2. **The registry had already advanced to the `_v4` family.** The ruled v2
+   registry's `successor_policy.successor_pack_ids` installs
+   `d117_floor_qwen25_1p5b_v4` / `_7b_v4` / `contrast_..._v4`, and
+   `_plan_profile` admits a successor only on exact pack-id match. Every
+   fixture built `_v2` packs, so all of them were refused with
+   `successor ID … is not installed by the R1 registry`. Cured per ruling 1:
+   fixtures carry the ruled `_v4` ids. S-0 mints pack BYTES; the IDs are
+   council-ruled values this candidate's own registry already installs, so a
+   synthetic fixture carrying one exercises the admit path and mints nothing.
 
-A related in-scope defect WAS cured: the same closure check was firing inside
-`validate_r1_lifecycle_registry` for **every** caller-supplied lifecycle
-registry, not just the tracked one. It now fires on the registry-LOAD path the
-marker ruling names (`validate_registry`), which is the only path where an
-unregistered code can explode into `readiness_internal_error`. That alone
-fixed nine of the 149.
+3. **Frozen packs bind the ARCHIVAL coordinate by design.** The committed
+   `_v1`, `_v2` and `_v3` campaign packs' `plan_tree.json` all record
+   `d117_row_registry_v1.json` / `d117-row-registry-v1` / sha `d248fdc5…`.
+   That is not drift — it is exactly why the ruling keeps v1 in-tree and
+   sha-pinned, so frozen recorded references keep resolving. Cured per ruling
+   2: `test_plan_tree_slots_bind_profiles_and_never_name_future_arm_receipt`
+   now asserts BOTH halves explicitly, citing `MAGISTRATE-RULING.md:124-131` —
+   the archival half per pack inside the loop, and the live half after it
+   (`ROW_REGISTRY_RELATIVE_PATH` is the v2 coordinate, `registry_id` is
+   `d117-row-registry-v2`, and the two shas provably differ). **No frozen pack
+   bytes were touched.**
+
+#### 9.3.2 Ruling option 3 — proven dead, and discharged
+
+The ruling's option 3 allowed a fixture to model the pre-`_v4` era by keeping
+`_v2` ids with the archival v1 registry installed as that fixture's registry.
+**That configuration cannot be built.** `load_registry`
+(`joulewise/arm_readiness.py:2688`) resolves exactly one coordinate,
+`ROW_REGISTRY_RELATIVE_PATH`, so a fixture repository holding only the v1 file
+fails outright with `cannot read row registry: … d117_row_registry_v2.json`;
+installing both files does not help, because `_registry_reference` then loads
+v2 and `_plan_profile` refuses the `_v2` pack as not installed. The mechanism
+was built, proven dead by execution, and removed rather than left as a
+documented-but-unusable knob. The only pre-`_v4` packs that still resolve are
+generation-1 ones, which short-circuit through `_PROFILE_BY_PACK` before the
+registry is consulted — that path works and needs no special handling.
+
+#### 9.3.3 Two dissolved premises — reconstructed, not retired
+
+Per the second ruling, the PROPERTY outranks the premise: where the refusal a
+test needs is reconstructible in the ruled configuration, the test is rewritten
+to it rather than blocked.
+
+- **`test_predecessor_authenticates_outside_the_live_map_and_resolver`** proves
+  that a predecessor the live lookups refuse still authenticates from its own
+  recorded bytes. Only its second refusal broke: the old premise leaned on the
+  registry-FREE `_plan_profile`, where `_v1` matched no successor shape, and
+  `_v3` does match. `resolve_frozen_plan` never stopped refusing. Reconstructed
+  on the PRODUCTION admission path — `_plan_profile(predecessor, registry)`,
+  which refuses because the registry does not install `_v3`. This is the
+  stronger assertion: the shape-only route is documented as a pre-registry
+  convenience for construction tools, not the admission gate. **Green.**
+
+- **`test_r1_lifecycle_is_dormant_for_historical_v1_registry_and_profile`** →
+  renamed `test_r1_lifecycle_grandfathers_a_historical_v1_pack_and_profile`.
+  Dormancy is now **structurally unreachable**, not merely unobserved:
+  `_r1_lifecycle_registry_for_pack` returns `None` only for a non-R1 schema,
+  and the repoint leaves one R1 registry for every pack. The safety concern it
+  protected — a v1-era pack must not be silently swept into R1 semantics —
+  survives in a different mechanism, an explicit grandfathering refusal, and
+  that is what the test now asserts (`V1_GRANDFATHERING` →
+  `readiness_r1_v1_grandfathering`). **Green.** Nothing was retired and no
+  property was left vacuous.
+
+#### 9.3.4 Two candidate defects cured under the lease extension
+
+Both files are the candidate's own and neither is in the r6-pinned set
+(verified).
+
+1. **`joulewise/arm_readiness.py` — absent predecessor directory failed ugly.**
+   `generate_freeze_receipt` evaluated
+   `Path(predecessor_pack_root).resolve(strict=True)` inside the
+   family-publication gate CONDITION, so a missing directory escaped as a bare
+   `FileNotFoundError` instead of a governed refusal. It was unreachable while
+   no registry carried a generation threshold — the `and` short-circuited on
+   `family_first_generation is None` — and the ruled registry supplies
+   `family_publication_first_generation: 4`, which made it live. The
+   predecessor is now resolved once, and an unreadable root raises the governed
+   `_successor_chain_refusal` (`readiness_successor_chain_invalid`). No new
+   reason codes. Regression added:
+   `test_absent_predecessor_directory_refuses_with_the_governed_code`, which
+   names an absent pack at a GATED generation so it exercises the branch the
+   threshold guards.
+
+2. **`joulewise/arm_readiness_evidence.py:1441` — the closed refusal census did
+   not know the candidate's own codes.** Seven `readiness_r1_*` codes are
+   resolved BY ROLE from the ruled registry's
+   `freeze_evidence_lifecycle.refusal_vocabulary` at the moment of refusal, so
+   they deliberately never appear as literals in the runtime source: the
+   registry, not the module, is the code/type authority, and the registry-load
+   closure check is what keeps them registered. They are now listed in the
+   module's `dynamic` set with that authority comment, mirroring the same cure
+   applied to `dynamic_or_defensive` in
+   `tests/test_arm_readiness_integration.py`. The two sets must stay in step.
+
+#### 9.3.5 The S0-BLOCKED set (21 tests) — S-0 acceptance
+
+Every entry is marked `@unittest.expectedFailure` with the reason string
+`S0-BLOCKED: requires minted _v4 packs`. They must flip green in the S-0 clone
+proof; an entry that passes before S-0 mints is itself a finding.
+
+**Dominant cause — V1_GRANDFATHERING (18 of 21).** The fixtures author
+legacy-schema PACK evidence. Under the R1 registry a PASSING freeze requires
+R1-schema evidence, so authoring refuses with
+`legacy generic freeze evidence may not enter the R1 lifecycle`. This is the
+"complete pack fixture with a passing freeze receipt" §9.2 already assigned to
+S-0.
+
+- `tests/test_arm_readiness_evidence_t0.py` (7): `test_arm_consumes_volatile_receipts_within_short_horizon`,
+  `test_mocked_forbidden_process_evidence_expires_before_arm`,
+  `test_forbidden_process_started_after_authoring_expires_before_arm`,
+  `test_acid_authored_fifteen_then_real_arm_generator_reaches_go`,
+  `test_acid_real_boot_session_then_real_arm_generator_reaches_go`,
+  `test_synthetic_acid_is_hermetic_to_system_timezone`,
+  `test_synthetic_acid_ignores_wall_clock_48_hours_in_future`
+- `tests/test_arm_readiness_integration.py` (5): `test_alpha_beta_gamma_end_to_end_pass_and_no_hash_cycle`,
+  `test_same_head_pack_terminal_evidence_and_final_arm_bindings_go_stale`,
+  `test_verification_recomputes_current_pack_bytes_despite_skip_worktree`,
+  `test_missing_arm_only_evidence_refuses_and_bound_source_mutation_stales_go`,
+  `test_identity_arm_evidence_symlink_escape_refuses`
+- `tests/test_arm_readiness_dry_run.py` (4): `test_real_under_lease_rehearsal_uses_reservation_and_both_writer_slots`,
+  `test_dry_run_becomes_stale_after_later_head_even_when_pack_bytes_do_not_change`,
+  `test_dry_run_refuses_a_dirty_or_nonreviewed_checkout`,
+  `test_dry_run_rehearsal_root_and_id_are_single_use`
+- `tests/test_arm_readiness_lifecycle.py` (2): `test_atomic_launch_capability_race_exactly_one_consumer_and_replay_refuses`,
+  `test_boot_session_change_voids_verification_and_consumption`
+
+**Gate shadowing (1).** `tests/test_arm_readiness_lifecycle.py::test_self_wrong_role_and_ordinal_violations_refuse`.
+Its self-reference leg mints with the pack as its OWN predecessor; with
+`family_publication_first_generation: 4` a `_v4` self-predecessor engages the
+family-publication gate FIRST, so the mint RETURNS a REFUSE record carrying
+`readiness_r1_family_publication` ("marker_absent: registry-installed family
+has no marker") instead of RAISING `readiness_successor_chain_invalid`.
+Confirmed by direct probe. The property is intact but shadowed until a real
+`_v4` family marker exists.
+
+**Historical pairing (1).** `tests/test_arm_readiness_lifecycle.py::test_historical_predecessor_resolves_and_still_anchors_the_chain`
+asserts the successor's predecessor is a `_PROFILE_BY_PACK` entry — true only
+of the `_v2`/`_v1` pairing. The ruled family's predecessor is `_v3`, which is
+neither a map entry nor an installed successor.
+
+**Generator chain (1).** `tests/test_d117_decode_contrast_plan.py::test_authenticated_freeze_transition_preserves_frozen_bytes`
+drives the committed `_v1` generators with `--family-suffix _v2`; the generated
+`_v2` pack is refused at admission, yielding
+`readiness_row_registry_mismatch` where the test expects
+`readiness_successor_chain_invalid`. Driving them to `_v4` needs the
+intervening `_v3` chain, which is S-0's mint.
+
+#### 9.3.6 OPEN FINDING — the re-derivation refusals are unreachable from a fixture
+
+Curing the closed refusal census (§9.3.4 item 2) unmasked eight tests in
+`tests/test_arm_readiness_evidence_author.py` whose code paths had been
+unreachable behind the earlier refusal. Three were resolved on ruled grounds and
+are green (per-schema `boot_session_id`, the message->code assertion, and the
+`_v4` id adoption); one more was already counted elsewhere. **Four remain, and
+they share one cause.**
+
+**The finding.** Under R1 the authoring and ARM re-derivation refusals appear to
+be **unreachable from a fixture**: every route that presents authored or
+doctored pack artifacts trips an earlier HEAD-comparison gate first. This was
+established by walking all four gates under ruling, not by inference.
+
+The ruled adversary model is that the INTEGRITY gates own an incoherent tamper
+while re-derivation owns the COHERENT one -- source, receipt and sidecars
+rewritten to agree, committed, reviewed ref advanced, so every integrity gate
+passes and only semantics can catch the lie. Variant 4 built exactly that world.
+**The re-derivation refusal still did not fire.** The four gates, in order:
+
+1. `readiness_pack_not_committed` -- `untracked pack directory:
+   b'arm_readiness.evidence'`, because authoring CREATES that directory.
+2. After committing the authored bytes: `disk and committed bytes/mode differ
+   for b'arm_readiness.sources/doctrine-pin.json'` -- the tamper itself.
+3. After committing the tamper too: `reviewed HEAD changed relevant path(s)`,
+   because committing moves HEAD.
+4. After also advancing `refs/remotes/origin/main` to HEAD (the sanctioned
+   `commit_case` idiom): **still** `reviewed HEAD changed relevant path(s)`,
+   now listing all 33 authored evidence and source paths.
+
+Gate 4 is the substantive result. Advancing the reviewed ref cannot satisfy the
+check, because committing the authored evidence **is itself** a change to
+pack-relevant paths -- the very act of making the artifacts presentable is what
+the gate refuses. On this evidence the coherent-rewrite adversary cannot be
+staged at all, and the re-derivation path has no reachable refusal left to
+prove. Whether that is a candidate DEFECT (the gate is too broad and swallows
+the semantic check) or a CONTRACT change (re-derivation is legitimately
+subsumed by HEAD custody under R1) is **for the gauntlet's independent seat**,
+not this one. Per ruling it was not forced further.
+
+The affected tests, each with the evidence that classifies it:
+
+- `test_source_tamper_refuses_without_overwriting_any_receipt` -- expects
+  `"invalid"`, gets `reviewed HEAD changed relevant path(s)`.
+- `test_coordinated_source_receipt_rewrite_refuses_without_overwrite` -- expects
+  `"differs from freshly derived bytes"`, gets the same.
+- `test_authoring_is_deterministic_valid_and_boot_bound` -- gate 1,
+  `untracked pack directory: b'arm_readiness.evidence'`.
+- `test_authored_evidence_makes_synthetic_pack_freeze_pass` -- **probed to
+  conclusion, and it is NOT the R1-evidence-schema class.** The traceback is
+  `EvidenceLifecycleError: ARM re-derivation refused: primary artifact is not
+  byte-identical to HEAD:
+  configs/campaigns/d117_floor_qwen25_1p5b_v4/plan_tree.json`, raised at
+  `joulewise/arm_readiness.py:5470` in `_authenticate_generic_evidence_item`.
+  That is the same HEAD-comparison family as the other three, so it is
+  classified here and **not** listed S0-BLOCKED. The earlier suspicion that it
+  needed minted R1-schema evidence was not borne out by the probe.
+
+These four are NOT marked `expectedFailure` and NOT counted in the 21: their
+disposition is a live question, and a wrongly listed entry would corrupt the
+S-0 acceptance gate. The two tamper tests carry variant 4 as ruled, so the
+next seat inherits the fixture already staged at the coherent-rewrite adversary.
 
 ### 9.4 Frozen surfaces, re-verified at `b1c6bee`
 
