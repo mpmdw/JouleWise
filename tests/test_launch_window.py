@@ -478,8 +478,23 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                         self.DIGEST,
                     )
 
-    def test_evidence_author_cli_threads_digest_unchanged(self) -> None:
+    def test_evidence_author_cli_keeps_the_ruled_pack_root_only_surface(self) -> None:
+        # Delta re-audit S1D-1: the digest is a CONSUMPTION-side attestation;
+        # the authoring CLI carried an inert digest flag (no table path, no
+        # effect) and it was removed to restore the ruled --pack-root-only
+        # surface. This test pins the removal: the flag refuses, and a plain
+        # authoring invocation passes no confirmation kwargs at all.
         pack = ROOT / "tests"
+        with self.assertRaises(SystemExit) as caught:
+            author_arm_readiness_evidence.main(
+                [
+                    "--pack-root",
+                    str(pack),
+                    "--expected-confirmation-digest",
+                    self.DIGEST,
+                ]
+            )
+        self.assertEqual(caught.exception.code, 2)
         with mock.patch.object(
             author_arm_readiness_evidence.readiness,
             "_repo_for_pack",
@@ -494,19 +509,12 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             )
             with stdout_patch:
                 code = author_arm_readiness_evidence.main(
-                    [
-                        "--pack-root",
-                        str(pack),
-                        "--expected-confirmation-digest",
-                        self.DIGEST,
-                    ]
+                    ["--pack-root", str(pack)]
                 )
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(sink.getvalue())["status"], "PASS")
-        self.assertEqual(
-            consumer.call_args.kwargs["expected_confirmation_digest"],
-            self.DIGEST,
-        )
+        self.assertEqual(consumer.call_args.args, (ROOT / "tests",))
+        self.assertEqual(consumer.call_args.kwargs, {})
 
     def test_launch_cli_refuses_unconfirmed_table_and_accepts_operator_digest(
         self,
