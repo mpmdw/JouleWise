@@ -78,9 +78,12 @@ _LOGICAL_WRITER_TEST_ORIGIN_S = 1_784_490_850.05
 
 @dataclass(frozen=True)
 class PackTraceEvidence:
-    """Complete child-owned Trace2 evidence for one loose-object packer."""
+    """Complete same-domain Trace2 topology for detached loose-object packing."""
 
     events: tuple[dict[str, object], ...]
+    detached_start: dict[str, object] | None
+    maintenance_sid: str | None
+    maintenance_terminal_event: dict[str, object] | None
     child_sid: str | None
     terminal_event: dict[str, object] | None
     complete: bool
@@ -128,18 +131,65 @@ def _is_pack_objects_start(event: dict[str, object]) -> bool:
     )
 
 
+def _is_detached_maintenance_start(event: dict[str, object]) -> bool:
+    argv = event.get("argv")
+    return (
+        event.get("event") == "child_start"
+        and isinstance(argv, list)
+        and len(argv) >= 3
+        and Path(str(argv[0])).name == "git"
+        and argv[1] == "maintenance"
+        and "--detach" in argv
+    )
+
+
+def _is_maintenance_process_start(event: dict[str, object]) -> bool:
+    argv = event.get("argv")
+    return (
+        event.get("event") == "start"
+        and isinstance(event.get("sid"), str)
+        and isinstance(argv, list)
+        and len(argv) >= 2
+        and Path(str(argv[0])).name == "git"
+        and argv[1] == "maintenance"
+        and "--detach" in argv
+    )
+
+
 def _pack_trace_evidence(
     events: tuple[dict[str, object], ...],
     *,
     final_record_incomplete: bool = False,
     timed_out: bool = False,
 ) -> PackTraceEvidence:
+    detached_starts = tuple(
+        event for event in events if _is_detached_maintenance_start(event)
+    )
+    detached_start = detached_starts[0] if len(detached_starts) == 1 else None
     child_sids = {
         event.get("sid")
         for event in events
         if _is_pack_objects_start(event) and isinstance(event.get("sid"), str)
     }
     child_sid = next(iter(child_sids)) if len(child_sids) == 1 else None
+    maintenance_sids = {
+        event.get("sid")
+        for event in events
+        if _is_maintenance_process_start(event)
+        and child_sid is not None
+        and child_sid.startswith(f"{event.get('sid')}/")
+    }
+    maintenance_sid = next(iter(maintenance_sids)) if len(maintenance_sids) == 1 else None
+    maintenance_terminal_events = tuple(
+        event
+        for event in events
+        if maintenance_sid is not None
+        and event.get("sid") == maintenance_sid
+        and event.get("event") in _PACK_TERMINAL_EVENTS
+    )
+    maintenance_terminal_event = (
+        maintenance_terminal_events[-1] if maintenance_terminal_events else None
+    )
     terminal_events = tuple(
         event
         for event in events
@@ -150,10 +200,16 @@ def _pack_trace_evidence(
     terminal_event = terminal_events[-1] if terminal_events else None
     return PackTraceEvidence(
         events=events,
+        detached_start=detached_start,
+        maintenance_sid=maintenance_sid,
+        maintenance_terminal_event=maintenance_terminal_event,
         child_sid=child_sid,
         terminal_event=terminal_event,
         complete=(
-            child_sid is not None
+            detached_start is not None
+            and maintenance_sid is not None
+            and maintenance_terminal_event is not None
+            and child_sid is not None
             and terminal_event is not None
             and not final_record_incomplete
             and not timed_out
@@ -163,11 +219,14 @@ def _pack_trace_evidence(
 
 def _wait_for_pack_terminal(
     path: Path,
-    deadline_s: float = 2.0,
+    deadline_s: float = 10.0,
+    stalled_s: float = 2.0,
 ) -> PackTraceEvidence:
-    """Poll until the exact pack-objects child emits its own terminal event."""
+    """Wait progress-aware for pack child and detached-parent terminals."""
 
     deadline = time.monotonic() + deadline_s
+    stalled_deadline = min(deadline, time.monotonic() + stalled_s)
+    observed_records = 0
     events: tuple[dict[str, object], ...] = ()
     final_record_incomplete = False
     while True:
@@ -178,7 +237,10 @@ def _wait_for_pack_terminal(
         )
         if evidence.complete:
             return evidence
-        remaining_s = deadline - time.monotonic()
+        if len(events) > observed_records:
+            observed_records = len(events)
+            stalled_deadline = min(deadline, time.monotonic() + stalled_s)
+        remaining_s = min(deadline, stalled_deadline) - time.monotonic()
         if remaining_s <= 0:
             return _pack_trace_evidence(
                 events,
@@ -201,21 +263,51 @@ def _event_timestamp(event: dict[str, object]) -> float | None:
 def _classify_pack_cleanup(
     evidence: PackTraceEvidence,
     *,
-    cleanup_started_s: float,
-    cleanup_finished_s: float,
-    raw_enotempty: bool,
+    raw_cleanup_errno: int | None,
 ) -> str:
-    """Classify cleanup using only the pack child's own Trace2 region."""
+    """Validate one Trace2 causal topology, then branch on cleanup outcome."""
 
-    if not evidence.complete or evidence.child_sid is None:
+    if (
+        not evidence.complete
+        or evidence.detached_start is None
+        or evidence.maintenance_sid is None
+        or evidence.maintenance_terminal_event is None
+        or evidence.child_sid is None
+    ):
         return _TRACE_INCOMPLETE
     if evidence.terminal_event is None:
         return _TRACE_INCOMPLETE
+    maintenance_starts = tuple(
+        event
+        for event in evidence.events
+        if event.get("sid") == evidence.maintenance_sid
+        and _is_maintenance_process_start(event)
+    )
+    pack_starts = tuple(
+        event
+        for event in evidence.events
+        if event.get("sid") == evidence.child_sid and _is_pack_objects_start(event)
+    )
+    if len(maintenance_starts) != 1 or len(pack_starts) != 1:
+        return _TRACE_INCOMPLETE
+    topology_events = (
+        evidence.detached_start,
+        maintenance_starts[0],
+        pack_starts[0],
+        evidence.terminal_event,
+        evidence.maintenance_terminal_event,
+    )
+    topology_times = tuple(_event_timestamp(event) for event in topology_events)
+    if any(timestamp is None for timestamp in topology_times):
+        return _TRACE_INCOMPLETE
+    ordered_times = tuple(timestamp for timestamp in topology_times if timestamp is not None)
+    if tuple(sorted(ordered_times)) != ordered_times:
+        return _TRACE_INCOMPLETE
+    if raw_cleanup_errno is not None:
+        return _RACE_EXERCISED
     terminal_time = _event_timestamp(evidence.terminal_event)
     if terminal_time is None:
         return _TRACE_INCOMPLETE
-    if raw_enotempty:
-        return _RACE_EXERCISED
 
     open_regions: list[float] = []
     intervals: list[tuple[float, float]] = []
@@ -241,16 +333,75 @@ def _classify_pack_cleanup(
             if event_time < started_s:
                 return _TRACE_INCOMPLETE
             intervals.append((started_s, event_time))
+    write_interrupted_at_terminal = bool(open_regions)
     for started_s in open_regions:
         if terminal_time < started_s:
             return _TRACE_INCOMPLETE
         intervals.append((started_s, terminal_time))
+    if not intervals:
+        return _TRACE_INCOMPLETE
+    pack_started_s = ordered_times[2]
+    pack_finished_s = ordered_times[3]
     if any(
-        started_s <= cleanup_finished_s and finished_s >= cleanup_started_s
+        started_s < pack_started_s or finished_s > pack_finished_s
         for started_s, finished_s in intervals
     ):
+        return _TRACE_INCOMPLETE
+    if write_interrupted_at_terminal:
         return _RACE_EXERCISED
     return _NO_RACE_PRE_WRITE
+
+
+def _synthetic_pack_topology() -> tuple[dict[str, object], ...]:
+    initiator_sid = "initiator"
+    maintenance_sid = "initiator/maintenance"
+    child_sid = "initiator/maintenance/pack-child"
+    return (
+        {
+            "event": "child_start",
+            "sid": initiator_sid,
+            "time": "2026-08-11T12:00:00.050000Z",
+            "argv": ["git", "maintenance", "run", "--auto", "--detach"],
+        },
+        {
+            "event": "start",
+            "sid": maintenance_sid,
+            "time": "2026-08-11T12:00:00.075000Z",
+            "argv": ["/usr/bin/git", "maintenance", "run", "--auto", "--detach"],
+        },
+        {
+            "event": "start",
+            "sid": child_sid,
+            "time": "2026-08-11T12:00:00.100000Z",
+            "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
+        },
+        {
+            "event": "region_enter",
+            "sid": child_sid,
+            "time": "2026-08-11T12:00:00.130000Z",
+            "category": "pack-objects",
+            "label": "write-pack-file",
+        },
+        {
+            "event": "region_leave",
+            "sid": child_sid,
+            "time": "2026-08-11T12:00:00.170000Z",
+            "category": "pack-objects",
+            "label": "write-pack-file",
+        },
+        {
+            "event": "exit",
+            "sid": child_sid,
+            "time": "2026-08-11T12:00:00.200000Z",
+            "code": 0,
+        },
+        {
+            "event": "exit",
+            "sid": maintenance_sid,
+            "time": "2026-08-11T12:00:00.210000Z",
+            "code": 0,
+        },
+    )
 
 
 def _wait_for_semantic_readiness(
@@ -1749,43 +1900,78 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             flush=True,
         )
 
+    def test_deterministic_writer_remover_harness_covers_both_interleavings(
+        self,
+    ) -> None:
+        def exercise(*, cleanup_before_write: bool) -> tuple[str, ...]:
+            ordered: list[str] = []
+            order_lock = threading.Lock()
+            writer_scheduled = threading.Event()
+            cleanup_started = threading.Event()
+            write_complete = threading.Event()
+
+            def record(event: str) -> None:
+                with order_lock:
+                    ordered.append(event)
+
+            def writer() -> None:
+                record("writer_scheduled")
+                writer_scheduled.set()
+                if cleanup_before_write:
+                    self.assertTrue(cleanup_started.wait(timeout=2.0))
+                record("write")
+                write_complete.set()
+                record("writer_terminal")
+
+            def remover() -> None:
+                self.assertTrue(writer_scheduled.wait(timeout=2.0))
+                if not cleanup_before_write:
+                    self.assertTrue(write_complete.wait(timeout=2.0))
+                record("cleanup_start")
+                cleanup_started.set()
+                if cleanup_before_write:
+                    self.assertTrue(write_complete.wait(timeout=2.0))
+                record("cleanup_finish")
+
+            threads = (
+                threading.Thread(target=writer, name="injected-writer"),
+                threading.Thread(target=remover, name="injected-remover"),
+            )
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=2.0)
+                self.assertFalse(thread.is_alive())
+            return tuple(ordered)
+
+        overlap = exercise(cleanup_before_write=True)
+        pre_write = exercise(cleanup_before_write=False)
+        self.assertLess(overlap.index("cleanup_start"), overlap.index("write"))
+        self.assertLess(overlap.index("write"), overlap.index("cleanup_finish"))
+        self.assertLess(pre_write.index("write"), pre_write.index("writer_terminal"))
+        self.assertLess(pre_write.index("writer_terminal"), pre_write.index("cleanup_start"))
+        self.assertEqual(
+            {_RACE_EXERCISED, _NO_RACE_PRE_WRITE},
+            {
+                _RACE_EXERCISED
+                if overlap.index("cleanup_start") < overlap.index("write")
+                else _NO_RACE_PRE_WRITE,
+                _RACE_EXERCISED
+                if pre_write.index("cleanup_start") < pre_write.index("write")
+                else _NO_RACE_PRE_WRITE,
+            },
+        )
+
     def test_pack_classifier_accepts_child_exit_without_parent_child_exit(
         self,
     ) -> None:
-        parent_sid = "parent"
-        child_sid = "parent/pack-child"
-        events = (
-            {
-                "event": "start",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.100000Z",
-                "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
-            },
-            {
-                "event": "exit",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.200000Z",
-                "code": 128,
-            },
-            {
-                "event": "signal",
-                "sid": parent_sid,
-                "time": "2026-08-11T12:00:00.210000Z",
-                "signal": signal.SIGPIPE,
-            },
-        )
+        events = _synthetic_pack_topology()
         evidence = _pack_trace_evidence(events)
         self.assertFalse(any(event.get("event") == "child_exit" for event in events))
         self.assertEqual(
             _classify_pack_cleanup(
                 evidence,
-                cleanup_started_s=datetime.fromisoformat(
-                    "2026-08-11T12:00:00.120000+00:00"
-                ).timestamp(),
-                cleanup_finished_s=datetime.fromisoformat(
-                    "2026-08-11T12:00:00.180000+00:00"
-                ).timestamp(),
-                raw_enotempty=False,
+                raw_cleanup_errno=None,
             ),
             _NO_RACE_PRE_WRITE,
         )
@@ -1813,54 +1999,13 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
     def test_pack_classifier_finds_child_write_overlap_without_parent_child_exit(
         self,
     ) -> None:
-        parent_sid = "parent"
-        child_sid = "parent/pack-child"
-        events = (
-            {
-                "event": "start",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.100000Z",
-                "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
-            },
-            {
-                "event": "region_enter",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.130000Z",
-                "category": "pack-objects",
-                "label": "write-pack-file",
-            },
-            {
-                "event": "region_leave",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.170000Z",
-                "category": "pack-objects",
-                "label": "write-pack-file",
-            },
-            {
-                "event": "exit",
-                "sid": child_sid,
-                "time": "2026-08-11T12:00:00.200000Z",
-                "code": 128,
-            },
-            {
-                "event": "signal",
-                "sid": parent_sid,
-                "time": "2026-08-11T12:00:00.210000Z",
-                "signal": signal.SIGPIPE,
-            },
-        )
+        events = _synthetic_pack_topology()
         evidence = _pack_trace_evidence(events)
         self.assertFalse(any(event.get("event") == "child_exit" for event in events))
         self.assertEqual(
             _classify_pack_cleanup(
                 evidence,
-                cleanup_started_s=datetime.fromisoformat(
-                    "2026-08-11T12:00:00.140000+00:00"
-                ).timestamp(),
-                cleanup_finished_s=datetime.fromisoformat(
-                    "2026-08-11T12:00:00.160000+00:00"
-                ).timestamp(),
-                raw_enotempty=False,
+                raw_cleanup_errno=errno.ENOTEMPTY,
             ),
             _RACE_EXERCISED,
         )
@@ -2010,14 +2155,17 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 # The target mutation is the immediate raw teardown attempted
                 # as soon as the commit returns, before trace parsing adds
                 # enough delay for the detached object writer to disappear.
-                cleanup_started_s = time.time()
                 try:
                     shutil.rmtree(sandbox.root)
                 except OSError as exc:
                     raw_enotempty = exc
-                cleanup_finished_s = time.time()
                 pack_evidence = _wait_for_pack_terminal(mutation_trace)
                 mutation_events = pack_evidence.events
+                self.assertTrue(pack_evidence.complete, mutation_events[-20:])
+                self.assertIsNotNone(pack_evidence.maintenance_sid)
+                self.assertIsNotNone(pack_evidence.maintenance_terminal_event)
+                self.assertIsNotNone(pack_evidence.child_sid)
+                self.assertIsNotNone(pack_evidence.terminal_event)
             detached_starts = [
                 event
                 for event in mutation_events
@@ -2042,11 +2190,22 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             # lookup as ENOENT; the same teardown race can instead leave a
             # child behind and report ENOTEMPTY.
             self.assertIn(raw_enotempty.errno, (errno.ENOTEMPTY, errno.ENOENT))
+        else:
+            self.assertTrue(
+                any(
+                    event.get("sid") == pack_evidence.child_sid
+                    and event.get("event") == "region_enter"
+                    and event.get("category") == "pack-objects"
+                    and event.get("label") == "write-pack-file"
+                    for event in mutation_events
+                ),
+                mutation_events[-20:],
+            )
         classification = _classify_pack_cleanup(
             pack_evidence,
-            cleanup_started_s=cleanup_started_s,
-            cleanup_finished_s=cleanup_finished_s,
-            raw_enotempty=raw_enotempty is not None,
+            raw_cleanup_errno=(
+                raw_enotempty.errno if raw_enotempty is not None else None
+            ),
         )
         classifications[classification] += 1
         self.assertEqual(sum(classifications.values()), 1)
