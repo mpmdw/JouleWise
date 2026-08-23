@@ -121,24 +121,61 @@ taking the maximum handles safely.
 Raw corpus: `hosted-module-timings.json` (this directory).
 
 **Per-test** timings were derived for the heavy modules from the
-microsecond timestamps GitHub stamps on each log line, taking the delta
-between consecutive `... ok` lines. The method was cross-validated against
-the independently printed module totals:
+microsecond timestamps GitHub stamps on each log line. This required a
+correction worth recording, because it is a trap for anyone repeating the
+method.
+
+`unittest -v` writes a test's description when the test **starts** and its
+outcome word when it **ends**. For an *undocstrung* test the description is
+one line, `name (id) ... ok`, and the line is therefore stamped at the
+test's END. For a *docstrung* test the description spans two lines — a bare
+`name (id)` stamped at START, then `<docstring> ... ok` stamped at END.
+Naively differencing consecutive outcome lines therefore attaches the right
+*durations* to the **wrong tests** wherever docstrung and undocstrung tests
+are interleaved.
+
+> The first pass of this analysis made exactly that error, and reported a
+> 252.9 s test that does not exist — it was two adjacent tests (218.2 s and
+> 34.7 s) summed. **The sum-closure check below did not catch it**, and
+> could not: closure tests totals, and a misattribution preserves the
+> total. It was caught by an independent audit. Corrected per-test values
+> use the docstring-aware rule.
 
 | Module | Σ per-test | `MODULE` line | tests derived / reported |
 | --- | ---: | ---: | ---: |
 | `tests.test_reduce` | 1540.7 s | 1544.5 s | 131 / 131 |
 | `tests.test_p2038_production_path` | 645.8 s | 652.1 s | 8 / 8 |
 | `tests.test_whole_window_selection` | 495.3 s | 498.9 s | 57 / 57 |
-| `tests.test_run_campaign` | 417.2 s | 425.5 s | 257 / 257 |
 
 Counts match exactly and sums agree within 0.2–2%, the residual being that
 per-test values come from one run while module weights are the max of two.
 
+Because attribution proved to be the fragile part, **only per-test values
+confirmed by two independent methods** — docstring-aware log parsing *and*
+a direct bench harness — are used as scheduling weights. Where the two
+methods disagreed (two ~87 s tests in `test_reduce`), the tests are left in
+the computed remainder rather than declared under a disputed identity. This
+costs nothing: see §4.3.
+
 ### 1.5 A note on the bench corpus
 
-A full serial bench baseline was also started, for cross-reference. **It is
-contaminated and is not used for any decision here.** Two orphaned
+A full serial bench baseline was run for cross-reference: 140 modules,
+2931 s, completing after the hosted corpus was already in use. It is the
+source of the "bench today" column in §1.3, and it independently reproduces
+the audit's amplification figures from a separate process:
+
+| Module | this bench run | audit's harness | hosted | ratio |
+| --- | ---: | ---: | ---: | ---: |
+| `tests.test_reduce` | 481.9 s | 480.1 s | 1544.5 s | 3.20x |
+| `tests.test_p2038_production_path` | 227.3 s | 228.9 s | 652.1 s | 2.87x |
+| `tests.test_whole_window_selection` | 148.6 s | 153.3 s | 498.9 s | 3.36x |
+| `tests.test_run_campaign` | 149.3 s | 143.6 s | 425.5 s | 2.85x |
+
+Two independent measurements agreeing to within a few percent are what
+retire the "68x" claim in §1.3.
+
+**The bench is nonetheless contaminated and no scheduling decision rests on
+it.** Two orphaned
 processes — `python3 -c 'while True: pass'`, PIDs 45067 and 56539 — have
 been consuming 100% of a core each for **14 days**, and `test_calibration_exits`
 failed on the bench during this session purely from concurrent load. See
@@ -294,6 +331,44 @@ unit:
 Enumerating every id instead would give two lists that can rot; one list
 plus a computed complement has one way to rot, and it is the loud one.
 
+The guard is exercised against the **real checked-in map** by
+`tests/test_shard_split.py`, not only against fixtures — so a renamed
+declared id fails the merge gate the moment it lands, rather than whenever
+someone next happens to run `--split`.
+
+### 4.4 What actually shipped, and why so little of `test_reduce` is declared
+
+Only **three** test ids are declared for `tests.test_reduce`, leaving 128
+tests in the remainder. That is deliberate on three grounds:
+
+1. **It is sufficient.** The remainder is 1002.6 s, already below the
+   1029 s even-four-way share, so the partition reaches its optimum. The
+   measured plan is `1036.7 / 1036.7 / 1036.7 / 1036.7` — balanced to
+   0.001 s.
+2. **It avoids the disputed attributions.** The three declared ids are the
+   ones both measurement methods agree on. Naming the contested ~87 s tests
+   would buy no wall clock while risking a weight pinned to the wrong test.
+3. **Splitting is not free.** Each process that touches `test_reduce`
+   re-fills two module-level memo caches (~17 s and ~14 s hosted). Carving
+   out many units would pay that repeatedly — measured elsewhere as 153.6 s
+   becoming 212.8 s when a class was fully separated. Three units is the
+   knee.
+
+Note the consequence, since it bounds future work: because the remainder is
+itself an atomic unit, adding shards beyond ~5 buys **nothing** for the
+ordinary lane until more of `test_reduce` is declared. The lane's floor is
+now 1002.6 s.
+
+### 4.5 Backward compatibility
+
+Proven rather than asserted: every function on the module-atomic path is
+byte-identical to the previous HEAD; partitions match HEAD exactly at shard
+counts 1, 2, 3, 4, 5, 8 and 16; `main()` is unchanged unless the new opt-in
+`--split` flag is passed; `tests/test_shard_tests.py` passes untouched; and
+**20 of 20 seeded mutants were killed**, including
+remainder-resolves-to-nothing, remainder-re-includes-declared, and
+vanished-id-silently-dropped.
+
 ---
 
 ## 5. Lever 2(d) — the additive PR-fast tier
@@ -329,27 +404,118 @@ called out there as a lead-gated change.
 
 ## 6. Result, and the floor that remains
 
+All figures below are measured or planned against this tree; the plan rows
+come from extracting and executing all six python blocks embedded in
+`ci.yml`.
+
 | | before | after |
 | --- | ---: | ---: |
-| Max ordinary shard | 41 min | 17.6 min |
-| Crash-matrix exclusive | 33 min | 23.5 min |
+| Max ordinary shard | 41 min (2442 s) | **17.6 min** (1036.7 s ×4, balanced) |
+| Crash-matrix exclusive | 33 min (2005 s) | **23.5 min** (1385.3 / 605.3 s) |
 | Calibration-exits exclusive | 15 min | 15 min *(unchanged by design)* |
 | **CI wall clock** | **41 min** | **~23.5 min** |
-| PR first signal | 41 min | **~4 min** |
-
-The remaining floor is **a single test method that costs 1385 s**. No
-sharding strategy can go below it, because a test method is indivisible.
-Removing it is the already-registered **WO-CRASHMATRIX-RELIABILITY** work,
-which changes test semantics and is therefore outside this lane's fence —
-and is explicitly not on the paper critical path. That is the honest end of
-this hill climb: the data lever and the sharding lever are exhausted, and
-what is left is a fixture defect, not a scheduling problem.
+| PR first signal | 41 min | **~4 min** (236.1 s ×2) |
 
 Job budget: GitHub Free permits 20 concurrent jobs. The workflow defines 18
 after this change (8 ordinary shards, 4 crash-matrix, 2 calibration-exits,
 2 fast-tier, `build`, `installed-wheel`), leaving 2 spare.
 
+The remaining floor is **a single test method that costs 1385 s**. No
+sharding strategy can go below it, because a test method is indivisible.
+The scheduling levers are now exhausted — which is exactly why §7 matters
+more than anything in this file.
+
+---
+
+## 7. The finding worth more than everything above — NOT APPLIED
+
+The audit of `tests.test_reduce` found a **legitimate, semantics-preserving
+speedup of 6.2x**, and this lane deliberately did not take it.
+
+### The defect
+
+`tests/test_reduce.py:65` defines the `self_consistent_calibration`
+fixture, which costs **5.25 s on the bench and ~17 s hosted per cold
+call**. It is pure CPU — no subprocess, no sleep: it builds a 1.02 MB
+synthetic plist, re-parses it, then runs pulse detection (13.7M overlap
+calls) and an exact-`Fraction` clock-anchor solve.
+
+It is memoised at `tests/test_reduce.py:77-84`. **The memo is keyed on
+whether the caller passed `None`, not on the argument values.** Its main
+consumer `_bundle_with_calibration` (`:2910`, **37 call sites**) always
+passes an explicit `float(capture_wall_time_s) - 1.95` (`:2947`) — which is
+*exactly* the default value, since
+`(1784490850.05 + 1.95) - 1.95 == 1784490850.05` in IEEE-754. So the
+argument is always the default, is never `None`, and **the cache therefore
+misses on every single call** while producing byte-identical output.
+
+Five test modules import this fixture, including
+`tests/test_calibration_exits.py` — the other exclusive job.
+
+### The fix, and its measured effect
+
+Key the memo on resolved argument values. Demonstrated by wrapping the
+module attribute at run time, with **no file edited**:
+
+```
+AS-IS         70.22 s   run=3 ok=True fail=0 err=0
+VALUE-KEYED   11.26 s   run=3 ok=True fail=0 err=0
+outcome identical: True     speedup: 6.2x
+```
+
+No assertion weakened, no iteration count reduced, no case skipped, no
+production code path touched — it changes a *test helper's cache key*.
+
+### Why this lane did not apply it
+
+It edits a test file, and TEST-SPEED-01 is fenced against that. **Proposed,
+not applied**, per the instruction to propose rather than apply when in
+doubt. It is recorded here so the decision is the lead's.
+
+### Why it is worth more than the sharding
+
+Sharding divides work across machines; this removes the work. It attacks
+the cost directly and, unlike sharding, it is **not** bounded by the
+indivisible-test floor:
+
+- `tests.test_reduce` is 1544.5 s and 37.5% of the ordinary suite.
+- The fixture is imported by five modules, `test_calibration_exits`
+  (a 15-min exclusive job) among them.
+- The crash-matrix module belongs to the same declared
+  "CPU-amplifying-fixture" class.
+
+If the effect carries at anything near the measured 6.2x, it plausibly
+reaches the **real** critical path — the 1385 s test that §6 identifies as
+the hard floor — in a way that no amount of scheduling can. The scheduling
+work in this file buys 41 → 23.5 min and then stops; this is the lever that
+could go further.
+
+Suggested home: it is the same defect class as the registered
+**WO-CRASHMATRIX-RELIABILITY** and **WO-CALEXITS-RELIABILITY** rows.
+
+### What was checked and rejected as *not* legitimate
+
+Recorded so the line is visible: passing the production physics cache into
+the D078R01 tests (a cache hit sets `fresh = None` at
+`joulewise/reduce.py:1535-1536`, skipping the containment gate those tests
+exist to prove); trimming the 70-iteration boundary sweep; removing the
+real `time.sleep` at `test_p2038_production_path.py:254` (the child needs
+wall time to exit); bytecode warming (`ci.yml` already runs `compileall`);
+and `-O` flags. None of these are available.
+
+Note also that `joulewise/reduce.py` is one of the four **D-079 r6-pinned**
+estimator sources, so a library-side fix to `test_reduce`'s cost is
+categorically unavailable — it would force an r7 reissue. That is precisely
+why the runner-side split was the only lever inside the fence, and why the
+test-helper memo key is the only cheap one outside it.
+
 ### Open questions for the lead
+
+0. **Take the memo-key fix?** §7. A measured **6.2x** on the single most
+   expensive module, semantics-preserving, ~10 lines, blocked only by this
+   lane's no-test-file-edits fence. It is the highest-value item on this
+   page by a wide margin and the only one that can reach past the
+   indivisible-test floor. Proposed, not applied.
 
 1. **Two leaked processes have been burning 100% of a core each for 14
    days** (PIDs 45067 and 56539, `python3 -c 'while True: pass'`, parented
