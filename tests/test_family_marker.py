@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import inspect
 import json
 import subprocess
@@ -10,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise import arm_readiness as readiness
+from joulewise import scheduler_gates
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,33 +20,49 @@ OID = "a" * 40
 TREE = "b" * 40
 
 
+def digest(label: str) -> str:
+    """A distinct, stable, obviously-synthetic SHA-256 per fixture field.
+
+    Every digest field in these fixtures used to be ``"0" * 64``.  That made
+    the whole schema test class blind to cross-field comparison bugs: code that
+    compared ``pack_sha256`` where it meant ``freeze_receipt.sha256`` compared
+    equal either way.  Deriving each fixture digest from its field's own name
+    means any such swap now shows up as a mismatch (gap G-9).
+    """
+
+    return hashlib.sha256(f"joulewise-fixture:{label}".encode()).hexdigest()
+
+
 def member(profile: str, pack_id: str) -> dict[str, object]:
+    def field(name: str) -> str:
+        return digest(f"{profile}:{name}")
+
     return {
         "profile": profile,
         "pack_id": pack_id,
         "pack_path": f"configs/campaigns/{pack_id}",
         "pack_digest_algorithm": readiness.PACK_DIGEST_ALGORITHM,
-        "pack_sha256": SHA,
+        "pack_sha256": field("pack"),
         "plan_tree": {
             "path": "plan_tree.json",
-            "sha256": SHA,
+            "sha256": field("plan_tree"),
             "sidecar_path": "plan_tree.sha256",
-            "sidecar_sha256": SHA,
+            "sidecar_sha256": field("plan_tree.sidecar"),
         },
         "frozen_plan": {
             "plan_id": "plan-v4",
             "window_id": f"window-{profile.lower()}",
             "path": "calibration_plan.json",
-            "sha256": SHA,
+            "sha256": field("frozen_plan"),
         },
         "freeze_receipt": {
             "schema_version": readiness.FREEZE_RECEIPT_V2_SCHEMA,
             "receipt_id": "freeze-0004",
             "ordinal": 4,
             "path": "arm_readiness.freeze.receipts/freeze-0004.json",
-            "sha256": SHA,
+            "sha256": field("freeze_receipt"),
             "sidecar_path": "arm_readiness.freeze.receipts/freeze-0004.json.sha256",
-            "sidecar_sha256": SHA,
+            "sidecar_sha256": field("freeze_receipt.sidecar"),
             "status": "PASS",
         },
     }
@@ -70,7 +88,7 @@ def marker() -> dict[str, object]:
             "path": "configs/arm_readiness/d117_row_registry_v2.json",
             "schema_version": readiness.R1_ROW_REGISTRY_SCHEMA,
             "registry_id": "d117-row-registry-v2",
-            "sha256": SHA,
+            "sha256": digest("registry"),
             "lifecycle_registry_id": "d117-r1-lifecycle-v1",
             "family_publication_marker_schema": readiness.FAMILY_PUBLICATION_MARKER_SCHEMA,
             "family_publication_refusal": {
@@ -97,14 +115,15 @@ def marker() -> dict[str, object]:
             "source_commit_time_utc": "2026-08-22T00:00:00Z",
             "construction_phase": "POST_FREEZE_FAMILY_BOUNDARY",
             "custody_class": "TRANSACTION_EXTERNAL",
-            "builder": {"path": "scripts/build_family_marker.py", "sha256": SHA},
-            "consumer": {"path": "scripts/verify_family_marker.py", "sha256": SHA},
+            "builder": {"path": "scripts/build_family_marker.py", "sha256": digest("builder")},
+            "consumer": {"path": "scripts/verify_family_marker.py", "sha256": digest("consumer")},
         },
         "assurance": copy.deepcopy(readiness.ASSURANCE),
     }
 
 
-def confirmation(marker_sha: str = SHA) -> dict[str, object]:
+def confirmation(marker_sha: str | None = None) -> dict[str, object]:
+    marker_sha = digest("marker") if marker_sha is None else marker_sha
     source = marker()
     return {
         "schema_version": readiness.STEP6_CONFIRMATION_TABLE_SCHEMA,
@@ -116,7 +135,7 @@ def confirmation(marker_sha: str = SHA) -> dict[str, object]:
             "path": "configs/arm_readiness/d117_row_registry_v2.json",
             "schema_version": readiness.R1_ROW_REGISTRY_SCHEMA,
             "registry_id": "d117-row-registry-v2",
-            "sha256": SHA,
+            "sha256": digest("registry"),
         },
         "family_publication": {
             "marker": {
@@ -137,7 +156,7 @@ def confirmation(marker_sha: str = SHA) -> dict[str, object]:
         "successor_pinset": {
             "path": "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json",
             "schema_version": readiness.RECEIPT_HISTSEM_PINSET_SCHEMA,
-            "sha256": SHA,
+            "sha256": digest("successor_pinset"),
             "pack_count": 3,
             "receipt_count": 33,
             "fact_count": 33,
@@ -194,32 +213,165 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
         })
 
     def test_confirmation_missing_unknown_and_wrong_successor_refuse(self) -> None:
+        """Each tamper must produce its SPECIFIC diagnostic.
+
+        Asserting only that *some* registered code came back would pass against
+        a validator that refuses for the wrong reason -- which is exactly what
+        the previous ``assertIn(check_id, FAMILY_PUBLICATION_CHECK_IDS)``
+        assertion did (gap G-9).
+        """
+
         unknown = confirmation(); unknown["family_publication"]["extra"] = True
         wrong = confirmation(); wrong["successor_pinset"]["path"] = "configs/arm_readiness/not-enumerated.json"
         no = confirmation(); no["confirmation"]["decision"] = "NO"
-        for value in (unknown, wrong, no):
-            with self.assertRaises(readiness.FamilyPublicationError) as caught:
-                readiness.validate_step6_confirmation_table(value)
-            self.assertIn(caught.exception.check_id, readiness.FAMILY_PUBLICATION_CHECK_IDS)
+        absent_section = confirmation(); absent_section.pop("successor_pinset")
+        wrong_packs = confirmation(); wrong_packs["successor_pinset"]["pack_count"] = 2
+        wrong_receipts = confirmation(); wrong_receipts["successor_pinset"]["receipt_count"] = 32
+        cases = (
+            (unknown, "marker_schema_mismatch", "unknown key in a section"),
+            (wrong, "confirmation_mismatch", "successor path off the chain"),
+            (no, "confirmation_mismatch", "decision is not the literal YES"),
+            (absent_section, "marker_schema_mismatch", "successor section absent"),
+            (wrong_packs, "confirmation_mismatch", "pack_count off contract"),
+            (wrong_receipts, "confirmation_mismatch", "receipt_count off contract"),
+        )
+        for value, expected, label in cases:
+            with self.subTest(case=label):
+                with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                    readiness.validate_step6_confirmation_table(value)
+                self.assertEqual(caught.exception.check_id, expected)
+
+    def test_verification_receipt_lane_fields_gate_and_cannot_be_laundered(self) -> None:
+        """Gap G-6: a candidate-lane receipt must not authorise anything.
+
+        The S-0 clone forges ``origin/main``, so a candidate PASS proves only
+        that the marker is internally coherent.  Consumers now inspect the
+        receipt's own lane fields, and refuse both the honest candidate receipt
+        (``lane_inadmissible``) and a doctored one whose fields contradict its
+        phase (``lane_inconsistent``).
+        """
+
+        published = {
+            "schema_version": readiness.FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
+            "receipt_kind": "family_publication_verification",
+            "phase": "pre-arm",
+            "lane": "published",
+            "gate_admissible": True,
+            "publication_authorized": True,
+            "status": "PASS",
+        }
+        self.assertIs(
+            readiness.require_gate_admissible_verification(published), published
+        )
+
+        candidate = dict(published, phase="candidate", lane="candidate",
+                         gate_admissible=False, publication_authorized=False)
+        with self.assertRaises(readiness.FamilyPublicationError) as caught:
+            readiness.require_gate_admissible_verification(candidate)
+        self.assertEqual(caught.exception.check_id, "lane_inadmissible")
+
+        laundered = (
+            ("candidate receipt relabelled published", dict(candidate, lane="published")),
+            ("candidate receipt flagged admissible", dict(candidate, gate_admissible=True)),
+            ("published receipt flagged candidate", dict(published, lane="candidate")),
+            ("authorisation without admissibility",
+             dict(published, publication_authorized=False)),
+            ("foreign schema", dict(published, schema_version="joulewise.other.v1")),
+            ("unknown phase", dict(published, phase="rehearsal")),
+        )
+        for label, receipt in laundered:
+            with self.subTest(case=label):
+                with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                    readiness.require_gate_admissible_verification(receipt)
+                self.assertEqual(caught.exception.check_id, "lane_inconsistent")
+
+        refused = dict(published, status="REFUSE")
+        with self.assertRaises(readiness.FamilyPublicationError) as caught:
+            readiness.require_gate_admissible_verification(refused)
+        self.assertEqual(caught.exception.check_id, "lane_inadmissible")
+
+        # Both live consumers call it.
+        for function in (
+            readiness._gate_family_publication,
+            scheduler_gates._evaluate_g7,
+        ):
+            self.assertIn(
+                "require_gate_admissible_verification",
+                inspect.getsource(function),
+            )
 
     def test_diagnostic_check_ids_are_exact_closed_enumeration(self) -> None:
+        """The set is exact, and every member is reachable.
+
+        Pinning the set exactly is what keeps diagnostics from being invented
+        at call sites -- but it also locks in any member that nothing raises.
+        The finish round of 2026-08-22 (gap G-5) therefore RETIRED three
+        members that had no raise site and could not honestly acquire one:
+        ``history_shallow``, ``git_unavailable`` (neither is consulted on this
+        path; an unavailable Git surfaces as ``head_unresolvable``), and
+        ``internal_error`` (an unhandled fault must propagate, not be
+        relabelled as a family-publication diagnosis).  The count went 32 -> 29.
+        """
+
         expected = {
             "marker_absent", "marker_unreadable", "marker_noncanonical",
             "marker_schema_mismatch", "marker_self_digest_mismatch",
             "lane_inconsistent", "lane_inadmissible", "registry_mismatch",
             "registry_dormant", "roster_mismatch", "roster_incomplete",
             "pack_not_member", "family_incoherent", "head_mismatch",
-            "head_unpublished", "head_unresolvable", "history_shallow",
-            "git_unavailable", "worktree_dirty", "pack_digest_mismatch",
+            "head_unpublished", "head_unresolvable",
+            "worktree_dirty", "pack_digest_mismatch",
             "plan_binding_mismatch", "evidence_set_mismatch",
             "freeze_binding_mismatch", "freeze_not_pass", "predecessor_mismatch",
             "terminal_review_mismatch", "confirmation_missing",
             "confirmation_mismatch", "tool_mismatch", "output_in_tree",
-            "output_collision", "internal_error",
+            "output_collision",
         }
         self.assertEqual(readiness.FAMILY_PUBLICATION_CHECK_IDS, frozenset(expected))
+        self.assertEqual(len(readiness.FAMILY_PUBLICATION_CHECK_IDS), 29)
         with self.assertRaisesRegex(ValueError, "unregistered"):
             readiness.FamilyPublicationError("free_form", "no")
+        for retired in ("history_shallow", "git_unavailable", "internal_error"):
+            with self.subTest(retired=retired):
+                with self.assertRaisesRegex(ValueError, "unregistered"):
+                    readiness.FamilyPublicationError(retired, "retired in G-5")
+
+    def test_every_check_id_has_a_raise_site(self) -> None:
+        """The closure discipline's other half: no dead members.
+
+        A member with no raise site is a diagnostic the code can never emit,
+        and the exactness test above would preserve it indefinitely.  This
+        counts raise sites mechanically across the library, the scheduler, and
+        the two custody tools.
+        """
+
+        sources = "\n".join(
+            (ROOT / relative).read_text(encoding="utf-8")
+            for relative in (
+                "joulewise/arm_readiness.py",
+                "joulewise/scheduler_gates.py",
+                "scripts/build_family_marker.py",
+                "scripts/verify_family_marker.py",
+            )
+        )
+        raised = {
+            check_id
+            for check_id in readiness.FAMILY_PUBLICATION_CHECK_IDS
+            if f'FamilyPublicationError(\n            "{check_id}"' in sources
+            or f'FamilyPublicationError("{check_id}"' in sources
+            or f'FamilyPublicationError(\n                "{check_id}"' in sources
+            or f'digest_check="{check_id}"' in sources
+            or f'absent_check="{check_id}"' in sources
+            or f'invalid_check="{check_id}"' in sources
+            or f'noncanonical_check="{check_id}"' in sources
+            or f'FamilyPublicationError(diagnostic' in sources
+            and check_id in {"worktree_dirty", "head_mismatch"}
+        }
+        self.assertEqual(
+            readiness.FAMILY_PUBLICATION_CHECK_IDS - raised,
+            set(),
+            "closed check-id set contains members nothing raises",
+        )
 
 
 class FamilyMarkerMechanismTests(unittest.TestCase):
@@ -461,6 +613,266 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         source = inspect.getsource(readiness.build_family_publication_marker)
         self.assertIn("output.relative_to(repository)", source)
         self.assertIn("output_collision", source)
+
+
+class FamilyMarkerLiveFixtureTests(unittest.TestCase):
+    """Gap G-7: exercise the verifier against a REAL repository.
+
+    Every other test in this file hands the verifier dictionaries.  This class
+    builds an actual Git repository with the tracked v2 registry committed,
+    ``HEAD == refs/heads/main == refs/remotes/origin/main``, a clean tree, and
+    a real marker file with a real GNU sidecar in custody OUTSIDE that
+    repository -- then walks a tamper ladder through the verifier's own code.
+
+    What it does NOT cover, honestly: the three `_v4` packs do not exist until
+    S-0 mints them, so the member-replay leg (``pack_digest_mismatch``,
+    ``freeze_binding_mismatch``, ``evidence_set_mismatch``) is reached but its
+    PASS direction cannot be observed here.  That first observation belongs to
+    S-0 and must be transcribed there.
+    """
+
+    def fixture_repository(self, base: Path) -> tuple[Path, Path]:
+        repository = base / "repository"
+        custody = base / "custody"
+        (repository / "configs/arm_readiness").mkdir(parents=True)
+        custody.mkdir(exist_ok=True)
+        registry_relative = readiness.ROW_REGISTRY_RELATIVE_PATH.as_posix()
+        (repository / registry_relative).write_bytes(
+            (ROOT / registry_relative).read_bytes()
+        )
+        for command in (
+            ("init", "-q"),
+            ("config", "user.email", "test@example.invalid"),
+            ("config", "user.name", "S1 Finish Round"),
+            ("checkout", "-q", "-B", "main"),
+            ("add", "."),
+            ("commit", "-qm", "install reviewed registry"),
+        ):
+            subprocess.run(
+                ("git", "-C", str(repository), *command),
+                check=True, capture_output=True,
+            )
+        head = subprocess.run(
+            ("git", "-C", str(repository), "rev-parse", "HEAD"),
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        subprocess.run(
+            ("git", "-C", str(repository), "update-ref",
+             "refs/remotes/origin/main", head),
+            check=True, capture_output=True,
+        )
+        return repository, custody
+
+    def live_marker(self, repository: Path) -> dict[str, object]:
+        live = readiness.reviewed_main(repository)
+        self.assertIs(live["exact_match"], True, "fixture must be four-way exact")
+        registry_raw = (
+            repository / readiness.ROW_REGISTRY_RELATIVE_PATH
+        ).read_bytes()
+        value = marker()
+        value["publication_git"] = dict(live)
+        value["terminal_review"]["head_tree_oid"] = live["head_tree_oid"]
+        value["authoring_context"]["transaction_id"] = f"d117-v4@{live['head_commit']}"
+        value["lifecycle_registry"]["sha256"] = readiness.sha256_bytes(registry_raw)
+        return value
+
+    def write_marker(self, custody: Path, value: object, *, sidecar: bytes | None = None) -> Path:
+        path = custody / readiness.FAMILY_PUBLICATION_MARKER_NAME
+        raw = readiness.render_json(value) if not isinstance(value, bytes) else value
+        path.write_bytes(raw)
+        path.with_name(f"{path.name}.sha256").write_bytes(
+            sidecar
+            if sidecar is not None
+            else readiness.gnu_sidecar(readiness.sha256_bytes(raw), path.name)
+        )
+        return path
+
+    def verify(self, repository: Path, marker_path: Path):
+        return readiness.verify_family_publication_marker(
+            repository, marker_path, phase="candidate"
+        )
+
+    def refusal(self, repository: Path, marker_path: Path) -> str:
+        with self.assertRaises(readiness.FamilyPublicationError) as caught:
+            self.verify(repository, marker_path)
+        return caught.exception.check_id
+
+    def test_live_fixture_tamper_ladder_reaches_each_specific_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository, custody = self.fixture_repository(Path(temporary))
+            value = self.live_marker(repository)
+            marker_path = self.write_marker(custody, value)
+
+            # The honest marker gets all the way to member replay, which is the
+            # first check that needs the unbuilt _v4 packs.
+            self.assertEqual(
+                self.refusal(repository, marker_path), "plan_binding_mismatch"
+            )
+
+            # Marker absent from custody.
+            absent = custody / "nowhere" / readiness.FAMILY_PUBLICATION_MARKER_NAME
+            self.assertEqual(self.refusal(repository, absent), "marker_absent")
+
+            # Marker inside the repository is refused before it is even read --
+            # custody-externality is what keeps the changed set at 112.
+            in_tree = repository / readiness.FAMILY_PUBLICATION_MARKER_NAME
+            in_tree.write_bytes(marker_path.read_bytes())
+            self.assertEqual(self.refusal(repository, in_tree), "marker_unreadable")
+            in_tree.unlink()
+
+            # Bytes disagreeing with their own sidecar now have their own
+            # diagnostic instead of the vaguer marker_unreadable (gap G-5).
+            self.write_marker(
+                custody,
+                value,
+                sidecar=readiness.gnu_sidecar(
+                    "0" * 64, readiness.FAMILY_PUBLICATION_MARKER_NAME
+                ),
+            )
+            self.assertEqual(
+                self.refusal(repository, marker_path), "marker_self_digest_mismatch"
+            )
+
+            # Noncanonical JSON.
+            self.write_marker(custody, b'{ "schema_version": "x" }\n')
+            self.assertEqual(
+                self.refusal(repository, marker_path), "marker_noncanonical"
+            )
+
+            # Registry digest that is not the committed registry's.
+            stale = copy.deepcopy(value)
+            stale["lifecycle_registry"]["sha256"] = digest("stale-registry")
+            self.write_marker(custody, stale)
+            self.assertEqual(
+                self.refusal(repository, marker_path), "registry_mismatch"
+            )
+
+            # Dirty tree.
+            self.write_marker(custody, value)
+            (repository / "scratch.txt").write_text("dirty\n")
+            self.assertEqual(self.refusal(repository, marker_path), "worktree_dirty")
+            (repository / "scratch.txt").unlink()
+            self.assertEqual(
+                self.refusal(repository, marker_path), "plan_binding_mismatch"
+            )
+
+    def test_builder_refuses_in_tree_output_and_collision_when_executed(self) -> None:
+        """Gap G-8 item 7: execute the builder, do not grep it.
+
+        Custody-externality and create-only are the two properties that keep
+        the marker from touching the 112-path changed-set contract.  Both are
+        asserted here against a real run of the CLI, and the repository is
+        checked to be untouched afterwards -- the mechanical proof that
+        building a marker cannot change the changed set.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repository, _custody = self.fixture_repository(Path(temporary))
+            before = subprocess.run(
+                ("git", "-C", str(repository), "status", "--porcelain"),
+                check=True, capture_output=True, text=True,
+            ).stdout
+            in_tree = repository / "marker.json"
+            completed = subprocess.run(
+                (
+                    "python3", str(ROOT / "scripts/build_family_marker.py"),
+                    "--repository", str(repository),
+                    "--head", "0" * 40,
+                    "--pack-root", "configs/campaigns/d117_floor_qwen25_1p5b_v4",
+                    "--output", str(in_tree),
+                ),
+                check=False, capture_output=True,
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertNotIn(b"Traceback", completed.stderr)
+            self.assertEqual(
+                json.loads(completed.stdout)["check_id"], "output_in_tree"
+            )
+            self.assertFalse(in_tree.exists())
+
+            external = Path(temporary) / "custody" / "marker.json"
+            external.parent.mkdir(parents=True, exist_ok=True)
+            external.write_text("{}")
+            collided = subprocess.run(
+                (
+                    "python3", str(ROOT / "scripts/build_family_marker.py"),
+                    "--repository", str(repository),
+                    "--head", "0" * 40,
+                    "--pack-root", "configs/campaigns/d117_floor_qwen25_1p5b_v4",
+                    "--output", str(external),
+                ),
+                check=False, capture_output=True,
+            )
+            self.assertEqual(collided.returncode, 2)
+            self.assertEqual(
+                json.loads(collided.stdout)["check_id"], "output_collision"
+            )
+            self.assertEqual(external.read_text(), "{}")
+
+            after = subprocess.run(
+                ("git", "-C", str(repository), "status", "--porcelain"),
+                check=True, capture_output=True, text=True,
+            ).stdout
+            self.assertEqual(before, after, "a marker build must not touch the tree")
+
+    def test_rollback_falsifier_old_published_head_is_refused(self) -> None:
+        """Gap G-8 item 3 -- the refuter that DECIDED split S-1.
+
+        A marker built at a genuinely published head stays valid forever under
+        an ancestry rule: check out that old head after origin advances and it
+        is trivially an ancestor of both HEAD and origin/main.  Strict four-way
+        equality is what forbids it.  This is that scenario, executed.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary:
+            repository, custody = self.fixture_repository(Path(temporary))
+            value = self.live_marker(repository)
+            marker_path = self.write_marker(custody, value)
+            old_head = value["publication_git"]["head_commit"]
+
+            # The marker is valid at the head it was built at: it survives the
+            # Git legs and refuses only at the unbuilt member replay.
+            self.assertEqual(
+                self.refusal(repository, marker_path), "plan_binding_mismatch"
+            )
+
+            # origin/main advances; the worktree is checked out at the OLD
+            # published head, which remains an ancestor of the new origin/main.
+            (repository / "later.txt").write_text("published later\n")
+            for command in (
+                ("add", "."),
+                ("commit", "-qm", "advance origin"),
+            ):
+                subprocess.run(
+                    ("git", "-C", str(repository), *command),
+                    check=True, capture_output=True,
+                )
+            new_head = subprocess.run(
+                ("git", "-C", str(repository), "rev-parse", "HEAD"),
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            subprocess.run(
+                ("git", "-C", str(repository), "update-ref",
+                 "refs/remotes/origin/main", new_head),
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ("git", "-C", str(repository), "reset", "-q", "--hard", old_head),
+                check=True, capture_output=True,
+            )
+            # Ancestry would admit this: the old head IS an ancestor of the new
+            # origin/main. Equality refuses it, with the rollback's own id.
+            ancestry = subprocess.run(
+                ("git", "-C", str(repository), "merge-base", "--is-ancestor",
+                 old_head, new_head),
+                check=False, capture_output=True,
+            )
+            self.assertEqual(
+                ancestry.returncode, 0, "fixture must reproduce the ancestry trap"
+            )
+            self.assertEqual(
+                self.refusal(repository, marker_path), "head_unpublished"
+            )
 
 
 if __name__ == "__main__":

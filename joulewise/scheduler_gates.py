@@ -869,6 +869,10 @@ def _evaluate_g7(
             confirmation_path=confirmation_path,
             target_pack_root=pack_root,
         )
+        # The receipt must be able to gate before anything downstream records
+        # it: a candidate-lane receipt is forged-origin/main-conditional and
+        # must never launder into a scheduler PASS.
+        arm_readiness.require_gate_admissible_verification(result)
         if result["family_id"] != family_id:
             raise arm_readiness.FamilyPublicationError(
                 "family_incoherent",

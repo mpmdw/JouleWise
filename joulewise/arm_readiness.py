@@ -547,8 +547,6 @@ FAMILY_PUBLICATION_CHECK_IDS = frozenset(
         "head_mismatch",
         "head_unpublished",
         "head_unresolvable",
-        "history_shallow",
-        "git_unavailable",
         "worktree_dirty",
         "pack_digest_mismatch",
         "plan_binding_mismatch",
@@ -562,9 +560,27 @@ FAMILY_PUBLICATION_CHECK_IDS = frozenset(
         "tool_mismatch",
         "output_in_tree",
         "output_collision",
-        "internal_error",
     }
 )
+"""The closed, code-enumerated diagnostic vocabulary (marker ruling item 4).
+
+Closed means: ``FamilyPublicationError`` refuses to construct an id outside
+this set, so a diagnostic can never be invented at a call site.  It also means
+a member with no raise site is dead weight that the exactness regression would
+lock in forever, so every member must have one.
+
+Finish round (2026-08-22, gap G-5) retired three members that had none and
+could not honestly acquire one: ``history_shallow`` and ``git_unavailable``
+(nothing in this path consults history depth, and an unavailable Git surfaces
+through ``head_unresolvable``), and ``internal_error`` (an unhandled fault is
+not a family-publication diagnosis and must propagate, not be relabelled).
+Three others acquired real raise sites in the same round: ``registry_dormant``
+(a registry with no reviewed generation threshold), ``lane_inconsistent`` (a
+verification receipt whose lane fields contradict its own phase), and
+``marker_self_digest_mismatch`` (marker bytes disagreeing with their sidecar,
+previously reported as the vaguer ``marker_unreadable``).  ``head_unpublished``
+acquired one by splitting the rollback case out of ``head_mismatch``.
+"""
 _R1_REGISTRY_KEYS = {
     "schema_version",
     "registry_id",
@@ -10149,16 +10165,36 @@ def _family_member(
     *,
     step6_confirmation_table: Path | str | None = None,
 ) -> tuple[dict[str, Any], set[str]]:
-    profile = _plan_profile(root, registry)
-    tree, tree_raw = _plan_tree(root)
-    freeze, freeze_ref = _load_freeze_reference(
-        root,
-        tree,
-        registry_reference,
-        registry,
-        require_pass=True,
-        step6_confirmation_table=step6_confirmation_table,
-    )
+    # A roster member that cannot be resolved or read at all is a family
+    # diagnosis too.  Without these two wrappers the failure escapes as a bare
+    # ArmReadinessError, which the CLI then reports as `registry_mismatch` --
+    # naming the wrong artifact entirely (found by the G-7 live fixture).
+    try:
+        profile = _plan_profile(root, registry)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("roster_mismatch", str(exc)) from exc
+    try:
+        tree, tree_raw = _plan_tree(root)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("plan_binding_mismatch", str(exc)) from exc
+    # Loading a v2 freeze receipt also authenticates its recorded D-139
+    # predecessor chain.  That failure is a family diagnosis, not a generic
+    # readiness error: give it the closed id the verification receipt reports,
+    # so a marker consult can never say "predecessor_mismatch: PASS" for a
+    # check whose refusal would have escaped as something else (gap G-5/G-9).
+    try:
+        freeze, freeze_ref = _load_freeze_reference(
+            root,
+            tree,
+            registry_reference,
+            registry,
+            require_pass=True,
+            step6_confirmation_table=step6_confirmation_table,
+        )
+    except ArmReadinessError as exc:
+        if exc.reason_code == "readiness_successor_chain_invalid":
+            raise FamilyPublicationError("predecessor_mismatch", str(exc)) from exc
+        raise
     if freeze["schema_version"] != FREEZE_RECEIPT_V2_SCHEMA:
         raise FamilyPublicationError("freeze_binding_mismatch", "family freeze must use schema v2")
     if freeze["receipt_id"] != "freeze-0004" or freeze["status"] != "PASS":
@@ -10375,6 +10411,7 @@ def _read_external_canonical(
     absent_check: str,
     invalid_check: str,
     noncanonical_check: str | None = None,
+    digest_check: str | None = None,
 ) -> tuple[Mapping[str, Any], bytes]:
     try:
         if path.is_symlink() or not path.is_file():
@@ -10387,7 +10424,9 @@ def _read_external_canonical(
         raise FamilyPublicationError(invalid_check, f"custody artifact is unreadable: {exc}") from exc
     digest = sha256_bytes(raw)
     if sidecar != gnu_sidecar(digest, path.name):
-        raise FamilyPublicationError(invalid_check, "custody artifact sidecar differs")
+        raise FamilyPublicationError(
+            digest_check or invalid_check, "custody artifact sidecar differs"
+        )
     try:
         value = parse_json_bytes(raw, require_canonical=True)
     except ArmReadinessError as exc:
@@ -10431,6 +10470,7 @@ def verify_family_publication_marker(
         absent_check="marker_absent",
         invalid_check="marker_unreadable",
         noncanonical_check="marker_noncanonical",
+        digest_check="marker_self_digest_mismatch",
     )
     try:
         marker = validate_family_publication_marker(
@@ -10441,6 +10481,18 @@ def verify_family_publication_marker(
     live = reviewed_main(repository)
     if live["clean"] is not True:
         raise FamilyPublicationError("worktree_dirty", "live marker consult requires a clean tree")
+    # Split S-1 is STRICT FOUR-WAY equality.  Separate the two ways it can
+    # fail, because they mean different things to an operator: the marker names
+    # a head that is not the published head (`head_unpublished` -- the rollback
+    # case the Sol refuter used to decide S-1: a checkout of an old published
+    # head is trivially an ancestor of origin/main, so ancestry would admit it
+    # and equality does not), versus the live coordinates simply disagreeing.
+    if marker["publication_git"]["head_commit"] != live["origin_main_commit"]:
+        raise FamilyPublicationError(
+            "head_unpublished",
+            "marker publication head is not the current origin/main -- an old "
+            "published head or an unpushed head cannot gate",
+        )
     if live["exact_match"] is not True or marker["publication_git"] != live:
         raise FamilyPublicationError("head_mismatch", "marker and live four-way Git coordinates differ")
     if marker["lifecycle_registry"] != {
@@ -10552,25 +10604,35 @@ def verify_family_publication_marker(
             "path": str(Path(confirmation_path)),
             "sha256": sha256_bytes(table_raw),
         }
-    checks = [
-        {"check_id": check_id, "status": "PASS"}
-        for check_id in sorted(
-            {
-                "marker_schema_mismatch",
-                "registry_mismatch",
-                "roster_mismatch",
-                "head_mismatch",
-                "pack_digest_mismatch",
-                "plan_binding_mismatch",
-                "evidence_set_mismatch",
-                "freeze_binding_mismatch",
-                "predecessor_mismatch",
-                "terminal_review_mismatch",
-                "tool_mismatch",
-                *( {"confirmation_mismatch"} if phase != "candidate" else set() ),
-            }
-        )
+    # The checks array records the checks this run ACTUALLY executed, in the
+    # order the code performs them.  It was previously a hardcoded literal that
+    # reported PASS for checks that never ran (notably predecessor_mismatch),
+    # which made a PASS receipt overstate what had been verified (gap G-9).
+    executed = [
+        "marker_self_digest_mismatch",
+        "marker_noncanonical",
+        "marker_schema_mismatch",
+        "worktree_dirty",
+        "head_unpublished",
+        "head_mismatch",
+        "registry_mismatch",
+        "roster_mismatch",
+        "predecessor_mismatch",
+        "freeze_binding_mismatch",
+        "freeze_not_pass",
+        "plan_binding_mismatch",
+        "pack_digest_mismatch",
+        "evidence_set_mismatch",
+        "terminal_review_mismatch",
     ]
+    if target_pack_root is not None:
+        executed.append("pack_not_member")
+    if consumer_tool is not None:
+        executed.append("tool_mismatch")
+    if phase != "candidate":
+        executed.append("confirmation_missing")
+        executed.append("confirmation_mismatch")
+    checks = [{"check_id": check_id, "status": "PASS"} for check_id in executed]
     return {
         "schema_version": FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
         "receipt_kind": "family_publication_verification",
@@ -10589,6 +10651,61 @@ def verify_family_publication_marker(
         "detail": None,
         "assurance": copy.deepcopy(ASSURANCE),
     }
+
+
+def require_gate_admissible_verification(
+    receipt: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Refuse a verification receipt that cannot lawfully gate an arm.
+
+    A family-publication verification receipt records the lane it was produced
+    in.  Candidate-lane receipts are produced inside the S-0 clone, whose
+    ``origin/main`` ref is deliberately forged, so a candidate PASS is
+    forged-ref-conditional and must never be consumed as publication proof
+    (D-151 condition 4, extended to this verifier by the marker ruling).
+
+    Two distinct failures are separated here:
+
+    * ``lane_inconsistent`` -- the receipt's own ``lane`` / ``gate_admissible``
+      / ``publication_authorized`` fields disagree with its ``phase``.  Such a
+      document is forged or corrupt: no honest run can emit it.
+    * ``lane_inadmissible`` -- the receipt is internally coherent but is a
+      candidate-lane or non-PASS receipt, which cannot gate.
+
+    Call this on any verification receipt before letting it authorise anything,
+    including one just produced in-process: it costs nothing and it is the only
+    thing standing between a laundered candidate receipt and an arm.
+    """
+
+    if not isinstance(receipt, Mapping):
+        raise FamilyPublicationError(
+            "lane_inconsistent", "verification receipt is not an object"
+        )
+    phase = receipt.get("phase")
+    if (
+        receipt.get("schema_version") != FAMILY_PUBLICATION_VERIFICATION_SCHEMA
+        or receipt.get("receipt_kind") != "family_publication_verification"
+        or phase not in {"candidate", "publication", "pre-arm", "t0"}
+    ):
+        raise FamilyPublicationError(
+            "lane_inconsistent", "verification receipt identity is not the governed one"
+        )
+    published = phase != "candidate"
+    if (
+        receipt.get("lane") != ("published" if published else "candidate")
+        or receipt.get("gate_admissible") is not published
+        or receipt.get("publication_authorized") is not published
+    ):
+        raise FamilyPublicationError(
+            "lane_inconsistent",
+            "verification receipt lane fields disagree with its own phase",
+        )
+    if receipt.get("gate_admissible") is not True or receipt.get("status") != "PASS":
+        raise FamilyPublicationError(
+            "lane_inadmissible",
+            "a candidate-lane or non-PASS verification receipt cannot gate an arm",
+        )
+    return receipt
 
 
 def _gate_family_publication(
@@ -10610,12 +10727,14 @@ def _gate_family_publication(
         return
     if marker_path is None:
         raise FamilyPublicationError("marker_absent", "registry-installed family has no marker")
-    verify_family_publication_marker(
-        repository,
-        marker_path,
-        phase="pre-arm",
-        confirmation_path=confirmation_path,
-        target_pack_root=pack_root,
+    require_gate_admissible_verification(
+        verify_family_publication_marker(
+            repository,
+            marker_path,
+            phase="pre-arm",
+            confirmation_path=confirmation_path,
+            target_pack_root=pack_root,
+        )
     )
 
 

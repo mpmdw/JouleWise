@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import subprocess
 import sys
@@ -196,8 +197,15 @@ class SchedulerGateReceiptTests(unittest.TestCase):
             "clean": True,
             "exact_match": True,
         }
+        # A complete, lane-coherent PUBLISHED receipt.  G7 now inspects the
+        # lane fields, so a stub that omits them cannot launder into a PASS.
         verified = {
             "schema_version": arm_readiness.FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
+            "receipt_kind": "family_publication_verification",
+            "phase": "pre-arm",
+            "lane": "published",
+            "gate_admissible": True,
+            "publication_authorized": True,
             "status": "PASS",
             "family_id": "family-1",
             "consulted_git": reviewed,
@@ -225,13 +233,139 @@ class SchedulerGateReceiptTests(unittest.TestCase):
         publication = receipt["family_publication"]
         self.assertEqual(publication["verdict"], "PASS")
         self.assertEqual(publication["marker_path"], str(marker_path))
-        self.assertRegex(publication["marker_sha256"], r"^[0-9a-f]{64}$")
-        self.assertRegex(publication["confirmation_sha256"], r"^[0-9a-f]{64}$")
-        self.assertRegex(
-            publication["verification_receipt"]["sha256"], r"^[0-9a-f]{64}$"
+        # Gap G-8 item 4: assert digest EQUALITY against the real bytes on
+        # disk, not merely 64-hex shape.  A shape assertion passes against a
+        # block that binds some other artifact's digest entirely.
+        self.assertEqual(
+            publication["marker_sha256"],
+            hashlib.sha256(marker_path.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            publication["confirmation_sha256"],
+            hashlib.sha256(confirmation_path.read_bytes()).hexdigest(),
+        )
+        written = Path(publication["verification_receipt"]["path"])
+        self.assertEqual(
+            publication["verification_receipt"]["sha256"],
+            hashlib.sha256(written.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            json.loads(written.read_bytes()),
+            verified,
+            "the recorded receipt must be the verification result itself",
+        )
+        self.assertEqual(
+            written.with_name(f"{written.name}.sha256").read_bytes(),
+            arm_readiness.gnu_sidecar(
+                publication["verification_receipt"]["sha256"], written.name
+            ),
+        )
+        self.assertNotEqual(
+            publication["marker_sha256"], publication["confirmation_sha256"]
         )
         self.assertEqual(receipt["gates"][-1]["gate_id"], "G7")
         self.assertEqual(receipt["gates"][-1]["verdict"], "PASS")
+
+    def test_candidate_lane_verification_cannot_launder_into_a_g7_pass(self) -> None:
+        """Gap G-6 at the scheduler.
+
+        A candidate-lane receipt is produced in the S-0 clone, whose
+        ``origin/main`` is forged.  Even when every other G7 input is in place,
+        such a receipt must refuse -- and so must one whose lane fields have
+        been doctored to claim it is published.
+        """
+
+        publication_root = self.campaign_root / "family_publication"
+        publication_root.mkdir()
+        marker_path = publication_root / arm_readiness.FAMILY_PUBLICATION_MARKER_NAME
+        confirmation_path = publication_root / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
+        marker_path.write_bytes(b"marker")
+        confirmation_path.write_bytes(b"confirmation")
+        reviewed = {
+            "head_commit": "a" * 40,
+            "head_tree_oid": "b" * 40,
+            "local_main_commit": "a" * 40,
+            "origin_main_commit": "a" * 40,
+            "clean": True,
+            "exact_match": True,
+        }
+        base = {
+            "schema_version": arm_readiness.FAMILY_PUBLICATION_VERIFICATION_SCHEMA,
+            "receipt_kind": "family_publication_verification",
+            "status": "PASS",
+            "family_id": "family-1",
+            "consulted_git": reviewed,
+        }
+        cases = {
+            "honest candidate receipt": dict(
+                base, phase="candidate", lane="candidate",
+                gate_admissible=False, publication_authorized=False,
+            ),
+            "candidate receipt relabelled published": dict(
+                base, phase="candidate", lane="published",
+                gate_admissible=True, publication_authorized=True,
+            ),
+        }
+        pack = {"pack_id": "pack", "pack_sha256": "c" * 64}
+        for label, verified in cases.items():
+            with self.subTest(case=label):
+                with (
+                    mock.patch.object(gates, "_live_boot_session_id", return_value=BOOT_A),
+                    mock.patch.object(arm_readiness, "reviewed_main", return_value=reviewed),
+                    mock.patch.object(arm_readiness, "_pack_record", return_value=pack),
+                    mock.patch.object(arm_readiness, "_repo_for_pack", return_value=self.root),
+                    mock.patch.object(
+                        arm_readiness,
+                        "verify_family_publication_marker",
+                        return_value=verified,
+                    ),
+                ):
+                    receipt = gates.evaluate_scheduler_gates(
+                        pack_root=self.pack_root,
+                        campaign_root=self.campaign_root,
+                        family_id="family-1",
+                        window_class="SHAKEDOWN",
+                        receipt_boot_session_ids={"evidence-1": BOOT_A},
+                        now_monotonic_ns=123,
+                    )
+                publication = receipt["family_publication"]
+                self.assertEqual(publication["verdict"], "REFUSE")
+                self.assertIsNone(publication["marker_sha256"])
+                self.assertNotEqual(receipt["verdict"], "GO")
+                g7 = receipt["gates"][-1]
+                self.assertEqual(g7["gate_id"], "G7")
+                self.assertEqual(g7["verdict"], "REFUSE")
+                self.assertIn(
+                    g7["observations"]["diagnostic"],
+                    {"lane_inadmissible", "lane_inconsistent"},
+                )
+
+    def test_g7_scheduler_code_map_covers_every_branch(self) -> None:
+        """Gap G-8 item 5: six branches, previously zero tested.
+
+        The existing assertion was the generic ``assertIn(code,
+        G7_REASON_CODES)``, which passes for any registered code and therefore
+        cannot detect a branch mapping a diagnostic to the wrong reason.
+        """
+
+        expected = {
+            "marker_absent": "scheduler_family_marker_absent",
+            "confirmation_missing": "scheduler_family_confirmation_absent",
+            "confirmation_mismatch": "scheduler_family_confirmation_invalid",
+            "head_unpublished": "scheduler_family_unpublished",
+            "family_incoherent": "scheduler_family_boot_pin_mismatch",
+            "marker_schema_mismatch": "scheduler_family_marker_invalid",
+        }
+        for check_id, code in expected.items():
+            with self.subTest(check_id=check_id):
+                self.assertEqual(gates._g7_scheduler_code(check_id), code)
+                self.assertIn(code, gates.G7_REASON_CODES)
+        self.assertEqual(set(expected.values()), set(gates.G7_REASON_CODES))
+        # Every closed marker diagnostic maps to a registered G7 reason code,
+        # so no refusal can reach the receipt with an unregistered code.
+        for check_id in arm_readiness.FAMILY_PUBLICATION_CHECK_IDS:
+            with self.subTest(check_id=check_id):
+                self.assertIn(gates._g7_scheduler_code(check_id), gates.G7_REASON_CODES)
 
     def test_receipt_rejects_unknown_root_and_gate_keys(self) -> None:
         receipt = self._evaluate()
