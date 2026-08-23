@@ -123,8 +123,14 @@ jobs:
     # 145.911 s — the slowness is hosted-runner-specific, the same
     # CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY fixed for
     # test_calibration_exits, registered as WO-CRASHMATRIX-RELIABILITY).
-    # Exclusivity buys FAST ordinary-shard signal (~175 s estimated per
-    # shard); it does not shorten this module's own job — the 120-minute
+    # Exclusivity buys FASTER ordinary-shard signal; it does not shorten
+    # this module's own job — the 120-minute
+    # NOTE (TEST-SPEED-01, 2026-08-23): the "~175 s estimated per shard"
+    # figure previously claimed here was an artifact of the superseded
+    # 2026-08-03 quiet-bench timing map, which understated hosted cost by
+    # up to 68x. Measured ordinary shards under that map were 41/14/7/6
+    # minutes, not ~3. The map is now hosted-measured; see
+    # docs/process_traces/2026-08-23-speed/.
     # ceiling covers the observed ~89-minute hosted runtime with ~1.35x
     # headroom until the reliability rework lands.
     runs-on: ubuntu-latest
