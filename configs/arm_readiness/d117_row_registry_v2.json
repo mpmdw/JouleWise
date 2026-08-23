@@ -511,6 +511,7 @@
     "schema_version": "joulewise.arm_readiness_freeze_evidence_lifecycle_registry.v1",
     "successor_policy": {
       "cross_chain_numbering": "joulewise.freeze_chain.monotonic_predecessor_ordinal.v1",
+      "family_publication_first_generation": 4,
       "family_publication_marker_schema": "joulewise.d117_family_publication_marker.v1",
       "freeze_receipt_v2_predecessor_bindings": [
         "evidence_set_sha256",

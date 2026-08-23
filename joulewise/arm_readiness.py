@@ -72,6 +72,7 @@ FAMILY_PUBLICATION_VERIFICATION_SCHEMA = (
 STEP6_CONFIRMATION_TABLE_SCHEMA = "joulewise.d117_step6_confirmation_table.v1"
 FAMILY_PUBLICATION_MARKER_NAME = "d117_family_publication_v4.json"
 STEP6_CONFIRMATION_TABLE_NAME = "d117_step6_confirmation_table_v4.json"
+S0_CANDIDATE_MANIFEST_NAME = "s0-candidate-manifest.json"
 LEGACY_CONSUMPTION_RECEIPT_SCHEMA = (
     "joulewise.arm_readiness_launch_consumption.v1"
 )
@@ -528,7 +529,6 @@ R1_REFUSAL_ROLES = frozenset(
         "V1_GRANDFATHERING",
     }
 )
-FAMILY_PUBLICATION_FIRST_GENERATION = 4
 FAMILY_PUBLICATION_CHECK_IDS = frozenset(
     {
         "marker_absent",
@@ -589,6 +589,15 @@ _R1_SUCCESSOR_POLICY_KEYS = {
     "cross_chain_numbering",
     "freeze_receipt_v2_predecessor_bindings",
     "family_publication_marker_schema",
+}
+_R1_SUCCESSOR_POLICY_OPTIONAL_KEYS = {
+    # Marker-ruling split S-2: the generation at which family publication first
+    # engages is a REVIEWED REGISTRY VALUE, never code prose.  It is optional in
+    # the schema only so that lifecycle registries authored before the `_v4`
+    # transaction still validate; a registry that omits it cannot reach any
+    # family-publication code path, because every reader refuses when it is
+    # absent (see ``_family_first_generation``).
+    "family_publication_first_generation",
 }
 _R1_REFUSAL_ENTRY_KEYS = {"role", "code", "type"}
 _R1_ED_RESERVED_PREFIX = "ED_RESERVED:"
@@ -1805,11 +1814,38 @@ def validate_r1_lifecycle_registry(
                 "readiness_row_registry_mismatch", f"R1 arm_policy.{name} is invalid"
             )
 
-    successor_policy = _require_exact_keys(
-        registry["successor_policy"],
-        _R1_SUCCESSOR_POLICY_KEYS,
-        "R1 successor_policy",
-    )
+    raw_successor_policy = registry["successor_policy"]
+    if not isinstance(raw_successor_policy, Mapping):
+        raise ArmReadinessError(
+            "readiness_schema_invalid", "R1 successor_policy must be an object"
+        )
+    observed_successor_keys = set(raw_successor_policy)
+    if observed_successor_keys - (
+        _R1_SUCCESSOR_POLICY_KEYS | _R1_SUCCESSOR_POLICY_OPTIONAL_KEYS
+    ):
+        raise ArmReadinessError(
+            "readiness_unknown_key",
+            "R1 successor_policy contains keys outside the closed enumeration",
+        )
+    if _R1_SUCCESSOR_POLICY_KEYS - observed_successor_keys:
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            "R1 successor_policy is missing required keys",
+        )
+    successor_policy = raw_successor_policy
+    generation = successor_policy.get("family_publication_first_generation")
+    if generation is not None and not (
+        (isinstance(generation, str) and generation.startswith(_R1_ED_RESERVED_PREFIX))
+        or (
+            isinstance(generation, int)
+            and not isinstance(generation, bool)
+            and generation >= 1
+        )
+    ):
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "R1 successor_policy.family_publication_first_generation is invalid",
+        )
     pack_ids = successor_policy["successor_pack_ids"]
     if not (
         (isinstance(pack_ids, str) and pack_ids.startswith(_R1_ED_RESERVED_PREFIX))
@@ -6496,10 +6532,19 @@ def generate_freeze_receipt(
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
     _valid_plan_attachment(readiness, registry_reference)
     generation = _pack_generation(root.name)
+    # Split S-2: engage on the REGISTRY's generation threshold, and only when
+    # the registry actually carries one.  A registry without the reviewed value
+    # never engages family publication (the `_v1`..`_v3` generations).
+    family_first_generation: int | None
+    try:
+        family_first_generation = _family_first_generation(registry)
+    except ArmReadinessError:
+        family_first_generation = None
     if (
         predecessor_pack_root is not None
+        and family_first_generation is not None
         and _pack_generation(Path(predecessor_pack_root).resolve(strict=True).name)
-        >= FAMILY_PUBLICATION_FIRST_GENERATION
+        >= family_first_generation
     ):
         try:
             _gate_family_publication(
@@ -9646,6 +9691,35 @@ def _family_exact(value: object, keys: frozenset[str], where: str) -> Mapping[st
         raise FamilyPublicationError("marker_schema_mismatch", str(exc)) from exc
 
 
+def _family_first_generation(registry: Mapping[str, Any]) -> int:
+    """Read split S-2's generation threshold out of the tracked registry.
+
+    ``registry`` is the whole row registry (the object ``load_registry``
+    returns).  The threshold is the pack generation at which family publication
+    first engages -- 4 for the ``_v4`` family.  It lives in
+    ``freeze_evidence_lifecycle.successor_policy.family_publication_first_generation``
+    precisely so that advancing to ``_v5`` is a REVIEWED REGISTRY EDIT rather
+    than a code change, which is what the marker ruling adopted in place of the
+    literal predecessor-in-current-roster predicate.  A registry that does not
+    carry the value cannot engage the mechanism at all: this refuses.
+    """
+
+    lifecycle = registry.get("freeze_evidence_lifecycle")
+    value = (
+        lifecycle.get("successor_policy", {}).get(
+            "family_publication_first_generation"
+        )
+        if isinstance(lifecycle, Mapping)
+        else None
+    )
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ArmReadinessError(
+            "readiness_row_registry_mismatch",
+            "registry does not carry a resolved family-publication generation threshold",
+        )
+    return value
+
+
 def _family_refusal_entry(registry: Mapping[str, Any]) -> dict[str, str]:
     entry = _r1_refusal_entry(registry["freeze_evidence_lifecycle"], "FAMILY_PUBLICATION")
     return {
@@ -9667,15 +9741,22 @@ def _family_sha(value: object, where: str) -> str:
     return value
 
 
-def validate_family_publication_marker(value: object) -> Mapping[str, Any]:
-    """Validate the immutable-from-build marker's exact schema."""
+def validate_family_publication_marker(
+    value: object, *, first_generation: int
+) -> Mapping[str, Any]:
+    """Validate the immutable-from-build marker's exact schema.
+
+    ``first_generation`` is the reviewed registry threshold (split S-2); the
+    caller reads it from the tracked registry with ``_family_first_generation``
+    so that no code literal names a family generation.
+    """
 
     marker = _family_exact(value, _FAMILY_MARKER_KEYS, "family marker")
     if (
         marker["schema_version"] != FAMILY_PUBLICATION_MARKER_SCHEMA
         or marker["marker_kind"] != "FAMILY_PUBLICATION"
         or marker["family_id"] != "d117-v4"
-        or marker["family_generation"] != FAMILY_PUBLICATION_FIRST_GENERATION
+        or marker["family_generation"] != first_generation
         or isinstance(marker["family_generation"], bool)
         or marker["publication_state"] != "PUBLISHED"
     ):
@@ -9958,27 +10039,104 @@ def validate_step6_confirmation_table(value: object) -> Mapping[str, Any]:
     return table
 
 
+def _candidate_manifest_tool_digest(
+    manifest_path: Path, relative_path: str
+) -> str:
+    """Read one tool's reviewed digest out of the S-0 ``$INPUT`` manifest.
+
+    The manifest is ``s0-candidate-manifest.json`` from S-0 runsheet section
+    1.3 -- the lead-reviewed custody record that names the candidate patch, its
+    changed paths, and the exact bytes of every custody tool.  The binding this
+    function reads is::
+
+        {"custody_tools": {"<repo-relative tool path>": "<64 hex sha256>"}}
+
+    Reading it is what makes candidate mode non-tautological: the digest comes
+    from a document written and reviewed BEFORE the tool is executed, so a
+    modified tool cannot authenticate itself by regenerating its own sidecar.
+    """
+
+    try:
+        raw = manifest_path.resolve(strict=True).read_bytes()
+    except OSError as exc:
+        raise FamilyPublicationError(
+            "tool_mismatch",
+            f"reviewed candidate manifest is unreadable at {manifest_path}: {exc}",
+        ) from exc
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise FamilyPublicationError(
+            "tool_mismatch", f"reviewed candidate manifest is not JSON: {exc}"
+        ) from exc
+    tools = value.get("custody_tools") if isinstance(value, Mapping) else None
+    if not isinstance(tools, Mapping):
+        raise FamilyPublicationError(
+            "tool_mismatch",
+            "reviewed candidate manifest has no custody_tools object",
+        )
+    recorded = tools.get(relative_path)
+    if not isinstance(recorded, str) or _LOWER_SHA256_RE.fullmatch(recorded) is None:
+        raise FamilyPublicationError(
+            "tool_mismatch",
+            f"reviewed candidate manifest records no SHA-256 for {relative_path}",
+        )
+    return recorded
+
+
 def _family_tool_reference(
-    repository: Path, head: str, relative_path: str, executing_path: Path
+    repository: Path,
+    head: str,
+    relative_path: str,
+    executing_path: Path,
+    *,
+    phase: str,
+    candidate_manifest: Path | str | None = None,
 ) -> dict[str, str]:
+    """Authenticate the executing custody tool under the lane's own rule.
+
+    PRODUCTION (``phase`` is anything but ``"candidate"``): the executing bytes
+    must equal the blob committed at ``head``.  This is the ruled rule and the
+    only one that can gate a publication.
+
+    CANDIDATE (``phase == "candidate"``): the tools deliberately do not exist at
+    the pinned HEAD of the S-0 clone, so committed-blob equality would refuse
+    the clone proof.  The executing bytes are instead compared against the
+    digest recorded in the reviewed ``$INPUT`` manifest (marker ruling, split
+    S-5).  The lane is chosen by this argument alone -- never by the presence of
+    a file on disk, which would let a dropped sidecar silently downgrade a
+    production consult.
+    """
+
+    if phase not in {"candidate", "publication", "pre-arm", "t0"}:
+        raise FamilyPublicationError(
+            "lane_inadmissible", f"unsupported tool-authentication phase {phase!r}"
+        )
     try:
         raw = executing_path.resolve(strict=True).read_bytes()
     except OSError as exc:
         raise FamilyPublicationError("tool_mismatch", f"cannot read {relative_path}: {exc}") from exc
     digest = sha256_bytes(raw)
-    sidecar_path = executing_path.with_name(f"{executing_path.name}.sha256")
-    if sidecar_path.exists():
-        try:
-            if sidecar_path.read_bytes() != gnu_sidecar(digest, executing_path.name):
-                raise FamilyPublicationError("tool_mismatch", f"candidate sidecar differs for {relative_path}")
-        except OSError as exc:
-            raise FamilyPublicationError("tool_mismatch", f"cannot read candidate tool sidecar: {exc}") from exc
+    if phase == "candidate":
+        manifest_path = (
+            Path(candidate_manifest)
+            if candidate_manifest is not None
+            else executing_path.resolve(strict=True).with_name(
+                S0_CANDIDATE_MANIFEST_NAME
+            )
+        )
+        if _candidate_manifest_tool_digest(manifest_path, relative_path) != digest:
+            raise FamilyPublicationError(
+                "tool_mismatch",
+                f"{relative_path} differs from the digest the reviewed candidate "
+                "manifest records for it",
+            )
     else:
         code, committed, _stderr = _histsem_git(repository, "show", f"{head}:{relative_path}")
         if code != 0 or committed != raw:
             raise FamilyPublicationError(
                 "tool_mismatch",
-                f"{relative_path} is neither candidate-sidecar authenticated nor the committed blob",
+                f"{relative_path} is not the blob committed at the reviewed head",
             )
     return {"path": relative_path, "sha256": digest}
 
@@ -10072,8 +10230,15 @@ def build_family_publication_marker(
     *,
     builder_tool: Path | str,
     consumer_tool: Path | str,
+    phase: str = "publication",
+    candidate_manifest: Path | str | None = None,
 ) -> dict[str, Any]:
-    """Construct deterministic marker bytes in external create-only custody."""
+    """Construct deterministic marker bytes in external create-only custody.
+
+    ``phase`` selects the tool-authentication lane (split S-5) and defaults to
+    the strict production rule, so candidate semantics are always an explicit
+    opt-in rather than something a stray file on disk can turn on.
+    """
 
     repository = Path(repository_root).resolve(strict=True)
     output = Path(output_path).resolve(strict=False)
@@ -10096,6 +10261,10 @@ def build_family_publication_marker(
         diagnostic = "worktree_dirty" if reviewed["clean"] is not True else "head_mismatch"
         raise FamilyPublicationError(diagnostic, "marker build requires strict four-way reviewed main")
     registry, registry_raw = load_registry(repository)
+    try:
+        first_generation = _family_first_generation(registry)
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("registry_dormant", str(exc)) from exc
     lifecycle = registry["freeze_evidence_lifecycle"]
     expected = lifecycle["successor_policy"]["successor_pack_ids"]
     if {root.name for root in roots} != set(expected.values()):
@@ -10124,10 +10293,20 @@ def build_family_publication_marker(
     common_tree = common_tree_raw.decode("ascii", errors="strict").strip()
     family_refusal = _family_refusal_entry(registry)
     builder_ref = _family_tool_reference(
-        repository, head, "scripts/build_family_marker.py", Path(builder_tool)
+        repository,
+        head,
+        "scripts/build_family_marker.py",
+        Path(builder_tool),
+        phase=phase,
+        candidate_manifest=candidate_manifest,
     )
     consumer_ref = _family_tool_reference(
-        repository, head, "scripts/verify_family_marker.py", Path(consumer_tool)
+        repository,
+        head,
+        "scripts/verify_family_marker.py",
+        Path(consumer_tool),
+        phase=phase,
+        candidate_manifest=candidate_manifest,
     )
     code, commit_time_raw, _stderr = _histsem_git(repository, "show", "-s", "--format=%cI", head)
     if code != 0:
@@ -10137,7 +10316,7 @@ def build_family_publication_marker(
         "schema_version": FAMILY_PUBLICATION_MARKER_SCHEMA,
         "marker_kind": "FAMILY_PUBLICATION",
         "family_id": "d117-v4",
-        "family_generation": FAMILY_PUBLICATION_FIRST_GENERATION,
+        "family_generation": first_generation,
         "publication_state": "PUBLISHED",
         "publication_git": dict(reviewed),
         "common_evidence_git": {
@@ -10172,7 +10351,7 @@ def build_family_publication_marker(
         },
         "assurance": copy.deepcopy(ASSURANCE),
     }
-    validate_family_publication_marker(marker)
+    validate_family_publication_marker(marker, first_generation=first_generation)
     raw = render_json(marker)
     output.parent.mkdir(parents=True, exist_ok=True)
     _exclusive_write(output, raw)
@@ -10229,6 +10408,7 @@ def verify_family_publication_marker(
     confirmation_path: Path | str | None = None,
     target_pack_root: Path | str | None = None,
     consumer_tool: Path | str | None = None,
+    candidate_manifest: Path | str | None = None,
 ) -> dict[str, Any]:
     """Replay marker semantics; candidate PASS is never gate-admissible."""
 
@@ -10253,9 +10433,11 @@ def verify_family_publication_marker(
         noncanonical_check="marker_noncanonical",
     )
     try:
-        marker = validate_family_publication_marker(marker_value)
-    except FamilyPublicationError:
-        raise
+        marker = validate_family_publication_marker(
+            marker_value, first_generation=_family_first_generation(registry)
+        )
+    except ArmReadinessError as exc:
+        raise FamilyPublicationError("registry_dormant", str(exc)) from exc
     live = reviewed_main(repository)
     if live["clean"] is not True:
         raise FamilyPublicationError("worktree_dirty", "live marker consult requires a clean tree")
@@ -10319,12 +10501,16 @@ def verify_family_publication_marker(
             str(live["head_commit"]),
             "scripts/build_family_marker.py",
             builder_path,
+            phase=phase,
+            candidate_manifest=candidate_manifest,
         )
         expected_consumer = _family_tool_reference(
             repository,
             str(live["head_commit"]),
             "scripts/verify_family_marker.py",
             Path(consumer_tool),
+            phase=phase,
+            candidate_manifest=candidate_manifest,
         )
         if (
             marker["authoring_context"]["builder"] != expected_builder
@@ -10495,7 +10681,6 @@ __all__ = [
     "EXECUTION_EVIDENCE_RECEIPT_SCHEMA",
     "EvidenceLifecycleError",
     "FAMILY_PUBLICATION_CHECK_IDS",
-    "FAMILY_PUBLICATION_FIRST_GENERATION",
     "FAMILY_PUBLICATION_MARKER_NAME",
     "FAMILY_PUBLICATION_MARKER_SCHEMA",
     "FAMILY_PUBLICATION_VERIFICATION_SCHEMA",

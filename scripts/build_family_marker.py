@@ -21,6 +21,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--head", required=True)
     parser.add_argument("--pack-root", type=Path, action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    # Split S-5: the tool-authentication lane is chosen here and nowhere else.
+    # The default is the strict production rule (executing bytes must equal the
+    # blob committed at --head); candidate mode is an explicit opt-in that
+    # compares against the reviewed $INPUT manifest instead.
+    parser.add_argument(
+        "--phase",
+        choices=("candidate", "publication", "pre-arm", "t0"),
+        default="publication",
+    )
+    parser.add_argument("--candidate-manifest", type=Path)
     return parser
 
 
@@ -35,6 +45,8 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             builder_tool=Path(__file__),
             consumer_tool=consumer,
+            phase=args.phase,
+            candidate_manifest=args.candidate_manifest,
         )
     except readiness.FamilyPublicationError as exc:
         result = {

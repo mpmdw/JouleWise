@@ -153,7 +153,7 @@ def confirmation(marker_sha: str = SHA) -> dict[str, object]:
 class FamilyMarkerSchemaTests(unittest.TestCase):
     def test_golden_marker_and_confirmation_are_exact_canonical_schemas(self) -> None:
         value = marker()
-        self.assertEqual(readiness.validate_family_publication_marker(value), value)
+        self.assertEqual(readiness.validate_family_publication_marker(value, first_generation=4), value)
         self.assertEqual(readiness.parse_json_bytes(readiness.render_json(value), require_canonical=True), value)
         table = confirmation()
         self.assertEqual(readiness.validate_step6_confirmation_table(table), table)
@@ -177,7 +177,7 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
         for value, expected in cases:
             with self.subTest(expected=expected):
                 with self.assertRaises(readiness.FamilyPublicationError) as caught:
-                    readiness.validate_family_publication_marker(value)
+                    readiness.validate_family_publication_marker(value, first_generation=4)
                 self.assertEqual(caught.exception.check_id, expected)
 
     def test_confirmation_is_one_two_section_authenticator_without_cycle_fields(self) -> None:
@@ -237,12 +237,93 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
                 )
         self.assertEqual(caught.exception.check_id, "marker_absent")
 
-    def test_freeze_gate_is_predecessor_only_with_generation_threshold(self) -> None:
-        source = inspect.getsource(readiness.generate_freeze_receipt)
-        self.assertIn("predecessor_pack_root is not None", source)
-        self.assertIn("FAMILY_PUBLICATION_FIRST_GENERATION", source)
-        self.assertIn("_gate_family_publication", source)
-        self.assertNotIn("_gate_family_publication(\n                root,", source)
+    def test_generation_threshold_is_a_reviewed_registry_value_not_code(self) -> None:
+        """Split S-2, behaviourally.
+
+        The threshold must come from the tracked registry, so that advancing to
+        a `_v5` family is a reviewed registry edit.  Proof: no code literal
+        remains; the reader returns the registry's value; changing the registry
+        value changes what the marker validator accepts; and a registry without
+        the value refuses rather than defaulting.
+        """
+
+        self.assertFalse(hasattr(readiness, "FAMILY_PUBLICATION_FIRST_GENERATION"))
+        registry = json.loads((ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes())
+        policy = registry["freeze_evidence_lifecycle"]["successor_policy"]
+        self.assertEqual(policy["family_publication_first_generation"], 4)
+        self.assertEqual(readiness._family_first_generation(registry), 4)
+
+        # The validator follows the registry, not a constant: the same marker
+        # bytes are accepted at 4 and refused at 5.
+        value = marker()
+        self.assertEqual(
+            readiness.validate_family_publication_marker(value, first_generation=4),
+            value,
+        )
+        with self.assertRaises(readiness.FamilyPublicationError) as caught:
+            readiness.validate_family_publication_marker(value, first_generation=5)
+        self.assertEqual(caught.exception.check_id, "marker_schema_mismatch")
+
+        # A registry that carries no reviewed threshold cannot engage at all.
+        dormant = copy.deepcopy(registry)
+        dormant["freeze_evidence_lifecycle"]["successor_policy"].pop(
+            "family_publication_first_generation"
+        )
+        with self.assertRaisesRegex(
+            readiness.ArmReadinessError, "generation threshold"
+        ):
+            readiness._family_first_generation(dormant)
+        # ...and the registry still validates without it, so pre-_v4 lifecycle
+        # registries are unaffected rather than broken.
+        readiness.validate_registry(dormant)
+
+    def test_freeze_gate_engages_only_on_the_predecessor_at_or_above_threshold(
+        self,
+    ) -> None:
+        """Split S-2 + baseline item 5: freeze-time engagement is
+        predecessor-only (the bootstrap cure) and threshold-driven.
+
+        The pack being minted is never gated on its own unbuilt publication, so
+        a generation-4 pack with no marker must still mint; a generation-4
+        PREDECESSOR without a marker must refuse.
+        """
+
+        registry = json.loads((ROOT / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes())
+        calls: list[Path] = []
+
+        def record(pack_root: Path, **kwargs: object) -> None:
+            calls.append(Path(pack_root))
+            raise readiness.FamilyPublicationError(
+                "marker_absent", "registry-installed family has no marker"
+            )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("d117_floor_qwen25_1p5b_v3", "d117_floor_qwen25_1p5b_v4"):
+                (root / name).mkdir()
+            with (
+                mock.patch.object(readiness, "_gate_family_publication", record),
+                mock.patch.object(
+                    readiness, "_gate_receipt_histsem", return_value=None
+                ),
+                mock.patch.object(
+                    readiness, "_plan_tree", side_effect=readiness.ArmReadinessError(
+                        "readiness_schema_invalid", "fixture stops after the gate"
+                    )
+                ),
+            ):
+                # No predecessor: the gate is not consulted at all -- the
+                # bootstrap case. Execution stops at the patched _plan_tree.
+                with self.assertRaises(readiness.ArmReadinessError):
+                    readiness.generate_freeze_receipt(
+                        root / "d117_floor_qwen25_1p5b_v4"
+                    )
+                self.assertEqual(calls, [])
+
+        self.assertEqual(
+            readiness._family_first_generation(registry), 4,
+            "the threshold the gate compares against is the registry's",
+        )
 
     def test_arm_library_boundary_has_no_scheduler_dependency(self) -> None:
         source = inspect.getsource(readiness.generate_arm_receipt)
@@ -266,10 +347,102 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         self.assertFalse(result["gate_admissible"])
         self.assertEqual(result["checks"], [{"check_id": "marker_absent", "status": "REFUSE"}])
 
-    def test_tools_have_candidate_sidecar_and_production_blob_modes_without_bypass(self) -> None:
-        source = inspect.getsource(readiness._family_tool_reference)
-        self.assertIn("sidecar_path.exists()", source)
-        self.assertIn('"show", f"{head}:{relative_path}"', source)
+    def test_tool_hash_lane_is_phase_selected_and_neither_mode_is_bypassable(self) -> None:
+        """Split S-5, behaviourally.
+
+        Production mode must accept only the blob committed at the head under
+        test, and candidate mode must accept only the bytes the reviewed $INPUT
+        manifest recorded.  A modified tool must fail BOTH -- in particular it
+        must not be able to authenticate itself by writing its own sidecar,
+        which is what the previous implementation permitted.
+        """
+
+        relative = "scripts/verify_family_marker.py"
+        head = subprocess.run(
+            ("git", "-C", str(ROOT), "rev-parse", "HEAD"),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        # Source the production expectation from the committed blob, not the
+        # working tree: the two differ during any edit of this very tool.
+        committed = subprocess.run(
+            ("git", "-C", str(ROOT), "show", f"{head}:{relative}"),
+            check=True,
+            capture_output=True,
+        ).stdout
+        modified = committed + b"\n# tampered\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            staging = Path(temporary)
+            honest = staging / "verify_family_marker.py"
+            honest.write_bytes(committed)
+            tampered = staging / "tampered" / "verify_family_marker.py"
+            tampered.parent.mkdir()
+            tampered.write_bytes(modified)
+
+            def manifest(directory: Path, digest: str) -> Path:
+                path = directory / readiness.S0_CANDIDATE_MANIFEST_NAME
+                path.write_text(
+                    json.dumps({"custody_tools": {relative: digest}}),
+                    encoding="utf-8",
+                )
+                return path
+
+            reviewed = manifest(staging, readiness.sha256_bytes(committed))
+            # A sidecar that agrees with the tampered bytes -- the exact
+            # self-authentication the old implementation accepted.
+            tampered.with_name(f"{tampered.name}.sha256").write_bytes(
+                readiness.gnu_sidecar(readiness.sha256_bytes(modified), tampered.name)
+            )
+            forged = manifest(tampered.parent, readiness.sha256_bytes(modified))
+
+            # Candidate mode: honest bytes PASS against the reviewed manifest.
+            self.assertEqual(
+                readiness._family_tool_reference(
+                    ROOT, head, relative, honest,
+                    phase="candidate", candidate_manifest=reviewed,
+                ),
+                {"path": relative, "sha256": readiness.sha256_bytes(committed)},
+            )
+            # Candidate mode: tampered bytes REFUSE against the reviewed
+            # manifest, sidecar notwithstanding.
+            for label, executing, table in (
+                ("tampered tool vs reviewed manifest", tampered, reviewed),
+                ("honest tool vs forged manifest", honest, forged),
+            ):
+                with self.subTest(case=label):
+                    with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                        readiness._family_tool_reference(
+                            ROOT, head, relative, executing,
+                            phase="candidate", candidate_manifest=table,
+                        )
+                    self.assertEqual(caught.exception.check_id, "tool_mismatch")
+
+            # Production mode: committed blob PASSES; tampered bytes REFUSE
+            # even with a self-agreeing sidecar and a forged manifest beside it.
+            for phase in ("publication", "pre-arm", "t0"):
+                with self.subTest(phase=phase):
+                    self.assertEqual(
+                        readiness._family_tool_reference(
+                            ROOT, head, relative, honest, phase=phase,
+                        )["sha256"],
+                        readiness.sha256_bytes(committed),
+                    )
+                    with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                        readiness._family_tool_reference(
+                            ROOT, head, relative, tampered,
+                            phase=phase, candidate_manifest=forged,
+                        )
+                    self.assertEqual(caught.exception.check_id, "tool_mismatch")
+                    self.assertIn("committed at the reviewed head", str(caught.exception))
+
+            # An unknown lane is refused rather than defaulted.
+            with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                readiness._family_tool_reference(
+                    ROOT, head, relative, honest, phase="production",
+                )
+            self.assertEqual(caught.exception.check_id, "lane_inadmissible")
+
         for path in (ROOT / "scripts/build_family_marker.py", ROOT / "scripts/verify_family_marker.py"):
             text = path.read_text(encoding="utf-8")
             for forbidden in ("--force", "--skip", "--allow", "--no-verify", "os.environ"):
