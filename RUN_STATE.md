@@ -10,7 +10,29 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-23 morning (T21 — S-1 GAUNTLET-COMPLETE at impl/s1-candidate b5f97c3; ONE gate left: the lead's full read)
+Last updated: 2026-08-23 afternoon (T22 — MERGE WAVE ON MAIN at e6a6520; S-0 IS NEXT)
+
+**T22 (2026-08-23 afternoon):** the RULE-1 GATE CLOSED (8-slice read
+ledger, candidate SOUND) and the MERGE WAVE LANDED: S-1 (3c098de, the
+full D-151+marker implementation), the ack-driver H4 fix (fe53aef),
+the calexits 7-item hardening (e6a6520) — CI adjudicating
+(conclusion-field-verified only, per E-1). Ed rulings D-150a
+(pre-campaign REBOOT then no-reboot span; push freeze with the
+committed visibility/notification protocol) and D-150b (STEP-6 +
+TERMINAL REVIEW DELEGATED to the magistrate as
+independence-preserving mechanical comparison; Ed notified, never
+blocked-on) recorded and pushed. CI hill-climb ROUND 2 running on Sol
+xhigh (target <=12 min; perf/test-speed, watchdogged). NEXT IN ORDER:
+(1) CI green on e6a6520 -> kernel wave (close S1-CANDIDATE-01;
+register A84 + A85 from the corrected packet rows); (2) my full
+pre-execution read of s0-runsheet-r2 + strike the 21-test addendum +
+pin update to e6a6520 (closes S0-RUNSHEET-R2); (3) S-0 AT THE BENCH —
+needs Ed's permission-prompt clicks (or the optional settings rule);
+(4) Ed's pre-campaign REBOOT (D-150a); (5) the REAL transaction
+(S-1..S-5 commits per r4-3) with step-6 under the D-150b delegation;
+(6) READY sitting -> windows -> the paper's data.
+
+Last updated (T21 morning): (S-1 gauntlet-complete at b5f97c3)
 
 **T21 MORNING CLOSE:** the S-1 candidate finished its complete
 adversarial arc: conformance audit → finish round → G-11 cure →
