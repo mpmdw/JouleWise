@@ -725,9 +725,9 @@
     "CALWRITER-ACK-TIMEOUT-01": {
       "acceptance": {
         "evidence": [
-          "The writer-crash-matrix ack protocol no longer couples pass/fail to fixed wall-clock ack deadlines under host load (the A79 audit's H4 bounded-fix shape: progress acknowledgement, monotonic deadline, owned teardown)",
-          "Both observed 2026-08-22 failure stages (after-sampler-teardown/pre and finalization-intent-write/post classes) are covered by regressions that fail on the old fixed-deadline shape",
-          "No byte of the four r6-pinned estimator sources changes"
+          "The driver's await_acknowledgement uses a progress-aware deadline (the H4 shape) rather than a fixed wall-clock timeout, or an equivalently justified cure",
+          "Both shards' observed failure classes are covered by regressions or causal evidence per the calexits-cure precedents",
+          "CI green on both previously-affected exclusive shards at a head containing the fix; no byte of the four r6-pinned estimator sources changes"
         ],
         "pointer": {
           "json_pointer": "/tasks/CALWRITER-ACK-TIMEOUT-01/acceptance",
@@ -752,13 +752,13 @@
         }
       ],
       "flags": [],
-      "goal": "Cure the sampler-acknowledgement timeout flake class in tests/test_calibration_writer_crash_matrix (AssertionError 1 != -9 after RuntimeError 'test sampler acknowledgement timeout' at scripts/validate_powermetrics_fiducial.py:264) by applying the A79 audit's H4 bounded-fix shape to its ack protocol.",
+      "goal": "Cure the SHARED-DRIVER sampler-acknowledgement timeout mechanism (scripts/validate_powermetrics_fiducial.py await_acknowledgement, :264) that fires under loaded hosted 3.11 runners across BOTH exclusive shards: the writer-crash-matrix failures (three firings 2026-08-22: runs 32578576711, 32601988870, 32607418551) AND the calexits test_parameterized_durable_public_cli_witnesses failure (run 32607418551: correction=calibration_rederive_failed caused by pulse_command_on:42 ack timeout) — apply the A79 audit's H4 bounded-fix shape at the driver level (progress-aware acknowledgement deadline, not fixed wall-clock).",
       "id": "CALWRITER-ACK-TIMEOUT-01",
       "lane": "agent",
-      "priority": "p3_hardening_candidates",
+      "priority": "p2_next_slice",
       "rank": 83,
       "status": "queued",
-      "status_note": "Registered on the second same-day firing (magistrate override of the run-report drafter's row-on-next-recurrence recommendation, with grounds: mechanism-class identity is the row identity; stage variation is what H4 predicts). Non-gating.",
+      "status_note": "ESCALATED P3->P2 2026-08-22 late (third same-day firing; reds required shards; every push needs a per-run disposition until cured). SCOPE BROADENED same time: run 32607418551 proved the mechanism lives in the shared driver, firing in BOTH the writer-crash-matrix and calexits shards — and thereby supplied the PRESERVED CUSTODY the A79 audit's row 6 (2026-08-19 parameterized-witnesses) lacked: same driver line :264, REDERIVE-class surface. The audit's refusal to force-join row 6 without evidence is now resolved WITH evidence; the audit record stands as written (its row-6 caveat was correct at its evidence state). scripts/validate_powermetrics_fiducial.py is script-side, NOT one of the four r6-pinned joulewise/ modules — verify against the pinned list at WRITE_SCOPE time regardless.",
       "stop_card": null
     },
     "CGV-HARDEN-01": {

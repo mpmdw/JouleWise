@@ -36,3 +36,28 @@ lines in a partial watch transcript.
 The commit message itself is immutable history; this erratum is the
 correction of record, cross-referenced from the run report's CI
 section.
+
+## E-2 — c09351d run 32607418551 disposition + the ack-timeout unification (2026-08-22 late)
+
+The errata commit's own CI run concluded FAILURE on two exclusive
+shards. Disposition: NO defect in the pushed diff (docs + kernel only);
+both failures share ONE root signature — `RuntimeError: test sampler
+acknowledgement timeout` raised by the shared harness driver
+`scripts/validate_powermetrics_fiducial.py:264` under hosted-runner
+load:
+
+- `calibration-writer-crash-matrix-exclusive (3.11)`: third same-day
+  firing (`pulse_command_off:63`).
+- `calibration-exits-exclusive (3.11)`:
+  `test_parameterized_durable_public_cli_witnesses` failed
+  `correction=calibration_rederive_failed` caused by
+  `pulse_command_on:42` — the SAME driver line. This preserves, for the
+  first time, the failure custody that the A79 audit's row 6 (the
+  2026-08-19 parameterized-witnesses observation) lacked; the audit's
+  refusal to force-join that row without evidence was correct at its
+  evidence state and is now resolved WITH evidence.
+
+Kernel action: CALWRITER-ACK-TIMEOUT-01 broadened to the shared-driver
+mechanism and escalated P3→P2 (three firings in one day red required
+shards). 97e0203's run 32607323880 concluded SUCCESS (verified via the
+conclusion field per E-1's lesson) — no disposition needed there.
