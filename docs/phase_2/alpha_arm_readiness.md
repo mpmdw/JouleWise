@@ -14,7 +14,9 @@ the required operator-qualification rows with evidence.
 
 Window ALPHA is the first prospective D-117 night: the Qwen2.5 1.5B decode
 floor with prefill floor cells. The authoritative row set is
-`configs/arm_readiness/d117_row_registry_v1.json`; this page is a checked,
+`configs/arm_readiness/d117_row_registry_v2.json` (the ruled live registry;
+the frozen `_v1`–`_v3` packs pin the archival `d117_row_registry_v1.json`
+coordinate in their immutable plan trees); this page is a checked,
 plain-language view of its ALPHA profile. A row appearing here does not make
 it pass. Only authenticated evidence consumed by the D-134 generator can do
 that.

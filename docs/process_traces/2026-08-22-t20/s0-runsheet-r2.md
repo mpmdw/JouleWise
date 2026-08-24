@@ -257,6 +257,36 @@ test "$SWEEP_RC" = 0 -o "$SWEEP_RC" = 1
 
 At least `tests/test_arm_readiness_schemas.py` is a correct retention because it pins the archival v1 SHA. No file under `joulewise/` may retain the v1 live pointer. Any unclassified or stale live hit is a candidate precondition defect; correct the reviewed candidate and restart rather than editing it ad hoc in S-0. Authority: REGISTRY-V2 RULING (`MAGISTRATE-RULING.md:124-131`, including the literal-string consistency sweep); S-1 MANIFEST §7 and §9.3.1 item 3.
 
+**AMENDMENT (2026-08-24, cold-gate packets 1 and 2; custody
+`s0-clone-proof/custody/transcripts/006–013` of the 2026-08-24 session).**
+Two rulings bind this clause's application:
+
+1. *Census scope (packet 1, two-seat concurrence).* The sweep pattern
+   above greps BOTH literal forms while MANIFEST §7's census and its
+   "no file under `joulewise/`" claim cover the underscore filename
+   form only. The clause therefore also fires on the hyphen-form id
+   constant `joulewise/arm_readiness.py:46` (`ROW_REGISTRY_ID =
+   "d117-row-registry-v1"`), whose ruled disposition is CORRECT
+   ARCHIVAL RETENTION: it is reachable only for v1-schema documents,
+   selects nothing live (`ROW_REGISTRY_RELATIVE_PATH` at `:88` is the
+   live pointer), and mirrors the documented
+   `FREEZE_RECEIPT_V1_SCHEMA` retention pattern. That hit does not
+   stop S-0. A follow-up naming row (REGISTRY-ID-NAMING-01) is
+   registered and fenced outside the transaction window.
+2. *Fence (packet 2, magistrate synthesis adopting the refuter).* The
+   classification lanes here admit ONLY mechanical classification of
+   hits into the two listed classes. Any hit whose disposition would
+   require more than that — a repoint, a rewritten sentence, a
+   resolved semantic conflict, any new `joulewise/` hit — is a
+   candidate precondition defect: stop, correct the reviewed candidate
+   on main through the ordinary review lane, and restart S-0 from a
+   fresh estate. In-clone doc edits are FORBIDDEN in S-0 because
+   DOCTRINE_PIN mints whole-file hashes of `window_runbook.md` and
+   `decision_log.md` (`arm_readiness_evidence.py:799-830`): an
+   in-clone edit would certify bytes no reviewed candidate ever
+   contained. The four class-(b) doc hits found 2026-08-24 were cured
+   on main under this rule (Q1-RESTART executed).
+
 # 2. ALLOWLIST GENERATION
 
 ### 2.1 Generate, never hand-type, the base 112-path contract

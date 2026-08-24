@@ -265,10 +265,13 @@ Before quiet time:
 For an ALPHA, BETA, or GAMMA night, `PACK_ROOT` means the exact per-plan
 campaign-pack directory, and `PACK_ID` means that directory's final path
 component, which the readiness implementation records as the pack ID. The
-sole authority for which readiness rows belong to those plans is
-`configs/arm_readiness/d117_row_registry_v1.json`. Record that registry's
-path, SHA-256, registry ID, and plan profile in the plan tree; the Markdown
-readiness pages are checked human views, not row authority.
+sole authority for which readiness rows belong to those plans is the ruled
+live registry `configs/arm_readiness/d117_row_registry_v2.json`; the frozen
+`_v1`–`_v3` packs pin the archival `d117_row_registry_v1.json` coordinate in
+their immutable plan trees, and neither file is ever edited to match the
+other. Record the live registry's path, SHA-256, registry ID, and plan
+profile in the plan tree; the Markdown readiness pages are checked human
+views, not row authority.
 
 Freeze readiness only with the implemented command:
 
