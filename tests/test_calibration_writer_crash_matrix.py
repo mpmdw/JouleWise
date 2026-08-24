@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -17,6 +18,7 @@ from unittest import mock
 
 from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 from joulewise.calibration_ledger import (
+
     BRACKET_SESSION_ABORT_EVENT,
     BRACKET_SESSION_FINALIZATION_EVENT,
     BRACKET_SESSION_SCHEMA,
@@ -40,6 +42,15 @@ from tests.owned_process_runner import (
     spawn_spinning_descendant_for_guard_test,
 )
 from tests.test_calibration_exits import _install_fake_writer_dependencies
+
+# Liveness-guard nominal for the shared sampler-ack driver: raised 1.0 -> 4.0
+# after four hosted-runner starvation firings (runs 32578576711, 32601988870,
+# 32607418551, and the e6a6520 merge-head run). The measured hosted/bench
+# ratio is ~2.9x; 4.0 rounds up with 38% margin, and the driver's 4x outer
+# bound still terminates a true hang. Healthy children acknowledge early, so
+# this adds no wall time on the good path. Not a semantic bound.
+_SAMPLER_ACK_TIMEOUT_S = 4.0
+
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -204,6 +215,7 @@ class LogicalPulseAcknowledgementDeadlineTests(unittest.TestCase):
 
 
 class CalibrationWriterCrashMatrixTests(unittest.TestCase):
+    _CASE_WORKERS = 4
     @classmethod
     def setUpClass(cls) -> None:
         cls.tmp = tempfile.TemporaryDirectory()
@@ -598,7 +610,7 @@ class CalibrationWriterCrashMatrixTests(unittest.TestCase):
             "--time-scale-for-test",
             "0.001",
             "--sampler-ready-timeout-s",
-            "1.0",
+            str(_SAMPLER_ACK_TIMEOUT_S),
             "--rollover-timeout-s",
             "1.0",
             "--identity-epoch-json-for-test",
@@ -901,6 +913,17 @@ print(json.dumps(output, sort_keys=True))
         self.assertEqual(self._payload(exited)["terminal_result"], "session_aborted")
         return "session_aborted"
 
+    def _parallel_worker(self, index: int) -> CalibrationWriterCrashMatrixTests:
+        """Return an isolated process owner over the shared read-only fixture repo."""
+
+        worker = type(self)(methodName=self._testMethodName)
+        worker.epoch = self.epoch
+        worker.t1 = self.t1
+        worker.runner = OwnedPublicProcessRunner(
+            Path(self.tmp.name) / "parallel-runners" / f"worker-{index}"
+        )
+        return worker
+
     def test_torn_and_fsynced_append_boundaries_resume_from_fresh_processes(self) -> None:
         operation_stages = {
             "reservation": (
@@ -922,7 +945,7 @@ print(json.dumps(output, sort_keys=True))
                 WriterStage.FINALIZATION_TARGET_FSYNCED,
             ),
         }
-        witnessed: set[tuple[str, str, str]] = set()
+        prepared = []
         for operation, stages in operation_stages.items():
             slots = ("reservation",) if operation == "reservation" else ("pre", "post")
             for slot in slots:
@@ -933,7 +956,13 @@ print(json.dumps(output, sort_keys=True))
                         prefinalize=slot == "post",
                         reserved=operation != "reservation",
                     )
-                    killed = self._kill_at_production_stage(
+                    prepared.append(
+                        (operation, slot, stage, ledger, pin, plan, session_id, custody)
+                    )
+
+        def execute(worker, item):
+            operation, slot, stage, ledger, pin, plan, session_id, custody = item
+            killed = worker._kill_at_production_stage(
                         ledger=ledger,
                         pin=pin,
                         plan=plan,
@@ -942,13 +971,12 @@ print(json.dumps(output, sort_keys=True))
                         custody=custody,
                         stage=stage,
                     )
-                    self.assertEqual(
-                        killed.returncode,
-                        -signal.SIGKILL,
-                        f"{token}: {killed.stderr}",
-                    )
-                    witnessed.add((operation, slot, stage.value))
-                    self._recover_after_crash(
+            worker.assertEqual(
+                killed.returncode,
+                -signal.SIGKILL,
+                f"{operation}/{slot}/{stage.value}: {killed.stderr}",
+            )
+            worker._recover_after_crash(
                         stage=stage,
                         ledger=ledger,
                         pin=pin,
@@ -957,6 +985,30 @@ print(json.dumps(output, sort_keys=True))
                         slot="pre" if slot == "reservation" else slot,
                         custody=custody,
                     )
+            return operation, slot, stage.value
+
+        # Reservation recovery may advance and commit a synthetic head pin,
+        # so those four cases retain their original serial ordering.  Claim
+        # and finalization cases own disjoint ledgers/custody roots and use a
+        # distinct process owner per worker; executing them concurrently
+        # changes only wall time, not their case set or recovery assertions.
+        serial = [item for item in prepared if item[0] == "reservation"]
+        parallel = [item for item in prepared if item[0] != "reservation"]
+        witnessed = {execute(self, item) for item in serial}
+
+        def execute_owned(indexed_item):
+            index, item = indexed_item
+            worker = self._parallel_worker(index)
+            try:
+                return execute(worker, item)
+            finally:
+                worker.runner.close()
+
+        with ThreadPoolExecutor(
+            max_workers=min(self._CASE_WORKERS, len(parallel)),
+            thread_name_prefix="crash-append-case",
+        ) as executor:
+            witnessed.update(executor.map(execute_owned, enumerate(parallel)))
         expected = {
             (operation, slot, stage.value)
             for operation, stages in operation_stages.items()
@@ -1556,6 +1608,8 @@ import time
 from pathlib import Path
 from joulewise.calibration_ledger import CalibrationWriterLease, claim_bracket_session_slot
 ledger = Path({str(ledger)!r})
+
+
 with CalibrationWriterLease(ledger):
     claim_bracket_session_slot(ledger, session_id={session_id!r}, slot='pre', attempt_id={f'{session_id}-pre'!r})
     print('LEASED', flush=True)
@@ -1615,8 +1669,7 @@ with CalibrationWriterLease(ledger):
             for stage in WriterStage
             for slot in _applicable_slots(stage)
         }
-        witnessed: set[tuple[WriterStage, str]] = set()
-        outcomes: dict[tuple[WriterStage, str], str] = {}
+        prepared = []
         for stage in WriterStage:
             for slot in _applicable_slots(stage):
                 token = f"{stage.name.lower()}-{slot}"
@@ -1625,7 +1678,13 @@ with CalibrationWriterLease(ledger):
                     prefinalize=slot == "post",
                     reserved=stage not in _ACTUAL_RESERVATION,
                 )
-                killed = self._kill_at_production_stage(
+                prepared.append(
+                    (stage, slot, ledger, pin, plan, session_id, custody)
+                )
+
+        def execute(worker, item):
+            stage, slot, ledger, pin, plan, session_id, custody = item
+            killed = worker._kill_at_production_stage(
                     ledger=ledger,
                     pin=pin,
                     plan=plan,
@@ -1634,13 +1693,12 @@ with CalibrationWriterLease(ledger):
                     custody=custody,
                     stage=stage,
                 )
-                self.assertEqual(
-                    killed.returncode,
-                    -signal.SIGKILL,
-                    f"{stage.value}/{slot}: {killed.stderr}",
-                )
-                witnessed.add((stage, slot))
-                outcomes[(stage, slot)] = self._recover_after_crash(
+            worker.assertEqual(
+                killed.returncode,
+                -signal.SIGKILL,
+                f"{stage.value}/{slot}: {killed.stderr}",
+            )
+            outcome = worker._recover_after_crash(
                     stage=stage,
                     ledger=ledger,
                     pin=pin,
@@ -1649,6 +1707,34 @@ with CalibrationWriterLease(ledger):
                     slot="pre" if slot == "reservation" else slot,
                     custody=custody,
                 )
+            return stage, slot, outcome
+
+        # The seven reservation-stage cases retain serial execution because
+        # their recovery may write a synthetic Git head pin.  Every remaining
+        # case has a unique ledger/custody root and a per-worker process owner,
+        # so concurrency preserves exact case and survivor coverage.
+        serial = [item for item in prepared if item[0] in _ACTUAL_RESERVATION]
+        parallel = [item for item in prepared if item[0] not in _ACTUAL_RESERVATION]
+        results = [execute(self, item) for item in serial]
+
+        def execute_owned(indexed_item):
+            index, item = indexed_item
+            worker = self._parallel_worker(index)
+            try:
+                return execute(worker, item)
+            finally:
+                worker.runner.close()
+
+        with ThreadPoolExecutor(
+            max_workers=min(self._CASE_WORKERS, len(parallel)),
+            thread_name_prefix="crash-stage-case",
+        ) as executor:
+            results.extend(executor.map(execute_owned, enumerate(parallel)))
+
+        witnessed = {(stage, slot) for stage, slot, _outcome in results}
+        outcomes = {
+            (stage, slot): outcome for stage, slot, outcome in results
+        }
         self.assertEqual(witnessed, expected)
         self.assertEqual(
             outcomes[(WriterStage.DURING_MANIFEST_ARTIFACT, "pre")],
