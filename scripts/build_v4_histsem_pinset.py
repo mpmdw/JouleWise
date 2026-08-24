@@ -133,11 +133,14 @@ def _row(
     )
     if current_digest != readiness.committed_pack_tree_sha256(root):
         raise BuildError("HEAD differential self-test failed")
-    if any(
-        PurePosixPath(path).parts
-        and PurePosixPath(path).parts[0] in readiness._HISTSEM_CUSTODY_DIRECTORIES
-        for path in historical_paths
-    ):
+    # The pre-authoring test asks only whether EVIDENCE AUTHORING had already
+    # happened at the historical coordinate, so it consults the authoring
+    # subset, not the full custody frozenset.  U11 projection receipts are
+    # committed per pack BEFORE authoring under the ruled _v4 order (runsheet
+    # §3.2), so their presence here is correct.  `_delta` above keeps the full
+    # frozenset: a projection receipt is still an admissible post-authoring
+    # addition.  See `_HISTSEM_AUTHORING_CUSTODY_DIRECTORIES`.
+    if readiness._histsem_tree_has_authoring_custody(historical_paths):
         raise BuildError("historical coordinate is not pre-authoring")
 
     plan_tree_raw = _show(repository, current_head, f"{relative}/plan_tree.json")

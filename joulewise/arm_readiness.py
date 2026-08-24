@@ -2875,6 +2875,49 @@ _HISTSEM_CUSTODY_DIRECTORIES = frozenset(
         "identity_pin_projection.receipts",
     }
 )
+_HISTSEM_PROJECTION_CUSTODY_DIRECTORY = "identity_pin_projection.receipts"
+_HISTSEM_AUTHORING_CUSTODY_DIRECTORIES = _HISTSEM_CUSTODY_DIRECTORIES - {
+    _HISTSEM_PROJECTION_CUSTODY_DIRECTORY
+}
+"""Custody written by EVIDENCE AUTHORING, as opposed to identity projection.
+
+``_HISTSEM_CUSTODY_DIRECTORIES`` answers a different question than the
+pre-authoring test does, and the two must not share an answer:
+
+* The post-authoring DELTA envelope (``_histsem_delta`` and the builder's
+  ``_delta``) asks "may this path legitimately APPEAR between the historical
+  coordinate and HEAD?".  Every custody directory may, projection receipts
+  included, so that check keeps the full frozenset.
+* The PRE-AUTHORING test asks "had evidence authoring already happened when
+  this coordinate was committed?".  Only authoring answers that.
+
+``identity_pin_projection.receipts`` holds U11 identity-pin projection
+receipts, which the ruled ``_v4`` transaction order (D-153 / packet-5, the
+runsheet §3.2 interleave) commits per pack BEFORE any evidence is authored --
+forced by the v2 issuance gate, which refuses to freeze a dirty tree.  Its
+presence at the historical coordinate is therefore CORRECT and carries no
+information about authoring.  ``arm_readiness.evidence`` and
+``arm_readiness.sources`` are written by the authoring step
+(``arm_readiness_evidence.py``) and ``arm_readiness.freeze.receipts`` by the
+freeze that follows it, so all three still prove the coordinate is too late.
+"""
+
+
+def _histsem_tree_has_authoring_custody(paths: Iterable[str]) -> bool:
+    """True when a historical pack tree already contains AUTHORING custody.
+
+    ``paths`` are pack-relative POSIX paths from ``_historical_pack_tree``.
+    Projection custody is deliberately not counted -- see
+    ``_HISTSEM_AUTHORING_CUSTODY_DIRECTORIES``.
+    """
+
+    return any(
+        PurePosixPath(path).parts
+        and PurePosixPath(path).parts[0] in _HISTSEM_AUTHORING_CUSTODY_DIRECTORIES
+        for path in paths
+    )
+
+
 _HISTSEM_ALLOWED_MODIFICATIONS = frozenset(
     {
         "generate_configs.py",
@@ -3428,10 +3471,7 @@ def verify_receipt_histsem_pack(
             "histsem_historical_digest_mismatch",
             "historical pack digest differs from the governed pin",
         )
-    if any(
-        PurePosixPath(path).parts[0] in _HISTSEM_CUSTODY_DIRECTORIES
-        for path in historical_paths
-    ):
+    if _histsem_tree_has_authoring_custody(historical_paths):
         raise HistoricalSemanticsError(
             "histsem_historical_tree_not_pre_authoring",
             "historical receipt coordinate already contains custody artifacts",

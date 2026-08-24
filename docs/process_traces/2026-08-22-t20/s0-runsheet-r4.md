@@ -1677,12 +1677,21 @@ test ! -e "$CLONE/$SUCCESSOR_PINSET" || die 'successor pinset output path is cre
 "$PY" "$CLONE/scripts/build_v4_histsem_pinset.py" \
   --repository "$CLONE" \
   --base-pinset "$CLONE/$BASE_PINSET" \
-  --historical-head "$EVIDENCE_COMMIT" \
+  --historical-head "$EVIDENCE_DERIVATION_HEAD" \
   --current-head "$FREEZE_COMMIT" \
   --pack-root "$FIRST_PACK" --pack-root "$SECOND_PACK" --pack-root "$THIRD_PACK" \
   --output "$CLONE/$SUCCESSOR_PINSET" \
   > "$TRANS/070-build-v4-pinset.json" || die 'successor pinset build refused; see 070'
 ```
+
+`--historical-head` is `$EVIDENCE_DERIVATION_HEAD`, not `$EVIDENCE_COMMIT`:
+§3.4 authors every generic receipt AT the derivation head, so that is the
+coordinate each receipt's `derivation_commit` records and the only value the
+builder's receipt-coordinate check accepts, while the same head satisfies the
+pre-authoring check because §3.2's U11 projection custody -- committed before
+authoring -- is excluded from that test (`_HISTSEM_AUTHORING_CUSTODY_DIRECTORIES`);
+`$EVIDENCE_COMMIT` is the post-authoring commit and fails the pre-authoring
+check outright.
 
 The output path is create-only and must be absent before the command. The v1
 artifact is an immutable member 1 of the code-enumerated chain
