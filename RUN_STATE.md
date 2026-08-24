@@ -10,6 +10,64 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T23 (2026-08-24 pre-dawn) — FABLE LOOP SESSION: six PRs landed, the CI
+red class cured at its root, the paper advanced, and S-0's instrument
+sent to r3 by its own discipline.** Fable seated as magistrate directly
+(Ed's model switch); the D-128 loop runs under a 5-day paper mandate.
+
+- **CI red DIAGNOSED and CURED end-to-end.** The 47-failure arc
+  partitioned into exactly two classes; class A (mutation-race third
+  terminal shape) fixed and merged (PR #169, 0/30->30/30 with
+  red-before/green-after + anti-suppression proofs); class B was NOT
+  starvation — an escalation consult (third same-signature round
+  triggered it) root-caused a PERMANENT EVENT-LOSS WEDGE in the fake
+  sampler's file tailer (partial-line readline drop; APFS-vs-ext4
+  explains bench non-reproduction), cured by newline-safe tail-buffering
+  + fail-loud (PR #173, torn-line regression red/green). Constant
+  re-tune deferred until soak. TEST-SPEED-01 lever 2 landed (PR #172):
+  crash-matrix parallelization verified (91/91 disjoint roots, outcome
+  maps identical, one aliasing defect found-and-fixed by the check);
+  hosted CI confirmed 23.1 -> ~6.5 min worst shard; the exclusive job is
+  no longer the critical path (now: ordinary shard 4 at ~18 min).
+- **Paper: substantial writable-now advance landed (PR #171)** — the
+  broken CONDITIONAL-INSERT block re-anchored + de-numericized under
+  ruling (insert 4 VOID), four ruled limitations folded into §7 at the
+  writing standard (168h horizon, 748 bundles, check-to-grant race,
+  in-process adversary), `capture` first-use cured, the two flagship §2
+  TODO-EVIDENCE holes FILLED with independently re-derived primary-
+  artifact values (bit-identical b_fiducial + cell count; they were
+  READ-side citation gaps, not retention gaps — no pre-collection code
+  change needed), 28-ref bibliography web-audited (zero hard errors;
+  Rivoire refs flawless; EIR 6(2) reverted to HotCarbon '26 pending
+  indexing; CSL patched, build --check green). Desk batch PR #168
+  landed B-9/B-27/B-43/B-45/B-47/B-33 earlier the same night.
+- **S-0 CAMPAIGN (the _v4 clone-proof): three cold-gate packets + an
+  executability audit; instrument advances to r3.** Packet 1 (:46
+  archival id constant — CLEAR, amend-instrument); packet 2 (four
+  stale-live doc pointers — Q1-RESTART adopted on the DOCTRINE_PIN
+  whole-file-hash ground; repoints landed via PR #170; estate r2 cut,
+  §§1.1-3.1 executed clean, 112/112 shape PASS). Packet 3: §3.2 U11
+  freeze REFUSED — §1.1's "stdlib-only suffices" axiom was NEVER TRUE
+  (real packs import the mlx runtime and hash weights); both cold seats
+  killed remedies (c)/(d); the refuter found the locked measurement venv
+  (.venv, mlx_lm 0.31.3) already on the host — ruled remedy: §3.2 runs
+  under that pinned venv, ZERO installs, no Ed action (amendment 3, PR
+  #174 open). The ruled executability audit over §§3.3-5 then found
+  FIVE more blocks-execution false axioms (tools invoked from $INPUT,
+  step-6 suite red inevitable with its cited delta nonexistent,
+  unreachable 4(h) expectation, zsh 1-based arrays + stateless shells,
+  undefined MARKER_BRANCH) -> per the ruling's own condition, FULL COLD
+  RE-RATIFICATION mandated: s0-runsheet-r3 drafting in flight (folds
+  amendments 1-3, cures F-1..F-14, authors the missing fixation delta),
+  then a fresh cold pair ratifies, then a FRESH estate executes. r2
+  estate SUPERSEDED (custody 031/032 contaminated; anomaly recorded).
+  Kernel: ED-MINT-LICENSE-01 closed (D-150.1 supersession),
+  V4-TRANSACTION-01 -> partial, CALEXITS-EVIDENCE-BYTES-01 +
+  REGISTRY-ID-NAMING-01 registered (89 live).
+- **Machine note for Ed:** /opt/homebrew/bin/python3 now points at
+  3.14.7 (brew python@3.14 installed by the lever-2 stream). Ed's 00:09
+  reboot is NOT the D-150a ruled boot — that comes after S-0 passes.
+
 **PAUSED 2026-08-24 — API OUTAGE CHECKPOINT.** The T22 session stopped
 mid-flight when the API went down; this banner is the resume pointer.
 Nothing is lost and nothing is in flight: every branch is pushed, no Sol
