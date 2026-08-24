@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast as _ast
 import copy
 import inspect
+import io
 import json
 import os
 import platform as _platform
@@ -17,6 +18,7 @@ import signal
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 from dataclasses import dataclass
@@ -24,6 +26,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
 
 from joulewise import arm_readiness as _readiness
+from joulewise import identity_pins as _identity_pins
 from joulewise.calibration_bracketing import (
     ISSUED_ACCEPTANCE_REGISTRY as _ISSUED_ACCEPTANCE_REGISTRY,
     PREDECESSOR_ACCEPTANCE_ID as _PREDECESSOR_ACCEPTANCE_ID,
@@ -160,6 +163,7 @@ _DERIVER_RECORDED_READ_BOUNDARIES = frozenset(
         "_recorded_generator_check",
         "_recorded_pack_family_plan_tree",
         "_recorded_pack_glob",
+        "_recorded_projected_pack_authentication",
         "_recorded_receipt_oracle",
         "_run_suite",
     }
@@ -1056,6 +1060,7 @@ def _recorded_generator_check(
             check=False,
             capture_output=True,
             timeout=180,
+            env=_generator_environment(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise _underivable(kind, f"pack generator check could not execute: {exc}") from exc
@@ -1070,15 +1075,470 @@ def _recorded_generator_check(
     }
 
 
+# --- U11 projected-pack authentication (PACKAUTH) -------------------------
+#
+# A pack that has been through the U11 identity-pin projection cannot be
+# authenticated by the generator's bare `--check`: `identity_pins
+# .freeze_projection` ADDS the projection receipt and its sidecar (which the
+# generator then reports as inventory extras) and REWRITES plan_tree.json /
+# plan_tree.sha256 / producer_contract.json through `_render_json`
+# (sort_keys) while the generator emits insertion-order bytes.  Re-running the
+# generator against a projected pack is therefore underivable by construction.
+#
+# The cure COMPOSES two authentications:
+#
+#   1. the generator's own derivation of the PRE-projection pack, run against
+#      the pack bytes materialised from the receipt's anchored commit, and
+#   2. a byte-exact replay of the projection's write set from those
+#      pre-projection bytes plus the COMMITTED receipt.
+#
+# The composed claim is: the committed pack is exactly the generator's
+# emission at the anchored commit, plus exactly the U11 projection's
+# receipted rewrite of it.
+#
+# `receipt["pack"]["reviewed_git_commit"]` is a repo-wide HEAD, NOT a
+# pack-scoped pin, so it is treated as an UNTRUSTED source of candidate bytes.
+# Every binding is derived from digests instead: the byte-exact replay ties the
+# anchor's pre-projection plan tree to the committed bytes cryptographically (a
+# different anchor renders different bytes), and the subtree fence ties every
+# other file in the pack.  The anchor must additionally resolve to a commit and
+# be an ancestor of the derivation head, so it lies inside audited history.
+#
+# The generator imports `joulewise.*` from the tree it is run in, and the
+# anchor's library code is NOT pinned by anything.  The materialised tree
+# therefore gets HEAD's `joulewise/` and `scripts/` overlaid on top of it, so
+# the code that EXECUTES is the reviewed head's code and only pack/data bytes
+# come from the anchor.
+_PROJECTION_REWRITTEN_FILES = frozenset(
+    {"plan_tree.json", "plan_tree.sha256", "producer_contract.json"}
+)
+_ANCHOR_LIBRARY_PATHS = ("joulewise", "scripts")
+_ANCHOR_ARCHIVE_TIMEOUT_SECONDS = 300
+
+
+def _generator_environment() -> dict[str, str]:
+    """Environment for a generator subprocess.
+
+    ``PYTHONDONTWRITEBYTECODE`` keeps the child from leaving ``__pycache__``
+    inside the pack directory.  A stray ``__pycache__`` is untracked, so the
+    authoring run that created it makes the NEXT authoring run refuse with
+    ``evidence_author_pack_uncommitted`` against its own residue.
+    """
+
+    return dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+
+
+def _safe_pack_relative(value: object, *, kind: str, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise _underivable(kind, f"{label} is missing")
+    if value.startswith("/") or "\\" in value or value.endswith("/"):
+        raise _underivable(kind, f"{label} is not a safe pack-relative path: {value}")
+    parts = PurePosixPath(value).parts
+    if not parts or any(part in {"..", "."} for part in parts):
+        raise _underivable(kind, f"{label} is not a safe pack-relative path: {value}")
+    return value
+
+
+def _pack_file_digests(root: Path, *, kind: str, label: str) -> dict[str, str]:
+    """Digest every regular file under ``root``, refusing anything else."""
+
+    digests: dict[str, str] = {}
+    for directory, subdirectories, filenames in os.walk(root):
+        subdirectories.sort()
+        for name in sorted(filenames):
+            path = Path(directory) / name
+            relative = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                raise _underivable(kind, f"{label} contains a symlink: {relative}")
+            if not path.is_file():
+                raise _underivable(
+                    kind, f"{label} contains a non-regular file: {relative}"
+                )
+            digests[relative] = _readiness.sha256_bytes(path.read_bytes())
+    return digests
+
+
+def _git_capture(
+    repository: Path, arguments: Sequence[str], *, kind: str, binary: bool = False
+) -> Any:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repository), *arguments],
+            check=False,
+            capture_output=True,
+            timeout=_ANCHOR_ARCHIVE_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise _underivable(kind, f"git {arguments[0]} could not execute: {exc}") from exc
+    if completed.returncode != 0:
+        detail = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise _underivable(kind, f"git {arguments[0]} refused: {detail}")
+    return completed.stdout if binary else completed.stdout.decode("utf-8")
+
+
+def _extract_committed_tree(
+    repository: Path,
+    commit: str,
+    destination: Path,
+    *,
+    kind: str,
+    paths: Sequence[str] = (),
+) -> None:
+    """Materialise ``commit`` (or part of it) into ``destination``.
+
+    ``git archive`` output comes from the repository's own object store, but it
+    is still sanitised member by member: nothing may escape ``destination`` and
+    no links are admitted, so a hostile pack cannot reach outside the scratch
+    tree when it is later walked and executed.
+    """
+
+    archive = _git_capture(
+        repository,
+        ["archive", "--format=tar", commit, *paths],
+        kind=kind,
+        binary=True,
+    )
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            for member in tar.getmembers():
+                if member.issym() or member.islnk():
+                    raise _underivable(
+                        kind, f"anchored tree contains a link: {member.name}"
+                    )
+                if not (member.isfile() or member.isdir()):
+                    raise _underivable(
+                        kind, f"anchored tree contains a special file: {member.name}"
+                    )
+                name = PurePosixPath(member.name)
+                if name.is_absolute() or ".." in name.parts:
+                    raise _underivable(
+                        kind, f"anchored tree member escapes the tree: {member.name}"
+                    )
+            tar.extractall(destination)
+    except tarfile.TarError as exc:
+        raise _underivable(kind, f"anchored tree could not be read: {exc}") from exc
+
+
+def _replay_projection_write_set(
+    pre_projection_pack: Path,
+    receipt: Mapping[str, Any],
+    receipt_relative: str,
+    receipt_sha256: str,
+    *,
+    kind: str,
+) -> dict[str, bytes]:
+    """Re-derive `freeze_projection`'s write set from pre-projection bytes.
+
+    This mirrors `identity_pins.freeze_projection` exactly, EXCEPT that the
+    derived per-unit ``model_runtime_config`` values are taken from the
+    committed receipt rather than re-derived: live re-derivation would import
+    the mlx runtime adapters, and the evidence author runs under stdlib Python.
+    """
+
+    try:
+        tree, projection, producer = _identity_pins._load_pack_projection(
+            pre_projection_pack
+        )
+    except _identity_pins.IdentityPinProjectionError as exc:
+        raise _underivable(
+            kind, f"anchored pack projection is unreadable: {exc}"
+        ) from exc
+    if projection["state"] == "frozen":
+        raise _underivable(kind, "anchored pack is already frozen")
+    frozen = copy.deepcopy(projection)
+    frozen["state"] = "frozen"
+    frozen["projection_receipt"] = {
+        "path": receipt_relative,
+        "sha256": receipt_sha256,
+    }
+    runtime_by_id = {
+        unit["identity_unit_id"]: unit["model_runtime_config"]
+        for unit in receipt["identity_units"]
+    }
+    for unit in frozen["identity_units"]:
+        unit_id = unit["identity_unit_id"]
+        if unit_id not in runtime_by_id:
+            raise _underivable(
+                kind, f"projection receipt omits identity unit: {unit_id}"
+            )
+        unit["model_runtime_config"] = copy.deepcopy(runtime_by_id[unit_id])
+    tree["arm_attachments"]["identity_pin_projection"] = copy.deepcopy(frozen)
+    writes: dict[str, bytes] = {}
+    if producer is not None:
+        producer["identity_pin_projection"] = copy.deepcopy(frozen)
+        producer_bytes = _identity_pins._render_json(producer)
+        writes["producer_contract.json"] = producer_bytes
+        downstream = tree.get("downstream_contract")
+        reference = (
+            downstream.get("producer_contract")
+            if isinstance(downstream, Mapping)
+            else None
+        )
+        if isinstance(reference, dict):
+            reference["sha256"] = _identity_pins._sha256_bytes(producer_bytes)
+    tree_bytes = _identity_pins._render_json(tree)
+    writes["plan_tree.json"] = tree_bytes
+    writes["plan_tree.sha256"] = _identity_pins._gnu_sidecar(
+        _identity_pins._sha256_bytes(tree_bytes), "plan_tree.json"
+    )
+    return writes
+
+
+def _recorded_projected_pack_authentication(
+    context: _DerivationContext,
+    generator_artifact: Mapping[str, str],
+    projection: Mapping[str, Any],
+    *,
+    kind: str,
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, str]]]:
+    """Authenticate a U11-projected pack; see the block comment above.
+
+    Returns the generator-check record, the projection-authentication record,
+    and the artifacts this boundary authenticated as primaries.  Every byte it
+    reads is digested into one of the two records.
+    """
+
+    pack_relative = _repo_relative(context.repository, context.pack_root)
+
+    # 1. Receipt binding: the committed receipt and its sidecar, proven
+    #    byte-identical to the derivation head and to the plan tree's pin.
+    reference = projection.get("projection_receipt")
+    if not isinstance(reference, Mapping):
+        raise _underivable(kind, "frozen projection carries no receipt reference")
+    receipt_relative = _safe_pack_relative(
+        reference.get("path"), kind=kind, label="projection receipt path"
+    )
+    if not receipt_relative.endswith(".json"):
+        raise _underivable(
+            kind, f"projection receipt is not a JSON file: {receipt_relative}"
+        )
+    sidecar_relative = f"{receipt_relative[: -len('.json')]}.sha256"
+    receipt_artifact, receipt_raw = _committed_artifact(
+        context.repository, f"{pack_relative}/{receipt_relative}", kind=kind
+    )
+    sidecar_artifact, sidecar_raw = _committed_artifact(
+        context.repository, f"{pack_relative}/{sidecar_relative}", kind=kind
+    )
+    receipt_sha256 = receipt_artifact["sha256"]
+    if reference.get("sha256") != receipt_sha256:
+        raise _underivable(
+            kind, "projection receipt digest differs from the plan tree reference"
+        )
+    expected_sidecar = _identity_pins._gnu_sidecar(
+        receipt_sha256, PurePosixPath(receipt_relative).name
+    )
+    if sidecar_raw != expected_sidecar:
+        raise _underivable(
+            kind, "projection receipt sidecar does not authenticate the receipt"
+        )
+    try:
+        receipt = _identity_pins.validate_projection_receipt(
+            _readiness.parse_json_bytes(receipt_raw)
+        )
+    except (_readiness.ArmReadinessError, _identity_pins.IdentityPinProjectionError) as exc:
+        raise _underivable(kind, f"projection receipt is invalid: {exc}") from exc
+    if receipt["receipt_kind"] != "freeze_projection" or receipt["status"] != "PASS":
+        raise _underivable(kind, "projection receipt is not a passing freeze receipt")
+    if receipt["pack"]["pack_id"] != context.pack_root.name:
+        raise _underivable(kind, "projection receipt names a different pack")
+
+    # 2. Anchor: untrusted for CONTENT, but it must sit in audited history.
+    anchor = receipt["pack"]["reviewed_git_commit"]
+    if not isinstance(anchor, str) or not _GIT_RE.fullmatch(anchor):
+        raise _underivable(kind, "reviewed_git_commit is not a 40-hex commit")
+    try:
+        _git_capture(
+            context.repository, ["cat-file", "-e", f"{anchor}^{{commit}}"], kind=kind
+        )
+    except EvidenceAuthoringError as exc:
+        raise _underivable(
+            kind, f"reviewed_git_commit does not resolve to a commit: {anchor}"
+        ) from exc
+    try:
+        ancestry = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(context.repository),
+                "merge-base",
+                "--is-ancestor",
+                anchor,
+                context.head_commit,
+            ],
+            check=False,
+            capture_output=True,
+            timeout=_ANCHOR_ARCHIVE_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise _underivable(kind, f"anchor ancestry could not execute: {exc}") from exc
+    if ancestry.returncode != 0:
+        raise _underivable(
+            kind, "reviewed_git_commit is not an ancestor of the derivation head"
+        )
+
+    with tempfile.TemporaryDirectory() as scratch:
+        anchored = Path(scratch).resolve()
+        # 3. Materialise the anchor, then overlay the reviewed head's library
+        #    code so the generator executes reviewed code, not anchor code.
+        _extract_committed_tree(context.repository, anchor, anchored, kind=kind)
+        for library in _ANCHOR_LIBRARY_PATHS:
+            target = anchored / library
+            if target.exists():
+                shutil.rmtree(target)
+        _extract_committed_tree(
+            context.repository,
+            context.head_commit,
+            anchored,
+            kind=kind,
+            paths=_ANCHOR_LIBRARY_PATHS,
+        )
+        pre_projection_pack = anchored / pack_relative
+        if not pre_projection_pack.is_dir():
+            raise _underivable(kind, "pack is absent at the anchored commit")
+
+        # 4. The generator that runs must be the one the plan tree pins.
+        generator_relative = generator_artifact["path"]
+        anchored_generator = anchored / PurePosixPath(generator_relative)
+        if not anchored_generator.is_file():
+            raise _underivable(kind, "pack generator is absent at the anchored commit")
+        if (
+            _readiness.sha256_bytes(anchored_generator.read_bytes())
+            != generator_artifact["sha256"]
+        ):
+            raise _underivable(
+                kind, "pack generator at the anchored commit differs from its pin"
+            )
+
+        # Census the anchored pack BEFORE running anything in the tree.
+        anchored_digests = _pack_file_digests(
+            pre_projection_pack, kind=kind, label="anchored pack"
+        )
+
+        # 5. The generator's own derivation of the pre-projection pack.
+        try:
+            completed = subprocess.run(
+                [sys.executable, str(anchored_generator), "--check"],
+                cwd=anchored,
+                check=False,
+                capture_output=True,
+                timeout=180,
+                env=_generator_environment(),
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise _underivable(
+                kind, f"pack generator check could not execute: {exc}"
+            ) from exc
+        if completed.returncode != 0:
+            detail = completed.stderr.decode("utf-8", errors="replace").strip()
+            raise _underivable(
+                kind, f"pack generator --check refused at the anchored commit: {detail}"
+            )
+        generator_result = {
+            "command": [sys.executable, generator_relative, "--check"],
+            "exit_code": completed.returncode,
+            "stdout_sha256": _readiness.sha256_bytes(completed.stdout),
+            "stderr_sha256": _readiness.sha256_bytes(completed.stderr),
+        }
+
+        # 6. Subtree fence: the anchor -> committed delta must be EXACTLY the
+        #    projection's write set and nothing else.
+        committed_digests = _pack_file_digests(
+            context.pack_root, kind=kind, label="committed pack"
+        )
+        added = sorted(set(committed_digests) - set(anchored_digests))
+        removed = sorted(set(anchored_digests) - set(committed_digests))
+        changed = sorted(
+            name
+            for name in set(anchored_digests) & set(committed_digests)
+            if anchored_digests[name] != committed_digests[name]
+        )
+        licensed_additions = sorted({receipt_relative, sidecar_relative})
+        if added != licensed_additions:
+            raise _underivable(
+                kind,
+                "pack subtree adds files the projection does not license: "
+                f"{sorted(set(added) - set(licensed_additions))!r}",
+            )
+        if removed:
+            raise _underivable(
+                kind, f"pack subtree removes anchored files: {removed!r}"
+            )
+        unlicensed = sorted(set(changed) - _PROJECTION_REWRITTEN_FILES)
+        if unlicensed:
+            raise _underivable(
+                kind, f"pack subtree diverges at the anchored commit: {unlicensed!r}"
+            )
+
+        # 7. Byte-exact replay of the projection's write set.
+        writes = _replay_projection_write_set(
+            pre_projection_pack,
+            receipt,
+            receipt_relative,
+            receipt_sha256,
+            kind=kind,
+        )
+        replayed: dict[str, str] = {}
+        for relative, expected in sorted(writes.items()):
+            actual = (context.pack_root / relative).read_bytes()
+            if actual != expected:
+                raise _underivable(
+                    kind,
+                    "projection replay does not reproduce the committed bytes: "
+                    f"{relative}",
+                )
+            replayed[relative] = _readiness.sha256_bytes(expected)
+
+    projection_result = {
+        "reviewed_git_commit": anchor,
+        "projection_receipt": dict(receipt_artifact),
+        "projection_receipt_sidecar": dict(sidecar_artifact),
+        "licensed_additions": licensed_additions,
+        "replayed_files": replayed,
+        "rewritten_files": changed,
+        "anchored_file_count": len(anchored_digests),
+        "committed_file_count": len(committed_digests),
+    }
+    return generator_result, projection_result, [receipt_artifact, sidecar_artifact]
+
+
+def _pack_projection(context: _DerivationContext) -> Mapping[str, Any] | None:
+    """Return the pack's identity-pin projection block, if it carries one."""
+
+    attachments = context.tree.get("arm_attachments")
+    if not isinstance(attachments, Mapping):
+        return None
+    projection = attachments.get("identity_pin_projection")
+    return projection if isinstance(projection, Mapping) else None
+
+
 def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
     kind = "PACK_AUTHENTICATION"
     generator = context.tree.get("generator")
     generator_artifact, _ = _pinned_artifact(
         context, generator, kind=kind, label="pack generator"
     )
-    generator_result = _recorded_generator_check(
-        context, generator_artifact["path"], kind=kind
-    )
+    projection = _pack_projection(context)
+    projection_result: dict[str, Any] | None = None
+    projection_primary: list[dict[str, str]] = []
+    if (
+        projection is not None
+        and projection.get("state") == "frozen"
+        and projection.get("projection_receipt") is not None
+    ):
+        # A projected pack is NEVER allowed to fall back to the bare check:
+        # a permissive generator would otherwise bypass the projection
+        # authentication entirely.
+        (
+            generator_result,
+            projection_result,
+            projection_primary,
+        ) = _recorded_projected_pack_authentication(
+            context, generator_artifact, projection, kind=kind
+        )
+    else:
+        generator_result = _recorded_generator_check(
+            context, generator_artifact["path"], kind=kind
+        )
     manifests = _validate_manifests(context, kind=kind)
     downstream = context.tree.get("downstream_contract")
     if not isinstance(downstream, Mapping):
@@ -1134,6 +1594,7 @@ def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
         context.repository, "joulewise/floor_extraction.py", kind=kind
     )
     primary = [generator_artifact, extraction_artifact, validator_artifact]
+    primary.extend(projection_primary)
     primary.extend(manifests["authenticated_artifacts"])
     return _DerivedKind(
         kind,
@@ -1141,6 +1602,11 @@ def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
         tuple(primary),
         (
             _check("pack_generator_check", generator_result),
+            *(
+                ()
+                if projection_result is None
+                else (_check("projected_pack_authentication", projection_result),)
+            ),
             _check(
                 "manifest_validator",
                 {
