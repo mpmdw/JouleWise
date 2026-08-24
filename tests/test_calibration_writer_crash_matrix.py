@@ -18,7 +18,6 @@ from unittest import mock
 
 from joulewise.uncertainty_evidence import ACTIVE_CAPTURE_ANCHOR_METHOD
 from joulewise.calibration_ledger import (
-
     BRACKET_SESSION_ABORT_EVENT,
     BRACKET_SESSION_FINALIZATION_EVENT,
     BRACKET_SESSION_SCHEMA,
@@ -43,15 +42,26 @@ from tests.owned_process_runner import (
 )
 from tests.test_calibration_exits import _install_fake_writer_dependencies
 
-# Liveness-guard nominal for the shared sampler-ack driver: raised 1.0 -> 4.0
-# after four hosted-runner starvation firings (runs 32578576711, 32601988870,
-# 32607418551, and the e6a6520 merge-head run). The measured hosted/bench
-# ratio is ~2.9x; 4.0 rounds up with 38% margin, and the driver's 4x outer
-# bound still terminates a true hang. Healthy children acknowledge early, so
-# this adds no wall time on the good path. Not a semantic bound.
-_SAMPLER_ACK_TIMEOUT_S = 4.0
-
-
+# Stall deadline for the shared sampler-ack driver: how long the parent waits
+# for a freshly spawned sampler child to say "I am up" before declaring the
+# child hung. This is a LIVENESS BACKSTOP, not a semantic bound: no assertion
+# in this module depends on its value, and a healthy child acknowledges in
+# milliseconds, so raising it costs zero wall time on the good path and only
+# widens the window in which a STARVED-but-healthy child still counts as alive.
+#
+# History: 1.0 -> 4.0 after four hosted-runner starvation firings (runs
+# 32578576711, 32601988870, 32607418551, and the e6a6520 merge-head run); 4.0
+# was sized on a ~2.9x hosted/bench ratio and proved still too tight. The
+# 2026-08-24 red-triage partition of 47 recent exclusive-job failures found 28
+# of them to be sampler-ack stall-deadline misses on starved hosted runners
+# (evidence run 32683484684), i.e. the deadline itself was the top single cause
+# of CI red in this file. 30.0 is set well past any plausible starvation spike
+# rather than tuned to the last observed one.
+#
+# Nothing is unbounded by this: tests/owned_process_runner.py still terminates a
+# true hang with its 600 s absolute communicate ceiling and its 120-480 s
+# progress-idle deadline, both of which apply to every child started here.
+_SAMPLER_ACK_TIMEOUT_S = 30.0
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -215,7 +225,25 @@ class LogicalPulseAcknowledgementDeadlineTests(unittest.TestCase):
 
 
 class CalibrationWriterCrashMatrixTests(unittest.TestCase):
+    # How many crash cases the two sweeps run concurrently. Sized to the CI
+    # runner, not to this bench: every job that runs this module is
+    # `runs-on: ubuntu-latest`, which is 4 vCPUs. A full module run at 4
+    # workers measured 278.92 s wall for 864.73 s of user CPU, i.e. an average
+    # demand of 3.10 cores -- so 4 workers ask for ~3.1 of the 4 available
+    # vCPUs and leave headroom. Raising it would not: the same per-case CPU
+    # demand at 8 workers wants ~6.2 cores, which on a 4-vCPU runner is the
+    # 1.55x oversubscription that starves sampler acknowledgement and is the
+    # single largest cause of red in this file (see _SAMPLER_ACK_TIMEOUT_S).
+    #
+    # Bench scaling on a 14-core M3 Max, both sweeps, python 3.11, quiet
+    # machine, serial mean 826.9 s over two runs:
+    #     workers=2  437.9 s  1.89x     workers=6  184.0 s  4.49x
+    #     workers=4  239.9 s  3.45x     workers=8  126.7 s  6.53x
+    # It keeps scaling past 4 here because this box has the cores; that is a
+    # reason to revisit this number if CI ever moves to a larger runner, and
+    # not a reason to raise it now.
     _CASE_WORKERS = 4
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.tmp = tempfile.TemporaryDirectory()
@@ -913,14 +941,21 @@ print(json.dumps(output, sort_keys=True))
         self.assertEqual(self._payload(exited)["terminal_result"], "session_aborted")
         return "session_aborted"
 
-    def _parallel_worker(self, index: int) -> CalibrationWriterCrashMatrixTests:
-        """Return an isolated process owner over the shared read-only fixture repo."""
+    def _parallel_worker(self, name: str) -> CalibrationWriterCrashMatrixTests:
+        """Return a case-private process owner over the shared fixture repo.
+
+        The returned instance carries its own OwnedPublicProcessRunner, whose
+        capability root and descendant registry live under a directory keyed by
+        ``name``.  Callers pass a name unique across the whole class, because
+        both sweeps run cases concurrently and a reused root would let one
+        case's teardown observe another case's registered descendants.
+        """
 
         worker = type(self)(methodName=self._testMethodName)
         worker.epoch = self.epoch
         worker.t1 = self.t1
         worker.runner = OwnedPublicProcessRunner(
-            Path(self.tmp.name) / "parallel-runners" / f"worker-{index}"
+            Path(self.tmp.name) / "parallel-runners" / name
         )
         return worker
 
@@ -963,42 +998,47 @@ print(json.dumps(output, sort_keys=True))
         def execute(worker, item):
             operation, slot, stage, ledger, pin, plan, session_id, custody = item
             killed = worker._kill_at_production_stage(
-                        ledger=ledger,
-                        pin=pin,
-                        plan=plan,
-                        session_id=session_id,
-                        slot=slot,
-                        custody=custody,
-                        stage=stage,
-                    )
+                ledger=ledger,
+                pin=pin,
+                plan=plan,
+                session_id=session_id,
+                slot=slot,
+                custody=custody,
+                stage=stage,
+            )
             worker.assertEqual(
                 killed.returncode,
                 -signal.SIGKILL,
                 f"{operation}/{slot}/{stage.value}: {killed.stderr}",
             )
             worker._recover_after_crash(
-                        stage=stage,
-                        ledger=ledger,
-                        pin=pin,
-                        plan=plan,
-                        session_id=session_id,
-                        slot="pre" if slot == "reservation" else slot,
-                        custody=custody,
-                    )
+                stage=stage,
+                ledger=ledger,
+                pin=pin,
+                plan=plan,
+                session_id=session_id,
+                slot="pre" if slot == "reservation" else slot,
+                custody=custody,
+            )
             return operation, slot, stage.value
 
-        # Reservation recovery may advance and commit a synthetic head pin,
-        # so those four cases retain their original serial ordering.  Claim
-        # and finalization cases own disjoint ledgers/custody roots and use a
-        # distinct process owner per worker; executing them concurrently
-        # changes only wall time, not their case set or recovery assertions.
+        # Reservation recovery may advance and commit a synthetic head pin --
+        # a write to the ONE shared fixture Git repository -- so those four
+        # cases keep their original serial ordering on the main thread.  The
+        # remaining sixteen cases touch only per-case paths: _case() gives each
+        # one its own cases/<token>/ root holding its ledger, head pin, plan and
+        # both custody locators, and each gets a case-private process owner, so
+        # concurrency changes wall time only.  Verified 2026-08-24 by recording
+        # every case's paths and every git argv with its thread: 91 cases, 91
+        # distinct roots, zero path reuse, zero git calls off the main thread,
+        # and an outcome map identical to the serial run.
         serial = [item for item in prepared if item[0] == "reservation"]
         parallel = [item for item in prepared if item[0] != "reservation"]
         witnessed = {execute(self, item) for item in serial}
 
         def execute_owned(indexed_item):
             index, item = indexed_item
-            worker = self._parallel_worker(index)
+            worker = self._parallel_worker(f"{self._testMethodName}-{index}")
             try:
                 return execute(worker, item)
             finally:
@@ -1608,8 +1648,6 @@ import time
 from pathlib import Path
 from joulewise.calibration_ledger import CalibrationWriterLease, claim_bracket_session_slot
 ledger = Path({str(ledger)!r})
-
-
 with CalibrationWriterLease(ledger):
     claim_bracket_session_slot(ledger, session_id={session_id!r}, slot='pre', attempt_id={f'{session_id}-pre'!r})
     print('LEASED', flush=True)
@@ -1685,41 +1723,45 @@ with CalibrationWriterLease(ledger):
         def execute(worker, item):
             stage, slot, ledger, pin, plan, session_id, custody = item
             killed = worker._kill_at_production_stage(
-                    ledger=ledger,
-                    pin=pin,
-                    plan=plan,
-                    session_id=session_id,
-                    slot=slot,
-                    custody=custody,
-                    stage=stage,
-                )
+                ledger=ledger,
+                pin=pin,
+                plan=plan,
+                session_id=session_id,
+                slot=slot,
+                custody=custody,
+                stage=stage,
+            )
             worker.assertEqual(
                 killed.returncode,
                 -signal.SIGKILL,
                 f"{stage.value}/{slot}: {killed.stderr}",
             )
             outcome = worker._recover_after_crash(
-                    stage=stage,
-                    ledger=ledger,
-                    pin=pin,
-                    plan=plan,
-                    session_id=session_id,
-                    slot="pre" if slot == "reservation" else slot,
-                    custody=custody,
-                )
+                stage=stage,
+                ledger=ledger,
+                pin=pin,
+                plan=plan,
+                session_id=session_id,
+                slot="pre" if slot == "reservation" else slot,
+                custody=custody,
+            )
             return stage, slot, outcome
 
-        # The seven reservation-stage cases retain serial execution because
-        # their recovery may write a synthetic Git head pin.  Every remaining
-        # case has a unique ledger/custody root and a per-worker process owner,
-        # so concurrency preserves exact case and survivor coverage.
+        # The seven reservation-stage cases keep serial execution on the main
+        # thread because their recovery may write and commit a synthetic Git
+        # head pin into the ONE shared fixture repository.  Each of the other
+        # sixty-four cases owns its cases/<token>/ root -- ledger, head pin,
+        # plan, both custody locators -- and a case-private process owner, and
+        # its recovery issues only read-only Git queries, so concurrency
+        # preserves the exact case set and every survivor outcome.  See the
+        # append sweep above for the measurement that established this.
         serial = [item for item in prepared if item[0] in _ACTUAL_RESERVATION]
         parallel = [item for item in prepared if item[0] not in _ACTUAL_RESERVATION]
         results = [execute(self, item) for item in serial]
 
         def execute_owned(indexed_item):
             index, item = indexed_item
-            worker = self._parallel_worker(index)
+            worker = self._parallel_worker(f"{self._testMethodName}-{index}")
             try:
                 return execute(worker, item)
             finally:
@@ -1732,9 +1774,7 @@ with CalibrationWriterLease(ledger):
             results.extend(executor.map(execute_owned, enumerate(parallel)))
 
         witnessed = {(stage, slot) for stage, slot, _outcome in results}
-        outcomes = {
-            (stage, slot): outcome for stage, slot, outcome in results
-        }
+        outcomes = {(stage, slot): outcome for stage, slot, outcome in results}
         self.assertEqual(witnessed, expected)
         self.assertEqual(
             outcomes[(WriterStage.DURING_MANIFEST_ARTIFACT, "pre")],
