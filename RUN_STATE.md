@@ -10,7 +10,7 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-23 night (T22 — new calexits flake found+diagnosed, fix round in flight; S-0 clone head must be a GREEN run containing f6a4c81, so the flake fix is S-0-blocking; runsheet read DONE; Ed's prompts still the only human gate)
+Last updated: 2026-08-23 night (T22 — S-0 CLONE-HEAD GATE SATISFIED: 33aa594 concluded GREEN, conclusion-field-verified, and contains f6a4c81; S-0 clones from 33aa594; Ed at the keyboard is the ONLY remaining gate. Calexits mutation-flake fix demoted to CI hygiene, round in flight)
 
 **T22 NIGHT — CALEXITS-MUTATION-FLAKE:** a NEW intermittent CI failure
 class opened after the merge wave: `calibration-exits-exclusive` fails
@@ -27,9 +27,17 @@ terminal shape -> RACE_EXERCISED; widened assertion via shared helper;
 deterministic classifier unit tests) delegated to the ackfix agent in
 -wt-ackfix; magistrate reviews before landing. CI status: last all-green
 head is eeeaf94; f6a4c81 + f692e26 failed on the flake; tip 33aa594
-in_progress. S-0 IMPLICATION: the clone head must be a green run
-containing f6a4c81 (the pinset-builder fix), so S-0 waits on this fix
-landing green — Ed's freeze-prompt sitting remains the only HUMAN gate.
+in_progress at first writing. SUPERSEDED SAME NIGHT: tip 33aa594
+(run 32679620252) concluded SUCCESS — conclusion-field-verified — and
+contains f6a4c81, so the S-0 clone-head gate is SATISFIED at 33aa594;
+the flake fix is CI hygiene (the arc's red rate demands it), no longer
+S-0-blocking. Ed's freeze-prompt sitting is the only remaining gate.
+T0-UNATTENDED-01 co-design: both blind seats delivered, debate round
+run (Opus critique bench-corroborated: sleep-blind monotonic clock,
+summed-bound incident replay, multi-server intersection); Sol
+counter-critique in flight; magistrate synthesis ruling next. T21/T22
+run report drafted (docs/run_reports/2026-08-23-t21-t22-session.md,
+16 verified anomaly flags) awaiting magistrate review before landing.
 
 **T22 EVENING:** CI GREEN at 42df510 (conclusion-field-verified) after
 three post-merge cures (stale S1D-1 test rewritten to pin the ruled
