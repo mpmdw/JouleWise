@@ -451,8 +451,11 @@ diagnostic and never authorizes ARM.
   residue, incompatible operation target, partial custody, or live writer.
 - [ ] Read the D-117 §10 procedure below and prepare truthful operator identity
   and attestation values before the quiet window begins.
-- [ ] Treat `needs_pin_commit: true` as desk work that ends a 2 a.m. attempt.
-  It never licenses an uncommitted-pin override.
+- [ ] Treat `needs_pin_commit: true` absent its valid pre-slot relation — the
+  exact governed session extension — as desk work that ends a 2 a.m. attempt.
+  At an enforcing pre-slot check reporting that relation, the flag is
+  expected and only schedules the pin commit for the desk. It never licenses
+  an uncommitted-pin override.
 
 The public readiness, `audit`, `audit-observations`, and `validate-slot`
 commands are early warning or validation only and never emit `ready_to_arm`.
@@ -1826,8 +1829,15 @@ Then run governed extraction:
   --spec "$WINDOW_PLAN_ROOT/extraction_spec.json" \
   --out "$WINDOW_CUSTODY_ROOT/detection-floor-extraction.json" \
   --evaluation-basis-sha256 "$WHOLE_WINDOW_BASIS_SHA256" \
+  --consumption-semantics-id d078_minted_envelopes_v1 \
   --hash-bundles
 ```
+
+`--evaluation-basis-sha256` and `--consumption-semantics-id` are required
+together, and the id must name the exact consumption semantics of the
+verdict row being consumed: `d078_minted_envelopes_v1` for the ordinary §9
+verdict above, or `salvage_dangler_exclusion_v1` for a licensed D-100
+salvage basis.
 
 - [ ] Require exit code 0 and `all_cells_extractable: true`.
 - [ ] Require no `spec_membership_refusals` or
