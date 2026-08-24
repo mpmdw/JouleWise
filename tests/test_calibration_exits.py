@@ -94,6 +94,7 @@ _PACK_TERMINAL_EVENTS = frozenset({"atexit", "exit", "signal"})
 _RACE_EXERCISED = "RACE_EXERCISED"
 _NO_RACE_PRE_WRITE = "NO_RACE_PRE_WRITE"
 _TRACE_INCOMPLETE = "TRACE_INCOMPLETE"
+_NO_PACK_CHILD = "NO_PACK_CHILD"
 _LOGICAL_WRITER_TEST_ORIGIN_S = 1_784_490_850.05
 
 
@@ -107,6 +108,7 @@ class PackTraceEvidence:
     maintenance_terminal_event: dict[str, object] | None
     child_sid: str | None
     terminal_event: dict[str, object] | None
+    pack_child_absent: bool
     complete: bool
 
 
@@ -219,6 +221,70 @@ def _pack_trace_evidence(
         and event.get("event") in _PACK_TERMINAL_EVENTS
     )
     terminal_event = terminal_events[-1] if terminal_events else None
+    absent_path_maintenance_sids = {
+        event.get("sid")
+        for event in events
+        if _is_maintenance_process_start(event)
+        and isinstance(event.get("sid"), str)
+    }
+    absent_path_maintenance_sid = (
+        next(iter(absent_path_maintenance_sids))
+        if len(absent_path_maintenance_sids) == 1
+        else None
+    )
+    absent_path_has_terminal = False
+    loose_objects_enters = 0
+    loose_objects_leaves = 0
+    loose_objects_depth = 0
+    loose_objects_leave_before_enter = False
+    prune_packed_start_indices: list[int] = []
+    successful_child_exit_indices: list[int] = []
+    if absent_path_maintenance_sid is not None:
+        for index, event in enumerate(events):
+            if event.get("sid") != absent_path_maintenance_sid:
+                continue
+            if event.get("event") in _PACK_TERMINAL_EVENTS:
+                absent_path_has_terminal = True
+            if (
+                event.get("category") == "maintenance"
+                and event.get("label") == "loose-objects"
+            ):
+                if event.get("event") == "region_enter":
+                    loose_objects_enters += 1
+                    loose_objects_depth += 1
+                elif event.get("event") == "region_leave":
+                    loose_objects_leaves += 1
+                    if loose_objects_depth == 0:
+                        loose_objects_leave_before_enter = True
+                    else:
+                        loose_objects_depth -= 1
+            argv = event.get("argv")
+            if (
+                event.get("event") == "child_start"
+                and isinstance(argv, list)
+                and len(argv) >= 2
+                and Path(str(argv[0])).name == "git"
+                and argv[1] == "prune-packed"
+            ):
+                prune_packed_start_indices.append(index)
+            elif event.get("event") == "child_exit" and event.get("code") == 0:
+                successful_child_exit_indices.append(index)
+    pack_child_absent = (
+        detached_start is not None
+        and not any(_is_pack_objects_start(event) for event in events)
+        and absent_path_maintenance_sid is not None
+        and absent_path_has_terminal
+        and loose_objects_enters > 0
+        and loose_objects_leaves > 0
+        and loose_objects_enters == loose_objects_leaves
+        and not loose_objects_leave_before_enter
+        and any(
+            start_index < exit_index
+            for start_index in prune_packed_start_indices
+            for exit_index in successful_child_exit_indices
+        )
+        and not final_record_incomplete
+    )
     return PackTraceEvidence(
         events=events,
         detached_start=detached_start,
@@ -226,6 +292,7 @@ def _pack_trace_evidence(
         maintenance_terminal_event=maintenance_terminal_event,
         child_sid=child_sid,
         terminal_event=terminal_event,
+        pack_child_absent=pack_child_absent,
         complete=(
             detached_start is not None
             and maintenance_sid is not None
@@ -326,6 +393,55 @@ def _pack_child_killed_during_prepare(
     )
 
 
+def _pack_child_failed_repository_setup(
+    events: tuple[dict[str, object], ...],
+    child_sid: str | None,
+) -> bool:
+    """Detect cleanup removing the repository between sibling children.
+
+    A sibling child resolved the repository, then the pack child could not
+    resolve it, so rmtree landed between their repository-setup attempts.
+    """
+
+    if child_sid is None:
+        return False
+    repository_resolved_indices: list[int] = []
+    setup_error_indices: list[int] = []
+    terminal_code_128_indices: list[int] = []
+    pack_region_seen = False
+    for index, event in enumerate(events):
+        if event.get("event") == "def_repo" and isinstance(
+            event.get("worktree"), str
+        ):
+            repository_resolved_indices.append(index)
+        if event.get("sid") != child_sid:
+            continue
+        if event.get("category") == "pack-objects" and event.get("event") in {
+            "region_enter",
+            "region_leave",
+        }:
+            pack_region_seen = True
+        if (
+            event.get("event") == "error"
+            and event.get("fmt")
+            == "not a git repository (or any of the parent directories): %s"
+        ):
+            setup_error_indices.append(index)
+        elif (
+            event.get("event") in {"atexit", "exit"}
+            and event.get("code") == 128
+        ):
+            terminal_code_128_indices.append(index)
+    if pack_region_seen:
+        return False
+    return any(
+        resolved_index < error_index < terminal_index
+        for resolved_index in repository_resolved_indices
+        for error_index in setup_error_indices
+        for terminal_index in terminal_code_128_indices
+    )
+
+
 def _classify_pack_cleanup(
     evidence: PackTraceEvidence,
     *,
@@ -333,6 +449,13 @@ def _classify_pack_cleanup(
 ) -> str:
     """Validate one Trace2 causal topology, then branch on cleanup outcome."""
 
+    if evidence.pack_child_absent:
+        # A raised cleanup errno is direct race evidence and outranks the pack
+        # topology, which is corroboration rather than the evidence itself.
+        # Without it, an absent pack child would mask a real shape-A race.
+        if raw_cleanup_errno is not None:
+            return _RACE_EXERCISED
+        return _NO_PACK_CHILD
     if (
         not evidence.complete
         or evidence.detached_start is None
@@ -405,9 +528,15 @@ def _classify_pack_cleanup(
             return _TRACE_INCOMPLETE
         intervals.append((started_s, terminal_time))
     if not intervals:
-        if _pack_child_killed_during_prepare(
-            evidence.events,
-            evidence.child_sid,
+        if (
+            _pack_child_killed_during_prepare(
+                evidence.events,
+                evidence.child_sid,
+            )
+            or _pack_child_failed_repository_setup(
+                evidence.events,
+                evidence.child_sid,
+            )
         ):
             return _RACE_EXERCISED
         return _TRACE_INCOMPLETE
@@ -427,12 +556,22 @@ def _synthetic_pack_topology(
     *,
     include_write_pack: bool = True,
     prepare_pack_kill: bool = False,
+    repository_setup_kill: bool = False,
+    no_pack_child: bool = False,
 ) -> tuple[dict[str, object], ...]:
     initiator_sid = "initiator"
     maintenance_sid = "initiator/maintenance"
     child_sid = "initiator/maintenance/pack-child"
-    if include_write_pack and prepare_pack_kill:
-        raise ValueError("synthetic topology cannot write a pack after prepare kill")
+    prune_child_sid = "initiator/maintenance/prune-child"
+    if sum(
+        (
+            include_write_pack,
+            prepare_pack_kill,
+            repository_setup_kill,
+            no_pack_child,
+        )
+    ) > 1:
+        raise ValueError("synthetic topology terminal shapes are mutually exclusive")
     events = [
         {
             "event": "child_start",
@@ -446,13 +585,76 @@ def _synthetic_pack_topology(
             "time": "2026-08-11T12:00:00.075000Z",
             "argv": ["/usr/bin/git", "maintenance", "run", "--auto", "--detach"],
         },
+    ]
+    if no_pack_child:
+        events.extend(
+            (
+                {
+                    "event": "region_enter",
+                    "sid": maintenance_sid,
+                    "time": "2026-08-11T12:00:00.090000Z",
+                    "category": "maintenance",
+                    "label": "loose-objects",
+                },
+                {
+                    "event": "child_start",
+                    "sid": maintenance_sid,
+                    "time": "2026-08-11T12:00:00.100000Z",
+                    "child_id": 0,
+                    "argv": ["git", "prune-packed", "--quiet"],
+                },
+                {
+                    "event": "def_repo",
+                    "sid": prune_child_sid,
+                    "time": "2026-08-11T12:00:00.120000Z",
+                    "worktree": "/tmp/joulewise-exit-witness/repo",
+                },
+                {
+                    "event": "exit",
+                    "sid": prune_child_sid,
+                    "time": "2026-08-11T12:00:00.130000Z",
+                    "code": 0,
+                },
+                {
+                    "event": "child_exit",
+                    "sid": maintenance_sid,
+                    "time": "2026-08-11T12:00:00.140000Z",
+                    "child_id": 0,
+                    "code": 0,
+                },
+                {
+                    "event": "region_leave",
+                    "sid": maintenance_sid,
+                    "time": "2026-08-11T12:00:00.160000Z",
+                    "category": "maintenance",
+                    "label": "loose-objects",
+                },
+                {
+                    "event": "exit",
+                    "sid": maintenance_sid,
+                    "time": "2026-08-11T12:00:00.210000Z",
+                    "code": 0,
+                },
+            )
+        )
+        return tuple(events)
+    if repository_setup_kill:
+        events.append(
+            {
+                "event": "def_repo",
+                "sid": prune_child_sid,
+                "time": "2026-08-11T12:00:00.090000Z",
+                "worktree": "/tmp/joulewise-exit-witness/repo",
+            }
+        )
+    events.append(
         {
             "event": "start",
             "sid": child_sid,
             "time": "2026-08-11T12:00:00.100000Z",
             "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
-        },
-    ]
+        }
+    )
     if include_write_pack:
         events.extend(
             (
@@ -491,8 +693,18 @@ def _synthetic_pack_topology(
                 },
             )
         )
-    child_exit_code = 128 if prepare_pack_kill else 0
-    maintenance_exit_code = 1 if prepare_pack_kill else 0
+    elif repository_setup_kill:
+        events.append(
+            {
+                "event": "error",
+                "sid": child_sid,
+                "time": "2026-08-11T12:00:00.170000Z",
+                "msg": "not a git repository (or any of the parent directories): .git",
+                "fmt": "not a git repository (or any of the parent directories): %s",
+            }
+        )
+    child_exit_code = 128 if prepare_pack_kill or repository_setup_kill else 0
+    maintenance_exit_code = 1 if prepare_pack_kill or repository_setup_kill else 0
     events.extend(
         (
             {
@@ -2104,6 +2316,121 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             _RACE_EXERCISED,
         )
 
+    def test_pack_classifier_shape_d_repository_setup_kill_is_race_exercised(
+        self,
+    ) -> None:
+        events = _synthetic_pack_topology(
+            include_write_pack=False,
+            repository_setup_kill=True,
+        )
+        evidence = _pack_trace_evidence(events)
+        self.assertFalse(
+            any(
+                event.get("label") in {"write-pack-file", "prepare-pack"}
+                for event in events
+            )
+        )
+        self.assertEqual(
+            _classify_pack_cleanup(
+                evidence,
+                raw_cleanup_errno=None,
+            ),
+            _RACE_EXERCISED,
+        )
+
+    def test_pack_classifier_shape_e_absent_pack_child_is_no_pack_child(
+        self,
+    ) -> None:
+        events = _synthetic_pack_topology(
+            include_write_pack=False,
+            no_pack_child=True,
+        )
+        evidence = _pack_trace_evidence(events, timed_out=True)
+        self.assertTrue(evidence.pack_child_absent)
+        self.assertFalse(evidence.complete)
+        self.assertIsNone(evidence.child_sid)
+        self.assertEqual(
+            _classify_pack_cleanup(
+                evidence,
+                raw_cleanup_errno=None,
+            ),
+            _NO_PACK_CHILD,
+        )
+
+    def test_absent_pack_child_never_masks_a_raised_cleanup_errno(self) -> None:
+        # A raised rmtree errno is direct shape-A race evidence.  The absent
+        # pack child is the WEAKER signal, so it must not shadow the stronger
+        # one: the same trace classifies NO_PACK_CHILD without an errno and
+        # RACE_EXERCISED with one.
+        events = _synthetic_pack_topology(
+            include_write_pack=False,
+            no_pack_child=True,
+        )
+        evidence = _pack_trace_evidence(events, timed_out=True)
+        self.assertTrue(evidence.pack_child_absent)
+        self.assertEqual(
+            _classify_pack_cleanup(evidence, raw_cleanup_errno=None),
+            _NO_PACK_CHILD,
+        )
+        for raised_errno in (errno.ENOTEMPTY, errno.ENOENT):
+            with self.subTest(errno=raised_errno):
+                self.assertEqual(
+                    _classify_pack_cleanup(
+                        evidence,
+                        raw_cleanup_errno=raised_errno,
+                    ),
+                    _RACE_EXERCISED,
+                )
+
+    def test_absent_pack_child_evidence_requires_a_completed_loose_objects_task(
+        self,
+    ) -> None:
+        events = _synthetic_pack_topology(
+            include_write_pack=False,
+            no_pack_child=True,
+        )
+        maintenance_sid = "initiator/maintenance"
+        removals = (
+            (
+                "missing loose-objects region_leave",
+                lambda event: (
+                    event.get("sid") == maintenance_sid
+                    and event.get("event") == "region_leave"
+                    and event.get("category") == "maintenance"
+                    and event.get("label") == "loose-objects"
+                ),
+            ),
+            (
+                "missing prune-packed child_exit",
+                lambda event: (
+                    event.get("sid") == maintenance_sid
+                    and event.get("event") == "child_exit"
+                    and event.get("code") == 0
+                ),
+            ),
+            (
+                "missing maintenance terminal",
+                lambda event: (
+                    event.get("sid") == maintenance_sid
+                    and event.get("event") in _PACK_TERMINAL_EVENTS
+                ),
+            ),
+        )
+        for description, should_remove in removals:
+            with self.subTest(description):
+                incomplete_events = tuple(
+                    event for event in events if not should_remove(event)
+                )
+                evidence = _pack_trace_evidence(incomplete_events)
+                self.assertFalse(evidence.pack_child_absent)
+                self.assertEqual(
+                    _classify_pack_cleanup(
+                        evidence,
+                        raw_cleanup_errno=None,
+                    ),
+                    _TRACE_INCOMPLETE,
+                )
+
     def test_pack_classifier_clean_without_write_or_prepare_kill_is_trace_incomplete(
         self,
     ) -> None:
@@ -2136,6 +2463,70 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         self.assertFalse(
             _pack_child_killed_during_prepare(negative_events, child_sid)
         )
+
+    def test_pack_child_failed_repository_setup_discriminates_terminal_shapes(
+        self,
+    ) -> None:
+        shape_b_events = _synthetic_pack_topology()
+        shape_c_events = _synthetic_pack_topology(
+            include_write_pack=False,
+            prepare_pack_kill=True,
+        )
+        shape_d_events = _synthetic_pack_topology(
+            include_write_pack=False,
+            repository_setup_kill=True,
+        )
+        negative_events = _synthetic_pack_topology(include_write_pack=False)
+        child_sid = "initiator/maintenance/pack-child"
+        self.assertTrue(
+            _pack_child_failed_repository_setup(shape_d_events, child_sid)
+        )
+        self.assertFalse(
+            _pack_child_failed_repository_setup(shape_b_events, child_sid)
+        )
+        self.assertFalse(
+            _pack_child_failed_repository_setup(shape_c_events, child_sid)
+        )
+        self.assertFalse(
+            _pack_child_failed_repository_setup(negative_events, child_sid)
+        )
+        self.assertFalse(
+            _pack_child_killed_during_prepare(shape_d_events, child_sid)
+        )
+
+    def test_repository_setup_kill_negative_is_load_bearing(self) -> None:
+        events = _synthetic_pack_topology(include_write_pack=False)
+        evidence = _pack_trace_evidence(events)
+        self.assertEqual(
+            _classify_pack_cleanup(evidence, raw_cleanup_errno=None),
+            _TRACE_INCOMPLETE,
+        )
+        # This proves regression #2's negative cases are load-bearing.
+        with mock.patch(
+            f"{__name__}._pack_child_failed_repository_setup",
+            return_value=True,
+        ):
+            self.assertEqual(
+                _classify_pack_cleanup(evidence, raw_cleanup_errno=None),
+                _RACE_EXERCISED,
+            )
+
+    def test_prepare_pack_kill_negative_is_load_bearing(self) -> None:
+        events = _synthetic_pack_topology(include_write_pack=False)
+        evidence = _pack_trace_evidence(events)
+        self.assertEqual(
+            _classify_pack_cleanup(evidence, raw_cleanup_errno=None),
+            _TRACE_INCOMPLETE,
+        )
+        # This proves the existing shape-C negative is load-bearing too.
+        with mock.patch(
+            f"{__name__}._pack_child_killed_during_prepare",
+            return_value=True,
+        ):
+            self.assertEqual(
+                _classify_pack_cleanup(evidence, raw_cleanup_errno=None),
+                _RACE_EXERCISED,
+            )
 
     def test_trace_reader_retries_incomplete_final_record(self) -> None:
         with tempfile.TemporaryDirectory(prefix="joulewise-trace-reader-") as root:
@@ -2249,13 +2640,15 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             _RACE_EXERCISED: 0,
             _NO_RACE_PRE_WRITE: 0,
             _TRACE_INCOMPLETE: 0,
+            _NO_PACK_CHILD: 0,
         }
 
         def report_classifications() -> None:
             print(
                 f"RACE_EXERCISED={classifications[_RACE_EXERCISED]} "
                 f"NO_RACE_PRE_WRITE={classifications[_NO_RACE_PRE_WRITE]} "
-                f"TRACE_INCOMPLETE={classifications[_TRACE_INCOMPLETE]}",
+                f"TRACE_INCOMPLETE={classifications[_TRACE_INCOMPLETE]} "
+                f"NO_PACK_CHILD={classifications[_NO_PACK_CHILD]}",
                 flush=True,
             )
 
@@ -2336,11 +2729,15 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                     raw_enotempty = exc
                 pack_evidence = _wait_for_pack_terminal(mutation_trace)
                 mutation_events = pack_evidence.events
-                self.assertTrue(pack_evidence.complete, mutation_events[-20:])
-                self.assertIsNotNone(pack_evidence.maintenance_sid)
-                self.assertIsNotNone(pack_evidence.maintenance_terminal_event)
-                self.assertIsNotNone(pack_evidence.child_sid)
-                self.assertIsNotNone(pack_evidence.terminal_event)
+                if not pack_evidence.pack_child_absent:
+                    self.assertTrue(
+                        pack_evidence.complete,
+                        mutation_events[-20:],
+                    )
+                    self.assertIsNotNone(pack_evidence.maintenance_sid)
+                    self.assertIsNotNone(pack_evidence.maintenance_terminal_event)
+                    self.assertIsNotNone(pack_evidence.child_sid)
+                    self.assertIsNotNone(pack_evidence.terminal_event)
             detached_starts = [
                 event
                 for event in mutation_events
@@ -2363,9 +2760,10 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             # Detached Git maintenance can remove an object-store child after
             # rmtree has enumerated it.  Python 3.11 reports that stale child
             # lookup as ENOENT; the same teardown race can instead leave a
-            # child behind and report ENOTEMPTY.
+            # child behind and report ENOTEMPTY.  This holds whether or not the
+            # pack child was ever spawned, so it is never skipped.
             self.assertIn(raw_enotempty.errno, (errno.ENOTEMPTY, errno.ENOENT))
-        else:
+        elif not pack_evidence.pack_child_absent:
             self.assertTrue(
                 any(
                     event.get("sid") == pack_evidence.child_sid
@@ -2375,6 +2773,10 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                     for event in mutation_events
                 )
                 or _pack_child_killed_during_prepare(
+                    mutation_events,
+                    pack_evidence.child_sid,
+                )
+                or _pack_child_failed_repository_setup(
                     mutation_events,
                     pack_evidence.child_sid,
                 ),
@@ -2395,7 +2797,8 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
         )
         self.assertEqual(
             classifications[_RACE_EXERCISED]
-            + classifications[_NO_RACE_PRE_WRITE],
+            + classifications[_NO_RACE_PRE_WRITE]
+            + classifications[_NO_PACK_CHILD],
             1,
         )
         self.assertFalse(sandbox.root.exists())
