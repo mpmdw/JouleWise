@@ -40,7 +40,9 @@ from tests.test_arm_readiness_schemas import (
     sample_evidence,
     sample_freeze,
     sample_freeze_v2,
+    apply_freeze_projection,
     sample_frozen_projection,
+    sample_unprojected_projection,
     sample_identity_receipt,
     TEST_BOOT_SESSION_ID,
 )
@@ -72,6 +74,13 @@ LAUNCH_WINDOW_SPEC.loader.exec_module(launch_window)
 
 def git(repo: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+
+
+def git_text(repo: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", *args], cwd=repo, check=True, capture_output=True
+    )
+    return completed.stdout.decode("utf-8")
 
 
 def predecessor_pack_name(pack_name: str) -> str:
@@ -301,6 +310,48 @@ def write_predecessor_pack(
     return pack
 
 
+
+def commit_u11_projection(
+    repo: Path,
+    pack: Path,
+    identity_unit_ids: tuple[str, ...],
+    *,
+    identity_status: str = "PASS",
+) -> tuple[str, str]:
+    """Commit the U11 projection over an already-committed unprojected pack.
+
+    The receipt anchors `reviewed_git_commit` on the CURRENT head, which is the
+    commit that carries the pre-projection pack the projection read -- the same
+    ordering `identity_pins.freeze_projection` gets from its clean-tree mint.
+    Callers that keep shaping the pack after `make_go_fixture` must therefore
+    call this LAST, once the pack bytes are final.
+    """
+
+    anchor = git_text(repo, "rev-parse", "HEAD").strip()
+    identity_relative = "identity_pin_projection.receipts/projection-0001.json"
+    receipt = sample_identity_receipt(
+        pack_id=pack.name,
+        identity_unit_ids=identity_unit_ids,
+        status=identity_status,
+        reason_codes=(
+            [] if identity_status == "PASS" else ["readiness_identity_environment_dirty"]
+        ),
+        reviewed_git_commit=anchor,
+    )
+    receipt_raw = render_json(receipt)
+    receipt_sha = hashlib.sha256(receipt_raw).hexdigest()
+    receipt_path = pack / identity_relative
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_bytes(receipt_raw)
+    receipt_path.with_suffix(".sha256").write_bytes(
+        gnu_sidecar(receipt_sha, receipt_path.name)
+    )
+    apply_freeze_projection(pack, receipt, identity_relative, receipt_sha)
+    git(repo, "add", ".")
+    git(repo, "commit", "-qm", "U11 identity-pin projection")
+    return identity_relative, receipt_sha
+
+
 def make_go_fixture(
     pack_name: str = PACK_NAME,
     profile: str = "ALPHA",
@@ -308,6 +359,7 @@ def make_go_fixture(
     predecessor_status: str = "PASS",
     predecessor_plan_path_spelling: str | None = None,
     identity_status: str = "PASS",
+    project: bool = True,
 ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path]:
     """Build a committed one-pack repository.
 
@@ -343,23 +395,13 @@ def make_go_fixture(
         if profile == "GAMMA"
         else (profile.lower(),)
     )
-    identity_receipt = sample_identity_receipt(
-        pack_id=pack_name,
-        identity_unit_ids=identity_ids,
-        status=identity_status,
-        reason_codes=(
-            [] if identity_status == "PASS" else ["readiness_identity_environment_dirty"]
-        ),
-    )
-    identity_raw = render_json(identity_receipt)
-    identity_sha = hashlib.sha256(identity_raw).hexdigest()
+    # PACKAUTH: this pack is committed TWICE, exactly as a real one is.  The
+    # first commit holds the UNPROJECTED pack and is what the projection
+    # receipt anchors as `reviewed_git_commit`; the second carries the U11
+    # projection's rewrite of it.  A single-commit fixture that merely asserted
+    # a frozen state would let the evidence author authenticate a projection
+    # that was never derived from anything.
     identity_relative = "identity_pin_projection.receipts/projection-0001.json"
-    identity_path = pack / identity_relative
-    identity_path.parent.mkdir()
-    identity_path.write_bytes(identity_raw)
-    identity_path.with_suffix(".sha256").write_bytes(
-        gnu_sidecar(identity_sha, identity_path.name)
-    )
     tree = {
         "plan": {"path": "calibration_plan.json", "plan_id": "plan-test"},
         "window_identity": {"window_id": "window-test", "evidence_root_id": "evidence-test"},
@@ -369,9 +411,7 @@ def make_go_fixture(
         },
         "acceptance_policy": {"selection": "issued_d116_artifact_only", "issued": "d079"},
         "arm_attachments": {
-            "identity_pin_projection": sample_frozen_projection(
-                identity_relative, identity_sha, identity_ids
-            ),
+            "identity_pin_projection": sample_unprojected_projection(identity_ids),
             "arm_readiness": {
                 "contract_id": "D-134",
                 "required_before_arm": True,
@@ -413,6 +453,10 @@ def make_go_fixture(
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "pack")
     git(repo, "branch", "-M", "main")
+    if project:
+        commit_u11_projection(
+            repo, pack, identity_ids, identity_status=identity_status
+        )
     git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
 
     custody = Path(temporary.name) / "window-custody"
