@@ -1,4 +1,4 @@
-**SUPERSEDED — This standalone draft is retained for history; the current related-work section is [draft-v1.md §9](draft-v1.md#9-related-work).**
+**SUPERSEDED — This standalone draft is retained for history; the current related-work section is [draft-v1.md §8](draft-v1.md#8-related-work).**
 
 # Related Work
 
