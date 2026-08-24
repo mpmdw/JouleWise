@@ -116,6 +116,32 @@ git -C "$CLONE" status --porcelain=v1 > "$TRANS/002-base-status.txt"
 
 No `pip install` is required: the core command surfaces are stdlib-only. Never install the `mac` extra and never run a dry-run, launch, measurement, or quiet-Mac command in S-0. Authority: R4 r4-2, r4-3, r4-7; R5 V-2; `pyproject.toml:5-14`.
 
+**AMENDMENT 3 (2026-08-24, cold-gate packet 3; custody
+`s0-clone-proof-r2/custody/transcripts/034–036`).** The stdlib-only
+sentence above is FALSE for §3.2 and was never true on any host:
+`project_identity_pins.py freeze` on a real pack loads the pack's
+declared model through the mlx runtime and hashes its weight files
+(`identity_pins.py` `_runtime_probe_metadata` → `MlxRuntimeAdapter.prepare`);
+`pyproject.toml:11-13` itself predicts the structured refusal S-0
+observed. Corrected environment contract: NO installs into the estate
+venv, the host, or any environment — and §3.2 ONLY runs under the
+PINNED existing host measurement venv interpreter
+`/Users/edr/code/JouleWise/.venv/bin/python` (read-only use; the locked
+environment of `env/mac-measurement-lock.txt`), with (i) a clone-first
+import assertion (`joulewise.__file__` resolves under `$CLONE`) before
+and after, (ii) `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1`, (iii) the
+declared `model_source` weight paths asserted present and their digests
+consistent with the committed `_v3` projection receipts, and (iv) the
+interpreter path and resolved `mlx`/`mlx_lm`/`transformers` versions
+recorded to transcript `029-u11-runtime-environment.txt`. Every other
+step, including §3.10's suite, stays on the stdlib estate `$PY`. Exit
+code 134 anywhere in §3.2 is the A85 abort firing outside pytest: STOP
+and escalate; never retry. Reading `/Users/edr/jw_models` (read-only
+hashing) is permitted; it is not the forbidden measurement checkout.
+Execution discipline: runsheet steps run one command per shell
+invocation with explicit rc checks between — never compound loops over
+gate assertions (custody 035 records the defect class).
+
 ### 1.2 Install transcript helpers
 
 ```bash
@@ -728,6 +754,14 @@ cmp "$STEP6_CANDIDATE" \
 Promotion copies exact immutable bytes; it never edits either consumer or the table. The reviewer now recomputes the successor digest/counts from the committed blob, compares them both to the fixation assertions and to `table.successor_pinset`, and records the match. A mismatch is a mechanism failure, not an invitation to reseal. Authority: D-151 conditions 2–3; MARKER-RULING ratified items 1–2.
 
 ### 3.9 Arm and verify all three after window closure and fixation
+
+**AMENDMENT 3 NOTE (2026-08-24):** under the stdlib `$PY`, the
+`u11-arm-reverification` leg REFUSES with
+`readiness_identity_artifact_unreadable`. That refusal is EXPECTED and
+admissible here (the eleven asserted `want` kinds exclude the identity
+item); it is pre-declared so it is never read as a finding. Live
+arm-side U11 re-verification is proven by the real transaction in the
+measurement environment, not by S-0.
 
 The exact 112 window was already closed at `WINDOW_CLOSE_HEAD` in §3.7; the post-window fixation commit does not retroactively enlarge it. This clone proof may arm only after the exact marker and Ed-confirmed table have been placed in `$CUSTODY/windows/family_publication`. Any arm/verify result here is non-claim-bearing and forged-ref-conditional; publication acceptance is the separate published-green step below. Authority: D-151 conditions 3–5 and 8; MARKER-RULING ratified item 3.
 
