@@ -8,6 +8,15 @@ PROPOSED bindings ratified by the lead 2026-08-22); the
 prior audit is
 `docs/process_traces/2026-08-19-prep-sprint/paper-staging/registry-audit.md`.
 
+Revised again 2026-08-24 against `docs/paper/draft-v1.md` at commit `a591a91`
+(602 lines). This revision binds every characterization token to the frozen
+characterization result specification landed at `ec11f3f`, and re-derives every
+draft-site line locator by searching for that site's own anchor text. The
+locators carried by the 2026-08-22 revision were already stale before the
+Section 5 rewrite and the rewrite moved them again, so no single offset would
+have repaired them. The change list this revision implements is
+`docs/process_traces/2026-08-24-p06-codesign/06-registry-template-changes-needed.md`.
+
 This is the binding crosswalk for result rendering. It inventories the generic
 markers in `docs/paper/draft-v1.md` by site and the exact fill-key vocabulary in
 `docs/process_traces/2026-08-07-plan-factory/DRAFT-RESULTS_PROSE.md` by distinct
@@ -62,6 +71,13 @@ Every row cites one or more of these defining sources:
 - `LINT` —
   `docs/process_traces/2026-08-07-plan-factory/lint_results_prose_template.py`,
   which enforces branch selection, global token licensing, and `STOP_FILL`.
+- `SPEC` — `configs/campaigns/metrology_v1/characterization_result_schema_v1.json`,
+  the frozen characterization result specification, with its normative prose
+  contract `docs/contracts/characterization_result_schema_v1.md`. Its
+  `render_map.rows` object names the producing report field for every
+  characterization token; `render_map.derived_value_rules` states the two
+  derivations; `render_map.outcome_phrases` fixes the closed plain-language
+  phrase set. The four limits it left open were ruled by D-152 on 2026-08-24.
 - `DF` — `joulewise/detection_floor.py`, stable output fields emitted by
   `build_floor_cell`: `floor_abs_j`, `floor_cmp_j`, `floor_gate_j`,
   `eligibility`, and `point_floor_diagnostics`. Its validator fixes
@@ -241,39 +257,136 @@ tokens the template already defines.
 
 ### Characterization campaign
 
-The prose template fixes the semantic names and branch structure, but no
-repository file in the authority set defines a characterization result schema
-or the output field paths below. All numeric and outcome fills therefore stop.
-The resolving unit must define one issued characterization verdict/report with
-row identifiers, units, acceptance criteria, diagnostic presence flags, and
-the fields named here before collection results are rendered.
+The characterization tokens are now bound.
+`configs/campaigns/metrology_v1/characterization_result_schema_v1.json` is the
+frozen characterization result specification and
+`docs/contracts/characterization_result_schema_v1.md` is its normative prose
+contract. Between them they name one producing field, in an issued
+characterization report, for every token in the table below. The 2026-08-22
+finding that no repository file in the authority set defined a characterization
+result schema or these output field paths is therefore retired.
 
-| Exact token | Intended producing field | Campaign / row | Fill rule | Freeze status and resolution | Sources |
+Each field path below is copied verbatim from the specification's
+`render_map.rows` object, which is the specification's own token-to-field map.
+A path reads `rows.<row identifier>.<container>.<field>`. The issued report
+carries one entry per public row under the six frozen row identifiers
+`linearity`, `null`, `empirical_floor`, `phase_attribution`, `drift_settling`,
+and `between_sessions`. Within a row entry, `observed_values` holds the values a
+row publishes when its window passed, `diagnostics` holds the values a refused
+window may still publish, `diagnostic_present` is the boolean that licenses the
+diagnostic clause, and `row_outcome` holds the row's single outcome word.
+
+Three plain-language tokens are spelled differently from the row they read:
+`[PLAIN_LANGUAGE_RESULT_floor]` reads row `empirical_floor`,
+`[PLAIN_LANGUAGE_RESULT_phase]` reads row `phase_attribution`, and
+`[PLAIN_LANGUAGE_RESULT_drift]` reads row `drift_settling`. The specification
+writes that crosswalk out in `render_map.rows` instead of leaving a renderer to
+infer it, and the rows below cite it the same way.
+
+No characterization report has been issued. Every fill in this section
+therefore still stops. The rows are `KEY_FROZEN / VALUE_UNISSUED`: the
+producing field name is fixed, and no value may be inserted. No row here moves
+to a fillable state until an authenticated report exists.
+
+Fail-closed carry-over is unchanged. A missing report, an unrecognized refusal
+reason code, or a failed hash predicate is `STOP_FILL`. The specification's
+`characterization_*` reason codes are a closed, non-overlapping set: a code
+outside that set stops rendering until it is registered here, exactly as the
+terminal-refusal rule above requires.
+
+| Exact token | Producing field in the issued characterization report | Campaign / row | Fill rule | Freeze status and resolution | Sources |
 |---|---|---|---|---|---|
-| `[S_C_linearity_request_J_per_token]` | UNKNOWN — fitted gross-request slope | characterization / linearity | STOP_FILL | SUPPLIER_UNKNOWN; define in characterization report schema | TPL, DRAFT |
-| `[S_C_linearity_decode_J_per_token]` | UNKNOWN — fitted token-generation slope | characterization / linearity | STOP_FILL | SUPPLIER_UNKNOWN | TPL, DRAFT |
-| `[R_C_linearity_limit_J]` | UNKNOWN — frozen residual acceptance criterion carried into the issued report | characterization / linearity | STOP_FILL | SUPPLIER_UNKNOWN; criterion must be pre-registered, not outcome-selected | TPL, DRAFT |
-| `[D_C_null_max_abs_J]` | UNKNOWN — largest authenticated absolute null ABBA difference | characterization / null response | STOP_FILL | SUPPLIER_UNKNOWN | TPL, DRAFT |
-| `[R_C_micro_min_x_floor]` | UNKNOWN — lower authenticated effect-to-floor diagnostic bound | characterization / empirical floor | STOP_FILL | SUPPLIER_UNKNOWN | TPL, DRAFT |
-| `[R_C_micro_max_x_floor]` | UNKNOWN — upper authenticated effect-to-floor diagnostic bound | characterization / empirical floor | STOP_FILL | SUPPLIER_UNKNOWN | TPL, DRAFT |
-| `[D_C_additivity_J]` | UNKNOWN — registered phase-sum minus enclosing-request diagnostic | characterization / phase attribution | STOP_FILL | SUPPLIER_UNKNOWN | TPL, DRAFT |
-| `[S_C_prompt_invariance_J_per_token]` | UNKNOWN — fitted prompt-processing slope against later output length | characterization / phase attribution | STOP_FILL | SUPPLIER_UNKNOWN | TPL, DRAFT |
-| `[B_C_prompt_invariance_J_per_token]` | UNKNOWN — frozen prompt-invariance acceptance band | characterization / phase attribution | STOP_FILL | SUPPLIER_UNKNOWN; band must be pre-registered | TPL, DRAFT |
-| `[D_C_reference_excursion_J]` | UNKNOWN — authenticated start/midpoint/end excursion | characterization / drift and settling | STOP_FILL | SUPPLIER_UNKNOWN | TPL, DRAFT |
-| `[T_C_recovery_s]` | UNKNOWN — authenticated recovery-time result | characterization / drift and settling | STOP_FILL | SUPPLIER_UNKNOWN | TPL, DRAFT |
-| `[N_C_eligible_sessions]` | UNKNOWN — eligible-session count under the registered identity/freshness rule | characterization / between sessions | STOP_FILL | SUPPLIER_UNKNOWN; a refused window contributes nothing | TPL, DRAFT |
-| `[PLAIN_LANGUAGE_RESULT_linearity]` | UNKNOWN row-outcome enum, rendered through the template's closed phrase set | characterization / linearity | STOP_FILL | SUPPLIER_UNKNOWN; define row outcome and evidence predicate | TPL, LINT |
-| `[PLAIN_LANGUAGE_RESULT_null]` | UNKNOWN row-outcome enum, rendered through the closed phrase set | characterization / null response | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
-| `[PLAIN_LANGUAGE_RESULT_floor]` | UNKNOWN row-outcome enum, rendered through the closed phrase set | characterization / empirical floor | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
-| `[PLAIN_LANGUAGE_RESULT_phase]` | UNKNOWN row-outcome enum, rendered through the closed phrase set | characterization / phase attribution | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
-| `[PLAIN_LANGUAGE_RESULT_drift]` | UNKNOWN row-outcome enum, rendered through the closed phrase set | characterization / drift and settling | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
-| `[PLAIN_LANGUAGE_RESULT_between_sessions]` | UNKNOWN row-outcome enum, rendered through the closed phrase set | characterization / between sessions | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
-| `[REFUSAL_REASON_window_C]` | Characterization whole-window verdict `status`, `idle_admission_core.conditions`, and `member_failures`, once an exact verdict basis is issued | characterization / whole window | MEASURED | KEY_FROZEN / VERDICT_UNISSUED | TPL, WV, AUTH |
-| `[D_C_linearity_diagnostic_J_per_token]` | UNKNOWN refused-window diagnostic field | characterization / linearity diagnostic | STOP_FILL | SUPPLIER_UNKNOWN; define diagnostic presence and value field | TPL, LINT |
-| `[D_C_null_diagnostic_J]` | UNKNOWN refused-window diagnostic field | characterization / null diagnostic | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
-| `[D_C_micro_diagnostic_x_floor]` | UNKNOWN refused-window diagnostic field | characterization / empirical-floor diagnostic | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
-| `[D_C_phase_diagnostic_J]` | UNKNOWN refused-window diagnostic field | characterization / phase diagnostic | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
-| `[D_C_drift_diagnostic_J]` | UNKNOWN refused-window diagnostic field | characterization / drift diagnostic | STOP_FILL | SUPPLIER_UNKNOWN | TPL, LINT |
+| `[S_C_linearity_request_J_per_token]` | `rows.linearity.observed_values.request_slope_j_per_token`; fitted gross-request slope | characterization / linearity | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[S_C_linearity_decode_J_per_token]` | `rows.linearity.observed_values.decode_slope_j_per_token`; fitted token-generation slope | characterization / linearity | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[R_C_linearity_limit_J]` | `rows.linearity.observed_values.applied_residual_limit_j`; the binding residual limb, not one of the two limbs on its own | characterization / linearity | DERIVE | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; the derivation is PROPOSED below and awaits lead ratification | TPL, DRAFT, SPEC |
+| `[D_C_null_max_abs_J]` | `rows.null.observed_values.max_abs_block_delta_j`; largest authenticated absolute ABBA block difference | characterization / null response | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[R_C_micro_min_x_floor]` | `rows.empirical_floor.observed_values.min_effect_to_floor_ratio` | characterization / empirical floor | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[R_C_micro_max_x_floor]` | `rows.empirical_floor.observed_values.max_effect_to_floor_ratio` | characterization / empirical floor | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[D_C_additivity_J]` | `rows.phase_attribution.observed_values.max_abs_additivity_residual_j`; registered phase-sum minus enclosing-request residual | characterization / phase attribution | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[S_C_prompt_invariance_J_per_token]` | `rows.phase_attribution.observed_values.prefill_slope_j_per_token`; fitted prompt-processing slope against later output length | characterization / phase attribution | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[B_C_prompt_invariance_J_per_token]` | `rows.phase_attribution.observed_values.applied_invariance_band_j_per_token`; the binding invariance limb | characterization / phase attribution | DERIVE | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; the derivation is PROPOSED below and awaits lead ratification | TPL, DRAFT, SPEC |
+| `[D_C_reference_excursion_J]` | `rows.drift_settling.observed_values.max_heldout_excursion_j`; largest held-out reference-probe deviation | characterization / drift and settling | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[T_C_recovery_s]` | `rows.drift_settling.observed_values.max_recovery_s` | characterization / drift and settling | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued | TPL, DRAFT, SPEC |
+| `[N_C_eligible_sessions]` | `rows.between_sessions.observed_values.eligible_session_count`, counted by the specification's `eligibility_predicate` | characterization / between sessions | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; a refused window contributes nothing | TPL, DRAFT, SPEC |
+| `[PLAIN_LANGUAGE_RESULT_linearity]` | `rows.linearity.row_outcome`, rendered through `render_map.outcome_phrases` | characterization / linearity | DERIVE | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only through `render_map.outcome_phrases`, whose four phrases are the closed set; the pending-eligibility phrase is available to the between-sessions row alone | TPL, LINT, SPEC |
+| `[PLAIN_LANGUAGE_RESULT_null]` | `rows.null.row_outcome`, rendered through `render_map.outcome_phrases` | characterization / null response | DERIVE | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only through `render_map.outcome_phrases`, whose four phrases are the closed set; the pending-eligibility phrase is available to the between-sessions row alone | TPL, LINT, SPEC |
+| `[PLAIN_LANGUAGE_RESULT_floor]` | `rows.empirical_floor.row_outcome`, rendered through `render_map.outcome_phrases` | characterization / empirical floor | DERIVE | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only through `render_map.outcome_phrases`, whose four phrases are the closed set; the pending-eligibility phrase is available to the between-sessions row alone | TPL, LINT, SPEC |
+| `[PLAIN_LANGUAGE_RESULT_phase]` | `rows.phase_attribution.row_outcome`, rendered through `render_map.outcome_phrases` | characterization / phase attribution | DERIVE | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only through `render_map.outcome_phrases`, whose four phrases are the closed set; the pending-eligibility phrase is available to the between-sessions row alone | TPL, LINT, SPEC |
+| `[PLAIN_LANGUAGE_RESULT_drift]` | `rows.drift_settling.row_outcome`, rendered through `render_map.outcome_phrases` | characterization / drift and settling | DERIVE | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only through `render_map.outcome_phrases`, whose four phrases are the closed set; the pending-eligibility phrase is available to the between-sessions row alone | TPL, LINT, SPEC |
+| `[PLAIN_LANGUAGE_RESULT_between_sessions]` | `rows.between_sessions.row_outcome`, rendered through `render_map.outcome_phrases` | characterization / between sessions | DERIVE | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only through `render_map.outcome_phrases`, whose four phrases are the closed set; the pending-eligibility phrase is available to the between-sessions row alone | TPL, LINT, SPEC |
+| `[REFUSAL_REASON_window_C]` | Characterization whole-window verdict `status`, `idle_admission_core.conditions`, and `member_failures`, once an exact verdict basis is issued; the specification binds the same verdict at `render_map.selector_atoms.whole_window_verdict` | characterization / whole window | MEASURED | KEY_FROZEN / VERDICT_UNISSUED | TPL, WV, AUTH, SPEC |
+| `[D_C_linearity_diagnostic_J_per_token]` | `rows.linearity.diagnostics.decode_slope_j_per_token`; a refused-window diagnostic | characterization / linearity diagnostic | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only when `rows.linearity.diagnostic_present` is true, and absence renders nothing | TPL, LINT, SPEC |
+| `[D_C_null_diagnostic_J]` | `rows.null.diagnostics.max_abs_block_delta_j`; a refused-window diagnostic | characterization / null diagnostic | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only when `rows.null.diagnostic_present` is true, and absence renders nothing | TPL, LINT, SPEC |
+| `[D_C_micro_diagnostic_x_floor]` | `rows.empirical_floor.diagnostics.effect_to_floor_ratio`; a refused-window diagnostic | characterization / empirical-floor diagnostic | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only when `rows.empirical_floor.diagnostic_present` is true, and absence renders nothing | TPL, LINT, SPEC |
+| `[D_C_phase_diagnostic_J]` | `rows.phase_attribution.diagnostics.max_abs_additivity_residual_j`; a refused-window diagnostic | characterization / phase diagnostic | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only when `rows.phase_attribution.diagnostic_present` is true, and absence renders nothing | TPL, LINT, SPEC |
+| `[D_C_drift_diagnostic_J]` | `rows.drift_settling.diagnostics.max_heldout_excursion_j`; a refused-window diagnostic | characterization / drift diagnostic | MEASURED | KEY_FROZEN / VALUE_UNISSUED; the producing field is named, no characterization report has been issued; renders only when `rows.drift_settling.diagnostic_present` is true, and absence renders nothing | TPL, LINT, SPEC |
+
+#### The two limit tokens print a limit, not an observation (PROPOSED)
+
+Two tokens in the table above print a *limit* — the value the row's observation
+had to stay inside — rather than an observation of the instrument.
+`[R_C_linearity_limit_J]` prints the residual limit of the workload-response
+sentence; `[B_C_prompt_invariance_J_per_token]` prints the acceptance band of
+the prompt-invariance sentence.
+
+The ratified design gives each of those two properties **two limbs**, and the
+row passes only if the observation stays inside both:
+
+- a **resolution limb** — the limit set by what one admitted measurement can
+  resolve. For linearity this is `H`, the largest half-width any single
+  admitted bundle's authenticated energy interval carries for that metric
+  (specification criteria C1.4 and C1.6). For prompt invariance it is `L_H`,
+  the largest admitted prompt-processing energy half-width divided by the
+  registered output-token span, the difference between the largest and smallest
+  registered output-token counts (criterion C4.2a).
+- a **claim-anchored limb** — the limit set by an independently issued floor
+  for the matching cell, from a window frozen strictly earlier than the
+  characterization freeze, never from the characterization window's own data.
+  For linearity this is `F_operative` (criteria C1.5 and C1.7). For prompt
+  invariance it is `L_F`, that same-cell prompt-processing floor divided by the
+  same output-token span (criterion C4.2b).
+
+Each template sentence has room for one number. The specification therefore
+publishes the **binding** limb — the stricter of the two when both are
+available, and the sole available limb otherwise — in one field per property,
+and writes the rule into `render_map.derived_value_rules` so no renderer infers
+it:
+
+- `[R_C_linearity_limit_J]` takes `min(H, F_operative)`, published as
+  `rows.linearity.observed_values.applied_residual_limit_j`.
+- `[B_C_prompt_invariance_J_per_token]` takes `min(L_H, L_F)`, published as
+  `rows.phase_attribution.observed_values.applied_invariance_band_j_per_token`.
+
+Nothing is hidden by printing one limb. Both limbs stay separately reported per
+criterion in `rows[].criteria[].limit_applied` of the same issued report.
+
+Worked case, in symbols because this registry prints no numbers: when a
+window's issued same-cell operative floor is smaller than that window's largest
+admitted timing half-width, `F_operative` is the stricter limb and is what the
+sentence prints, so the residual had to clear the tighter of the two tests. When
+no same-cell floor was issued before the characterization freeze, criteria C1.5
+and C1.7 return no conclusion under the reason code
+`characterization_operative_floor_unavailable` — D-152 ruled that the
+claim-anchored limb has no absolute fallback — the row itself returns no
+conclusion, and the only limit the report can carry is the sole available limb,
+`H`.
+
+**Status: PROPOSED; the lead ratifies or replaces it.** This is the single
+place where the specification had to choose what a one-limit template sentence
+prints for a two-limb criterion. Until it is ratified, the two rows above carry
+the derivation and no value, and no fill is authorized under either outcome.
+
+#### The Variant-B prompt-invariance band (resolved)
+
+`[B_C_prompt_invariance_J_per_token]` occurred in Section 6 Variant A only.
+Variant B's phase-attribution sentence printed the observed prompt-processing
+slope with no band beside it, so a Variant-B reader could not tell whether that
+slope sat inside the registered limit or outside it. This revision adds the band
+to the Variant-B present-branch sentence and to the linter's
+`phase_attribution` row tuple, so both variants print slope and band together.
+The specification publishes the band either way. The alternative on offer —
+recording Variant B as slope-only by design — was rejected because it prints a
+number the reader has no way to judge.
 
 ### Renderer-only metatokens
 
@@ -295,53 +408,60 @@ The draft does not use the binding token vocabulary. Its repeated generic
 markers are therefore inventoried by physical site, not collapsed by spelling.
 Line references are locators only; the draft remains read-only in this task.
 The six characterization rows DS-02 through DS-07 bind exact content anchors
-whose former bracket markers are absent. Those sites are specification rows
-carrying `TODO-EVIDENCE` guards, not fillable result cells.
+whose former bracket markers are absent. The Section 5 rewrite at `ec11f3f`
+replaced every `TODO-EVIDENCE` guard inside those rows with a frozen value, a
+derivation rule, or an explicit statement that a value must be ratified before
+the plan is frozen; the six content anchors themselves are unchanged and each
+still occurs exactly once, mechanically verified. Those sites remain
+protocol-specification rows, not fillable result cells: results render through
+the template's Section 6 variants, never by filling draft Table 1. Every line
+number below was re-derived on 2026-08-24 by searching for the site's own
+anchor text.
 
 | Draft site | Exact marker or anchor | Intended supplier / binding token | Campaign / cell | Fill rule | Freeze status | Sources |
 |---|---|---|---|---|---|---|
-| DS-01 — Section 3 operative-floor hold, line 249 | `[RESULT PENDING ISSUED ARTIFACTS]` | Four cell decompositions from all `F_*_abs_J`, `F_*_cmp_J`, and `F_*_operative_J` tokens | alpha and beta / all phase floor cells | DERIVE | DRAFT_GENERIC; guarded template output only | DRAFT, TPL, DF |
-| DS-02 — Section 5 characterization specification row, line 321 | `\| Workload response \|` content anchor with `TODO-EVIDENCE` guards | `PLAIN_LANGUAGE_RESULT_linearity` plus licensed linearity diagnostics, only after an issued characterization schema and row verdict exist | characterization / linearity | STOP_FILL | SUPPLIER_UNKNOWN; specification row is not a fillable result cell | DRAFT, TPL |
-| DS-03 — Section 5 characterization specification row, line 322 | `\| Identical-condition null response \|` content anchor with `TODO-EVIDENCE` guards | `PLAIN_LANGUAGE_RESULT_null` plus licensed null diagnostics, only after an issued characterization schema and row verdict exist | characterization / null response | STOP_FILL | SUPPLIER_UNKNOWN; specification row is not a fillable result cell | DRAFT, TPL |
-| DS-04 — Section 5 characterization specification row, line 323 | `\| Deliberate small-difference challenge \|` content anchor with `TODO-EVIDENCE` guards | `PLAIN_LANGUAGE_RESULT_floor` plus licensed floor diagnostics, only after an issued characterization schema and row verdict exist | characterization / empirical floor | STOP_FILL | SUPPLIER_UNKNOWN; specification row is not a fillable result cell | DRAFT, TPL |
-| DS-05 — Section 5 characterization specification row, line 324 | `\| Phase accounting \|` content anchor with `TODO-EVIDENCE` guards | `PLAIN_LANGUAGE_RESULT_phase` plus licensed additivity/invariance diagnostics, only after an issued characterization schema and row verdict exist | characterization / phase attribution | STOP_FILL | SUPPLIER_UNKNOWN; specification row is not a fillable result cell | DRAFT, TPL |
-| DS-06 — Section 5 characterization specification row, line 325 | `\| Drift and recovery \|` content anchor with `TODO-EVIDENCE` guards | `PLAIN_LANGUAGE_RESULT_drift` plus licensed excursion/recovery diagnostics, only after an issued characterization schema and row verdict exist | characterization / drift and settling | STOP_FILL | SUPPLIER_UNKNOWN; specification row is not a fillable result cell | DRAFT, TPL |
-| DS-07 — Section 5 characterization specification row, line 326 | `\| Between-session stability \|` content anchor with `TODO-EVIDENCE` guards | `PLAIN_LANGUAGE_RESULT_between_sessions` and `N_C_eligible_sessions`, only after an issued characterization schema and row verdict exist | characterization / between sessions | STOP_FILL | SUPPLIER_UNKNOWN; specification row is not a fillable result cell | DRAFT, TPL |
-| DS-08 — Section 6 results branch hold, line 358 | `[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labelled instrument diagnostics of Sections 3 and 7.]` | Exactly one guarded template result variant; template-internal section labels are not draft section locators | alpha, beta, gamma | DERIVE | DRAFT_GENERIC; no historical or diagnostic result is a supplier | DRAFT, TPL, LINT |
-| DS-09 — Table 2 prompt/1.5B gross cell, line 364, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_request` with lower and upper interval endpoints | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-10 — Table 2 prompt/1.5B per-token cell, line 364, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_token` | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-11 — Table 2 prompt/1.5B floor cell, line 364, col 6 under `Cell floor (labelled)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `F_1p5B_prompt_operative_J` plus cell label branch | alpha / prompt floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-12 — Table 2 prompt/1.5B count cell, line 364, col 7 under `n` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `N_bundles_1p5B_prompt` | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-13 — Table 2 prompt/7B gross cell, line 365, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `E_7B_prompt_J_per_request` with lower and upper interval endpoints | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-14 — Table 2 prompt/7B per-token cell, line 365, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `E_7B_prompt_J_per_token` | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-15 — Table 2 prompt/7B floor cell, line 365, col 6 under `Cell floor (labelled)` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `F_7B_prompt_operative_J` plus cell label branch | beta / prompt floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-16 — Table 2 prompt/7B count cell, line 365, col 7 under `n` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `N_bundles_7B_prompt` | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-17 — Table 2 decode/1.5B gross cell, line 366, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `E_1p5B_decode_J_per_request` with lower and upper interval endpoints | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-18 — Table 2 decode/1.5B per-token cell, line 366, col 5 under `J per output token` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `E_1p5B_decode_J_per_token` | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-19 — Table 2 decode/1.5B floor cell, line 366, col 6 under `Cell floor (labelled)` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `F_1p5B_decode_operative_J` plus cell label branch | alpha / decode floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-20 — Table 2 decode/1.5B count cell, line 366, col 7 under `n` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `N_bundles_1p5B_decode` | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-21 — Table 2 decode/7B gross cell, line 367, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `E_7B_decode_J_per_request` with lower and upper interval endpoints | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-22 — Table 2 decode/7B per-token cell, line 367, col 5 under `J per output token` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `E_7B_decode_J_per_token` | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-23 — Table 2 decode/7B floor cell, line 367, col 6 under `Cell floor (labelled)` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `F_7B_decode_operative_J` plus cell label branch | beta / decode floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-24 — Table 2 decode/7B count cell, line 367, col 7 under `n` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `N_bundles_7B_decode` | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-25 — Table 3 decode point estimate, line 373, col 2 under `Point estimate` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `E_decode_contrast_signed_J_per_request` | gamma / decode contrast | MEASURED | VALUE_UNISSUED | DRAFT, TPL, CV |
-| DS-26 — Table 3 decode interval, line 373, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `E_decode_contrast_lower_J`, `E_decode_contrast_upper_J` | gamma / decode contrast | MEASURED | VALUE_UNISSUED; one bracket marker contains two semantic fills | DRAFT, TPL, CV |
-| DS-27 — Table 3 decode floor, line 373, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `F_claim_decode_armwise_max_J` | gamma consuming alpha/beta decode floors | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-28 — Table 3 decode clearance, line 373, col 5 under `Clearance (point − floor)` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `C_decode_floor_clearance_J` on passage or negative of `S_decode_floor_shortfall_J` on refusal; branch must be explicit | gamma / decode contrast | DERIVE | DRAFT/TEMPLATE SHAPE MISMATCH; draft has one unconditional cell | DRAFT, TPL |
-| DS-29 — Table 3 decode claim-side bound, line 373, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `B_decode_claim_J` | gamma / decode contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, DF, CV |
-| DS-30 — Table 3 decode floor-gate outcome, line 373, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from authenticated magnitude and claim floor, consistent with claim verdict | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; renderer contract must add a binding without renaming existing tokens | DRAFT, TPL, CV |
-| DS-31 — Table 3 decode direction-gate outcome, line 373, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from the fully composed interval and registered direction | gamma / decode contrast | STOP_FILL | TOKEN_MISSING | DRAFT, TPL, CV |
-| DS-32 — Table 3 decode verdict, line 373, col 9 under `Verdict` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; candidate source `contrasts[decode].claim_evaluation.outcome` | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; bind a professor-facing conservative rendering | DRAFT, TPL, CV, AUTH |
-| DS-33 — Table 3 prompt floor, line 374, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No prompt claim-floor token exists; the draft arm is live and the template family is missing | gamma consuming alpha/beta prompt floors | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, AUTH |
-| DS-34 — Section 9 evidence/code-availability locator hold, line 450 | `[REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST]` | UNKNOWN release-manifest fields for repository commit, archive locator, and published digest manifest | release / artifact availability | STOP_FILL | SUPPLIER_UNKNOWN; resolve only after the release checklist issues the locators | DRAFT, AUTH |
-| PG-01 — Table 3 prompt point estimate, line 374, col 2 under `Point estimate` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated prompt-contrast estimator field | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
-| PG-02 — Table 3 prompt interval lower endpoint, line 374, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed lower endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
-| PG-03 — Table 3 prompt interval upper endpoint, line 374, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed upper endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
-| PG-04 — Table 3 prompt clearance, line 374, col 5 under `Clearance (point − floor)` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future branch-explicit clearance or shortfall derivation | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING; shape contract required | DRAFT, TPL, CV |
-| PG-05 — Table 3 prompt claim-side bound, line 374, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token and no named claim-side-bound output field | gamma / prompt contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, CV, AUTH |
-| PG-06 — Table 3 prompt floor-gate outcome, line 374, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering consistent with authenticated magnitude, floor, and verdict | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV |
-| PG-07 — Table 3 prompt direction-gate outcome, line 374, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering from the fully composed interval and registered direction | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
-| PG-08 — Table 3 prompt verdict, line 374, col 9 under `Verdict` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt rendering token; future authenticated claim-evaluation outcome | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
+| DS-01 — Section 3 operative-floor hold, line 263 | `[RESULT PENDING ISSUED ARTIFACTS]` | Four cell decompositions from all `F_*_abs_J`, `F_*_cmp_J`, and `F_*_operative_J` tokens | alpha and beta / all phase floor cells | DERIVE | DRAFT_GENERIC; guarded template output only | DRAFT, TPL, DF |
+| DS-02 — Section 5 characterization specification row, line 346 | `\| Workload response \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_linearity` plus licensed linearity diagnostics, only after an authenticated characterization report is issued | characterization / linearity | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-03 — Section 5 characterization specification row, line 347 | `\| Identical-condition null response \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_null` plus licensed null diagnostics, only after an authenticated characterization report is issued | characterization / null response | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-04 — Section 5 characterization specification row, line 348 | `\| Deliberate small-difference challenge \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_floor` plus licensed floor diagnostics, only after an authenticated characterization report is issued | characterization / empirical floor | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-05 — Section 5 characterization specification row, line 349 | `\| Phase accounting \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_phase` plus licensed additivity/invariance diagnostics, only after an authenticated characterization report is issued | characterization / phase attribution | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-06 — Section 5 characterization specification row, line 350 | `\| Drift and recovery \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_drift` plus licensed excursion/recovery diagnostics, only after an authenticated characterization report is issued | characterization / drift and settling | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-07 — Section 5 characterization specification row, line 351 | `\| Between-session stability \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_between_sessions` and `N_C_eligible_sessions`, only after an authenticated characterization report is issued | characterization / between sessions | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-08 — Section 6 results branch hold, line 403 | `[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3 and 7.]` | Exactly one guarded template result variant; template-internal section labels are not draft section locators | alpha, beta, gamma | DERIVE | DRAFT_GENERIC; no historical or diagnostic result is a supplier | DRAFT, TPL, LINT |
+| DS-09 — Table 2 prompt/1.5B gross cell, line 409, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_request` with lower and upper interval endpoints | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-10 — Table 2 prompt/1.5B per-token cell, line 409, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_token` | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-11 — Table 2 prompt/1.5B floor cell, line 409, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `F_1p5B_prompt_operative_J` plus cell label branch | alpha / prompt floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
+| DS-12 — Table 2 prompt/1.5B count cell, line 409, col 7 under `n` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `N_bundles_1p5B_prompt` | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-13 — Table 2 prompt/7B gross cell, line 410, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `E_7B_prompt_J_per_request` with lower and upper interval endpoints | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-14 — Table 2 prompt/7B per-token cell, line 410, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `E_7B_prompt_J_per_token` | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-15 — Table 2 prompt/7B floor cell, line 410, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `F_7B_prompt_operative_J` plus cell label branch | beta / prompt floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
+| DS-16 — Table 2 prompt/7B count cell, line 410, col 7 under `n` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `N_bundles_7B_prompt` | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-17 — Table 2 decode/1.5B gross cell, line 411, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `E_1p5B_decode_J_per_request` with lower and upper interval endpoints | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-18 — Table 2 decode/1.5B per-token cell, line 411, col 5 under `J per output token` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `E_1p5B_decode_J_per_token` | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-19 — Table 2 decode/1.5B floor cell, line 411, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `F_1p5B_decode_operative_J` plus cell label branch | alpha / decode floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
+| DS-20 — Table 2 decode/1.5B count cell, line 411, col 7 under `n` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `N_bundles_1p5B_decode` | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-21 — Table 2 decode/7B gross cell, line 412, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `E_7B_decode_J_per_request` with lower and upper interval endpoints | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-22 — Table 2 decode/7B per-token cell, line 412, col 5 under `J per output token` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `E_7B_decode_J_per_token` | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-23 — Table 2 decode/7B floor cell, line 412, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `F_7B_decode_operative_J` plus cell label branch | beta / decode floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
+| DS-24 — Table 2 decode/7B count cell, line 412, col 7 under `n` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `N_bundles_7B_decode` | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-25 — Table 3 decode point estimate, line 418, col 2 under `Point estimate` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `E_decode_contrast_signed_J_per_request` | gamma / decode contrast | MEASURED | VALUE_UNISSUED | DRAFT, TPL, CV |
+| DS-26 — Table 3 decode interval, line 418, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `E_decode_contrast_lower_J`, `E_decode_contrast_upper_J` | gamma / decode contrast | MEASURED | VALUE_UNISSUED; one bracket marker contains two semantic fills | DRAFT, TPL, CV |
+| DS-27 — Table 3 decode floor, line 418, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `F_claim_decode_armwise_max_J` | gamma consuming alpha/beta decode floors | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
+| DS-28 — Table 3 decode clearance, line 418, col 5 under `Clearance (point − floor)` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `C_decode_floor_clearance_J` on passage or negative of `S_decode_floor_shortfall_J` on refusal; branch must be explicit | gamma / decode contrast | DERIVE | DRAFT/TEMPLATE SHAPE MISMATCH; draft has one unconditional cell | DRAFT, TPL |
+| DS-29 — Table 3 decode claim-side bound, line 418, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `B_decode_claim_J` | gamma / decode contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, DF, CV |
+| DS-30 — Table 3 decode floor-gate outcome, line 418, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from authenticated magnitude and claim floor, consistent with claim verdict | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; renderer contract must add a binding without renaming existing tokens | DRAFT, TPL, CV |
+| DS-31 — Table 3 decode direction-gate outcome, line 418, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from the fully composed interval and registered direction | gamma / decode contrast | STOP_FILL | TOKEN_MISSING | DRAFT, TPL, CV |
+| DS-32 — Table 3 decode verdict, line 418, col 9 under `Verdict` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; candidate source `contrasts[decode].claim_evaluation.outcome` | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; bind a professor-facing conservative rendering | DRAFT, TPL, CV, AUTH |
+| DS-33 — Table 3 prompt floor, line 419, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No prompt claim-floor token exists; the draft arm is live and the template family is missing | gamma consuming alpha/beta prompt floors | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, AUTH |
+| DS-34 — Section 9 evidence/code-availability locator hold, line 501 | `[REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST]` | UNKNOWN release-manifest fields for repository commit, archive locator, and published digest manifest | release / artifact availability | STOP_FILL | SUPPLIER_UNKNOWN; resolve only after the release checklist issues the locators | DRAFT, AUTH |
+| PG-01 — Table 3 prompt point estimate, line 419, col 2 under `Point estimate` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated prompt-contrast estimator field | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
+| PG-02 — Table 3 prompt interval lower endpoint, line 419, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed lower endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
+| PG-03 — Table 3 prompt interval upper endpoint, line 419, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed upper endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
+| PG-04 — Table 3 prompt clearance, line 419, col 5 under `Clearance (point − floor)` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future branch-explicit clearance or shortfall derivation | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING; shape contract required | DRAFT, TPL, CV |
+| PG-05 — Table 3 prompt claim-side bound, line 419, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token and no named claim-side-bound output field | gamma / prompt contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, CV, AUTH |
+| PG-06 — Table 3 prompt floor-gate outcome, line 419, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering consistent with authenticated magnitude, floor, and verdict | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV |
+| PG-07 — Table 3 prompt direction-gate outcome, line 419, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering from the fully composed interval and registered direction | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
+| PG-08 — Table 3 prompt verdict, line 419, col 9 under `Verdict` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt rendering token; future authenticated claim-evaluation outcome | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
 
 ## Authority discrepancies and non-token gaps
 
@@ -353,7 +473,7 @@ read-only and the template vocabulary is binding.
 | Gamma prompt-processing contrast | The current draft registers both contrast arms, while the template remains decode-only | The lead-owned template train must add the guarded prompt token family and exact identifiers for the point estimate, interval endpoints, claim floor, branch-explicit clearance or shortfall, claim-side bound, floor and direction outcomes, verdict, and refusal branches before rendering; DS-33 and PG-01 through PG-08 state this one-sided gap | DRAFT, TPL, AUTH |
 | D-123 reported means | D-123 authorizes mean cells, while no current extraction/report schema fixes their member basis or output field names | Land and audit the reported-mean schema in the alpha/beta packs and extraction output; prove floor outputs remain byte-identical; then replace `SUPPLIER_UNKNOWN` statuses | AUTH, FX, PLAN |
 | Generic draft table outcomes | Draft Table 3 has generic cells for decode and prompt gate outcomes and verdicts, but the template has no exact tokens for them | Add binding tokens or a machine renderer contract in the lead-owned template train; do not infer strings from variant headings | DRAFT, TPL, CV |
-| Characterization outputs | The template names values and rows but no authoritative result schema defines their fields; the current draft contains protocol-specification rows, not claim-bearing result cells | Freeze the characterization analysis/report schema before collection and map every named token to an issued field and row verdict | DRAFT, TPL |
+| Characterization outputs | RESOLVED 2026-08-24 as to the field contract: the frozen characterization result specification defines every named token's producing field, and this registry now binds each one. The draft's Section 5 still holds protocol-specification rows rather than claim-bearing result cells, which is by design | Issue an authenticated characterization report; until then every characterization row stays `KEY_FROZEN / VALUE_UNISSUED`. Ratify or replace the two-limb derivation recorded above | DRAFT, TPL, SPEC |
 
 The folded capture-method-era and estimator-provenance preconditions authorize
 no value.
@@ -369,7 +489,14 @@ such as `[1]` are excluded by construction.
 
 - Draft: 35 bracket-marker sites, representing 37 semantic fill slots because
   the two interval markers `[PENDING, PENDING]` each contain two endpoints.
-- Template: 436 token occurrences and 91 distinct exact tokens.
+  Re-counted 2026-08-24 after the Section 5 rewrite: unchanged. The rewritten
+  Section 5 carries square brackets only inside LaTeX math, which the census
+  command's marker prefixes exclude.
+- Template: 437 token occurrences and 91 distinct exact tokens. The count
+  rose by one on 2026-08-24: `[B_C_prompt_invariance_J_per_token]` was added
+  to the Section 6 Variant B phase-attribution sentence, which is an added
+  occurrence of an already-registered token, so the distinct vocabulary is
+  unchanged.
 - Registry: 91 exact template-token rows plus 42 draft-site rows, for 133
   census rows. The two swap-block-only rows are separately registered, have no
   landed template counterpart, and are excluded from the template-key census.
@@ -393,7 +520,9 @@ such as `[1]` are excluded by construction.
   claim-side term.
 - For D-122, add the guarded prompt token family to the template train; the
   draft arm is live. Add the missing Table 3 outcome tokens.
-- Freeze a characterization result schema before using any characterization
-  token.
+- The characterization result schema is frozen; what remains is an issued,
+  authenticated characterization report. Ratify or replace the PROPOSED
+  two-limb derivation for `[R_C_linearity_limit_J]` and
+  `[B_C_prompt_invariance_J_per_token]` before either is rendered.
 - Keep D-119 conservative wording attached to every rendered figure, table,
   and caption; a stronger claim must name its evidence in the same sentence.

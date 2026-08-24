@@ -782,7 +782,8 @@ def lint_text(text: str) -> None:
         "null": ("D_C_null_max_abs_J",),
         "empirical_floor": ("R_C_micro_min_x_floor", "R_C_micro_max_x_floor"),
         "phase_attribution": (
-            "D_C_additivity_J", "S_C_prompt_invariance_J_per_token"),
+            "D_C_additivity_J", "S_C_prompt_invariance_J_per_token",
+            "B_C_prompt_invariance_J_per_token"),
         "drift_settling": ("D_C_reference_excursion_J", "T_C_recovery_s"),
         "between_sessions": ("N_C_eligible_sessions",),
     }
