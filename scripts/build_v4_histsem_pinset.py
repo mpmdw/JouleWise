@@ -278,8 +278,22 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         )
         for root, relative in sorted(normalized, key=lambda item: item[1])
     ]
+    # Chain composition (D-151 condition 6 / runsheet §3.7): the successor is
+    # MEMBER 2 of the code-enumerated chain and carries ONLY the three _v4
+    # rows. The v1 rows stay in the immutable member-1 artifact; copying them
+    # here would make the chain union refuse on duplicate identities. The
+    # base is still validated above and used for collision screening.
+    base_identities = {
+        (str(row["pack_id"]), str(row["pack_path"])) for row in base["packs"]
+    }
+    for row in rows:
+        identity = (str(row["pack_id"]), str(row["pack_path"]))
+        if identity in base_identities:
+            raise BuildError(
+                f"successor row collides with a base pinset identity: {identity!r}"
+            )
     value = dict(base)
-    value["packs"] = [*list(base["packs"]), *rows]
+    value["packs"] = rows
     readiness._validate_histsem_pinset(value)
     raw = readiness.render_json(value)
     output.parent.mkdir(parents=True, exist_ok=True)
