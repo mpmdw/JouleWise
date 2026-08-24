@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import importlib.util
 import io
 import json
 import subprocess
@@ -793,7 +792,14 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
 
 
 def load_v4_builder():
-    """Import `scripts/build_v4_histsem_pinset.py` as a module."""
+    """Import `scripts/build_v4_histsem_pinset.py` as a module.
+
+    The import is local, not module-level: `docs/process_traces/2026-08-22-t20/
+    s0-runsheet-r4.md` §0.3 pins this file's lines 32 and 138-165, and a new
+    top-level import would silently drift all three.
+    """
+
+    import importlib.util
 
     spec = importlib.util.spec_from_file_location(
         "build_v4_histsem_pinset", ROOT / "scripts/build_v4_histsem_pinset.py"
