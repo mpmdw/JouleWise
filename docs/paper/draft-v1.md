@@ -490,25 +490,21 @@ The reusable contribution is the combination of six habits: calibrate the instru
 
 <!-- CONDITIONAL-INSERT-TIGHTER-FLOOR
 
-Use this block only if the two-shared-edge estimator and its issuance support land before the paper freeze. Apply every replacement below; partial application would leave the estimator and sizing narratives inconsistent.
+Use this block only if the shared-error calculation and its issuance support land before the paper freeze. Apply every replacement below; partial application would leave the calculation and sizing narratives inconsistent. Insert 4 is marked VOID and has no replacement to apply; the remaining replacements are the whole transaction.
 
-NO NUMERIC LITERAL APPEARS IN THIS BLOCK, BY RULING. Every energy value below is a
-registry bracket token. At the trigger, fill each token from the minted artifact
-through its row in `docs/paper/results-fill-registry.md`; a value pre-written into
-this file is never a supplier. Any qualitative verdict about margin or clearance is
-re-derived from the filled values at that time, not carried over from this text.
-This block previously carried literals replayed from a superseded-era corpus; they
-were removed under the magistrate ruling recorded against sweep finding B7.
+RE-ANCHORED 2026-08-24 under magistrate ruling. Commit c732cec rewrote the draft body and left five of the six REPLACE EXACT anchors matching no live passage; insert 4's target sentence no longer exists anywhere. Every anchor below was re-cut from the current body text and mechanically verified to occur exactly once outside this block. Re-verify all anchors before applying if the body has changed since.
 
-SECTION 3, AFTER FIGURE 2
+NO NUMERIC LITERAL APPEARS IN THIS BLOCK, BY RULING. Every energy value below is a registry bracket token. At the trigger, fill each token from the minted artifact through its row in `docs/paper/results-fill-registry.md`; a value pre-written into this file is never a supplier. A token whose registry row reads STOP_FILL blocks the fill: drop the sentence carrying it rather than substituting a value — each such token is confined to a single sentence for exactly that reason. Any qualitative verdict about margin or clearance is re-derived from the filled values at that time, not carried over from this text. This block previously carried literals replayed from a superseded-era corpus; they were removed under the magistrate ruling recorded against sweep finding B7. The two literals that survived that removal — a projected prompt-processing contrast and an adversarial-round defect magnitude — were removed on 2026-08-24 with the passages that carried them. Digits inside a REPLACE EXACT anchor belong to the draft body's own byte-exact text (workload sizes, block structure, test-case counts); this block quotes them, it never supplies them.
+
+INSERT 1 — SECTION 3, AFTER FIGURE 2 (re-anchored 2026-08-24)
 
 REPLACE EXACT:
-The comparative composition registered for this cycle's floor cells is the worst-case composition above: every member interval is permitted to take its independently most adverse endpoint, and no credit is given for timing errors that may in fact be shared within a block. A tighter calculation that does credit such sharing is pre-registered in the frozen packs and described in Section 7. No comparative floor value has been issued in this cycle; each cell's floor is issued by the mint together with that cell's results.
+The comparative calculation fixed for the current floor cells is the conservative composition above: every member interval may take its independently most adverse endpoint, with no credit for errors shared within a block. Section 7 defines the narrower calculation that can be fixed for a future cell when its physical assumptions hold. No current comparative floor has been issued; the specified floor-issuing program must produce each value from that cell's checked inputs together with its results.
 
 WITH:
-Comparative results issued in this cycle use the pre-registered two-shared-edge calculation. It sweeps one onset error and one offset error shared within each A/B/B/A block while keeping bundle-specific residuals adversarial. For the token-generation contrast cell, the issued comparative false-effect floor is [F_decode_contrast_cmp_two_edge_J], against [F_decode_contrast_cmp_worst_case_J] under the independently adverse worst-case calculation on the same cell.
+The comparative calculation fixed for this cycle's issued floor cells is the narrower shared-error calculation defined in Section 7: one onset error and one offset error are taken as shared by all four runs in an ABBA block, while each run's remaining timing residual still takes its adverse value. Every member interval not covered by that shared pair keeps its independently most adverse endpoint. For the token-generation contrast cell, the issued comparative floor is [F_decode_contrast_cmp_two_edge_J]. The counterpart value under the conservative composition on the same cell is [F_decode_contrast_cmp_worst_case_J]. Each floor is issued with its own cell by the specified floor-issuing program, from that cell's checked inputs together with its results, and is never quoted from another cell.
 
-SECTION 3, PUBLICATION LABEL AND THE TWO CLAIM GATES
+INSERT 2 — SECTION 3, PUBLICATION LABEL AND THE TWO CLAIM GATES (anchor unchanged; still matches)
 
 REPLACE EXACT:
 This sizing quantity must be reported for the particular cell rather than as a universal five-joule rule. The cell floor and the claim-side bound are separate quantities, each issued with its own cell and never carried over from another; both are pending for every cell in this paper. Their sum explains how large an effect will generally need to be to clear both gates together and ensures that neither physical uncertainty term is hidden as an apparent double count.
@@ -516,36 +512,40 @@ This sizing quantity must be reported for the particular cell rather than as a u
 WITH:
 This sizing quantity must be reported for the particular cell rather than treated as a universal constant. For the token-generation contrast cell, the issued floor is [F_decode_contrast_cmp_two_edge_J]; the claim-side bound remains a separate additional quantity in prospective sizing. Their sum explains how large an effect will generally need to be to clear both gates together and ensures that neither physical uncertainty term is hidden as an apparent double count.
 
-SECTION 4, PRE-REGISTRATION AND ADMISSION
+INSERT 3 — SECTION 4, PRE-REGISTRATION AND ADMISSION (re-anchored 2026-08-24)
 
 REPLACE EXACT:
-The extraction specification also fixes the estimator: comparative cells in this cycle use the conservative worst-case calculation. Any future alternative must be named and parameter-bound in the committed pre-registration and extraction specification; estimator identity is not accepted from result or floor-artifact data.
+The extraction specification also fixes the calculation: comparative cells in this cycle use the conservative worst-case rule. Any future alternative must be named with all parameters in those fixed files; a result file cannot select its own calculation.
 
 WITH:
-The extraction specification also fixes the estimator: comparative cells in this cycle use the two-shared-edge calculation, named and parameter-bound in the committed pre-registration and extraction specification. Estimator identity remains outside admitted result and floor-artifact data and is re-derived within the governed extraction and issuance path.
+The extraction specification also fixes the calculation: comparative cells in this cycle use the narrower shared-error rule, named with all parameters in those fixed files before collection. A result file cannot select its own calculation; which calculation was used is re-derived inside the governed extraction and issuance path rather than read from a result or floor file.
 
-SECTION 6, PROSPECTIVE WORKLOAD SIZING
+INSERT 4 — SECTION 6, PROSPECTIVE WORKLOAD SIZING — VOID 2026-08-24, NO REPLACEMENT
+
+VOID because commit c732cec removed this insert's premise from the body: the historical proportional 256-token projection is recorded there as "not an authorized current effect", the earlier clearance claim was withdrawn, and under D-139 the token-generation cell's floor cannot stand in for the dedicated 256-token cell floor the sizing sentence needs — so the margin sentence this insert existed to write has no admissible inputs and no surviving anchor. The body's `TODO-EVIDENCE` marker in that paragraph already names what must be issued instead.
+
+INSERT 5 — SECTION 7, ATTRIBUTION-LIMITED RESOLUTION (re-anchored 2026-08-24)
 
 REPLACE EXACT:
-The registered prompt-processing arm adopts a fixed 256-token prompt whose projected contrast is approximately 11.6 J. Measured against the conservative worst-case composition, that projection is a thin design margin rather than a contrast standing at roughly twice the operative sizing disclosure; measured against the tighter pre-registered calculation it is less thin, by an amount that cannot be stated until the floor is issued. The prompt is frozen before collection and produces identical token IDs under both model tokenizers.
+A floor is a property of one cell under one calculation and cannot be quoted from another. An older short-prompt model-size diagnostic suggested marginal clearance under the conservative calculation and motivated the fixed-256-token prompt-processing arm; it was neither a fresh measurement nor an issued refusal.
 
 WITH:
-The registered prompt-processing arm adopts a fixed 256-token prompt whose projected contrast is approximately 11.6 J. Against the token-generation cell's issued two-shared-edge floor of [F_decode_contrast_cmp_two_edge_J], the design margin before the separate claim-side bound is considered is [C_decode_floor_clearance_J]; state whether that margin is thin or comfortable from the filled values, never from this sentence. The prompt is frozen before collection and produces identical token IDs under both model tokenizers.
+A floor is a property of one cell under one calculation and cannot be quoted from another: the token-generation contrast cell has an issued floor of [F_decode_contrast_cmp_two_edge_J], to which the separate claim-side bound is added for sizing only. An older short-prompt model-size diagnostic suggested marginal clearance under the conservative calculation and motivated the fixed-256-token prompt-processing arm; it was neither a fresh measurement nor an issued refusal.
 
-SECTION 7, ATTRIBUTION-LIMITED RESOLUTION
+INSERT 6 — SECTION 7, WHEN TIMING ERRORS MAY BE SHARED WITHIN A BLOCK (re-anchored 2026-08-24; two replacements at one site)
+
+The body paragraph rewritten at c732cec already carries the stationarity caveat and the exact-arithmetic validation this insert used to add, and its bold lead-in no longer asserts a registration state, so neither is replaced. Only the two sentences that assert the pre-issuance state are swapped, and the sentence carrying the generated-case count is deliberately left standing so the swap destroys no body evidence.
 
 REPLACE EXACT:
-There is no universal five-joule practical sizing disclosure: a floor is a property of one cell under one estimator, and it is issued with that cell rather than quoted from another. For a historical non-claim diagnostic of the short-prompt model-size contrast, its projected clearance was marginal against the conservative worst-case composition.
+An alternative calculation uses one onset error and one offset error shared by all four runs in an ABBA block, while still letting each run's remaining timing residual take its adverse value.
 
 WITH:
-The practical sizing disclosure remains cell-specific: the token-generation contrast cell has an issued floor of [F_decode_contrast_cmp_two_edge_J] before its separate claim-side bound is added for sizing. For a historical non-claim diagnostic of the short-prompt model-size contrast, its projected clearance was marginal against the conservative worst-case composition.
-
-SECTION 7, ESTIMATOR APPLICABILITY
+The calculation fixed for this cycle's issued comparative cells takes one onset error and one offset error as shared by all four runs in an ABBA block, while still letting each run's remaining timing residual take its adverse value.
 
 REPLACE EXACT:
-**Validated tighter estimator, registered for the next mint.** A two-shared-edge calculation treats the onset error and offset error as common within an A/B/B/A block while keeping bundle-specific residuals adversarial. A replay on retained evidence found it substantially tighter than the worst-case default; because that evidence belongs to the superseded era described above, the replay's magnitudes are not restated here. After the arithmetic was moved behind the governed extraction boundary, a terminal audit found zero exact-arithmetic understatements in 4,096 independently generated cases. More than six successive adversarial review rounds had tested progressively smaller defects, from 0.25 J down to approximately \(5\times10^{-10}\) J, with exact rational arithmetic used as the acceptance bar; each discovered defect class was closed, including a serialization attack addressed by removing registration vocabulary from admitted artifacts. The tighter estimator (`d124_two_shared_edge_common_mode.v1`) — the estimator's identity, not any floor value — is pre-registered in the frozen packs and selected for six shared-edge comparative cells. No comparative result has been issued in this cycle; the paper-regime swap that will state this estimator's issued floors executes at the first post-freeze mint tracked in `TASK_QUEUE.md` and has not been applied here. The physical assumption that onset and offset errors remain shared over one block remains explicit: the calibration corpus records bounds, not each member's realized error.
+No current comparative result is issued, so no magnitude from the older replay appears here.
 
 WITH:
-**Estimator applicability and stationarity.** The issued two-shared-edge calculation passed a terminal audit with zero exact-arithmetic understatements in 4,096 independently generated cases after its arithmetic was moved behind the governed extraction boundary. More than six successive adversarial review rounds had tested progressively smaller defects, from 0.25 J down to approximately \(5\times10^{-10}\) J, with exact rational arithmetic used as the acceptance bar; each discovered defect class was closed, including a serialization attack addressed by removing registration vocabulary from admitted artifacts. That arithmetic result does not establish the physical assumption that onset and offset errors remain shared over one A/B/B/A block: the calibration corpus records bounds, not each member's realized error. The paper therefore reports that transfer assumption with every result using the estimator and refuses geometry outside the estimator's registered domain.
+That disclosure accompanies every comparative result issued in this cycle, because all of them use the shared-error calculation. No magnitude from the older replay appears here: the superseded-era evidence behind it can supply no issued value.
 
 END CONDITIONAL-INSERT-TIGHTER-FLOOR -->
