@@ -505,6 +505,22 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
         )
         self.assert_refuses(repository, pack, "changes file modes")
 
+    def test_refuses_a_mode_bit_flip_on_a_licensed_addition(self) -> None:
+        """The receipt and sidecar exist only at the head.
+
+        The anchor-vs-head comparison spans shared paths only, so their modes
+        are never reached by it and need a check of their own.
+        """
+
+        for relative in (RECEIPT_RELATIVE, SIDECAR_RELATIVE):
+            with self.subTest(relative=relative):
+                repository, pack = self.fixture()
+                os.chmod(pack / relative, 0o755)
+                self.recommit(repository, "flip a projection artifact mode")
+                self.assert_refuses(
+                    repository, pack, "not a plain committed file"
+                )
+
     def test_refuses_a_receipt_carrying_an_extra_identity_unit(self) -> None:
         repository, pack = self.fixture()
 

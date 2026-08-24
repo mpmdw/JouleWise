@@ -1102,6 +1102,11 @@ def _recorded_generator_check(
 # (arm_readiness.py:5092) re-derives the projection through
 # `verify_frozen_projection` on the measurement host.
 #
+# This check is valid in the post-projection, pre-D-134-freeze authoring
+# window -- exactly the ruled §3 order of project -> commit -> author ->
+# freeze.  A pack that has ALREADY been D-134 frozen takes the separately
+# governed preserve-mode path instead, and is not this kind's business.
+#
 # `receipt["pack"]["reviewed_git_commit"]` is a repo-wide HEAD, NOT a
 # pack-scoped pin, so it is treated as an UNTRUSTED source of candidate bytes.
 # Every binding is derived from digests instead: the byte-exact replay ties the
@@ -1560,6 +1565,16 @@ def _recorded_projected_pack_authentication(
             raise _underivable(
                 kind, "committed pack tree and working tree disagree on membership"
             )
+        # The comparison above only spans paths the anchor and the head share.
+        # The receipt and its sidecar exist ONLY at the head, so their modes
+        # would otherwise never be examined at all.
+        for relative in licensed_additions:
+            if committed_modes.get(relative) != "100644":
+                raise _underivable(
+                    kind,
+                    "projection artifact is not a plain committed file: "
+                    f"{relative} ({committed_modes.get(relative)})",
+                )
 
         # 6. The generator's own derivation of the pre-projection pack.
         try:
