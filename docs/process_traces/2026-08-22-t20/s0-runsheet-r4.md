@@ -149,6 +149,14 @@ block below:
   legitimately quotes the broken form, as the paragraph above does. Extract
   the blocks the same way the `zsh -n` pass does, then:
 
+  **Both extractors anchor on `^```zsh` — column zero.** This revision has 47
+  executable blocks at column zero and exactly 2 INDENTED ```` ```zsh ```` blocks,
+  both illustrative (the `source` example above and this lint snippet). An
+  executable step that is accidentally indented would escape the `zsh -n` pass
+  and both lints silently, so any future revision must re-check that
+  `grep -c '^[[:space:]]*```zsh'` minus `grep -c '^```zsh'` is still 2.
+
+
   ```zsh
   RUNSHEET=docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md
   awk '/^```zsh/{f=1;next} f&&/^```/{f=0;next} f' "$RUNSHEET" > /tmp/s0-blocks.zsh
@@ -160,6 +168,15 @@ block below:
 
   Both must print nothing (grep exits 1). A hit is a defect in the
   instrument, not in the bench.
+
+- **The `env.sh` heredoc is UNQUOTED (`<<ENVEOF`) on purpose**, so that the
+  operator's `$SESSION`, `$BASE` and `$CI_RUN_ID` are baked into the file as
+  literals. Everything else inside it must be escaped: every `$` that belongs to
+  env.sh is written `\$`, and **backticks must never appear inside it, not even
+  in a comment** — the shell runs them. During this revision a comment
+  containing a backticked word executed that word as a command while env.sh was
+  being written. `zsh -n` does not catch this either; only executing §1.1 does,
+  which is why the block battery in §0.1's self-review bar is mandatory.
 
 **No state survives between command blocks.** Each block below runs in a fresh
 shell: exported variables, shell functions and `cd` are all gone by the next
@@ -477,8 +494,8 @@ new_case() {
 
 if [ -f "\$MANIFEST" ]; then
   # A malformed or key-less manifest must STOP with a runsheet message.  Reading
-  # it with a bare subscript raised a Python KeyError traceback during `source`,
-  # which is neither a governed refusal nor readable at the bench.
+  # it with a bare subscript raised a Python KeyError traceback while env.sh
+  # was being sourced, which is neither a governed refusal nor readable.
   MARKER_BRANCH=\$("\$PY" -c '
 import json,sys
 try:
