@@ -8,7 +8,7 @@
 > unmodified because they are the record of how the instrument changed; they no
 > longer bind execution. Ruling: 2026-08-24 magistrate ruling on the
 > executability-audit verdict (custody transcript 037), which made full cold
-> re-ratification mandatory and advanced the instrument to r3.
+> re-ratification mandatory and advanced the instrument to r4.
 
 # S-0 CLONE-PROOF RUNSHEET R2 — JouleWise `_v4` transaction
 

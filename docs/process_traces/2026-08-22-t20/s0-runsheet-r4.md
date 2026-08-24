@@ -30,13 +30,35 @@ difference, plus one finding r4 surfaces without deciding.
 | F-10 | §4(e.1) writes into the transaction's own `$CUSTODY/windows` and mints `arm-0002`, superseding `arm-0001`. | note | folded: recorded as deliberate custody mixing, and every arm-receipt read is ordinal-pinned to `arm-0001` |
 | F-11 | §2.2's `check_census.py` heredoc was never run in the r2 estate while §3.4 invoked it. | note | folded: §2.2 materialization is a checked step with transcript `011-*`, and §3.4 asserts the tool first |
 
-**R4-O1 is OPEN and blocks execution of §3.9.** Surfaced while curing N-2, named
-by neither seat, and NOT decided here: at a reviewed head containing the
-fixation commit, `tests/test_receipt_histsem.py` is a changed path outside the
-ruled 112 (all 112 are under `configs/`), so `validate_r1_evidence_lifecycle`
-raises `DEPENDENCY_CHANGED_SET` — which is also the real mechanism behind N-2.
-The full trace and the three candidate resolutions are recorded in §3.9. It is a
-ruling, not a bench call.
+**R4-O1 — RULED (interim); the §3.9 hold is discharged.** Surfaced while curing
+N-2, named by neither r3 seat, confirmed by the r4 delta re-audit: at a reviewed
+head containing the fixation commit, `tests/test_receipt_histsem.py` is a
+changed path outside the ruled 112 (all 112 are under `configs/`), so
+`validate_r1_evidence_lifecycle` raises `DEPENDENCY_CHANGED_SET` — which is also
+the real mechanism behind N-2. The magistrate adopted resolution (ii):
+**`DEPENDENCY_CHANGED_SET` is the EXPECTED arm outcome at `$FIXATION_COMMIT`**,
+carrying the positive obligation that the gate's residue is exactly
+`['tests/test_receipt_histsem.py']` and nothing else (transcript `098-*`), paired
+with a diagnostic arm at `$WINDOW_CLOSE_HEAD` proving the residue there is EMPTY
+(`099-*`) — the two together isolate the fixation commit as the sole cause. The
+interim ruling governs **S-0 only**; whether D-151 condition 3 is reopened so
+the REAL transaction arms cleanly is a separate cold process (packet 5) that
+gates the real transaction, not this runsheet. Full record in §3.9.
+
+**Fix round 2 (2026-08-24), from the delta re-audit.** All seven r4 cures
+confirmed and both r3 blockers dead; these were the residuals. D-3: §1.3's
+library sweep moves to `git grep -- joulewise/` over TRACKED bytes — a worktree
+recursion descends into `joulewise/__pycache__` once any step imports
+`joulewise`, and those `.pyc` files really do contain both literals (verified),
+so whether the sweep breaks depends on the grep implementation (the bench ugrep
+7.8.4 drops binary matches silently; GNU grep would emit a `Binary file …
+matches` line and fail the equality assertion). D-4: the four R4-O1-affected
+sites are annotated in place, and the two that carried now-inverted assertions
+were retargeted onto the residue rather than left to fire. D-5: the r2 banner
+says r4. §0.2 gains the plain statement that the anchor map is a DRIFT TRIPWIRE
+and never an integrity control — the re-audit's second forge showed symbol
+anchors pass 13/13 over gutted function bodies. §0.1 folds the column-zero
+invariant into the lint block as executable checks.
 
 **r3 (2026-08-24) — REFUSED by both ratification seats; never executed.** A clean instrument. Amendments 1–3 are folded into the
 body text — there are no amendment blocks below — and the fourteen findings of
@@ -149,12 +171,10 @@ block below:
   legitimately quotes the broken form, as the paragraph above does. Extract
   the blocks the same way the `zsh -n` pass does, then:
 
-  **Both extractors anchor on `^```zsh` — column zero.** This revision has 47
-  executable blocks at column zero and exactly 2 INDENTED ```` ```zsh ```` blocks,
-  both illustrative (the `source` example above and this lint snippet). An
-  executable step that is accidentally indented would escape the `zsh -n` pass
-  and both lints silently, so any future revision must re-check that
-  `grep -c '^[[:space:]]*```zsh'` minus `grep -c '^```zsh'` is still 2.
+  **Both extractors anchor on `^```zsh` — column zero.** An executable step that
+  is accidentally indented would escape the `zsh -n` pass and both lints
+  silently, so the column-zero invariant is checked in the same block rather
+  than asserted in prose.
 
 
   ```zsh
@@ -164,6 +184,13 @@ block below:
   grep -nE '\$[A-Z_]+:[aAcegGhlpqQrstux&]' /tmp/s0-blocks.zsh
   # Stricter uniform lint, which this revision satisfies: ZERO unbraced $VAR:
   grep -nE '(^|[^{])\$[A-Za-z_][A-Za-z_0-9]*:' /tmp/s0-blocks.zsh
+  # Column-zero invariant: exactly two INDENTED ```zsh blocks exist, both
+  # illustrative (the source example above and this snippet).  Any third means
+  # an executable step was indented and silently escaped every check above.
+  ALL=$(grep -cE '^[[:space:]]*```zsh' "$RUNSHEET")
+  COL0=$(grep -c '^```zsh' "$RUNSHEET")
+  test "$((ALL - COL0))" = 2 || echo "INDENTED-BLOCK INVARIANT BROKEN: $((ALL - COL0))"
+  test "$COL0" = 49 || echo "EXECUTABLE BLOCK COUNT CHANGED: $COL0"
   ```
 
   Both must print nothing (grep exits 1). A hit is a defect in the
@@ -177,6 +204,14 @@ block below:
   containing a backticked word executed that word as a command while env.sh was
   being written. `zsh -n` does not catch this either; only executing §1.1 does,
   which is why the block battery in §0.1's self-review bar is mandatory.
+
+- **The bench `grep` is ugrep 7.8.4, not GNU grep.** It is API-compatible for
+  everything this runsheet does, with one behavioural difference that matters:
+  it drops binary-file matches silently where GNU grep prints
+  `Binary file … matches`. Any sweep whose result is compared for equality must
+  therefore not depend on the grep implementation — which is the second reason
+  §1.3's library sweep uses `git grep` over tracked bytes rather than a worktree
+  recursion. (`rg` does not exist on this bench at all; see F-14.)
 
 **No state survives between command blocks.** Each block below runs in a fresh
 shell: exported variables, shell functions and `cd` are all gone by the next
@@ -242,6 +277,19 @@ check is for the pinned line sitting in the *body* of a multi-line literal,
 which is what a docstring forge always produces. Non-Python anchors would fall
 back to text equality and be labelled as such; all thirteen are Python today,
 so none does.
+
+**The anchor map is a DRIFT TRIPWIRE, never an integrity control, and no step
+below may be read as relying on it for integrity.** It answers one question —
+"do the thirteen citations in this runsheet still point at the code they
+claim?" — and nothing more. The r4 delta re-audit made the limit concrete with a
+second forge: a commit whose functions keep their names and signatures at the
+pinned lines but whose BODIES are gutted passes the AST check 13/13, because
+every anchor is a definition site rather than a behaviour. Integrity comes from
+three other places and only from them: the §1.3 manifest digests over committed
+bytes, §3.6.1's authentication of the executing custody tools against those
+digests, and the fact that `$BASE` is a merged head with green CI. If the anchor
+map ever appears to be doing integrity work, that is a defect in the reasoning,
+not a strength of the check.
 
 | # | File | Line | Kind | Owner | Expected content at that line |
 |---|---|---|---|---|---|
@@ -932,8 +980,16 @@ fi
 
 # The hyphen-form id constant in the library is IN SCOPE for this sweep and is
 # ruled CORRECT ARCHIVAL RETENTION (packet 1).  Any OTHER joulewise/ hit stops.
+# `git grep -- joulewise/` reads TRACKED BYTES, which is what the REGISTRY-V2
+# ruling governs.  A worktree recursion (`grep -rn ... joulewise/`) descends into
+# joulewise/__pycache__ as soon as any earlier step imports joulewise, and those
+# .pyc files really do contain both literals (verified).  Whether they then
+# surface is grep-implementation-dependent -- the bench ugrep drops binary
+# matches silently, GNU grep would emit a "Binary file ... matches" line that
+# breaks the equality assertion below -- so the worktree form makes this step
+# non-re-runnable and host-dependent.  git grep removes both problems.
 set +e
-( cd "$CLONE" && grep -rnE 'd117_row_registry_v1|d117-row-registry-v1' joulewise/ ) \
+git -C "$CLONE" grep -nE 'd117_row_registry_v1|d117-row-registry-v1' -- joulewise/ \
   > "$TRANS/010-joulewise-v1-hits.txt"
 LIB_RC=$?
 set -e
@@ -1912,19 +1968,33 @@ legitimately present. Otherwise a **governed**, non-null arm receipt and
 canonical verify REFUSE (often `readiness_dependency_refused`) is acceptable;
 S-0 must not fabricate T0 or measurement evidence.
 
-**The eleven-kind census is NOT an arm-side assertion, and r3 wrongly made it
-one.** `arm` calls `_discover_evidence` with `include_pack=False`
-(`arm_readiness.py:7384`), and `_discover_evidence` then drops the `PACK`
-namespace outright (`:5510-5512`). Nothing in S-0 writes evidence receipts into
-`<window custody root>/<pack>/arm_readiness.evidence/`, and nothing should — the
-generic receipts live in the pack, which is exactly where the ruled design puts
-them. So arm-side discovery legitimately finds zero generic items, and r3's
-`want <= kinds` assertion over the arm receipt could not pass. **Do not seed
-custody evidence to make it pass**: that would fabricate the very artifacts the
-proof is meant to authenticate.
+**The eleven-kind census is not asserted at §3.9 under the interim ruling — but
+NOT because it is structurally unreachable there.** r4's first draft said it was,
+and the delta re-audit corrected that: `arm`'s own *discovery* does find zero
+generic items (it calls `_discover_evidence` with `include_pack=False`,
+`arm_readiness.py:7384`, and `_discover_evidence` drops the `PACK` namespace at
+`:5510-5512`), yet the eleven kinds still reach the arm receipt by a second
+route — `_freeze_evidence_for_arm` (`:6478-6528`) deep-copies the freeze
+receipt's evidence, and `evidence_items.extend(freeze_items)` merges it at
+**`:7425`**. A clean arm therefore *does* carry the eleven kinds. They are absent
+today for one reason only: R4-O1's changed-set refusal empties `freeze_items` at
+`:7415-7417`.
 
-The eleven kinds are asserted where they are actually discovered, and both
-assertions already run earlier in this runsheet:
+Two consequences, both binding:
+
+- **Do not seed custody evidence** into
+  `<window custody root>/<pack>/arm_readiness.evidence/` to make an arm-side
+  census pass. The generic receipts live in the pack, which is where the ruled
+  design puts them; seeding would fabricate the artifacts the proof exists to
+  authenticate.
+- **The census RETURNS to §3.9** if the pending D-151 condition-3 ruling
+  (packet 5) restores a clean arm. It is deferred, not retired. When that ruling
+  lands, the assertion to restore is `want <= kinds` over the arm receipt's
+  `evidence[].receipt_kind`, and it becomes meaningful the moment `freeze_items`
+  survives.
+
+Meanwhile the eleven kinds are asserted where they are proven unconditionally,
+and both assertions already run earlier in this runsheet:
 
 - **§3.4** — `check_census.py` asserts `sorted(authored_kinds) == want` over
   each of the three author outputs, PASS and `mutated:true`, transcript
@@ -1939,14 +2009,14 @@ assertions already run earlier in this runsheet:
   against `d117_floor_qwen25_1p5b_v3/…/freeze-0003.json`: twelve items, eleven
   generic kinds).
 
-What remains for the arm side is therefore what the arm alone can prove:
-neither the registry's `DEPENDENCY_CHANGED_SET` nor `DEPENDENCY_MANIFEST` code
-appears; no traceback occurs; and an arm receipt is written. Resolve the two
-candidate-owned spellings mechanically:
-
-> **OPEN — R4-O1. The forbidden-code check is predicted to FIRE, and that is a
-> ruling, not a bench call.** Surfaced while curing N-2; not named by either
-> ratification seat; NOT decided here.
+> **R4-O1 — RULED (interim), 2026-08-24. `DEPENDENCY_CHANGED_SET` is the
+> EXPECTED arm outcome at `$FIXATION_COMMIT`.** Surfaced while curing N-2, named
+> by neither r3 ratification seat, confirmed by the r4 delta re-audit. The
+> magistrate adopted candidate resolution (ii): the transaction accepts the
+> refusal as the pre-declared, governed consequence of fixation, and the proof
+> obligation moves from "no changed-set code" to **"the code refuses for exactly
+> the fixation path and nothing else."** This blockquote is retained as the
+> record; the earlier "do not execute §3.9" hold is DISCHARGED by that ruling.
 >
 > *The trace.* At §3.9 the arm's reviewed head is `$FIXATION_COMMIT` and each
 > generic receipt's `derivation_commit` is `$EVIDENCE_DERIVATION_HEAD`.
@@ -1955,36 +2025,130 @@ candidate-owned spellings mechanically:
 > and then `outstanding = set(changed_paths) - (allowlist - conditional)`,
 > `relevant = sorted(outstanding)`, `if relevant: raise … DEPENDENCY_CHANGED_SET`
 > (`:4296-4322`). There is **no** filter restricting the changed set to
-> pack-relevant paths: every changed path outside the 112 is `relevant`.
-> The fixation commit changes `tests/test_receipt_histsem.py`. The ruled
-> allowlist is 112 entries, all under `configs/` — verified: zero `tests/`
-> entries. So `relevant == ['tests/test_receipt_histsem.py']` and the arm
-> refuses `DEPENDENCY_CHANGED_SET`.
+> pack-relevant paths: every changed path outside the 112 is `relevant`. The
+> fixation commit changes `tests/test_receipt_histsem.py`; the ruled allowlist is
+> 112 entries, all under `configs/` — verified: zero `tests/` entries. So
+> `relevant == ['tests/test_receipt_histsem.py']`.
 >
-> *Why it is one defect, not two.* This is also the true mechanism behind N-2.
-> `_freeze_evidence_for_arm` (`:6478-6528`) deep-copies the freeze receipt's
-> evidence — which does carry all eleven generic kinds — but authenticates each
-> generic item through the same R1 gate; on `EvidenceLifecycleError` the caller
-> catches and sets `freeze_items = []` (`:7415-7417`). So the eleven kinds
-> vanish from the arm receipt AND the changed-set code appears, for one reason.
-> Curing the census assertion alone does not make this block pass.
+> *Why it is one defect, not two.* It is also the mechanism behind N-2, through
+> the `freeze_items = []` path at `:7415-7417` described above.
 >
-> *What it touches.* This block's forbidden-code assertion; §4(e.1)'s
-> "no `091-arm-*` transcript carries `$CHANGED_CODE`"; §5's r4-2 and V-1.vi
-> boxes; §6's "an ordinary non-allowlisted path crosses" clause.
+> *What it touches, all annotated in place.* The forbidden-code block below;
+> §4(e.1)'s changed-set expectation; §5's r4-2 and V-1.vi boxes; §6's "an
+> ordinary non-allowlisted path crosses" clause.
 >
-> *The candidate resolutions, none taken here.* (i) The arm runs at
-> `$WINDOW_CLOSE_HEAD`, where the window is closed and the fixation commit does
-> not yet exist — but D-151 condition 3 sequences fixation before arm. (ii) The
-> transaction accepts `DEPENDENCY_CHANGED_SET` at §3.9 as the pre-declared,
-> governed consequence of fixation, and the proof obligation moves to "the code
-> refuses for exactly the fixation path and nothing else." (iii) The ruled 112
-> is wrong and a fixation-commit path belongs in it — which contradicts D-151
-> conditions 1–2 and the verified arithmetic, and is almost certainly not the
-> answer. Each changes what S-0 proves. **Do not execute §3.9 until this is
-> ruled.**
+> *Scope of the interim ruling.* It governs **S-0, this clone proof, only.**
+> Whether D-151 condition 3 should be reopened so that the REAL transaction
+> arms cleanly is a SEPARATE cold process (packet 5) which gates the real
+> transaction and not this runsheet. S-0 executes now under the form below.
 
-Resolve the two candidate-owned spellings mechanically:
+**The positive obligation.** A bare "the changed-set code appeared" proves
+nothing — it is satisfied equally by the fixation path and by a genuine
+mechanism failure. The refusal must be pinned to its cause. Note a code fact
+that shapes how: `EvidenceLifecycleError.refusal()` returns only
+`{type, code, row_id, evidence_id}` (`:1071-1077`) and `_receipt_refusal` the
+same (`:4726-4738`), so **the refused path list is not carried in the receipt or
+in the CLI payload** — the `relevant!r` list lives only in the discarded
+exception message. The obligation is therefore discharged by recomputing the
+gate's own arithmetic from primary evidence — the registry allowlist, the real
+constant, and `git diff` — and requiring the residue to be exactly the fixation
+path.
+
+```zsh
+source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+"$PY" - "$CLONE" "$REGISTRY" "$EVIDENCE_DERIVATION_HEAD" "$FIXATION_COMMIT" \
+  > "$TRANS/098-r4o1-changed-set-residue.json" <<'PY'
+import json, pathlib, subprocess, sys
+clone, registry_path, derivation, head = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+sys.path.insert(0, clone)
+from joulewise import arm_readiness as r   # the REAL digest-conditional constant
+
+lifecycle = json.loads(pathlib.Path(registry_path).read_bytes())["freeze_evidence_lifecycle"]
+allowlist = set(lifecycle["irrelevant_path_allowlist"])
+assert len(allowlist) == 112, len(allowlist)
+conditional = allowlist & set(r.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
+assert conditional == {"configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"}, conditional
+
+raw = subprocess.run(["git", "-C", clone, "diff", "--name-only", "-z",
+                      f"{derivation}..{head}", "--"],
+                     check=True, capture_output=True).stdout
+changed = sorted(item for item in raw.decode().split("\0") if item)
+
+# Exactly the gate's arithmetic at arm_readiness.py:4296-4322.
+outstanding = set(changed) - (allowlist - conditional)
+# Ed's confirmed table discharges the digest-conditional member; what is left
+# is what the gate reports as `relevant`.
+residue = sorted(outstanding - conditional)
+
+expected = ["tests/test_receipt_histsem.py"]
+assert residue == expected, {"residue": residue, "expected": expected}
+print(json.dumps({"status": "PASS", "changed_paths": len(changed),
+                  "allowlisted": len(allowlist), "residue": residue,
+                  "ruling": "R4-O1 interim: this residue is the EXPECTED cause of "
+                            "DEPENDENCY_CHANGED_SET at the fixation head"},
+                 indent=2, sort_keys=True))
+PY
+```
+
+If the residue is anything other than exactly `['tests/test_receipt_histsem.py']`
+— an extra path, a missing one, an empty list — the interim ruling does not
+cover it and this is a STOP under §6 mechanism failures. An empty residue at the
+fixation head would mean the gate refused for a reason nobody has identified.
+
+**The isolating diagnostic.** The pair of assertions is what isolates the
+fixation commit as the sole cause: the residue is exactly the fixation path at
+`$FIXATION_COMMIT`, and it is EMPTY one commit earlier. The second half runs a
+throwaway `new_case` at `$WINDOW_CLOSE_HEAD` — diagnostic only, never promoted,
+never custody for any claim.
+
+```zsh
+source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+CASE=$(new_case r4o1-window-close-diagnostic "$WINDOW_CLOSE_HEAD")
+
+"$PY" - "$CASE" "$REGISTRY" "$EVIDENCE_DERIVATION_HEAD" "$WINDOW_CLOSE_HEAD" \
+  > "$TRANS/099-r4o1-window-close-residue.json" <<'PY'
+import json, pathlib, subprocess, sys
+case, registry_path, derivation, head = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+sys.path.insert(0, case)
+from joulewise import arm_readiness as r
+
+lifecycle = json.loads(pathlib.Path(registry_path).read_bytes())["freeze_evidence_lifecycle"]
+allowlist = set(lifecycle["irrelevant_path_allowlist"])
+conditional = allowlist & set(r.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
+raw = subprocess.run(["git", "-C", case, "diff", "--name-only", "-z",
+                      f"{derivation}..{head}", "--"],
+                     check=True, capture_output=True).stdout
+changed = sorted(item for item in raw.decode().split("\0") if item)
+residue = sorted((set(changed) - (allowlist - conditional)) - conditional)
+assert residue == [], {"residue": residue,
+                       "meaning": "the window did NOT close at exactly 112"}
+print(json.dumps({"status": "PASS", "changed_paths": len(changed), "residue": [],
+                  "meaning": "at window close the changed set is fully allowlisted; "
+                             "the fixation commit is the sole cause of R4-O1"},
+                 indent=2, sort_keys=True))
+PY
+
+# The live arm at the same head confirms the arithmetic against the code itself.
+capture 099-r4o1-diagnostic-arm "$PY" "$CASE/scripts/generate_arm_readiness.py" arm \
+  --pack-root "$CASE/$FIRST_PACK" --arm-context "$ARM_CONTEXT" \
+  --window-custody-root "$CUSTODY/windows"
+no_traceback 099-r4o1-diagnostic-arm || die 'diagnostic arm failed ugly'
+if grep -F "$CHANGED_CODE" "$TRANS/099-r4o1-diagnostic-arm.stdout.json" > /dev/null; then
+  die "R4-O1 diagnostic: the changed-set code fires at WINDOW_CLOSE_HEAD too, so the fixation commit is NOT the sole cause"
+fi
+```
+
+This diagnostic arm is EXPECTED to refuse for other reasons — the marker and
+Ed's table were built at `$FIXATION_COMMIT`, so the family-publication gate
+refuses at a head that predates them. That is pre-declared and is not a finding.
+The only thing asserted here is the ABSENCE of `$CHANGED_CODE`.
+
+**What the arm side then proves.** `$MANIFEST_CODE` must not appear; no
+traceback occurs; an arm receipt is written; and `$CHANGED_CODE` appears if and
+only if the residue above is exactly the fixation path. Resolve the two
+candidate-owned spellings mechanically:
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
@@ -1993,7 +2157,12 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 import json,pathlib,sys
 reg=json.load(open(sys.argv[1]))["freeze_evidence_lifecycle"]
 codes={x["role"]:x["code"] for x in reg["refusal_vocabulary"]}
-bad={codes["DEPENDENCY_CHANGED_SET"],codes["DEPENDENCY_MANIFEST"]}
+# R4-O1 interim ruling: DEPENDENCY_CHANGED_SET is the EXPECTED outcome at the
+# fixation head and is pinned to its cause by transcript 098 (the residue is
+# exactly tests/test_receipt_histsem.py).  DEPENDENCY_MANIFEST stays forbidden:
+# nothing in the ruling licenses a manifest-binding failure.
+expected={codes["DEPENDENCY_CHANGED_SET"]}
+bad={codes["DEPENDENCY_MANIFEST"]}
 root=pathlib.Path(sys.argv[2])
 # arm-0001 ONLY.  Section 4(e.1)'s probe 123 arms against this SAME custody
 # root -- it must, because the marker and Ed's table live here -- and mints
@@ -2006,12 +2175,15 @@ assert receipts, "no transaction arm receipt (arm-0001) under the window custody
 seen=0
 for path in receipts:
  d=json.load(open(path))
- present=sorted(bad & {r["code"] for r in d["refusals"]})
- assert not present, (str(path), present)
+ present={r["code"] for r in d["refusals"]}
+ forbidden=sorted(bad & present)
+ assert not forbidden, (str(path), forbidden)
  seen+=1
 print(json.dumps({"status":"PASS","transaction_arm_receipts":seen,
  "ordinal_pinned":"arm-0001","crossed_actual_gate":"arm_readiness.py:4300-4322",
- "forbidden_codes":sorted(bad)}, indent=2, sort_keys=True))
+ "forbidden_codes":sorted(bad),"expected_under_r4o1":sorted(expected),
+ "changed_set_cause_pinned_by":"098-r4o1-changed-set-residue.json"},
+ indent=2, sort_keys=True))
 PY
 ```
 
@@ -2407,15 +2579,30 @@ set -e
 test "$CTOS_RC" = 0 || die "C-to-S unit probes failed with rc $CTOS_RC; see 122"
 
 # Transaction PASS side: section 3.9's 091-* arms used Ed's exact table at
-# $CUSTODY/windows/family_publication and must contain no R1 changed-set code.
+# $CUSTODY/windows/family_publication.  (under R4-O1 -- see 3.9) The PASS-side
+# property is NOT "no changed-set code": R4-O1 makes that code the expected
+# consequence of the fixation commit.  What the C->S edge actually claims is
+# that Ed's exact table DISCHARGED the digest-conditional successor, i.e. the
+# successor path is absent from the gate's residue.  Transcript 098 computes
+# that residue with the gate's own arithmetic, so assert against it.
 checked=0
 for p in "$TRANS"/091-arm-*.stdout.json; do
-  if grep -F "$CHANGED_CODE" "$p" > /dev/null; then
-    die "arm transcript $p carries the changed-set code"
-  fi
+  test -s "$p" || die "arm transcript $p is empty"
   checked=$((checked + 1))
 done
 test "$checked" = 3 || die "checked $checked arm transcripts, expected 3"
+"$PY" - "$TRANS/098-r4o1-changed-set-residue.json" "$SUCCESSOR_PINSET" <<'PY'
+import json, sys
+residue = json.load(open(sys.argv[1]))["residue"]
+successor = sys.argv[2]
+assert successor not in residue, (
+    "the successor pinset is in the changed-set residue: Ed's confirmed table "
+    "did NOT discharge the digest-conditional path", residue)
+assert residue == ["tests/test_receipt_histsem.py"], residue
+print(json.dumps({"status": "PASS",
+                  "c_to_s_edge": "successor discharged by Ed's confirmed digest",
+                  "residue": residue}, indent=2, sort_keys=True))
+PY
 ```
 
 **Deliberate custody mixing — recorded, not accidental (F-10).** Every other
@@ -2454,8 +2641,11 @@ no_traceback 123-c-to-s-later-rewrite || die 'C-to-S rewrite probe traceback'
 ```
 
 Pass iff the valid transaction crosses the changed-set gate only against Ed's
-exact table digest, while the later committed rewrite is refused by
-`DEPENDENCY_CHANGED_SET` before it can be forgiven by allowlist membership. The
+exact table digest **(under R4-O1 — see §3.9: "crosses" here means the successor
+path is discharged out of the gate's residue, not that the changed-set code is
+absent; the fixation path keeps it present)**, while the later committed rewrite
+is refused by `DEPENDENCY_CHANGED_SET` before it can be forgiven by allowlist
+membership. The
 table and its sidecar are immutable during the probe. Authority: D-151
 condition 2; `docs/contracts/d117_step6_confirmation_table.md` "Where the
 `C → S` edge is enforced."
@@ -2598,7 +2788,8 @@ expect_rc 131-histsem-out-of-enumeration 2 || die 'the override probe did not ex
 ```
 
 Pass iff the closed v1→successor chain verifies, arms cross the actual
-changed-set gate only under the confirmed C→S condition, an absent **enumerated**
+changed-set gate only under the confirmed C→S condition **(under R4-O1 — see
+§3.9)**, an absent **enumerated**
 member produces `histsem_pinset_absent`, an out-of-enumeration override produces
 `histsem_pinset_invalid`, and all three malformed candidate variants of §4(d)
 fail. D-151 condition 6 preserves the rule-11 clarification unchanged: an absent
@@ -2653,8 +2844,10 @@ reading its named artifacts.
 - [ ] **r4-2** — One full three-pack sequence is evidenced by `030-*`, `031-*`,
   `032-*`, `040-*`, `042-*`, `050-*`, `060-*`, `061-*`, `070-*`–`077-*`,
   `080-*`, `081-*`, `082-*`, `084-*`, `085-*`, `090-*`, `091-*`, `092-*` and
-  `097-*` (there is no `083-*`: no step produces one); every pack crosses the
-  actual changed-set gate; ordinary path, both unexpected-output namespaces,
+  `097-*` (there is no `083-*`: no step produces one), plus `098-*`/`099-*`;
+  every pack crosses the actual changed-set gate **(under R4-O1 — see §3.9: the
+  expected refusal is pinned to its cause by `098-*`, and `099-*` isolates the
+  fixation commit as the sole cause)**; ordinary path, both unexpected-output namespaces,
   both plan-tree directions, candidate-shape triplet, C→S, and poison probes
   adjudicate as specified. Every cardinality assertion (`3` packs, `8` tamper
   classes, `3` arm transcripts) is recorded, not assumed.
@@ -2664,7 +2857,9 @@ reading its named artifacts.
 - [ ] **V-1.vi / D-151 C→S** — All eight path classes in `110-*` and `118-*`
   have independent tamper refusals, including the two manifest halves;
   `122-*`/`123-*` prove that successor subtraction is conditional on Ed's exact
-  table digest and that a later rewrite refuses; any unauthenticated class has
+  table digest and that a later rewrite refuses **(under R4-O1 — see §3.9; the
+  subtraction is evidenced by the successor's ABSENCE from `098-*`'s residue)**;
+  any unauthenticated class has
   triggered the derived-manifest reopen rather than being waived. Authority:
   D-151 condition 2.
 - [ ] **rh-8 / D-151 successor** — The 112 arithmetic and exact window-close
@@ -2729,7 +2924,10 @@ over them belongs to the S-0 fixation commit, and S-0 does not run a
 # 6. FAILURE SEMANTICS
 
 **Mechanism failures — trip V-1.vi and REOPEN to the derived authenticated
-manifest.** An ordinary non-allowlisted path crosses; an unexpected evidence
+manifest.** An ordinary non-allowlisted path crosses **(under R4-O1 — see
+§3.9: `tests/test_receipt_histsem.py` at the fixation head is the one
+pre-declared, ruled exception, and it must REFUSE, not cross; anything else
+appearing in `098-*`'s residue is this failure)**; an unexpected evidence
 output is accepted in either namespace; either current or sibling coherent
 non-freeze plan mutation crosses R1; any missing/extra/unused candidate variant
 is accepted; any one of the eight allowlisted classes lacks an independent
