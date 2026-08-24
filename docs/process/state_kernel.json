@@ -676,6 +676,36 @@
       "status": "queued",
       "stop_card": null
     },
+    "CALEXITS-EVIDENCE-BYTES-01": {
+      "acceptance": {
+        "evidence": [
+          "test_logical_producer_delay_preserves_exact_evidence_bytes passes deterministically at the bench and in CI",
+          "The root cause of temp-path bytes reaching evidence is identified and cured code-side or fixture-side with a defect-shaped regression"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALEXITS-EVIDENCE-BYTES-01/acceptance",
+          "label": "CALEXITS-EVIDENCE-BYTES-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The pre-existing deterministic bench failure is cured, not skipped."
+      },
+      "authority": {
+        "label": "RUN_STATE 2026-08-24 red-diagnosis entry + flake-fix director report (failure proven pre-existing on pristine main 74794af)",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Cure the pre-existing deterministic failure of test_logical_producer_delay_preserves_exact_evidence_bytes (tests/test_calibration_exits.py): temp-path bytes leak into the two evidence artifacts, failing byte-exactness on pristine main at the bench. Distinct from both diagnosed CI-red classes (not the mutation race, not the ack backstop).",
+      "id": "CALEXITS-EVIDENCE-BYTES-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 86,
+      "status": "queued",
+      "status_note": "Found 2026-08-24 during the flake-fix round; fails identically on main and the fix branch, so it is NOT a regression of either cure. May be environment-sensitive (path length/normalization) — reproduce first.",
+      "stop_card": null
+    },
     "CALEXITS-HYGIENE-FIXES-01": {
       "acceptance": {
         "evidence": [
@@ -1380,36 +1410,6 @@
       "rank": 70,
       "status": "queued",
       "status_note": "Lane: ed. E-11 expired ~2026-08-20T16:51Z unless harvested. The mint license and ED-Q-L9-3 capture are SPLIT OUT as their own rows (ED-MINT-LICENSE-01, EDQ-L9-3-CAPTURE-01) so the license-first path and the B-16 sequencing are dependency-enforced, not textual.",
-      "stop_card": null
-    },
-    "ED-MINT-LICENSE-01": {
-      "acceptance": {
-        "evidence": [
-          "The rule is installed in the untracked settings.local.json",
-          "S-0's mint steps run unprompted in the throwaway clone"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ED-MINT-LICENSE-01/acceptance",
-          "label": "ED-MINT-LICENSE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The settings rule exists and a dry invocation of each licensed command form is accepted without a prompt."
-      },
-      "authority": {
-        "label": "r5 consolidation V-7 item 1 (blocks S-0)",
-        "path": "docs/process_traces/2026-08-20-go-session/rulings-r5-consolidation.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Install the D-148.1 freeze-mint permission rule for the six _v4 commands, scoped to the measurement checkout (Ed's hands only; the classifier forbids self-granting).",
-      "id": "ED-MINT-LICENSE-01",
-      "lane": "ed_external",
-      "priority": "p1_phase_gate",
-      "rank": 8,
-      "status": "queued",
-      "status_note": "THE single blocking item for the _v4 transaction; everything gates on S-0.",
       "stop_card": null
     },
     "EDQ-L9-3-CAPTURE-01": {
@@ -3180,7 +3180,46 @@
       "priority": "p2_next_slice",
       "rank": 68,
       "status": "queued",
-      "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. B-46/B-9 (paper + WINDOW_STATUS corrections) are immediate desk items.",
+      "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. 2026-08-24: first desk batch LANDED on PR #168 (B-9, B-27, B-43, B-45, B-47, B-33; B-46 verified already cured in ae82a392) — workflow-implemented, per-shard verified, magistrate-reviewed. Residuals carried: window_runbook.md:995,:1161 similar needs_pin_commit phrasings.",
+      "stop_card": null
+    },
+    "REGISTRY-ID-NAMING-01": {
+      "acceptance": {
+        "evidence": [
+          "ROW_REGISTRY_ID renamed to ROW_REGISTRY_V1_ID (archival semantics explicit), mirroring the FREEZE_RECEIPT_V1_SCHEMA pattern in the same constant block",
+          "The live v2 outer id gains a named constant consumed at both hardcoded-literal enforcement sites (arm_readiness.py ~:9928, ~:10095)",
+          "No behavior change; the archival v1-schema validation branch still verifies committed v1 artifacts byte-identically"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REGISTRY-ID-NAMING-01/acceptance",
+          "label": "REGISTRY-ID-NAMING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The superseded-generation constant is named as archival and the live id gets a named home."
+      },
+      "authority": {
+        "label": "S-0 cold-gate packet-1 synthesis, item 3 (refuter free finding; two-seat record)",
+        "path": "docs/process_traces/2026-08-22-t20/s0-runsheet-r2.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Packet-1 synthesis ruling",
+            "path": "docs/process_traces/2026-08-22-t20/s0-runsheet-r2.md"
+          },
+          "rule": "Naming/legibility only — NOT a stale pointer and NOT S-0-blocking; must not land inside the _v4 transaction window"
+        }
+      ],
+      "flags": [],
+      "goal": "Rename joulewise/arm_readiness.py:46 ROW_REGISTRY_ID (holds the superseded 'd117-row-registry-v1') to an explicitly archival name and give the live v2 outer id a named constant, replacing the two unnamed string literals at the enforcement sites.",
+      "id": "REGISTRY-ID-NAMING-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 87,
+      "status": "queued",
+      "status_note": "Registered from the S-0 packet-1 cold-gate round (both seats: archival retention, not a defect). Defer landing until after the _v4 transaction closes.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -3666,11 +3705,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-150 item (1): MINT LICENSE GRANTED as live prompts",
+            "path": "docs/decision_log.md"
+          },
           "kind": "task",
-          "required": "Ed installs the D-148.1 mint-license settings rule (r5 V-7 item 1; blocks S-0)",
+          "required": "Mint license granted — D-150 item (1) operationalized it as live permission prompts at Ed's hands (supersedes the D-148.1 settings-rule form; no rule exists and none is required)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "ED-MINT-LICENSE-01"
         }
@@ -3683,8 +3725,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 66,
-      "status": "blocked",
-      "status_note": "BLOCKED on ED-MINT-LICENSE-01 (r5 V-7 item 1; blocks S-0). S-0 is lead-executed at the bench; delegated transcript review is ADDITIVE ONLY — the magistrate's own reading of the S-0 transcript remains the final verification gate (cold-attached sentence, verbatim). BIG per D-144: gauntlet + Fable final review + ONE pre-merge two-seat pass over the composed S-1..S-5 merge; the magistrate rules its findings. Horizon (item 2) and marker (item 3) rulings also gate mint-side steps.",
+      "status": "partial",
+      "status_note": "S-0 IN EXECUTION 2026-08-24 (mint-license dependency SATISFIED per D-150 item 1 — live prompts, no settings rule). Clone estate cut from 33aa594 (green run 32679620252); §§1.1-2.1 executed and magistrate-ratified (custody transcripts 000-011); 112-path allowlist shape PASS. HELD at cold-gate packet 2 (four class-(b) doc repoints: transaction-work vs candidate-defect; seat 1 Q2-PROCEED-WITH-AMENDMENT, refuter in flight). Retained verbatim: S-0 is lead-executed at the bench; delegated transcript review is ADDITIVE ONLY — the magistrate's own reading of the S-0 transcript remains the final verification gate (cold-attached sentence). BIG per D-144: gauntlet + Fable final review + ONE pre-merge two-seat pass over the composed S-1..S-5 merge; the magistrate rules its findings. Horizon (item 2) and marker (item 3) rulings also gate mint-side steps.",
       "stop_card": null
     },
     "WO-CENSUS-SEMANTICS": {
