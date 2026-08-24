@@ -1,121 +1,87 @@
-S-0 FIXATION/ACTIVATION DELTA — reviewed input of runsheet r4 §3.7
-==================================================================
+S-0 FIXATION DELTA (post-D-153) — reviewed input of runsheet r4, fixation step
+==============================================================================
 Target: tests/test_receipt_histsem.py
-Applies at: the S-0 fixation commit (the FIRST commit after window close),
-            inside the S-0 clone only. Never applied on main.
-Authority: D-151 condition 3 and Consequences; S-1 MANIFEST §§9.3, 9.3.5;
-           runsheet r3 §3.7 steps 4-7; executability-audit finding F-2
-           (custody transcript 037).
+Applies at: the FIXATION COMMIT — the first commit after the r4-3 commit-freeze
+            WINDOW CLOSE — inside the S-0 clone only. Never applied on main.
+Authority: D-151 condition 3 as amended by D-153 A1 and A2; runsheet r4's
+           fixation step; executability-audit finding F-2 (custody 037).
 
-WHY THIS FILE EXISTS
---------------------
-Runsheet r2 §3.7 told the operator to "apply the separately reviewed
-mechanical fixation/activation delta" and then, in step 6, to run
-tests.test_receipt_histsem. No such delta was ever authored, and the step
-that needed it was sequenced AFTER the suite run. Both defects are cured
-here: the delta is a real reviewed artifact with a digest in the candidate
-manifest, and r3 §3.7 applies it BEFORE the suite runs.
+WHAT THIS DELTA IS, AFTER D-153
+-------------------------------
+It contains EXACTLY ONE thing: the hS byte pin — a module constant carrying an
+unsubstitutable sentinel, plus the single test that checks it.
 
-DESIGN CHOICE — WHAT IS A LITERAL AND WHAT IS DERIVED
------------------------------------------------------
-Exactly ONE value in this delta is substituted at the bench:
-SUCCESSOR_PINSET_SHA256. It has to be a literal, and it cannot be a
-derivation, because it is the BYTE AUTHENTICATOR for the successor
-allowlist class (runsheet §4(e), row "successor pinset JSON"). A test that
-derived the digest from the file it is checking would recompute to whatever
-a tampered file now hashes to and would authenticate nothing. The digest is
-unknowable before the mint, so the delta ships an obviously-invalid
-sentinel, "S0-FIXATION-SUBSTITUTION-PENDING", and r4 §3.7 step 5
-substitutes it mechanically from the minted bytes. The sentinel is not 64
-hex characters on purpose: an unsubstituted delta fails loudly on the guard
-assertion rather than silently pinning a plausible-looking value (a
-64-zero placeholder would not have that property).
+Everything the pre-D-153 version of this delta carried has MOVED into the
+pre-derivation candidate as a reviewed code change (D-153 A2, work order W1):
+the rename to test_differential_self_test_all_governed_packs, the chain-derived
+corpus totals, and the presence-conditional non-authenticating successor shape
+assertion. None of those depends on a digest, so none of them belongs in a
+post-window commit.
 
-Everything else is either a REVIEWED LITERAL or a DERIVATION:
+WHY THE SPLIT IS FORCED (D-153 finding 3, the published-head-suite trap)
+------------------------------------------------------------------------
+The mint ALONE reddens the old literal 9/99 corpus assertions. If the cure for
+that redness lived in the fixation commit, the suite would be red across the
+whole window — the same defect O-1-E was killed for. So every digest-INDEPENDENT
+consequence of the chain read must land BEFORE derivation, where it is green in
+both coordinates; only hS, which is unknowable before the mint, may wait.
 
-  * SUCCESSOR_PACK_COUNT (3) and SUCCESSOR_RECEIPT_COUNT (33) are ruled
-    before the mint by D-151, so they are reviewed literals in this file --
-    not bench substitutions.
-  * The v1 member's literals (PINSET_SHA256, 9 packs, 99 receipts, 108
-    facts) are UNTOUCHED, exactly as D-151 condition 3 requires; the delta
-    only re-scopes them so they state what they always meant -- the v1
-    member's own coordinates -- instead of standing in for whole-corpus
-    totals that stop being true the moment the successor is minted.
-  * The whole-corpus totals in
-    test_full_corpus_verifies_two_coordinates_and_facts now DERIVE from the
-    loaded chain (9 rows before the mint, 12 after). They are consistency
-    checks, not authenticators. Substituting 12/132/<new fact count> as
-    literals would have added three more unreviewable bench edits while
-    authenticating nothing that the two per-member digest pins do not
-    already authenticate.
-  * test_differential_self_test_all_nine_packs is renamed to
-    test_differential_self_test_all_governed_packs and iterates the loaded
-    chain. r2 called the old name "then-false"; iterating the chain makes
-    the method true in BOTH coordinates with no bench edit.
+THE ONE BENCH SUBSTITUTION
+--------------------------
+SUCCESSOR_PINSET_SHA256 ships as "S0-FIXATION-SUBSTITUTION-PENDING". It is not
+64 hex characters on purpose: an unsubstituted delta fails loudly on the guard
+assertion instead of silently pinning a plausible-looking value (a 64-zero
+placeholder would not have that property). The runsheet substitutes the minted
+digest mechanically and proves the sentinel is gone.
 
-WHAT AN INDEPENDENT REVIEWER RECOMPUTES (r4 §3.7 step 7)
---------------------------------------------------------
-sha256 of $CLONE/configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json
-at the fixation commit; that it equals the substituted SUCCESSOR_PINSET_SHA256;
-that it equals table.successor_pinset.sha256 in Ed's confirmed step-6 table;
-and that the successor's pack/receipt counts are 3 and 33.
+WHY hS MUST BE A LITERAL AND CANNOT BE DERIVED
+----------------------------------------------
+It is the byte authenticator for the successor allowlist class. A test that
+derived the digest from the file it is checking would recompute to whatever a
+tampered file now hashes to and would authenticate nothing. D-151 condition 2
+forbids the shape assertions from standing in for it, and the shape method says
+so in its own docstring.
 
 VERIFIED BEFORE PUBLICATION OF THIS DELTA
 -----------------------------------------
   * `git apply --check` clean against tests/test_receipt_histsem.py at the
-    r3 base head.
-  * With the delta applied to the PRE-mint tree, the two rewritten methods
-    (test_differential_self_test_all_governed_packs,
-    test_full_corpus_verifies_two_coordinates_and_facts) both PASS, and
-    test_successor_pinset_is_byte_pinned_at_fixation fails with exactly the
-    sentinel guard message. The delta therefore introduces no pre-mint
-    regression and its one bench substitution is impossible to skip
-    silently.
+    branch head (i.e. against the post-W1 candidate).
+  * The candidate suite is green in BOTH coordinates WITHOUT this delta
+    applied — pre-mint (shape assertion vacuous) and post-mint against a REAL
+    synthetic minted successor. That is the D-153 W1/D4 verification, and it is
+    what proves this delta carries nothing the candidate already needs.
 
 diff --git a/tests/test_receipt_histsem.py b/tests/test_receipt_histsem.py
-index bc3727d..27a91e1 100644
+index dcb884c..6224261 100644
 --- a/tests/test_receipt_histsem.py
 +++ b/tests/test_receipt_histsem.py
-@@ -32,6 +32,25 @@ ROOT = Path(__file__).resolve().parents[1]
- PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"
- PINSET_SHA256 = "d81515505d677c2ca045238e721c87eae8f38439a89a5377e58fa9064eaf2f21"
- REPRESENTATIVE_PACK = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
-+SUCCESSOR_PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
-+# The successor's SHA-256 cannot be known before S-0 mints it, so this literal
-+# is the ONE value the S-0 fixation step substitutes at the bench (runsheet r3
-+# section 3.7 step 5).  The sentinel below is deliberately not 64 hex
-+# characters: an unsubstituted delta fails loudly on the guard assertion in
-+# ``test_successor_pinset_is_byte_pinned_at_fixation`` instead of silently
-+# pinning a plausible-looking digest.  The two counts beside it are ruled
-+# before the mint (D-151: three governed _v4 rows, eleven receipts each), so
-+# they are reviewed literals, not bench substitutions.
+@@ -45,6 +45,13 @@ SUCCESSOR_PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v
+ # authenticating the successor, whose only byte authenticator is the hS literal
+ # pinned by the post-window fixation commit (D-153 A1).  Asserting shape here
+ # must never be read as, or relied on as, authenticating the minted bytes.
++# hS -- the successor's ONE byte authenticator, pinned by the post-window
++# fixation commit and by nothing else (D-151 condition 3; D-153 A1).  It cannot
++# exist before the mint, so the fixation delta ships this sentinel and the
++# runsheet substitutes the minted digest for it.  The sentinel is deliberately
++# not 64 hex characters: an unsubstituted delta fails loudly on the guard in
++# test_successor_pinset_hs_byte_pin rather than pinning a plausible value.
 +SUCCESSOR_PINSET_SHA256 = "S0-FIXATION-SUBSTITUTION-PENDING"
-+SUCCESSOR_PACK_COUNT = 3
-+SUCCESSOR_RECEIPT_COUNT = 33
-+SUCCESSOR_PACK_IDS = frozenset(
-+    {
-+        "d117_contrast_qwen25_1p5b_vs_7b_v4",
-+        "d117_floor_qwen25_1p5b_v4",
-+        "d117_floor_qwen25_7b_v4",
-+    }
-+)
+ SUCCESSOR_PACK_COUNT = 3
+ SUCCESSOR_RECEIPT_COUNT = 33
+ SUCCESSOR_PACK_IDS = frozenset(
+@@ -217,6 +224,27 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
+             len(json.loads(PINSET.read_bytes())["packs"]) + SUCCESSOR_PACK_COUNT,
+         )
  
- 
- def git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
-@@ -143,6 +162,35 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
-         self.assertEqual(len(value["packs"]), 9)
-         self.assertEqual(sum(row["receipt_count"] for row in value["packs"]), 99)
- 
-+    def test_successor_pinset_is_byte_pinned_at_fixation(self) -> None:
-+        """Pin the minted successor's exact bytes at the fixation commit.
++    def test_successor_pinset_hs_byte_pin(self) -> None:
++        """The successor's byte authenticator: hS, pinned at fixation.
 +
-+        This is the byte authenticator for the successor allowlist class: a
-+        tamper that edits the minted pinset without re-running the reviewed
-+        builder must fail HERE, not merely fail to be subtracted.  A derived
-+        digest could not do that -- it would recompute to whatever the tampered
-+        file now hashes to -- so the successor digest is a literal, substituted
-+        once, and cross-checked by an independent reviewer against Ed's step-6
-+        confirmation table.
++        This is the ONLY assertion in this file that authenticates the minted
++        successor bytes.  Everything else about the successor is shape and
++        consistency (see test_successor_member_shape_when_present, which is
++        explicitly non-authenticating).  A byte-only tamper of the minted pinset
++        that preserves pack_count, receipt_count and the pack ids fails HERE and
++        only here.
 +        """
 +
 +        self.assertRegex(
@@ -123,78 +89,11 @@ index bc3727d..27a91e1 100644
 +            r"\A[0-9a-f]{64}\Z",
 +            "the S-0 fixation substitution never ran: the sentinel is still in place",
 +        )
-+        raw = SUCCESSOR_PINSET.read_bytes()
-+        self.assertEqual(hashlib.sha256(raw).hexdigest(), SUCCESSOR_PINSET_SHA256)
-+        value = json.loads(raw)
-+        self.assertEqual(len(value["packs"]), SUCCESSOR_PACK_COUNT)
 +        self.assertEqual(
-+            sum(row["receipt_count"] for row in value["packs"]),
-+            SUCCESSOR_RECEIPT_COUNT,
++            hashlib.sha256(SUCCESSOR_PINSET.read_bytes()).hexdigest(),
++            SUCCESSOR_PINSET_SHA256,
 +        )
-+        self.assertEqual({row["pack_id"] for row in value["packs"]}, set(SUCCESSOR_PACK_IDS))
-+        builder = (ROOT / "scripts/build_v4_histsem_pinset.py").read_text(encoding="utf-8")
-+        self.assertNotIn("--update", builder)
 +
      def test_verifier_cli_refusal_is_canonical_and_exit_two(self) -> None:
          completed = subprocess.run(
              (
-@@ -163,9 +211,15 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
-         self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
-         self.assertEqual(completed.stdout, render_json(payload))
- 
--    def test_differential_self_test_all_nine_packs(self) -> None:
--        value = json.loads(PINSET.read_bytes())
--        for row in value["packs"]:
-+    def test_differential_self_test_all_governed_packs(self) -> None:
-+        # Renamed at the S-0 fixation commit: after the successor is minted the
-+        # governed corpus is no longer "all nine packs", and a name that says
-+        # nine while the chain holds twelve is a false statement in the record.
-+        # Iterating the loaded chain keeps the method true in BOTH coordinates
-+        # -- nine rows before the mint, twelve after -- with no bench edit.
-+        rows = readiness._load_histsem_pinset(ROOT)
-+        self.assertGreaterEqual(len(rows), 9)
-+        for row in rows:
-             with self.subTest(pack=row["pack_id"]):
-                 pack = ROOT / row["pack_path"]
-                 self.assertEqual(
-@@ -176,15 +230,38 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
-     def test_full_corpus_verifies_two_coordinates_and_facts(self) -> None:
-         result = verify_all_receipt_histsem(ROOT, require_published=True)
-         self.assertEqual(result["status"], "PASS")
--        self.assertEqual(result["pack_count"], 9)
--        self.assertEqual(result["receipt_count"], 99)
-+        # Corpus TOTALS follow the loaded chain rather than a bench-substituted
-+        # literal.  They are consistency checks, not byte authenticators: each
-+        # chain member is pinned by its own literal digest (PINSET_SHA256 for
-+        # v1, SUCCESSOR_PINSET_SHA256 for the successor), so an added or edited
-+        # row fails those pins first.  Substituting 12/132 here instead would
-+        # have added two more unreviewable bench edits and authenticated
-+        # nothing the member pins do not already authenticate.
-+        chain = readiness._load_histsem_pinset(ROOT)
-+        self.assertEqual(result["pack_count"], len(chain))
-+        self.assertEqual(
-+            result["receipt_count"], sum(int(row["receipt_count"]) for row in chain)
-+        )
-+        # The v1 member's own coordinates keep their pre-fixation literals.
-         pinset = json.loads(PINSET.read_bytes())
-+        self.assertEqual(len(pinset["packs"]), 9)
-+        self.assertEqual(sum(row["receipt_count"] for row in pinset["packs"]), 99)
-         fact_count = sum(
-             len(json.loads((ROOT / row["pack_path"] / item["path"]).read_bytes())["facts"])
-             for row in pinset["packs"]
-             for item in row["receipts"]
-         )
-         self.assertEqual(fact_count, 108)
-+        # Every governed receipt in the chain -- v1 and successor alike --
-+        # resolves at its recorded path and carries at least one fact.
-+        for row in chain:
-+            for item in row["receipts"]:
-+                receipt_path = ROOT / row["pack_path"] / item["path"]
-+                with self.subTest(receipt=item["path"], pack=row["pack_id"]):
-+                    self.assertTrue(
-+                        json.loads(receipt_path.read_bytes())["facts"],
-+                        "governed receipt carries no facts",
-+                    )
-         self.assertTrue(
-             all(not row["advisories"] for row in result["packs"]), result["packs"]
-         )
