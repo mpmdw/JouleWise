@@ -304,6 +304,7 @@ def sample_identity_receipt(
     reason_codes: list[str] | None = None,
     pack_id: str = "d117_floor_qwen25_1p5b_v1",
     identity_unit_ids: tuple[str, ...] = ("synthetic/decode",),
+    reviewed_git_commit: str = "a" * 40,
 ) -> dict[str, Any]:
     return identity_pins._receipt(
         kind=kind,
@@ -313,7 +314,7 @@ def sample_identity_receipt(
             "pack_id": pack_id,
             "window_id": "window-test",
             "plan_id": "plan-test",
-            "reviewed_git_commit": "a" * 40,
+            "reviewed_git_commit": reviewed_git_commit,
             "projection_input_sha256": ZERO_SHA,
         },
         units=[sample_identity_unit(unit_id) for unit_id in identity_unit_ids],
@@ -321,7 +322,7 @@ def sample_identity_receipt(
             "contract_id": identity_pins.IDENTITY_PIN_DERIVATION_CONTRACT,
             "callables": ["synthetic_derivation"],
             "source_file_sha256": {"synthetic.py": ZERO_SHA},
-            "git_commit": "a" * 40,
+            "git_commit": reviewed_git_commit,
         },
         checks=[],
         reason_codes=reason_codes or [],
@@ -354,6 +355,85 @@ def sample_frozen_projection(
         },
         "supersedes": [],
     }
+
+
+
+def sample_unprojected_projection(
+    identity_unit_ids: tuple[str, ...] = ("synthetic/decode",),
+) -> dict[str, Any]:
+    """The projection block a pack carries BEFORE `freeze_projection` runs.
+
+    `identity_pins` (:522) requires every `model_runtime_config` value to be
+    None until a pack is frozen: the runtime triple is what the projection
+    derives, so a pack that already carried it would be claiming a derivation
+    it never ran.
+    """
+
+    projection = sample_frozen_projection(
+        "identity_pin_projection.receipts/projection-0001.json",
+        ZERO_SHA,
+        identity_unit_ids,
+    )
+    projection["state"] = "unprojected"
+    projection["projection_receipt"] = None
+    for unit in projection["identity_units"]:
+        unit["model_runtime_config"] = {
+            name: None for name in unit["model_runtime_config"]
+        }
+    return projection
+
+
+def apply_freeze_projection(
+    pack_root: Path,
+    receipt: Mapping[str, Any],
+    receipt_relative: str,
+    receipt_sha256: str,
+) -> None:
+    """Rewrite an unprojected committed pack exactly as `freeze_projection` does.
+
+    This deliberately mirrors `identity_pins.freeze_projection` (:1826) rather
+    than calling the evidence author's replay: a fixture built BY the code under
+    test could only ever agree with it.  The real `freeze_projection` cannot be
+    used here because it derives identity units through the mlx runtime adapters
+    and mints its git anchor under a clean-tree gate.  Fidelity to the real
+    write set is proven separately, against the live `_v4` packs.
+    """
+
+    tree, projection, producer = identity_pins._load_pack_projection(pack_root)
+    frozen = copy.deepcopy(projection)
+    frozen["state"] = "frozen"
+    frozen["projection_receipt"] = {
+        "path": receipt_relative,
+        "sha256": receipt_sha256,
+    }
+    runtime_by_id = {
+        unit["identity_unit_id"]: unit["model_runtime_config"]
+        for unit in receipt["identity_units"]
+    }
+    for unit in frozen["identity_units"]:
+        unit["model_runtime_config"] = copy.deepcopy(
+            runtime_by_id[unit["identity_unit_id"]]
+        )
+    tree["arm_attachments"]["identity_pin_projection"] = copy.deepcopy(frozen)
+    if producer is not None:
+        producer["identity_pin_projection"] = copy.deepcopy(frozen)
+        producer_bytes = identity_pins._render_json(producer)
+        (pack_root / "producer_contract.json").write_bytes(producer_bytes)
+        downstream = tree.get("downstream_contract")
+        reference = (
+            downstream.get("producer_contract")
+            if isinstance(downstream, Mapping)
+            else None
+        )
+        if isinstance(reference, dict):
+            reference["sha256"] = identity_pins._sha256_bytes(producer_bytes)
+    tree_bytes = identity_pins._render_json(tree)
+    (pack_root / "plan_tree.json").write_bytes(tree_bytes)
+    (pack_root / "plan_tree.sha256").write_bytes(
+        identity_pins._gnu_sidecar(
+            identity_pins._sha256_bytes(tree_bytes), "plan_tree.json"
+        )
+    )
 
 
 class ArmReadinessSchemaTests(unittest.TestCase):

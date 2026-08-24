@@ -1,0 +1,14 @@
+{
+  "_comment": "A write set the REAL identity_pins.freeze_projection actually produced, recorded so that nothing under test authored these bytes. Every other packauth fixture is built by tests.test_arm_readiness_schemas.apply_freeze_projection, which MIRRORS the real freeze; if that mirror were wrong in the same way as the replay under test, those fixtures would still agree with it. These bytes cannot. pre_projection.tar.gz holds the pack's pre-projection plan_tree.json, its sidecar and producer_contract.json as committed at reviewed_git_commit, plus the committed projection receipt; expected_sha256 are the digests the real freeze emitted. The replay must reproduce them from the recorded inputs alone.",
+  "_provenance": "Recorded from the v4 S-0 estate, which is SESSION-LOCAL: its commits are not yet on any pushed ref, so reviewed_git_commit cannot be resolved from this repository. Source: pack configs/campaigns/d117_floor_qwen25_7b_v4 at commit b7225bfcfc45ae833b9d836885a6e7830814fd9f (estate head e40ac7ef182108c3054c8b9561d6b6ca9ab78c5b).",
+  "_provenance_binding": "Provenance becomes repo-verifiable when the v4 estate's commits reach a pushed ref; until then the in-repo corroboration is the v3 replay probe (delta re-audit record: producer_contract byte-exact for both v3 packs from their real anchors; plan_tree byte-exact except the later D-134 freeze_receipt rewrite).",
+  "expected_sha256": {
+    "plan_tree.json": "2e2511e74ceb96ae15d974c5fa03b5737be10ecf345992a27286634454b147a8",
+    "plan_tree.sha256": "a8e418393ed4c5f7000305eb95c583eef5238ebd04fdde9d5c4aa14d57cfd053",
+    "producer_contract.json": "6c1873379e53cc27cfbba030c9cb9a96c878915be2a6578f1875edff1a283d4d"
+  },
+  "pack_id": "d117_floor_qwen25_7b_v4",
+  "receipt_relative": "identity_pin_projection.receipts/projection-0001.json",
+  "receipt_sha256": "a27d8ddcb21ae12dab1ecc1bd8b32fc32693821539d3f81c7c506d30fc9c2a0d",
+  "reviewed_git_commit": "b7225bfcfc45ae833b9d836885a6e7830814fd9f"
+}

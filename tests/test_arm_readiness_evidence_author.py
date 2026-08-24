@@ -23,6 +23,7 @@ from joulewise.receipt_oracle import derive_bracket_session_receipt_oracle
 from scripts import author_arm_readiness_evidence as evidence_author_cli
 from scripts import generate_arm_readiness as arm_readiness_cli
 from tests.test_arm_readiness_lifecycle import (
+    commit_u11_projection,
     git,
     make_go_fixture,
     predecessor_pack_root,
@@ -114,7 +115,7 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
 
     generation_suffix = pack_name[pack_name.rindex("_v") :]
     temporary, repository, pack, custody, arm_path = make_go_fixture(
-        pack_name, "ALPHA"
+        pack_name, "ALPHA", project=False
     )
 
     for relative in (
@@ -200,8 +201,10 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
         "print('synthetic pack check passed')\n"
     ).encode("utf-8")
     (pack / "generate_configs.py").write_bytes(generator_raw)
-    producer_raw = readiness.render_json({"schema_version": "synthetic-producer.v1"})
-    (pack / "producer_contract.json").write_bytes(producer_raw)
+    # The producer contract is written LAST, once the plan tree's projection
+    # block is final: `identity_pins._load_pack_projection` requires the two
+    # blocks to be equal and the tree to authenticate the producer's bytes.
+    producer_raw = b""
 
     extraction_relative = "configs/floor_mint/d117_qwen25_1p5b_extraction_spec.json"
     _copy_primary(repository, extraction_relative)
@@ -277,6 +280,18 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
     tree["arm_attachments"]["identity_pin_projection"]["identity_units"][0][
         "consumer_bindings"
     ] = copy.deepcopy(alpha_identity["consumer_bindings"])
+    producer_raw = readiness.render_json(
+        {
+            "schema_version": "synthetic-producer.v1",
+            "identity_pin_projection": copy.deepcopy(
+                tree["arm_attachments"]["identity_pin_projection"]
+            ),
+        }
+    )
+    (pack / "producer_contract.json").write_bytes(producer_raw)
+    tree["downstream_contract"]["producer_contract"]["sha256"] = hashlib.sha256(
+        producer_raw
+    ).hexdigest()
     tree_raw = readiness.render_json(tree)
     tree_path.write_bytes(tree_raw)
     (pack / "plan_tree.sha256").write_bytes(
@@ -306,6 +321,9 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
 
     git(repository, "add", ".")
     git(repository, "commit", "-qm", "author evidence inputs")
+    # PACKAUTH: that commit carries the finished PRE-projection pack, so it is
+    # the commit the projection receipt anchors.
+    commit_u11_projection(repository, pack, ("alpha",))
     git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
     return temporary, repository, pack, custody, arm_path
 
@@ -440,6 +458,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 "copy",
                 "dataclass",
                 "inspect",
+                "io",
                 "json",
                 "os",
                 "re",
@@ -447,6 +466,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 "signal",
                 "subprocess",
                 "sys",
+                "tarfile",
                 "tempfile",
                 "time",
             ],
