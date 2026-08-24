@@ -722,45 +722,6 @@
       "status_note": "Successor to CALEXITS-TIMING-HYGIENE (closed 2026-08-22 with the audit as deliverable). Items are independent and land through the normal gauntlet; top two by yield are H1 origin pinning and H6 witness-cache ownership.",
       "stop_card": null
     },
-    "CALWRITER-ACK-TIMEOUT-01": {
-      "acceptance": {
-        "evidence": [
-          "The driver's await_acknowledgement uses a progress-aware deadline (the H4 shape) rather than a fixed wall-clock timeout, or an equivalently justified cure",
-          "Both shards' observed failure classes are covered by regressions or causal evidence per the calexits-cure precedents",
-          "CI green on both previously-affected exclusive shards at a head containing the fix; no byte of the four r6-pinned estimator sources changes"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CALWRITER-ACK-TIMEOUT-01/acceptance",
-          "label": "CALWRITER-ACK-TIMEOUT-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The calibration-writer-crash-matrix sampler-acknowledgement timeout flake class is cured with the H4 bounded-fix shape, non-gating."
-      },
-      "authority": {
-        "label": "T20 run report CI-incident section (two same-day firings: runs 32578576711 + 32601988870) + A79 audit H4/H9",
-        "path": "docs/run_reports/2026-08-22-t20-session.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Standing frozen-surface hazard (r6 pinset)",
-            "path": "RUN_STATE.md"
-          },
-          "rule": "scripts/validate_powermetrics_fiducial.py is adjacent to the pinned joulewise/powermetrics_fiducial.py — any fix stays test/script-side and every WRITE_SCOPE authorization checks the four pinned sources first"
-        }
-      ],
-      "flags": [],
-      "goal": "Cure the SHARED-DRIVER sampler-acknowledgement timeout mechanism (scripts/validate_powermetrics_fiducial.py await_acknowledgement, :264) that fires under loaded hosted 3.11 runners across BOTH exclusive shards: the writer-crash-matrix failures (three firings 2026-08-22: runs 32578576711, 32601988870, 32607418551) AND the calexits test_parameterized_durable_public_cli_witnesses failure (run 32607418551: correction=calibration_rederive_failed caused by pulse_command_on:42 ack timeout) — apply the A79 audit's H4 bounded-fix shape at the driver level (progress-aware acknowledgement deadline, not fixed wall-clock).",
-      "id": "CALWRITER-ACK-TIMEOUT-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 83,
-      "status": "queued",
-      "status_note": "ESCALATED P3->P2 2026-08-22 late (third same-day firing; reds required shards; every push needs a per-run disposition until cured). SCOPE BROADENED same time: run 32607418551 proved the mechanism lives in the shared driver, firing in BOTH the writer-crash-matrix and calexits shards — and thereby supplied the PRESERVED CUSTODY the A79 audit's row 6 (2026-08-19 parameterized-witnesses) lacked: same driver line :264, REDERIVE-class surface. The audit's refusal to force-join row 6 without evidence is now resolved WITH evidence; the audit record stands as written (its row-6 caveat was correct at its evidence state). scripts/validate_powermetrics_fiducial.py is script-side, NOT one of the four r6-pinned joulewise/ modules — verify against the pinned list at WRITE_SCOPE time regardless.",
-      "stop_card": null
-    },
     "CGV-HARDEN-01": {
       "acceptance": {
         "evidence": [
@@ -1491,6 +1452,45 @@
       "status_note": "Depends on PREWINDOW-REGEX-01 so the tightened check precedes the agent-free capture.",
       "stop_card": null
     },
+    "FIXTURE-MODERNIZATION-01": {
+      "acceptance": {
+        "evidence": [
+          "make_go_fixture authors R1 content/execution receipt schemas and the 14 STRUCTURAL-BLOCKED tests flip green with their skips removed",
+          "An end-to-end regression proves a stale boot voids evidence on the arm path (S1D-2: net coverage is zero until this lands)",
+          "POST-MINT: test_historical_predecessor_resolves_and_still_anchors_the_chain reconstructed as an authenticated _v4->_v3 predecessor proof"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FIXTURE-MODERNIZATION-01/acceptance",
+          "label": "FIXTURE-MODERNIZATION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The fixture-schema blocked class is cured, the boot-voiding end-to-end property is proven, and the historical-pairing property is proven on real chains; non-gating for S-0."
+      },
+      "authority": {
+        "label": "S-1 fix-round magistrate rulings + delta re-audit S1D-2/S1D-3",
+        "path": "docs/process_traces/2026-08-22-t20/s1-candidate/s1-fixround-packet.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Standing frozen-surface hazard",
+            "path": "RUN_STATE.md"
+          },
+          "rule": "The four r6-pinned estimator sources stay byte-identical; every WRITE_SCOPE authorization checks that list first"
+        }
+      ],
+      "flags": [],
+      "goal": "Modernize the arm-readiness test fixtures so make_go_fixture authors R1 content/execution receipt schemas instead of legacy generic freeze evidence, unblocking the 14 STRUCTURAL-BLOCKED tests stopping at joulewise/arm_readiness.py:5330; add the S1D-2 end-to-end boot-voiding regression; reconstruct the historical-predecessor test on real post-mint _v4->_v3 receipt chains.",
+      "id": "FIXTURE-MODERNIZATION-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 84,
+      "status": "queued",
+      "status_note": "Registered when the S0-BLOCKED theory was disproven by measurement (0/17/4); the 21-test flip addendum was struck from S-0 acceptance at the same ruling. The post-mint item unblocks only after S-0 mints the _v4 generation.",
+      "stop_card": null
+    },
     "FLOOR-BIND-01": {
       "acceptance": {
         "evidence": [
@@ -1739,6 +1739,45 @@
       "rank": 19,
       "status": "blocked",
       "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); the night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay completed BYTE-IDENTICAL at pinned 3de370ec (all four digests; docs/process_traces/2026-08-03-q1-remint-bytecompare/). 2026-08-05: condition (a) is satisfied by merged PR #100. Condition (b) preparation is complete and its verification blocker is resolved: the B1 disposition is lead-ruled 30/2/6 and deterministic bootstrap is implemented on impl/ledger-bootstrap, under audit. Condition (c) is in flight on impl/validator-rootpins. The row remains hard-blocked on the still-pending D-110 (b)+(c) completion gate.",
+      "stop_card": null
+    },
+    "MLX-ACID-SIGABRT-01": {
+      "acceptance": {
+        "evidence": [
+          "The mlx_runtime.py:1159 abort no longer kills the interpreter under pytest at the four ACID tests",
+          "The four CRASH-BLOCKED skips can be narrowed to their remaining structural cause (A84) with reason strings updated",
+          "Full-suite pytest collection completes with zero deselection"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MLX-ACID-SIGABRT-01/acceptance",
+          "label": "MLX-ACID-SIGABRT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The interpreter-killing abort is cured; the four CRASH-BLOCKED tests become runnable (they then need FIXTURE-MODERNIZATION-01 to go green — this row is necessary but NOT sufficient)."
+      },
+      "authority": {
+        "label": "S-1 delta re-audit S1D-3 + the independent seat's SIGABRT finding",
+        "path": "docs/process_traces/2026-08-22-t20/s1-candidate/s1-fixround-packet.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold-pair-166 discipline",
+            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
+          },
+          "rule": "Distinct mechanism, distinct row: expectedFailure/skip markers cannot contain a process-level abort — the cure is code-side, not marker-side"
+        }
+      ],
+      "flags": [],
+      "goal": "Cure the pre-existing pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 reached via the four ACID tests in tests/test_arm_readiness_evidence_t0.py (reproduces at merge-base 5523003; not a branch regression), so the suite is pytest-collectable without deselection.",
+      "id": "MLX-ACID-SIGABRT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 85,
+      "status": "queued",
+      "status_note": "Necessary but not sufficient for the four CRASH-BLOCKED tests (they also need A84). mlx_runtime.py is NOT in the r6 pinset but is adapter code — gauntlet applies.",
       "stop_card": null
     },
     "MODULARITY-01": {
@@ -3162,17 +3201,7 @@
         "label": "D-151 consequences + marker ruling consequences",
         "path": "docs/process_traces/2026-08-22-t20/o1-coldgate/MAGISTRATE-RULING-O1.md"
       },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "the candidate manifest names the successor pinset path",
-          "scope": "close",
-          "state": "pending",
-          "strength": "advisory",
-          "target": "S1-CANDIDATE-01"
-        }
-      ],
+      "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
@@ -3182,53 +3211,7 @@
       "priority": "p1_phase_gate",
       "rank": 82,
       "status": "queued",
-      "status_note": "Soft-starts now with the successor filename bound to the candidate manifest; finalizes when S1-CANDIDATE-01 names it.",
-      "stop_card": null
-    },
-    "S1-CANDIDATE-01": {
-      "acceptance": {
-        "evidence": [
-          "Every artifact the S-0 runsheet section 1.3 requires exists with sha256 sidecars and a binding manifest",
-          "D-151 conditions 1, 2, 6, and 8 are each implemented and named in the manifest (chain contract, digest-conditional successor subtraction, chain integrity, registry allowlist key)",
-          "The marker ruling's ratified baseline and all six adjudicated splits are implemented; the regression set is the union of both design seats' lists with a writer-not-reviewer audit"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/S1-CANDIDATE-01/acceptance",
-          "label": "S1-CANDIDATE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The complete S-0 section-1.3 input set exists, lead-reviewed, implementing D-151 conditions 1/2/6/8 and the marker co-design ruling, through the C-028 gauntlet."
-      },
-      "authority": {
-        "label": "D-151 + the marker co-design ruling",
-        "path": "docs/process_traces/2026-08-22-t20/marker-codesign/MAGISTRATE-RULING-MARKER.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-151 fixed-point rule",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "No authenticator path enters any allowlist; the step-6 confirmation table is an authenticator and may never be allowlisted"
-        },
-        {
-          "authority": {
-            "label": "Standing frozen-surface hazard",
-            "path": "RUN_STATE.md"
-          },
-          "rule": "The four r6-pinned estimator sources stay byte-identical; every WRITE_SCOPE authorization checks that list first"
-        }
-      ],
-      "flags": [],
-      "goal": "Author the lead-reviewed _v4 candidate custody: the R1 candidate registry (112-path allowlist with the successor-pinset path per D-151, refusal vocabulary, D-150 168h horizon values), the pinset chain contract amendment + chain-read code delta, r4-5's two EvidenceLifecycleError catches, and the ruled marker family (schema/builder/verifier, unified step-6 confirmation-table contract doc, reason-code registration + closure check, scheduler gate-receipt v2 with G7, generation-threshold constant, library-boundary publication gate), delivered as s0-candidate.patch + manifest + custody tools with sha256 sidecars.",
-      "id": "S1-CANDIDATE-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 81,
-      "status": "queued",
-      "status_note": "The gate on S-0 execution. Design questions are RULED (D-151, marker ruling) — implementation from ruled spec; no re-litigation.",
+      "status_note": "The candidate manifest names the successor pinset path (dependency satisfied at the 3c098de merge); r2 amendments applied bbd25ed (21-flip addendum struck, pin note). Remaining: the lead's one-sitting pre-execution read at the execution head.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {

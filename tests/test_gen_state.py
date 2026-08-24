@@ -95,10 +95,11 @@ EXPECTED_IDS = {
     "CALEXITS-HYGIENE-FIXES-01",
     # 2026-08-22 T20 _v4-transaction registrations (D-150 item 4; D-151 +
     # marker-ruling consequences)
-    "T0-UNATTENDED-01", "S1-CANDIDATE-01", "S0-RUNSHEET-R2",
-    # 2026-08-22 T20 close-out: writer-crash ack-timeout flake row minted on
-    # its second same-day firing (run-report CI-incident section).
-    "CALWRITER-ACK-TIMEOUT-01",
+    "T0-UNATTENDED-01", "S0-RUNSHEET-R2",
+    "FIXTURE-MODERNIZATION-01", "MLX-ACID-SIGABRT-01",
+    # (CALWRITER-ACK-TIMEOUT-01 minted T20 on the second firing, broadened
+    # to the shared driver at E-2, closed T22: H4 driver + 4s nominal cure,
+    # both exclusive shards green at 42df510.)
     # (EVIDENCE-AUTHOR-GIT-TEARDOWN-01 registered on ERRATA E-1, fixed
     # ea90585 at the shared fixture site, closed same day on CI-green
     # acceptance — run conclusion-field-verified.)
@@ -325,8 +326,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # CALWRITER-ACK-TIMEOUT-01 on the flake's second same-day firing:
         # 86 + 1 = 87; the T20 errata wave registers
         # EVIDENCE-AUTHOR-GIT-TEARDOWN-01 (E-1, required-shard red):
-        # 87 + 1 = 88; closed same day at ea90585 (CI green, its
-        # acceptance clause): 88 - 1 = 87 exact live records.
+        # 87 + 1 = 88; closed same day at ea90585: 88 - 1 = 87; the T22
+        # merge-wave closure retires S1-CANDIDATE-01 (merged 3c098de,
+        # CI green 42df510) and CALWRITER-ACK-TIMEOUT-01 (H4 driver +
+        # nominal cure, both shards green 42df510) and registers
+        # FIXTURE-MODERNIZATION-01 + MLX-ACID-SIGABRT-01:
+        # 87 - 2 + 2 = 87 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
         self.assertEqual(len(self.tasks), 87)
 
