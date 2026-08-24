@@ -95,7 +95,7 @@ EXPECTED_IDS = {
     "CALEXITS-HYGIENE-FIXES-01",
     # 2026-08-22 T20 _v4-transaction registrations (D-150 item 4; D-151 +
     # marker-ruling consequences)
-    "T0-UNATTENDED-01", "S0-RUNSHEET-R2",
+    "T0-UNATTENDED-01",
     "FIXTURE-MODERNIZATION-01", "MLX-ACID-SIGABRT-01",
     # (CALWRITER-ACK-TIMEOUT-01 minted T20 on the second firing, broadened
     # to the shared driver at E-2, closed T22: H4 driver + 4s nominal cure,
@@ -331,9 +331,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # CI green 42df510) and CALWRITER-ACK-TIMEOUT-01 (H4 driver +
         # nominal cure, both shards green 42df510) and registers
         # FIXTURE-MODERNIZATION-01 + MLX-ACID-SIGABRT-01:
-        # 87 - 2 + 2 = 87 exact live records.
+        # 87 - 2 + 2 = 87; S0-RUNSHEET-R2 closed on the lead's completed
+        # pre-execution read (anchor map + two execution-blocking defects
+        # caught and fixed: builder chain composition f6a4c81, section-1.3
+        # superseded-by-merge f692e26): 87 - 1 = 86 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 87)
+        self.assertEqual(len(self.tasks), 86)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

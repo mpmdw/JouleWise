@@ -3183,37 +3183,6 @@
       "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. B-46/B-9 (paper + WINDOW_STATUS corrections) are immediate desk items.",
       "stop_card": null
     },
-    "S0-RUNSHEET-R2": {
-      "acceptance": {
-        "evidence": [
-          "Each named revision item is present and cites its ruling",
-          "No step contradicts the D-151 nine-condition set or the marker ruling's ratified baseline",
-          "The lead has read r2 in full before any S-0 command executes"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/S0-RUNSHEET-R2/acceptance",
-          "label": "S0-RUNSHEET-R2 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "An executable r2 runsheet exists whose every step is consistent with D-150, D-151, and the marker ruling, lead-fully-read before S-0 executes."
-      },
-      "authority": {
-        "label": "D-151 consequences + marker ruling consequences",
-        "path": "docs/process_traces/2026-08-22-t20/o1-coldgate/MAGISTRATE-RULING-O1.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Revise the S-0 clone-proof runsheet (r1 custodied at docs/process_traces/2026-08-22-t20/s0-runsheet-r1.md) to r2 per D-151 and the marker ruling: successor-pinset path as the 112th allowlist entry, section 3.7 mints into the successor artifact, the section 4(d) registry-key fix, two-part published-green transcript language, the dead option-(b) marker branch removed per D-150, candidate-mode tool-hash semantics, and the lane/gate_admissible transcript fields.",
-      "id": "S0-RUNSHEET-R2",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 82,
-      "status": "queued",
-      "status_note": "The candidate manifest names the successor pinset path (dependency satisfied at the 3c098de merge); r2 amendments applied bbd25ed (21-flip addendum struck, pin note). Remaining: the lead's one-sitting pre-execution read at the execution head.",
-      "stop_card": null
-    },
     "SEC5A-REMOTE-01": {
       "acceptance": {
         "evidence": [
