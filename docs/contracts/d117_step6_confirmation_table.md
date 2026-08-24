@@ -52,8 +52,12 @@ the operator to every consumer through its explicit
 digest comes from transaction custody independently of the repository path
 being checked, rather than from `C` or its sidecar. A consumer that is not
 given `hC` refuses: it performs no changed-set subtraction and authorizes no
-publication. After fixation, the standing source of `hC` is the literal pinned
-in the D-151 fixation commit.
+publication. The standing source of `hC` is transaction custody, out of band, for
+the life of the evidence; no repository path ever holds `hC`. The D-151
+fixation commit pins `hS` — the successor pinset's own digest — which is
+a durable archival byte pin, not a source of `hC` and not the
+authenticator the C→S edge consults (amended per D-153 A5; the prior
+sentence confused `hC` with `hS` and was enforced by no code).
 
 `hC` must never be stored at a repository path that the changed-set allowlist
 could name while the window is open. Under D-151's fixed-point rule, putting an
