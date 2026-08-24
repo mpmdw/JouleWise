@@ -1,17 +1,44 @@
-# S-0 CLONE-PROOF RUNSHEET R3 — JouleWise `_v4` transaction
+# S-0 CLONE-PROOF RUNSHEET R4 — JouleWise `_v4` transaction
 
 This is a bench runsheet, not an execution transcript. The magistrate executes
 it in the throwaway clone defined in §1.1 and reads every transcript. It never
 uses or reads `/Users/edr/JouleWise-measurement-20260818`.
 
-R3 supersedes `s0-runsheet-r2.md`. R2 and its three dated amendment blocks are
-retained unchanged as the record; nothing in them binds execution any more.
+R4 supersedes `s0-runsheet-r2.md` and the r3 draft, which was never executed.
+R2 and its three dated amendment blocks are retained unchanged as the record;
+nothing in them binds execution any more. r3 exists only as commit `926826b` on
+this branch — it was refused by both ratification seats and no estate ran it.
 
 ---
 
 ## Revision history
 
-**r3 (2026-08-24).** A clean instrument. Amendments 1–3 are folded into the
+**r4 (2026-08-24).** A targeted delta over the refused r3 draft. Both r3
+ratification seats returned REFUSE/REFUTED while certifying 12 of the 14 F-cures
+and roughly twenty executed checks, and both prescribed a delta rather than a
+rewrite. Everything r3 established stands; the eight cures below are the whole
+difference, plus one finding r4 surfaces without deciding.
+
+| # | Cure | Severity | Status |
+|---|---|---|---|
+| N-1 / R3-1 | `"$BASE:configs/…"` → `"${BASE}:configs/…"`; zsh's `:c` history modifier ate a character and the §1.1 gate refused a CLEAN base. Three-party reproduced. §0.1 gains the bracing rule and a lint, because `zsh -n` cannot catch it. | BLOCKER | fixed; blast-radius sweep re-run, and this revision satisfies the stricter "zero unbraced `$VAR:`" lint |
+| N-2 | §3.9's arm-side eleven-kind census could not pass — `arm` runs `include_pack=False` (`:7384`) and `_discover_evidence` drops the PACK namespace (`:5510-5512`). The census moves to where the kinds are actually discovered (§3.4 authoring, §3.6 freeze); §3.9 keeps the forbidden-code check and rc alternatives. **No custody evidence is seeded.** | BLOCKER | fixed |
+| R3-2 | `s0_anchor_map.py` validated line TEXT, so a commit with the pinned lines inside a module string passed 13/13 while defining nothing. Replaced with AST validation (parse + symbol/statement/owner), stdlib-only. | BLOCKER | fixed; forge reproduced and now REFUSED 0/13 |
+| D-1 | §5 cited transcript range `080-*`–`085-*`; no step produces `083-*`. | defect | fixed: the five actual transcripts are named |
+| D-2 / N-3 | Citation drift: `:7383`→`:7384` (second site `:7615`), `:7439-7448`→`:7437`. | defect | fixed |
+| N-4 | `env.sh`'s `MARKER_BRANCH` read raised a raw Python traceback during `source` on a key-less manifest. | defect | fixed: exits 3 and `die`s with a runsheet message |
+| F-10 | §4(e.1) writes into the transaction's own `$CUSTODY/windows` and mints `arm-0002`, superseding `arm-0001`. | note | folded: recorded as deliberate custody mixing, and every arm-receipt read is ordinal-pinned to `arm-0001` |
+| F-11 | §2.2's `check_census.py` heredoc was never run in the r2 estate while §3.4 invoked it. | note | folded: §2.2 materialization is a checked step with transcript `011-*`, and §3.4 asserts the tool first |
+
+**R4-O1 is OPEN and blocks execution of §3.9.** Surfaced while curing N-2, named
+by neither seat, and NOT decided here: at a reviewed head containing the
+fixation commit, `tests/test_receipt_histsem.py` is a changed path outside the
+ruled 112 (all 112 are under `configs/`), so `validate_r1_evidence_lifecycle`
+raises `DEPENDENCY_CHANGED_SET` — which is also the real mechanism behind N-2.
+The full trace and the three candidate resolutions are recorded in §3.9. It is a
+ruling, not a bench call.
+
+**r3 (2026-08-24) — REFUSED by both ratification seats; never executed.** A clean instrument. Amendments 1–3 are folded into the
 body text — there are no amendment blocks below — and the fourteen findings of
 the R-3 executability audit are cured. Binding records:
 
@@ -22,7 +49,7 @@ the R-3 executability audit are cured. Binding records:
 | Custody anomaly | `custody/transcripts/035` | transcripts 031/032 of the r2 estate are VOID; compound scripts swallowed the failing gate assertions |
 | Executability audit verdict | `custody/transcripts/037` | F-1…F-14; full cold re-ratification made mandatory; the instrument advances to r3 |
 
-### What changed from r2 to r3
+### What changed from r2 to r3 (retained: r4 inherits all of it)
 
 1. **Execution contract (F-4, F-5, R-5).** A new §0.1 states the shell contract:
    the executing shell is **zsh 5.9 with 1-based arrays**, and **no shell state
@@ -55,7 +82,7 @@ the R-3 executability audit are cured. Binding records:
    `git rm`'d and is passed as `--pinset`, which is the only path that reaches
    the `present == 0` branch at `arm_readiness.py:3223-3227`.
 5. **§4(b) targets a reachable signal (F-6).** `arm` discovery runs with
-   `include_pack=False` (`arm_readiness.py:7383`), so an unexpected file in the
+   `include_pack=False` (`arm_readiness.py:7384`), so an unexpected file in the
    *pack's* evidence directory is invisible to it. The probe is now two probes:
    4(b.1) puts the unexpected file in the **window-custody** evidence namespace,
    which `arm` does scan; 4(b.2) puts it in the **pack** namespace and freezes
@@ -95,15 +122,44 @@ block below:
 - **Arrays are 1-based.** `${PACKS[0]}` is the empty string, not the first
   pack. In r2 that silently dropped the third pack from every
   `for i in 0 1 2` loop and made every gate assertion after the first a no-op.
-  R3 contains no numeric array indexing at all: loops iterate values
+  R4 contains no numeric array indexing at all: loops iterate values
   (`for pack in "${PACKS[@]}"`), and the three packs also have named variables
   (`$FIRST_PACK`, `$SECOND_PACK`, `$THIRD_PACK`) for the places that need one
   pack by name.
 - **`set -e` is not trustworthy inside compound constructs.** Custody 035
   records a `for` loop that continued past failed assertions and then wrote
-  later steps' evidence with the wrong head. Every assertion in r3 therefore
+  later steps' evidence with the wrong head. Every assertion in r4 therefore
   ends in `|| die '<message>'`. `die` prints and exits; it never depends on
   the shell's errexit context.
+
+- **Every `$VAR:` must be written `${VAR}:`.** In zsh a colon directly after
+  an unbraced parameter name starts a *history modifier*, and the modifier
+  silently eats the following character: `$BASE:configs/...` expands to
+  `deadbeefonfigs/...` because `:c` is a modifier. `:t`, `:h`, `:r`, `:e`,
+  `:a`, `:A`, `:g`, `:G`, `:l`, `:u`, `:p`, `:q`, `:Q`, `:s`, `:x` and `:&`
+  all fire the same way. This produced a BLOCKER in r3 (`$BASE:configs/...`
+  in the §1.1 `$BASE` gate), where the gate refused a perfectly clean base by
+  looking up a corrupted object path. **`zsh -n` cannot catch this** — the
+  construct is syntactically valid and the corruption happens at expansion
+  time, so a parse check passes and the command fails only at run time
+  against real data. It therefore needs its own lint, which every future
+  revision of this instrument must run over its own text:
+
+  The lint runs over the EXTRACTED COMMAND BLOCKS, not the prose — prose
+  legitimately quotes the broken form, as the paragraph above does. Extract
+  the blocks the same way the `zsh -n` pass does, then:
+
+  ```zsh
+  RUNSHEET=docs/process_traces/2026-08-22-t20/s0-runsheet-r4.md
+  awk '/^```zsh/{f=1;next} f&&/^```/{f=0;next} f' "$RUNSHEET" > /tmp/s0-blocks.zsh
+  # Blast-radius lint: any $VAR: immediately followed by a modifier letter.
+  grep -nE '\$[A-Z_]+:[aAcegGhlpqQrstux&]' /tmp/s0-blocks.zsh
+  # Stricter uniform lint, which this revision satisfies: ZERO unbraced $VAR:
+  grep -nE '(^|[^{])\$[A-Za-z_][A-Za-z_0-9]*:' /tmp/s0-blocks.zsh
+  ```
+
+  Both must print nothing (grep exits 1). A hit is a defect in the
+  instrument, not in the bench.
 
 **No state survives between command blocks.** Each block below runs in a fresh
 shell: exported variables, shell functions and `cd` are all gone by the next
@@ -138,33 +194,58 @@ do not delete the line.
 **Transcripts.** Every tool run is captured as a stdout/stderr/rc triplet under
 `$TRANS`. The magistrate reads every one. Authority: R4 r4-2; R5 V-2.
 
-### 0.2 Anchor map — verified 13/13 at `d19df05`
+### 0.2 Anchor map — verified 13/13 at `d19df05`, validated through the AST
 
 The R-3 executability audit verified all thirteen anchors at `d19df05`
 (2026-08-24). They are the drift tripwire for every inline citation in this
 runsheet; §1.1 re-checks them mechanically against `$BASE` before any
 transaction work.
 
-| # | File | Line | Expected content at that line |
-|---|---|---|---|
-| 1 | `joulewise/arm_readiness.py` | 1050 | `class EvidenceLifecycleError(ValueError):` |
-| 2 | `joulewise/arm_readiness.py` | 2025 | `- set(lifecycle["irrelevant_path_allowlist"])` |
-| 3 | `joulewise/arm_readiness.py` | 3639 | `def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -> None:` |
-| 4 | `joulewise/arm_readiness.py` | 4115 | `def _r1_changed_paths(` |
-| 5 | `joulewise/arm_readiness.py` | 4300 | `allowlist = set(governed["irrelevant_path_allowlist"])` |
-| 6 | `joulewise/arm_readiness.py` | 5266 | `def _authenticate_generic_evidence_item(` |
-| 7 | `joulewise/arm_readiness.py` | 6265 | `def _load_freeze_reference(` |
-| 8 | `joulewise/arm_readiness.py` | 6531 | `def generate_freeze_receipt(` |
-| 9 | `joulewise/arm_readiness.py` | 6572 | `generation = _pack_generation(root.name)` |
-| 10 | `joulewise/identity_pins.py` | 1826 | `def freeze_projection(pack_root: Path \| str) -> Mapping[str, Any]:` |
-| 11 | `scripts/generate_arm_readiness.py` | 28 | `def _parser() -> argparse.ArgumentParser:` |
-| 12 | `scripts/project_identity_pins.py` | 23 | `def parse_args(argv: list[str] \| None = None) -> argparse.Namespace:` |
-| 13 | `scripts/verify_receipt_histsem.py` | 22 | `def _parser() -> argparse.ArgumentParser:` |
+**Text equality is not enough, and r3 relied on it.** Both r3 ratification
+seats executed the same forge: a commit whose files contain the pinned line
+text inside a module-level string still matched all thirteen lines, so r3's
+checker returned `PASS 13/13` on a repository whose `arm_readiness.py` defines
+nothing at all. Reproduced during this revision — r3's checker: `PASS 13/13` on
+the forge; r4's checker: `REFUSE 0/13`. Each anchor therefore now carries a
+**kind** and an **owner**, and §1.1's checker validates them through Python's
+`ast`:
+
+- the file must **parse** at `$BASE` — a non-parsing file is never 13/13;
+- a **symbol** anchor must be a real `def`/`class` of the named symbol
+  *beginning* at the pinned line;
+- a **statement** anchor must be executable code beginning at the pinned line,
+  inside the named enclosing symbol, and not in the body of a multi-line
+  string;
+- the line text must still match, so a semantically equivalent rewrite is still
+  reported as drift.
+
+A single-line string on the pinned line is not a forge — real code such as
+`allowlist = set(governed["irrelevant_path_allowlist"])` contains one. The
+check is for the pinned line sitting in the *body* of a multi-line literal,
+which is what a docstring forge always produces. Non-Python anchors would fall
+back to text equality and be labelled as such; all thirteen are Python today,
+so none does.
+
+| # | File | Line | Kind | Owner | Expected content at that line |
+|---|---|---|---|---|---|
+| 1 | `joulewise/arm_readiness.py` | 1050 | symbol | `EvidenceLifecycleError` | `class EvidenceLifecycleError(ValueError):` |
+| 2 | `joulewise/arm_readiness.py` | 2025 | statement | `validate_registry` | `- set(lifecycle["irrelevant_path_allowlist"])` |
+| 3 | `joulewise/arm_readiness.py` | 3639 | symbol | `_gate_receipt_histsem` | `def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -> None:` |
+| 4 | `joulewise/arm_readiness.py` | 4115 | symbol | `_r1_changed_paths` | `def _r1_changed_paths(` |
+| 5 | `joulewise/arm_readiness.py` | 4300 | statement | `validate_r1_evidence_lifecycle` | `allowlist = set(governed["irrelevant_path_allowlist"])` |
+| 6 | `joulewise/arm_readiness.py` | 5266 | symbol | `_authenticate_generic_evidence_item` | `def _authenticate_generic_evidence_item(` |
+| 7 | `joulewise/arm_readiness.py` | 6265 | symbol | `_load_freeze_reference` | `def _load_freeze_reference(` |
+| 8 | `joulewise/arm_readiness.py` | 6531 | symbol | `generate_freeze_receipt` | `def generate_freeze_receipt(` |
+| 9 | `joulewise/arm_readiness.py` | 6572 | statement | `generate_freeze_receipt` | `generation = _pack_generation(root.name)` |
+| 10 | `joulewise/identity_pins.py` | 1826 | symbol | `freeze_projection` | `def freeze_projection(pack_root: Path \| str) -> Mapping[str, Any]:` |
+| 11 | `scripts/generate_arm_readiness.py` | 28 | symbol | `_parser` | `def _parser() -> argparse.ArgumentParser:` |
+| 12 | `scripts/project_identity_pins.py` | 23 | symbol | `parse_args` | `def parse_args(argv: list[str] \| None = None) -> argparse.Namespace:` |
+| 13 | `scripts/verify_receipt_histsem.py` | 22 | symbol | `_parser` | `def _parser() -> argparse.ArgumentParser:` |
 
 ### 0.3 Pinned mechanics map — re-derived at `d19df05`
 
 R2 carried ranges pinned at `1ba04a8` that had wholly drifted, plus a rule
-saying the header map won on disagreement. R3 removes the disagreement: every
+saying the header map won on disagreement. R4 removes the disagreement: every
 range below was re-derived at `d19df05` by symbol extraction, and every entry
 names its symbol so the next drift is detectable by name rather than by line.
 
@@ -197,7 +278,7 @@ names its symbol so the next drift is detectable by name rather than by line.
   `:5266-5485` (its R1 refusals at `:5436`, `:5460`, `:5481`).
 - Evidence discovery `_discover_evidence`: `:5488-5743`; the unexpected-output
   rejection is `:5514-5541`; `include_pack` defaults true and is passed False
-  by arm `:7383` and verify `:7616`.
+  by arm `:7384` and verify `:7615`.
 - Predecessor authentication and semantic replay
   `_authenticate_freeze_predecessor`: `:6098-6224`; predecessor derivation
   `_derive_freeze_predecessor`: `:6227-6262`.
@@ -283,7 +364,7 @@ BASE=<green main head SHA that satisfies the gate below>
 CI_RUN_ID=<green CI run id for $BASE>
 
 SOURCE=/Users/edr/code/JouleWise
-PROOF="$SESSION/s0-clone-proof-r3"
+PROOF="$SESSION/s0-clone-proof-r4"
 CLONE="$PROOF/repo"
 CUSTODY="$PROOF/custody"
 TRANS="$CUSTODY/transcripts"
@@ -395,7 +476,18 @@ new_case() {
 }
 
 if [ -f "\$MANIFEST" ]; then
-  MARKER_BRANCH=\$("\$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["marker_branch"])' "\$MANIFEST")
+  # A malformed or key-less manifest must STOP with a runsheet message.  Reading
+  # it with a bare subscript raised a Python KeyError traceback during `source`,
+  # which is neither a governed refusal nor readable at the bench.
+  MARKER_BRANCH=\$("\$PY" -c '
+import json,sys
+try:
+    value = json.load(open(sys.argv[1]))["marker_branch"]
+except (OSError, ValueError, KeyError) as exc:
+    sys.stderr.write("manifest marker_branch unreadable: %r\\n" % (exc,))
+    raise SystemExit(3)
+print(value)
+' "\$MANIFEST") || die 'candidate manifest has no readable marker_branch'
 fi
 ENVEOF
 
@@ -418,8 +510,8 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 # The delta committed at BASE must be byte-identical to the delta this
 # instrument was ratified with, proven by its own committed GNU sidecar.
 DELTA_REL=docs/process_traces/2026-08-22-t20/s0-fixation-delta.patch
-git -C "$CLONE" show "$BASE:$DELTA_REL" > "$TRANS/004-base-delta.patch" \
-  || die "BASE does not contain the r3 fixation delta"
+git -C "$CLONE" show "${BASE}:${DELTA_REL}" > "$TRANS/004-base-delta.patch" \
+  || die "BASE does not contain the r4 fixation delta"
 DELTA_SHA=$(shasum -a 256 "$TRANS/004-base-delta.patch" | awk '{print $1}')
 SIDECAR_SHA=$(awk '{print $1}' "$CLONE/$DELTA_REL.sha256")
 test "$DELTA_SHA" = "$SIDECAR_SHA" \
@@ -431,14 +523,14 @@ for tool in \
   scripts/verify_family_marker.py \
   scripts/verify_receipt_histsem.py
 do
-  git -C "$CLONE" cat-file -e "$BASE:$tool" || die "BASE lacks custody tool $tool"
+  git -C "$CLONE" cat-file -e "${BASE}:${tool}" || die "BASE lacks custody tool $tool"
 done
-git -C "$CLONE" cat-file -e "$BASE:configs/arm_readiness/d117_row_registry_v2.json" \
+git -C "$CLONE" cat-file -e "${BASE}:configs/arm_readiness/d117_row_registry_v2.json" \
   || die "BASE lacks the v2 registry"
 
 # BASE must contain NONE of the _v4 output that S-0 itself generates.
 for absent in "$SUCCESSOR_PINSET" "$FIRST_PACK" "$SECOND_PACK" "$THIRD_PACK"; do
-  if git -C "$CLONE" cat-file -e "$BASE:$absent" 2>/dev/null; then
+  if git -C "$CLONE" cat-file -e "${BASE}:${absent}" 2>/dev/null; then
     die "BASE already contains _v4 output at $absent"
   fi
 done
@@ -455,41 +547,184 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 cat > "$CUSTODY/tools/s0_anchor_map.py" <<'PY'
 #!/usr/bin/env python3
-"""Re-check the thirteen pinned anchors against a committed revision."""
-import json, subprocess, sys
+"""Re-check the thirteen pinned anchors against a committed revision.
 
+Text equality alone is forgeable: a commit that moves the pinned line into a
+docstring, a comment, or any string literal -- or that does not parse as Python
+at all -- still matches the text and would pass a text-only check 13/13. Every
+Python anchor is therefore validated through the AST:
+
+  * the file must PARSE at the revision (a non-parsing file is never 13/13);
+  * a "symbol" anchor must be a real ``def``/``class`` of the named symbol
+    starting exactly at the pinned line;
+  * a "statement" anchor must be executable code at the pinned line, inside the
+    named enclosing symbol, and NOT inside any string literal;
+  * the line text must still match, so a semantically equivalent rewrite is
+    still reported as drift.
+
+Non-Python anchors fall back to text equality alone and are labelled as such.
+"""
+import ast, json, subprocess, sys
+
+# (path, line, kind, owner, expected text). kind is "symbol" (a def/class that
+# begins at this line), "statement" (executable code inside `owner`), or "text"
+# (non-Python file; text equality only).
 ANCHORS = (
- ("joulewise/arm_readiness.py", 1050, "class EvidenceLifecycleError(ValueError):"),
- ("joulewise/arm_readiness.py", 2025, '- set(lifecycle["irrelevant_path_allowlist"])'),
- ("joulewise/arm_readiness.py", 3639, "def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -> None:"),
- ("joulewise/arm_readiness.py", 4115, "def _r1_changed_paths("),
- ("joulewise/arm_readiness.py", 4300, 'allowlist = set(governed["irrelevant_path_allowlist"])'),
- ("joulewise/arm_readiness.py", 5266, "def _authenticate_generic_evidence_item("),
- ("joulewise/arm_readiness.py", 6265, "def _load_freeze_reference("),
- ("joulewise/arm_readiness.py", 6531, "def generate_freeze_receipt("),
- ("joulewise/arm_readiness.py", 6572, "generation = _pack_generation(root.name)"),
- ("joulewise/identity_pins.py", 1826, "def freeze_projection(pack_root: Path | str) -> Mapping[str, Any]:"),
- ("scripts/generate_arm_readiness.py", 28, "def _parser() -> argparse.ArgumentParser:"),
- ("scripts/project_identity_pins.py", 23, "def parse_args(argv: list[str] | None = None) -> argparse.Namespace:"),
- ("scripts/verify_receipt_histsem.py", 22, "def _parser() -> argparse.ArgumentParser:"),
+ ("joulewise/arm_readiness.py", 1050, "symbol", "EvidenceLifecycleError",
+  "class EvidenceLifecycleError(ValueError):"),
+ ("joulewise/arm_readiness.py", 2025, "statement", "validate_registry",
+  '- set(lifecycle["irrelevant_path_allowlist"])'),
+ ("joulewise/arm_readiness.py", 3639, "symbol", "_gate_receipt_histsem",
+  "def _gate_receipt_histsem(pack_root: Path, *, require_published: bool = False) -> None:"),
+ ("joulewise/arm_readiness.py", 4115, "symbol", "_r1_changed_paths",
+  "def _r1_changed_paths("),
+ ("joulewise/arm_readiness.py", 4300, "statement", "validate_r1_evidence_lifecycle",
+  'allowlist = set(governed["irrelevant_path_allowlist"])'),
+ ("joulewise/arm_readiness.py", 5266, "symbol", "_authenticate_generic_evidence_item",
+  "def _authenticate_generic_evidence_item("),
+ ("joulewise/arm_readiness.py", 6265, "symbol", "_load_freeze_reference",
+  "def _load_freeze_reference("),
+ ("joulewise/arm_readiness.py", 6531, "symbol", "generate_freeze_receipt",
+  "def generate_freeze_receipt("),
+ ("joulewise/arm_readiness.py", 6572, "statement", "generate_freeze_receipt",
+  "generation = _pack_generation(root.name)"),
+ ("joulewise/identity_pins.py", 1826, "symbol", "freeze_projection",
+  "def freeze_projection(pack_root: Path | str) -> Mapping[str, Any]:"),
+ ("scripts/generate_arm_readiness.py", 28, "symbol", "_parser",
+  "def _parser() -> argparse.ArgumentParser:"),
+ ("scripts/project_identity_pins.py", 23, "symbol", "parse_args",
+  "def parse_args(argv: list[str] | None = None) -> argparse.Namespace:"),
+ ("scripts/verify_receipt_histsem.py", 22, "symbol", "_parser",
+  "def _parser() -> argparse.ArgumentParser:"),
 )
 
-repository, revision = sys.argv[1], sys.argv[2]
-report, ok = [], True
-for path, line, expected in ANCHORS:
-    blob = subprocess.run(["git", "-C", repository, "show", f"{revision}:{path}"],
+DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _blob(repository, revision, path):
+    return subprocess.run(["git", "-C", repository, "show", f"{revision}:{path}"],
                           check=True, capture_output=True).stdout.decode()
-    lines = blob.splitlines()
-    actual = lines[line - 1].strip() if 0 < line <= len(lines) else "<out of range>"
-    match = actual == expected.strip()
-    ok &= match
-    report.append({"path": path, "line": line, "expected": expected.strip(),
-                   "actual": actual, "match": match})
-print(json.dumps({"revision": revision, "status": "PASS" if ok else "REFUSE",
-                  "checked": len(ANCHORS),
-                  "matched": sum(1 for item in report if item["match"]),
-                  "anchors": report}, indent=2, sort_keys=True))
-sys.exit(0 if ok else 2)
+
+
+def _inside_multiline_string(tree, line):
+    """True if `line` falls in the BODY of a multi-line string literal.
+
+    A single-line string on the pinned line does not count: real code such as
+    ``allowlist = set(governed["irrelevant_path_allowlist"])`` contains a string
+    constant whose span is exactly that line. What we are detecting is the forge
+    where the pinned TEXT was moved into a docstring or block comment, which
+    always means the line sits strictly inside a multi-line literal.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            start, end = node.lineno, node.end_lineno
+            if start is None or end is None or end == start:
+                continue
+            if start < line <= end:
+                return True
+    return False
+
+
+def _has_executable_node_at(tree, line):
+    """True if some non-string AST node BEGINS at `line`.
+
+    This is what separates code from commentary: a docstring that merely quotes
+    the pinned text has its Expr node at the docstring's opening line, so no
+    node begins at the quoted interior line.
+    """
+    for node in ast.walk(tree):
+        if getattr(node, "lineno", None) != line:
+            continue
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            continue
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) \
+                and isinstance(node.value.value, str):
+            continue
+        return True
+    return False
+
+
+def _defs_covering(tree, line):
+    covering = []
+    for node in ast.walk(tree):
+        if isinstance(node, DEFS) and node.lineno <= line <= (node.end_lineno or node.lineno):
+            covering.append(node)
+    covering.sort(key=lambda n: n.lineno)
+    return covering
+
+
+def check(repository, revision):
+    report, ok = [], True
+    caches = {}
+    for path, line, kind, owner, expected in ANCHORS:
+        entry = {"path": path, "line": line, "kind": kind, "owner": owner,
+                 "expected": expected}
+        try:
+            if path not in caches:
+                caches[path] = _blob(repository, revision, path)
+            source = caches[path]
+        except subprocess.CalledProcessError as exc:
+            entry.update({"match": False, "detail": f"blob unavailable: {exc}"})
+            report.append(entry); ok = False; continue
+
+        lines = source.splitlines()
+        actual = lines[line - 1].strip() if 0 < line <= len(lines) else "<out of range>"
+        entry["actual"] = actual
+        text_ok = actual == expected.strip()
+
+        if kind == "text":
+            entry.update({"match": text_ok, "ast": "not applicable (non-Python anchor)"})
+            ok &= text_ok
+            report.append(entry); continue
+
+        try:
+            tree = ast.parse(source, filename=path)
+        except SyntaxError as exc:
+            entry.update({"match": False, "detail": f"file does not parse: {exc}"})
+            report.append(entry); ok = False; continue
+
+        if kind == "symbol":
+            node = next((n for n in ast.walk(tree)
+                         if isinstance(n, DEFS) and n.name == owner and n.lineno == line), None)
+            ast_ok = node is not None
+            entry["ast"] = ("definition of %s begins at this line" % owner if ast_ok
+                            else "NO definition named %s begins at line %d" % (owner, line))
+        else:
+            in_string = _inside_multiline_string(tree, line)
+            is_code = _has_executable_node_at(tree, line)
+            covering = _defs_covering(tree, line)
+            innermost = covering[-1].name if covering else None
+            ast_ok = is_code and (not in_string) and innermost == owner
+            entry["ast"] = {
+                "inside_multiline_string": in_string,
+                "executable_node_begins_here": is_code,
+                "innermost_enclosing_symbol": innermost,
+                "required_enclosing_symbol": owner,
+            }
+
+        entry["match"] = bool(text_ok and ast_ok)
+        entry["text_match"] = text_ok
+        entry["ast_match"] = bool(ast_ok)
+        ok &= entry["match"]
+        report.append(entry)
+
+    return ok, report
+
+
+def main():
+    repository, revision = sys.argv[1], sys.argv[2]
+    ok, report = check(repository, revision)
+    print(json.dumps({"revision": revision,
+                      "validation": "AST + text (text-only for non-Python anchors)",
+                      "status": "PASS" if ok else "REFUSE",
+                      "checked": len(ANCHORS),
+                      "matched": sum(1 for item in report if item["match"]),
+                      "anchors": report}, indent=2, sort_keys=True))
+    return 0 if ok else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 PY
 chmod 0555 "$CUSTODY/tools/s0_anchor_map.py"
 "$PY" "$CUSTODY/tools/s0_anchor_map.py" "$CLONE" "$BASE" \
@@ -518,7 +753,7 @@ for spec in \
   'pyproject.toml 1,16p'
 do
   source_file=${spec%% *}; line_ranges=${spec#* }
-  git -C "$CLONE" show "$BASE:$source_file" | nl -ba | sed -n "$line_ranges" \
+  git -C "$CLONE" show "${BASE}:${source_file}" | nl -ba | sed -n "$line_ranges" \
     || die "line audit failed for $source_file"
 done > "$TRANS/006-pinned-line-audit.txt"
 test -s "$TRANS/006-pinned-line-audit.txt" || die 'line audit is empty'
@@ -860,7 +1095,31 @@ for p in sys.argv[1:]:
 print(json.dumps({"status":"PASS","packs":len(sys.argv)-1,"generic_kinds":want}))
 PY
 chmod 0555 "$CUSTODY/tools/check_census.py"
+
+# F-11: in the r2 estate this heredoc was NEVER RUN -- custody/tools/ held only
+# s0_allowlist_contract.py -- while section 3.4 invoked check_census.py.  A
+# heredoc merely printed in a runsheet is not a materialized tool, so
+# materialization is a checked step with its own transcript.
+test -f "$CUSTODY/tools/check_census.py" || die 'check_census.py was not materialized'
+"$PY" -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' \
+  "$CUSTODY/tools/check_census.py" || die 'check_census.py does not parse'
+shasum -a 256 "$CUSTODY/tools"/*.py > "$TRANS/011-custody-tools-materialized.txt"
+"$PY" - "$CUSTODY/tools" <<'PY'
+import pathlib, sys
+tools = pathlib.Path(sys.argv[1])
+required = {"s0_anchor_map.py", "s0_allowlist_contract.py", "check_census.py"}
+present = {path.name for path in tools.glob("*.py")}
+missing = sorted(required - present)
+assert not missing, f"custody tools not materialized: {missing}"
+print(f"PASS: {len(present)} custody tools materialized, all required present")
+PY
 ```
+
+Every tool this runsheet writes as a heredoc is materialized by RUNNING the
+block that contains it. `011-custody-tools-materialized.txt` is the record that
+the three tools needed before §3 exist on disk with their digests; §4's
+`mutate_plan.py` and `tamper_class.py` are materialized and checked in their own
+sections. §3.4 re-asserts the census tool before invoking it.
 
 Any future issued-acceptance corpus growth must mechanically change the census
 to 12 slugs per pack and the contract to 120 paths; no operator may preserve 112
@@ -979,7 +1238,7 @@ for pack in "${PACKS[@]}"; do
   capture "030-u11-$label" "$MEASURE_PY" scripts/project_identity_pins.py freeze "$pack"
   rc=$(cat "$TRANS/030-u11-$label.rc")
   if [ "$rc" = 134 ]; then
-    die "exit 134 in section 3.2 for $label: A85 SIGABRT outside pytest. STOP, escalate, never retry."
+    die "exit 134 in section 3.2 for ${label}: A85 SIGABRT outside pytest. STOP, escalate, never retry."
   fi
   test "$rc" = 0 || die "U11 freeze rc=$rc for $label"
   no_traceback "030-u11-$label" || die "U11 freeze traceback for $label"
@@ -1083,6 +1342,9 @@ Authority: R4 r4-3, r4-5; R5 V-1.iii, V-2; AUDIT F-7.
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
+
+test -f "$CUSTODY/tools/check_census.py" \
+  || die 'check_census.py is absent: re-run section 2.2 before authoring'
 
 author_logs=()
 for pack in "${PACKS[@]}"; do
@@ -1561,9 +1823,9 @@ separate published-green step in §3.10.
 
 **Pre-declared expected refusal.** Under the stdlib `$PY`, the
 `u11-arm-reverification` leg refuses with
-`readiness_identity_artifact_unreadable` (`arm_readiness.py:7439-7448` calls
-`_run_identity_arm_reverification`, which resolves the runtime backend the same
-way §3.2 does). That refusal is EXPECTED and admissible here — the eleven
+`readiness_identity_artifact_unreadable` (`arm_readiness.py:7437` calls
+`_run_identity_arm_reverification`, defined at `:5092`, which resolves the
+runtime backend the same way §3.2 does). That refusal is EXPECTED and admissible here — the eleven
 asserted `want` kinds below exclude the identity item — and it is pre-declared
 so it is never read as a finding. Live arm-side U11 re-verification is proven by
 the real transaction in the measurement environment, not by S-0.
@@ -1631,11 +1893,81 @@ printf 'armed=%s receipts_written=%s\n' "$armed" "$receipts" > "$TRANS/097-arm-c
 The arm may be GO only if all non-S-0 custody and T0 prerequisites are
 legitimately present. Otherwise a **governed**, non-null arm receipt and
 canonical verify REFUSE (often `readiness_dependency_refused`) is acceptable;
-S-0 must not fabricate T0 or measurement evidence. "All items cross the R1 gate"
-concretely means, for each pack: all eleven generic evidence items are
-discovered; neither the registry's `DEPENDENCY_CHANGED_SET` nor
-`DEPENDENCY_MANIFEST` code appears; no traceback occurs; and an arm receipt is
-written. Resolve the two candidate-owned spellings mechanically:
+S-0 must not fabricate T0 or measurement evidence.
+
+**The eleven-kind census is NOT an arm-side assertion, and r3 wrongly made it
+one.** `arm` calls `_discover_evidence` with `include_pack=False`
+(`arm_readiness.py:7384`), and `_discover_evidence` then drops the `PACK`
+namespace outright (`:5510-5512`). Nothing in S-0 writes evidence receipts into
+`<window custody root>/<pack>/arm_readiness.evidence/`, and nothing should — the
+generic receipts live in the pack, which is exactly where the ruled design puts
+them. So arm-side discovery legitimately finds zero generic items, and r3's
+`want <= kinds` assertion over the arm receipt could not pass. **Do not seed
+custody evidence to make it pass**: that would fabricate the very artifacts the
+proof is meant to authenticate.
+
+The eleven kinds are asserted where they are actually discovered, and both
+assertions already run earlier in this runsheet:
+
+- **§3.4** — `check_census.py` asserts `sorted(authored_kinds) == want` over
+  each of the three author outputs, PASS and `mutated:true`, transcript
+  `041-applicability-census.json`. That is the authoring coordinate.
+- **§3.6** — the clean freeze PASS is the discovery coordinate.
+  `generate_freeze_receipt` calls `_discover_evidence` with the default
+  `include_pack=True` (`:6725`), so the pack namespace IS scanned; a missing,
+  unreadable, or inventory-violating evidence directory becomes a refusal and
+  the freeze cannot return `status:PASS` with an empty `reason_codes`. §3.6
+  asserts exactly that for all three packs, and a committed freeze receipt
+  carries all eleven `receipt_kind` values plus `freeze_projection` (verified
+  against `d117_floor_qwen25_1p5b_v3/…/freeze-0003.json`: twelve items, eleven
+  generic kinds).
+
+What remains for the arm side is therefore what the arm alone can prove:
+neither the registry's `DEPENDENCY_CHANGED_SET` nor `DEPENDENCY_MANIFEST` code
+appears; no traceback occurs; and an arm receipt is written. Resolve the two
+candidate-owned spellings mechanically:
+
+> **OPEN — R4-O1. The forbidden-code check is predicted to FIRE, and that is a
+> ruling, not a bench call.** Surfaced while curing N-2; not named by either
+> ratification seat; NOT decided here.
+>
+> *The trace.* At §3.9 the arm's reviewed head is `$FIXATION_COMMIT` and each
+> generic receipt's `derivation_commit` is `$EVIDENCE_DERIVATION_HEAD`.
+> `validate_r1_evidence_lifecycle` computes
+> `changed_paths = _r1_changed_paths(root, derivation_commit, current_head, …)`
+> and then `outstanding = set(changed_paths) - (allowlist - conditional)`,
+> `relevant = sorted(outstanding)`, `if relevant: raise … DEPENDENCY_CHANGED_SET`
+> (`:4296-4322`). There is **no** filter restricting the changed set to
+> pack-relevant paths: every changed path outside the 112 is `relevant`.
+> The fixation commit changes `tests/test_receipt_histsem.py`. The ruled
+> allowlist is 112 entries, all under `configs/` — verified: zero `tests/`
+> entries. So `relevant == ['tests/test_receipt_histsem.py']` and the arm
+> refuses `DEPENDENCY_CHANGED_SET`.
+>
+> *Why it is one defect, not two.* This is also the true mechanism behind N-2.
+> `_freeze_evidence_for_arm` (`:6478-6528`) deep-copies the freeze receipt's
+> evidence — which does carry all eleven generic kinds — but authenticates each
+> generic item through the same R1 gate; on `EvidenceLifecycleError` the caller
+> catches and sets `freeze_items = []` (`:7415-7417`). So the eleven kinds
+> vanish from the arm receipt AND the changed-set code appears, for one reason.
+> Curing the census assertion alone does not make this block pass.
+>
+> *What it touches.* This block's forbidden-code assertion; §4(e.1)'s
+> "no `091-arm-*` transcript carries `$CHANGED_CODE`"; §5's r4-2 and V-1.vi
+> boxes; §6's "an ordinary non-allowlisted path crosses" clause.
+>
+> *The candidate resolutions, none taken here.* (i) The arm runs at
+> `$WINDOW_CLOSE_HEAD`, where the window is closed and the fixation commit does
+> not yet exist — but D-151 condition 3 sequences fixation before arm. (ii) The
+> transaction accepts `DEPENDENCY_CHANGED_SET` at §3.9 as the pre-declared,
+> governed consequence of fixation, and the proof obligation moves to "the code
+> refuses for exactly the fixation path and nothing else." (iii) The ruled 112
+> is wrong and a fixation-commit path belongs in it — which contradicts D-151
+> conditions 1–2 and the verified arithmetic, and is almost certainly not the
+> answer. Each changes what S-0 proves. **Do not execute §3.9 until this is
+> ruled.**
+
+Resolve the two candidate-owned spellings mechanically:
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
@@ -1646,19 +1978,23 @@ reg=json.load(open(sys.argv[1]))["freeze_evidence_lifecycle"]
 codes={x["role"]:x["code"] for x in reg["refusal_vocabulary"]}
 bad={codes["DEPENDENCY_CHANGED_SET"],codes["DEPENDENCY_MANIFEST"]}
 root=pathlib.Path(sys.argv[2])
-want={"ACCEPTANCE_OWNER","DOCTRINE_PIN","ESTIMATOR_IDENTITY","MINT_TRUST",
-"MULTICELL_MINT","PACK_AUTHENTICATION","PACK_FAMILY","REASON_CODE_COVERAGE",
-"RECEIPT_ORACLE","RECOVERY_LEDGER_TEST","THREE_WINDOW_REGRESSION"}
+# arm-0001 ONLY.  Section 4(e.1)'s probe 123 arms against this SAME custody
+# root -- it must, because the marker and Ed's table live here -- and mints
+# arm-0002, which supersedes arm-0001 (arm_readiness.py:7494-7505).  A bare
+# arm-*.json glob re-read after section 4 would therefore read a PROBE receipt
+# as transaction evidence.  Pinning the ordinal keeps this block re-runnable at
+# any later point in the proof.
+receipts=sorted(root.glob("*/arm_readiness.receipts/arm-0001.json"))
+assert receipts, "no transaction arm receipt (arm-0001) under the window custody root"
 seen=0
-for p in sorted(root.glob("*/arm_readiness.receipts/arm-*.json")):
- d=json.load(open(p)); kinds={e.get("receipt_kind") for e in d["evidence"]}
- assert want <= kinds, (str(p), sorted(want-kinds))
- assert not (bad & {r["code"] for r in d["refusals"]}), (str(p), sorted(bad))
+for path in receipts:
+ d=json.load(open(path))
+ present=sorted(bad & {r["code"] for r in d["refusals"]})
+ assert not present, (str(path), present)
  seen+=1
-assert seen, "no arm receipts were found under the window custody root"
-print(json.dumps({"status":"PASS","arm_receipts":seen,
- "crossed_actual_gate":"arm_readiness.py:4300-4322","forbidden_codes":sorted(bad)},
- indent=2, sort_keys=True))
+print(json.dumps({"status":"PASS","transaction_arm_receipts":seen,
+ "ordinal_pinned":"arm-0001","crossed_actual_gate":"arm_readiness.py:4300-4322",
+ "forbidden_codes":sorted(bad)}, indent=2, sort_keys=True))
 PY
 ```
 
@@ -1751,7 +2087,7 @@ the changed-set gate runs. Authority: R4 r4-2; R5 V-1;
 
 R2 ran this at the `arm` verb against the pack's own evidence directory. That
 cannot work: `arm` calls `_discover_evidence` with `include_pack=False`
-(`arm_readiness.py:7383`), so the pack namespace is dropped from the scan
+(`arm_readiness.py:7384`), so the pack namespace is dropped from the scan
 (`_evidence_directories`, `:5257-5263`) and what actually refuses is the
 pack-digest / changed-set code, not `readiness_evidence_unreadable`. The single
 directory-inventory check at `:5514-5541` governs **both** namespaces, so it
@@ -1759,7 +2095,19 @@ takes two probes to exercise it in both.
 
 **4(b.1) — window-custody namespace, at `arm`, pack untouched.** The custody
 pack root is `<window custody root>/<pack name>` (`:7365`), and that namespace
-IS scanned at arm. Nothing in the repository is modified, so this probe proves
+IS scanned at arm.
+
+*Expected rc, derived* (the r3 ratification flagged this as unverified): the
+inventory check **appends** to the governed refusal list rather than raising —
+`refusals.append(_receipt_refusal("readiness_evidence_unreadable"))` at
+`:5524` and `:5533` — so `generate_arm_receipt` returns a result mapping with
+`status: "REFUSE"`, not an `ArmReadinessError`. The CLI maps that to
+`return 0 if result.get("status") not in {"REFUSE"} else 1`
+(`scripts/generate_arm_readiness.py:186`), i.e. **rc 1**. rc 2 would mean a
+raised `ArmReadinessError` — a different, non-governed path — and is a failure
+of this probe, not a pass. Note that under R4-O1 this arm will also carry
+`$CHANGED_CODE`; refusals accumulate, so the `readiness_evidence_unreadable`
+assertion below is unaffected either way. Nothing in the repository is modified, so this probe proves
 exactly what r2's prose claimed: a governed arm REFUSE naming
 `readiness_evidence_unreadable`, an external refusal receipt, and an unchanged
 pack snapshot.
@@ -1815,7 +2163,7 @@ git -C "$CASE" diff --exit-code -- "$FIRST_PACK/arm_readiness.evidence" \
 ```
 
 Pass iff both namespaces refuse through the directory-inventory check.
-Authority: R4 r4-2; R5 V-2; `arm_readiness.py:5257-5263,5514-5541,6725,7383`;
+Authority: R4 r4-2; R5 V-2; `arm_readiness.py:5257-5263,5514-5541,6725,7384` (second `include_pack=False` site: `:7615`);
 the CLI enforces read-only pack snapshots for non-freeze verbs at
 `scripts/generate_arm_readiness.py:95-105,108-168`; AUDIT F-6.
 
@@ -2053,11 +2401,30 @@ done
 test "$checked" = 3 || die "checked $checked arm transcripts, expected 3"
 ```
 
+**Deliberate custody mixing — recorded, not accidental (F-10).** Every other
+probe writes under `$CUSTODY/probes/<label>`. The block below is the one
+exception: it arms with `--window-custody-root "$CUSTODY/windows"`, the
+transaction's OWN custody root. That is necessary — the C→S edge is enforced
+against Ed's confirmed table and the family-publication marker, which live only
+there, and copying them into a probe root would change the very bytes under
+test. The consequence is recorded here rather than discovered later:
+`generate_arm_receipt` numbers receipts from the existing namespace
+(`number = max(...) + 1`, `:7366-7370`) and records a `supersedes` binding
+(`:7494-7505`), so **this probe mints `arm-0002`, which supersedes the
+transaction's `arm-0001`.** Two rules follow, both already enforced above:
+
+1. §3.9's census block globs `arm-0001.json` by exact ordinal, never `arm-*`,
+   so it reads transaction evidence even when re-run after §4.
+2. Any later step, or any reviewer, re-reading arm receipts under
+   `$CUSTODY/windows` must pin the ordinal the same way. An `arm-*` glob after
+   this point is a custody error, not a convenience.
+
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 # Transaction refusal side: keep Ed's table fixed, mutate the committed
 # successor bytes at a later reviewed head, and require DEPENDENCY_CHANGED_SET.
+# NOTE: this arms into $CUSTODY/windows and mints arm-0002 (see above).
 CASE=$(new_case c-to-s-later-rewrite "$PROBE_BASE")
 printf '\n' >> "$CASE/$SUCCESSOR_PINSET"
 commit_case "$CASE" 'S-0 C-to-S probe: later successor rewrite'
@@ -2268,7 +2635,8 @@ reading its named artifacts.
 
 - [ ] **r4-2** — One full three-pack sequence is evidenced by `030-*`, `031-*`,
   `032-*`, `040-*`, `042-*`, `050-*`, `060-*`, `061-*`, `070-*`–`077-*`,
-  `080-*`–`085-*`, `090-*`, `091-*`, `092-*` and `097-*`; every pack crosses the
+  `080-*`, `081-*`, `082-*`, `084-*`, `085-*`, `090-*`, `091-*`, `092-*` and
+  `097-*` (there is no `083-*`: no step produces one); every pack crosses the
   actual changed-set gate; ordinary path, both unexpected-output namespaces,
   both plan-tree directions, candidate-shape triplet, C→S, and poison probes
   adjudicate as specified. Every cardinality assertion (`3` packs, `8` tamper

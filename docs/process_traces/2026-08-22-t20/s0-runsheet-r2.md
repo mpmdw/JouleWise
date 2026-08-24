@@ -1,9 +1,10 @@
 > **SUPERSEDED 2026-08-24 — DO NOT EXECUTE.**
 > This revision is retained as the record only. The live instrument is
-> [`s0-runsheet-r3.md`](s0-runsheet-r3.md), which folds amendments 1-3 into its
+> [`s0-runsheet-r4.md`](s0-runsheet-r4.md), which folds amendments 1-3 into its
 > body text and cures the fourteen findings (F-1 through F-14) of the R-3
 > executability audit — five of which made steps in sections 3.3 through 5
-> unexecutable as written. The three dated AMENDMENT blocks below remain
+> unexecutable as written. (The live revision is r4; the r3 draft was refused by
+> both ratification seats and never executed.) The three dated AMENDMENT blocks below remain
 > unmodified because they are the record of how the instrument changed; they no
 > longer bind execution. Ruling: 2026-08-24 magistrate ruling on the
 > executability-audit verdict (custody transcript 037), which made full cold

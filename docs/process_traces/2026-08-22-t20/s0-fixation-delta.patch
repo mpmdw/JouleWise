@@ -1,4 +1,4 @@
-S-0 FIXATION/ACTIVATION DELTA — reviewed input of runsheet r3 §3.7
+S-0 FIXATION/ACTIVATION DELTA — reviewed input of runsheet r4 §3.7
 ==================================================================
 Target: tests/test_receipt_histsem.py
 Applies at: the S-0 fixation commit (the FIRST commit after window close),
@@ -25,7 +25,7 @@ allowlist class (runsheet §4(e), row "successor pinset JSON"). A test that
 derived the digest from the file it is checking would recompute to whatever
 a tampered file now hashes to and would authenticate nothing. The digest is
 unknowable before the mint, so the delta ships an obviously-invalid
-sentinel, "S0-FIXATION-SUBSTITUTION-PENDING", and r3 §3.7 step 5
+sentinel, "S0-FIXATION-SUBSTITUTION-PENDING", and r4 §3.7 step 5
 substitutes it mechanically from the minted bytes. The sentinel is not 64
 hex characters on purpose: an unsubstituted delta fails loudly on the guard
 assertion rather than silently pinning a plausible-looking value (a
@@ -53,7 +53,7 @@ Everything else is either a REVIEWED LITERAL or a DERIVATION:
     chain. r2 called the old name "then-false"; iterating the chain makes
     the method true in BOTH coordinates with no bench edit.
 
-WHAT AN INDEPENDENT REVIEWER RECOMPUTES (r3 §3.7 step 7)
+WHAT AN INDEPENDENT REVIEWER RECOMPUTES (r4 §3.7 step 7)
 --------------------------------------------------------
 sha256 of $CLONE/configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json
 at the fixation commit; that it equals the substituted SUCCESSOR_PINSET_SHA256;
