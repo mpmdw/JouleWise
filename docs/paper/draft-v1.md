@@ -502,6 +502,8 @@ JouleWise is an open tool. The current repository contains the runner, calibrati
 
 The custody limitation remains part of the release boundary: a standalone floor or result file cannot authorize a claim. The release will include the raw power traces, runtime events, configurations, calibration brackets, drift references, replacement records, complete-window verdict, and full planned member list. Each file has a cryptographic fingerprint in a published manifest, a file list that pairs each path with its fingerprint. The analysis program recomputes those fingerprints, checks the exact published source-code revision and calibration-method source fingerprint, and refuses unexpected source changes or evidence bytes. A reader can therefore repeat the reductions and detect any departure from the published bytes. This is experimenter-verified evidence designed for independent reanalysis; no uninvolved party has yet performed that reanalysis. Older files remain available beside their replacement records rather than being deleted.
 
+Appendix A is the operational form of this section. It states what a reader needs in order to re-derive the published numbers as against what is needed to collect fresh measurements, describes each released evidence class and what its fingerprint does and does not bind, gives the ordered commands that re-derive the results from the raw records together with what each one proves, and explains what a recorded refusal means to someone attempting replication.
+
 ## 10. Conclusion
 
 JouleWise treats a software power counter as a scientific instrument whose operating domain must be measured. The present evidence shows why: on the studied Apple-silicon configuration, phase-boundary attribution can dominate repeatability, so more runs alone do not make a small contrast trustworthy. The final paper will report the planned characterization and two-model demonstration with separate floor and direction gates, including any refusal the recorded evidence requires.
@@ -538,6 +540,218 @@ The reusable contribution is the combination of six habits: calibrate the instru
 26. Z. Zhuang, Y. Li, and Z. Fan. “Pre-Registering the Detectable Effect: A Paired-MDE Budget for 4-bit Quantization Benchmarks, with a Pilot Audit.” arXiv preprint, 2026. arXiv:2605.28873.
 27. J. Li, Y. Zhu, B. Chen, E. K. Lee, and K. Nahrstedt. “Revisiting Disaggregated Large Language Model Serving for Performance and Energy Implications.” *Proceedings of the 2026 European Workshop on Machine Learning and Systems (EuroMLSys '26)*, 2026, pp. 397–406. arXiv:2601.08833; DOI:10.1145/3805621.3807662.
 28. Y. Guo and S. Joshi. “SplitZip: Ultra Fast Lossless KV Compression for Disaggregated LLM Serving.” arXiv preprint, 2026. arXiv:2605.01708.
+
+## Appendix A. Reproducing this work
+
+This appendix is written for two different readers, and it keeps their jobs apart throughout because they need different things. **Re-derivation** means recomputing the paper's published quantities from the preserved raw files. It needs no Apple hardware, no elevated privileges, and no software beyond Python itself. **Fresh collection** means producing new measurements, and it needs the specific machine, operating system, model files, and quiet conditions named below. A reviewer who wants to know whether the published numbers follow from the published bytes is doing the first job only.
+
+Three words recur below and are fixed here, because the rest of the appendix rests on them. A *fingerprint* is a SHA-256 digest: a string of sixty-four lowercase hexadecimal characters computed from a file's exact bytes, which changes if any byte changes. A *refusal* is a recorded decision not to produce a result from the evidence offered, carrying a named reason code; Section A.4 explains what a replicator should conclude when one appears. A *revision* is one recorded state of the source code, named by the identifier its version-control system assigns, so that "the program that produced this file" is a checkable statement rather than a description.
+
+### A.1 What a reader needs
+
+**To re-derive the published numbers: Python 3.11 or later, and nothing else.** The `joulewise` package declares no third-party dependencies. Every module the analysis path imports ships with Python itself — the "standard library," hence *stdlib-only*. This is a fixed constraint on the project rather than a property the current code happens to have, and it is what makes the verification path checkable by a reviewer who declines to install anything. The environment that produced the retained reductions is recorded at `env/analysis-lock.txt` as a *constraints file*: a list of exact package versions used to pin an installation, never a list of packages to install. That file is nearly empty, and its emptiness is the evidence for the stdlib-only claim rather than an assertion about it.
+<!-- evidence: pyproject.toml [project] dependencies = [], requires-python = ">=3.11"; env/README.md "What each lock covers"; env/analysis-lock.txt -->
+
+**Where the stdlib-only claim stops.** Two optional dependency groups exist. In Python packaging these are called *extras*: named groups of dependencies installed only when a reader asks for them by name, and absent otherwise.
+
+- The `mac` extra installs the inference runtime and tokenizer libraries. It is required to *run* a model, and therefore to collect new measurements. It cannot be installed on non-Apple hardware. It is not needed to re-derive anything in this paper.
+- The `analysis` extra installs a plotting library used for one optional report figure. No published number depends on it. It was deliberately left uninstalled in the recorded analysis environment, so that the lock file records the environment that actually produced the retained reductions rather than a tidier one.
+
+Both extras are imported lazily — the import happens inside the function that needs the library, not when the package loads — so a command that needs one and cannot find it stops with a named failure rather than an import error at start-up. The absence is visible rather than silent. The measurement environment is pinned separately at `env/mac-measurement-lock.txt`, thirty-seven pinned packages, whose header records the host it was frozen from: macOS 15.7.7 build 24G720 on Apple silicon, under Python 3.13.1.
+<!-- evidence: pyproject.toml [project.optional-dependencies] mac = ["mlx-lm>=0.31.3","transformers<5.13"], analysis = ["matplotlib>=3.9,<4"]; env/mac-measurement-lock.txt header (37 pinned lines); env/README.md "The lock-what-IS rule" -->
+
+**To collect fresh measurements: an Apple-silicon Mac, plus four things that are checked rather than assumed.** The retained corpus was collected on an Apple M3 Max. Nothing in this paper establishes that a different Apple-silicon part, or a different operating-system build, reproduces these numbers; Section 7 states the one-unit, one-configuration, one-boundary scope, and a different machine is a different instrument that must establish its own floors before it can publish one.
+
+1. *Permission to read the power counter.* The *powermetrics* utility runs with administrator privilege. JouleWise never prompts for a password, because a prompt during a measurement would itself disturb the machine; it invokes the counter non-interactively and refuses with an explicit instruction when that is not configured. The permission rule to install has the form `<username> ALL=(root) NOPASSWD: /usr/bin/powermetrics`, and the program prints the exact line for the current user rather than leaving the reader to compose it. Re-derivation needs none of this.
+2. *A quiet machine.* Every entry condition in Section 4 — mains power connected, low-power mode off, displays asleep, screensaver off, nominal thermal pressure, and an idle baseline meeting the stated percentile limits — is evaluated by the program immediately before each stage. These are not advice to follow; they are predicates that stop the stage when they fail.
+3. *A working copy dedicated to measurement.* Collection runs from a checkout held at a fixed absolute path, recorded in the window's own environment record, and never from the copy a person is editing. The reason is custody — the unbroken record of which bytes produced which result — rather than tidiness: a working copy carrying uncommitted edits cannot be named by a single revision, so its evidence could not identify the code that produced it. The retained plans record that path inside themselves, so a reader can see which checkout produced a plan.
+4. *The model files themselves.* Two instruction-tuned models of one family at roughly 1.5 and 7 billion parameters, both 4-bit quantized, are named in the campaign plan. A reader who substitutes a re-quantized copy of the same nominal model is measuring a different condition, and the plan is what makes that substitution detectable rather than invisible.
+
+<!-- evidence: joulewise/adapters/powermetrics.py:50 POWER_METRICS = "/usr/bin/powermetrics", :127 privilege_prefix ("sudo","-n"), :1167 refusal message, :2202 sudoers_line(); docs/phase_2/window_runbook.md §1 MEASUREMENT_REPO rule; configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.freeze.receipts/freeze-0003.json pack_identity.pack_root -->
+
+### A.2 The artifact tree, and what each fingerprint binds
+
+**The code repository contains no measured evidence.** Every directory that holds run data is excluded from version control by design, so a reader who obtains the code has the programs and the plans fixed before collection, but none of the bytes those programs consumed. The measured evidence is released as a separate archive. The two halves are bound to each other in both directions: a plan names the source revision and the estimator source fingerprints it was frozen against, and a result names the plan and every input file it read.
+<!-- evidence: .gitignore excludes runs/, /runs_window_*/, /runs_recal*/, /runs_char_*/, ci-runs/; `git ls-files | grep -c 'runs_window\|^runs/'` returns 0 -->
+
+Six evidence classes are released. For each, what it is, where it lives, and what its fingerprint actually binds.
+
+**1. The run bundle — one workload run.** It lives at `<runs root>/<run id>/` and contains the normalized configuration `config.json` (written with sorted keys and fixed indentation, so its bytes are stable), `metadata.json`, `events.jsonl` (the runtime's own record of when each phase started and stopped), `power_trace.csv`, `rich_telemetry.jsonl`, `summary_metrics.json`, the counter's unmodified native output under `raw/powermetrics.plist`, and the `logs/` and `outputs/` subtrees. The configuration's fingerprint is stored inside the bundle as `metadata.config_sha256`; validation recomputes it over the on-disk bytes, and a missing or mismatched value refuses. What this binds is narrower than it looks, and worth stating exactly: it proves the bundle's stored summary was computed from *these* configuration bytes. It does not prove the configuration was the one the plan required — that is a separate check, made against the plan.
+<!-- evidence: docs/contracts/run_bundle_layout.md "Directory Shape" and "Required Artifacts" (config.json / metadata.config_sha256 recomputation) -->
+
+**2. The calibration custody subtree — one bracketing calibration.** Inside a bundle at `instrument_calibration/`: `manifest.json` (a file list pairing each path with its fingerprint), `instrument_evidence.json` (the validated edge-placement bound of Section 2), `events.jsonl` (the pulse commands), and `raw/powermetrics.plist`. This subtree is custody, not a cache that can be rebuilt from something else. An archive that preserves the bundle but drops any member of this subtree breaks the calibration binding, and the bundle then cannot support a claim — the reducer replays the native capture independently, so a missing member removes the very thing it would replay.
+<!-- evidence: docs/contracts/run_bundle_layout.md "instrument_calibration/ is a custody subtree, not a reconstructable cache" -->
+
+**3. The calibration-acceptance edition — the numbered policy a bound is judged against.** These live in `configs/calibration/`. Six editions are retained side by side rather than one being overwritten. Each records the fingerprints of the four source files implementing its estimator; each successor records its predecessor's fingerprint and the list of source fingerprints that changed. That changed-file list is what lets a reader distinguish a scientific revision from a reissue that changed only bytes, because a byte-only reissue is required to replay the entire corpus and reproduce every bound, decision, and evaluation count exactly. An acceptance file naming an edition that is not registered is refused rather than read.
+<!-- evidence: configs/calibration/calibration_acceptance_d079_v2{,_r2,_n17_r3,_n17_r4,_n17_r5,_n17_r6}.json (six editions); r6 prospective_rederivation.estimator_code_sha256 (four files), derivation_notes.predecessor, derivation_notes.reissue_delta; joulewise/calibration_bracketing.py:231-291 -->
+
+**4. The campaign plan, fixed before collection.** One directory per plan family under `configs/campaigns/`, holding `plan_tree.json`, `calibration_plan.json`, `order_manifest.json`, the condition-family declarations, the per-arm evidence files, and the freeze receipts. Two conventions live here and recur throughout the release.
+
+- The *sidecar convention*: a small companion file holding one fingerprint together with the name of the file it describes, written in the format the system checksum tool reads directly — sixty-four hexadecimal characters, two spaces, the subject file's name, one newline. Two naming forms are in use, and a replicator should expect both: most families append to the full name (`freeze-0003.json` beside `freeze-0003.json.sha256`), while a plan's own tree and calibration files replace the extension instead (`plan_tree.json` beside `plan_tree.sha256`). Because a sidecar's body always names its true subject, the standard checksum tool verifies either form without being told which convention produced it. The point of a sidecar is that fixed bytes can be checked without parsing the file — by a reader who does not yet trust the program that would parse it.
+- The *freeze receipt*: an append-only record that a plan was fixed. The current contrast plan carries `freeze-0003.json` with its own sidecar, listing twelve evidence receipts each by path, fingerprint, and pass status; fourteen decided rows, each naming the predicate it decided and the evidence it decided from; an empty refusal list; and a `predecessor` block naming the previous receipt by identifier, path, and fingerprint, plus one fingerprint over the whole predecessor evidence set. A later method never rewrites an earlier receipt: it issues a successor whose predecessor field points back at what it replaces. Across the nine retained campaign plans, ninety-nine such receipts form one continuous chain, verifiable from version-control objects alone.
+<!-- evidence: configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/{plan_tree.json,plan_tree.sha256,calibration_plan.json,calibration_plan.sha256,order_manifest.json}; arm_readiness.freeze.receipts/freeze-0003.json schema_version joulewise.arm_readiness_freeze_receipt.v2, 12 evidence[], 14 rows[], refusals [], predecessor{freeze_receipt{path,receipt_id,sha256},evidence_set_sha256}; scripts/verify_receipt_histsem.py run reports 9 packs PASS / 99 receipts -->
+
+**5. The whole-window verdict — the one accept-or-refuse decision covering a complete session.** It is not a standalone file. It is a record appended to that session's campaign log at `<runs root>/campaign_log.jsonl`, one JSON document per line, identified by the field `record_type` with value `idle_admission_whole_window_verdict` under schema `joulewise.idle_admission_whole_window_verdict.v1`. The record names the runs directory, the basis on which the session was evaluated, the campaign policy, the identifier of every member bundle (a *member* being one workload run, as Section 2 defines it), the bundles deliberately excluded and the exemptions granted, the recorded replacements, the member failures, and the idle-baseline admission result. Appending a line rather than rewriting a file is itself the custody choice: a later decision adds to the log, it never overwrites the earlier decision. What the verdict binds is the membership — because it fixes which runs belong to the window before any floor or claim is computed, a later analysis cannot quietly evaluate a more favourable subset and present it as the window. The stored record is not trusted on re-reading, either: the consumer reloads the source members and re-runs the policy, and a disagreement with the stored line is a named refusal rather than a silent preference for one of the two.
+<!-- evidence: scripts/run_campaign.py:201 schema constant, :5505 run_whole_window_verdict, :5692 record_type; joulewise/whole_window.py:74-75; docs/decision_log.md:4389-4400 "Stored verdicts are re-derived, never trusted"; refusal whole_window_verdict_conflict -->
+
+**6. The characterization result report — the issued statement of which criteria the instrument met.** The frozen specification and the issued report are a matched pair, `joulewise.characterization_result_spec.v1` and `joulewise.characterization_result.v1`, defined by the contract `characterization-result-schema/v1`. Both documents are written in one canonical JSON form — UTF-8, duplicate keys refused, no infinite or not-a-number values, object keys sorted lexicographically, two-space indentation, one trailing newline. That canonical form is what makes a fingerprint over a JSON document meaningful at all: without it, two byte-different files could carry identical content and disagree on their digests. The report pins the specification by fingerprint, pins the contract by fingerprint, carries its own fingerprint, names its predecessor report by path and fingerprint or explicitly as absent, and records a recomputed fingerprint beside every bound input. A recomputed fingerprint that differs from the bound value is a named refusal, not a correction.
+<!-- evidence: docs/contracts/characterization_result_schema_v1.md:78-82 artifact/schema table, :433 sixty-four lowercase hex, :467-471 contract.sha256, :584-587 predecessor{path,sha256}, :596 report_sha256, :605-611 evidence_binding[].sha256, :632-636 spec block, :653-656 canonical JSON form, :310 characterization_evidence_digest_mismatch -->
+
+**Why the release is shaped this way: freezing, and the two ordering gates.** The pattern above exists to answer one question mechanically — *was this pass criterion fixed before the data it judges existed?* — and the project adopted it because the answer was once no. A condition that had refused three cells was converted from a hard refusal into a labelled claim path on the same day the data behind those cells were collected. Nothing in the pipeline could refuse that edit, because nothing had fixed the criterion in the first place. The repair is not a rule against editing; it is putting every limit inside a fingerprinted specification rather than in prose or in analysis code, so that changing one requires a new predecessor-linked freeze and leaves a trace. A limit written in prose can be changed by an editing pass with no receipt. A limit written into the frozen specification cannot.
+
+Two checks then make "fixed before collection" decidable without trusting anyone's account of the order. One program issues the report; it recomputes every fingerprint itself, and rejects any input field that tries to nominate its own estimator or its own limit. Before it evaluates anything, it applies both gates:
+
+- *The criteria must predate the data.* The writer refuses unless the freeze record's issue time strictly precedes the capture time of every admitted member.
+- *A borrowed limit must predate the freeze that borrows it.* Where a criterion's limit comes from a separately issued artifact rather than from the data it judges, the writer refuses unless that supplier carries a strictly earlier *freeze ordinal* — a counter that increases by one with each freeze, so that "earlier" is decided by ordering rather than by comparing clocks.
+
+A refusal from either gate is protocol failure rather than a result: the writer emits no report at all. That distinction matters to a replicator, because it means a violation of collection order cannot be laundered into a published row that merely reads as failed.
+<!-- evidence: docs/contracts/characterization_result_schema_v1.md:17-31 (the criterion edited on collection day), :33-45 (no values in prose), :330-351 the two writer ordering gates — characterization_criteria_not_prior, characterization_limit_supplier_not_prior, "A refusal from either gate is protocol failure, not a result. The writer emits no report."; :331-332 sole issuer and estimator-selection rejection -->
+
+The same concern governs which evidence may test which limit. A reference that helped build an allowance cannot then be used to show that the allowance contains it; that test is satisfied by construction and measures nothing. The schema therefore requires held-out evidence for such checks — evidence deliberately excluded from building the thing it will later test — and emits a named refusal when the two sets overlap, rather than reporting a pass.
+<!-- evidence: docs/contracts/characterization_result_schema_v1.md:65 held-out probe definition, :311 characterization_floor_pair_not_disjoint, :313 characterization_heldout_reference_absent, :161-170 resolution vs claim-anchored limbs -->
+
+### A.3 Verifying everything, in order
+
+The checks below run in the order the custody chain was built, because each step's output is the next step's input: the code, then the plans fixed before collection, then the collected bundles, then the calibration bound, then the window decision, then the floors, then the claim verdicts. A reader may stop at any point. Each step states what it proves and — just as importantly — what it does not.
+
+Every command reports a *return code* when it finishes: the number a program hands back to the shell, conventionally zero when everything it checked passed. Where a program uses more than two return codes, the meanings are given, because in this pipeline a nonzero return does not always mean that nothing was produced.
+
+**Steps 1–6 need only the code and a Python interpreter.** They were executed as printed, in a checkout holding no measured evidence, and each returned zero.
+
+*Step 1 — obtain the code at the revision the release names.* Clone the repository normally and check out exactly that revision. Two cautions are load-bearing rather than stylistic. A checkout carrying local edits cannot be identified by a revision, and every later step binds its result to one. And the clone must carry full history: the receipt chain of Step 6 replays archived source trees against the commits they were pinned to, so a depth-limited clone lacks the objects it needs and will fail for that reason rather than for a custody reason.
+
+*Step 2 — confirm the verification path needs nothing but Python.* This checks the stdlib-only claim of Section A.1 rather than asserting it. The command imports every module the analysis path uses and prints the set of imported top-level modules that are not part of Python's own standard library. The `-S` flag suppresses the interpreter's site-configuration hooks, so that a package installed system-wide cannot be mistaken for a dependency of this one.
+
+```sh
+python3 -S -c "
+import sys, importlib
+for m in ('joulewise.cli','joulewise.reduce','joulewise.floor_extraction','joulewise.whole_window',
+          'joulewise.uncertainty_evidence','joulewise.powermetrics_fiducial','joulewise.detection_floor'):
+    importlib.import_module(m)
+extra = sorted({n.split('.')[0] for n in sys.modules}
+               - set(sys.stdlib_module_names) - {'joulewise', '__main__'})
+print('third-party modules imported:', extra)
+"
+```
+
+Proves: the reduction, floor-extraction, uncertainty, calibration-detector, and command-line modules import no third-party package, so nothing in the steps below can depend on one. It prints an empty list. Does not prove anything about the collection path, which does require the `mac` extra of Section A.1.
+
+*Step 3 — confirm the plans fixed before collection carry the bytes the paper describes.* Each fixed plan file has a sidecar in the format the system checksum tool reads, so this check needs no JouleWise code at all — which is the point: it can be run by a reader who does not yet trust the programs under review.
+
+```sh
+cd configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3
+shasum -a 256 -c plan_tree.sha256 calibration_plan.sha256
+```
+
+Proves: the plan tree and calibration plan carry the bytes their sidecars record, so the analysis plan has not been edited since it was fixed. Does not prove that the sidecar is itself the published one; that binding comes from the freeze receipt, which names the plan by fingerprint, and ultimately from the release manifest.
+
+*Step 4 — confirm the project's generated documents agree with their source of record.* Parts of the project's running-state and task documents are rendered from one structured source file and enclosed by markers; a hand edit inside a marked region would silently desynchronize the document from its source.
+
+```sh
+python3 scripts/gen_state.py --check
+```
+
+Proves: the structured source is itself in canonical form, and every generated region matches what that source renders right now. Return codes: `0` exact agreement, `1` drift between source and document, `2` an invalid source or missing markers. It prints nothing on success; silence is the pass.
+
+*Step 5 — confirm the assembled report matches the artifacts it was assembled from.* The report assembler recomputes the fingerprint of every artifact its manifest lists, regenerates its results page from those artifacts, re-resolves every file inclusion, and compares the result with the committed output.
+
+```sh
+python3 scripts/build_capstone.py --profile rpt001 --offline --check
+```
+
+Proves: no part of the assembled report was edited away from what its sources produce, and no listed artifact has changed bytes. `--offline` forbids network access during the check, so the outcome depends only on files present locally. `--check` writes nothing. Return codes: `0` no drift, `2` drift.
+
+*Step 6 — verify the receipt chain from version-control objects.* This is the strongest check available without the evidence archive. It walks the retained campaign plans and re-verifies every freeze and evidence receipt against the source trees they were pinned to.
+
+```sh
+python3 scripts/verify_receipt_histsem.py --repository-root . --require-published
+```
+
+Proves: across the nine retained campaign plans, ninety-nine receipts verify, each linked to its predecessor, with no gap and no rewritten link. `--require-published` refuses to accept a receipt that has not been published rather than passing it as provisional. This is the step that fails on a depth-limited clone, for the reason given in Step 1.
+
+**Steps 7–11 need the evidence archive.** They consume collected bundles, which are excluded from the code repository by design (Section A.2), so they cannot run in a code-only checkout. Each program's interface can still be inspected anywhere by asking it for `--help`; only the runs need the archive. Below, `<runs root>` is the directory the release archive unpacks to. Two of these steps write files or append to a log, and each says so — they are re-derivations, not read-only inspections, and a replicator should run them against a copy of the archive.
+
+*Step 7 — authenticate every bundle, without rewriting any of it.*
+
+```sh
+python3 -m joulewise.cli validate-bundle --strict <runs root>/<run id>
+```
+
+Proves, for one bundle: the recorded power trace is re-derived from the counter's raw native output rather than trusted; the stored summary metrics are re-derived from that trace and the runtime event log, and must match; and the configuration fingerprint recomputed over the on-disk bytes matches the one stored inside the bundle. `--strict` is what turns validation from a check on the bundle's shape into that re-derivation. It is read-only: it does not rewrite the bundle it validates. Does not prove that this bundle belongs to the window — that is Step 9.
+
+*Step 8 — re-derive the calibration bound from primary bytes, ignoring the stored answer.* This check runs through the detector's own verification entry point rather than a command-line flag. The reason is worth stating so a replicator does not take the wrong path: the calibration program does carry a `--rederive-from` flag, but it accepts only the earlier forty-pulse protocol and refuses a capture recorded under the current fifty-nine-pulse protocol of Section 2. The entry point below has no such restriction.
+
+```sh
+python3 -c "
+import json, pathlib
+from joulewise.powermetrics_fiducial import verify_stored_evidence_physics
+d = pathlib.Path('<runs root>/<run id>/instrument_calibration')
+evidence = json.loads((d / 'instrument_evidence.json').read_text())
+bound = verify_stored_evidence_physics(
+    evidence,
+    (d / 'raw' / 'powermetrics.plist').read_bytes(),
+    (d / 'events.jsonl').read_bytes(),
+)
+print('re-derived bound (s):', bound)
+print('stored bound (s):   ', evidence['b_fiducial_s'])
+"
+```
+
+The stored per-pulse rows, the stored status flags, and the stored bound are deliberately not inputs to the calculation. The trace anchor is rebuilt from the counter's native records and the recorded paired clock readings; the pulse command times come only from the event log; the detector then refits every commanded pulse and derives the capture's bound afresh. The value returned is widen-only — where the fresh derivation and the stored value differ, the larger is returned, so a re-derivation can never narrow a published bound. Proves: the published edge-placement bound follows from the retained raw bytes under the method the capture names, reproducing the bound and the count of evaluated candidate regions exactly; the worked example in Section 2 is one such re-derivation. Reads only; writes nothing. Does not prove that the calibration transfers to a workload phase edge — Section 7 records that as an explicit assumption. One caution: the calibration program run *without* `--rederive-from` performs a live capture and must never be started on a machine hosting other work.
+<!-- evidence: joulewise/powermetrics_fiducial.py:1277-1286 verify_stored_evidence_physics ("Stored status bits, diagnostic strings, pulse rows, and the scalar bound cannot substitute for a refit"), :1095-1110 rederive_detection_from_artifacts ("The stored pulse rows and bound are not inputs"), :1345 stored b_fiducial_s comparison, :43-45 protocol ids, :60 PROTOCOL_V2_PULSE_COUNT = 40; scripts/validate_powermetrics_fiducial.py:1099-1117 rederive_artifact refuses anything but 40-pulse v1/v2 evidence -->
+
+*Step 9 — reproduce the window's accept-or-refuse decision.*
+
+```sh
+python3 scripts/run_campaign.py --whole-window-verdict \
+  --runs-dir <runs root> --campaign-policy <policy>.json \
+  --neg8-drift-bound <drift bound>.json
+```
+
+Proves: the recorded membership, the preserved failed attempts and their replacements, the calibration bracket (the calibrations immediately before and after the session, Section 2), the policy, and the drift evidence together yield the published verdict. The stored verdict record is re-derived rather than read: a disagreement between the recomputed decision and the stored line is reported as a conflict refusal, and a policy file whose fingerprint is unknown, or whose tolerances disagree with the registered policy, is refused before re-derivation is even attempted. This is the step that makes subset selection detectable, because the verdict fixes the member set before any floor or claim is computed. It takes an exclusive lock and appends a record to `campaign_log.jsonl`; it does not overwrite the earlier record.
+
+*Step 10 — re-extract the detection floors.*
+
+```sh
+python3 scripts/extract_detection_floors.py \
+  --runs-root <runs root> --spec <extraction spec>.json --out floors.json
+```
+
+Proves: each floor cell — a *cell* being one set of runs sharing power source, energy definition, measured interval, workload, hardware, and software, as Section 2 defines it — follows from the admitted members under the extraction specification fixed before collection. The return codes carry information here and must not be read as simple pass or fail. `0` means every cell extracted under all gates. `1` means the report *was written* and at least one cell refused, with each refusal recorded against its member and cell rather than dropped. `2` means a bad specification or path, and no report is written at all. A replicator who obtains `1` has reproduced a published refusal rather than failed to run the tool; Section A.4 explains how to tell those apart.
+
+*Step 11 — re-derive the claim verdicts.*
+
+```sh
+python3 -m joulewise.cli analyze-claims \
+  --analysis-manifest <manifest>.json --runs-root <runs root> \
+  --floor-artifact <floor artifact>.json --output claim_verdicts.json
+```
+
+Proves: each registered contrast's point estimate, its fully composed uncertainty interval, and the two gates of Section 3 follow from the authenticated bundles and the issued floor artifact under the manifest fixed before collection. The manifest is an input and never something the result may select; Section A.2 gives that rule and the contract that enforces it.
+
+A note on the test suite. Running it needs a test runner that the recorded analysis environment deliberately does not carry, because that environment is locked to what actually produced the retained reductions (Section A.1). Running the tests is a development activity, not part of the verification path above.
+
+### A.4 What a refusal means to a replicator
+
+A *refusal* is not an error, a crash, or a defect report. It is an outcome of the measurement method: a recorded decision that the evidence offered does not authorize the result requested, together with the name of the condition that failed. Four consequences follow for anyone reproducing this work.
+
+**A refusal is reproducible, and that is what the reason name is for.** Given the same bytes and the same fixed plan, the programs return the same refusal under the same name. A replicator who runs the walkthrough of Section A.3 over the released archive and obtains a refusal has not failed to reproduce the paper; they have reproduced a published outcome, provided the name matches the one the release records. A refusal whose *name* differs from the published one is the genuine discrepancy and is worth reporting, because it means two different conditions are being reached from the same evidence.
+
+**The names form a closed vocabulary, and an unrecognized name stops rendering rather than passing through.** The floor-extraction and whole-window programs each carry an explicit registry of the reasons they may emit — among them `clock_anchor_unresolved`; `capture_pipeline_absent` and `capture_pipeline_superseded`, which separate evidence that names no current capture method from evidence that names a retired one, deliberately kept as distinct events; `whole_window_verdict_conflict`; `instrument_calibration_stale`; `negative_power_sample`; and `cooldown_cap_hit`. The characterization vocabulary is kept disjoint from the others, so that no coincidental refusal raised elsewhere in the pipeline can stand in for a required characterization refusal, and no characterization name is ever emitted by another component. Where an upstream reason must be carried along, it is preserved verbatim in its own field rather than translated into a nearby name.
+<!-- evidence: joulewise/floor_extraction.py:190 ff reason registry; joulewise/whole_window.py:199 ff; docs/contracts/characterization_result_schema_v1.md:239-245 disjoint vocabulary, :296 unlisted code stops rendering, :674 raw_source_code preserved verbatim -->
+
+**A refusal is not evidence that the two things compared are equal.** This is the misreading the paper most wants to prevent. A refused contrast says that the named implementation, under the recorded conditions, cannot adjudicate the difference. The effect may be real and below what this instrument resolves, or it may be absent, and the evidence does not separate those two cases. Section 7 states the scientific use of a refusal: it maps the operating domain of the measurement method rather than the world.
+
+**Refusals are preserved, and preserved in place.** Failed or interrupted artifacts are never deleted or overwritten. A retry does not reuse the slot of the attempt it replaces: the occupied slot is moved to a retained quarantine directory outside the active collection path, the retry writes a new slot, and an append-only replacement record states which occurrence is current and which one it supersedes. Two present bundles claiming the same occurrence — the same declared slot in the fixed plan — cause a refusal rather than a silent choice between them. For a replicator this has a concrete consequence: the archive contains more members than the analysis admits, by design, and a member's presence in the archive is never evidence that it was used. The verdict of Section A.2 is what says which members were.
+
+**One worked case.** At the end of one collection night, re-evaluation under the recorded rules refused an entire window because one member's internal clock alignment could not be resolved. Independent adjudication found the refusal correct. That window's data remain in the archive, remain fully auditable, and remain incapable of supporting a claim. That is the fail-closed design of Section 4 working as designed, not a software defect that some later run repaired.
+
+### A.5 Release locators
+
+The repository locator, the evidence-archive locator, and the published fingerprint manifest are not yet issued, and this appendix deliberately supplies none of them. All three are held by the single pending marker in Section 9 and are filled only when the release checklist issues them. The paper's fill registry records that marker as the one authorized site for all three, so no second copy of it is introduced here; until they are issued, this appendix names what the release will contain rather than where it will sit.
+<!-- evidence: docs/paper/results-fill-registry.md row DS-34 (Section 9 evidence/code-availability locator hold; rule STOP_FILL; SUPPLIER_UNKNOWN, resolve only after the release checklist issues the locators). The registry census "Draft: 35 bracket-marker sites" is exact against this draft, so this appendix deliberately emits no second marker; if a distinct appendix fill site is later wanted, DS-34 needs a second registry row first. -->
+
+When issued, the manifest pairs every released path with its fingerprint, and the walkthrough of Section A.3 is the procedure that consumes it. Two limits on what a passing check establishes are worth restating here, so that a replicator does not infer more than it supports. It establishes that the released bytes are internally consistent and unchanged relative to what was published. It does not establish who created any original capture, and no independent party has yet performed the reanalysis it makes possible. Section 7 records the trust assumptions under which that consistency is meaningful: a single-operator machine, carrying no program written to interfere with the measurement.
 
 <!-- CONDITIONAL-INSERT-TIGHTER-FLOOR
 
