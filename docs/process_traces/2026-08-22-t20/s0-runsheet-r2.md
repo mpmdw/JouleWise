@@ -1,5 +1,21 @@
 # S-0 CLONE-PROOF RUNSHEET R2 — JouleWise `_v4` transaction
 
+
+**ANCHOR MAP AT THE EXECUTION HEAD (lead pre-execution read, 2026-08-23,
+verified at the merged head): the S-1 merge shifted every
+`joulewise/arm_readiness.py` anchor below by the candidate's insertions.
+The recomputed authoritative positions are:**
+- `EvidenceLifecycleError` (a `ValueError`): `:1050`
+- changed-set enumeration `_r1_changed_paths`: `:4115`
+- allowlist subtraction + conditional-path logic: `:4300` (registry
+  cross-check of conditional paths: `:2025`)
+- generic-item authentication `_authenticate_generic_evidence_item`: `:5266`
+- freeze reference load: `:6265`; `generate_freeze_receipt`: `:6531`
+  (generation gate `:6572`); histsem gate `_gate_receipt_histsem`: `:3639`
+**Non-arm_readiness anchors (identity_pins `:1826`, generate CLI `:28`,
+identity CLI `:23`, histsem CLI `:22`) verified UNMOVED. Where this map
+and an inline citation below disagree, THIS MAP governs.**
+
 **PIN UPDATE (2026-08-23): the assembly pin advances to the MERGED candidate head on main (the merge wave e6a6520 + subsequent green head at execution time). The mechanics-map line anchors below were verified at 1ba04a8; re-verify the enumerated anchor set at the execution head before running (lead pre-execution read step). The §9.3.6 open finding was RESOLVED by the independent seat + fix round: the re-derivation path is proven live (fixture defect cured); O-4 is discharged.**
 
 Assembly target: repository commit `1ba04a83b6dacc2ea904c7936901922857ac89d4` (`1ba04a8`). This is a bench runsheet, not an execution transcript. The magistrate executes it, lead-executed, in the throwaway clone below and reads every transcript. It never uses or reads `/Users/edr/JouleWise-measurement-20260818`.
