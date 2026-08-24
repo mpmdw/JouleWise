@@ -22,11 +22,12 @@ FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
     "ARM-PACKET-01",
+    "CALEXITS-EVIDENCE-BYTES-01",
     "D144-SEATPASS-FOLLOWUPS",
     "ED-HANDS-BATCH-01",
-    "ED-MINT-LICENSE-01",
     "EDQ-L9-3-CAPTURE-01",
     "PREWINDOW-REGEX-01",
+    "REGISTRY-ID-NAMING-01",
     "READY-WO-BATCH-01",
     "SITTING2-PRECONDITIONS-01",
     "UNVERIFIED-REAUDIT-01",
@@ -340,9 +341,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # synthesis ruling (two-seat blind co-design + debate, converged)
         # registers UNATTENDED-LAUNCH-01 (launch-blocker separation, both
         # seats co-signed) and T0-CLOCK-ROW-RENAME-01 (coupled rename +
-        # horizon churn, post-_v4 gated): 86 + 2 = 88 exact live records.
+        # horizon churn, post-_v4 gated): 86 + 2 = 88; the 2026-08-24
+        # kernel wave closes ED-MINT-LICENSE-01 (D-150 item 1 supersedes
+        # the settings-rule form; the V4-TRANSACTION-01 dependency flips
+        # to satisfied) and registers CALEXITS-EVIDENCE-BYTES-01
+        # (pre-existing deterministic bench failure, distinct from both
+        # diagnosed CI-red classes) and REGISTRY-ID-NAMING-01 (S-0
+        # packet-1 cold-gate free finding, fenced post-_v4):
+        # 88 - 1 + 2 = 89 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 88)
+        self.assertEqual(len(self.tasks), 89)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
