@@ -10,7 +10,26 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-23 evening (T22 — MAIN GREEN at 42df510; kernel wave DONE at c749224; S-0 needs ONLY the lead runsheet read + Ed's prompts)
+Last updated: 2026-08-23 night (T22 — new calexits flake found+diagnosed, fix round in flight; S-0 clone head must be a GREEN run containing f6a4c81, so the flake fix is S-0-blocking; runsheet read DONE; Ed's prompts still the only human gate)
+
+**T22 NIGHT — CALEXITS-MUTATION-FLAKE:** a NEW intermittent CI failure
+class opened after the merge wave: `calibration-exits-exclusive` fails
+~50% (alternating interpreters) on
+`test_forced_auto_maintenance_mutation_reproduces_cleanup_race`. Root
+cause diagnosed at the bench from run 32677039329's trace2 dump: the
+forced race reproduces in a THIRD shape the test's post-rmtree dichotomy
+never modeled — clean rmtree AND the detached pack child killed during
+`prepare-pack` ("object cannot be read", exit 128) before any
+`write-pack-file` region; the else-branch assertion and
+`_classify_pack_cleanup` (empty-intervals -> TRACE_INCOMPLETE) both
+reject it, though it is race-exercised evidence. Ruled fix (third
+terminal shape -> RACE_EXERCISED; widened assertion via shared helper;
+deterministic classifier unit tests) delegated to the ackfix agent in
+-wt-ackfix; magistrate reviews before landing. CI status: last all-green
+head is eeeaf94; f6a4c81 + f692e26 failed on the flake; tip 33aa594
+in_progress. S-0 IMPLICATION: the clone head must be a green run
+containing f6a4c81 (the pinset-builder fix), so S-0 waits on this fix
+landing green — Ed's freeze-prompt sitting remains the only HUMAN gate.
 
 **T22 EVENING:** CI GREEN at 42df510 (conclusion-field-verified) after
 three post-merge cures (stale S1D-1 test rewritten to pin the ruled
