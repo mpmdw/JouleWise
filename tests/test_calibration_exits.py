@@ -2715,6 +2715,149 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             flush=True,
         )
 
+    @staticmethod
+    def _acknowledged_sequences(ack_path: Path) -> frozenset[int]:
+        """Sequences the fixture has acknowledged so far, torn tail tolerated."""
+
+        try:
+            lines = ack_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return frozenset()
+        sequences: set[int] = set()
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                # A partially written trailing ack; the next poll re-reads the
+                # whole file, exactly as the production ack reader does.
+                continue
+            sequence = row.get("sequence") if isinstance(row, dict) else None
+            if isinstance(sequence, int) and not isinstance(sequence, bool):
+                sequences.add(sequence)
+        return frozenset(sequences)
+
+    def _start_acknowledging_fixture(
+        self,
+        sandbox: WitnessSandbox,
+        *,
+        label: str,
+    ) -> tuple[subprocess.Popen[str], Path, Path, float]:
+        """Start the event-driven fixture on an empty event file, past ready."""
+
+        custody = sandbox.root / label
+        (custody / "raw").mkdir(parents=True)
+        events_path = custody / "events.jsonl"
+        events_path.write_text("", encoding="utf-8")
+        capture = custody / "raw" / "powermetrics.plist"
+        ack_path = sandbox.root / f"{label}-acks.jsonl"
+        origin = 1700000000.0
+        env = _fresh_cli_env() | {
+            "JW_FAKE_SAMPLER_MODE": "normal",
+            "JW_FAKE_HW_MODEL": "Mac15,9",
+            "JW_FAKE_OS_BUILD": "25F84",
+            "JW_FAKE_TIME_ORIGIN": str(origin),
+            "JW_FAKE_TIME_SCALE": "1",
+            "JW_FAKE_INITIAL_ENDPOINT": str(origin),
+            "JW_FAKE_SAMPLER_ACK_PATH": str(ack_path),
+        }
+        process = sandbox.runner.start_owned(
+            [sys.executable, FIXTURE_ROOT / "fake_sampler.py", "-o", capture],
+            cwd=sandbox.root,
+            env=env,
+            label=label,
+        )
+        _wait_for_semantic_readiness(
+            lambda: True if 0 in self._acknowledged_sequences(ack_path) else None,
+            process=process,
+            description=f"{label} sampler_ready acknowledgement",
+            timeout_s=30.0,
+            teardown=sandbox.close,
+        )
+        return process, events_path, ack_path, origin
+
+    def test_torn_event_line_keeps_its_acknowledgement(self) -> None:
+        """A line appended in two halves must still be seen exactly once.
+
+        The event file is written by one process and read by another, so a
+        read can land mid-line.  The fixture used to consume that fragment
+        with text-mode ``readline()``: the prefix failed to parse, the suffix
+        failed to parse, and the event's acknowledgement was never written --
+        wedging the writer's ``await_acknowledgement`` until its stall
+        deadline.  Tearing one line deterministically reproduces that loss.
+        """
+
+        sandbox = WitnessSandbox()
+        try:
+            process, events_path, ack_path, origin = (
+                self._start_acknowledging_fixture(sandbox, label="torn-event-line")
+            )
+            line = (
+                json.dumps(
+                    {
+                        "timestamp_s": origin + 2.0,
+                        "event_type": "sampling_started",
+                        "test_protocol_sequence": 1,
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            ).encode("utf-8")
+            split_at = len(line) // 2
+            self.assertGreater(split_at, 0)
+            with events_path.open("ab", buffering=0) as stream:
+                stream.write(line[:split_at])
+                os.fsync(stream.fileno())
+                # Hundreds of times the fixture's 1 ms drain period, so the
+                # torn prefix is certainly read before the remainder lands even
+                # on a heavily loaded runner.  This is the interval in which the
+                # old readline() path destroyed the event.
+                time.sleep(0.25)
+                self.assertNotIn(
+                    1,
+                    self._acknowledged_sequences(ack_path),
+                    "an incomplete event line must never be acknowledged",
+                )
+                stream.write(line[split_at:])
+                os.fsync(stream.fileno())
+            _wait_for_semantic_readiness(
+                lambda: True if 1 in self._acknowledged_sequences(ack_path) else None,
+                process=process,
+                description="torn event line acknowledgement",
+                timeout_s=30.0,
+                teardown=sandbox.close,
+            )
+            os.killpg(process.pid, signal.SIGTERM)
+            process.communicate(timeout=5.0)
+            sandbox.runner.close()
+            print("P4_TORN_EVENT_LINE=ACKNOWLEDGED", flush=True)
+        finally:
+            sandbox.close()
+
+    def test_complete_unparseable_event_line_fails_the_fixture_loudly(self) -> None:
+        """A whole line that will not parse is a defect, not a dropped byte."""
+
+        sandbox = WitnessSandbox()
+        try:
+            process, events_path, _ack_path, _origin = (
+                self._start_acknowledging_fixture(
+                    sandbox, label="unparseable-event-line"
+                )
+            )
+            with events_path.open("ab", buffering=0) as stream:
+                stream.write(b'{"event_type": "sampling_started"\n')
+                os.fsync(stream.fileno())
+            stdout, stderr = process.communicate(timeout=30.0)
+            self.assertNotEqual(
+                process.returncode,
+                0,
+                f"fixture survived an unparseable event line: {stdout}",
+            )
+            self.assertIn("could not parse a complete event line", stderr)
+            sandbox.runner.close()
+            print("P4_UNPARSEABLE_EVENT_LINE=FAILS_LOUDLY", flush=True)
+        finally:
+            sandbox.close()
+
 
 class SamplerLifecycleHardeningTests(unittest.TestCase):
     def _deterministic_success_capture(self, *, hardened: bool) -> bytes:
