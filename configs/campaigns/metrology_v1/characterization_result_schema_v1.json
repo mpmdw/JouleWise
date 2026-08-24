@@ -1,0 +1,1523 @@
+{
+  "anti_selection": {
+    "predecessor_link_required": true,
+    "rule": "A window that failed its whole-window verdict may be re-collected. A contradicted row inside a window that PASSED its verdict does NOT license re-collection to reverse it. Any successor characterization window carries an explicit predecessor link and both reports publish; the paper reports the sequence, never the more favourable member of it. The abandon-after-three rule at docs/paper/draft-v1.md:317 covers repeated environmental interruption and does not reach this case."
+  },
+  "c2_floor_mode": {
+    "activation_predicate": "Select issued_floor_comparator if and only if, at freeze time, a same-cell operative floor has already been issued from a window with a strictly earlier freeze ordinal AND the set of evidence bundle digests behind that floor is disjoint from the set of null-ladder bundle digests. Otherwise select heldout_train_test. The predicate is evaluated once, at freeze, and its outcome is recorded in selected_at_freeze; it is never re-evaluated after outcomes are visible.",
+    "modes": {
+      "heldout_train_test": {
+        "block_roles": {
+          "floor_train": 5,
+          "null_test": 5
+        },
+        "comparator": "F_train, derived from the five floor_train blocks alone using the existing comparative point guard, its corner widening, and its guard factor; the five null_test blocks must not appear in that derivation",
+        "rationale": "Conditional branch. It restores independence when no issued floor exists, at the cost of doubling the ladder to ten blocks per magnitude and of a weaker comparator: the committed guard factor is sqrt(9/(n-1)), so five blocks carry 1.5 while ten carry 1. Imposing it unconditionally would force the weaker comparator even where a stronger issued one is available."
+      },
+      "issued_floor_comparator": {
+        "block_roles": {
+          "null_test": 5
+        },
+        "comparator": "the operative floor of the already-issued same-cell floor artifact, whose evidence is disjoint from these blocks",
+        "rationale": "Primary. The null ladder's blocks are already held outside the prior floor's derivation, so non-circularity holds without splitting the ladder, and the comparator carries the stronger guard factor of an n>=10 derivation."
+      }
+    },
+    "selected_at_freeze": null
+  },
+  "characterization_family": {
+    "alpha": 0.05,
+    "claim_role": "exploratory",
+    "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+    "family_id": "characterization-metrology-v1",
+    "inferential_subfamily": [
+      "C2.3",
+      "C4.2a",
+      "C4.2b"
+    ],
+    "inferential_subfamily_note": "C4.2a and C4.2b are two limbs of ONE inferential property and share a single Holm-adjusted slope interval, so the denominator counts properties, not limbs. Every other criterion in this spec is a deterministic bound comparison with no false-positive rate to correct.",
+    "multiplicity_denominator": 2,
+    "multiplicity_rule": "The family is registered explicitly exploratory with no confirmatory inference, a formulation permitted by name at docs/contracts/analysis_plans.md:24. Within it, the two inferential properties - the identical-condition null mean containment and the prompt-invariance slope containment - are corrected together by the Holm procedure at m = 2."
+  },
+  "contract": {
+    "path": "docs/contracts/characterization_result_schema_v1.md",
+    "schema_version": "characterization-result-schema/v1",
+    "sha256": "bfbe4e4c9527be0180b9592ee30a5ae26e9d0ad648b79216695361d095b1437e"
+  },
+  "ed_input_ledger": [
+    {
+      "blocked_on": "ED-INPUT",
+      "blocks": [
+        "C3.4"
+      ],
+      "item": "sizing_tolerance_ratio",
+      "ledger_text": "sizing_tolerance_ratio (C3 mis-sizing guard) - no basis exists."
+    },
+    {
+      "blocked_on": "ED-INPUT",
+      "blocks": [
+        "C4.1a"
+      ],
+      "item": "tau_float",
+      "ledger_text": "tau_float (C4 overcount) - pinned code value or Ed ruling; A's 1e-9 J is NOT ruled and is not frozen."
+    },
+    {
+      "blocked_on": "ED-INPUT",
+      "blocks": [
+        "C5.1",
+        "C5.2"
+      ],
+      "item": "heldout_reference_probe_count",
+      "ledger_text": "Held-out reference probe count (C5) - window budget; proposed >= 3."
+    },
+    {
+      "blocked_on": "ED-INPUT",
+      "blocks": [
+        "C1.5",
+        "C1.7",
+        "C2.3",
+        "C2.4"
+      ],
+      "item": "r1_r2_fallback_absolute_limits",
+      "ledger_text": "R1/R2 fallback ABSOLUTE limits iff no alpha/beta floor is issued at freeze time (the design's single largest dependency)."
+    }
+  ],
+  "ordering_gates": {
+    "characterization_criteria_not_prior": {
+      "predicate": "The report writer refuses unless the freeze record's issue time strictly precedes the capture timestamp of every admitted member. This makes 'fixed before collection' checkable rather than promised.",
+      "refusal_code": "characterization_criteria_not_prior"
+    },
+    "characterization_limit_supplier_not_prior": {
+      "predicate": "The report writer refuses unless every derived limit's supplier artifact carries a strictly earlier freeze ordinal than the characterization freeze. This is the gate that would have refused the 2026-07-25 same-day criterion change.",
+      "refusal_code": "characterization_limit_supplier_not_prior"
+    }
+  },
+  "render_map": {
+    "derived_value_rules": {
+      "rows.linearity.observed_values.applied_residual_limit_j": "The binding residual limb: min(H, F_operative) when both the resolution limb (C1.4/C1.6) and the claim-anchored limb (C1.5/C1.7) are available, and the sole available limb otherwise. Both limbs stay separately reported in rows.linearity.criteria[].limit_applied; this field exists because the report template prints one residual limit.",
+      "rows.phase_attribution.observed_values.applied_invariance_band_j_per_token": "The binding invariance limb: min(L_H, L_F) when both C4.2a and C4.2b are available, and the sole available limb otherwise. Both limbs stay separately reported in rows.phase_attribution.criteria[].limit_applied."
+    },
+    "outcome_phrases": {
+      "contradicted": "showed that the registered expected behavior did not hold",
+      "indeterminate": "did not support a conclusion under the registered criterion",
+      "pending_eligibility": "remains pending because fewer than three eligible sessions are available",
+      "supported": "supported the registered behavior"
+    },
+    "phrase_source": "docs/process_traces/2026-08-07-plan-factory/DRAFT-RESULTS_PROSE.md:258-263; the pending_eligibility phrase is available to the between_sessions row alone",
+    "publication_class_from_row_outcome": {
+      "contradicted": "PUBLISHABLE_REFUSAL",
+      "indeterminate": "DIAGNOSTIC_ONLY",
+      "pending_eligibility": "DIAGNOSTIC_ONLY",
+      "supported": "RESULT"
+    },
+    "rows": {
+      "between_sessions": {
+        "diagnostic_presence_atom": "diagnostic_between_sessions_present",
+        "diagnostic_tokens": {},
+        "plain_language_token": "PLAIN_LANGUAGE_RESULT_between_sessions",
+        "value_tokens": {
+          "N_C_eligible_sessions": "rows.between_sessions.observed_values.eligible_session_count"
+        }
+      },
+      "drift_settling": {
+        "diagnostic_presence_atom": "diagnostic_drift_settling_present",
+        "diagnostic_tokens": {
+          "D_C_drift_diagnostic_J": "rows.drift_settling.diagnostics.max_heldout_excursion_j"
+        },
+        "plain_language_token": "PLAIN_LANGUAGE_RESULT_drift",
+        "value_tokens": {
+          "D_C_reference_excursion_J": "rows.drift_settling.observed_values.max_heldout_excursion_j",
+          "T_C_recovery_s": "rows.drift_settling.observed_values.max_recovery_s"
+        }
+      },
+      "empirical_floor": {
+        "diagnostic_presence_atom": "diagnostic_empirical_floor_present",
+        "diagnostic_tokens": {
+          "D_C_micro_diagnostic_x_floor": "rows.empirical_floor.diagnostics.effect_to_floor_ratio"
+        },
+        "plain_language_token": "PLAIN_LANGUAGE_RESULT_floor",
+        "value_tokens": {
+          "R_C_micro_max_x_floor": "rows.empirical_floor.observed_values.max_effect_to_floor_ratio",
+          "R_C_micro_min_x_floor": "rows.empirical_floor.observed_values.min_effect_to_floor_ratio"
+        }
+      },
+      "linearity": {
+        "diagnostic_presence_atom": "diagnostic_linearity_present",
+        "diagnostic_tokens": {
+          "D_C_linearity_diagnostic_J_per_token": "rows.linearity.diagnostics.decode_slope_j_per_token"
+        },
+        "plain_language_token": "PLAIN_LANGUAGE_RESULT_linearity",
+        "value_tokens": {
+          "R_C_linearity_limit_J": "rows.linearity.observed_values.applied_residual_limit_j",
+          "S_C_linearity_decode_J_per_token": "rows.linearity.observed_values.decode_slope_j_per_token",
+          "S_C_linearity_request_J_per_token": "rows.linearity.observed_values.request_slope_j_per_token"
+        }
+      },
+      "null": {
+        "diagnostic_presence_atom": "diagnostic_null_present",
+        "diagnostic_tokens": {
+          "D_C_null_diagnostic_J": "rows.null.diagnostics.max_abs_block_delta_j"
+        },
+        "plain_language_token": "PLAIN_LANGUAGE_RESULT_null",
+        "value_tokens": {
+          "D_C_null_max_abs_J": "rows.null.observed_values.max_abs_block_delta_j"
+        }
+      },
+      "phase_attribution": {
+        "diagnostic_presence_atom": "diagnostic_phase_attribution_present",
+        "diagnostic_tokens": {
+          "D_C_phase_diagnostic_J": "rows.phase_attribution.diagnostics.max_abs_additivity_residual_j"
+        },
+        "plain_language_token": "PLAIN_LANGUAGE_RESULT_phase",
+        "value_tokens": {
+          "B_C_prompt_invariance_J_per_token": "rows.phase_attribution.observed_values.applied_invariance_band_j_per_token",
+          "D_C_additivity_J": "rows.phase_attribution.observed_values.max_abs_additivity_residual_j",
+          "S_C_prompt_invariance_J_per_token": "rows.phase_attribution.observed_values.prefill_slope_j_per_token"
+        }
+      }
+    },
+    "selector_atoms": {
+      "outcome_drift_supported": "rows.drift_settling.row_outcome == supported",
+      "whole_window_verdict": "whole_window_verdict.status"
+    }
+  },
+  "rows": [
+    {
+      "criteria": [
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A missing level leaves the fitted response unconstrained over part of the tested range, so no residual limit can be evaluated and the row reports no conclusion rather than a fit over a shortened range.",
+          "criterion_id": "C1.1",
+          "decision_rule": "levels_complete == 5",
+          "estimator": {
+            "formula": "count of registered levels L for which the number of admitted bundles at L equals minimum_n_per_level",
+            "inputs": [
+              {
+                "field_path": "cells[].ordered_bundle_ids",
+                "role": "campaign_plan"
+              },
+              {
+                "field_path": "members[].admission_status",
+                "role": "whole_window_verdict"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "cells[].ordered_bundle_ids",
+              "parent_role": "campaign_plan",
+              "path": "configs/campaigns/metrology_v1/linearity_ramp/calibration_plan.json"
+            },
+            {
+              "field_path": "$.status",
+              "parent_role": "whole_window_verdict",
+              "path": "<runs_root>/whole_window_verdict.json"
+            }
+          ],
+          "failure_outcome": "indeterminate",
+          "limit": 5,
+          "limit_basis": "ruled",
+          "limit_basis_source": "configs/campaigns/metrology_v1/linearity_ramp/calibration_plan.json registers exactly five cells (output levels 128, 256, 512, 1024, 2048) at fixed_n 8, ratified and frozen before measurement",
+          "minimum_n": 5,
+          "quantity": "count of registered output-token levels present with their full registered admitted-bundle count",
+          "reason_code_on_failure": "characterization_level_absent",
+          "sample_unit": "registered output-token level",
+          "units": "levels"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Whole-request energy did not increase with output length over the tested range, so no energy difference between two workloads of different length may be attributed to the work done, and the per-token conversion is withdrawn from every downstream use.",
+          "criterion_id": "C1.2",
+          "decision_rule": "all_corners_slope_lower_bound > 0",
+          "estimator": {
+            "formula": "ordinary least squares of E = a + b*T over admitted bundles, one bundle one point, T = runtime-observed realized output tokens, E = energy_request_j; b evaluated at every joint corner of the admitted energy intervals; report the least favourable corner's slope as the all-corners lower bound",
+            "inputs": [
+              {
+                "field_path": "energy_request_j",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "realized_output_tokens",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "energy_request_j",
+              "parent_role": "member_summary",
+              "path": "runs/metrology_v1/linearity_ramp/*/summary_metrics.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 0.0,
+          "limit_basis": "ruled",
+          "limit_basis_source": "Zero is not a tuned threshold: a non-positive slope means measured energy did not increase with the amount of work done, which falsifies the response the row exists to characterize.",
+          "minimum_n": 40,
+          "quantity": "fitted energy-per-output-token slope for whole-request energy",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "admitted bundle",
+          "units": "J per output token"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "The token-generation slope cannot size an effect, so the deliberate small-difference row returns no conclusion rather than being re-derived from data collected after outcomes were visible.",
+          "criterion_id": "C1.3",
+          "decision_rule": "all_corners_slope_lower_bound > 0",
+          "estimator": {
+            "formula": "ordinary least squares of E = a + b*T over admitted bundles, E = phase_energy_j.decode; all-corners lower bound as in C1.2",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.decode",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "realized_output_tokens",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "phase_energy_j.decode",
+              "parent_role": "member_summary",
+              "path": "runs/metrology_v1/linearity_ramp/*/summary_metrics.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 0.0,
+          "limit_basis": "ruled",
+          "limit_basis_source": "Zero is not a tuned threshold; see C1.2. This slope is also the energy standard the deliberate small-difference row consumes, so a non-positive value makes that row unbuildable.",
+          "minimum_n": 40,
+          "quantity": "fitted energy-per-output-token slope for token-generation energy",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "admitted bundle",
+          "units": "J per output token"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Departure from the straight line exceeds what one admitted measurement could resolve, so the fitted response for whole-request energy is reported as not usable over the tested range and no per-token conversion derived from it may be quoted.",
+          "criterion_id": "C1.4",
+          "decision_rule": "R_max <= H",
+          "derivation_rule": "H = max over admitted bundles of (energy_interval_j.upper - energy_interval_j.lower) / 2 for this metric: the largest timing-resolution half-width any single admitted bundle carries. Resolves to a literal at freeze time only after collection, so the report records the resolved value.",
+          "estimator": {
+            "formula": "R_max = max over registered levels L of sup |mean admitted energy at L - (a + b*T_L)|, the supremum taken over the authenticated energy intervals rather than midpoints, from the same fixed fit as C1.2/C1.3",
+            "inputs": [
+              {
+                "field_path": "energy_request_j",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "energy_interval_j.lower",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "energy_interval_j.upper",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "energy_request_j",
+              "parent_role": "member_summary",
+              "path": "runs/metrology_v1/linearity_ramp/*/summary_metrics.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "Derived from the admitted bundles' own authenticated energy intervals, whose construction is docs/paper/draft-v1.md:213 (worst-case timing attribution). This limb is always available and is resolution-qualified: it cannot fail for instrument-quality reasons, because a degraded collection widens its own allowed residual. That is why C1.5/C1.7 exist.",
+          "minimum_n": 40,
+          "quantity": "largest level-mean departure from the fitted straight line for whole-request energy",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "admitted bundle",
+          "units": "J"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Departure from the straight line exceeds the difference the instrument can manufacture with nothing changed, so curvature is a real property of the instrument over this range and every comparison relying on a fixed per-token conversion for whole-request energy is re-scoped to a single level.",
+          "criterion_id": "C1.5",
+          "decision_rule": "R_max <= F_operative",
+          "derivation_rule": "F_operative = the operative floor of the already-issued same-cell floor artifact for this metric and window class, from a window whose freeze ordinal is strictly earlier than the characterization freeze. Never from this window's own data. If no such floor has been issued at freeze time, this criterion's limit_basis becomes ed_input_required and an absolute joule limit must be ratified before the criterion freezes; see ed_input_ledger item r1_r2_fallback_absolute_limits.",
+          "estimator": {
+            "formula": "R_max, exactly as computed in C1.4",
+            "inputs": [
+              {
+                "field_path": "energy_request_j",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].operative_floor_j",
+              "parent_role": "issued_floor_artifact",
+              "path": "<prior-window detection-floor-extraction.json>"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "docs/paper/draft-v1.md:257-263 defines the operative floor as the larger of a cell's absolute and comparative components. A departure smaller than the largest difference the instrument can manufacture with nothing changed is not evidence of curvature.",
+          "minimum_n": 40,
+          "quantity": "largest level-mean departure from the fitted straight line for whole-request energy, judged against an independently issued floor",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "reason_code_on_limit_unavailable": "characterization_operative_floor_unavailable",
+          "sample_unit": "admitted bundle",
+          "units": "J"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Departure from the straight line exceeds what one admitted measurement could resolve, so the fitted response for token-generation energy is reported as not usable over the tested range and no per-token conversion derived from it may be quoted.",
+          "criterion_id": "C1.6",
+          "decision_rule": "R_max <= H",
+          "derivation_rule": "H = max over admitted bundles of (energy_interval_j.upper - energy_interval_j.lower) / 2 for this metric: the largest timing-resolution half-width any single admitted bundle carries. Resolves to a literal at freeze time only after collection, so the report records the resolved value.",
+          "estimator": {
+            "formula": "R_max = max over registered levels L of sup |mean admitted energy at L - (a + b*T_L)|, the supremum taken over the authenticated energy intervals rather than midpoints, from the same fixed fit as C1.2/C1.3",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.decode",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "energy_interval_j.lower",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "energy_interval_j.upper",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "phase_energy_j.decode",
+              "parent_role": "member_summary",
+              "path": "runs/metrology_v1/linearity_ramp/*/summary_metrics.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "Derived from the admitted bundles' own authenticated energy intervals, whose construction is docs/paper/draft-v1.md:213 (worst-case timing attribution). This limb is always available and is resolution-qualified: it cannot fail for instrument-quality reasons, because a degraded collection widens its own allowed residual. That is why C1.5/C1.7 exist.",
+          "minimum_n": 40,
+          "quantity": "largest level-mean departure from the fitted straight line for token-generation energy",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "admitted bundle",
+          "units": "J"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Departure from the straight line exceeds the difference the instrument can manufacture with nothing changed, so curvature is a real property of the instrument over this range and every comparison relying on a fixed per-token conversion for token-generation energy is re-scoped to a single level.",
+          "criterion_id": "C1.7",
+          "decision_rule": "R_max <= F_operative",
+          "derivation_rule": "F_operative = the operative floor of the already-issued same-cell floor artifact for this metric and window class, from a window whose freeze ordinal is strictly earlier than the characterization freeze. Never from this window's own data. If no such floor has been issued at freeze time, this criterion's limit_basis becomes ed_input_required and an absolute joule limit must be ratified before the criterion freezes; see ed_input_ledger item r1_r2_fallback_absolute_limits.",
+          "estimator": {
+            "formula": "R_max, exactly as computed in C1.6",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.decode",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].operative_floor_j",
+              "parent_role": "issued_floor_artifact",
+              "path": "<prior-window detection-floor-extraction.json>"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "docs/paper/draft-v1.md:257-263 defines the operative floor as the larger of a cell's absolute and comparative components. A departure smaller than the largest difference the instrument can manufacture with nothing changed is not evidence of curvature.",
+          "minimum_n": 40,
+          "quantity": "largest level-mean departure from the fitted straight line for token-generation energy, judged against an independently issued floor",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "reason_code_on_limit_unavailable": "characterization_operative_floor_unavailable",
+          "sample_unit": "admitted bundle",
+          "units": "J"
+        }
+      ],
+      "row_id": "linearity",
+      "row_label": "C1",
+      "supplying_campaign": "configs/campaigns/metrology_v1/linearity_ramp",
+      "table_property": "Workload response"
+    },
+    {
+      "criteria": [
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A missing magnitude leaves the null untested at that workload size, so the row reports no conclusion for the ladder rather than a result over the magnitudes that happened to complete.",
+          "criterion_id": "C2.1",
+          "decision_rule": "magnitudes_complete == 3",
+          "estimator": {
+            "formula": "count of registered magnitudes M for which the number of admitted A/B/B/A blocks at M equals the mode's required block count",
+            "inputs": [
+              {
+                "field_path": "cells[].ordered_blocks",
+                "role": "campaign_plan"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "cells[].ordered_blocks",
+              "parent_role": "campaign_plan",
+              "path": "configs/campaigns/metrology_v1/null_ladder/calibration_plan.json"
+            }
+          ],
+          "failure_outcome": "indeterminate",
+          "limit": 3,
+          "limit_basis": "ruled",
+          "limit_basis_source": "configs/campaigns/metrology_v1/null_ladder/calibration_plan.json registers exactly three cells (output magnitudes 128, 512, 2048) at fixed_n 5 blocks, ratified and frozen before measurement",
+          "minimum_n": 3,
+          "quantity": "count of registered output-token magnitudes present with their full registered admitted-block count",
+          "reason_code_on_failure": "characterization_magnitude_absent",
+          "sample_unit": "registered output-token magnitude",
+          "units": "magnitudes"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A block whose whole interval excludes zero under identical conditions is a difference the instrument manufactured; the affected cell's issued floor is withdrawn from claim use and every contrast consuming it returns not resolvable pending a re-derived floor.",
+          "criterion_id": "C2.2",
+          "decision_rule": "0 is contained in I_delta_i for every admitted block i",
+          "estimator": {
+            "formula": "delta_i = (B1 + B2 - A1 - A2) / 2 per block, with I_delta_i the block interval formed from the four signed member intervals",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.decode",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "energy_interval_j",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "phase_energy_j.decode",
+              "parent_role": "member_summary",
+              "path": "runs/metrology_v1/null_ladder/*/summary_metrics.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 0.0,
+          "limit_basis": "ruled",
+          "limit_basis_source": "docs/paper/draft-v1.md:308: for a null block A and B are the same configuration and payload, so any nonzero block difference is false by construction. Zero is the physical value, not a tuned threshold.",
+          "minimum_n": 5,
+          "quantity": "signed A/B/B/A block difference under identical conditions",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "A/B/B/A block",
+          "units": "J"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "The mean identical-condition difference is not contained by the floor that claims to bound it; the affected cell's issued floor is withdrawn from claim use and every contrast consuming it returns not resolvable pending a re-derived floor.",
+          "criterion_id": "C2.3",
+          "decision_rule": "I_mean is contained in [-m, +m] for every magnitude",
+          "derivation_rule": "m is supplied by the active c2_floor_mode branch: in issued_floor_comparator, m = the operative floor of the already-issued same-cell floor artifact; in heldout_train_test, m = F_train derived from the five floor_train blocks alone. If neither is available at freeze, limit_basis becomes ed_input_required; see ed_input_ledger item r1_r2_fallback_absolute_limits.",
+          "estimator": {
+            "formula": "mean of delta_i over admitted blocks at a magnitude, with its complete deterministic composed interval I_mean, Holm-adjusted as an inferential family member",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.decode",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].operative_floor_j",
+              "parent_role": "issued_floor_artifact",
+              "path": "<prior-window detection-floor-extraction.json>"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "docs/paper/draft-v1.md:165 defines the floor as the largest difference the measurement system can manufacture on its own with nothing changed. A null block is nothing changed, so a null exceeding the floor falsifies the floor. docs/paper/draft-v1.md:336 requires containment, not failure to reject zero.",
+          "minimum_n": 5,
+          "quantity": "mean block difference under identical conditions",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "reason_code_on_limit_unavailable": "characterization_operative_floor_unavailable",
+          "sample_unit": "A/B/B/A block",
+          "units": "J"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "At least one identical-condition block exceeded the floor that claims to bound it; the affected cell's issued floor is withdrawn from claim use and every contrast consuming it returns not resolvable pending a re-derived floor.",
+          "criterion_id": "C2.4",
+          "decision_rule": "M <= m for every magnitude",
+          "derivation_rule": "m exactly as resolved for C2.3",
+          "estimator": {
+            "formula": "M = max over admitted blocks of sup |delta_i|, the supremum taken over each block's composed interval",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.decode",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].operative_floor_j",
+              "parent_role": "issued_floor_artifact",
+              "path": "<prior-window detection-floor-extraction.json>"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "Same source as C2.3. The maximum is reported alongside the mean because a mean near zero can hide two blocks leaking in opposite directions, and per-block behaviour is what a floor claims to bound.",
+          "minimum_n": 5,
+          "quantity": "largest absolute block difference under identical conditions",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "reason_code_on_limit_unavailable": "characterization_operative_floor_unavailable",
+          "sample_unit": "A/B/B/A block",
+          "units": "J"
+        }
+      ],
+      "row_id": "null",
+      "row_label": "C2",
+      "supplying_campaign": "configs/campaigns/metrology_v1/null_ladder",
+      "table_property": "Identical-condition null response"
+    },
+    {
+      "criteria": [
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Without an externally fixed slope the probes cannot be sized before collection, so the row reports no conclusion rather than sizing itself from the data it is about to test.",
+          "criterion_id": "C3.1",
+          "decision_rule": "slope_supplier_issued and slope_supplier_freeze_ordinal < this_freeze_ordinal",
+          "estimator": {
+            "formula": "the fitted slope b consumed by this row is read from an issued linearity supplier artifact whose freeze ordinal is strictly earlier than this row's evaluation; it is never estimated from this row's own blocks",
+            "inputs": [
+              {
+                "field_path": "rows.linearity.observed_values.decode_slope_j_per_token",
+                "role": "issued_characterization_report"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.freeze_ordinal",
+              "parent_role": "supplier_freeze_record",
+              "path": "<issued linearity supplier freeze record>"
+            }
+          ],
+          "failure_outcome": "indeterminate",
+          "limit": 1,
+          "limit_basis": "ruled",
+          "limit_basis_source": "configs/campaigns/metrology_v1/micro_delta/README.md:3-4 marks the pack DRAFT-PENDING-SLOPE and forbids measurement until the linearity slope fixes and the slots are ratified.",
+          "minimum_n": 1,
+          "quantity": "presence of an independently issued token-generation slope supplier",
+          "reason_code_on_failure": "characterization_slope_supplier_unavailable",
+          "sample_unit": "supplier artifact",
+          "units": "boolean"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A target that cannot be generated at integer token granularity, or that exceeds the frozen context limit, is reported as not built; the row reports no conclusion for that slot and never records it as a gate failure.",
+          "criterion_id": "C3.2",
+          "decision_rule": "every registered target and direction is realizable",
+          "estimator": {
+            "formula": "for each registered ratio r, k_r = floor(r * F_seed / b) when r <= 1 and ceil(r * F_seed / b) when r > 1, so the rounding always moves the probe away from the gate boundary; the target is realizable when b > 0, k_r >= 1, and the resulting configuration lies inside the frozen context limit",
+            "inputs": [
+              {
+                "field_path": "rows.linearity.observed_values.decode_slope_j_per_token",
+                "role": "issued_characterization_report"
+              },
+              {
+                "field_path": "$.floors[].operative_floor_j",
+                "role": "issued_floor_artifact"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "draft_note",
+              "parent_role": "campaign_plan",
+              "path": "configs/campaigns/metrology_v1/micro_delta/calibration_plan.json"
+            }
+          ],
+          "failure_outcome": "indeterminate",
+          "limit": 8,
+          "limit_basis": "ruled",
+          "limit_basis_source": "Four registered ratios (0.5, 1.0, 1.5, 3.0) at configs/campaigns/metrology_v1/micro_delta/calibration_plan.json:6, each registered in both directions, gives eight target-direction slots. The rounding direction is the counter-round's accepted away-from-the-boundary rule.",
+          "minimum_n": 8,
+          "quantity": "realizability of every registered near-floor target",
+          "reason_code_on_failure": "characterization_target_unrealizable",
+          "sample_unit": "registered target and direction",
+          "units": "targets"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A missing or overlapping floor pair is never replaced by a floor from another condition; the affected slot reports no conclusion.",
+          "criterion_id": "C3.3",
+          "decision_rule": "every slot has a bound, exact-configuration, disjoint floor pair",
+          "estimator": {
+            "formula": "for each target and direction, bind the exact-configuration floors F_A,r and F_B,r for the two arms and set F_r = max(F_A,r, F_B,r); the evidence-bundle hash sets behind those floors must be disjoint from this row's own admitted blocks",
+            "inputs": [
+              {
+                "field_path": "$.floors[].evidence_bundle_sha256",
+                "role": "issued_floor_artifact"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].cell_id",
+              "parent_role": "issued_floor_artifact",
+              "path": "<prior-window detection-floor-extraction.json>"
+            }
+          ],
+          "failure_outcome": "indeterminate",
+          "limit": 8,
+          "limit_basis": "ruled",
+          "limit_basis_source": "docs/paper/draft-v1.md:269-275: a floor belongs to one cell and is never quoted from another. The armwise maximum follows the existing claim-floor composition at docs/paper/results-fill-registry.md:214-223.",
+          "minimum_n": 8,
+          "quantity": "disjointness of each target's comparator floor pair",
+          "reason_code_on_failure": "characterization_floor_pair_not_disjoint",
+          "sample_unit": "registered target and direction",
+          "units": "target-direction slots"
+        },
+        {
+          "blocked_on": "ED-INPUT",
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A probe that landed away from its intended size tested the sizing arithmetic, not the gate. The slot reports no conclusion; it is never recorded as the gate failing.",
+          "criterion_id": "C3.4",
+          "decision_rule": "sizing_miss <= sizing_tolerance_ratio for every slot",
+          "estimator": {
+            "formula": "predicted_delta_j = b * k_r recorded at freeze; realized_delta_j = the observed signed contrast at report; sizing_miss = |realized_delta_j / predicted_delta_j - 1|",
+            "inputs": [
+              {
+                "field_path": "criteria[C3.4].predicted_delta_j",
+                "role": "frozen_spec"
+              },
+              {
+                "field_path": "$.contrasts[].point_estimate_j",
+                "role": "issued_report"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.contrasts[].point_estimate_j",
+              "parent_role": "issued_report",
+              "path": "<runs_root>/characterization_result_report.json"
+            }
+          ],
+          "failure_outcome": "indeterminate",
+          "ledger_text": "sizing_tolerance_ratio (C3 mis-sizing guard) - no basis exists.",
+          "limit_basis": "ed_input_required",
+          "limit_basis_source": "No basis exists in any ratified decision or committed code. The ruling records it as an ED-INPUT item and refuses the invented value.",
+          "minimum_n": 8,
+          "quantity": "agreement between each probe's predicted and realized energy difference",
+          "reason_code_on_failure": "characterization_effect_sizing_missed",
+          "sample_unit": "registered target and direction",
+          "units": "dimensionless ratio"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A sub-floor effect that resolves means the floor understates the instrument's false-effect rate and the floor construction is reported as falsified for that cell. A super-floor effect that fails to resolve means the two-gate path is less sensitive than the floor predicts and the prospective clearance sizing is re-derived upward.",
+          "criterion_id": "C3.5",
+          "decision_rule": "every registered slot whose expectation is not none realizes its prewritten expected gate outcome",
+          "estimator": {
+            "formula": "for each target and direction, evaluate the ordinary two-gate path and compare the realized outcome with the expectation frozen in registered_targets; Q_r = |realized_delta_j| / F_r is reported as a dimensionless diagnostic",
+            "inputs": [
+              {
+                "field_path": "$.contrasts[].gate_outcome",
+                "role": "issued_report"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.contrasts[].gate_outcome",
+              "parent_role": "issued_report",
+              "path": "<runs_root>/characterization_result_report.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 6,
+          "limit_basis": "ruled",
+          "limit_basis_source": "Six of the eight slots carry an expectation: the 0.5 ratio in both directions expects a floor-gate refusal, and the 1.5 and 3.0 ratios in both directions expect two-gate passage. The 1.0 slots are registered with expectation none, because at exactly the gate boundary an expectation would register a coin flip. docs/paper/draft-v1.md:337 requires the prewritten expected outcome; docs/process_traces/2026-08-07-plan-factory/DRAFT-RESULTS_PROSE.md:2451-2452 requires super-floor effects resolved in both directions.",
+          "minimum_n": 6,
+          "quantity": "agreement between realized and prewritten gate outcomes",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "registered target and direction",
+          "units": "target-direction slots"
+        }
+      ],
+      "registered_directions": [
+        "b_minus_a",
+        "a_minus_b"
+      ],
+      "registered_targets": [
+        {
+          "expectation": "floor_gate_refusal",
+          "ratio_of_floor": 0.5,
+          "rounding": "floor"
+        },
+        {
+          "expectation": "none",
+          "ratio_of_floor": 1.0,
+          "rounding": "floor"
+        },
+        {
+          "expectation": "two_gate_passage",
+          "ratio_of_floor": 1.5,
+          "rounding": "ceil"
+        },
+        {
+          "expectation": "two_gate_passage",
+          "ratio_of_floor": 3.0,
+          "rounding": "ceil"
+        }
+      ],
+      "row_id": "empirical_floor",
+      "row_label": "C3",
+      "supplying_campaign": "configs/campaigns/metrology_v1/micro_delta",
+      "table_property": "Deliberate small-difference challenge"
+    },
+    {
+      "criteria": [
+        {
+          "blocked_on": "ED-INPUT",
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A positive residual means the two phases both counted energy from the same sampling interval at their shared boundary. That is a hard instrument defect: every phase-specific energy claim is withdrawn until the boundary treatment is re-derived.",
+          "criterion_id": "C4.1a",
+          "decision_rule": "max_i D_i <= tau_float",
+          "estimator": {
+            "formula": "D_i = phase_energy_j.prefill + phase_energy_j.decode - energy_request_j per admitted bundle; report max_i D_i",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.prefill",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "phase_energy_j.decode",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "energy_request_j",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "phase_energy_j.prefill",
+              "parent_role": "member_summary",
+              "path": "runs/metrology_v1/additivity_shapes/*/summary_metrics.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "ledger_text": "tau_float (C4 overcount) - pinned code value or Ed ruling; A's 1e-9 J is NOT ruled and is not frozen.",
+          "limit_basis": "ed_input_required",
+          "limit_basis_source": "The retained evidence establishes a 0.0 J reintegration discrepancy (docs/paper/draft-v1.md:426), which is not the same as a ratified floating-point tolerance. The ruling refuses to freeze an invented literal; tau_float must be a pinned code-defined value or an Ed ruling.",
+          "minimum_n": 24,
+          "quantity": "signed phase-sum minus enclosing-request residual, overcount direction",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "admitted bundle",
+          "units": "J"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Energy is missing from the phase decomposition beyond what the un-phased gap can hold, so the phase energies do not account for the request and every phase-specific claim is narrowed to the request total.",
+          "criterion_id": "C4.1b",
+          "decision_rule": "|D_i| <= gap_duration_s_i * max_gap_power_w_i for every admitted bundle",
+          "derivation_rule": "gap_duration_s_i = the registered un-phased interval between the end of the prefill window and the start of the decode window for bundle i; max_gap_power_w_i = the largest recorded package power over that interval. Both are read from the bundle's retained trace and event stream; neither is a chosen constant.",
+          "estimator": {
+            "formula": "D_i as in C4.1a; the permitted magnitude is bounded per bundle by the energy that could physically sit in the un-phased gap between the two phase windows",
+            "inputs": [
+              {
+                "field_path": "phase_boundaries_s",
+                "role": "member_events"
+              },
+              {
+                "field_path": "power_trace_w",
+                "role": "member_raw_evidence"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "phase_boundaries_s",
+              "parent_role": "member_events",
+              "path": "runs/metrology_v1/additivity_shapes/*/events.jsonl"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "docs/process_traces/2026-08-07-plan-factory/DRAFT-RESULTS_PROSE.md:2456-2457 already presupposes a registered gap treatment ('under the registered setup and gap treatment'). A sign-symmetric test would refuse physically correct data, because legitimate un-phased gap energy makes D systematically negative.",
+          "minimum_n": 24,
+          "quantity": "signed phase-sum minus enclosing-request residual, undercount direction",
+          "reason_code_on_failure": "characterization_gap_evidence_absent",
+          "sample_unit": "admitted bundle",
+          "units": "J"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A nonzero prompt-processing slope under a fixed prompt would narrow the phase-specific claim rather than be explained away.",
+          "criterion_id": "C4.2a",
+          "decision_rule": "the whole composed slope interval lies inside [-L_H, +L_H]",
+          "derivation_rule": "L_H = max_i (prefill energy half-width of bundle i) / (T_max - T_min), where T_max and T_min are the largest and smallest registered output-token counts in this row's admitted evidence. The physical statement: no prefill dependence on later work larger than one admitted prefill half-width spread across the entire observed output span.",
+          "estimator": {
+            "formula": "with prompt tokens held fixed, fit prefill energy against runtime-observed later output tokens; report the complete composed slope interval, Holm-adjusted as an inferential family member",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.prefill",
+                "role": "member_summary"
+              },
+              {
+                "field_path": "realized_output_tokens",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "phase_energy_j.prefill",
+              "parent_role": "member_summary",
+              "path": "runs/metrology_v1/additivity_shapes/*/summary_metrics.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "Derived from the admitted bundles' own authenticated prefill intervals and the registered output span. Resolution-qualified, for the same reason as C1.4/C1.6, which is why C4.2b exists.",
+          "minimum_n": 24,
+          "quantity": "fitted prompt-processing energy slope against later output tokens, judged against one admitted measurement's resolution",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "admitted bundle",
+          "units": "J per output token"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Prompt-processing energy depends on work done after prompt processing finished, by more than the instrument's own false-difference floor, so the phase-specific claim is narrowed rather than explained away.",
+          "criterion_id": "C4.2b",
+          "decision_rule": "the whole composed slope interval lies inside [-L_F, +L_F]",
+          "derivation_rule": "L_F = F_operative / (T_max - T_min), where F_operative is the operative floor of the already-issued same-cell prefill floor from a strictly earlier freeze ordinal. The physical statement: over the whole registered output span, the leaked energy stays below the difference the instrument can manufacture with nothing changed.",
+          "estimator": {
+            "formula": "the same composed slope interval computed in C4.2a",
+            "inputs": [
+              {
+                "field_path": "phase_energy_j.prefill",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].operative_floor_j",
+              "parent_role": "issued_floor_artifact",
+              "path": "<prior-window detection-floor-extraction.json>"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "docs/paper/draft-v1.md:257-263 (cell-specific operative floor). The limit uses the cell's own issued floor, never a universal historical joule constant.",
+          "minimum_n": 24,
+          "quantity": "fitted prompt-processing energy slope against later output tokens, judged against an independently issued floor",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "reason_code_on_limit_unavailable": "characterization_operative_floor_unavailable",
+          "sample_unit": "admitted bundle",
+          "units": "J per output token"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A combined range would repeat the defect this criterion exists to repair; the paper reports the two terms separately or reports neither.",
+          "criterion_id": "C4.3",
+          "decision_rule": "both terms are present as separate report fields and no combined range is emitted",
+          "estimator": {
+            "formula": "report b_fiducial_s, the one bracket-capture term shared by every member of the session, as its own field; report each member's local and edge-span contribution as its own field; never report their sum as a corpus range",
+            "inputs": [
+              {
+                "field_path": "b_fiducial_s",
+                "role": "instrument_evidence"
+              },
+              {
+                "field_path": "energy_anchor_shift_envelopes[metric].anchor_bound_s",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "b_fiducial_s",
+              "parent_role": "instrument_evidence",
+              "path": "<runs_root>/instrument_evidence.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 2,
+          "limit_basis": "ruled",
+          "limit_basis_source": "docs/process_traces/2026-08-15-readiness-council/seat-reports/L11-retained-characterization-basis-report.md:37 shows the composed bound is fiducial plus bundle-local plus edge span, with the fiducial term shared across the whole session. Quoting a corpus min-max over the composed bound presents one shared constant as many independent draws.",
+          "minimum_n": 24,
+          "quantity": "separation of the shared session timing term from the per-member timing term",
+          "reason_code_on_failure": "characterization_attribution_terms_composed",
+          "sample_unit": "admitted bundle",
+          "units": "s"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A bracket outside the characterized band means the window's timing calibration is not the calibration the acceptance edition describes, and no member of the window supports a phase-specific claim.",
+          "criterion_id": "C4.4",
+          "decision_rule": "both bracket bounds lie inside the band registered by the bound acceptance edition",
+          "derivation_rule": "The band endpoints are looked up from the acceptance edition identified by acceptance_id in the supplied file. The spec binds the edition identifier, never the numbers, so a reissued edition cannot be silently substituted.",
+          "estimator": {
+            "formula": "for each of the window's two bracket captures, compare its combined timing bound with the minimum and maximum of the corpus band registered by the calibration-acceptance edition named in the supplied acceptance file",
+            "inputs": [
+              {
+                "field_path": "b_fiducial_s",
+                "role": "instrument_evidence"
+              },
+              {
+                "field_path": "source_statistics",
+                "role": "calibration_acceptance_edition"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "acceptance_id",
+              "parent_role": "calibration_acceptance_edition",
+              "path": "configs/calibration/<issued acceptance edition>.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "ruled",
+          "limit_basis_source": "The comparison is already performed in the paper at docs/paper/draft-v1.md:345 against the then-issued corpus range. The live edition selector is joulewise/calibration_bracketing.py ACTIVE_ACCEPTANCE_ID.",
+          "minimum_n": 2,
+          "quantity": "each bracket capture's timing-attribution bound, relative to the issued acceptance edition's registered corpus band",
+          "reason_code_on_failure": "characterization_bracket_capture_absent",
+          "sample_unit": "bracket capture",
+          "units": "s"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A member whose timing uncertainty is a large fraction of its own window cannot carry a phase-specific claim; the affected members are demoted to diagnostic and the row publishes the realized rate.",
+          "criterion_id": "C4.5",
+          "decision_rule": "flag_rate == 0",
+          "estimator": {
+            "formula": "count of claim-bearing admitted members carrying the clock_bound_exceeds_quarter_window flag, divided by the count of claim-bearing admitted members",
+            "inputs": [
+              {
+                "field_path": "claim_evidence_flags",
+                "role": "campaign_log"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "claim_evidence_flags",
+              "parent_role": "campaign_log",
+              "path": "runs/metrology_v1/additivity_shapes/campaign_log.jsonl"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 0.0,
+          "limit_basis": "ruled",
+          "limit_basis_source": "joulewise/reduce.py:997-998 raises clock_bound_exceeds_quarter_window when clock_bound_s > 0.25 * window.duration_s. The condition is committed code; this criterion adds no number, only the requirement that no claim-bearing member carries it. The retained 25 July corpus carried this flag on every one of its thirty members and the paper reports it nowhere.",
+          "minimum_n": 24,
+          "quantity": "rate of claim-bearing members whose clock bound exceeds a quarter of their own window duration",
+          "reason_code_on_failure": "characterization_quarter_window_flagged",
+          "sample_unit": "admitted claim-bearing member",
+          "units": "dimensionless rate"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A phase measured by too few power records, or sampled too coarsely for its duration, is not resolvable at the sampler rate; the affected members are demoted to diagnostic and the row publishes the realized rate.",
+          "criterion_id": "C4.6",
+          "decision_rule": "flag_rate == 0",
+          "estimator": {
+            "formula": "count of claim-bearing admitted members carrying cadence_ratio_below_threshold or insufficient_in_window_samples, divided by the count of claim-bearing admitted members",
+            "inputs": [
+              {
+                "field_path": "claim_evidence_flags",
+                "role": "campaign_log"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "claim_evidence_flags",
+              "parent_role": "campaign_log",
+              "path": "runs/metrology_v1/additivity_shapes/campaign_log.jsonl"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 0.0,
+          "limit_basis": "ruled",
+          "limit_basis_source": "joulewise/reduce.py:116-118 pins MIN_PHASE_SAMPLES 3, SHORT_WINDOW_CADENCE_RATIO_MIN 2.0, and REQUEST_WINDOW_CADENCE_RATIO_MIN 4.0; the flags are raised at joulewise/reduce.py:981 and :988. This criterion adds no number.",
+          "minimum_n": 24,
+          "quantity": "rate of claim-bearing members carrying a sampling-cadence or in-window-sample-count flag",
+          "reason_code_on_failure": "characterization_cadence_or_sample_fidelity_flagged",
+          "sample_unit": "admitted claim-bearing member",
+          "units": "dimensionless rate"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "This window's floors do not receive the attribution-limited label, and the paper's attribution-limited resolution paragraph is re-scoped to the retired-era corpus only, which is explicitly diagnostic.",
+          "criterion_id": "C4.7",
+          "decision_rule": "the committed predicate returns true for every floor cell",
+          "estimator": {
+            "formula": "evaluate the committed predicate admissible_set_uncertainty_dominates_point_floor over each of this window's floor cells: the largest residual or contrast admitted by the member timing envelopes is compared with the guarded point-only false-effect floor",
+            "inputs": [
+              {
+                "field_path": "admissible_half_widths_j",
+                "role": "floor_estimate"
+              },
+              {
+                "field_path": "deviations_j",
+                "role": "floor_estimate"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].point_floor_diagnostic",
+              "parent_role": "issued_floor_artifact",
+              "path": "<this window's detection-floor-extraction.json>"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 1,
+          "limit_basis": "ruled",
+          "limit_basis_source": "joulewise/detection_floor.py:806-840 is the committed predicate. It needs no new number: it compares two quantities the floor machinery already computes.",
+          "minimum_n": 1,
+          "quantity": "whether phase-edge placement, rather than run-to-run scatter, sets this window's floors",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "floor cell",
+          "units": "boolean"
+        }
+      ],
+      "row_id": "phase_attribution",
+      "row_label": "C4",
+      "supplying_campaign": "configs/campaigns/metrology_v1/additivity_shapes",
+      "table_property": "Phase accounting"
+    },
+    {
+      "criteria": [
+        {
+          "blocked_on": "ED-INPUT",
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Without roles fixed at pack generation the allowance cannot be shown to exclude the probes that test it, so the containment test would be satisfied by construction and the row reports no conclusion.",
+          "criterion_id": "C5.1",
+          "decision_rule": "every reference member carries a frozen reference_role and no held_out member appears in the allowance derivation",
+          "estimator": {
+            "formula": "count of reference members carrying reference_role in {allowance_constructing, held_out} in the frozen pack, with held-out members mechanically excluded from the excursion X and from the drift allowance",
+            "inputs": [
+              {
+                "field_path": "references[].reference_role",
+                "role": "campaign_plan"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "references",
+              "parent_role": "campaign_plan",
+              "path": "configs/campaigns/window_references/"
+            }
+          ],
+          "failure_outcome": "indeterminate",
+          "ledger_text": "Held-out reference probe count (C5) - window budget; proposed >= 3.",
+          "limit_basis": "ed_input_required",
+          "limit_basis_source": "The number of held-out probes is bounded by the window's time budget, which is Ed's to set. The ruling records the proposal of at least three, one per window third, so a single outlier is not the whole result.",
+          "minimum_n": 1,
+          "quantity": "count of reference members whose allowance-constructing or held-out role was fixed at pack generation",
+          "reason_code_on_failure": "characterization_reference_role_unfrozen",
+          "sample_unit": "reference member",
+          "units": "reference members"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "The published drift allowance does not contain the drift actually observed on probes it was not built from, so the allowance understates within-window drift and every floor carrying it is re-derived with a larger allowance.",
+          "criterion_id": "C5.2",
+          "decision_rule": "D_hold <= A_drift in both claim families",
+          "derivation_rule": "A_drift = max(X, R_c) exactly as the window computes it, where X is the start/midpoint/end trajectory excursion over the allowance-constructing references only and R_c is the matching settled-corpus reference-repeatability bound. Held-out probes enter neither term.",
+          "estimator": {
+            "formula": "D_hold = max over held-out probes j of |H_j - R_mean|, where R_mean is the mean over the window's allowance-constructing reference members; computed separately for gross request energy and idle-subtracted request energy",
+            "inputs": [
+              {
+                "field_path": "energy_request_j",
+                "role": "reference_member"
+              },
+              {
+                "field_path": "energy_request_idle_subtracted_j",
+                "role": "reference_member"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "energy_request_j",
+              "parent_role": "reference_member",
+              "path": "runs/metrology_v1/*/references/*/summary_metrics.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "docs/paper/draft-v1.md:244-250 defines A_drift and states in its own words that the start, midpoint, and end points document the allowance but cannot validate it: containment must be evaluated on held-out probes or later sessions.",
+          "minimum_n": 3,
+          "quantity": "largest deviation of a held-out reference probe from the window's allowance-constructing reference mean",
+          "reason_code_on_failure": "characterization_heldout_reference_absent",
+          "sample_unit": "held-out reference probe",
+          "units": "J"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No statement about recovery from operator intervention, hardware events, or any disturbance other than the registered sustained workload.",
+            "permitted": "recovery from workload-induced disturbance on this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Recovery from a sustained workload takes longer than the settling convention allows, so the settling interval is raised to the observed maximum plus the registered margin in a successor policy edition and every window collected under the present convention is re-examined for admission validity.",
+          "criterion_id": "C5.3",
+          "decision_rule": "max_j t_j <= 180",
+          "estimator": {
+            "formula": "t_j = the waited_s recorded on the cooldown note whose result is recovered, for the gate run after sustained hold j; report max_j t_j. The gate polls in five-second sub-windows and releases on a complete thirty-second rolling window with at least eighty percent duration coverage, duration-weighted mean power no more than 1.10 times the fixed clean reference, and nominal thermal pressure.",
+            "inputs": [
+              {
+                "field_path": "cooldown[].waited_s",
+                "role": "experiment_manifest"
+              },
+              {
+                "field_path": "cooldown[].result",
+                "role": "experiment_manifest"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "cooldown[].waited_s",
+              "parent_role": "experiment_manifest",
+              "path": "runs/metrology_v1/long_holds/*/experiment_manifest.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 180,
+          "limit_basis": "ruled",
+          "limit_basis_source": "docs/phase_2/window_runbook.md:214 (SETTLE_S=180) and :135 ('Stage settle | 180 seconds'). This is the settling convention the row exists to adjudicate. It is a different mechanism from the cooldown gate's own refusal cap of 300 s (configs/campaign_policies/quiet_mac_p2_production.json cap_s), and the two must not be conflated: the criterion asks whether recovery in fact completes inside the settling convention, not whether the gate eventually released.",
+          "minimum_n": 3,
+          "quantity": "time from the end of a sustained workload to the first passing cooldown-exit evaluation",
+          "reason_code_on_failure": "characterization_recovery_record_absent",
+          "sample_unit": "sustained hold and its following cooldown",
+          "units": "s"
+        }
+      ],
+      "row_id": "drift_settling",
+      "row_label": "C5",
+      "supplying_campaign": "configs/campaigns/metrology_v1/long_holds and configs/campaigns/window_references",
+      "table_property": "Drift and recovery"
+    },
+    {
+      "criteria": [
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Fewer eligible sessions than the registered minimum leaves the row pending. It renders the template's fourth phrase and no between-session value is promoted.",
+          "criterion_id": "C6.1",
+          "decision_rule": "eligible_session_count >= 3",
+          "estimator": {
+            "formula": "count of sessions satisfying eligibility_predicate; every excluded session is listed in sessions_excluded with its reason",
+            "inputs": [
+              {
+                "field_path": "$.status",
+                "role": "whole_window_verdict"
+              },
+              {
+                "field_path": "stack_identity",
+                "role": "whole_window_verdict"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.status",
+              "parent_role": "whole_window_verdict",
+              "path": "<each candidate session>/whole_window_verdict.json"
+            }
+          ],
+          "failure_outcome": "indeterminate",
+          "limit": 3,
+          "limit_basis": "ruled",
+          "limit_basis_source": "docs/paper/draft-v1.md:340 registers at least three sessions that passed every required check. It is the one characterization table cell already filled.",
+          "minimum_n": 3,
+          "quantity": "count of sessions satisfying the frozen eligibility predicate",
+          "reason_code_on_failure": "characterization_eligible_sessions_insufficient",
+          "sample_unit": "independently calibrated session",
+          "units": "sessions"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A session carried into the between-session row with a failed null or drift row would import that failure silently; instead the between-session row publishes the failure and no reuse corridor is claimed.",
+          "criterion_id": "C6.2",
+          "decision_rule": "every eligible session's null and drift_settling rows are supported",
+          "estimator": {
+            "formula": "for each eligible session, read its issued characterization report's null and drift_settling row outcomes",
+            "inputs": [
+              {
+                "field_path": "rows[].row_outcome",
+                "role": "issued_characterization_report"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "rows[].row_outcome",
+              "parent_role": "issued_characterization_report",
+              "path": "<each eligible session>/characterization_result_report.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 3,
+          "limit_basis": "ruled",
+          "limit_basis_source": "A session whose own null or drift row failed cannot contribute to a statement about stability across sessions; the count is the same registered minimum as C6.1.",
+          "minimum_n": 3,
+          "quantity": "health of the null and drift rows in every eligible session's own characterization report",
+          "reason_code_on_failure": "characterization_whole_window_verdict_unissued",
+          "sample_unit": "independently calibrated session",
+          "units": "sessions"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "Sessions that differ in stack identity or capture method are measuring different instruments, so a difference between them is not evidence about session-to-session stability and no reuse corridor is claimed.",
+          "criterion_id": "C6.3",
+          "decision_rule": "every eligible session matches the reference session exactly",
+          "estimator": {
+            "formula": "compare every stack-identity field, the capture-method era, and the estimator identity of each eligible session with the reference session",
+            "inputs": [
+              {
+                "field_path": "stack_identity",
+                "role": "whole_window_verdict"
+              },
+              {
+                "field_path": "capture_method_era",
+                "role": "member_summary"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "stack_identity",
+              "parent_role": "whole_window_verdict",
+              "path": "<each eligible session>/whole_window_verdict.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 3,
+          "limit_basis": "ruled",
+          "limit_basis_source": "docs/paper/draft-v1.md:333 requires the same complete hardware-and-software configuration; :325 requires claim-bearing evidence to positively name a current capture method.",
+          "minimum_n": 3,
+          "quantity": "agreement of stack identity, capture-method era, and estimator identity across eligible sessions",
+          "reason_code_on_failure": "characterization_identity_mismatch",
+          "sample_unit": "independently calibrated session",
+          "units": "sessions"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No general statistical stability claim, no percentile-bound interpretation, and no overlap test.",
+            "permitted": "stable enough for the stated reuse corridor across these eligible sessions"
+          },
+          "consequence_if_contradicted": "Floors for the same cell differ across sessions by more than the reuse corridor allows, so a floor from one session is marked stale for another and no floor is reused across the eligible set.",
+          "criterion_id": "C6.4",
+          "decision_rule": "max(F_cell) / min(F_cell) <= 1.25 for every repeated floor role",
+          "estimator": {
+            "formula": "for each floor role repeated across eligible sessions, max(F_cell) / min(F_cell) over those sessions",
+            "inputs": [
+              {
+                "field_path": "$.floors[].operative_floor_j",
+                "role": "issued_floor_artifact"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].operative_floor_j",
+              "parent_role": "issued_floor_artifact",
+              "path": "<each eligible session>/detection-floor-extraction.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 1.25,
+          "limit_basis": "derived",
+          "limit_basis_source": "derivation: symmetric_generalization_of_directional_stale_floor_sentinel. docs/phase_2/detection_floor.md:391-408 rules a DIRECTIONAL stale-floor sentinel: a revalidation floor no more than 1.25 times the earlier window's floor. The symmetric max-over-min form used here is a generalization of that directional rule and is NOT itself ruled. The same source states the rule is an operational stale-floor sentinel, not a statistical overlap test.",
+          "minimum_n": 1,
+          "quantity": "ratio of largest to smallest operative floor across eligible sessions, for each repeated floor role",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "repeated floor role",
+          "units": "dimensionless ratio"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A new instrument state between sessions means the sessions are not repeats of one another; the corridor result is withdrawn and the affected floors are marked stale.",
+          "criterion_id": "C6.5",
+          "decision_rule": "no eligible session shows a new instrument state",
+          "estimator": {
+            "formula": "for each eligible session's revalidation record, check that no residual or contrast component newly exceeds the earlier session's floor gate and that no new quality flag, cooldown cap-hit pattern, sampling change, or manifest change explains a new instrument state",
+            "inputs": [
+              {
+                "field_path": "revalidation",
+                "role": "issued_floor_artifact"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "revalidation",
+              "parent_role": "issued_floor_artifact",
+              "path": "<each eligible session>/detection-floor-extraction.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit": 3,
+          "limit_basis": "ruled",
+          "limit_basis_source": "docs/phase_2/detection_floor.md:393-398 lists these change checks as conjunctive conditions of the ruled revalidation rule; this criterion imports them unchanged.",
+          "minimum_n": 3,
+          "quantity": "presence of a new instrument state between eligible sessions",
+          "reason_code_on_failure": "characterization_change_check_failed",
+          "sample_unit": "independently calibrated session",
+          "units": "sessions"
+        },
+        {
+          "claim_ceiling": {
+            "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
+            "permitted": "instrument-result language about this named stack under these named conditions"
+          },
+          "consequence_if_contradicted": "A quantity varies more between sessions than any single session's declared uncertainty allows, so single-session uncertainty is reported as understating between-session behaviour and no single-session bound is quoted as if it covered reuse.",
+          "criterion_id": "C6.6",
+          "decision_rule": "range across eligible sessions <= the largest single-session declared bound for that quantity",
+          "derivation_rule": "The comparator is the largest bound any one eligible session already declares for that same quantity, read from that session's own issued artifacts. No new number is introduced.",
+          "estimator": {
+            "formula": "for each of the calibration bound, each operative floor, and the null result: range = max - min across eligible sessions",
+            "inputs": [
+              {
+                "field_path": "b_fiducial_s",
+                "role": "instrument_evidence"
+              },
+              {
+                "field_path": "$.floors[].operative_floor_j",
+                "role": "issued_floor_artifact"
+              },
+              {
+                "field_path": "rows.null.observed_values.max_abs_block_delta_j",
+                "role": "issued_characterization_report"
+              }
+            ]
+          },
+          "evidence_binding": [
+            {
+              "field_path": "$.floors[].operative_floor_j",
+              "parent_role": "issued_floor_artifact",
+              "path": "<each eligible session>/detection-floor-extraction.json"
+            }
+          ],
+          "failure_outcome": "contradicted",
+          "limit_basis": "derived",
+          "limit_basis_source": "The physical statement: session-to-session variation must not exceed the uncertainty a single session already admits to. If it does, the single-session bound understates what the instrument actually does between sessions.",
+          "minimum_n": 3,
+          "quantity": "spread of each repeated quantity across eligible sessions, against the largest single-session bound already declared for it",
+          "reason_code_on_failure": "characterization_criterion_not_met",
+          "sample_unit": "repeated quantity",
+          "units": "J or s, per quantity"
+        }
+      ],
+      "eligibility_predicate": "A session is eligible if and only if: (i) its whole-window verdict is issued and PASSED; (ii) every stack-identity field matches the reference session exactly; and (iii) its capture-method era is a current claim-bearing anchor method. The eligible set is defined by this predicate and is NEVER enumerated: an enumerated list can be selected after outcomes are visible, a predicate cannot. Every session considered and excluded is listed in sessions_excluded with its reason.",
+      "row_id": "between_sessions",
+      "row_label": "C6",
+      "supplying_campaign": "cross-window session index; no single campaign supplies this row",
+      "table_property": "Between-session stability"
+    }
+  ],
+  "schema_version": "joulewise.characterization_result_spec.v1",
+  "spec_id": "characterization-result-spec-v1"
+}
