@@ -23,9 +23,12 @@ FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 EXPECTED_IDS = {
     "ARM-PACKET-01",
     "CALEXITS-EVIDENCE-BYTES-01",
+    "CALEXITS-FOURTH-SHAPE-01",
     "D144-SEATPASS-FOLLOWUPS",
     "ED-HANDS-BATCH-01",
     "EDQ-L9-3-CAPTURE-01",
+    "PAPER-REPLAY-FENCE-01",
+    "PLANTEST-RGLOB-RACE-01",
     "PREWINDOW-REGEX-01",
     "REGISTRY-ID-NAMING-01",
     "READY-WO-BATCH-01",
@@ -348,9 +351,15 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # (pre-existing deterministic bench failure, distinct from both
         # diagnosed CI-red classes) and REGISTRY-ID-NAMING-01 (S-0
         # packet-1 cold-gate free finding, fenced post-_v4):
-        # 88 - 1 + 2 = 89 exact live records.
+        # 88 - 1 + 2 = 89; the 2026-08-24 morning wave registers
+        # CALEXITS-FOURTH-SHAPE-01 (run 32739939880's fourth terminal
+        # shape on a both-cures branch), PLANTEST-RGLOB-RACE-01 (the
+        # checkout_inventory scandir race, run 32745254371), and
+        # PAPER-REPLAY-FENCE-01 (the retained §2-fill replay fence,
+        # acceptance item 3 of the retention verification):
+        # 89 + 3 = 92 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 89)
+        self.assertEqual(len(self.tasks), 92)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

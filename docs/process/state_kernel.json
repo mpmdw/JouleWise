@@ -706,6 +706,36 @@
       "status_note": "Found 2026-08-24 during the flake-fix round; fails identically on main and the fix branch, so it is NOT a regression of either cure. May be environment-sensitive (path length/normalization) — reproduce first.",
       "stop_card": null
     },
+    "CALEXITS-FOURTH-SHAPE-01": {
+      "acceptance": {
+        "evidence": [
+          "The fourth shape is classified with a deterministic regression proving red-before/green-after",
+          "The mutation test passes repeatedly on hosted runners across both interpreters"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALEXITS-FOURTH-SHAPE-01/acceptance",
+          "label": "CALEXITS-FOURTH-SHAPE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The terminal-shape taxonomy is complete rather than grown one flake at a time."
+      },
+      "authority": {
+        "label": "RUN_STATE 2026-08-24 T23 entries",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Complete the mutation-race terminal-shape taxonomy: run 32739939880 (a branch CONTAINING both landed cures) failed test_forced_auto_maintenance_mutation_reproduces_cleanup_race with a FOURTH terminal shape the widened predicate (write-pack OR prepare-kill) rejects. Diagnose from the preserved attempt-1 log archive, admit the shape or fix the topology model, with deterministic classifier regressions per the third-shape pattern.",
+      "id": "CALEXITS-FOURTH-SHAPE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 88,
+      "status": "queued",
+      "status_note": "Hosted-only, intermittent. Evidence archive preserved in the session scratchpad (fourth-shape-run32739939880-attempt1.zip); capture into custody before scratchpad expiry if work has not started by then.",
+      "stop_card": null
+    },
     "CALEXITS-HYGIENE-FIXES-01": {
       "acceptance": {
         "evidence": [
@@ -3048,6 +3078,36 @@
       "status": "blocked",
       "stop_card": null
     },
+    "PAPER-REPLAY-FENCE-01": {
+      "acceptance": {
+        "evidence": [
+          "A committed check re-derives b_fiducial_s, the cell count, the pulse-9 values, and the five stamps from primary artifacts and matches the draft literals",
+          "No change to joulewise/ or any ESTIMATOR_CODE_PATHS-pinned file"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PAPER-REPLAY-FENCE-01/acceptance",
+          "label": "PAPER-REPLAY-FENCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The flagship worked examples are mechanically bound to their primary artifacts."
+      },
+      "authority": {
+        "label": "RUN_STATE 2026-08-24 T23 entries",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Add the replay fence for the two section-2 evidence fills (draft-v1.md pulse-9 literals + five clock stamps): a check that re-derives both substitutions from the primary custody artifacts (mirroring prove_r6_neutrality.py's read path) and asserts byte-agreement with the draft's literals, replacing the retired absence-assertions.",
+      "id": "PAPER-REPLAY-FENCE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 90,
+      "status": "queued",
+      "status_note": "Acceptance item 3 of the retention-verification round (the fills landed via PR #171 without it). Desk work; no estimator-pinned file may change.",
+      "stop_card": null
+    },
     "PHASE-SHARE-ESTIMAND-01": {
       "acceptance": {
         "evidence": [
@@ -3077,6 +3137,36 @@
       "rank": 55,
       "status": "queued",
       "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
+      "stop_card": null
+    },
+    "PLANTEST-RGLOB-RACE-01": {
+      "acceptance": {
+        "evidence": [
+          "The inventory walk survives concurrent directory removal (regression exercises it deterministically)",
+          "test_emitted_successor_generator_refuses_downgrade_targets green repeatedly on hosted runners"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PLANTEST-RGLOB-RACE-01/acceptance",
+          "label": "PLANTEST-RGLOB-RACE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The inventory helper cannot be killed by its own fixture teardown."
+      },
+      "authority": {
+        "label": "RUN_STATE 2026-08-24 T23 entries",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Cure the checkout_inventory rglob/scandir race in tests/test_d117_decode_contrast_plan.py:67 (run 32745254371: os.scandir died mid-walk when a directory vanished during the recursive inventory, presumably the generator fixture's own TemporaryDirectory teardown). Make the walk tolerant of vanishing entries or sequence the teardown, with a regression.",
+      "id": "PLANTEST-RGLOB-RACE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 89,
+      "status": "queued",
+      "status_note": "Single hosted occurrence 2026-08-24; docs-only commit, so the race is environmental to the test, not a product change.",
       "stop_card": null
     },
     "PREWINDOW-REGEX-01": {
@@ -3556,7 +3646,7 @@
       "priority": "p2_next_slice",
       "rank": 12,
       "status": "queued",
-      "status_note": "2026-08-03: timing DATA collected (quiet bench, 93 modules, 695s serial; raw in .desk/test-speed-consult/timings-20260803.jsonl) and DESIGN done (.desk/test-speed-consult/DESIGN-from-timing-data.md). Findings: suite is a 2-module problem (run_campaign 182s + p2038 133s = 45%); module-atomic sharding CAPS at 182s so those two must be split by TestCase class; shard-runner + splits -> ~87s wall @8 workers (6.5x); fast tier (drop 11 heavy integ modules) -> 25-40s PR feedback with the full suite still the merge gate. Blacksmith (lever 3) NEEDS ED (account/cost; likely marginal once sharded). Implementation queued: scripts/shard_tests.py + class-split + CI matrix — mechanical, delegatable, zero deletions (D-061). 2026-08-04: PHASE 1 LANDED — PR #98 MERGED (9b02539): module-atomic shard-runner + 8-way CI shard matrix, main CI green under it (~15min -> ~6min proven); worktree/branch pruned. Remaining scope: class-split of the two heavy modules (Phase 2), fast PR tier (lever 2), Blacksmith runners (lever 3, NEEDS ED).",
+      "status_note": "Lever 1 (reduce memo) + lever 2 (crash-matrix parallelization, hosted-verified 23.1->6.5 min worst shard) + the ack backstop LANDED via PR #172; the exclusive crash-matrix job is no longer the CI critical path. Remaining to the <=12 min target: ordinary test shard 4 (~18 min worst) and calibration-exits-exclusive (~16.6 min); scripts/test_timings.json shard split needs re-declaration (unbalanced the other way).",
       "stop_card": null
     },
     "TOOL-01": {
@@ -3726,7 +3816,7 @@
       "priority": "p1_phase_gate",
       "rank": 66,
       "status": "partial",
-      "status_note": "S-0 IN EXECUTION 2026-08-24 (mint-license dependency SATISFIED per D-150 item 1 — live prompts, no settings rule). Clone estate cut from 33aa594 (green run 32679620252); §§1.1-2.1 executed and magistrate-ratified (custody transcripts 000-011); 112-path allowlist shape PASS. HELD at cold-gate packet 2 (four class-(b) doc repoints: transaction-work vs candidate-defect; seat 1 Q2-PROCEED-WITH-AMENDMENT, refuter in flight). Retained verbatim: S-0 is lead-executed at the bench; delegated transcript review is ADDITIVE ONLY — the magistrate's own reading of the S-0 transcript remains the final verification gate (cold-attached sentence). BIG per D-144: gauntlet + Fable final review + ONE pre-merge two-seat pass over the composed S-1..S-5 merge; the magistrate rules its findings. Horizon (item 2) and marker (item 3) rulings also gate mint-side steps.",
+      "status_note": "S-0 UNDER THE RATIFIED r4 INSTRUMENT (2026-08-24 morning): runsheet advanced r2->r4 through two-seat cold ratification, delta re-audit, and fix rounds (PRs #175/#177); §§1-2 + §3.1 + the U11 environment PROVEN BY REAL EXECUTION (first real U11 freeze ever passed, measurement venv); §3.2 per-pack freeze->commit interleave verified red-before/green-after with three real MLX freezes. R4-O1 interim-ruled (DEPENDENCY_CHANGED_SET expected at fixation with exactly-one-path obligation); PACKET 5 (D-151 condition-3 reopening) REGISTERED as a separate cold process gating the REAL transaction. Second estate cut pending main green at c5b17b5. Retained verbatim: S-0 is lead-executed at the bench; the magistrate's own reading of the S-0 transcript remains the final verification gate. BIG per D-144: gauntlet + Fable final review + ONE pre-merge two-seat pass over the composed S-1..S-5 merge. Horizon and marker rulings gate mint-side steps.",
       "stop_card": null
     },
     "WO-CENSUS-SEMANTICS": {
