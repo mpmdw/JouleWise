@@ -257,7 +257,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Disqualifiers + not-resolvable conditions | Realized shape mismatch, stop-policy divergence, below-floor content deltas, or missing prompt hashes force `not resolvable` or capability wording. |
 | Linked manifests/bundle hashes | pending post-execution. |
 
-### Characterization rows AP-C0 … AP-C6 (added 2026-08-24)
+### Characterization rows AP-CH0 … AP-CH6 (added 2026-08-24)
 
 These seven rows transcribe the frozen characterization result specification
 `configs/campaigns/metrology_v1/characterization_result_schema_v1.json` into
@@ -277,37 +277,37 @@ every one of its criteria is supported — the criteria are conjunctive, not a
 vote. A row's `row_outcome` is one of `supported`, `indeterminate`,
 `contradicted`, or, for the between-sessions row alone, `pending_eligibility`.
 
-### AP-C0: characterization family registration
+### AP-CH0: characterization family registration
 
 | Field | Value |
 |---|---|
-| Plan ID / RQ consumer | AP-C0 / the family row for the Window C instrument-characterization campaign. It registers the family that AP-C1 through AP-C6 belong to; it is not itself a contrast. Consumers are draft Section 5 Table 1 and the Section 6 results variants of `docs/process_traces/2026-08-07-plan-factory/DRAFT-RESULTS_PROSE.md`. |
+| Plan ID / RQ consumer | AP-CH0 / the family row for the Window C instrument-characterization campaign. It registers the family that AP-CH1 through AP-CH6 belong to; it is not itself a contrast. Consumers are draft Section 5 Table 1 and the Section 6 results variants of `docs/process_traces/2026-08-07-plan-factory/DRAFT-RESULTS_PROSE.md`. |
 | family_id | characterization-metrology-v1 |
 | claim_role | exploratory |
 | selection_scope | The six public rows `linearity`, `null`, `empirical_floor`, `phase_attribution`, `drift_settling`, `between_sessions` and their thirty-four registered criteria, frozen in the specification file before collection. Nothing outside that frozen file is in scope, and no row may be added, renamed, or split after freeze. |
 | multiplicity_rule | Registered explicitly exploratory with no confirmatory inference — the formulation permitted by name in the Required fields table above. Within the family, exactly two criteria carry a false-positive rate that needs correcting: the identical-condition null mean containment (C2.3) and the prompt-invariance slope containment (C4.2a/C4.2b). They are corrected together by the Holm procedure at alpha = 0.05 with denominator m = 2. C4.2a and C4.2b are two limbs of ONE inferential property and share a single Holm-adjusted slope interval, so the denominator counts properties, not limbs. Every other criterion is a deterministic bound comparison and has no false-positive rate to correct. |
-| Metric + exact window class | Per row; see AP-C1 through AP-C6. The family spans request windows, phase windows, ABBA block windows, and session windows. |
-| Unit of analysis + dependence structure | Per row; see AP-C1 through AP-C6. No row treats an item window as an independent replicate. |
-| Estimator/formula | Per row; see AP-C1 through AP-C6. |
+| Metric + exact window class | Per row; see AP-CH1 through AP-CH6. The family spans request windows, phase windows, ABBA block windows, and session windows. |
+| Unit of analysis + dependence structure | Per row; see AP-CH1 through AP-CH6. No row treats an item window as an independent replicate. |
+| Estimator/formula | Per row; see AP-CH1 through AP-CH6. |
 | Inclusion/exclusion + quality-flag waiver rules | A member enters a row only if the window's whole-window verdict admitted it. Two ordering gates refuse the whole report rather than a row: `characterization_criteria_not_prior` refuses unless the freeze record's issue time strictly precedes the capture timestamp of every admitted member, and `characterization_limit_supplier_not_prior` refuses unless every derived limit's supplier artifact was frozen strictly earlier than the characterization freeze. No quality-flag waiver exists in this family. |
 | Order/blocking/covariates | From the campaign's own order manifest; the characterization specification does not supply this field. |
 | Floor gate | pending-P2-015: Where a criterion compares against a floor it uses the operative floor `max(floor_abs_j, floor_cmp_j)` of an independently issued same-cell floor artifact whose freeze ordinal is strictly earlier than the characterization freeze. A characterization window never supplies its own comparator. |
 | MDE/n sizing + predeclared top-up rule | n is frozen per row in the campaign packs under D-062 and is not a runtime parameter. Anti-selection rule from the specification: a window that failed its whole-window verdict may be re-collected, but a contradicted row inside a window that PASSED its verdict does not license re-collection to reverse it; any successor window carries an explicit predecessor link and both reports publish, and the paper reports the sequence rather than the more favourable member of it. |
 | Denominator provenance requirement | Runtime-observed realized token counts throughout; a config-declared token count is never a substitute. |
-| Holdout cells (L3 only) | not applicable; no row in this family is an L3 plan. AP-C5's held-out reference probes are an evidence-independence device, not an L3 prediction holdout. |
+| Holdout cells (L3 only) | not applicable; no row in this family is an L3 plan. AP-CH5's held-out reference probes are an evidence-independence device, not an L3 prediction holdout. |
 | Claim ceiling + exact forbidden upgrade | Ceiling: instrument-result language about this one named stack under these named conditions. Exact forbidden upgrade: no characterization row may be quoted as a scientific finding about models, hardware, or workloads. |
 | Disqualifiers + not-resolvable conditions | An unissued or failed whole-window verdict; a refusal reason code outside the closed `characterization_*` set; either ordering gate refusing. Any of these stops the report rather than downgrading a row. |
 | Linked manifests/bundle hashes | pending post-execution; the specification does not supply this field. |
 
-### AP-C1: characterization row `linearity` — workload response
+### AP-CH1: characterization row `linearity` — workload response
 
 | Field | Value |
 |---|---|
-| Plan ID / RQ consumer | AP-C1 / characterization row `linearity`, draft Table 1 property "Workload response". Supplies template tokens `[PLAIN_LANGUAGE_RESULT_linearity]`, `[S_C_linearity_request_J_per_token]`, `[S_C_linearity_decode_J_per_token]`, and `[R_C_linearity_limit_J]`. |
+| Plan ID / RQ consumer | AP-CH1 / characterization row `linearity`, draft Table 1 property "Workload response". Supplies template tokens `[PLAIN_LANGUAGE_RESULT_linearity]`, `[S_C_linearity_request_J_per_token]`, `[S_C_linearity_decode_J_per_token]`, and `[R_C_linearity_limit_J]`. |
 | family_id | characterization-metrology-v1 |
 | claim_role | exploratory |
 | selection_scope | Seven criteria C1.1 through C1.7 over five registered output levels — 128, 256, 512, 1024, and 2048 tokens — with eight admitted bundles at each, 40 in all, registered in `configs/campaigns/metrology_v1/linearity_ramp/calibration_plan.json` before measurement. |
-| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-C0. This row contributes no member to the inferential subfamily, so the family's Holm adjustment at m = 2 does not reach any criterion here. |
+| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-CH0. This row contributes no member to the inferential subfamily, so the family's Holm adjustment at m = 2 does not reach any criterion here. |
 | Metric + exact window class | Gross request energy (`energy_request_j`, request window) and token-generation energy (`phase_energy_j.decode`, phase window), each fitted separately. |
 | Unit of analysis + dependence structure | One admitted run bundle is one independent point for C1.2 through C1.7; one registered output level is the unit for C1.1. |
 | Estimator/formula | Ordinary least squares of E = a + b·T over admitted bundles, T the runtime-observed realized output tokens. The slope is evaluated at every joint corner of the admitted energy intervals and the least favourable corner's slope is reported as the all-corners lower bound (C1.2, C1.3; decision rule `all_corners_slope_lower_bound > 0`). R_max is the largest departure of a level mean from the fitted line, the supremum taken over the authenticated energy intervals rather than their midpoints (C1.4 through C1.7). |
@@ -321,15 +321,15 @@ vote. A row's `row_outcome` is one of `supported`, `indeterminate`,
 | Disqualifiers + not-resolvable conditions | A missing level leaves the response unconstrained over part of the range and returns no conclusion rather than a fit over a shortened range. A non-positive all-corners slope lower bound contradicts the row and withdraws the per-token conversion from every downstream use. R_max exceeding either available limb contradicts the row; an unavailable claim-anchored limb returns no conclusion. |
 | Linked manifests/bundle hashes | pending post-execution; the specification does not supply this field. |
 
-### AP-C2: characterization row `null` — identical-condition null response
+### AP-CH2: characterization row `null` — identical-condition null response
 
 | Field | Value |
 |---|---|
-| Plan ID / RQ consumer | AP-C2 / characterization row `null`, draft Table 1 property "Identical-condition null response". Supplies `[PLAIN_LANGUAGE_RESULT_null]` and `[D_C_null_max_abs_J]`. |
+| Plan ID / RQ consumer | AP-CH2 / characterization row `null`, draft Table 1 property "Identical-condition null response". Supplies `[PLAIN_LANGUAGE_RESULT_null]` and `[D_C_null_max_abs_J]`. |
 | family_id | characterization-metrology-v1 |
 | claim_role | exploratory |
 | selection_scope | Four criteria C2.1 through C2.4 over three registered output magnitudes — 128, 512, and 2048 tokens — registered in `configs/campaigns/metrology_v1/null_ladder/calibration_plan.json` before measurement. |
-| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-C0. C2.3 is one of the family's two inferential properties and carries the Holm adjustment at m = 2. |
+| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-CH0. C2.3 is one of the family's two inferential properties and carries the Holm adjustment at m = 2. |
 | Metric + exact window class | Signed A/B/B/A block difference in joules, over request windows collected under identical configuration and payload. |
 | Unit of analysis + dependence structure | One A/B/B/A block is one independent unit. Individual runs inside a block are not independent replicates. |
 | Estimator/formula | Per block, delta = (B1 + B2 − A1 − A2) / 2, with the block interval formed from the four signed member intervals (C2.2, every block interval must contain zero). C2.3 reports the mean of delta over admitted blocks at a magnitude with its complete deterministic composed interval, Holm-adjusted. C2.4 reports the largest absolute block difference, the supremum taken over each block's composed interval; it is reported alongside the mean because a mean near zero can hide two blocks leaking in opposite directions. |
@@ -343,15 +343,15 @@ vote. A row's `row_outcome` is one of `supported`, `indeterminate`,
 | Disqualifiers + not-resolvable conditions | A missing magnitude returns no conclusion. A block interval that excludes zero, a mean interval outside plus-or-minus the comparator, or a maximum absolute difference above the comparator contradicts the row. Failure to reject zero is never by itself sufficient to support the row. |
 | Linked manifests/bundle hashes | pending post-execution; the specification does not supply this field. |
 
-### AP-C3: characterization row `empirical_floor` — deliberate small-difference challenge
+### AP-CH3: characterization row `empirical_floor` — deliberate small-difference challenge
 
 | Field | Value |
 |---|---|
-| Plan ID / RQ consumer | AP-C3 / characterization row `empirical_floor`, draft Table 1 property "Deliberate small-difference challenge". Supplies `[PLAIN_LANGUAGE_RESULT_floor]`, `[R_C_micro_min_x_floor]`, and `[R_C_micro_max_x_floor]`. |
+| Plan ID / RQ consumer | AP-CH3 / characterization row `empirical_floor`, draft Table 1 property "Deliberate small-difference challenge". Supplies `[PLAIN_LANGUAGE_RESULT_floor]`, `[R_C_micro_min_x_floor]`, and `[R_C_micro_max_x_floor]`. |
 | family_id | characterization-metrology-v1 |
 | claim_role | exploratory |
 | selection_scope | Five criteria C3.1 through C3.5 over four registered effect ratios — 0.5, 1.0, 1.5, and 3.0 times the published floor — each registered in both directions (`b_minus_a`, `a_minus_b`), giving eight target-direction slots, registered in `configs/campaigns/metrology_v1/micro_delta/calibration_plan.json` before measurement. |
-| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-C0. This row contributes no member to the inferential subfamily, so the family's Holm adjustment at m = 2 does not reach any criterion here. |
+| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-CH0. This row contributes no member to the inferential subfamily, so the family's Holm adjustment at m = 2 does not reach any criterion here. |
 | Metric + exact window class | Observed signed energy difference divided by the operative floor, over ABBA block windows at a fixed configuration pair. |
 | Unit of analysis + dependence structure | One registered target-and-direction slot is the unit for C3.2 through C3.5; one ABBA block is the independent replicate inside a slot. |
 | Estimator/formula | The token increment for ratio r is k_r = floor(r·F_seed/b) when r ≤ 1 and ceil(r·F_seed/b) when r > 1, so rounding always moves the probe away from the gate boundary rather than toward it. The fitted slope b is read from an issued linearity supplier, never estimated from this row's own blocks (C3.1). Sizing agreement is `sizing_miss = abs(realized_delta_j / predicted_delta_j − 1)` (C3.4). C3.5 compares each slot's realized two-gate outcome with the expectation frozen before measurement. |
@@ -365,21 +365,21 @@ vote. A row's `row_outcome` is one of `supported`, `indeterminate`,
 | Disqualifiers + not-resolvable conditions | No issued slope supplier, an unrealizable target, a non-disjoint floor pair, or a missed sizing tolerance each return no conclusion. C3.5 contradicts the row when a slot carrying an expectation does not realize it: both 0.5 slots must be refused by the floor gate and the 1.5 and 3.0 slots must clear both gates in both directions. The 1.0 slots carry no expectation, because at exactly the boundary an expectation would register a coin flip. |
 | Linked manifests/bundle hashes | pending post-execution; the specification does not supply this field. |
 
-### AP-C4: characterization row `phase_attribution` — phase accounting
+### AP-CH4: characterization row `phase_attribution` — phase accounting
 
 | Field | Value |
 |---|---|
-| Plan ID / RQ consumer | AP-C4 / characterization row `phase_attribution`, draft Table 1 property "Phase accounting". Supplies `[PLAIN_LANGUAGE_RESULT_phase]`, `[D_C_additivity_J]`, `[S_C_prompt_invariance_J_per_token]`, and `[B_C_prompt_invariance_J_per_token]`. |
+| Plan ID / RQ consumer | AP-CH4 / characterization row `phase_attribution`, draft Table 1 property "Phase accounting". Supplies `[PLAIN_LANGUAGE_RESULT_phase]`, `[D_C_additivity_J]`, `[S_C_prompt_invariance_J_per_token]`, and `[B_C_prompt_invariance_J_per_token]`. |
 | family_id | characterization-metrology-v1 |
 | claim_role | exploratory |
 | selection_scope | Nine criteria — C4.1a/C4.1b (closure), C4.2a/C4.2b (prompt invariance), and C4.3 through C4.7 (timing attribution) — over three registered prompt-and-output shapes, 2048/128, 512/512, and 128/2048 tokens, with eight admitted bundles each, 24 in all, plus the window's two calibration bracket captures, registered in `configs/campaigns/metrology_v1/additivity_shapes/calibration_plan.json` before measurement. |
-| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-C0. C4.2a and C4.2b are the two limbs of ONE inferential property, share a single Holm-adjusted slope interval, and count once in the m = 2 denominator. |
+| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-CH0. C4.2a and C4.2b are the two limbs of ONE inferential property, share a single Holm-adjusted slope interval, and count once in the m = 2 denominator. |
 | Metric + exact window class | Prompt-processing (`phase_energy_j.prefill`) and token-generation (`phase_energy_j.decode`) phase windows against their enclosing request window; per-bundle and per-session timing terms in seconds; per-capture timing-attribution bounds in seconds. |
 | Unit of analysis + dependence structure | One admitted run bundle for C4.1a through C4.3 and C4.5/C4.6; one bracket capture for C4.4; one floor cell for C4.7. |
 | Estimator/formula | Closure residual D_i = prefill + decode − request per bundle. Invariance: with prompt tokens held fixed, fit prefill energy against runtime-observed later output tokens and report the complete composed slope interval. Attribution: report `b_fiducial_s`, the one bracket-capture term shared by every member of the session, as its own field, and each member's local and edge-span contribution as its own field, never their sum as a corpus range (C4.3). C4.7 evaluates the committed predicate `admissible_set_uncertainty_dominates_point_floor` over each floor cell. |
 | Inclusion/exclusion + quality-flag waiver rules | Admitted claim-bearing members only. C4.5 requires a zero rate of the committed `clock_bound_exceeds_quarter_window` flag; C4.6 requires a zero rate of `cadence_ratio_below_threshold` and `insufficient_in_window_samples`. Neither criterion introduces a number: both thresholds are already pinned in `joulewise/reduce.py`. No waiver — a flagged claim-bearing member contradicts the row. |
 | Order/blocking/covariates | From the campaign's own order manifest; the characterization specification does not supply this field. |
-| Floor gate | pending-P2-015: C4.2b's band is L_F = F_operative / (T_max − T_min), where F_operative is the operative floor of an already-issued same-cell prefill floor from a strictly earlier freeze ordinal and T_max, T_min are the largest and smallest registered output-token counts. C4.2a's band is L_H = the largest admitted prefill energy half-width divided by that same output span. The printed band is the binding limb, `min(L_H, L_F)`; both stay separately reported in `criteria[].limit_applied`. As in AP-C1, D-152 ruled no absolute fallback for the claim-anchored limb. |
+| Floor gate | pending-P2-015: C4.2b's band is L_F = F_operative / (T_max − T_min), where F_operative is the operative floor of an already-issued same-cell prefill floor from a strictly earlier freeze ordinal and T_max, T_min are the largest and smallest registered output-token counts. C4.2a's band is L_H = the largest admitted prefill energy half-width divided by that same output span. The printed band is the binding limb, `min(L_H, L_F)`; both stay separately reported in `criteria[].limit_applied`. As in AP-CH1, D-152 ruled no absolute fallback for the claim-anchored limb. |
 | MDE/n sizing + predeclared top-up rule | minimum_n 24 admitted bundles (three shapes at eight) plus the window's two bracket captures, frozen before measurement under D-062. C4.1a's overcount tolerance is `tau_float = 1e-6 J`, ruled by D-152 on 2026-08-24: three orders of magnitude below the smallest physical defect signal (~1e-3 J) and four above worst-case floating-point accumulation (~1e-10 J), so it covers arithmetic rounding only and cannot absorb a real overcount. No outcome-dependent top-up. Under D-062 the frozen n is not a runtime parameter, and any outcome-dependent top-up permanently demotes the affected result to exploratory — which is already this family's registered claim role, so the demotion is recorded rather than re-labelled. |
 | Denominator provenance requirement | Runtime-observed realized output tokens for the invariance fit; registered prompt token counts held fixed by construction. |
 | Holdout cells (L3 only) | not applicable. |
@@ -387,15 +387,15 @@ vote. A row's `row_outcome` is one of `supported`, `indeterminate`,
 | Disqualifiers + not-resolvable conditions | An overcount above `tau_float` contradicts the row, because a phase sum exceeding its enclosing request is a defect and not an allowance. An undercount is permitted only up to the energy that could physically sit in that bundle's un-phased gap — the interval between the end of prompt processing and the start of generation — computed as that gap's duration times the largest power recorded across it; missing gap evidence refuses under `characterization_gap_evidence_absent`. A composed slope interval outside either available band, a bracket bound outside the issued acceptance edition's registered corpus band, any flagged claim-bearing member, or a false dominance predicate contradicts the row. |
 | Linked manifests/bundle hashes | pending post-execution; the specification does not supply this field. |
 
-### AP-C5: characterization row `drift_settling` — drift and recovery
+### AP-CH5: characterization row `drift_settling` — drift and recovery
 
 | Field | Value |
 |---|---|
-| Plan ID / RQ consumer | AP-C5 / characterization row `drift_settling`, draft Table 1 property "Drift and recovery". Supplies `[PLAIN_LANGUAGE_RESULT_drift]`, `[D_C_reference_excursion_J]`, and `[T_C_recovery_s]`. Not to be confused with the `DRAFT-AP-C5-*` campaign-pack plan IDs, which are C5-series research-question packs and unrelated to this row. |
+| Plan ID / RQ consumer | AP-CH5 / characterization row `drift_settling`, draft Table 1 property "Drift and recovery". Supplies `[PLAIN_LANGUAGE_RESULT_drift]`, `[D_C_reference_excursion_J]`, and `[T_C_recovery_s]`. Not to be confused with the `DRAFT-AP-CH5-*` campaign-pack plan IDs, which are C5-series research-question packs and unrelated to this row. |
 | family_id | characterization-metrology-v1 |
 | claim_role | exploratory |
 | selection_scope | Three criteria C5.1 through C5.3 over three sustained 4096-token decode holds and their following cooldowns, registered in `configs/campaigns/metrology_v1/long_holds`, plus the window's reference probes in `configs/campaigns/window_references`. |
-| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-C0. This row contributes no member to the inferential subfamily, so the family's Holm adjustment at m = 2 does not reach any criterion here. |
+| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-CH0. This row contributes no member to the inferential subfamily, so the family's Holm adjustment at m = 2 does not reach any criterion here. |
 | Metric + exact window class | Gross request energy and idle-subtracted request energy for the reference probes, evaluated separately; elapsed seconds to the first passing cooldown-exit evaluation for recovery. |
 | Unit of analysis + dependence structure | One reference member for C5.1; one held-out reference probe for C5.2; one sustained hold with its following cooldown for C5.3. |
 | Estimator/formula | D_hold is the largest absolute deviation of a held-out probe from the mean over the window's allowance-constructing reference members. The allowance is A_drift = max(X, R_c), where X is the start/midpoint/end trajectory excursion computed over the allowance-constructing references ALONE and R_c is the matching settled-corpus reference-repeatability bound; held-out probes enter neither term. Recovery time t_j is the `waited_s` recorded on the cooldown note whose result is recovered. |
@@ -409,15 +409,15 @@ vote. A row's `row_outcome` is one of `supported`, `indeterminate`,
 | Disqualifiers + not-resolvable conditions | An unfrozen or missing reference role, or an absent held-out probe, returns no conclusion. A held-out deviation exceeding A_drift in either claim family, or a largest recovery time above 180 s, contradicts the row. That 180 s is the settling convention this row exists to adjudicate; it is a different mechanism from the cooldown gate's own refusal cap of 300 s, and the row tests the convention, not the cap. |
 | Linked manifests/bundle hashes | pending post-execution; the specification does not supply this field. |
 
-### AP-C6: characterization row `between_sessions` — between-session stability
+### AP-CH6: characterization row `between_sessions` — between-session stability
 
 | Field | Value |
 |---|---|
-| Plan ID / RQ consumer | AP-C6 / characterization row `between_sessions`, draft Table 1 property "Between-session stability". Supplies `[PLAIN_LANGUAGE_RESULT_between_sessions]` and `[N_C_eligible_sessions]`. |
+| Plan ID / RQ consumer | AP-CH6 / characterization row `between_sessions`, draft Table 1 property "Between-session stability". Supplies `[PLAIN_LANGUAGE_RESULT_between_sessions]` and `[N_C_eligible_sessions]`. |
 | family_id | characterization-metrology-v1 |
 | claim_role | exploratory |
 | selection_scope | Six criteria C6.1 through C6.6 over the eligible sessions of the cross-window session index. No single campaign supplies this row. |
-| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-C0. This row contributes no member to the inferential subfamily, so the family's Holm adjustment at m = 2 does not reach any criterion here. |
+| multiplicity_rule | Explicitly exploratory with no confirmatory inference, per AP-CH0. This row contributes no member to the inferential subfamily, so the family's Holm adjustment at m = 2 does not reach any criterion here. |
 | Metric + exact window class | Session window: each session's calibration bound, each operative floor, and its null result, all under one complete hardware-and-software configuration. |
 | Unit of analysis + dependence structure | One independently calibrated session is one unit; C6.4's unit is one repeated floor role and C6.6's is one repeated quantity. |
 | Estimator/formula | C6.4 is a corridor ratio: for each floor role repeated across eligible sessions, max(F_cell)/min(F_cell) must be no more than 1.25. C6.6 is a spread test: for each of the calibration bound, each operative floor, and the null result, the range across eligible sessions must be no larger than the largest bound a single eligible session already declares for that same quantity. |
