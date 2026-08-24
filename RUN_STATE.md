@@ -10,7 +10,24 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-23 afternoon (T22 — MERGE WAVE ON MAIN at e6a6520; S-0 IS NEXT)
+Last updated: 2026-08-23 evening (T22 — MAIN GREEN at 42df510; kernel wave DONE at c749224; S-0 needs ONLY the lead runsheet read + Ed's prompts)
+
+**T22 EVENING:** CI GREEN at 42df510 (conclusion-field-verified) after
+three post-merge cures (stale S1D-1 test rewritten to pin the ruled
+surface; the 3.14 argparse/Mock-stdout fixture fix; the ack-nominal
+1s->4s cure in both consumers — sixth-firing class CLOSED). KERNEL
+WAVE c749224: S1-CANDIDATE-01 + CALWRITER-ACK-TIMEOUT-01 closed on
+green evidence; A84 FIXTURE-MODERNIZATION-01 + A85 MLX-ACID-SIGABRT-01
+registered; 87 live. CI hill-climb runs under the A+B shape
+(Monitor-shell, commit-first sub-40-min turns; levers 1+6 landed —
+memo 3.3-3.5x + the nominal cure; turns A-D staged for levers 2-5).
+S-0 PRECONDITIONS ALL MET except: (a) the lead's one-sitting
+pre-execution read of s0-runsheet-r2 at the execution head (closes
+S0-RUNSHEET-R2; includes the anchor re-verification the pin note
+assigns); (b) Ed at the keyboard for the freeze-command permission
+prompts. Then: Ed's pre-campaign REBOOT (D-150a) -> the real
+transaction with step-6 under the D-150b delegation -> READY sitting
+-> windows.
 
 **T22 (2026-08-23 afternoon):** the RULE-1 GATE CLOSED (8-slice read
 ledger, candidate SOUND) and the MERGE WAVE LANDED: S-1 (3c098de, the
