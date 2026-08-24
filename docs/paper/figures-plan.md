@@ -238,13 +238,13 @@ These are drawings, not renderings of artifacts. They live in
 
 - `docs/paper/figures/fig1_boundary_attribution.svg` — phase-boundary timing
   uncertainty and the energy that migrates between prompt processing and token
-  generation (belongs to Section 4).
+  generation (belongs to Section 3).
 - `docs/paper/figures/fig2_window_timeline.svg` — measurement-window structure,
   the calibration bracket, and how ABBA order cancels steady drift (belongs to
-  Sections 3 and 5).
+  Section 2).
 - `docs/paper/figures/fig3_decision_gates.svg` — the floor gate and the
   interval-direction gate as separate checks, with the four outcomes (belongs
-  to Section 4).
+  to Section 3).
 
 Rules for this class:
 

@@ -63,10 +63,12 @@
       {"family": "Tschand"}, {"family": "Rajan"}, {"family": "Idgunji"},
       {"literal": "MLCommons Power Working Group"}
     ],
-    "container-title": "arXiv",
-    "issued": {"date-parts": [[2024]]},
-    "URL": "https://arxiv.org/abs/2410.12032",
-    "note": "Confirm the final venue; the inherited draft records a companion artifact labeled HPCA 2025."
+    "container-title": "2025 IEEE International Symposium on High-Performance Computer Architecture (HPCA)",
+    "page": "1201-1216",
+    "issued": {"date-parts": [[2025]]},
+    "DOI": "10.1109/HPCA61900.2025.00092",
+    "URL": "https://doi.org/10.1109/HPCA61900.2025.00092",
+    "note": "Published venue verified 2026-08-24 (IEEE HPCA 2025 proceedings record); preprint arXiv:2410.12032."
   },
   {
     "id": "zeus",
@@ -88,10 +90,13 @@
       {"family": "Zhao"}, {"family": "Wang"}, {"family": "Wang"},
       {"family": "Chen"}
     ],
-    "container-title": "arXiv",
-    "issued": {"date-parts": [[2025]]},
-    "URL": "https://arxiv.org/abs/2512.03024",
-    "note": "Inherited draft labels this AAAI 2026 Main Track; retain as a camera-ready venue check."
+    "container-title": "Proceedings of the Fortieth AAAI Conference on Artificial Intelligence",
+    "volume": "40",
+    "issue": "38",
+    "page": "32582-32590",
+    "issued": {"date-parts": [[2026]]},
+    "URL": "https://ojs.aaai.org/index.php/AAAI/article/view/40535",
+    "note": "Published venue verified 2026-08-24 (AAAI-40 OJS record 40535); preprint arXiv:2512.03024."
   },
   {
     "id": "mlenergy_benchmark",
