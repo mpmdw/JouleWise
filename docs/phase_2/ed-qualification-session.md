@@ -15,14 +15,13 @@ evidence. All agent fleets will already be stopped before you sit down
 do this.
 
 ## Step 2 — production sampler live checklist (~5 min)
-The #127 production sampler's reliance checklist (its items live in the
-sampler module docstring; the capture-lens audit enumerates them as rows):
-run the commands the loop has staged in
-`/tmp/ed-session/sampler-checklist.sh` when pinged — they exercise a
-short sudo powermetrics sample under the production supervisor, verify
-child reaping (no orphaned sampler processes after teardown: `pgrep -f
-powermetrics` empty), and record cadence observations. Output tees to
-`/tmp/ed-session/` for the audit's capture lens.
+The #127 production sampler's reliance checklist: run the committed
+script `scripts/ed_session/sampler-checklist.sh` when pinged — it
+exercises a short sudo powermetrics sample under the production
+supervisor, verifies child reaping (no orphaned sampler processes after
+teardown: `pgrep -f powermetrics` empty), and records cadence
+observations. The script tees its output to `/tmp/ed-session/` for the
+audit's capture lens.
 
 ## Step 3 — JW-MET-3 rail probe (~7 min, ABBA)
 The keyboard-backlight rail-inclusion probe (design custodied in the T6

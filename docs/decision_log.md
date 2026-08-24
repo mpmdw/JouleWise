@@ -4685,16 +4685,25 @@ wave (frozen 0.5.1/0.6.1 replay semantics unchanged throughout):
 
 11. **Attribution-limited detection floors — Ed-RATIFIED amendment
    (2026-07-25).** The first collection under the merged SCREEN+BUDGET
-   rules (windows a9, a10; both whole-window verdicts PASSED) could not
+   rules (windows a9, a10; both whole-window verdicts PASSED
+   [2026-08-24 caveat, readiness-sitting B-45/L11-SF3: the verdict
+   artifacts themselves were not retained — the retained extraction
+   refuses `whole_window_neg8_verdict_missing` — so PASSED here rests
+   on recorded close-out prose pending a recovered or re-derived
+   verdict artifact]) could not
    produce a floor: all three of a10's phase-absolute cells refuse
    `admissible_set_uncertainty_dominates_point_floor`. **Finding: the
    instrument is ATTRIBUTION-limited, not NOISE-limited.** Repeatability
    is 0.29-0.49 J on ~50 J points (and a settled reference pair three
-   hours apart agreed to 0.007 J), but each member carries a
+   hours apart agreed to 0.007 J [2026-08-24, B-47/L11-N2: unreproduced
+   — no retained ref pair matches this figure; best candidate
+   0.0013-0.0019 J gross at ~3.7 h]), but each member carries a
    clock-anchor-shift envelope of ~0.7-1.0 J: a +/-31 ms window shift
    across a phase boundary where power swings ~33 W mis-attributes ~1 J
    between prefill and decode. The composed bound is additive and
-   measured — fiducial 24.9 ms (80-87%) plus bundle-local 3.3-6.1 ms
+   measured — fiducial 24.9 ms (80-87%) [2026-08-24, B-47/L11-N2: the
+   24.9 ms reproduces; the 80-87% fraction does not — retained members
+   span 80-97%] plus bundle-local 3.3-6.1 ms
    plus edge span. Because repeatability will always beat attribution
    here, the refusal is STRUCTURALLY PERMANENT: no future phase corpus
    can pass it and there is nothing to re-collect around.
