@@ -10,6 +10,75 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**PAUSED 2026-08-24 — API OUTAGE CHECKPOINT.** The T22 session stopped
+mid-flight when the API went down; this banner is the resume pointer.
+Nothing is lost and nothing is in flight: every branch is pushed, no Sol
+run was interrupted (only idle MCP servers were live), and no background
+job was left running.
+
+- **Repo state at pause.** `main` = `9e1ea96`, pushed and clean.
+  `impl/t0-unattended` is byte-identical to `main`. `tmp/s1-fixtures`
+  (`c1b87f6`) has no remote branch but is fully contained in
+  `origin/main` — it is a spent scratch ref, safe to delete.
+  `fix/sampler-ack-timeout`, `fix/calexits-hygiene`, `impl/s1-candidate`
+  are all pushed and equal to their remotes.
+- **The one piece of live work, now checkpointed.** `perf/test-speed`
+  advanced to `4dbb058`, pushed: the CI hill-climb's **lever 2**
+  (crash-matrix case parallelization) committed as an explicitly
+  UNVERIFIED WIP. It compiles and nothing more — never run at any
+  interpreter, never measured, and its safety argument (disjoint
+  ledgers/custody roots plus a per-worker process owner) is asserted in
+  comments and unproven. Read that commit message before touching it;
+  re-run the lever-2 assessment from scratch rather than assuming any
+  part of it is settled. This is the branch the T21/T22 report flags as
+  the arc's one unmerged branch.
+- **Stale working tree, deliberately left alone.** `JouleWise-wt-s1b`
+  holds uncommitted edits from 2026-08-23 ~03:20 that the S-1 merge wave
+  has since SUPERSEDED — `main` is a strict superset (it carries the
+  step-6 threading, the A84/A85 annotations, the git-teardown fix, and
+  R1 exact-keys validation, none of which that snapshot has). Discard it
+  or ignore it; do not merge it forward.
+- **Gates are unchanged by the pause.** The S-0 clone-head gate stays
+  SATISFIED at `33aa594`; the only remaining S-0 gate is still Ed at the
+  keyboard for the freeze-command permission prompts, followed by the
+  D-150a pre-campaign reboot. WINDOW-COUNCIL-GATE still fences the
+  quiet-mac lane.
+- **`main` HEAD is RED, and one cause was real.** Run 32683484684 on
+  `9e1ea96` failed two jobs. `test (3.14, 3)` failed DETERMINISTICALLY on
+  `DRIFT: RUN_STATE.md generated region differs` — `9e1ea96` registered
+  the two new T0 rows in the kernel without re-running
+  `scripts/gen_state.py`, so the generated region never caught up. **This
+  checkpoint cures it**: the kernel's stale `latest_report` (it still
+  named the 2026-08-20 T18/T19 report, three days and two reports behind)
+  was corrected to the T21/T22 report and `scripts/gen_state.py` re-run,
+  so `--check` now exits 0. Run it before any commit that touches the
+  kernel.
+- **The other red job is NOT the documented flake — triage it on
+  resume.** `calibration-exits-exclusive (3.11)` failed in
+  `test_parameterized_durable_public_cli_witnesses` with `AssertionError:
+  1 != 0 : correction=calibration_rederive_output_required`. That is a
+  DIFFERENT test from the
+  `test_forced_auto_maintenance_mutation_reproduces_cleanup_race`
+  mutation flake described below, so do not assume this checkpoint's red
+  is that known flake — I did not diagnose it. Note also that the prior
+  run (32683202434, `8b79f10`) failed a THIRD, different job
+  (`calibration-writer-crash-matrix-exclusive (3.14)`). Different job
+  each run is the arc's high red rate, not a single identified defect.
+- **The ruled calexits flake fix never landed.** The third-terminal-shape
+  fix (prepare-pack kill -> `RACE_EXERCISED`, widened assertion, shared
+  helper, deterministic classifier unit tests) delegated to the ackfix
+  agent is NOT in the tree: `RACE_EXERCISED` in
+  `tests/test_calibration_exits.py` is only the pre-existing classifier
+  constant, there is no prepare-pack / "object cannot be read" handling
+  anywhere, and `fix/sampler-ack-timeout` tops out at `e2e5605`, a WIP
+  about the ack-timeout driver instead. That round produced nothing;
+  re-delegate it rather than looking for its output.
+- **Resume order** is unchanged from the T22 list below, plus two items
+  this checkpoint adds: the lever-2 assessment on `perf/test-speed`, and
+  triage of the red above (it is CI hygiene, and per the T22 ruling it
+  does not re-block S-0 — but the gate's evidence rests on a green run,
+  so a persistently red main is worth settling before the campaign).
+
 Last updated: 2026-08-23 night (T22 — S-0 CLONE-HEAD GATE SATISFIED: 33aa594 concluded GREEN, conclusion-field-verified, and contains f6a4c81; S-0 clones from 33aa594; Ed at the keyboard is the ONLY remaining gate. Calexits mutation-flake fix demoted to CI hygiene, round in flight)
 
 **T22 NIGHT — CALEXITS-MUTATION-FLAKE:** a NEW intermittent CI failure
@@ -4517,7 +4586,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-21). Latest report: [T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings](docs/run_reports/2026-08-20-t18-t19-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-23). Latest report: [T21–T22 session 2026-08-22/23: the gauntlet that merged — _v4 candidate through the full adversarial gauntlet, S-1 merge wave landed, S-0 clone-head gate SATISFIED at 33aa594](docs/run_reports/2026-08-23-t21-t22-session.md).
 
 ### [ED-EXTERNAL]
 

@@ -20,8 +20,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings",
-    "path": "docs/run_reports/2026-08-20-t18-t19-session.md"
+    "label": "T21–T22 session 2026-08-22/23: the gauntlet that merged — _v4 candidate through the full adversarial gauntlet, S-1 merge wave landed, S-0 clone-head gate SATISFIED at 33aa594",
+    "path": "docs/run_reports/2026-08-23-t21-t22-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
