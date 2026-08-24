@@ -1,8 +1,10 @@
 # Window BETA arm readiness — checked human view
 
 Window BETA is the prospective Qwen2.5 7B floor night. The authoritative row
-set is `configs/arm_readiness/d117_row_registry_v1.json`; this page is a
-checked human view of the BETA profile. No BETA row status is established by
+set is `configs/arm_readiness/d117_row_registry_v2.json` (the ruled live
+registry; the frozen `_v1`–`_v3` packs pin the archival
+`d117_row_registry_v1.json` coordinate in their immutable plan trees); this
+page is a checked human view of the BETA profile. No BETA row status is established by
 committed evidence at this checkpoint.
 
 At pack freeze, the completed frozen pack pins only the non-authorizing freeze
