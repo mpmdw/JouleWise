@@ -10,6 +10,46 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T23 continued (2026-08-24 morning) — S-0 EXECUTES FOR REAL and catches
+a transaction-blocking candidate defect; P06 schema RATIFIED and landed.**
+
+- **The instrument survived its gauntlet and then ran.** r4 ratified
+  through two-seat cold REFUSE -> targeted delta -> delta re-audit ->
+  fix round 2 (PRs #175/#177, merged); the §3.2 per-pack
+  freeze->commit interleave was found BY REAL EXECUTION (first-ever
+  live U11 freeze passed, second refused on the dirty tree) and cured
+  with a three-real-freeze red/green battery. Second estate executed
+  §§1-3.3 clean: ALL THREE _v4 packs carry PASSED U11 projections
+  (measurement venv, weight digests 4/4, per-pack commits).
+- **§3.4 then caught the real thing: PACK_AUTHENTICATION is
+  underivable for any projected pack** — the author's bare generator
+  --check regenerates an unprojected tree (extras refusal), and
+  post-U11 byte-idempotence is unrecoverable by construction
+  (sort_keys vs insertion-order rendering; probe-verified). The _v3
+  "working" order (author-then-project) is proven to have minted
+  UN-ARMABLE evidence (stale pack digests; arm refuses at :7380/:5583)
+  — so the ruled U11-first order is right and the AUTHENTICATOR must
+  change. T-0 hits the same wall: THIS BLOCKED THE REAL TRANSACTION
+  and S-0 found it first. Ruled cure in flight (full gauntlet):
+  compose generator-derivation of the pre-projection pack (anchored at
+  the projection receipt's reviewed_git_commit + pack-subtree
+  verification) with receipt-vs-bytes U11 authentication, in
+  arm_readiness_evidence.py only. Estate restarts fresh at the cured
+  head; §§3.1-3.2 re-run is mechanical (measurement venv, no quiet
+  window). Two INDEPENDENT soundness rows surfaced for the next kernel
+  wave: every successor family inherits a stale
+  CURRENT_FROZEN_RECEIPT_SHA256 (only ordinal-1 can bare---check), and
+  preserve-mode makes ordinal-1 PACK_AUTHENTICATION a tautology.
+- **P06 landed end-to-end**: D-144 co-design (two blind seats, debate,
+  counter-round, total convergence) -> magistrate ruling ->
+  implementation (contract + frozen spec JSON + the §5 rewrite at the
+  writing standard) merged via PR #176. §5 is no longer the paper's
+  weakest section; four ED-INPUT items enumerated (sizing tolerance,
+  overcount tolerance, held-out probe count, fallback absolute limits).
+- Kernel: +CALEXITS-FOURTH-SHAPE-01, +PLANTEST-RGLOB-RACE-01,
+  +PAPER-REPLAY-FENCE-01; TEST-SPEED-01 and V4-TRANSACTION-01
+  refreshed (92 live).
+
 **T23 (2026-08-24 pre-dawn) — FABLE LOOP SESSION: six PRs landed, the CI
 red class cured at its root, the paper advanced, and S-0's instrument
 sent to r3 by its own discipline.** Fable seated as magistrate directly
