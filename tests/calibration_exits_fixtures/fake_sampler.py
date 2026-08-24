@@ -133,6 +133,9 @@ def emit_idle_to(handle, endpoint: float) -> None:
 
 
 events_handle = None
+# Bytes read from the event file that do not yet form a whole line.  The event
+# file is appended to by a *separate* process, so any read can land mid-line.
+events_buffer = bytearray()
 ack_handle = None
 active_on: float | None = None
 
@@ -162,24 +165,59 @@ def acknowledge(handle, sequence: int, event_type: str, **metadata) -> None:
 
 
 def drain_events(handle) -> int:
+    """Consume only whole event lines; hold a torn tail until it completes.
+
+    The writer appends to the event file from another process, so a read can
+    land in the middle of a line.  Text-mode ``readline()`` both *returns and
+    consumes* such a partial line, so the fragment fails to parse, the rest of
+    the line arrives as a second unparseable fragment, and the event -- with
+    its acknowledgement -- is lost permanently.  Bytes are therefore buffered
+    and only newline-terminated lines are parsed; whatever follows the last
+    newline stays in the buffer for the next drain.  This mirrors the
+    buffered-until-newline idiom already used by the parent-side reader in
+    ``tests/test_calibration_exits.py``.
+    """
+
     global events_handle, active_on
     if events_handle is None:
         try:
-            events_handle = events_path.open(encoding="utf-8")
+            events_handle = events_path.open("rb")
         except OSError:
             return 0
+    while True:
+        chunk = events_handle.read(65536)
+        if not chunk:
+            break
+        events_buffer.extend(chunk)
     consumed = 0
     while True:
-        line = events_handle.readline()
-        if not line:
+        newline = events_buffer.find(b"\n")
+        if newline < 0:
             break
+        raw_line = bytes(events_buffer[:newline])
+        del events_buffer[: newline + 1]
+        if not raw_line.strip():
+            continue
         try:
-            row = json.loads(line)
+            row = json.loads(raw_line)
             timestamp_s = float(row["timestamp_s"])
             event_type = str(row["event_type"])
             sequence = row.get("test_protocol_sequence")
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            continue
+        except (
+            json.JSONDecodeError,
+            KeyError,
+            TypeError,
+            ValueError,
+            UnicodeDecodeError,
+        ) as error:
+            # A COMPLETE line that does not parse is a fixture/protocol defect,
+            # never a transport artefact -- the torn-tail case is handled above
+            # and never reaches here.  Silently dropping it is what made the
+            # original event-loss wedge invisible, so fail loudly instead.
+            raise RuntimeError(
+                "fake sampler could not parse a complete event line: "
+                f"{raw_line!r}"
+            ) from error
         consumed += 1
         if event_type in {"sampling_started", "sampling_stopped"}:
             emit_idle_to(handle, timestamp_s)
