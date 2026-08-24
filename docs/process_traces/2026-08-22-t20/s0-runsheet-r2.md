@@ -158,6 +158,27 @@ Authority: R4 r4-2 (full transcript); R5 V-2 (magistrate reads every transcript)
 
 ### 1.3 Required reviewed candidate inputs — hard precondition
 
+**SUPERSEDED-BY-MERGE (lead pre-execution ruling, 2026-08-23): the
+candidate MERGED to main (3c098de wave; CI green 42df510,
+conclusion-field-verified) before S-0 execution, which is strictly
+stronger provenance than a patch + sidecar. The patch-acquisition and
+git-apply steps below are MOOT: the clone in §1.1 is cut from the
+merged head, which already contains the registry v2, all four custody
+tools with committed sidecars, and both contract docs — and correctly
+does NOT contain the generated `_v4` pack outputs (S-0 generates
+those). What survives of this section: (a) record the clone identity
+in the transcript (head SHA + the green CI run id) as the provenance
+line; (b) the lead generates `$INPUT/s0-candidate-manifest.json`
+MECHANICALLY from committed bytes at the head — custody_tools =
+{repo-relative tool path: sha256 of the committed blob} for the four
+tools, marker_branch "BUILD-AT-BOUNDARY", plus the head SHA — with the
+generation command captured in the transcript (candidate-mode tool
+authentication reads this manifest; runsheet §3.8 and the S-5 lane
+rule are unchanged); (c) every stop condition below (ED_RESERVED
+strings, digest mismatch, missing tool) still stops execution. The
+historical §1.3 text follows unmodified as the record of the
+pre-merge design.**
+
 Pinned HEAD contains neither the three `_v4` roots nor the reviewed candidate. The S-1 candidate manifest names one patch export, one binding manifest, and four custody tools. Place these lead-reviewed custody inputs in `$INPUT` before proceeding:
 
 1. `s0-candidate.patch` and GNU sidecar `s0-candidate.patch.sha256`. The lead exports this patch at gauntlet close from the accepted candidate head; it is deliberately absent from the S-1 worktree before that point. It implements the ruled registry/code/contracts/tests but contains no generated `_v4` pack output.
