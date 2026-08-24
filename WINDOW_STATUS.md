@@ -4,9 +4,15 @@
 > but the evidence-expiry hazard was NOT closed by them: the `_v3` arm
 > evidence carried a 24h fuse from authoring, ruled to LAPSE
 > ~2026-08-20T16:51Z (D-148.5 R-2). The `_v3` family is not armable;
-> the compelled `_v4` transaction (V4-TRANSACTION-01, blocked on the
-> mint license) is the path to the next armable family. The no-reboot
-> constraint returns with `_v4` (r5 V-7 item 5).
+> the compelled `_v4` transaction is the path to the next armable family.
+> **2026-08-24 update:** the mint license is GRANTED and the `_v4`
+> transaction is OPEN (D-150), and the hazard is MANAGED — not closed —
+> under the D-150a protocol: a ruled pre-campaign REBOOT after S-0
+> passes, immediately before the real transaction's evidence stamping,
+> then a no-reboot span from that boot through campaign close. Per
+> RUN_STATE, S-0 and that ruled reboot are still ahead, so the
+> no-reboot span has not started; with the `_v3` evidence lapsed,
+> a reboot before the ruled boot voids nothing.
 
 Terms used here: a *measurement window* is one uninterrupted, calibrated
 collection session; a *pack* is the frozen campaign plan and its authenticated
@@ -28,13 +34,16 @@ characterization night remains Ed ruling #1.**
 | | |
 |---|---|
 | State | `between` |
-| Updated | 2026-08-17 (documentation clarity pass; no machine-setting assertion) |
+| Updated | 2026-08-24 (B-9 re-verification: top hazard note and reboot rule brought to D-150/D-150a state; no machine-setting assertion) |
 
 ## Live machine rules
 
 - Do not modify or dirty the dedicated measurement checkout.
-- Do not reboot before T-0. A reboot voids the current arm-readiness evidence,
-  which must then be authored again before T-0.
+- Reboots follow D-150a: one ruled pre-campaign reboot comes after S-0 passes
+  and immediately before the real transaction's evidence stamping; the
+  no-reboot span runs from that boot through campaign close. A reboot inside
+  the span voids the arm-readiness evidence, which must then be authored
+  again before T-0.
 - Do not launch a measurement window before a READY-candidate council issues a
   qualifying verdict.
 

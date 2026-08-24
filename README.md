@@ -111,7 +111,11 @@ the run-book: issue, or mint, the governed drift-bound artifact inside the windo
 triplet, midpoint reference, and end triplet around the science members. That
 protocol ran five times and passed five times — windows C, D, a10, the 7B
 floor window, and the contrast window — under the merged screening and
-uncertainty-budget rules (D-078 clause 10). Those pre-genesis results are
+uncertainty-budget rules (D-078 clause 10). One record-keeping caveat: for
+a10 (and its reference window a9) the machine-readable verdict files were
+not retained, so those "passed" results rest on the written close-out
+record until a verdict is re-derived from the retained data. Those
+pre-genesis results are
 diagnostic or rule-establishing evidence, not the live claim path. Claim
 authority can arise only from the prospective alpha, beta, and gamma windows
 under D-117; the separately named Window C characterization night remains Ed

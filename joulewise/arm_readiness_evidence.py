@@ -114,9 +114,16 @@ _ENVIRONMENT_FINGERPRINT_KINDS = frozenset(
         "THREE_WINDOW_REGRESSION",
     }
 )
-# Ed has not ruled the comparison semantics yet.  An empty implementation
-# allowlist is intentional: recording exists now; issuance stays fail closed.
-_SUPPORTED_ENVIRONMENT_COMPARISONS = frozenset()
+# D-148.5 r3/B-2: generic execution evidence re-use compares the complete
+# builder-emitted fingerprint digest.  The four specialized/no-generic-lane
+# kinds carry a distinct truthful token even though this generic author never
+# emits them.
+_SUPPORTED_ENVIRONMENT_COMPARISONS = frozenset(
+    {
+        "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE",
+        "NO_R1_AUTHORING_LANE",
+    }
+)
 _DERIVER_DIRECT_READ_CALLS = frozenset(
     {
         "open",
@@ -1423,10 +1430,24 @@ def _derive_reason_code_coverage(context: _DerivationContext) -> _DerivedKind:
             kind,
             f"unregistered produced refusals: {sorted(produced-registered)!r}",
         )
+    # Codes that are registered but never appear as literals in the runtime
+    # source, each for a stated reason.  The R1 entries are resolved BY ROLE
+    # from the ruled registry's freeze_evidence_lifecycle.refusal_vocabulary at
+    # the moment of refusal: the registry, not this module, is the code/type
+    # authority, and the registry-load closure check is what keeps them
+    # registered.  This set mirrors `dynamic_or_defensive` in
+    # tests/test_arm_readiness_integration.py and must stay in step with it.
     dynamic = {
         "readiness_identity_projection_mint_divergence",
         "readiness_identity_receipt_namespace_anomalous",
         "readiness_lock_unavailable",
+        "readiness_r1_class_mismatch",
+        "readiness_r1_dependency_changed_set",
+        "readiness_r1_dependency_manifest",
+        "readiness_r1_successor_chain",
+        "readiness_r1_temporal_budget",
+        "readiness_r1_unknown_policy",
+        "readiness_r1_v1_grandfathering",
     }
     if registered - produced != dynamic:
         raise _underivable(
@@ -2221,6 +2242,9 @@ def _authenticate_existing_r1(
     kinds: Sequence[str],
     lifecycle_registry: Mapping[str, Any],
     policies: Mapping[str, Mapping[str, Any]],
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     source_dir = pack_root / _SOURCE_DIRECTORY
     evidence_dir = pack_root / _EVIDENCE_DIRECTORY
@@ -2248,6 +2272,13 @@ def _authenticate_existing_r1(
     current_head = _readiness.reviewed_main(pack_root)["head_commit"]
     _repository, _prefix, pack_relative = _readiness._repository_and_pack_relative(
         pack_root
+    )
+    context = _DerivationContext(
+        pack_root=pack_root,
+        repository=repository,
+        tree=tree,
+        pack_sha256=_readiness.committed_pack_tree_sha256(pack_root),
+        head_commit=current_head,
     )
     receipts: dict[str, Mapping[str, Any]] = {}
     paths: list[str] = []
@@ -2285,9 +2316,22 @@ def _authenticate_existing_r1(
                 current_head=current_head,
                 expected_freshness_class=str(policies[kind]["freshness_class"]),
                 plan_tree_path=f"{pack_relative}/plan_tree.json",
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
             if receipt["freshness_class"] == "RE_DERIVABLE":
                 _r1_rederive_at_arm(pack_root, receipt, source)
+            elif (
+                policies[kind]["environment_comparison"]
+                == "EXECUTION_ENVIRONMENT_FINGERPRINT_EXACT_AT_REUSE"
+                and receipt["environment_fingerprint"]
+                != _execution_environment_fingerprint(context, kind)
+            ):
+                raise _refuse(
+                    kind,
+                    "evidence_author_environment_changed",
+                    "execution-environment fingerprint differs at re-use",
+                )
         except _readiness.EvidenceLifecycleError as exc:
             raise _refuse(kind, exc.reason_code, str(exc)) from exc
         except ValueError as exc:
@@ -2332,7 +2376,12 @@ def _authenticate_existing_r1(
     }
 
 
-def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
+def author_arm_readiness_evidence(
+    pack_root: Path | str,
+    *,
+    step6_confirmation_table: Path | str | None = None,
+    expected_confirmation_digest: str | None = None,
+) -> dict[str, Any]:
     """Author every applicable generic FREEZE_AND_ARM evidence receipt.
 
     Boot identity, clocks, hashes, HEAD, facts, statuses, suite outcomes, and
@@ -2368,6 +2417,8 @@ def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
                 kinds,
                 lifecycle_registry,
                 r1_policies,
+                step6_confirmation_table=step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
             )
         return _authenticate_existing(
             root,
@@ -2568,10 +2619,19 @@ def author_arm_readiness_evidence(pack_root: Path | str) -> dict[str, Any]:
 
 
 def _assert_public_author_signature() -> None:
-    parameters = tuple(inspect.signature(author_arm_readiness_evidence).parameters)
-    if parameters != ("pack_root",):
+    parameters = inspect.signature(author_arm_readiness_evidence).parameters
+    if tuple(parameters) != (
+        "pack_root",
+        "step6_confirmation_table",
+        "expected_confirmation_digest",
+    ) or any(
+        parameters[name].kind is not inspect.Parameter.KEYWORD_ONLY
+        or parameters[name].default is not None
+        for name in ("step6_confirmation_table", "expected_confirmation_digest")
+    ):
         raise AssertionError(
-            "public evidence author must accept exactly one non-injectable pack_root"
+            "public evidence author accepts only pack_root plus the two "
+            "keyword-only step-6 custody inputs"
         )
 
 

@@ -384,10 +384,27 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                         )
 
     def test_public_author_signature_has_no_execution_injection(self) -> None:
+        # The cold-gate fence is that authoring admits no OUTCOME-BEARING seam:
+        # boot identity, clocks, hashes, HEAD, facts, statuses and suite
+        # outcomes are always derived here and can never be supplied.  The
+        # S-1 step-6 threading widened this signature by exactly two
+        # keyword-only CUSTODY INPUTS (a table path and Ed's out-of-band
+        # digest), which carry no outcome and are defaulted to None so an
+        # omitted table still fails closed rather than being derived.  The
+        # library asserts the same tuple at import
+        # (`_assert_public_author_signature`); this test mirrors it so the
+        # fence cannot be relaxed on one side only.
+        parameters = inspect.signature(author_arm_readiness_evidence).parameters
         self.assertEqual(
-            tuple(inspect.signature(author_arm_readiness_evidence).parameters),
-            ("pack_root",),
+            tuple(parameters),
+            ("pack_root", "step6_confirmation_table", "expected_confirmation_digest"),
         )
+        for name in ("step6_confirmation_table", "expected_confirmation_digest"):
+            with self.subTest(parameter=name):
+                self.assertIs(
+                    parameters[name].kind, inspect.Parameter.KEYWORD_ONLY
+                )
+                self.assertIsNone(parameters[name].default)
         for keyword in ("runner", "outcome", "_suite_runner"):
             with self.subTest(keyword=keyword), self.assertRaises(TypeError):
                 author_arm_readiness_evidence(Path("unused"), **{keyword: object()})
@@ -455,7 +472,13 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             identities[relative], hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
         )
 
-    def test_authoring_is_deterministic_valid_and_boot_bound(self) -> None:
+    def test_authoring_is_deterministic_and_consumer_boot_primitive_pins(self) -> None:
+        # Renamed per delta re-audit S1D-2: the boot leg exercises the
+        # CONSUMER-side primitive (validate_r1_class_lifecycle, called only
+        # from arm_readiness.py), not authoring-path boot binding — R1
+        # authoring does not enforce boot binding; the arm path does, with
+        # live boot context, failing closed without it. The end-to-end
+        # boot-voiding obligation is recorded on row A84.
         temporary, _repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         with mock.patch.object(
@@ -480,7 +503,19 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 receipt = readiness.validate_evidence_receipt(
                     readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
                 )
-                self.assertEqual(receipt["boot_session_id"], TEST_BOOT_SESSION_ID)
+                # Exact-key schema validation above already owns the absence of
+                # boot fields from content receipts.  Independently pin the
+                # positive boot binding carried by every execution receipt.
+                if (
+                    receipt["schema_version"]
+                    == readiness.EXECUTION_EVIDENCE_RECEIPT_SCHEMA
+                ):
+                    self.assertEqual(
+                        receipt["boot_session_id"], TEST_BOOT_SESSION_ID
+                    )
+            git(_repository, "add", ".")
+            git(_repository, "commit", "-qm", "authored evidence")
+            git(_repository, "update-ref", "refs/remotes/origin/main", "HEAD")
             second = author_arm_readiness_evidence(pack)
             self.assertFalse(second["mutated"])
             after = {
@@ -492,13 +527,27 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 for path in directory.iterdir()
             }
             self.assertEqual(before, after)
-            with mock.patch.object(
-                readiness,
-                "_current_boot_session_id",
-                return_value=OTHER_BOOT_SESSION_ID,
-            ):
-                with self.assertRaisesRegex(EvidenceAuthoringError, "stale"):
-                    author_arm_readiness_evidence(pack)
+            execution_receipt = next(
+                readiness.validate_evidence_receipt(
+                    readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
+                )
+                for path in (pack / evidence._EVIDENCE_DIRECTORY).glob("*.json")
+                if readiness.parse_json_bytes(
+                    path.read_bytes(), require_canonical=True
+                )["schema_version"]
+                == readiness.EXECUTION_EVIDENCE_RECEIPT_SCHEMA
+            )
+            with self.assertRaisesRegex(
+                readiness.ArmReadinessError,
+                "EXECUTION_BOUND evidence is outside its boot/horizon binding",
+            ) as stale:
+                readiness.validate_r1_class_lifecycle(
+                    execution_receipt,
+                    execution_receipt["kind"],
+                    current_boot_session_id=OTHER_BOOT_SESSION_ID,
+                    now_monotonic_ns=100,
+                )
+            self.assertEqual(stale.exception.reason_code, "readiness_record_expired")
 
     def test_uncommitted_authoring_file_refuses_before_writing_output(self) -> None:
         temporary, repository, pack, _custody, _arm_path = make_author_fixture()
@@ -537,7 +586,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         self.assertFalse((pack / evidence._EVIDENCE_DIRECTORY).exists())
 
     def test_source_tamper_refuses_without_overwriting_any_receipt(self) -> None:
-        temporary, _repository, pack, _custody, _arm_path = make_author_fixture()
+        temporary, repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         suite_patch = mock.patch.object(
             evidence,
@@ -553,6 +602,13 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         }
         source = pack / evidence._SOURCE_DIRECTORY / "doctrine-pin.json"
         source.write_bytes(source.read_bytes() + b" ")
+        # Commit and review the tamper so pack custody admits the staged bytes.
+        # The fixture registry's exact allowlist names this fixture generation,
+        # so the authored-path commit reaches the source/receipt integrity check
+        # instead of being misclassified as an unrelated changed dependency.
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "authored evidence, tampered source")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         with self.assertRaisesRegex(EvidenceAuthoringError, "invalid"):
             author_arm_readiness_evidence(pack)
         self.assertEqual(
@@ -564,7 +620,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         )
 
     def test_coordinated_source_receipt_rewrite_refuses_without_overwrite(self) -> None:
-        temporary, _repository, pack, _custody, _arm_path = make_author_fixture()
+        temporary, repository, pack, _custody, _arm_path = make_author_fixture()
         self.addCleanup(temporary.cleanup)
         suite_patch = mock.patch.object(
             evidence,
@@ -589,6 +645,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         receipt = readiness.parse_json_bytes(
             receipt_path.read_bytes(), require_canonical=True
         )
+        receipt["dependency_manifest_sha256"] = hashlib.sha256(source_raw).hexdigest()
         for fact in receipt["facts"]:
             fact["source_sha256"] = hashlib.sha256(source_raw).hexdigest()
         receipt_raw = readiness.render_json(receipt)
@@ -598,6 +655,13 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 hashlib.sha256(receipt_raw).hexdigest(), receipt_path.name
             )
         )
+        # This is the COHERENT rewrite: source, receipt facts, and sidecar agree.
+        # Committing it creates the authored-path changed set; the fixture's
+        # pack-exact allowlist deliberately admits that set.  Semantic replay
+        # must therefore reject the internally consistent lie.
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "authored evidence, coordinated rewrite")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         tampered = {
             path.relative_to(pack).as_posix(): path.read_bytes()
             for directory in (
@@ -607,7 +671,8 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             for path in directory.iterdir()
         }
         with self.assertRaisesRegex(
-            EvidenceAuthoringError, "differs from freshly derived bytes"
+            EvidenceAuthoringError,
+            "DOCTRINE_PIN ARM re-derivation differs from authored semantics",
         ):
             author_arm_readiness_evidence(pack)
         self.assertEqual(
@@ -1040,10 +1105,18 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 readiness, "_discover_evidence", side_effect=discover_then_mutate
             ),
         ):
-            with self.assertRaisesRegex(
-                readiness.ArmReadinessError, "evidence status is invalid"
-            ):
+            # Refusal CODES are the closed contract surface; detail MESSAGES
+            # are diagnostic and code-authoritative.  Under R1 this mutation is
+            # caught by the execution-receipt validator
+            # (joulewise/arm_readiness.py:2259, "execution evidence receipt
+            # status is invalid") rather than by the legacy generic validator
+            # (:2143, "evidence status is invalid").  The message moved; the
+            # governed code did not, so the code is what is asserted.
+            with self.assertRaises(readiness.ArmReadinessError) as caught:
                 author_arm_readiness_evidence(pack)
+            self.assertEqual(
+                caught.exception.reason_code, "readiness_schema_invalid"
+            )
         self.assertFalse((pack / evidence._SOURCE_DIRECTORY).exists())
         self.assertFalse((pack / evidence._EVIDENCE_DIRECTORY).exists())
 
@@ -1124,15 +1197,16 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         family = mock.patch.dict(
             evidence._PACKS_BY_PROFILE,
             {
-                "ALPHA": "d117_floor_qwen25_1p5b_v2",
-                "BETA": "d117_floor_qwen25_7b_v2",
-                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+                # The ruled successor family (MAGISTRATE-RULING.md:124-131).
+                "ALPHA": "d117_floor_qwen25_1p5b_v4",
+                "BETA": "d117_floor_qwen25_7b_v4",
+                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
             },
         )
         family.start()
         self.addCleanup(family.stop)
         temporary, repository, pack, _custody, _arm_path = make_author_fixture(
-            "d117_floor_qwen25_1p5b_v2"
+            "d117_floor_qwen25_1p5b_v4"
         )
         self.addCleanup(temporary.cleanup)
         author_output = io.BytesIO()
@@ -1219,6 +1293,9 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             1,
         )
         self.assertEqual(receipt["receipt_id"], "freeze-0002")
+        git(repository, "add", "--", pack_relative)
+        git(repository, "commit", "-qm", "freeze synthetic successor")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         # F1 (delta-8): idempotent replay must re-authenticate the CURRENT
         # successor in full, not only its ancestry.  One appended byte in any
         # binding the receipt names must refuse instead of replaying PASS with

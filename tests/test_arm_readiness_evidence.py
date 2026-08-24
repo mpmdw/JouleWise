@@ -30,6 +30,7 @@ def lifecycle_registry(
     *,
     allowlist: tuple[str, ...] = (),
     policies: tuple[dict, ...] | None = None,
+    pack_generation: int = 2,
 ) -> dict:
     if policies is None:
         policies = (
@@ -62,9 +63,9 @@ def lifecycle_registry(
         },
         "successor_policy": {
             "successor_pack_ids": {
-                "ALPHA": "d117_floor_qwen25_1p5b_v2",
-                "BETA": "d117_floor_qwen25_7b_v2",
-                "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+                "ALPHA": f"d117_floor_qwen25_1p5b_v{pack_generation}",
+                "BETA": f"d117_floor_qwen25_7b_v{pack_generation}",
+                "GAMMA": f"d117_contrast_qwen25_1p5b_vs_7b_v{pack_generation}",
             },
             "cross_chain_numbering": "test.freeze-0002.v1",
             "freeze_receipt_v2_predecessor_bindings": [
@@ -75,6 +76,11 @@ def lifecycle_registry(
                 "pack_id",
             ],
             "family_publication_marker_schema": "test.family-marker.v1",
+            # Family policy, not a per-pack knob: the threshold is DECLARED
+            # here and this builder's packs (default generation 2) fall BELOW
+            # it, so the family-publication gate stays disengaged without the
+            # key being absent — R1 now requires it (exact-keys validation).
+            "family_publication_first_generation": 4,
         },
         "refusal_vocabulary": [
             {
@@ -93,6 +99,12 @@ def resolved_r1_row_registry() -> dict:
     )
     registry["schema_version"] = readiness.R1_ROW_REGISTRY_SCHEMA
     registry["registry_id"] = "test-r1-row-registry-v2"
+    # The registry-LOAD closure check admits only refusal codes the production
+    # vocabulary registers, so this synthetic registry carries the real
+    # vocabulary rather than lifecycle_registry()'s test_r1_* placeholders.
+    production_vocabulary = copy.deepcopy(
+        registry["freeze_evidence_lifecycle"]["refusal_vocabulary"]
+    )
     policies = []
     for kind, freshness_class in sorted(
         readiness.R1_EVIDENCE_FRESHNESS_CLASSES.items()
@@ -117,8 +129,14 @@ def resolved_r1_row_registry() -> dict:
     policy_by_kind = {
         item["kind"]: item["freshness_policy_id"] for item in policies
     }
+    # The registry-LOAD closure check also requires every digest-conditional
+    # code path to appear in the allowlist it governs — the S-1 cure for the
+    # fail-OPEN drift where an empty intersection silently subtracted the path
+    # unconditionally.  A synthetic ROW registry must therefore carry the real
+    # conditional paths, for the same reason it carries the real vocabulary.
     registry["freeze_evidence_lifecycle"] = lifecycle_registry(
-        policies=tuple(policies)
+        allowlist=tuple(sorted(readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)),
+        policies=tuple(policies),
     )
     registry["freeze_evidence_lifecycle"]["row_policies"] = [
         {
@@ -129,6 +147,7 @@ def resolved_r1_row_registry() -> dict:
         }
         for row in registry["rows"]
     ]
+    registry["freeze_evidence_lifecycle"]["refusal_vocabulary"] = production_vocabulary
     return registry
 
 
@@ -207,6 +226,43 @@ def content_source_and_receipt(
 
 
 class R1EvidenceLifecycleTests(unittest.TestCase):
+    def test_freshness_classes_are_pinned(self) -> None:
+        self.assertEqual(
+            readiness.R1_EVIDENCE_FRESHNESS_CLASSES,
+            {
+                "ACCEPTANCE_OWNER": "EXECUTION_BOUND",
+                "ACCEPTANCE_SUCCESSOR": "EXECUTION_BOUND",
+                "ARM_CAPABILITY": "TEMPORAL_CAPABILITY",
+                "BACKUP_PREFLIGHT": "TIME_BOUND",
+                "CLOCK_ATTESTATION": "TIME_BOUND",
+                "CLOCK_PROBE": "TIME_BOUND",
+                "DOCTRINE_PIN": "RE_DERIVABLE",
+                "DRY_RUN_REHEARSAL": "EXECUTION_BOUND",
+                "ESTIMATOR_IDENTITY": "EXECUTION_BOUND",
+                "GIT_CHECKOUT": "EXECUTION_BOUND",
+                "IDENTITY_PIN_PROJECTION": "EXECUTION_BOUND",
+                "LAUNCH_RECIPE": "SESSION_STATE_BOUND",
+                "LEDGER_RESERVATION": "SESSION_STATE_BOUND",
+                "MACHINE_PREFLIGHT": "TIME_BOUND",
+                "MAINTENANCE_CENSUS": "TIME_BOUND",
+                "MINT_TRUST": "EXECUTION_BOUND",
+                "MULTICELL_MINT": "EXECUTION_BOUND",
+                "OFFLINE_INPUT_INVENTORY": "EXECUTION_BOUND",
+                "PACK_AUTHENTICATION": "EXECUTION_BOUND",
+                "PACK_FAMILY": "RE_DERIVABLE",
+                "POWERMETRICS_PROBE": "TIME_BOUND",
+                "POWER_PREFLIGHT": "TIME_BOUND",
+                "PRIVILEGE_INSTALLATION": "EXECUTION_BOUND",
+                "PROCESS_CENSUS": "TIME_BOUND",
+                "REASON_CODE_COVERAGE": "EXECUTION_BOUND",
+                "RECEIPT_ORACLE": "EXECUTION_BOUND",
+                "RECOVERY_LEDGER_TEST": "EXECUTION_BOUND",
+                "ROOT_PREFLIGHT": "SESSION_STATE_BOUND",
+                "TERMINAL_REVIEW": "EXECUTION_BOUND",
+                "THREE_WINDOW_REGRESSION": "EXECUTION_BOUND",
+            },
+        )
+
     def make_repository(self) -> tuple[tempfile.TemporaryDirectory, Path, str]:
         temporary = tempfile.TemporaryDirectory()
         repository = Path(temporary.name)
@@ -625,12 +681,34 @@ class R1EvidenceLifecycleTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "test_r1_v1_grandfathering")
         self.assertEqual({path: path.read_bytes() for path in paths}, before_all)
 
-    def test_r1_lifecycle_is_dormant_for_historical_v1_registry_and_profile(self) -> None:
+    def test_r1_lifecycle_grandfathers_a_historical_v1_pack_and_profile(self) -> None:
+        """Reconstructed from a dissolved premise (was: ``..._is_dormant_...``).
+
+        The old premise was DORMANCY: while two registries existed, a
+        historical v1 pack loaded the v1 registry, whose schema is not R1, so
+        ``_r1_lifecycle_registry_for_pack`` returned None and the lifecycle
+        simply did not exist for that pack.  The ruled repoint leaves ONE
+        registry coordinate (MAGISTRATE-RULING.md:124-131), and that helper
+        returns None only for a non-R1 schema -- so dormancy is now
+        structurally unreachable, not merely unobserved.
+
+        The safety property it protected survives in a different mechanism: a
+        v1-era pack is not silently swept into R1 semantics, it is governed by
+        an EXPLICIT grandfathering refusal.  That is what is asserted here.
+        """
+
         pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v1"
         registry, registry_raw, reference = readiness._registry_reference(pack)
         before_digest = hashlib.sha256(registry_raw).hexdigest()
-        self.assertEqual(registry["schema_version"], readiness.ROW_REGISTRY_SCHEMA)
-        self.assertIsNone(evidence._r1_lifecycle_registry_for_pack(pack))
+        self.assertEqual(registry["schema_version"], readiness.R1_ROW_REGISTRY_SCHEMA)
+        lifecycle = evidence._r1_lifecycle_registry_for_pack(pack)
+        self.assertIsNotNone(lifecycle)
+        roles = {
+            item["role"]: item["code"] for item in lifecycle["refusal_vocabulary"]
+        }
+        self.assertEqual(
+            roles["V1_GRANDFATHERING"], "readiness_r1_v1_grandfathering"
+        )
         self.assertEqual(readiness._plan_profile(pack, registry), "ALPHA")
         self.assertEqual(
             hashlib.sha256(

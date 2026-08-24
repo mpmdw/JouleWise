@@ -27,10 +27,19 @@ from joulewise.arm_readiness import (  # noqa: E402
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--expected-confirmation-digest",
+        help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     freeze = subparsers.add_parser("freeze")
     freeze.add_argument("--pack-root", type=Path, required=True)
+    freeze.add_argument(
+        "--expected-confirmation-digest",
+        default=argparse.SUPPRESS,
+        help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
+    )
     # D-139: a successor pack's freeze receipt binds an authenticated
     # predecessor pack.  The command accepts a path only; every recorded ID,
     # digest, and ordinal is derived from that pack's committed bytes.
@@ -46,10 +55,20 @@ def _parser() -> argparse.ArgumentParser:
     arm.add_argument("--pack-root", type=Path, required=True)
     arm.add_argument("--arm-context", required=True)
     arm.add_argument("--window-custody-root", type=Path, required=True)
+    arm.add_argument(
+        "--expected-confirmation-digest",
+        default=argparse.SUPPRESS,
+        help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
+    )
 
     verify = subparsers.add_parser("verify")
     verify.add_argument("--pack-root", type=Path, required=True)
     verify.add_argument("--arm-receipt", type=Path, required=True)
+    verify.add_argument(
+        "--expected-confirmation-digest",
+        default=argparse.SUPPRESS,
+        help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
+    )
 
     consume = subparsers.add_parser("consume")
     consume.add_argument("--pack-root", type=Path, required=True)
@@ -97,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             result = generate_freeze_receipt(
                 args.pack_root,
                 predecessor_pack_root=args.predecessor_pack_root,
+                expected_confirmation_digest=args.expected_confirmation_digest,
             )
         elif args.command == "dry-run":
             result = generate_dry_run_receipt(
@@ -110,9 +130,14 @@ def main(argv: list[str] | None = None) -> int:
                 args.pack_root,
                 _arm_context(args.arm_context),
                 args.window_custody_root,
+                expected_confirmation_digest=args.expected_confirmation_digest,
             )
         elif args.command == "verify":
-            result = verify_arm_receipt(args.pack_root, args.arm_receipt)
+            result = verify_arm_receipt(
+                args.pack_root,
+                args.arm_receipt,
+                expected_confirmation_digest=args.expected_confirmation_digest,
+            )
         else:
             raise ArmReadinessError(
                 "readiness_usage_invalid",

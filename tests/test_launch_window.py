@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -16,7 +17,7 @@ from unittest import mock
 from joulewise import arm_readiness
 from joulewise.analysis_engine import inputs as analysis_inputs
 from joulewise import floor_extraction, whole_window
-from tests.test_arm_readiness import LaunchConsumptionV2Tests
+from tests import test_arm_readiness as arm_readiness_tests
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,21 @@ assert SPEC is not None and SPEC.loader is not None
 launch_window = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(launch_window)
 
+GENERATE_SPEC = importlib.util.spec_from_file_location(
+    "generate_arm_readiness_script", ROOT / "scripts/generate_arm_readiness.py"
+)
+assert GENERATE_SPEC is not None and GENERATE_SPEC.loader is not None
+generate_arm_readiness = importlib.util.module_from_spec(GENERATE_SPEC)
+GENERATE_SPEC.loader.exec_module(generate_arm_readiness)
+
+AUTHOR_SPEC = importlib.util.spec_from_file_location(
+    "author_arm_readiness_evidence_script",
+    ROOT / "scripts/author_arm_readiness_evidence.py",
+)
+assert AUTHOR_SPEC is not None and AUTHOR_SPEC.loader is not None
+author_arm_readiness_evidence = importlib.util.module_from_spec(AUTHOR_SPEC)
+AUTHOR_SPEC.loader.exec_module(author_arm_readiness_evidence)
+
 
 class LaunchWindowEntrypointTests(unittest.TestCase):
     def _args(self, root: Path) -> argparse.Namespace:
@@ -36,6 +52,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
             arm_readiness_custody_root=root / "custody",
             launch_manifest=root / "launch-manifest.json",
             lifecycle_event=None,
+            expected_confirmation_digest=None,
         )
 
     def _launch_inputs(
@@ -127,6 +144,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             args = self._args(Path(temporary))
             args.lifecycle_event = "start"
+            args.expected_confirmation_digest = "e" * 64
             try:
                 os.close(launch_window.HANDOFF_FD)
             except OSError:
@@ -135,10 +153,14 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 launch_window, "_consumption_path", return_value=Path("/tmp/c.json")
             ), mock.patch.object(
                 launch_window, "verify_consumed_launch", return_value={"status": "PASS"}
-            ):
+            ) as verify:
                 with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
                     launch_window.lifecycle(args)
             self.assertEqual(caught.exception.reason_code, "launch_handoff_invalid")
+            self.assertEqual(
+                verify.call_args.kwargs["expected_confirmation_digest"],
+                args.expected_confirmation_digest,
+            )
 
     def test_execve_failure_is_one_burned_attempt_without_retry(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -219,11 +241,12 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                     "window_chain_sha256",
                     "exec_argv",
                     "handoff_token_sha256",
+                    "expected_confirmation_digest",
                 },
             )
 
     def test_launch_assembles_and_passes_reauthenticated_file_context(self) -> None:
-        fixture = LaunchConsumptionV2Tests(
+        fixture = arm_readiness_tests.LaunchConsumptionV2Tests(
             methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
         )
         fixture.setUp()
@@ -234,6 +257,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 arm_readiness_custody_root=fixture.custody,
                 launch_manifest=fixture.manifest_path,
                 lifecycle_event=None,
+                expected_confirmation_digest="e" * 64,
             )
             arm_raw = fixture.arm_path.read_bytes()
             verified_arm = {
@@ -247,7 +271,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 launch_window,
                 "_verify_arm_receipt",
                 return_value=verified_arm,
-            ), mock.patch.object(
+            ) as verify_arm, mock.patch.object(
                 launch_window, "_install_handoff"
             ), mock.patch.object(
                 launch_window,
@@ -278,11 +302,15 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 context["window_chain_sha256"],
                 arm_readiness.sha256_bytes(fixture.chain_path.read_bytes()),
             )
+            self.assertEqual(
+                verify_arm.call_args.kwargs["expected_confirmation_digest"],
+                args.expected_confirmation_digest,
+            )
         finally:
             fixture.doCleanups()
 
     def test_honest_launcher_consumes_verifies_and_reaches_execve(self) -> None:
-        fixture = LaunchConsumptionV2Tests(
+        fixture = arm_readiness_tests.LaunchConsumptionV2Tests(
             methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
         )
         fixture.setUp()
@@ -293,6 +321,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 arm_readiness_custody_root=fixture.custody,
                 launch_manifest=fixture.manifest_path,
                 lifecycle_event=None,
+                expected_confirmation_digest=None,
             )
             arm_digest = hashlib.sha256(
                 fixture.arm_path.read_bytes()
@@ -375,6 +404,326 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
         refusal = json.loads(completed.stdout)
         self.assertEqual(refusal["reason_codes"], ["readiness_usage_invalid"])
         self.assertIn("scripts/launch_window.py", refusal["detail"])
+
+
+class OperatorConfirmationDigestCliTests(unittest.TestCase):
+    DIGEST = "Operator-Custody-Digest-Passed-Unchanged"
+
+    @staticmethod
+    def _captured_stdout(module: object) -> tuple[io.BytesIO, object]:
+        # A real text stream, not a Mock: Python 3.14's argparse probes
+        # sys.stdout.fileno() for colorization at parser construction, and
+        # os.isatty(Mock) is a TypeError. TextIOWrapper.fileno() raises
+        # io.UnsupportedOperation, which _colorize handles by disabling
+        # color — the supported non-tty path on every version we test.
+        sink = io.BytesIO()
+        stream = io.TextIOWrapper(sink, encoding="utf-8", write_through=True)
+        return sink, mock.patch.object(module.sys, "stdout", stream)
+
+    def test_generate_cli_threads_digest_to_freeze_arm_and_verify(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            pack = root / "pack"
+            pack.mkdir()
+            (pack / "sentinel.txt").write_text("immutable\n")
+            common_result = {"status": "PASS"}
+            commands = (
+                (
+                    [
+                        "freeze",
+                        "--pack-root",
+                        str(pack),
+                        "--expected-confirmation-digest",
+                        self.DIGEST,
+                    ],
+                    "generate_freeze_receipt",
+                ),
+                (
+                    [
+                        "arm",
+                        "--pack-root",
+                        str(pack),
+                        "--arm-context",
+                        "{}",
+                        "--window-custody-root",
+                        str(root / "custody"),
+                        "--expected-confirmation-digest",
+                        self.DIGEST,
+                    ],
+                    "generate_arm_receipt",
+                ),
+                (
+                    [
+                        "verify",
+                        "--pack-root",
+                        str(pack),
+                        "--arm-receipt",
+                        str(root / "arm.json"),
+                        "--expected-confirmation-digest",
+                        self.DIGEST,
+                    ],
+                    "verify_arm_receipt",
+                ),
+            )
+            for argv, consumer_name in commands:
+                with self.subTest(command=argv[0]), mock.patch.object(
+                    generate_arm_readiness,
+                    consumer_name,
+                    return_value=common_result,
+                ) as consumer:
+                    sink, stdout_patch = self._captured_stdout(
+                        generate_arm_readiness
+                    )
+                    with stdout_patch:
+                        code = generate_arm_readiness.main(argv)
+                    self.assertEqual(code, 0)
+                    self.assertEqual(json.loads(sink.getvalue()), common_result)
+                    self.assertEqual(
+                        consumer.call_args.kwargs["expected_confirmation_digest"],
+                        self.DIGEST,
+                    )
+
+    def test_evidence_author_cli_keeps_the_ruled_pack_root_only_surface(self) -> None:
+        # Delta re-audit S1D-1: the digest is a CONSUMPTION-side attestation;
+        # the authoring CLI carried an inert digest flag (no table path, no
+        # effect) and it was removed to restore the ruled --pack-root-only
+        # surface. This test pins the removal: the flag refuses, and a plain
+        # authoring invocation passes no confirmation kwargs at all.
+        pack = ROOT / "tests"
+        with self.assertRaises(SystemExit) as caught:
+            author_arm_readiness_evidence.main(
+                [
+                    "--pack-root",
+                    str(pack),
+                    "--expected-confirmation-digest",
+                    self.DIGEST,
+                ]
+            )
+        self.assertEqual(caught.exception.code, 2)
+        with mock.patch.object(
+            author_arm_readiness_evidence.readiness,
+            "_repo_for_pack",
+            return_value=ROOT,
+        ), mock.patch.object(
+            author_arm_readiness_evidence,
+            "author_arm_readiness_evidence",
+            return_value={"status": "PASS"},
+        ) as consumer:
+            sink, stdout_patch = self._captured_stdout(
+                author_arm_readiness_evidence
+            )
+            with stdout_patch:
+                code = author_arm_readiness_evidence.main(
+                    ["--pack-root", str(pack)]
+                )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(sink.getvalue())["status"], "PASS")
+        self.assertEqual(consumer.call_args.args, (ROOT / "tests",))
+        self.assertEqual(consumer.call_args.kwargs, {})
+
+    def test_launch_cli_refuses_unconfirmed_table_and_accepts_operator_digest(
+        self,
+    ) -> None:
+        from tests.test_family_marker import confirmation
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            repository.mkdir()
+            subprocess.run(
+                ("git", "-C", str(repository), "init", "-q"), check=True
+            )
+            subprocess.run(
+                (
+                    "git",
+                    "-C",
+                    str(repository),
+                    "config",
+                    "user.email",
+                    "test@example.invalid",
+                ),
+                check=True,
+            )
+            subprocess.run(
+                (
+                    "git",
+                    "-C",
+                    str(repository),
+                    "config",
+                    "user.name",
+                    "Launch CLI Digest Test",
+                ),
+                check=True,
+            )
+            self.assertEqual(
+                len(arm_readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS), 1
+            )
+            successor_relative = next(
+                iter(arm_readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
+            )
+            successor_path = repository / successor_relative
+            successor_path.parent.mkdir(parents=True)
+            successor_raw = b'{"schema_version":"test-successor-pinset"}\n'
+            successor_path.write_bytes(successor_raw)
+            subprocess.run(
+                ("git", "-C", str(repository), "add", "."), check=True
+            )
+            subprocess.run(
+                ("git", "-C", str(repository), "commit", "-qm", "pinset"),
+                check=True,
+            )
+            head = subprocess.run(
+                ("git", "-C", str(repository), "rev-parse", "HEAD"),
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+
+            custody = root / "custody"
+            publication = custody / "family_publication"
+            publication.mkdir(parents=True)
+            table_path = publication / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
+            table = confirmation()
+            table["successor_pinset"]["sha256"] = hashlib.sha256(
+                successor_raw
+            ).hexdigest()
+            table_raw = arm_readiness.render_json(table)
+            table_path.write_bytes(table_raw)
+            table_path.with_name(f"{table_path.name}.sha256").write_bytes(
+                arm_readiness.gnu_sidecar(
+                    hashlib.sha256(table_raw).hexdigest(), table_path.name
+                )
+            )
+            self.assertEqual(table["confirmation"]["authority"], "ED")
+            self.assertEqual(table["confirmation"]["decision"], "YES")
+
+            lifecycle_registry = json.loads(
+                (ROOT / arm_readiness.ROW_REGISTRY_RELATIVE_PATH).read_text()
+            )["freeze_evidence_lifecycle"]
+            changed_set_code = next(
+                item["code"]
+                for item in lifecycle_registry["refusal_vocabulary"]
+                if item["role"] == "DEPENDENCY_CHANGED_SET"
+            )
+            table_digest = hashlib.sha256(table_raw).hexdigest()
+            args = self._launch_argv(root, custody)
+            launch_args = launch_window._parser().parse_args(args)
+            exec_argv = [
+                "/usr/bin/caffeinate",
+                "-is",
+                "/bin/zsh",
+                "/tmp/window-chain.zsh",
+                "/tmp/window-plan",
+            ]
+            launch_inputs = LaunchWindowEntrypointTests()._launch_inputs(
+                launch_args, exec_argv
+            )
+            subtracted = False
+
+            def assemble(parsed: argparse.Namespace) -> dict[str, object]:
+                nonlocal subtracted
+                try:
+                    arm_readiness._require_confirmed_conditional_path(
+                        repository,
+                        head,
+                        successor_relative,
+                        lifecycle_registry,
+                        Path(parsed.arm_readiness_custody_root)
+                        / "family_publication"
+                        / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME,
+                        expected_confirmation_digest=(
+                            parsed.expected_confirmation_digest
+                        ),
+                        evidence_id="freeze-doctrine-pin-v1",
+                    )
+                except arm_readiness.EvidenceLifecycleError as exc:
+                    raise arm_readiness.ArmReadinessError(
+                        exc.reason_code, str(exc)
+                    ) from exc
+                subtracted = True
+                return launch_inputs
+
+            for label, supplied in (
+                ("digest absent", None),
+                ("digest wrong", "0" * 64),
+            ):
+                with self.subTest(case=label):
+                    subtracted = False
+                    argv = list(args)
+                    if supplied is not None:
+                        argv.extend(
+                            ["--expected-confirmation-digest", supplied]
+                        )
+                    sink, stdout_patch = self._captured_stdout(launch_window)
+                    with stdout_patch, mock.patch.object(
+                        launch_window,
+                        "_assemble_launch_inputs",
+                        side_effect=assemble,
+                    ), mock.patch.object(
+                        launch_window, "_consume_launch_capability"
+                    ) as consume, mock.patch.object(
+                        launch_window.os, "execve"
+                    ) as execve:
+                        code = launch_window.main(argv)
+                    self.assertEqual(code, 2)
+                    self.assertEqual(
+                        json.loads(sink.getvalue())["reason_codes"],
+                        [changed_set_code],
+                    )
+                    self.assertFalse(subtracted)
+                    consume.assert_not_called()
+                    execve.assert_not_called()
+
+            subtracted = False
+            correct_argv = args + [
+                "--expected-confirmation-digest",
+                table_digest,
+            ]
+            with mock.patch.object(
+                launch_window,
+                "_assemble_launch_inputs",
+                side_effect=assemble,
+            ), mock.patch.object(
+                launch_window, "_install_handoff"
+            ), mock.patch.object(
+                launch_window,
+                "_consume_launch_capability",
+                return_value={"consumption_path": "/tmp/consumed.json"},
+            ) as consume, mock.patch.object(
+                launch_window,
+                "verify_consumed_launch",
+                return_value={"exec_argv": exec_argv},
+            ) as verify, mock.patch.object(
+                launch_window.os, "execve", side_effect=SystemExit(0)
+            ) as execve:
+                with self.assertRaises(SystemExit) as exited:
+                    launch_window.main(correct_argv)
+            self.assertEqual(exited.exception.code, 0)
+            self.assertTrue(subtracted)
+            consume.assert_called_once()
+            verify.assert_called_once()
+            execve.assert_called_once()
+            self.assertEqual(
+                consume.call_args.kwargs["expected_confirmation_digest"],
+                table_digest,
+            )
+            self.assertEqual(
+                verify.call_args.kwargs["expected_confirmation_digest"],
+                table_digest,
+            )
+
+    @staticmethod
+    def _launch_argv(root: Path, custody: Path) -> list[str]:
+        return [
+            "--pack-root",
+            str(root / "pack"),
+            "--arm-receipt",
+            str(root / "arm.json"),
+            "--arm-readiness-custody-root",
+            str(custody),
+            "--launch-manifest",
+            str(root / "launch-manifest.json"),
+        ]
 
 
 class CeremonySkipConsumerTests(unittest.TestCase):

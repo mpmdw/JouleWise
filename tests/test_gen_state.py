@@ -22,11 +22,12 @@ FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
     "ARM-PACKET-01",
+    "CALEXITS-EVIDENCE-BYTES-01",
     "D144-SEATPASS-FOLLOWUPS",
     "ED-HANDS-BATCH-01",
-    "ED-MINT-LICENSE-01",
     "EDQ-L9-3-CAPTURE-01",
     "PREWINDOW-REGEX-01",
+    "REGISTRY-ID-NAMING-01",
     "READY-WO-BATCH-01",
     "SITTING2-PRECONDITIONS-01",
     "UNVERIFIED-REAUDIT-01",
@@ -95,10 +96,13 @@ EXPECTED_IDS = {
     "CALEXITS-HYGIENE-FIXES-01",
     # 2026-08-22 T20 _v4-transaction registrations (D-150 item 4; D-151 +
     # marker-ruling consequences)
-    "T0-UNATTENDED-01", "S1-CANDIDATE-01", "S0-RUNSHEET-R2",
-    # 2026-08-22 T20 close-out: writer-crash ack-timeout flake row minted on
-    # its second same-day firing (run-report CI-incident section).
-    "CALWRITER-ACK-TIMEOUT-01",
+    "T0-CLOCK-ROW-RENAME-01",
+    "T0-UNATTENDED-01",
+    "UNATTENDED-LAUNCH-01",
+    "FIXTURE-MODERNIZATION-01", "MLX-ACID-SIGABRT-01",
+    # (CALWRITER-ACK-TIMEOUT-01 minted T20 on the second firing, broadened
+    # to the shared driver at E-2, closed T22: H4 driver + 4s nominal cure,
+    # both exclusive shards green at 42df510.)
     # (EVIDENCE-AUTHOR-GIT-TEARDOWN-01 registered on ERRATA E-1, fixed
     # ea90585 at the shared fixture site, closed same day on CI-green
     # acceptance — run conclusion-field-verified.)
@@ -325,10 +329,28 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # CALWRITER-ACK-TIMEOUT-01 on the flake's second same-day firing:
         # 86 + 1 = 87; the T20 errata wave registers
         # EVIDENCE-AUTHOR-GIT-TEARDOWN-01 (E-1, required-shard red):
-        # 87 + 1 = 88; closed same day at ea90585 (CI green, its
-        # acceptance clause): 88 - 1 = 87 exact live records.
+        # 87 + 1 = 88; closed same day at ea90585: 88 - 1 = 87; the T22
+        # merge-wave closure retires S1-CANDIDATE-01 (merged 3c098de,
+        # CI green 42df510) and CALWRITER-ACK-TIMEOUT-01 (H4 driver +
+        # nominal cure, both shards green 42df510) and registers
+        # FIXTURE-MODERNIZATION-01 + MLX-ACID-SIGABRT-01:
+        # 87 - 2 + 2 = 87; S0-RUNSHEET-R2 closed on the lead's completed
+        # pre-execution read (anchor map + two execution-blocking defects
+        # caught and fixed: builder chain composition f6a4c81, section-1.3
+        # superseded-by-merge f692e26): 87 - 1 = 86; the T22 night T0
+        # synthesis ruling (two-seat blind co-design + debate, converged)
+        # registers UNATTENDED-LAUNCH-01 (launch-blocker separation, both
+        # seats co-signed) and T0-CLOCK-ROW-RENAME-01 (coupled rename +
+        # horizon churn, post-_v4 gated): 86 + 2 = 88; the 2026-08-24
+        # kernel wave closes ED-MINT-LICENSE-01 (D-150 item 1 supersedes
+        # the settings-rule form; the V4-TRANSACTION-01 dependency flips
+        # to satisfied) and registers CALEXITS-EVIDENCE-BYTES-01
+        # (pre-existing deterministic bench failure, distinct from both
+        # diagnosed CI-red classes) and REGISTRY-ID-NAMING-01 (S-0
+        # packet-1 cold-gate free finding, fenced post-_v4):
+        # 88 - 1 + 2 = 89 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 87)
+        self.assertEqual(len(self.tasks), 89)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

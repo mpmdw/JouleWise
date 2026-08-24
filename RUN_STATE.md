@@ -10,7 +10,220 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-Last updated: 2026-08-22 evening (T20 — THE `_v4` TRANSACTION IS OPEN; mint license granted; next: kernel registrations → S-1 candidate stream → S-0 at the bench)
+**PAUSED 2026-08-24 — API OUTAGE CHECKPOINT.** The T22 session stopped
+mid-flight when the API went down; this banner is the resume pointer.
+Nothing is lost and nothing is in flight: every branch is pushed, no Sol
+run was interrupted (only idle MCP servers were live), and no background
+job was left running.
+
+- **Repo state at pause.** `main` = `9e1ea96`, pushed and clean.
+  `impl/t0-unattended` is byte-identical to `main`. `tmp/s1-fixtures`
+  (`c1b87f6`) has no remote branch but is fully contained in
+  `origin/main` — it is a spent scratch ref, safe to delete.
+  `fix/sampler-ack-timeout`, `fix/calexits-hygiene`, `impl/s1-candidate`
+  are all pushed and equal to their remotes.
+- **The one piece of live work, now checkpointed.** `perf/test-speed`
+  advanced to `4dbb058`, pushed: the CI hill-climb's **lever 2**
+  (crash-matrix case parallelization) committed as an explicitly
+  UNVERIFIED WIP. It compiles and nothing more — never run at any
+  interpreter, never measured, and its safety argument (disjoint
+  ledgers/custody roots plus a per-worker process owner) is asserted in
+  comments and unproven. Read that commit message before touching it;
+  re-run the lever-2 assessment from scratch rather than assuming any
+  part of it is settled. This is the branch the T21/T22 report flags as
+  the arc's one unmerged branch.
+- **Stale working tree, deliberately left alone.** `JouleWise-wt-s1b`
+  holds uncommitted edits from 2026-08-23 ~03:20 that the S-1 merge wave
+  has since SUPERSEDED — `main` is a strict superset (it carries the
+  step-6 threading, the A84/A85 annotations, the git-teardown fix, and
+  R1 exact-keys validation, none of which that snapshot has). Discard it
+  or ignore it; do not merge it forward.
+- **Gates are unchanged by the pause.** The S-0 clone-head gate stays
+  SATISFIED at `33aa594`; the only remaining S-0 gate is still Ed at the
+  keyboard for the freeze-command permission prompts, followed by the
+  D-150a pre-campaign reboot. WINDOW-COUNCIL-GATE still fences the
+  quiet-mac lane.
+- **`main` HEAD is RED, and one cause was real.** Run 32683484684 on
+  `9e1ea96` failed two jobs. `test (3.14, 3)` failed DETERMINISTICALLY on
+  `DRIFT: RUN_STATE.md generated region differs` — `9e1ea96` registered
+  the two new T0 rows in the kernel without re-running
+  `scripts/gen_state.py`, so the generated region never caught up. **This
+  checkpoint cures it**: the kernel's stale `latest_report` (it still
+  named the 2026-08-20 T18/T19 report, three days and two reports behind)
+  was corrected to the T21/T22 report and `scripts/gen_state.py` re-run,
+  so `--check` now exits 0. Run it before any commit that touches the
+  kernel.
+- **RESOLVED 2026-08-24 (triage verdict; supersedes the bullet below):**
+  the red is DIAGNOSED. The 47 recent exclusive-job failures partition
+  cleanly in two: class A (19) = the known mutation flake
+  (third-terminal-shape fix in flight on `fix/calexits-third-shape`);
+  class B (28) = sampler-ack STALL-DEADLINE misses under hosted-runner
+  scheduling latency, spanning 4 tests in both exclusive modules — the
+  `8b79f10` crash-matrix red is the SAME class, not a third defect. The
+  "1 != 0 : correction=..." message was misread at checkpoint time: the
+  1 is the writer subprocess EXIT CODE (ack RuntimeError -> exit 1) and
+  the correction string only names the running witness case. Class B is
+  environmental and PROVABLY TEST-ONLY: the whole ack protocol sits
+  behind the suppressed `--time-scale-for-test` seam
+  (`validate_powermetrics_fiducial.py:1700-1706,1814-1832`), so no real
+  freeze/arm run can raise it — the campaign is NOT threatened. Cure
+  delegated: stall nominal 4s->30s in both modules (calexits via the
+  flake stream, crash-matrix via the perf stream) + stall-vs-hard
+  message split. Evidence: same case failed then PASSED 6.5 min later
+  inside run 32683484684; sequences scatter 12-125; bench could not
+  reproduce even at a 1s deadline.
+- **[superseded by the entry above] The other red job is NOT the documented flake — triage it on
+  resume.** `calibration-exits-exclusive (3.11)` failed in
+  `test_parameterized_durable_public_cli_witnesses` with `AssertionError:
+  1 != 0 : correction=calibration_rederive_output_required`. That is a
+  DIFFERENT test from the
+  `test_forced_auto_maintenance_mutation_reproduces_cleanup_race`
+  mutation flake described below, so do not assume this checkpoint's red
+  is that known flake — I did not diagnose it. Note also that the prior
+  run (32683202434, `8b79f10`) failed a THIRD, different job
+  (`calibration-writer-crash-matrix-exclusive (3.14)`). Different job
+  each run is the arc's high red rate, not a single identified defect.
+- **The ruled calexits flake fix never landed.** The third-terminal-shape
+  fix (prepare-pack kill -> `RACE_EXERCISED`, widened assertion, shared
+  helper, deterministic classifier unit tests) delegated to the ackfix
+  agent is NOT in the tree: `RACE_EXERCISED` in
+  `tests/test_calibration_exits.py` is only the pre-existing classifier
+  constant, there is no prepare-pack / "object cannot be read" handling
+  anywhere, and `fix/sampler-ack-timeout` tops out at `e2e5605`, a WIP
+  about the ack-timeout driver instead. That round produced nothing;
+  re-delegate it rather than looking for its output.
+- **Resume order** is unchanged from the T22 list below, plus two items
+  this checkpoint adds: the lever-2 assessment on `perf/test-speed`, and
+  triage of the red above (it is CI hygiene, and per the T22 ruling it
+  does not re-block S-0 — but the gate's evidence rests on a green run,
+  so a persistently red main is worth settling before the campaign).
+
+Last updated: 2026-08-23 night (T22 — S-0 CLONE-HEAD GATE SATISFIED: 33aa594 concluded GREEN, conclusion-field-verified, and contains f6a4c81; S-0 clones from 33aa594; Ed at the keyboard is the ONLY remaining gate. Calexits mutation-flake fix demoted to CI hygiene, round in flight)
+
+**T22 NIGHT — CALEXITS-MUTATION-FLAKE:** a NEW intermittent CI failure
+class opened after the merge wave: `calibration-exits-exclusive` fails
+~50% (alternating interpreters) on
+`test_forced_auto_maintenance_mutation_reproduces_cleanup_race`. Root
+cause diagnosed at the bench from run 32677039329's trace2 dump: the
+forced race reproduces in a THIRD shape the test's post-rmtree dichotomy
+never modeled — clean rmtree AND the detached pack child killed during
+`prepare-pack` ("object cannot be read", exit 128) before any
+`write-pack-file` region; the else-branch assertion and
+`_classify_pack_cleanup` (empty-intervals -> TRACE_INCOMPLETE) both
+reject it, though it is race-exercised evidence. Ruled fix (third
+terminal shape -> RACE_EXERCISED; widened assertion via shared helper;
+deterministic classifier unit tests) delegated to the ackfix agent in
+-wt-ackfix; magistrate reviews before landing. CI status: last all-green
+head is eeeaf94; f6a4c81 + f692e26 failed on the flake; tip 33aa594
+in_progress at first writing. SUPERSEDED SAME NIGHT: tip 33aa594
+(run 32679620252) concluded SUCCESS — conclusion-field-verified — and
+contains f6a4c81, so the S-0 clone-head gate is SATISFIED at 33aa594;
+the flake fix is CI hygiene (the arc's red rate demands it), no longer
+S-0-blocking. Ed's freeze-prompt sitting is the only remaining gate.
+T0-UNATTENDED-01 co-design: both blind seats delivered, debate round
+run (Opus critique bench-corroborated: sleep-blind monotonic clock,
+summed-bound incident replay, multi-server intersection); Sol
+counter-critique in flight; magistrate synthesis ruling next. T21/T22
+run report LANDED (docs/run_reports/2026-08-23-t21-t22-session.md — THE
+T21/T22 record, 16 verified anomaly flags; magistrate reviewed, added
+the §11 gate disposition mirroring bd4e65b).
+
+**T22 EVENING:** CI GREEN at 42df510 (conclusion-field-verified) after
+three post-merge cures (stale S1D-1 test rewritten to pin the ruled
+surface; the 3.14 argparse/Mock-stdout fixture fix; the ack-nominal
+1s->4s cure in both consumers — sixth-firing class CLOSED). KERNEL
+WAVE c749224: S1-CANDIDATE-01 + CALWRITER-ACK-TIMEOUT-01 closed on
+green evidence; A84 FIXTURE-MODERNIZATION-01 + A85 MLX-ACID-SIGABRT-01
+registered; 87 live. CI hill-climb runs under the A+B shape
+(Monitor-shell, commit-first sub-40-min turns; levers 1+6 landed —
+memo 3.3-3.5x + the nominal cure; turns A-D staged for levers 2-5).
+S-0 PRECONDITIONS ALL MET except: (a) the lead's one-sitting
+pre-execution read of s0-runsheet-r2 at the execution head (closes
+S0-RUNSHEET-R2; includes the anchor re-verification the pin note
+assigns); (b) Ed at the keyboard for the freeze-command permission
+prompts. Then: Ed's pre-campaign REBOOT (D-150a) -> the real
+transaction with step-6 under the D-150b delegation -> READY sitting
+-> windows.
+
+**T22 (2026-08-23 afternoon):** the RULE-1 GATE CLOSED (8-slice read
+ledger, candidate SOUND) and the MERGE WAVE LANDED: S-1 (3c098de, the
+full D-151+marker implementation), the ack-driver H4 fix (fe53aef),
+the calexits 7-item hardening (e6a6520) — CI adjudicating
+(conclusion-field-verified only, per E-1). Ed rulings D-150a
+(pre-campaign REBOOT then no-reboot span; push freeze with the
+committed visibility/notification protocol) and D-150b (STEP-6 +
+TERMINAL REVIEW DELEGATED to the magistrate as
+independence-preserving mechanical comparison; Ed notified, never
+blocked-on) recorded and pushed. CI hill-climb ROUND 2 running on Sol
+xhigh (target <=12 min; perf/test-speed, watchdogged). NEXT IN ORDER:
+(1) CI green on e6a6520 -> kernel wave (close S1-CANDIDATE-01;
+register A84 + A85 from the corrected packet rows); (2) my full
+pre-execution read of s0-runsheet-r2 + strike the 21-test addendum +
+pin update to e6a6520 (closes S0-RUNSHEET-R2); (3) S-0 AT THE BENCH —
+needs Ed's permission-prompt clicks (or the optional settings rule);
+(4) Ed's pre-campaign REBOOT (D-150a); (5) the REAL transaction
+(S-1..S-5 commits per r4-3) with step-6 under the D-150b delegation;
+(6) READY sitting -> windows -> the paper's data.
+
+Last updated (T21 morning): (S-1 gauntlet-complete at b5f97c3)
+
+**T21 MORNING CLOSE:** the S-1 candidate finished its complete
+adversarial arc: conformance audit → finish round → G-11 cure →
+independent Opus seat (REFUTED, 3 blockers) + Sol G-2 refuter
+(REFUTED, impersonation channel) → combined fix round (all four
+blockers cured; G2-1 six-bypass-verified) → close-out (repo radius
+3746 passed / 0 failures; 4 fix-round defects self-found via AST
+sweep) → DELTA RE-AUDIT: ACCEPT, no blockers, 6 bench conditions —
+ALL APPLIED at b5f97c3 (pushed). Delta rulings of record: the widened
+authoring fence ADMISSIBLE (2026-08-12 cold-gate semantic boundary +
+D-134 cl.6 + T-0 precedent); the hC operator-residual must NOT be
+mechanized (D-151 fixed-point tripwire — S-0 runsheet carries the
+operator-discipline line; literal pins at post-window fixation);
+S0-BLOCKED partition independently confirmed 0/17/4 honest. NEXT, in
+order: (1) THE LEAD'S FULL READ of main...impl/s1-candidate (rule 1;
+fresh context required — do NOT skim it at the end of a long session);
+(2) merge-ability/overbuild prune at the same read; (3) kernel wave:
+register A84 FIXTURE-MODERNIZATION-01 + A85 MLX-ACID-SIGABRT-01
+(paste-ready rows in docs/process_traces/2026-08-22-t20/s1-candidate/
+s1-fixround-packet.md, corrected a500378) + close S1-CANDIDATE-01 on
+its acceptance; (4) merge under D-148.2 gates; (5) my full pre-S-0
+read of s0-runsheet-r2 (closes S0-RUNSHEET-R2) + pin update to the
+merged head + strike the 21-test addendum per ruling; (6) S-0 AT THE
+BENCH with Ed live prompts. Parallel harvests COMPLETE: ack-fix
+e2e5605 VERIFIED-READY (H4 protocol confirmed, 4-mutant kill matrix,
+pinset hash-verified) + calexits 0202ce9 VERIFIED-READY (7/7, E-4
+fence byte-held) + COMBINED-GREEN integration run (both coupled
+modules pass in the merged state; shared harness same-blob on all four
+refs). ALL FOUR BRANCHES now wait ONLY on lead gates: S-1 full read,
+speed-branch review, then the merge wave (D-148.2) + kernel wave
+(A84/A85 + closures + the 6.2x memo lever and _WITNESS_RESULTS rows).
+
+Last updated (previous): 2026-08-23 early AM (T21 overnight fan-out — ALL WORK PRESERVED ON PUSHED BRANCHES; harvest orders below)
+
+**T21 OVERNIGHT (2026-08-23 ~01:00-06:30):** Ed licensed full Codex
+spend + Workflows + the Opus hill-climb directive (memory saved). The
+S-1 gauntlet ran its full arc: conformance audit (10 gaps) -> finish
+round (G-2/3/4 cured) -> G-11 cure (135 red -> 4; S0-BLOCKED measured
+EMPTY — two seats agree the 21-test theory was wrong) -> independent
+Opus seat REFUTED (3 blockers) + Sol G-2 refuter REFUTED
+(impersonation channel) -> COMBINED FIX ROUND: G2-1 impersonation
+channel CLOSED, six-bypass-verified, no-CLI-derivation fence held;
+B-1 re-derivation proven LIVE (V-1(iii) intact); B-2 skips
+machine-readable. PRESERVED: impl/s1-candidate @ d3101d6 (WIP — the
+commit message IS the harvest order: seam cure check, joint
+verification, MANIFEST rewrite, then DELTA RE-AUDIT; packet with
+kernel rows A84/A85 custodied under
+docs/process_traces/2026-08-22-t20/s1-candidate/).
+fix/sampler-ack-timeout @ e2e5605 (WIP, UNVERIFIED — run both consumer
+modules + pinned-file check). fix/calexits-hygiene (7/7 committed,
+re-verify then PR). perf/test-speed (5 commits, CI 41->23.5 min
+measured, lead review pending; register the 6.2x test_reduce memo
+lever + the _WITNESS_RESULTS fragility row; 14-day 2-core CPU leak
+KILLED ~03:15 — all bench timings before that ran 2 cores short).
+Orchestrator deaths overnight were CONTEXT EXHAUSTION, not transport;
+the Sol transport advisory stands until Ed restarts the Codex app.
+
+Last updated (previous): 2026-08-22 evening (T20 — THE `_v4` TRANSACTION IS OPEN; mint license granted; next: kernel registrations → S-1 candidate stream → S-0 at the bench)
 
 **T20 (2026-08-22) — the day the transaction opened.** Ed granted the
 MINT LICENSE in-session and ruled packet items 1-4 (D-150, 73764f0:
@@ -4392,7 +4605,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-21). Latest report: [T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings](docs/run_reports/2026-08-20-t18-t19-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-23). Latest report: [T21–T22 session 2026-08-22/23: the gauntlet that merged — _v4 candidate through the full adversarial gauntlet, S-1 merge wave landed, S-0 clone-head gate SATISFIED at 33aa594](docs/run_reports/2026-08-23-t21-t22-session.md).
 
 ### [ED-EXTERNAL]
 

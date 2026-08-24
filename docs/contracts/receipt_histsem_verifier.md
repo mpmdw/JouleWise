@@ -12,14 +12,28 @@ preserved as custody.
 
 ## Governed identity and activation
 
-The governed pinset is
-`configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json`. A pack is a
-legacy histsem pack exactly when its immutable repository identity — the pair
-`(pack_id, pack_path)` — is a member of the committed pinset. Receipt counts,
+The governed pinset is a closed, ordered, code-enumerated chain of versioned
+artifacts:
+
+1. `configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json`
+2. `configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json`
+
+A pack is a histsem pack exactly when its immutable repository identity — the
+pair `(pack_id, pack_path)` — is a member of the committed union. Receipt counts,
 receipt filenames, evidence-ID prefixes, and other scanned pack contents do
 not decide whether the gate engages. Consequently, adding, removing, or
 renaming an unreferenced receipt cannot disengage verification for a governed
 pack.
+
+An unenumerated pinset-like file governs nothing. A duplicate `(pack_id,
+pack_path)` anywhere across present members refuses `histsem_pinset_invalid`.
+Each present member retains schema `joulewise.receipt_histsem_pinset.v1`; the
+chain contract does not mutate that artifact schema.
+
+The optional verifier/CLI pinset-path selector may select one member of this
+same code-enumerated chain for a focused check; it is not an override lane. A
+path outside the enumeration refuses `histsem_pinset_invalid`, even when its
+bytes are an exact copy of an enumerated member.
 
 The in-library gate runs before custody output in both entry points:
 
@@ -33,7 +47,19 @@ complete legacy-receipt inventory. Its bytes are SHA-256-pinned by
 `tests/test_receipt_histsem.py`. There is no update, regenerate, repair, or
 auto-reseal lane; a new governed value requires an explicit versioned change.
 
-Eligibility is based only on a successful `git ls-tree HEAD -- <pinset>` presence check followed by a `git show HEAD:<pinset>` read: after canonical validation, membership of `(pack_id, pack_path)` engages the gate and a membership miss returns normally. An unambiguous result that the pinset path does not exist in `HEAD` also returns to ordinary readiness; it is an absence-of-governance answer, not a `histsem_pinset_absent` refusal. In that state the library must not inspect receipt schemas, names, counts, or inventories. Any other failure to obtain the HEAD pinset refuses, and an invalid HEAD pinset refuses. The HEAD read prevents worktree pinset deletion or mutation from disengaging a pack whose HEAD row exists, and the gate verifies against those same HEAD-anchored rows. Committed pinset mutation or deletion is owned by the byte-pin and changed-set CI controls. Residual: absent a HEAD pinset, the library cannot distinguish a synthetic/pre-governance repository from a history whose pinset was removed.
+Eligibility loops over the enumerated chain using successful `git ls-tree HEAD
+-- <member>` presence checks followed by `git show HEAD:<member>` reads. After
+canonical validation and union/duplicate closure, membership of `(pack_id,
+pack_path)` engages the gate and a membership miss returns normally. An
+unambiguous result that an enumerated member does not exist in `HEAD` skips
+that member; if all are absent, the library returns to ordinary readiness.
+This preserves the rule-11-settled absence-of-governance answer and is not a
+`histsem_pinset_absent` refusal. In that state the library must not inspect
+receipt schemas, names, counts, or inventories. Any other failure to obtain a
+HEAD member refuses, and any invalid present member refuses. The HEAD reads
+prevent worktree deletion or mutation from disengaging a pack whose HEAD row
+exists, and the gate verifies against those same HEAD-anchored rows. Committed
+mutation/deletion remains owned by byte pins and changed-set controls.
 
 ## Coordinates and checks
 
@@ -117,10 +143,18 @@ verifier does not add a `pack_root` equality check.
 This verifier and its refusal vocabulary land before the `_v4` re-freeze.
 After all three `freeze-0004` artifacts exist, and before Ed's exact-byte step
 6, the `_v4` pinset rows are minted and checked against the transaction's
-confirmation table. The pinset path is the pack-and-ordinal-exact 112th entry
+confirmation table. The successor pinset path is the pack-and-ordinal-exact 112th entry
 in the whole-repository changed-set allowlist. Retrofitting the rows after the
 transaction would recreate the missing-expected-value defect; a later family
 gets its own exact entry, never a glob.
+
+The successor class is digest-conditional on Ed's single step-6 confirmation
+table. The table schema, custody rule, and acyclic two-consumer digest graph
+have exactly one home in
+[`d117_step6_confirmation_table.md`](d117_step6_confirmation_table.md). This
+contract owns only the successor section's semantic replay; it does not
+restate or fork the confirmation schema. The confirmation table is an
+authenticator and therefore may never enter any allowlist.
 
 ## Truth boundary
 

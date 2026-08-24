@@ -20,8 +20,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "T12/T13 session 2026-08-19: co-design first application (R1/R2 rulings), D-147 transaction executed S0-S5 (r5/r6 reissues, _v3 family frozen with freeze-0003), writing standard + guide rewrite, D-148 Ed rulings",
-    "path": "docs/run_reports/2026-08-20-t18-t19-session.md"
+    "label": "T21–T22 session 2026-08-22/23: the gauntlet that merged — _v4 candidate through the full adversarial gauntlet, S-1 merge wave landed, S-0 clone-head gate SATISFIED at 33aa594",
+    "path": "docs/run_reports/2026-08-23-t21-t22-session.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -676,6 +676,36 @@
       "status": "queued",
       "stop_card": null
     },
+    "CALEXITS-EVIDENCE-BYTES-01": {
+      "acceptance": {
+        "evidence": [
+          "test_logical_producer_delay_preserves_exact_evidence_bytes passes deterministically at the bench and in CI",
+          "The root cause of temp-path bytes reaching evidence is identified and cured code-side or fixture-side with a defect-shaped regression"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CALEXITS-EVIDENCE-BYTES-01/acceptance",
+          "label": "CALEXITS-EVIDENCE-BYTES-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The pre-existing deterministic bench failure is cured, not skipped."
+      },
+      "authority": {
+        "label": "RUN_STATE 2026-08-24 red-diagnosis entry + flake-fix director report (failure proven pre-existing on pristine main 74794af)",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Cure the pre-existing deterministic failure of test_logical_producer_delay_preserves_exact_evidence_bytes (tests/test_calibration_exits.py): temp-path bytes leak into the two evidence artifacts, failing byte-exactness on pristine main at the bench. Distinct from both diagnosed CI-red classes (not the mutation race, not the ack backstop).",
+      "id": "CALEXITS-EVIDENCE-BYTES-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 86,
+      "status": "queued",
+      "status_note": "Found 2026-08-24 during the flake-fix round; fails identically on main and the fix branch, so it is NOT a regression of either cure. May be environment-sensitive (path length/normalization) — reproduce first.",
+      "stop_card": null
+    },
     "CALEXITS-HYGIENE-FIXES-01": {
       "acceptance": {
         "evidence": [
@@ -720,45 +750,6 @@
       "rank": 79,
       "status": "queued",
       "status_note": "Successor to CALEXITS-TIMING-HYGIENE (closed 2026-08-22 with the audit as deliverable). Items are independent and land through the normal gauntlet; top two by yield are H1 origin pinning and H6 witness-cache ownership.",
-      "stop_card": null
-    },
-    "CALWRITER-ACK-TIMEOUT-01": {
-      "acceptance": {
-        "evidence": [
-          "The driver's await_acknowledgement uses a progress-aware deadline (the H4 shape) rather than a fixed wall-clock timeout, or an equivalently justified cure",
-          "Both shards' observed failure classes are covered by regressions or causal evidence per the calexits-cure precedents",
-          "CI green on both previously-affected exclusive shards at a head containing the fix; no byte of the four r6-pinned estimator sources changes"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CALWRITER-ACK-TIMEOUT-01/acceptance",
-          "label": "CALWRITER-ACK-TIMEOUT-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The calibration-writer-crash-matrix sampler-acknowledgement timeout flake class is cured with the H4 bounded-fix shape, non-gating."
-      },
-      "authority": {
-        "label": "T20 run report CI-incident section (two same-day firings: runs 32578576711 + 32601988870) + A79 audit H4/H9",
-        "path": "docs/run_reports/2026-08-22-t20-session.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Standing frozen-surface hazard (r6 pinset)",
-            "path": "RUN_STATE.md"
-          },
-          "rule": "scripts/validate_powermetrics_fiducial.py is adjacent to the pinned joulewise/powermetrics_fiducial.py — any fix stays test/script-side and every WRITE_SCOPE authorization checks the four pinned sources first"
-        }
-      ],
-      "flags": [],
-      "goal": "Cure the SHARED-DRIVER sampler-acknowledgement timeout mechanism (scripts/validate_powermetrics_fiducial.py await_acknowledgement, :264) that fires under loaded hosted 3.11 runners across BOTH exclusive shards: the writer-crash-matrix failures (three firings 2026-08-22: runs 32578576711, 32601988870, 32607418551) AND the calexits test_parameterized_durable_public_cli_witnesses failure (run 32607418551: correction=calibration_rederive_failed caused by pulse_command_on:42 ack timeout) — apply the A79 audit's H4 bounded-fix shape at the driver level (progress-aware acknowledgement deadline, not fixed wall-clock).",
-      "id": "CALWRITER-ACK-TIMEOUT-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 83,
-      "status": "queued",
-      "status_note": "ESCALATED P3->P2 2026-08-22 late (third same-day firing; reds required shards; every push needs a per-run disposition until cured). SCOPE BROADENED same time: run 32607418551 proved the mechanism lives in the shared driver, firing in BOTH the writer-crash-matrix and calexits shards — and thereby supplied the PRESERVED CUSTODY the A79 audit's row 6 (2026-08-19 parameterized-witnesses) lacked: same driver line :264, REDERIVE-class surface. The audit's refusal to force-join row 6 without evidence is now resolved WITH evidence; the audit record stands as written (its row-6 caveat was correct at its evidence state). scripts/validate_powermetrics_fiducial.py is script-side, NOT one of the four r6-pinned joulewise/ modules — verify against the pinned list at WRITE_SCOPE time regardless.",
       "stop_card": null
     },
     "CGV-HARDEN-01": {
@@ -1421,36 +1412,6 @@
       "status_note": "Lane: ed. E-11 expired ~2026-08-20T16:51Z unless harvested. The mint license and ED-Q-L9-3 capture are SPLIT OUT as their own rows (ED-MINT-LICENSE-01, EDQ-L9-3-CAPTURE-01) so the license-first path and the B-16 sequencing are dependency-enforced, not textual.",
       "stop_card": null
     },
-    "ED-MINT-LICENSE-01": {
-      "acceptance": {
-        "evidence": [
-          "The rule is installed in the untracked settings.local.json",
-          "S-0's mint steps run unprompted in the throwaway clone"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ED-MINT-LICENSE-01/acceptance",
-          "label": "ED-MINT-LICENSE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The settings rule exists and a dry invocation of each licensed command form is accepted without a prompt."
-      },
-      "authority": {
-        "label": "r5 consolidation V-7 item 1 (blocks S-0)",
-        "path": "docs/process_traces/2026-08-20-go-session/rulings-r5-consolidation.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Install the D-148.1 freeze-mint permission rule for the six _v4 commands, scoped to the measurement checkout (Ed's hands only; the classifier forbids self-granting).",
-      "id": "ED-MINT-LICENSE-01",
-      "lane": "ed_external",
-      "priority": "p1_phase_gate",
-      "rank": 8,
-      "status": "queued",
-      "status_note": "THE single blocking item for the _v4 transaction; everything gates on S-0.",
-      "stop_card": null
-    },
     "EDQ-L9-3-CAPTURE-01": {
       "acceptance": {
         "evidence": [
@@ -1489,6 +1450,45 @@
       "rank": 9,
       "status": "blocked",
       "status_note": "Depends on PREWINDOW-REGEX-01 so the tightened check precedes the agent-free capture.",
+      "stop_card": null
+    },
+    "FIXTURE-MODERNIZATION-01": {
+      "acceptance": {
+        "evidence": [
+          "make_go_fixture authors R1 content/execution receipt schemas and the 14 STRUCTURAL-BLOCKED tests flip green with their skips removed",
+          "An end-to-end regression proves a stale boot voids evidence on the arm path (S1D-2: net coverage is zero until this lands)",
+          "POST-MINT: test_historical_predecessor_resolves_and_still_anchors_the_chain reconstructed as an authenticated _v4->_v3 predecessor proof"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FIXTURE-MODERNIZATION-01/acceptance",
+          "label": "FIXTURE-MODERNIZATION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The fixture-schema blocked class is cured, the boot-voiding end-to-end property is proven, and the historical-pairing property is proven on real chains; non-gating for S-0."
+      },
+      "authority": {
+        "label": "S-1 fix-round magistrate rulings + delta re-audit S1D-2/S1D-3",
+        "path": "docs/process_traces/2026-08-22-t20/s1-candidate/s1-fixround-packet.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Standing frozen-surface hazard",
+            "path": "RUN_STATE.md"
+          },
+          "rule": "The four r6-pinned estimator sources stay byte-identical; every WRITE_SCOPE authorization checks that list first"
+        }
+      ],
+      "flags": [],
+      "goal": "Modernize the arm-readiness test fixtures so make_go_fixture authors R1 content/execution receipt schemas instead of legacy generic freeze evidence, unblocking the 14 STRUCTURAL-BLOCKED tests stopping at joulewise/arm_readiness.py:5330; add the S1D-2 end-to-end boot-voiding regression; reconstruct the historical-predecessor test on real post-mint _v4->_v3 receipt chains.",
+      "id": "FIXTURE-MODERNIZATION-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 84,
+      "status": "queued",
+      "status_note": "Registered when the S0-BLOCKED theory was disproven by measurement (0/17/4); the 21-test flip addendum was struck from S-0 acceptance at the same ruling. The post-mint item unblocks only after S-0 mints the _v4 generation.",
       "stop_card": null
     },
     "FLOOR-BIND-01": {
@@ -1739,6 +1739,45 @@
       "rank": 19,
       "status": "blocked",
       "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); the night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay completed BYTE-IDENTICAL at pinned 3de370ec (all four digests; docs/process_traces/2026-08-03-q1-remint-bytecompare/). 2026-08-05: condition (a) is satisfied by merged PR #100. Condition (b) preparation is complete and its verification blocker is resolved: the B1 disposition is lead-ruled 30/2/6 and deterministic bootstrap is implemented on impl/ledger-bootstrap, under audit. Condition (c) is in flight on impl/validator-rootpins. The row remains hard-blocked on the still-pending D-110 (b)+(c) completion gate.",
+      "stop_card": null
+    },
+    "MLX-ACID-SIGABRT-01": {
+      "acceptance": {
+        "evidence": [
+          "The mlx_runtime.py:1159 abort no longer kills the interpreter under pytest at the four ACID tests",
+          "The four CRASH-BLOCKED skips can be narrowed to their remaining structural cause (A84) with reason strings updated",
+          "Full-suite pytest collection completes with zero deselection"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MLX-ACID-SIGABRT-01/acceptance",
+          "label": "MLX-ACID-SIGABRT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The interpreter-killing abort is cured; the four CRASH-BLOCKED tests become runnable (they then need FIXTURE-MODERNIZATION-01 to go green — this row is necessary but NOT sufficient)."
+      },
+      "authority": {
+        "label": "S-1 delta re-audit S1D-3 + the independent seat's SIGABRT finding",
+        "path": "docs/process_traces/2026-08-22-t20/s1-candidate/s1-fixround-packet.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Cold-pair-166 discipline",
+            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
+          },
+          "rule": "Distinct mechanism, distinct row: expectedFailure/skip markers cannot contain a process-level abort — the cure is code-side, not marker-side"
+        }
+      ],
+      "flags": [],
+      "goal": "Cure the pre-existing pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 reached via the four ACID tests in tests/test_arm_readiness_evidence_t0.py (reproduces at merge-base 5523003; not a branch regression), so the suite is pytest-collectable without deselection.",
+      "id": "MLX-ACID-SIGABRT-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 85,
+      "status": "queued",
+      "status_note": "Necessary but not sufficient for the four CRASH-BLOCKED tests (they also need A84). mlx_runtime.py is NOT in the r6 pinset but is adapter code — gauntlet applies.",
       "stop_card": null
     },
     "MODULARITY-01": {
@@ -3141,94 +3180,46 @@
       "priority": "p2_next_slice",
       "rank": 68,
       "status": "queued",
-      "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. B-46/B-9 (paper + WINDOW_STATUS corrections) are immediate desk items.",
+      "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. 2026-08-24: first desk batch LANDED on PR #168 (B-9, B-27, B-43, B-45, B-47, B-33; B-46 verified already cured in ae82a392) — workflow-implemented, per-shard verified, magistrate-reviewed. Residuals carried: window_runbook.md:995,:1161 similar needs_pin_commit phrasings.",
       "stop_card": null
     },
-    "S0-RUNSHEET-R2": {
+    "REGISTRY-ID-NAMING-01": {
       "acceptance": {
         "evidence": [
-          "Each named revision item is present and cites its ruling",
-          "No step contradicts the D-151 nine-condition set or the marker ruling's ratified baseline",
-          "The lead has read r2 in full before any S-0 command executes"
+          "ROW_REGISTRY_ID renamed to ROW_REGISTRY_V1_ID (archival semantics explicit), mirroring the FREEZE_RECEIPT_V1_SCHEMA pattern in the same constant block",
+          "The live v2 outer id gains a named constant consumed at both hardcoded-literal enforcement sites (arm_readiness.py ~:9928, ~:10095)",
+          "No behavior change; the archival v1-schema validation branch still verifies committed v1 artifacts byte-identically"
         ],
         "pointer": {
-          "json_pointer": "/tasks/S0-RUNSHEET-R2/acceptance",
-          "label": "S0-RUNSHEET-R2 acceptance",
+          "json_pointer": "/tasks/REGISTRY-ID-NAMING-01/acceptance",
+          "label": "REGISTRY-ID-NAMING-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "An executable r2 runsheet exists whose every step is consistent with D-150, D-151, and the marker ruling, lead-fully-read before S-0 executes."
+        "summary": "The superseded-generation constant is named as archival and the live id gets a named home."
       },
       "authority": {
-        "label": "D-151 consequences + marker ruling consequences",
-        "path": "docs/process_traces/2026-08-22-t20/o1-coldgate/MAGISTRATE-RULING-O1.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "the candidate manifest names the successor pinset path",
-          "scope": "close",
-          "state": "pending",
-          "strength": "advisory",
-          "target": "S1-CANDIDATE-01"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Revise the S-0 clone-proof runsheet (r1 custodied at docs/process_traces/2026-08-22-t20/s0-runsheet-r1.md) to r2 per D-151 and the marker ruling: successor-pinset path as the 112th allowlist entry, section 3.7 mints into the successor artifact, the section 4(d) registry-key fix, two-part published-green transcript language, the dead option-(b) marker branch removed per D-150, candidate-mode tool-hash semantics, and the lane/gate_admissible transcript fields.",
-      "id": "S0-RUNSHEET-R2",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 82,
-      "status": "queued",
-      "status_note": "Soft-starts now with the successor filename bound to the candidate manifest; finalizes when S1-CANDIDATE-01 names it.",
-      "stop_card": null
-    },
-    "S1-CANDIDATE-01": {
-      "acceptance": {
-        "evidence": [
-          "Every artifact the S-0 runsheet section 1.3 requires exists with sha256 sidecars and a binding manifest",
-          "D-151 conditions 1, 2, 6, and 8 are each implemented and named in the manifest (chain contract, digest-conditional successor subtraction, chain integrity, registry allowlist key)",
-          "The marker ruling's ratified baseline and all six adjudicated splits are implemented; the regression set is the union of both design seats' lists with a writer-not-reviewer audit"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/S1-CANDIDATE-01/acceptance",
-          "label": "S1-CANDIDATE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The complete S-0 section-1.3 input set exists, lead-reviewed, implementing D-151 conditions 1/2/6/8 and the marker co-design ruling, through the C-028 gauntlet."
-      },
-      "authority": {
-        "label": "D-151 + the marker co-design ruling",
-        "path": "docs/process_traces/2026-08-22-t20/marker-codesign/MAGISTRATE-RULING-MARKER.md"
+        "label": "S-0 cold-gate packet-1 synthesis, item 3 (refuter free finding; two-seat record)",
+        "path": "docs/process_traces/2026-08-22-t20/s0-runsheet-r2.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "label": "D-151 fixed-point rule",
-            "path": "docs/decision_log.md"
+            "label": "Packet-1 synthesis ruling",
+            "path": "docs/process_traces/2026-08-22-t20/s0-runsheet-r2.md"
           },
-          "rule": "No authenticator path enters any allowlist; the step-6 confirmation table is an authenticator and may never be allowlisted"
-        },
-        {
-          "authority": {
-            "label": "Standing frozen-surface hazard",
-            "path": "RUN_STATE.md"
-          },
-          "rule": "The four r6-pinned estimator sources stay byte-identical; every WRITE_SCOPE authorization checks that list first"
+          "rule": "Naming/legibility only — NOT a stale pointer and NOT S-0-blocking; must not land inside the _v4 transaction window"
         }
       ],
       "flags": [],
-      "goal": "Author the lead-reviewed _v4 candidate custody: the R1 candidate registry (112-path allowlist with the successor-pinset path per D-151, refusal vocabulary, D-150 168h horizon values), the pinset chain contract amendment + chain-read code delta, r4-5's two EvidenceLifecycleError catches, and the ruled marker family (schema/builder/verifier, unified step-6 confirmation-table contract doc, reason-code registration + closure check, scheduler gate-receipt v2 with G7, generation-threshold constant, library-boundary publication gate), delivered as s0-candidate.patch + manifest + custody tools with sha256 sidecars.",
-      "id": "S1-CANDIDATE-01",
+      "goal": "Rename joulewise/arm_readiness.py:46 ROW_REGISTRY_ID (holds the superseded 'd117-row-registry-v1') to an explicitly archival name and give the live v2 outer id a named constant, replacing the two unnamed string literals at the enforcement sites.",
+      "id": "REGISTRY-ID-NAMING-01",
       "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 81,
+      "priority": "p2_next_slice",
+      "rank": 87,
       "status": "queued",
-      "status_note": "The gate on S-0 execution. Design questions are RULED (D-151, marker ruling) — implementation from ruled spec; no re-litigation.",
+      "status_note": "Registered from the S-0 packet-1 cold-gate round (both seats: archival retention, not a defect). Defer landing until after the _v4 transaction closes.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -3352,6 +3343,55 @@
       "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
       "stop_card": null
     },
+    "T0-CLOCK-ROW-RENAME-01": {
+      "acceptance": {
+        "evidence": [
+          "One registry churn lands the clock-row rename (successor fact id no longer named for the retired prior-state read) together with any ruled horizon successor, never separately",
+          "Historical operator receipts still authenticate byte-identically",
+          "The churn happens post-_v4 (after the _v4 transaction's windows consume), gauntleted as registry-touching work"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T0-CLOCK-ROW-RENAME-01/acceptance",
+          "label": "T0-CLOCK-ROW-RENAME-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The coupled rename + horizon registry churn, deferred past _v4 by ruling; the two decisions are revisited together, never one alone."
+      },
+      "authority": {
+        "label": "MAGISTRATE-RULING-T0-UNATTENDED (2026-08-23 two-seat co-design synthesis)",
+        "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the in-place PROBE branch must be landed (and _v4 consumed) before the coupled rename+horizon registry churn opens",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "T0-UNATTENDED-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-T0-UNATTENDED (2026-08-23 two-seat co-design synthesis)",
+            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+          },
+          "rule": "Post-_v4 gate: no registry churn while the _v4 transaction is open. Any horizon change is a ruled-number change requiring an Ed ruling; it must not travel as predicate recency."
+        }
+      ],
+      "flags": [],
+      "goal": "Retire the legibility debt the T0 ruling deferred: rename the clock fact id whose name still references the retired operator prior-state read, batched with any horizon successor in one post-_v4 registry churn.",
+      "id": "T0-CLOCK-ROW-RENAME-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 82,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-23 by the T0 synthesis ruling (Sol's concern adopted, cure deferred; coupling to the horizon decision is ruled).",
+      "stop_card": null
+    },
     "T0-UNATTENDED-01": {
       "acceptance": {
         "evidence": [
@@ -3375,6 +3415,13 @@
       "fences": [
         {
           "authority": {
+            "label": "MAGISTRATE-RULING-T0-UNATTENDED (2026-08-23 two-seat co-design synthesis)",
+            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+          },
+          "rule": "Implementation follows the ruled design exactly: single-row in-place PROBE branch (no registry change), diverse 3-server roster under sample_policy_id, R0+R1 references with R1 before the author censuses, separate 5 ms CLOCK_MONOTONIC_RAW anchor gate (never summed), anchor endpoints published for the arm-side step check, 6 h horizon untouched with issuance-time numeric recency predicates, merged 10-gate rehearsal. Deviations return to the magistrate."
+        },
+        {
+          "authority": {
             "label": "r4-6 (sudoers item downgraded to observability)",
             "path": "docs/process_traces/2026-08-20-go-session/v4-plan-ruling-r4draft.md"
           },
@@ -3388,7 +3435,7 @@
       "priority": "p1_phase_gate",
       "rank": 80,
       "status": "queued",
-      "status_note": "Authorized by Ed over attended-T-0. _v4 windows gate on this row's landing (D-150 item 4). Design-bearing: D-144-class consult applies to the evidence-class design.",
+      "status_note": "Authorized by Ed over attended-T-0. _v4 windows gate on this row's landing (D-150 item 4). DESIGN RULED 2026-08-23: two-seat blind co-design (Sol xhigh + Opus) + debate round converged; synthesis ruling is the ONE home and binds implementation. First deliverable of the implementation round is the REASON_CODE_COVERAGE enumerated delta, before code.",
       "stop_card": null
     },
     "T3-CHAR-PAIR-01": {
@@ -3556,6 +3603,55 @@
       "status_note": "lead personal tooling, non-repo",
       "stop_card": null
     },
+    "UNATTENDED-LAUNCH-01": {
+      "acceptance": {
+        "evidence": [
+          "A reviewed launch/relaunch harness exists implementing D-127 clause 4: autonomous initial foreground launch, verified post-window relaunch, liveness proof, bounded retries, independent launchd fallback",
+          "The E-10 runbook amendment (physical-launch wording) is ratified by Ed and landed",
+          "A rehearsal window is launched and relaunched by the harness with zero human action and full lifecycle evidence"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/UNATTENDED-LAUNCH-01/acceptance",
+          "label": "UNATTENDED-LAUNCH-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The campaign scheduler self-launches and self-recovers per D-127 clause 4; E-10's physical-launch reservation is amended by ratified runbook change, not silently absorbed."
+      },
+      "authority": {
+        "label": "MAGISTRATE-RULING-T0-UNATTENDED (2026-08-23 two-seat co-design synthesis)",
+        "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the ruled T-0 evidence change (machine clock attestation, zero prompts) must exist before a launch harness can rehearse an unattended window",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "T0-UNATTENDED-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-T0-UNATTENDED (2026-08-23 two-seat co-design synthesis)",
+            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+          },
+          "rule": "Separate row by ruling: T0-UNATTENDED-01 owns evidence semantics only; this row owns process lifecycle. Production windows depend on BOTH. E-10 amendment is Ed-ratified before any automated launch."
+        }
+      ],
+      "flags": [],
+      "goal": "Build the unattended launch/relaunch harness (D-127 clause 4: initial launch, relaunch, liveness, bounded retries, launchd fallback) and land the Ed-ratified E-10 runbook amendment, so campaign windows run without Ed's physical launch.",
+      "id": "UNATTENDED-LAUNCH-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 81,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-23 by the T0 synthesis ruling (both seats co-signed the separation). Design round required before implementation.",
+      "stop_card": null
+    },
     "UNVERIFIED-REAUDIT-01": {
       "acceptance": {
         "evidence": [
@@ -3609,11 +3705,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "D-150 item (1): MINT LICENSE GRANTED as live prompts",
+            "path": "docs/decision_log.md"
+          },
           "kind": "task",
-          "required": "Ed installs the D-148.1 mint-license settings rule (r5 V-7 item 1; blocks S-0)",
+          "required": "Mint license granted — D-150 item (1) operationalized it as live permission prompts at Ed's hands (supersedes the D-148.1 settings-rule form; no rule exists and none is required)",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "ED-MINT-LICENSE-01"
         }
@@ -3626,8 +3725,8 @@
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 66,
-      "status": "blocked",
-      "status_note": "BLOCKED on ED-MINT-LICENSE-01 (r5 V-7 item 1; blocks S-0). S-0 is lead-executed at the bench; delegated transcript review is ADDITIVE ONLY — the magistrate's own reading of the S-0 transcript remains the final verification gate (cold-attached sentence, verbatim). BIG per D-144: gauntlet + Fable final review + ONE pre-merge two-seat pass over the composed S-1..S-5 merge; the magistrate rules its findings. Horizon (item 2) and marker (item 3) rulings also gate mint-side steps.",
+      "status": "partial",
+      "status_note": "S-0 IN EXECUTION 2026-08-24 (mint-license dependency SATISFIED per D-150 item 1 — live prompts, no settings rule). Clone estate cut from 33aa594 (green run 32679620252); §§1.1-2.1 executed and magistrate-ratified (custody transcripts 000-011); 112-path allowlist shape PASS. HELD at cold-gate packet 2 (four class-(b) doc repoints: transaction-work vs candidate-defect; seat 1 Q2-PROCEED-WITH-AMENDMENT, refuter in flight). Retained verbatim: S-0 is lead-executed at the bench; delegated transcript review is ADDITIVE ONLY — the magistrate's own reading of the S-0 transcript remains the final verification gate (cold-attached sentence). BIG per D-144: gauntlet + Fable final review + ONE pre-merge two-seat pass over the composed S-1..S-5 merge; the magistrate rules its findings. Horizon (item 2) and marker (item 3) rulings also gate mint-side steps.",
       "stop_card": null
     },
     "WO-CENSUS-SEMANTICS": {
@@ -3870,5 +3969,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-21"
+  "updated": "2026-08-23"
 }
