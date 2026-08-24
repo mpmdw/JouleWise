@@ -45,32 +45,34 @@
   },
   "ed_input_ledger": [
     {
-      "blocked_on": "ED-INPUT",
       "blocks": [
         "C3.4"
       ],
       "item": "sizing_tolerance_ratio",
-      "ledger_text": "sizing_tolerance_ratio (C3 mis-sizing guard) - no basis exists."
+      "ledger_text": "sizing_tolerance_ratio (C3 mis-sizing guard) - no basis exists.",
+      "ruling": "D-152 (Ed, 2026-08-24): C3 sizing_tolerance_ratio=0.25; C4 tau_float=1e-6 J (Ed's conditional resolved by arithmetic: 3 orders below the smallest physical defect signal ~1e-3 J, 4 above worst-case float accumulation ~1e-10 J); C5 held_out_reference_count=6, two per window third (cost ~30-45 min across the paper's characterization windows, far under Ed's threshold); R1/R2 anchored limbs carry NO absolute fallback - dual-limb design governs (unavailable limb -> indeterminate, characterization_operative_floor_unavailable).",
+      "status": "RULED"
     },
     {
-      "blocked_on": "ED-INPUT",
       "blocks": [
         "C4.1a"
       ],
       "item": "tau_float",
-      "ledger_text": "tau_float (C4 overcount) - pinned code value or Ed ruling; A's 1e-9 J is NOT ruled and is not frozen."
+      "ledger_text": "tau_float (C4 overcount) - pinned code value or Ed ruling; A's 1e-9 J is NOT ruled and is not frozen.",
+      "ruling": "D-152 (Ed, 2026-08-24): C3 sizing_tolerance_ratio=0.25; C4 tau_float=1e-6 J (Ed's conditional resolved by arithmetic: 3 orders below the smallest physical defect signal ~1e-3 J, 4 above worst-case float accumulation ~1e-10 J); C5 held_out_reference_count=6, two per window third (cost ~30-45 min across the paper's characterization windows, far under Ed's threshold); R1/R2 anchored limbs carry NO absolute fallback - dual-limb design governs (unavailable limb -> indeterminate, characterization_operative_floor_unavailable).",
+      "status": "RULED"
     },
     {
-      "blocked_on": "ED-INPUT",
       "blocks": [
         "C5.1",
         "C5.2"
       ],
       "item": "heldout_reference_probe_count",
-      "ledger_text": "Held-out reference probe count (C5) - window budget; proposed >= 3."
+      "ledger_text": "Held-out reference probe count (C5) - window budget; proposed >= 3.",
+      "ruling": "D-152 (Ed, 2026-08-24): C3 sizing_tolerance_ratio=0.25; C4 tau_float=1e-6 J (Ed's conditional resolved by arithmetic: 3 orders below the smallest physical defect signal ~1e-3 J, 4 above worst-case float accumulation ~1e-10 J); C5 held_out_reference_count=6, two per window third (cost ~30-45 min across the paper's characterization windows, far under Ed's threshold); R1/R2 anchored limbs carry NO absolute fallback - dual-limb design governs (unavailable limb -> indeterminate, characterization_operative_floor_unavailable).",
+      "status": "RULED"
     },
     {
-      "blocked_on": "ED-INPUT",
       "blocks": [
         "C1.5",
         "C1.7",
@@ -78,7 +80,9 @@
         "C2.4"
       ],
       "item": "r1_r2_fallback_absolute_limits",
-      "ledger_text": "R1/R2 fallback ABSOLUTE limits iff no alpha/beta floor is issued at freeze time (the design's single largest dependency)."
+      "ledger_text": "R1/R2 fallback ABSOLUTE limits iff no alpha/beta floor is issued at freeze time (the design's single largest dependency).",
+      "ruling": "D-152 (Ed, 2026-08-24): C3 sizing_tolerance_ratio=0.25; C4 tau_float=1e-6 J (Ed's conditional resolved by arithmetic: 3 orders below the smallest physical defect signal ~1e-3 J, 4 above worst-case float accumulation ~1e-10 J); C5 held_out_reference_count=6, two per window third (cost ~30-45 min across the paper's characterization windows, far under Ed's threshold); R1/R2 anchored limbs carry NO absolute fallback - dual-limb design governs (unavailable limb -> indeterminate, characterization_operative_floor_unavailable).",
+      "status": "RULED"
     }
   ],
   "ordering_gates": {
@@ -721,7 +725,6 @@
           "units": "target-direction slots"
         },
         {
-          "blocked_on": "ED-INPUT",
           "claim_ceiling": {
             "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
             "permitted": "instrument-result language about this named stack under these named conditions"
@@ -751,8 +754,10 @@
           ],
           "failure_outcome": "indeterminate",
           "ledger_text": "sizing_tolerance_ratio (C3 mis-sizing guard) - no basis exists.",
-          "limit_basis": "ed_input_required",
+          "limit": 0.25,
+          "limit_basis": "ruled",
           "limit_basis_source": "No basis exists in any ratified decision or committed code. The ruling records it as an ED-INPUT item and refuses the invented value.",
+          "limit_source": "D-152 (Ed, 2026-08-24): sizing_tolerance_ratio=0.25",
           "minimum_n": 8,
           "quantity": "agreement between each probe's predicted and realized energy difference",
           "reason_code_on_failure": "characterization_effect_sizing_missed",
@@ -828,7 +833,6 @@
     {
       "criteria": [
         {
-          "blocked_on": "ED-INPUT",
           "claim_ceiling": {
             "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
             "permitted": "instrument-result language about this named stack under these named conditions"
@@ -862,8 +866,10 @@
           ],
           "failure_outcome": "contradicted",
           "ledger_text": "tau_float (C4 overcount) - pinned code value or Ed ruling; A's 1e-9 J is NOT ruled and is not frozen.",
-          "limit_basis": "ed_input_required",
+          "limit": 1e-06,
+          "limit_basis": "ruled",
           "limit_basis_source": "The retained evidence establishes a 0.0 J reintegration discrepancy (docs/paper/draft-v1.md:426), which is not the same as a ratified floating-point tolerance. The ruling refuses to freeze an invented literal; tau_float must be a pinned code-defined value or an Ed ruling.",
+          "limit_source": "D-152 (Ed, 2026-08-24): tau_float=1e-6 J (conditional resolved: 3 orders below the smallest physical defect ~1e-3 J, 4 above worst-case float accumulation ~1e-10 J)",
           "minimum_n": 24,
           "quantity": "signed phase-sum minus enclosing-request residual, overcount direction",
           "reason_code_on_failure": "characterization_criterion_not_met",
@@ -1172,7 +1178,6 @@
     {
       "criteria": [
         {
-          "blocked_on": "ED-INPUT",
           "claim_ceiling": {
             "exact_forbidden_upgrade": "No characterization row may be quoted as a scientific finding about models, hardware, or workloads.",
             "permitted": "instrument-result language about this named stack under these named conditions"
@@ -1198,9 +1203,10 @@
           ],
           "failure_outcome": "indeterminate",
           "ledger_text": "Held-out reference probe count (C5) - window budget; proposed >= 3.",
-          "limit_basis": "ed_input_required",
+          "limit_basis": "ruled",
           "limit_basis_source": "The number of held-out probes is bounded by the window's time budget, which is Ed's to set. The ruling records the proposal of at least three, one per window third, so a single outlier is not the whole result.",
-          "minimum_n": 1,
+          "limit_source": "D-152 (Ed, 2026-08-24): held_out_reference_count=6, two per window third (~30-45 min total across the paper's windows)",
+          "minimum_n": 6,
           "quantity": "count of reference members whose allowance-constructing or held-out role was fixed at pack generation",
           "reason_code_on_failure": "characterization_reference_role_unfrozen",
           "sample_unit": "reference member",
