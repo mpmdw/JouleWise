@@ -97,9 +97,10 @@ INTEGER_RE = r"(?:0|[1-9][0-9]*)"
 SAFE_REASON_RE = r"[^\[\]\n]+"
 
 
-def _registry_rows() -> tuple[frozenset[str], frozenset[str]]:
+def _registry_rows() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
     rows: set[str] = set()
     supplier_unknown: set[str] = set()
+    value_unissued: set[str] = set()
     for line in REGISTRY_PATH.read_text(encoding="utf-8").splitlines():
         match = re.match(r"^\| `(\[[^\]]+\])` \|", line)
         if match is None:
@@ -108,10 +109,12 @@ def _registry_rows() -> tuple[frozenset[str], frozenset[str]]:
         rows.add(row)
         if "SUPPLIER_UNKNOWN" in line:
             supplier_unknown.add(row)
-    return frozenset(rows), frozenset(supplier_unknown)
+        if "VALUE_UNISSUED" in line:
+            value_unissued.add(row)
+    return frozenset(rows), frozenset(supplier_unknown), frozenset(value_unissued)
 
 
-REGISTRY_ROWS, SUPPLIER_UNKNOWN_ROWS = _registry_rows()
+REGISTRY_ROWS, SUPPLIER_UNKNOWN_ROWS, VALUE_UNISSUED_ROWS = _registry_rows()
 
 
 class StopFill(ValueError):
@@ -153,6 +156,17 @@ def _supplier_unknown(row: str) -> None:
         row,
         "SUPPLIER_UNKNOWN",
         "the registry freezes this token but defines no producing artifact field",
+    )
+
+
+def _value_unissued(row: str) -> None:
+    if row not in VALUE_UNISSUED_ROWS:
+        raise RuntimeError(f"renderer misclassified non-VALUE_UNISSUED row {row}")
+    raise _stop(
+        row,
+        "VALUE_UNISSUED",
+        "the registry binds this token to a producing field, but no issued "
+        "artifact carries a value for it yet",
     )
 
 
@@ -919,9 +933,12 @@ def _select_section6(
     )
     status = artifact.get("status")
     if status == "passed":
-        _supplier_unknown("[PLAIN_LANGUAGE_RESULT_linearity]")
+        # The characterization result schema froze every row field on
+        # 2026-08-24, so these rows are no longer SUPPLIER_UNKNOWN; they stop
+        # because no characterization report has been issued.
+        _value_unissued("[PLAIN_LANGUAGE_RESULT_linearity]")
     if status in {"failed", "flagged", "invalid"}:
-        _supplier_unknown("[D_C_linearity_diagnostic_J_per_token]")
+        _value_unissued("[D_C_linearity_diagnostic_J_per_token]")
     raise _stop("[REFUSAL_REASON_window_C]", "UNKNOWN_FIELD", f"unknown characterization verdict status {status!r}")
 
 

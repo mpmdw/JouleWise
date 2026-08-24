@@ -96,6 +96,14 @@ class VocabularySyncTests(unittest.TestCase):
         self.assertTrue(expected)
         self.assertEqual(RENDERER.SUPPLIER_UNKNOWN_ROWS, frozenset(expected))
 
+    def test_value_unissued_rows_match_registry(self) -> None:
+        expected = set()
+        for line in RENDERER.REGISTRY_PATH.read_text(encoding="utf-8").splitlines():
+            if line.startswith("| `[") and "VALUE_UNISSUED" in line:
+                expected.add(line.split("`", 2)[1])
+        self.assertTrue(expected)
+        self.assertEqual(RENDERER.VALUE_UNISSUED_ROWS, frozenset(expected))
+
 
 class VariantSelectionTests(unittest.TestCase):
     @classmethod
@@ -389,7 +397,7 @@ class StopFillTests(unittest.TestCase):
         self.assertEqual(caught.exception.registry_row, "[B_decode_claim_J]")
         self.assertEqual(caught.exception.label, "SUPPLIER_UNKNOWN")
 
-    def test_section6_pass_and_refusal_both_stop_on_unknown_schema_rows(self) -> None:
+    def test_section6_pass_and_refusal_both_stop_on_unissued_report(self) -> None:
         for verdict, expected_row in (
             ("synthetic_pass_verdict.json", "[PLAIN_LANGUAGE_RESULT_linearity]"),
             (
@@ -411,7 +419,7 @@ class StopFillTests(unittest.TestCase):
                     with self.assertRaises(RENDERER.StopFill) as caught:
                         RENDERER.render_from_manifest(path)
                 self.assertEqual(caught.exception.registry_row, expected_row)
-                self.assertEqual(caught.exception.label, "SUPPLIER_UNKNOWN")
+                self.assertEqual(caught.exception.label, "VALUE_UNISSUED")
 
     def test_stored_operative_gate_mismatch_is_failed_predicate(self) -> None:
         manifest = make_paths_absolute(

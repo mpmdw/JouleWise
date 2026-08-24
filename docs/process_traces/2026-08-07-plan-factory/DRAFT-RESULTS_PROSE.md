@@ -2516,7 +2516,8 @@ The phase-attribution row [PLAIN_LANGUAGE_RESULT_phase].
 <!-- IF diagnostic_phase_attribution_present -->
 The authenticated additivity residual was [D_C_additivity_J] J, and the
 fixed-prompt prompt-processing slope against later output length was
-[S_C_prompt_invariance_J_per_token] J per token.
+[S_C_prompt_invariance_J_per_token] J per token against a
+[B_C_prompt_invariance_J_per_token] J-per-token acceptance band.
 <!-- ELSE: emit no numeric phase-attribution clause -->
 <!-- END_ROW_RENDER: phase_attribution -->
 
