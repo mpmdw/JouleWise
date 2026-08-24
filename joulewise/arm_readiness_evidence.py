@@ -1052,7 +1052,7 @@ def _validate_manifests(context: _DerivationContext, *, kind: str) -> dict[str, 
 def _recorded_generator_check(
     context: _DerivationContext, generator_path: str, *, kind: str
 ) -> dict[str, Any]:
-    command = [sys.executable, str(context.repository / generator_path), "--check"]
+    command = _generator_command(str(context.repository / generator_path))
     try:
         completed = subprocess.run(
             command,
@@ -1068,7 +1068,7 @@ def _recorded_generator_check(
         detail = completed.stderr.decode("utf-8", errors="replace").strip()
         raise _underivable(kind, f"pack generator --check refused: {detail}")
     return {
-        "command": [sys.executable, generator_path, "--check"],
+        "command": _generator_command(generator_path),
         "exit_code": completed.returncode,
         "stdout_sha256": _readiness.sha256_bytes(completed.stdout),
         "stderr_sha256": _readiness.sha256_bytes(completed.stderr),
@@ -1092,9 +1092,15 @@ def _recorded_generator_check(
 #   2. a byte-exact replay of the projection's write set from those
 #      pre-projection bytes plus the COMMITTED receipt.
 #
-# The composed claim is: the committed pack is exactly the generator's
-# emission at the anchored commit, plus exactly the U11 projection's
-# receipted rewrite of it.
+# The composed claim is BYTES AND LINEAGE ONLY: the committed pack is exactly
+# the generator's emission at the anchored commit, plus exactly the U11
+# projection's receipted rewrite of it.  It does NOT claim the receipt's
+# per-unit runtime values are TRUE of this machine -- they are taken from the
+# receipt precisely because re-deriving them needs the mlx runtime adapters,
+# which the stdlib evidence author cannot import.  Runtime-value truth is
+# deferred to arm time, where `_run_identity_arm_reverification`
+# (arm_readiness.py:5092) re-derives the projection through
+# `verify_frozen_projection` on the measurement host.
 #
 # `receipt["pack"]["reviewed_git_commit"]` is a repo-wide HEAD, NOT a
 # pack-scoped pin, so it is treated as an UNTRUSTED source of candidate bytes.
@@ -1104,11 +1110,14 @@ def _recorded_generator_check(
 # other file in the pack.  The anchor must additionally resolve to a commit and
 # be an ancestor of the derivation head, so it lies inside audited history.
 #
-# The generator imports `joulewise.*` from the tree it is run in, and the
-# anchor's library code is NOT pinned by anything.  The materialised tree
-# therefore gets HEAD's `joulewise/` and `scripts/` overlaid on top of it, so
-# the code that EXECUTES is the reviewed head's code and only pack/data bytes
-# come from the anchor.
+# Only the generator FILE is pinned, by the committed plan tree.  Everything
+# else it imports it reaches through the repository root it puts on `sys.path`
+# itself, and the anchor's copy of that library code is pinned by nothing.  The
+# materialised tree therefore gets HEAD's `joulewise/` and `scripts/` overlaid
+# on top of it, so the code that EXECUTES is the reviewed head's and only
+# pack/data bytes come from the anchor.  The remaining import surface is the
+# standard library plus that repository root, which the isolated interpreter
+# and minimal environment below hold it to.
 _PROJECTION_REWRITTEN_FILES = frozenset(
     {"plan_tree.json", "plan_tree.sha256", "producer_contract.json"}
 )
@@ -1116,16 +1125,46 @@ _ANCHOR_LIBRARY_PATHS = ("joulewise", "scripts")
 _ANCHOR_ARCHIVE_TIMEOUT_SECONDS = 300
 
 
-def _generator_environment() -> dict[str, str]:
-    """Environment for a generator subprocess.
+# A generator subprocess must not inherit the invoking environment.  A benign
+# fake `mlx` package on an inherited PYTHONPATH is enough to change what a
+# PINNED generator imports, and therefore to flip this kind's verdict without
+# altering one authenticated byte (executed refutation, PR #178).  Only these
+# names are forwarded, and PATH is replaced outright.
+_GENERATOR_ENVIRONMENT_ALLOWLIST = ("HOME", "TMPDIR", "LANG", "LC_ALL")
+_GENERATOR_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
-    ``PYTHONDONTWRITEBYTECODE`` keeps the child from leaving ``__pycache__``
-    inside the pack directory.  A stray ``__pycache__`` is untracked, so the
-    authoring run that created it makes the NEXT authoring run refuse with
-    ``evidence_author_pack_uncommitted`` against its own residue.
+
+def _generator_command(generator: str) -> list[str]:
+    """Interpreter invocation for a generator subprocess.
+
+    ``-I`` is isolated mode: it implies ``-E`` (ignore every PYTHON* variable,
+    PYTHONPATH included), ``-s`` (no user site-packages) and ``-P`` (do not
+    prepend the script's own directory to ``sys.path``).  ``-P`` matters here
+    because the script lives INSIDE the pack under authentication: without it a
+    committed pack file could shadow a stdlib or joulewise module by name and
+    be imported as the generator runs.  The pinned generators put their
+    repository root on ``sys.path`` themselves, so isolation costs them nothing.
+
+    ``-B`` re-states PYTHONDONTWRITEBYTECODE, which ``-E`` would otherwise
+    discard.  Both generator paths need it: without it the child leaves
+    ``__pycache__`` inside the pack directory, and that untracked residue makes
+    the NEXT authoring run refuse with ``evidence_author_pack_uncommitted``
+    against its own output.  The variable is kept alongside ``-B`` so the
+    intent survives if these flags are ever edited.
     """
 
-    return dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    return [sys.executable, "-I", "-B", generator, "--check"]
+
+
+def _generator_environment() -> dict[str, str]:
+    """Minimal allowlisted environment for a generator subprocess."""
+
+    environment = {"PATH": _GENERATOR_PATH, "PYTHONDONTWRITEBYTECODE": "1"}
+    for name in _GENERATOR_ENVIRONMENT_ALLOWLIST:
+        value = os.environ.get(name)
+        if value is not None:
+            environment[name] = value
+    return environment
 
 
 def _safe_pack_relative(value: object, *, kind: str, label: str) -> str:
@@ -1156,6 +1195,43 @@ def _pack_file_digests(root: Path, *, kind: str, label: str) -> dict[str, str]:
                 )
             digests[relative] = _readiness.sha256_bytes(path.read_bytes())
     return digests
+
+
+_REGULAR_BLOB_MODES = frozenset({"100644", "100755"})
+
+
+def _pack_tree_modes(
+    repository: Path, commit: str, pack_relative: str, *, kind: str, label: str
+) -> dict[str, str]:
+    """Mode bits for every pack entry at ``commit``, read from the tree object.
+
+    The content census walks files and cannot see the executable bit, so a
+    commit that only flips 100644 -> 100755 on a committed config would pass it
+    unchanged.  Modes come from the tree object rather than the filesystem
+    because git records exactly two regular-file modes and nothing else here.
+    """
+
+    listing = _git_capture(
+        repository, ["ls-tree", "-r", "-z", commit, "--", pack_relative], kind=kind
+    )
+    prefix = f"{pack_relative}/"
+    modes: dict[str, str] = {}
+    for entry in listing.split("\0"):
+        if not entry:
+            continue
+        meta, _tab, path = entry.partition("\t")
+        fields = meta.split()
+        if len(fields) < 3 or not path:
+            raise _underivable(kind, f"{label} tree listing is malformed: {entry!r}")
+        mode, object_type = fields[0], fields[1]
+        if object_type != "blob" or mode not in _REGULAR_BLOB_MODES:
+            raise _underivable(
+                kind, f"{label} contains a non-regular entry: {path} ({mode} {object_type})"
+            )
+        if not path.startswith(prefix):
+            raise _underivable(kind, f"{label} lists a path outside the pack: {path}")
+        modes[path[len(prefix) :]] = mode
+    return modes
 
 
 def _git_capture(
@@ -1245,6 +1321,16 @@ def _replay_projection_write_set(
         ) from exc
     if projection["state"] == "frozen":
         raise _underivable(kind, "anchored pack is already frozen")
+    if projection["state"] == "superseded":
+        # `freeze_projection` (identity_pins.py:1831) refuses to freeze a
+        # superseded pack, so no lawful projection can have been derived from
+        # one; a replay that accepted it would manufacture a lineage the real
+        # freeze would have rejected.
+        raise _underivable(kind, "anchored pack projection is superseded")
+    if projection["state"] != "unprojected":
+        raise _underivable(
+            kind, f"anchored pack projection state is unusable: {projection['state']}"
+        )
     frozen = copy.deepcopy(projection)
     frozen["state"] = "frozen"
     frozen["projection_receipt"] = {
@@ -1255,6 +1341,15 @@ def _replay_projection_write_set(
         unit["identity_unit_id"]: unit["model_runtime_config"]
         for unit in receipt["identity_units"]
     }
+    projection_ids = {unit["identity_unit_id"] for unit in frozen["identity_units"]}
+    # Exact correspondence, not containment: a receipt carrying an EXTRA unit
+    # would be attesting to a derivation this pack never declared.
+    if set(runtime_by_id) != projection_ids:
+        raise _underivable(
+            kind,
+            "projection receipt identity units differ from the pack's: "
+            f"{sorted(set(runtime_by_id) ^ projection_ids)!r}",
+        )
     for unit in frozen["identity_units"]:
         unit_id = unit["identity_unit_id"]
         if unit_id not in runtime_by_id:
@@ -1409,39 +1504,13 @@ def _recorded_projected_pack_authentication(
                 kind, "pack generator at the anchored commit differs from its pin"
             )
 
-        # Census the anchored pack BEFORE running anything in the tree.
+        # 5. Subtree fence, run BEFORE anything in the tree is EXECUTED: step 6
+        #    starts an interpreter whose working directory is this tree, so a
+        #    pack file the projection does not license must be refused first,
+        #    not after it has had a chance to run.
         anchored_digests = _pack_file_digests(
             pre_projection_pack, kind=kind, label="anchored pack"
         )
-
-        # 5. The generator's own derivation of the pre-projection pack.
-        try:
-            completed = subprocess.run(
-                [sys.executable, str(anchored_generator), "--check"],
-                cwd=anchored,
-                check=False,
-                capture_output=True,
-                timeout=180,
-                env=_generator_environment(),
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            raise _underivable(
-                kind, f"pack generator check could not execute: {exc}"
-            ) from exc
-        if completed.returncode != 0:
-            detail = completed.stderr.decode("utf-8", errors="replace").strip()
-            raise _underivable(
-                kind, f"pack generator --check refused at the anchored commit: {detail}"
-            )
-        generator_result = {
-            "command": [sys.executable, generator_relative, "--check"],
-            "exit_code": completed.returncode,
-            "stdout_sha256": _readiness.sha256_bytes(completed.stdout),
-            "stderr_sha256": _readiness.sha256_bytes(completed.stderr),
-        }
-
-        # 6. Subtree fence: the anchor -> committed delta must be EXACTLY the
-        #    projection's write set and nothing else.
         committed_digests = _pack_file_digests(
             context.pack_root, kind=kind, label="committed pack"
         )
@@ -1468,6 +1537,55 @@ def _recorded_projected_pack_authentication(
             raise _underivable(
                 kind, f"pack subtree diverges at the anchored commit: {unlicensed!r}"
             )
+        anchored_modes = _pack_tree_modes(
+            context.repository, anchor, pack_relative, kind=kind, label="anchored pack"
+        )
+        committed_modes = _pack_tree_modes(
+            context.repository,
+            context.head_commit,
+            pack_relative,
+            kind=kind,
+            label="committed pack",
+        )
+        flipped = sorted(
+            name
+            for name in set(anchored_modes) & set(committed_modes)
+            if anchored_modes[name] != committed_modes[name]
+        )
+        if flipped:
+            raise _underivable(
+                kind, f"pack subtree changes file modes at the anchored commit: {flipped!r}"
+            )
+        if set(committed_modes) != set(committed_digests):
+            raise _underivable(
+                kind, "committed pack tree and working tree disagree on membership"
+            )
+
+        # 6. The generator's own derivation of the pre-projection pack.
+        try:
+            completed = subprocess.run(
+                _generator_command(str(anchored_generator)),
+                cwd=anchored,
+                check=False,
+                capture_output=True,
+                timeout=180,
+                env=_generator_environment(),
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise _underivable(
+                kind, f"pack generator check could not execute: {exc}"
+            ) from exc
+        if completed.returncode != 0:
+            detail = completed.stderr.decode("utf-8", errors="replace").strip()
+            raise _underivable(
+                kind, f"pack generator --check refused at the anchored commit: {detail}"
+            )
+        generator_result = {
+            "command": _generator_command(generator_relative),
+            "exit_code": completed.returncode,
+            "stdout_sha256": _readiness.sha256_bytes(completed.stdout),
+            "stderr_sha256": _readiness.sha256_bytes(completed.stderr),
+        }
 
         # 7. Byte-exact replay of the projection's write set.
         writes = _replay_projection_write_set(
@@ -1520,14 +1638,13 @@ def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
     projection = _pack_projection(context)
     projection_result: dict[str, Any] | None = None
     projection_primary: list[dict[str, str]] = []
-    if (
-        projection is not None
-        and projection.get("state") == "frozen"
-        and projection.get("projection_receipt") is not None
-    ):
-        # A projected pack is NEVER allowed to fall back to the bare check:
-        # a permissive generator would otherwise bypass the projection
-        # authentication entirely.
+    if projection is not None and projection.get("state") == "frozen":
+        # A frozen pack is NEVER allowed to fall back to the bare check, and
+        # the state ALONE selects this path: keying off the receipt too would
+        # let a frozen pack with a null receipt take the unprojected route,
+        # where a permissive generator bypasses the projection authentication
+        # entirely.  A frozen state with no receipt is a refusal, not a
+        # fallback.
         (
             generator_result,
             projection_result,

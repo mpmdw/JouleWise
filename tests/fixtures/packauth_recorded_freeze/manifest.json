@@ -1,0 +1,12 @@
+{
+  "_comment": "A REAL freeze_projection write set, recorded from the live D-117 estate. pre_projection.tar.gz holds the pack's pre-projection plan_tree.json, its sidecar, producer_contract.json (captured from the anchored commit) and the committed projection receipt. expected_sha256 are the digests the real identity_pins.freeze_projection actually produced. The replay under test must reproduce them from the recorded inputs alone.",
+  "expected_sha256": {
+    "plan_tree.json": "2e2511e74ceb96ae15d974c5fa03b5737be10ecf345992a27286634454b147a8",
+    "plan_tree.sha256": "a8e418393ed4c5f7000305eb95c583eef5238ebd04fdde9d5c4aa14d57cfd053",
+    "producer_contract.json": "6c1873379e53cc27cfbba030c9cb9a96c878915be2a6578f1875edff1a283d4d"
+  },
+  "pack_id": "d117_floor_qwen25_7b_v4",
+  "receipt_relative": "identity_pin_projection.receipts/projection-0001.json",
+  "receipt_sha256": "a27d8ddcb21ae12dab1ecc1bd8b32fc32693821539d3f81c7c506d30fc9c2a0d",
+  "reviewed_git_commit": "b7225bfcfc45ae833b9d836885a6e7830814fd9f"
+}

@@ -22,9 +22,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -40,6 +43,7 @@ from joulewise import identity_pins  # noqa: E402
 from test_arm_readiness_evidence_author import make_author_fixture  # noqa: E402
 from test_arm_readiness_lifecycle import git  # noqa: E402
 
+RECORDED_FREEZE = ROOT / "tests/fixtures/packauth_recorded_freeze"
 RECEIPT_RELATIVE = "identity_pin_projection.receipts/projection-0001.json"
 SIDECAR_RELATIVE = "identity_pin_projection.receipts/projection-0001.sha256"
 
@@ -202,6 +206,107 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
         self.assertNotIn("projected_pack_authentication", checks)
         self.assertEqual(checks, {"pack_generator_check", "manifest_validator"})
 
+
+    # ---- the subprocess boundary ----------------------------------------
+
+    def test_generator_child_cannot_see_the_invoking_environment(self) -> None:
+        """A fake `mlx` on an inherited PYTHONPATH flipped a PASS (PR #178)."""
+
+        scratch = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, scratch, True)
+        site = scratch / "site"
+        (site / "packauth_marker").mkdir(parents=True)
+        (site / "packauth_marker" / "__init__.py").write_text("MARKER = 'HOSTILE'\n")
+        probe = scratch / "probe.py"
+        probe.write_text(
+            "import json, os, sys\n"
+            "try:\n"
+            "    import packauth_marker\n"
+            "    marker = packauth_marker.MARKER\n"
+            "except ImportError:\n"
+            "    marker = None\n"
+            "print(json.dumps({'marker': marker,\n"
+            "                  'pythonpath': os.environ.get('PYTHONPATH'),\n"
+            "                  'virtual_env': os.environ.get('VIRTUAL_ENV'),\n"
+            "                  'sys_path_0': sys.path[0],\n"
+            "                  'dont_write_bytecode': sys.dont_write_bytecode}))\n"
+        )
+        with unittest.mock.patch.dict(
+            os.environ,
+            {"PYTHONPATH": str(site), "VIRTUAL_ENV": str(scratch / "venv")},
+        ):
+            # The parent really can import it, so the child's failure is the
+            # isolation working and not a broken marker package.
+            control = subprocess.run(
+                [sys.executable, str(probe)],
+                capture_output=True,
+                env=dict(os.environ),
+                check=True,
+            )
+            self.assertEqual(
+                json.loads(control.stdout)["marker"], "HOSTILE", "marker is not importable at all"
+            )
+            completed = subprocess.run(
+                evidence._generator_command(str(probe)),
+                capture_output=True,
+                env=evidence._generator_environment(),
+                check=True,
+            )
+        observed = json.loads(completed.stdout)
+        self.assertIsNone(observed["marker"])
+        self.assertIsNone(observed["pythonpath"])
+        self.assertIsNone(observed["virtual_env"])
+        # -P keeps the pack's own directory off sys.path, so a committed pack
+        # file cannot shadow a stdlib or joulewise module.
+        self.assertNotEqual(Path(observed["sys_path_0"]), probe.parent)
+        # -B survives -E discarding PYTHONDONTWRITEBYTECODE.
+        self.assertTrue(observed["dont_write_bytecode"])
+        self.assertNotIn("PYTHONPATH", evidence._generator_environment())
+        self.assertNotIn("VIRTUAL_ENV", evidence._generator_environment())
+
+    # ---- a RECORDED real freeze -----------------------------------------
+
+    def test_replay_reproduces_a_recorded_real_freeze_projection(self) -> None:
+        """Replay a write set the real `freeze_projection` actually produced.
+
+        Every other fixture here is built by `apply_freeze_projection`, which
+        mirrors the real code; if that mirror were wrong in the same way as the
+        replay, those tests would still pass.  These bytes were recorded from
+        the live D-117 estate, so nothing under test authored them.
+        """
+
+        manifest = json.loads((RECORDED_FREEZE / "manifest.json").read_bytes())
+        scratch = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, scratch, True)
+        with tarfile.open(RECORDED_FREEZE / "pre_projection.tar.gz") as tar:
+            tar.extractall(scratch)
+        recorded = scratch / "pre"
+        receipt = json.loads((recorded / "receipt.json").read_bytes())
+        self.assertEqual(
+            hashlib.sha256((recorded / "receipt.json").read_bytes()).hexdigest(),
+            manifest["receipt_sha256"],
+        )
+        pack = scratch / manifest["pack_id"]
+        pack.mkdir()
+        for name in ("plan_tree.json", "plan_tree.sha256", "producer_contract.json"):
+            (pack / name).write_bytes((recorded / name).read_bytes())
+
+        writes = evidence._replay_projection_write_set(
+            pack,
+            receipt,
+            manifest["receipt_relative"],
+            manifest["receipt_sha256"],
+            kind="PACK_AUTHENTICATION",
+        )
+
+        self.assertEqual(sorted(writes), sorted(manifest["expected_sha256"]))
+        for name, expected in sorted(manifest["expected_sha256"].items()):
+            self.assertEqual(
+                hashlib.sha256(writes[name]).hexdigest(),
+                expected,
+                f"replay diverges from the recorded real freeze: {name}",
+            )
+
     # ---- the refusals ----------------------------------------------------
 
     def test_refuses_pack_subtree_divergence_at_the_anchor(self) -> None:
@@ -240,11 +345,20 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
             repository, pack, "does not reproduce the committed bytes"
         )
 
-    def test_refuses_an_unlicensed_extra_file(self) -> None:
+    def test_refuses_an_unlicensed_extra_file_before_executing_anything(self) -> None:
+        """The fence runs BEFORE the generator: step 6 starts an interpreter
+        whose working directory is the materialised tree, so a pack file the
+        projection does not license must be refused first, not after it has
+        had a chance to run."""
+
         repository, pack = self.fixture()
         (pack / "EXTRA.json").write_bytes(readiness.render_json({"extra": True}))
         self.recommit(repository)
-        self.assert_refuses(repository, pack, "does not license")
+        with unittest.mock.patch.object(
+            evidence, "_generator_command", wraps=evidence._generator_command
+        ) as spy:
+            self.assert_refuses(repository, pack, "does not license")
+        spy.assert_not_called()
 
     def test_refuses_a_removed_anchored_file(self) -> None:
         repository, pack = self.fixture()
@@ -302,6 +416,109 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
         self.rewrite_receipt(pack, refuse)
         self.recommit(repository)
         self.assert_refuses(repository, pack, "not a passing freeze receipt")
+
+    def test_refuses_a_frozen_state_with_no_receipt(self) -> None:
+        """The state ALONE selects the composed path; no receipt is a refusal."""
+
+        repository, pack = self.fixture()
+        shutil.rmtree(pack / "identity_pin_projection.receipts")
+        self.rewrite_tree(
+            pack,
+            lambda tree: tree["arm_attachments"]["identity_pin_projection"].__setitem__(
+                "projection_receipt", None
+            ),
+        )
+        self.recommit(repository)
+        self.assert_refuses(repository, pack, "carries no receipt reference")
+
+    def test_replay_refuses_a_superseded_anchored_projection(self) -> None:
+        """`freeze_projection` (identity_pins.py:1831) refuses a superseded pack.
+
+        No lawful projection can have been derived from one, so a replay that
+        accepted it would manufacture a lineage the real freeze would have
+        rejected.  A superseded projection is schema-required to carry real
+        pins and a receipt reference (identity_pins.py:520-541), so the
+        state is flipped on a copy of the FROZEN pack rather than the
+        pre-projection one, and the replay is called directly.
+        """
+
+        repository, pack = self.fixture()
+        scratch = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, scratch, True)
+        candidate = scratch / pack.name
+        shutil.copytree(pack, candidate)
+
+        def supersede(value: dict) -> None:
+            value["arm_attachments"]["identity_pin_projection"]["state"] = "superseded"
+
+        tree = json.loads((candidate / "plan_tree.json").read_bytes())
+        supersede(tree)
+        producer = json.loads((candidate / "producer_contract.json").read_bytes())
+        producer["identity_pin_projection"] = copy.deepcopy(
+            tree["arm_attachments"]["identity_pin_projection"]
+        )
+        producer_raw = identity_pins._render_json(producer)
+        (candidate / "producer_contract.json").write_bytes(producer_raw)
+        tree["downstream_contract"]["producer_contract"]["sha256"] = hashlib.sha256(
+            producer_raw
+        ).hexdigest()
+        tree_raw = identity_pins._render_json(tree)
+        (candidate / "plan_tree.json").write_bytes(tree_raw)
+        (candidate / "plan_tree.sha256").write_bytes(
+            identity_pins._gnu_sidecar(
+                hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json"
+            )
+        )
+        # The candidate is a lawful superseded pack, so it LOADS ...
+        _tree, projection, _producer = identity_pins._load_pack_projection(candidate)
+        self.assertEqual(projection["state"], "superseded")
+
+        receipt = json.loads((pack / RECEIPT_RELATIVE).read_bytes())
+        digest = hashlib.sha256((pack / RECEIPT_RELATIVE).read_bytes()).hexdigest()
+        # ... and the replay still refuses it.
+        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+            evidence._replay_projection_write_set(
+                candidate, receipt, RECEIPT_RELATIVE, digest, kind="PACK_AUTHENTICATION"
+            )
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_pack_authentication_underivable",
+        )
+        self.assertIn("superseded", str(caught.exception))
+
+    def test_refuses_a_mode_bit_flip(self) -> None:
+        """The content census cannot see the executable bit; the fence must."""
+
+        repository, pack = self.fixture()
+        pack_relative = pack.resolve(strict=True).relative_to(repository).as_posix()
+        os.chmod(pack / "config.json", 0o755)
+        self.recommit(repository, "flip a mode bit")
+        self.assertEqual(
+            subprocess.run(
+                ["git", "ls-tree", "HEAD", "--", f"{pack_relative}/config.json"],
+                cwd=repository,
+                capture_output=True,
+                check=True,
+            ).stdout.decode().split()[0],
+            "100755",
+            "the fixture did not actually record an executable bit",
+        )
+        self.assert_refuses(repository, pack, "changes file modes")
+
+    def test_refuses_a_receipt_carrying_an_extra_identity_unit(self) -> None:
+        repository, pack = self.fixture()
+
+        def add_unit(value: dict) -> None:
+            extra = copy.deepcopy(value["identity_units"][0])
+            extra["identity_unit_id"] = "smuggled/unit"
+            value["identity_units"].append(extra)
+            # The receipt schema pins the unit count, so a smuggled unit that
+            # did not also correct it would be refused by validation instead.
+            value["observations"]["identity_unit_count"] = len(value["identity_units"])
+
+        self.rewrite_receipt(pack, add_unit)
+        self.recommit(repository)
+        self.assert_refuses(repository, pack, "identity units differ from the pack")
 
 
 if __name__ == "__main__":
