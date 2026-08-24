@@ -256,9 +256,28 @@ class _LogicalTestPulseDriver:
         hard_deadline = started_at + self.hard_timeout_s
         observed_byte_count = 0
         observed_acknowledgements: set[str] = set()
+        exhausted_deadline = "no deadline recorded"
         while True:
             now = self._monotonic()
-            if now >= stall_deadline or now >= hard_deadline:
+            # Record WHICH deadline expired before leaving the loop; the two are
+            # different failures and used to be indistinguishable in the raised
+            # message.  The stall deadline expiring means the child emitted no
+            # new acknowledgement bytes within timeout_s and is presumed wedged.
+            # The hard deadline expiring means the child kept making progress
+            # but never reached this sequence within hard_timeout_s.
+            # stall_deadline is capped at hard_deadline below, so both can read
+            # as expired on the same pass -- the absolute bound is the more
+            # specific diagnosis, so it is tested first.
+            if now >= hard_deadline:
+                exhausted_deadline = (
+                    f"hard deadline {self.hard_timeout_s}s exceeded"
+                )
+                break
+            if now >= stall_deadline:
+                exhausted_deadline = (
+                    "no acknowledgement progress within "
+                    f"{self.timeout_s}s stall deadline"
+                )
                 break
             try:
                 acknowledgement_bytes = self._acknowledgement_reader()
@@ -301,8 +320,12 @@ class _LogicalTestPulseDriver:
             if process.poll() is not None:
                 raise RuntimeError("test sampler exited before acknowledgement")
             self._sleep(min(0.001, self.timeout_s / 4))
+        elapsed_s = self._monotonic() - started_at
+        # The leading "test sampler acknowledgement timeout: <event>:<seq>" text
+        # is asserted on by callers; keep it verbatim and append the diagnosis.
         raise RuntimeError(
-            f"test sampler acknowledgement timeout: {event_type}:{sequence}"
+            f"test sampler acknowledgement timeout: {event_type}:{sequence} "
+            f"({exhausted_deadline}; elapsed {elapsed_s:.3f}s)"
         )
 
     def await_ready(self, process: subprocess.Popen) -> None:
