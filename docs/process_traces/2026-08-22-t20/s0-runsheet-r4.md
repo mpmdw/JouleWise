@@ -45,6 +45,25 @@ interim ruling governs **S-0 only**; whether D-151 condition 3 is reopened so
 the REAL transaction arms cleanly is a separate cold process (packet 5) that
 gates the real transaction, not this runsheet. Full record in §3.9.
 
+**§3.2 amendment (2026-08-24), from REAL EXECUTION.** The first cut of r4 was
+executed against a fresh estate and reached §3.2, where the first U11 freeze
+PASSED under the measurement venv — the first real U11 freeze ever to pass, and
+live proof of amendment 3's mechanism — and the second refused
+`readiness_identity_environment_dirty`. Cause: `freeze_projection` →
+`_mint_git_anchor` (`identity_pins.py:788-806`) runs the v2 issuance mint's
+whole-tree Git gate, which requires a CLEAN tree per freeze, while §3.2
+sequenced all three freezes before one commit — so freeze #2 saw freeze #1's
+uncommitted projection receipts and plan rewrite. **No ratification battery
+could reach this**: it needs a freeze to have actually mutated the tree, and
+every prior check stopped at preconditions. §3.2.b is now a per-pack
+**freeze → assert → commit** interleave with a clean-tree guard before and
+after each freeze; `$EVIDENCE_DERIVATION_HEAD` is the head after the third
+commit, so every projection path stays strictly before it and §2.1's 112
+exclusion and §3.3's common-head authoring are unchanged (stated in place).
+Custody: `s0-clone-proof-r4/custody/transcripts/031-stop-u11-sequencing.md`.
+Estate r4 (first cut) is superseded for custody hygiene. Verified red-before /
+green-after by two REAL freezes on this machine — see the battery note in §0.1.
+
 **Fix round 2 (2026-08-24), from the delta re-audit.** All seven r4 cures
 confirmed and both r3 blockers dead; these were the residuals. D-3: §1.3's
 library sweep moves to `git grep -- joulewise/` over TRACKED bytes — a worktree
@@ -204,6 +223,12 @@ block below:
   containing a backticked word executed that word as a command while env.sh was
   being written. `zsh -n` does not catch this either; only executing §1.1 does,
   which is why the block battery in §0.1's self-review bar is mandatory.
+  The same lesson recurred one layer deeper in §3.2: a defect that needs a REAL
+  MLX freeze to have mutated the tree cannot be found by any check that stops at
+  preconditions. This machine can run a real single-pack freeze (measurement
+  venv plus weights on disk, a few minutes of model load), so **the battery for
+  any future revision of §3.2 must include two real freezes back to back** —
+  the second one proving that the interleave leaves a clean tree for it.
 
 - **The bench `grep` is ugrep 7.8.4, not GNU grep.** It is API-compatible for
   everything this runsheet does, with one behavioural difference that matters:
@@ -1298,7 +1323,23 @@ from the letter of PACKET-3 RULING R-1(iii), which asked for a precondition; the
 evidentiary content is unchanged and the placement is strictly later, so a
 missing or moved weight file still stops the step before any mutation.
 
-**3.2.b — the three freezes.**
+**3.2.b — the three freezes, each committed before the next begins.**
+
+**The tree must be CLEAN at every freeze.** `freeze_projection` calls
+`_mint_git_anchor` (`identity_pins.py:788-806`), which invokes the v2 issuance
+mint's fixed-repository, **whole-tree** Git gate; a dirty working tree refuses
+`readiness_identity_environment_dirty`. r4's first cut sequenced all three
+freezes before a single commit, so freeze #2 saw freeze #1's uncommitted
+`projection-0001.json`, its sidecar, and the rewritten plan bytes — and refused.
+This was found by REAL EXECUTION, not by review: the first freeze passed (the
+first real U11 freeze ever to pass, proving amendment 3's mechanism live) and
+the second refused. No battery that stops at preconditions can reach it, because
+it needs one freeze to have actually mutated the tree. Custody:
+`s0-clone-proof-r4/custody/transcripts/031-stop-u11-sequencing.md`.
+
+The cure is a per-pack **freeze → assert → commit** interleave. Run this block
+**once per pack**, in pack order, each in its own shell, and do not start the
+next pack until the previous one's commit exists.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
@@ -1306,25 +1347,78 @@ cd "$CLONE"
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
-for pack in "${PACKS[@]}"; do
-  label=$(basename "$pack")
-  capture "030-u11-$label" "$MEASURE_PY" scripts/project_identity_pins.py freeze "$pack"
-  rc=$(cat "$TRANS/030-u11-$label.rc")
-  if [ "$rc" = 134 ]; then
-    die "exit 134 in section 3.2 for ${label}: A85 SIGABRT outside pytest. STOP, escalate, never retry."
-  fi
-  test "$rc" = 0 || die "U11 freeze rc=$rc for $label"
-  no_traceback "030-u11-$label" || die "U11 freeze traceback for $label"
-  "$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["status"]=="PASS" and d["mutated"] is True, d' \
-    "$TRANS/030-u11-$label.stdout.json" || die "U11 freeze is not PASS/mutated for $label"
-done
+# PACK is the ONE pack this invocation freezes.  Paste the pack path here:
+#   first  invocation: $FIRST_PACK
+#   second invocation: $SECOND_PACK
+#   third  invocation: $THIRD_PACK
+PACK=$FIRST_PACK
+
+label=$(basename "$PACK")
+# Amendment-3 guard, re-asserted per freeze: the tree must be clean BEFORE this
+# freeze, or the v2 git anchor refuses readiness_identity_environment_dirty.
+test -z "$(git -C "$CLONE" status --porcelain=v1)" \
+  || die "tree is dirty before the U11 freeze of ${label}: commit the previous pack first"
+
+capture "030-u11-$label" "$MEASURE_PY" scripts/project_identity_pins.py freeze "$PACK"
+rc=$(cat "$TRANS/030-u11-$label.rc")
+if [ "$rc" = 134 ]; then
+  die "exit 134 in section 3.2 for ${label}: A85 SIGABRT outside pytest. STOP, escalate, never retry."
+fi
+test "$rc" = 0 || die "U11 freeze rc=$rc for ${label}"
+no_traceback "030-u11-$label" || die "U11 freeze traceback for ${label}"
+"$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["status"]=="PASS" and d["mutated"] is True, d' \
+  "$TRANS/030-u11-$label.stdout.json" || die "U11 freeze is not PASS/mutated for ${label}"
+test -f "$CLONE/$PACK/identity_pin_projection.receipts/projection-0001.json" \
+  || die "no projection receipt for ${label}"
+# The sidecar is projection-0001.sha256, NOT projection-0001.json.sha256 --
+# verified against a live freeze and against the committed _v3 packs.
+test -f "$CLONE/$PACK/identity_pin_projection.receipts/projection-0001.sha256" \
+  || die "no projection sidecar for ${label}"
+
+# Commit THIS pack only, so the next freeze starts from a clean tree.
+git add -- "$PACK"
+git commit -m "S-0 U11 identity-pin projection for ${label}"
+test -z "$(git -C "$CLONE" status --porcelain=v1)" \
+  || die "tree still dirty after committing ${label}: the freeze wrote outside its pack"
+printf '%s %s\n' "$label" "$(git rev-parse HEAD)" >> "$TRANS/030-u11-commits.txt"
 ```
 
-**3.2.c — post-conditions, then the derivation-head commit.**
+The trailing clean-tree assertion is load-bearing in its own right: it proves
+each freeze wrote only inside its own pack root. A freeze that touched anything
+else would leave the tree dirty after a pack-scoped `git add`, and the next
+pack's freeze would refuse anyway — better to stop here, where the cause is
+named.
+
+**Why the 112-path argument is unchanged.** `$EVIDENCE_DERIVATION_HEAD` is now
+the head after the **third** commit rather than after a single combined commit.
+Every projection path — `projection-0001.json`, its sidecar, and the rewritten
+plan bytes for all three packs — is written by one of the three commits, so all
+of them remain **strictly before** `$EVIDENCE_DERIVATION_HEAD`. §2.1's argument
+that projection receipts and identity-projection paths are "correctly absent
+from the 112" therefore holds exactly as before: the changed-set window that
+§3.7 closes runs from `$EVIDENCE_DERIVATION_HEAD` forward, and nothing written
+in §3.2 is inside it. §3.3's common-head requirement is likewise unaffected —
+it requires the three *evidence-authoring* commands in §3.4 to run at one
+common head with no commit between them, which is a property of §3.4, not of
+how many commits §3.2 made.
+
+**3.2.c — post-conditions, then the derivation head.** Run after all three
+per-pack commits exist. There is no commit of its own to make: the three
+commits from §3.2.b already carry every projection path, and this block only
+records which head they ended at.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 cd "$CLONE"
+
+# All three per-pack freezes ran and were committed, in order, one each.
+test "$(wc -l < "$TRANS/030-u11-commits.txt" | tr -d ' ')" = 3 \
+  || die 'expected exactly three per-pack U11 commits; see 030-u11-commits.txt'
+for pack in "${PACKS[@]}"; do
+  grep -qF "$(basename "$pack") " "$TRANS/030-u11-commits.txt" \
+    || die "no U11 commit recorded for $(basename "$pack")"
+done
+test -z "$(git status --porcelain=v1)" || die 'tree is dirty at the derivation head'
 
 # Clone-first import assertion AFTER the mutation.
 "$MEASURE_PY" -c 'import sys; sys.path.insert(0,sys.argv[1]); import joulewise; print(joulewise.__file__)' \
@@ -1359,17 +1453,23 @@ for successor, predecessor in pairs.items():
 print(json.dumps({"status": "PASS", "weight_digests_compared": compared}, indent=2, sort_keys=True))
 PY
 
-git add -- "${PACKS[@]}"
-git commit -m 'S-0 U11 identity-pin projections for v4 packs'
+# EVIDENCE_DERIVATION_HEAD is the head after the THIRD per-pack commit.  Every
+# projection path was written by one of those three commits, so all of them are
+# strictly BEFORE this head and stay outside the 112-path window that section
+# 3.7 closes from this head forward.
 EVIDENCE_DERIVATION_HEAD=$(git rev-parse HEAD)
+test "$EVIDENCE_DERIVATION_HEAD" = "$(tail -1 "$TRANS/030-u11-commits.txt" | awk '{print $2}')" \
+  || die 'HEAD is not the third per-pack U11 commit'
 git update-ref refs/remotes/origin/main "$EVIDENCE_DERIVATION_HEAD"
 record_env EVIDENCE_DERIVATION_HEAD "$EVIDENCE_DERIVATION_HEAD"
 printf '%s\n' "$EVIDENCE_DERIVATION_HEAD" > "$TRANS/031-common-derivation-head.txt"
 ```
 
-Expected: PASS, `mutated:true`, `projection-0001.json` and `.sha256`, and
-updated plan bytes in each pack. Those paths are before
-`$EVIDENCE_DERIVATION_HEAD`, so they are correctly absent from the 112.
+Expected per pack: PASS, `mutated:true`, `reason_codes: []`,
+`projection-0001.json` and `projection-0001.sha256` (the sidecar drops the
+`.json`, unlike every other sidecar in this runsheet), and updated plan bytes. All three packs' paths are written by the three §3.2.b
+commits and are therefore before `$EVIDENCE_DERIVATION_HEAD`, so they remain
+correctly absent from the 112.
 Transcripts `031` and `032` are written **only** after this commit exists — the
 r2 estate wrote them from a compound script that continued past failed
 assertions, and both were voided (custody 035). Authority: PACKET-3 RULING R-1
