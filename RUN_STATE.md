@@ -53,7 +53,26 @@ job was left running.
   was corrected to the T21/T22 report and `scripts/gen_state.py` re-run,
   so `--check` now exits 0. Run it before any commit that touches the
   kernel.
-- **The other red job is NOT the documented flake — triage it on
+- **RESOLVED 2026-08-24 (triage verdict; supersedes the bullet below):**
+  the red is DIAGNOSED. The 47 recent exclusive-job failures partition
+  cleanly in two: class A (19) = the known mutation flake
+  (third-terminal-shape fix in flight on `fix/calexits-third-shape`);
+  class B (28) = sampler-ack STALL-DEADLINE misses under hosted-runner
+  scheduling latency, spanning 4 tests in both exclusive modules — the
+  `8b79f10` crash-matrix red is the SAME class, not a third defect. The
+  "1 != 0 : correction=..." message was misread at checkpoint time: the
+  1 is the writer subprocess EXIT CODE (ack RuntimeError -> exit 1) and
+  the correction string only names the running witness case. Class B is
+  environmental and PROVABLY TEST-ONLY: the whole ack protocol sits
+  behind the suppressed `--time-scale-for-test` seam
+  (`validate_powermetrics_fiducial.py:1700-1706,1814-1832`), so no real
+  freeze/arm run can raise it — the campaign is NOT threatened. Cure
+  delegated: stall nominal 4s->30s in both modules (calexits via the
+  flake stream, crash-matrix via the perf stream) + stall-vs-hard
+  message split. Evidence: same case failed then PASSED 6.5 min later
+  inside run 32683484684; sequences scatter 12-125; bench could not
+  reproduce even at a 1s deadline.
+- **[superseded by the entry above] The other red job is NOT the documented flake — triage it on
   resume.** `calibration-exits-exclusive (3.11)` failed in
   `test_parameterized_durable_public_cli_witnesses` with `AssertionError:
   1 != 0 : correction=calibration_rederive_output_required`. That is a
