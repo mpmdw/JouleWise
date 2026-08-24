@@ -36,8 +36,9 @@ T0-UNATTENDED-01 co-design: both blind seats delivered, debate round
 run (Opus critique bench-corroborated: sleep-blind monotonic clock,
 summed-bound incident replay, multi-server intersection); Sol
 counter-critique in flight; magistrate synthesis ruling next. T21/T22
-run report drafted (docs/run_reports/2026-08-23-t21-t22-session.md,
-16 verified anomaly flags) awaiting magistrate review before landing.
+run report LANDED (docs/run_reports/2026-08-23-t21-t22-session.md — THE
+T21/T22 record, 16 verified anomaly flags; magistrate reviewed, added
+the §11 gate disposition mirroring bd4e65b).
 
 **T22 EVENING:** CI GREEN at 42df510 (conclusion-field-verified) after
 three post-merge cures (stale S1D-1 test rewritten to pin the ruled
