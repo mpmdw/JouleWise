@@ -61,11 +61,22 @@ from tests.receipt_corpus import ReceiptCorpus
 
 # Liveness-guard nominal for the shared sampler-ack driver: raised 1.0 -> 4.0
 # after four hosted-runner starvation firings (runs 32578576711, 32601988870,
-# 32607418551, and the e6a6520 merge-head run). The measured hosted/bench
-# ratio is ~2.9x; 4.0 rounds up with 38% margin, and the driver's 4x outer
-# bound still terminates a true hang. Healthy children acknowledge early, so
-# this adds no wall time on the good path. Not a semantic bound.
-_SAMPLER_ACK_TIMEOUT_S = 4.0
+# 32607418551, and the e6a6520 merge-head run), then 4.0 -> 30.0 after the
+# run 32683484684 red-partition: 28 of 47 recent CI failures were this deadline
+# missed under hosted-runner scheduling latency, across four tests in both
+# exclusive modules. 4.0 was sized from a ~2.9x hosted/bench ratio, but that
+# run measured the module 4.4x slower than bench, and one case failed and then
+# passed 6.5 minutes later WITHIN a single run -- so the starvation tail is far
+# longer than any small multiple of the bench time.
+#
+# This is a LIVENESS BACKSTOP, not a semantic bound: nothing about the protocol
+# under test says an acknowledgement must arrive within N seconds. It exists
+# only so a wedged child fails loudly instead of hanging. Runaway is already
+# bounded elsewhere -- owned_process_runner caps at 600s absolute and 120-480s
+# progress-idle -- so 30.0 cannot turn a true hang into an infinite wait; it
+# only stops charging scheduling latency to the test. Healthy children
+# acknowledge immediately, so this adds no wall time on the good path.
+_SAMPLER_ACK_TIMEOUT_S = 30.0
 
 
 
