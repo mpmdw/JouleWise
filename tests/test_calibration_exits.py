@@ -270,6 +270,51 @@ def _event_timestamp(event: dict[str, object]) -> float | None:
         return None
 
 
+def _pack_child_killed_during_prepare(
+    events: tuple[dict[str, object], ...],
+    child_sid: str | None,
+) -> bool:
+    """Detect cleanup deleting loose objects beneath prepare-pack.
+
+    Git's unreadable-object fatal exit from an unclosed prepare-pack region means
+    rmtree won the race before the child could enter write-pack-file.
+    """
+
+    if child_sid is None:
+        return False
+    open_prepare_regions: list[int] = []
+    unreadable_object_errors: list[int] = []
+    terminal_code_128_events: list[int] = []
+    for index, event in enumerate(events):
+        if event.get("sid") != child_sid:
+            continue
+        if (
+            event.get("category") == "pack-objects"
+            and event.get("label") == "prepare-pack"
+        ):
+            if event.get("event") == "region_enter":
+                open_prepare_regions.append(index)
+            elif event.get("event") == "region_leave" and open_prepare_regions:
+                open_prepare_regions.pop()
+            continue
+        if (
+            event.get("event") == "error"
+            and event.get("fmt") == "object %s cannot be read"
+        ):
+            unreadable_object_errors.append(index)
+        elif (
+            event.get("event") in {"atexit", "exit"}
+            and event.get("code") == 128
+        ):
+            terminal_code_128_events.append(index)
+    return any(
+        prepare_index < error_index < terminal_index
+        for prepare_index in open_prepare_regions
+        for error_index in unreadable_object_errors
+        for terminal_index in terminal_code_128_events
+    )
+
+
 def _classify_pack_cleanup(
     evidence: PackTraceEvidence,
     *,
@@ -349,6 +394,11 @@ def _classify_pack_cleanup(
             return _TRACE_INCOMPLETE
         intervals.append((started_s, terminal_time))
     if not intervals:
+        if _pack_child_killed_during_prepare(
+            evidence.events,
+            evidence.child_sid,
+        ):
+            return _RACE_EXERCISED
         return _TRACE_INCOMPLETE
     pack_started_s = ordered_times[2]
     pack_finished_s = ordered_times[3]
@@ -362,11 +412,17 @@ def _classify_pack_cleanup(
     return _NO_RACE_PRE_WRITE
 
 
-def _synthetic_pack_topology() -> tuple[dict[str, object], ...]:
+def _synthetic_pack_topology(
+    *,
+    include_write_pack: bool = True,
+    prepare_pack_kill: bool = False,
+) -> tuple[dict[str, object], ...]:
     initiator_sid = "initiator"
     maintenance_sid = "initiator/maintenance"
     child_sid = "initiator/maintenance/pack-child"
-    return (
+    if include_write_pack and prepare_pack_kill:
+        raise ValueError("synthetic topology cannot write a pack after prepare kill")
+    events = [
         {
             "event": "child_start",
             "sid": initiator_sid,
@@ -385,33 +441,64 @@ def _synthetic_pack_topology() -> tuple[dict[str, object], ...]:
             "time": "2026-08-11T12:00:00.100000Z",
             "argv": ["/usr/bin/git", *_PACK_OBJECTS_ARGV],
         },
-        {
-            "event": "region_enter",
-            "sid": child_sid,
-            "time": "2026-08-11T12:00:00.130000Z",
-            "category": "pack-objects",
-            "label": "write-pack-file",
-        },
-        {
-            "event": "region_leave",
-            "sid": child_sid,
-            "time": "2026-08-11T12:00:00.170000Z",
-            "category": "pack-objects",
-            "label": "write-pack-file",
-        },
-        {
-            "event": "exit",
-            "sid": child_sid,
-            "time": "2026-08-11T12:00:00.200000Z",
-            "code": 0,
-        },
-        {
-            "event": "exit",
-            "sid": maintenance_sid,
-            "time": "2026-08-11T12:00:00.210000Z",
-            "code": 0,
-        },
+    ]
+    if include_write_pack:
+        events.extend(
+            (
+                {
+                    "event": "region_enter",
+                    "sid": child_sid,
+                    "time": "2026-08-11T12:00:00.130000Z",
+                    "category": "pack-objects",
+                    "label": "write-pack-file",
+                },
+                {
+                    "event": "region_leave",
+                    "sid": child_sid,
+                    "time": "2026-08-11T12:00:00.170000Z",
+                    "category": "pack-objects",
+                    "label": "write-pack-file",
+                },
+            )
+        )
+    elif prepare_pack_kill:
+        events.extend(
+            (
+                {
+                    "event": "region_enter",
+                    "sid": child_sid,
+                    "time": "2026-08-11T12:00:00.130000Z",
+                    "category": "pack-objects",
+                    "label": "prepare-pack",
+                },
+                {
+                    "event": "error",
+                    "sid": child_sid,
+                    "time": "2026-08-11T12:00:00.170000Z",
+                    "msg": "object 0123456789abcdef cannot be read",
+                    "fmt": "object %s cannot be read",
+                },
+            )
+        )
+    child_exit_code = 128 if prepare_pack_kill else 0
+    maintenance_exit_code = 1 if prepare_pack_kill else 0
+    events.extend(
+        (
+            {
+                "event": "exit",
+                "sid": child_sid,
+                "time": "2026-08-11T12:00:00.200000Z",
+                "code": child_exit_code,
+            },
+            {
+                "event": "exit",
+                "sid": maintenance_sid,
+                "time": "2026-08-11T12:00:00.210000Z",
+                "code": maintenance_exit_code,
+            },
+        )
     )
+    return tuple(events)
 
 
 def _wait_for_semantic_readiness(
@@ -1973,7 +2060,7 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             },
         )
 
-    def test_pack_classifier_accepts_child_exit_without_parent_child_exit(
+    def test_pack_classifier_shape_b_complete_write_is_no_race_pre_write(
         self,
     ) -> None:
         events = _synthetic_pack_topology()
@@ -1985,6 +2072,58 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                 raw_cleanup_errno=None,
             ),
             _NO_RACE_PRE_WRITE,
+        )
+
+    def test_pack_classifier_shape_c_prepare_kill_is_race_exercised(
+        self,
+    ) -> None:
+        events = _synthetic_pack_topology(
+            include_write_pack=False,
+            prepare_pack_kill=True,
+        )
+        evidence = _pack_trace_evidence(events)
+        self.assertFalse(
+            any(event.get("label") == "write-pack-file" for event in events)
+        )
+        self.assertEqual(
+            _classify_pack_cleanup(
+                evidence,
+                raw_cleanup_errno=None,
+            ),
+            _RACE_EXERCISED,
+        )
+
+    def test_pack_classifier_clean_without_write_or_prepare_kill_is_trace_incomplete(
+        self,
+    ) -> None:
+        events = _synthetic_pack_topology(include_write_pack=False)
+        evidence = _pack_trace_evidence(events)
+        self.assertEqual(
+            _classify_pack_cleanup(
+                evidence,
+                raw_cleanup_errno=None,
+            ),
+            _TRACE_INCOMPLETE,
+        )
+
+    def test_pack_child_killed_during_prepare_discriminates_terminal_shapes(
+        self,
+    ) -> None:
+        shape_b_events = _synthetic_pack_topology()
+        shape_c_events = _synthetic_pack_topology(
+            include_write_pack=False,
+            prepare_pack_kill=True,
+        )
+        negative_events = _synthetic_pack_topology(include_write_pack=False)
+        child_sid = "initiator/maintenance/pack-child"
+        self.assertFalse(
+            _pack_child_killed_during_prepare(shape_b_events, child_sid)
+        )
+        self.assertTrue(
+            _pack_child_killed_during_prepare(shape_c_events, child_sid)
+        )
+        self.assertFalse(
+            _pack_child_killed_during_prepare(negative_events, child_sid)
         )
 
     def test_trace_reader_retries_incomplete_final_record(self) -> None:
@@ -2007,9 +2146,12 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
             self.assertEqual(events, (first, second))
             self.assertFalse(incomplete)
 
-    def test_pack_classifier_finds_child_write_overlap_without_parent_child_exit(
+    def test_pack_classifier_shape_a_cleanup_errno_is_race_exercised(
         self,
     ) -> None:
+        # Keep the write-pack overlap in this shape-A input: the errno branch
+        # must short-circuit to RACE_EXERCISED *before* interval analysis, and
+        # a topology with no write-pack region would not exercise that.
         events = _synthetic_pack_topology()
         evidence = _pack_trace_evidence(events)
         self.assertFalse(any(event.get("event") == "child_exit" for event in events))
@@ -2220,6 +2362,10 @@ class CalibrationExitReliabilityTests(unittest.TestCase):
                     and event.get("category") == "pack-objects"
                     and event.get("label") == "write-pack-file"
                     for event in mutation_events
+                )
+                or _pack_child_killed_during_prepare(
+                    mutation_events,
+                    pack_evidence.child_sid,
                 ),
                 mutation_events[-20:],
             )
