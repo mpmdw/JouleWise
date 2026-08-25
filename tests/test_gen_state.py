@@ -30,7 +30,9 @@ EXPECTED_IDS = {
     "FROZEN-RECEIPT-CONSTANT-STALE-01",
     "MIDCAMPAIGN-CURE-GENERATION-01",
     "PACKAUTH-PRESERVE-TAUTOLOGY-01",
-    "PAPER-REPLAY-FENCE-01",
+    # (PAPER-REPLAY-FENCE-01 closed 2026-08-25 on PR #189 (94a93e3a squashed
+    # to main at b186710a): 43/43 fenced values live-re-derived and matched,
+    # no joulewise/ or ESTIMATOR_CODE_PATHS-pinned file touched.)
     "PINSET-GRAMMAR-EXCLUSION-01",
     "PLANTEST-RGLOB-RACE-01",
     "PREWINDOW-REGEX-01",
@@ -40,6 +42,13 @@ EXPECTED_IDS = {
     "SITTING2-PRECONDITIONS-01",
     "UNVERIFIED-REAUDIT-01",
     "V4-TRANSACTION-01",
+    # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
+    # rulings reserved for the kernel — synthesis R-5 (epoch lint), synthesis
+    # R-4's registration of Opus finding 3f (consume-side supply line), and
+    # the joint delta re-audit's adjudication item 4 (006-* guard strength).
+    "EPOCH-LINT-01",
+    "CONSUME-CONFIRMATION-SUPPLY-01",
+    "LINE-AUDIT-GUARD-01",
     # [AGENT]
     # 2026-08-15 council Phase-1 repair program. The landed U11 identity
     # projection and FLOOR-COMMONMODE rows retired when these successors
@@ -370,9 +379,19 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # the S-0 §3.4 round, FROZEN-RECEIPT-CONSTANT-STALE-01 and
         # PACKAUTH-PRESERVE-TAUTOLOGY-01, and the PR #182 pinset-builder
         # should-fix PINSET-GRAMMAR-EXCLUSION-01:
-        # 92 + 5 = 97 exact live records.
+        # 92 + 5 = 97; the 2026-08-25 T23-night wave closes
+        # PAPER-REPLAY-FENCE-01 (PR #189, 94a93e3a squashed to main at
+        # b186710a; 43/43 fenced values live-re-derived and matched, no
+        # joulewise/ or pinned-file change) and registers the three
+        # D-153-sweep follow-ups the rulings reserved for the kernel —
+        # EPOCH-LINT-01 (synthesis R-5, the three dependency kinds the
+        # $TRANS producer/consumer sweep cannot see),
+        # CONSUME-CONFIRMATION-SUPPLY-01 (synthesis R-4's registration of
+        # Opus finding 3f), and LINE-AUDIT-GUARD-01 (joint delta re-audit
+        # adjudication item 4):
+        # 97 - 1 + 3 = 99 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 97)
+        self.assertEqual(len(self.tasks), 99)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
