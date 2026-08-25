@@ -6407,6 +6407,74 @@ def _derive_freeze_predecessor(
     }
 
 
+def _freeze_pack_identity_mismatch_detail(
+    recorded: Mapping[str, Any],
+    current: Mapping[str, Any],
+    pack_root: Path,
+    registry: Mapping[str, Any],
+) -> str | None:
+    """Return the truthful freeze-identity refusal detail, if any."""
+
+    recorded_keys = set(recorded)
+    current_keys = set(current)
+    if "pack_root" not in recorded_keys or recorded_keys != current_keys or any(
+        recorded[key] != current[key]
+        for key in recorded_keys
+        if key != "pack_root"
+    ):
+        return "freeze receipt pack identity differs from committed pack bytes"
+
+    generation = _pack_generation(pack_root.name)
+    successor_relative = (
+        registry.get("schema_version") == R1_ROW_REGISTRY_SCHEMA
+        and generation >= _family_first_generation(registry)
+    )
+    if not successor_relative:
+        if recorded["pack_root"] != current["pack_root"]:
+            return (
+                "freeze receipt archival location differs; the 2026-08-20 ruling "
+                "keeps pre-v4 replay location-bound"
+            )
+        return None
+
+    _repository, _pack_prefix, pack_relative = _repository_and_pack_relative(
+        pack_root
+    )
+    suffix = () if pack_relative == "." else PurePosixPath(pack_relative).parts
+
+    def repository_relative_projection(value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        absolute = PurePosixPath(value)
+        if (
+            not absolute.is_absolute()
+            or value.startswith("//")
+            or value != absolute.as_posix()
+            or any(part in {".", ".."} for part in absolute.parts)
+            or (
+                suffix
+                and (
+                    len(absolute.parts) < len(suffix)
+                    or absolute.parts[-len(suffix) :] != suffix
+                )
+            )
+        ):
+            return None
+        if not suffix:
+            return "."
+        return PurePosixPath(*absolute.parts[-len(suffix) :]).as_posix()
+
+    recorded_projection = repository_relative_projection(recorded["pack_root"])
+    current_projection = repository_relative_projection(current["pack_root"])
+    if (
+        recorded_projection is None
+        or current_projection is None
+        or recorded_projection != current_projection
+    ):
+        return "freeze receipt repository-relative pack location differs"
+    return None
+
+
 def _load_freeze_reference(
     pack_root: Path,
     tree: Mapping[str, Any],
@@ -6445,10 +6513,14 @@ def _load_freeze_reference(
             "readiness_row_registry_mismatch",
             "freeze receipt registry binding differs from the plan",
         )
-    if receipt["pack_identity"] != _pack_identity(pack_root, tree):
+    current_identity = _pack_identity(pack_root, tree)
+    identity_mismatch_detail = _freeze_pack_identity_mismatch_detail(
+        receipt["pack_identity"], current_identity, pack_root, registry
+    )
+    if identity_mismatch_detail is not None:
         raise ArmReadinessError(
             "readiness_freeze_receipt_mismatch",
-            "freeze receipt pack identity differs from committed pack bytes",
+            identity_mismatch_detail,
         )
     if receipt["schema_version"] == FREEZE_RECEIPT_V2_SCHEMA:
         _authenticate_freeze_predecessor(

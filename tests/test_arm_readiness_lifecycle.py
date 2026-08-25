@@ -1181,6 +1181,191 @@ class FreezeSuccessorChainTests(unittest.TestCase):
             hashlib.sha256(table.read_bytes()).hexdigest(),
         )
 
+    def frozen_clone_fixture(
+        self, pack_name: str = PACK_NAME
+    ) -> tuple[Path, Path, Path, Path]:
+        """Mint, commit, and clone a frozen pack without preserving its path."""
+
+        temporary, repository, pack, _custody, _arm_path = make_go_fixture(
+            pack_name
+        )
+        self.addCleanup(temporary.cleanup)
+        predecessor = predecessor_pack_root(repository, pack_name)
+        minted = generate_freeze_receipt(
+            pack, predecessor_pack_root=predecessor
+        )
+        self.assertTrue(minted["mutated"])
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "mint frozen fixture")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+        clone = repository.parent / "foreign-clone"
+        git(
+            repository.parent,
+            "clone",
+            "-q",
+            "--no-local",
+            str(repository),
+            str(clone),
+        )
+        git(clone, "config", "user.email", "tests@joulewise.invalid")
+        git(clone, "config", "user.name", "JouleWise tests")
+        git(clone, "config", "gc.auto", "0")
+        git(clone, "config", "maintenance.auto", "false")
+        clone_pack = clone / pack.relative_to(repository)
+        clone_predecessor = predecessor_pack_root(clone, pack_name)
+        return repository, clone, clone_pack, clone_predecessor
+
+    # D-154 ----------------------------------------------------------------
+    def test_v4_freeze_replay_authenticates_in_a_foreign_clone(self) -> None:
+        repository, _clone, pack, predecessor = self.frozen_clone_fixture()
+        # The recorded absolute root is historical and need not still exist.
+        shutil.rmtree(repository)
+
+        replayed = generate_freeze_receipt(
+            pack, predecessor_pack_root=predecessor
+        )
+
+        self.assertFalse(replayed["mutated"])
+        self.assertIsNotNone(replayed["receipt_path"])
+
+    def test_v4_freeze_replay_refuses_a_different_repository_relative_path(
+        self,
+    ) -> None:
+        _repository, clone, _pack, _predecessor = self.frozen_clone_fixture()
+        destination = clone / "relocated/configs"
+        destination.mkdir(parents=True)
+        git(
+            clone,
+            "mv",
+            "configs/campaigns",
+            "relocated/configs/campaigns",
+        )
+        git(clone, "commit", "-qm", "move pack family")
+        git(clone, "update-ref", "refs/remotes/origin/main", "HEAD")
+        pack = destination / "campaigns" / PACK_NAME
+        predecessor = predecessor_pack_root(
+            clone / "relocated", PACK_NAME
+        )
+
+        with self.assertRaises(ArmReadinessError) as caught:
+            generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_freeze_receipt_mismatch"
+        )
+        self.assertEqual(
+            str(caught.exception),
+            "freeze receipt repository-relative pack location differs",
+        )
+
+    def test_v4_freeze_replay_one_byte_plan_mutation_uses_content_detail(
+        self,
+    ) -> None:
+        _repository, clone, pack, predecessor = self.frozen_clone_fixture()
+        plan = pack / "calibration_plan.json"
+        original = plan.read_bytes()
+        self.assertTrue(original.endswith(b"\n"))
+        plan.write_bytes(original[:-1] + b" \n")
+        self.assertEqual(plan.stat().st_size, len(original) + 1)
+        git(clone, "add", plan.relative_to(clone).as_posix())
+        git(clone, "commit", "-qm", "mutate frozen plan by one byte")
+        git(clone, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+        with self.assertRaises(ArmReadinessError) as caught:
+            generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_freeze_receipt_mismatch"
+        )
+        self.assertEqual(
+            str(caught.exception),
+            "freeze receipt pack identity differs from committed pack bytes",
+        )
+
+    def test_v3_freeze_replay_remains_bound_to_its_archival_location(self) -> None:
+        pack_name = "d117_floor_qwen25_1p5b_v3"
+        repository, _clone, pack, predecessor = self.frozen_clone_fixture(
+            pack_name
+        )
+        shutil.rmtree(repository)
+
+        with self.assertRaises(ArmReadinessError) as caught:
+            generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_freeze_receipt_mismatch"
+        )
+        self.assertEqual(
+            str(caught.exception),
+            "freeze receipt archival location differs; the 2026-08-20 ruling "
+            "keeps pre-v4 replay location-bound",
+        )
+
+    def test_every_non_pack_root_identity_term_uses_content_detail(self) -> None:
+        _repository, _clone, pack, _predecessor = self.frozen_clone_fixture()
+        tree, _tree_raw = readiness._plan_tree(pack)
+        registry, _registry_raw, _reference = readiness._registry_reference(pack)
+        current = readiness._pack_identity(pack, tree)
+
+        for field in sorted(set(current) - {"pack_root"}):
+            with self.subTest(field=field):
+                recorded = copy.deepcopy(current)
+                recorded[field] = f"{recorded[field]}-mutated"
+                self.assertEqual(
+                    readiness._freeze_pack_identity_mismatch_detail(
+                        recorded, current, pack, registry
+                    ),
+                    "freeze receipt pack identity differs from committed pack bytes",
+                )
+        for keyset_case in ("missing", "extra"):
+            with self.subTest(keyset=keyset_case):
+                recorded = copy.deepcopy(current)
+                if keyset_case == "missing":
+                    recorded.pop("plan_id")
+                else:
+                    recorded["unexpected"] = "value"
+                self.assertEqual(
+                    readiness._freeze_pack_identity_mismatch_detail(
+                        recorded, current, pack, registry
+                    ),
+                    "freeze receipt pack identity differs from committed pack bytes",
+                )
+
+    def test_v4_pack_root_projection_is_lexical_canonical_and_suffix_bound(
+        self,
+    ) -> None:
+        _repository, _clone, pack, _predecessor = self.frozen_clone_fixture()
+        tree, _tree_raw = readiness._plan_tree(pack)
+        registry, _registry_raw, _reference = readiness._registry_reference(pack)
+        current = readiness._pack_identity(pack, tree)
+        _repo, _prefix, pack_relative = readiness._repository_and_pack_relative(
+            pack
+        )
+
+        nonexistent = copy.deepcopy(current)
+        nonexistent["pack_root"] = f"/historical/clone/{pack_relative}"
+        self.assertIsNone(
+            readiness._freeze_pack_identity_mismatch_detail(
+                nonexistent, current, pack, registry
+            )
+        )
+        invalid_roots = (
+            pack_relative,
+            f"/historical/../clone/{pack_relative}",
+            f"/historical/clone/other/{pack.name}",
+        )
+        for recorded_root in invalid_roots:
+            with self.subTest(recorded_root=recorded_root):
+                recorded = copy.deepcopy(current)
+                recorded["pack_root"] = recorded_root
+                self.assertEqual(
+                    readiness._freeze_pack_identity_mismatch_detail(
+                        recorded, current, pack, registry
+                    ),
+                    "freeze receipt repository-relative pack location differs",
+                )
+
     # R-1 / R-7 -------------------------------------------------------------
     def test_pass_predecessor_mints_a_singleton_freeze_0002(self) -> None:
         repo, pack, predecessor = self.successor_fixture()
@@ -2135,7 +2320,10 @@ class FreezeReplayExpiryTests(unittest.TestCase):
             "receipt_id": "freeze-0001",
             "status": "PASS",
             "row_registry": self.registry_reference,
-            "pack_identity": {"pack_id": "test"},
+            "pack_identity": {
+                "pack_id": "test",
+                "pack_root": str(self.pack.resolve()),
+            },
             "evidence": [self.item],
             "rows": [],
             "refusals": [],
@@ -2264,9 +2452,10 @@ class PostSupersessionLayeringTests(unittest.TestCase):
     governed gates, not concentrated in a map lookup.  Measured against the
     committed campaign packs at this head: ALPHA/BETA v1 refuse freeze,
     dry-run, and arm at R2 frozen-plan resolution
-    (``readiness_pack_unreadable``); GAMMA v1 refuses all three at freeze-
-    receipt authentication (``readiness_freeze_receipt_mismatch``); all three
-    refuse evidence authoring (``evidence_author_existing_stale``).  Those
+    (``readiness_pack_unreadable``); GAMMA v1 refuses all three earlier at the
+    registry-binding check (``readiness_row_registry_mismatch``), because the
+    live registry installs only ``_v4``; all three refuse evidence authoring
+    (``evidence_author_existing_stale``).  Those
     end-to-end paths are exercised by the R2 and freeze-authentication
     regressions in their own ONE homes; the units here pin the map design
     itself.

@@ -185,6 +185,8 @@ out-of-band digest.
 The four entry points named above are exhaustive. Marker **build** is not one
 of them, and its absence is structural rather than an omission.
 
+Freeze-receipt authentication shares the successor-relative/legacy-absolute location doctrine in [`receipt_histsem_verifier.md`](receipt_histsem_verifier.md) § “Archival location rule”.
+
 The forcing problem is the acyclicity argument at the top of this document,
 read forwards. The final table bytes `C` contain the marker digest `hM`, so `C`
 cannot be rendered until the marker bytes `M` exist. A marker build therefore
