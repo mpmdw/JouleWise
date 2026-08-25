@@ -13,6 +13,15 @@ this branch — it was refused by both ratification seats and no estate ran it.
 
 ## Revision history
 
+**Anchor remap round 4 (2026-08-25, D-154).** PR #192 inserted the
+`_freeze_pack_identity_mismatch_detail` helper into `joulewise/arm_readiness.py`
+(+65 lines before the old comparison site, +69 after it), so every
+`arm_readiness.py` anchor and citation at or beyond old line 6410 was
+re-derived from a fresh difflib map: +0 through 6409, +65 for 6410-6447, +69
+from 6449 on (57 substitution events; the replaced comparison lines 6448/6451
+no longer exist and no citation names them). The AST anchor map returns 15/15
+against a fresh clone at bf88212e. Estate 8's §1.1 anchor gate found the drift.
+
 **r5 (2026-08-24): D-153 sweep cure.** A revision of this file, not a new
 instrument: the filename, the estate layout and every r4 record below stand
 unchanged. Authority: the two-seat D-153 fixation-family / confirmation-supply
@@ -135,10 +144,10 @@ difference, plus one finding r4 surfaces without deciding.
 | # | Cure | Severity | Status |
 |---|---|---|---|
 | N-1 / R3-1 | `"$BASE:configs/…"` → `"${BASE}:configs/…"`; zsh's `:c` history modifier ate a character and the §1.1 gate refused a CLEAN base. Three-party reproduced. §0.1 gains the bracing rule and a lint, because `zsh -n` cannot catch it. | BLOCKER | fixed; blast-radius sweep re-run, and this revision satisfies the stricter "zero unbraced `$VAR:`" lint |
-| N-2 | §3.9's arm-side eleven-kind census could not pass — `arm` runs `include_pack=False` (`:7533`) and `_discover_evidence` drops the PACK namespace (`:5655-5657`). The census moves to where the kinds are actually discovered (§3.4 authoring, §3.6 freeze); §3.9 keeps the forbidden-code check and rc alternatives. **No custody evidence is seeded.** | BLOCKER | fixed |
+| N-2 | §3.9's arm-side eleven-kind census could not pass — `arm` runs `include_pack=False` (`:7602`) and `_discover_evidence` drops the PACK namespace (`:5655-5657`). The census moves to where the kinds are actually discovered (§3.4 authoring, §3.6 freeze); §3.9 keeps the forbidden-code check and rc alternatives. **No custody evidence is seeded.** | BLOCKER | fixed |
 | R3-2 | `s0_anchor_map.py` validated line TEXT, so a commit with the pinned lines inside a module string passed 13/13 while defining nothing. Replaced with AST validation (parse + symbol/statement/owner), stdlib-only. | BLOCKER | fixed; forge reproduced and now REFUSED 0/13 |
 | D-1 | §5 cited transcript range `080-*`–`085-*`; no step produces `083-*`. | defect | fixed: the five actual transcripts are named |
-| D-2 / N-3 | Citation drift: `:7532`→`:7533` (second site `:7764`), `:7588-7597`→`:7586`. | defect | fixed |
+| D-2 / N-3 | Citation drift: `:7601`→`:7602` (second site `:7833`), `:7657-7666`→`:7655`. | defect | fixed |
 | N-4 | `env.sh`'s `MARKER_BRANCH` read raised a raw Python traceback during `source` on a key-less manifest. | defect | fixed: exits 3 and `die`s with a runsheet message |
 | F-10 | §4(e.1) writes into the transaction's own `$CUSTODY/windows` and mints `arm-0002`, superseding `arm-0001`. | note | folded: recorded as deliberate custody mixing, and every arm-receipt read is ordinal-pinned to `arm-0001` |
 | F-11 | §2.2's `check_census.py` heredoc was never run in the r2 estate while §3.4 invoked it. | note | folded: §2.2 materialization is a checked step with transcript `011-*`, and §3.4 asserts the tool first |
@@ -245,7 +254,7 @@ the R-3 executability audit are cured. Binding records:
    `git rm`'d and is passed as `--pinset`, which is the only path that reaches
    the `present == 0` branch at `arm_readiness.py:3340-3344`.
 5. **§4(b) targets a reachable signal (F-6).** `arm` discovery runs with
-   `include_pack=False` (`arm_readiness.py:7533`), so an unexpected file in the
+   `include_pack=False` (`arm_readiness.py:7602`), so an unexpected file in the
    *pack's* evidence directory is invisible to it. The probe is now two probes:
    4(b.1) puts the unexpected file in the **window-custody** evidence namespace,
    which `arm` does scan; 4(b.2) puts it in the **pack** namespace and freezes
@@ -498,7 +507,7 @@ names its symbol so the next drift is detectable by name rather than by line.
   `histsem_pinset_invalid` at `:3301-3304`.
 - Whole-corpus verifier `verify_all_receipt_histsem`: `:3719-3750`.
 - Freeze/arm histsem gate `_gate_receipt_histsem`: `:3753-3821`; its two call
-  sites are freeze `:6705` and arm `:7468`.
+  sites are freeze `:6774` and arm `:7537`.
 - Changed-set enumeration `_r1_changed_paths`: `:4229-4277` (its
   `DEPENDENCY_CHANGED_SET` refusals at `:4262` and `:4274`).
 - Dependency-manifest helper `_r1_manifest_dependencies` and the
@@ -517,20 +526,20 @@ names its symbol so the next drift is detectable by name rather than by line.
   `:5409-5630` (its R1 refusals at `:5580`, `:5604`, `:5626`).
 - Evidence discovery `_discover_evidence`: `:5633-5888`; the unexpected-output
   rejection is `:5659-5686`; `include_pack` defaults true and is passed False
-  by arm `:7533` and verify `:7764`.
+  by arm `:7602` and verify `:7833`.
 - Predecessor authentication and semantic replay
   `_authenticate_freeze_predecessor`: `:6243-6369`; predecessor derivation
   `_derive_freeze_predecessor`: `:6372-6407`.
 - Freeze reference load / idempotent replay `_load_freeze_reference`:
-  `:6410-6622`.
-- `generate_freeze_receipt`: `:6680-6956`; generation gate `:6721`; the new
-  mint unconditionally writes and plan-pins PASS **or** REFUSE at `:6909-6955`.
-- `generate_arm_receipt`: `:7456-7702`; governed arm receipt construction and
-  external write `:7668-7702`.
+  `:6475-6691`.
+- `generate_freeze_receipt`: `:6749-7025`; generation gate `:6790`; the new
+  mint unconditionally writes and plan-pins PASS **or** REFUSE at `:6978-7024`.
+- `generate_arm_receipt`: `:7525-7771`; governed arm receipt construction and
+  external write `:7737-7771`.
 - Candidate/production tool-authentication lane `_family_tool_reference`:
-  `:10395-10449`; the manifest digest reader `_candidate_manifest_tool_digest`:
-  `:10348-10392`; marker construction `build_family_publication_marker`:
-  `:10561-10714` (it writes the marker **and** its GNU sidecar at `:10702-10703`).
+  `:10464-10518`; the manifest digest reader `_candidate_manifest_tool_digest`:
+  `:10417-10461`; marker construction `build_family_publication_marker`:
+  `:10630-10783` (it writes the marker **and** its GNU sidecar at `:10771-10772`).
 - U11 projection `joulewise/identity_pins.py:1826-1935`.
 - Generic applicability rows `joulewise/arm_readiness_evidence.py:1709-1731`;
   authoring implementation `:2379-2618`.
@@ -836,11 +845,11 @@ ANCHORS = (
   'allowlist = set(governed["irrelevant_path_allowlist"])'),
  ("joulewise/arm_readiness.py", 5409, "symbol", "_authenticate_generic_evidence_item",
   "def _authenticate_generic_evidence_item("),
- ("joulewise/arm_readiness.py", 6410, "symbol", "_load_freeze_reference",
+ ("joulewise/arm_readiness.py", 6475, "symbol", "_load_freeze_reference",
   "def _load_freeze_reference("),
- ("joulewise/arm_readiness.py", 6680, "symbol", "generate_freeze_receipt",
+ ("joulewise/arm_readiness.py", 6749, "symbol", "generate_freeze_receipt",
   "def generate_freeze_receipt("),
- ("joulewise/arm_readiness.py", 6721, "statement", "generate_freeze_receipt",
+ ("joulewise/arm_readiness.py", 6790, "statement", "generate_freeze_receipt",
   "generation = _pack_generation(root.name)"),
  ("joulewise/identity_pins.py", 1826, "symbol", "freeze_projection",
   "def freeze_projection(pack_root: Path | str) -> Mapping[str, Any]:"),
@@ -1134,7 +1143,7 @@ The manifest digest is the candidate-mode tool authority. Sidecars prove
 transfer integrity, but the executing marker tools are authenticated against the
 already-written `s0-candidate-manifest.json` `custody_tools` digests, never
 against committed blobs and never by recomputing a self-authenticating sidecar
-(`arm_readiness.py:10361-10449`). Production and publication phases retain
+(`arm_readiness.py:10430-10518`). Production and publication phases retain
 committed-blob equality. Because the manifest is generated from the committed
 bytes at `$BASE`, that equality is exact by construction; what §3.6.1 then
 proves is that the executing worktree files were not modified after the manifest
@@ -1727,8 +1736,8 @@ implementation `arm_readiness_evidence.py:2379-2618`.
 
 Pinned mechanics answer the poison question **YES**: `generate_freeze_receipt`
 evaluates refusals and then unconditionally writes and plan-pins the PASS **or**
-REFUSE receipt at `arm_readiness.py:6909-6955`; replay authenticates and returns
-that conclusion through `_load_freeze_reference` `:6410-6622`. Therefore, before
+REFUSE receipt at `arm_readiness.py:6978-7024`; replay authenticates and returns
+that conclusion through `_load_freeze_reference` `:6475-6691`. Therefore, before
 touching the primary clone's unbuilt freeze slots, mint all three in a
 sacrificial clone and require PASS.
 
@@ -1757,7 +1766,7 @@ test "$minted" = 3 || die "preflight minted $minted packs, expected 3"
 ```
 
 Any REFUSE here is a **STOP before primary mint**. Authority: R4 r4-2 poison
-question; R5 V-2; `arm_readiness.py:6410-6622,6760-6806`.
+question; R5 V-2; `arm_readiness.py:6475-6691,6760-6806`.
 
 ### 3.6 Primary freeze ×3 and freeze commit
 
@@ -1788,7 +1797,7 @@ printf '%s\n' "$FREEZE_COMMIT" > "$TRANS/061-freeze-commit.txt"
 Expected per pack: `status:PASS`, `mutated:true`, `freeze-0004.json`, its
 sidecar, and updated `plan_tree.json`/sidecar. The predecessor path is supplied;
 all IDs, hashes and ordinal 0004 are derived by code
-(`arm_readiness.py:6372-6407`, `:6680-6956`). A primary REFUSE here is
+(`arm_readiness.py:6372-6407`, `:6749-7025`). A primary REFUSE here is
 recoverable only by abandoning this clone and restarting from `$EVIDENCE_COMMIT`
 — §4(i) proves the refusal is plan-pinned. Authority: R4 r4-2, r4-3; R5 V-1.iv,
 V-1.v; RH-8.
@@ -1798,7 +1807,7 @@ V-1.v; RH-8.
 Every custody tool executes from `$CLONE/scripts/`. Before the first one runs,
 each executing file's SHA-256 must equal the digest the reviewed manifest
 records for its repo-relative path. This is the same comparison the library
-performs internally in candidate mode (`arm_readiness.py:10361-10449`); doing it
+performs internally in candidate mode (`arm_readiness.py:10430-10518`); doing it
 here first means a mismatch stops S-0 at a named step instead of surfacing as a
 `tool_mismatch` refusal in the middle of the marker build.
 
@@ -1821,7 +1830,7 @@ for relative, digest in sorted(recorded.items()):
     actual = hashlib.sha256(executing.read_bytes()).hexdigest()
     assert actual == digest, (relative, actual, digest)
     # The builder is located as a SIBLING of the executing consumer
-    # (arm_readiness.py:10948), so both must live in the same directory.
+    # (arm_readiness.py:11017), so both must live in the same directory.
     assert executing.parent == clone / "scripts", executing
 print(json.dumps({"status": "PASS", "tools_authenticated": len(recorded),
                   "lane": "candidate", "rule": "manifest digest, not committed blob"},
@@ -1998,20 +2007,20 @@ printf '%s\n' "$MARKER_BRANCH" > "$TRANS/080-marker-decision.txt"
 > confirmation digest supplied".
 >
 > *The supply-line trace, end to end.* build_family_publication_marker calls
-> _family_member at arm_readiness.py:10638 as
+> _family_member at arm_readiness.py:10707 as
 > _family_member(repository, root, registry, reference) — with NEITHER
 > step6_confirmation_table NOR expected_confirmation_digest, both of which
 > default to None. _family_member forwards those Nones into
-> _load_freeze_reference (:10349-10351), whose R1 lifecycle evaluation reaches
+> _load_freeze_reference (:10418-10420), whose R1 lifecycle evaluation reaches
 > the digest-conditional allowlist path because the successor was minted into
 > the changed set at PINSET_MINT_HEAD. _require_confirmed_conditional_path then
 > calls _authenticate_confirmation_table(None, None), which raises
-> confirmation_missing at :10617-10620. The FamilyPublicationError is caught at
-> :10353-10358 and re-raised as evidence_set_mismatch. **There is no supply
+> confirmation_missing at :10686-10689. The FamilyPublicationError is caught at
+> :10422-10427 and re-raised as evidence_set_mismatch. **There is no supply
 > line**: build_family_marker.py's CLI has no --confirmation and no
 > --expected-confirmation-digest flag, and build_family_publication_marker does
 > not accept either parameter. The verifier has both flags and passes them at
-> :10737-10748 — but suppresses them when phase is candidate.
+> :10806-10817 — but suppresses them when phase is candidate.
 >
 > *Why reordering the blocks below does NOT fix it, and would make things
 > worse.* The step-6 contract is explicit that the table C contains hM in
@@ -2050,7 +2059,7 @@ A1 fixation is the last commit of this clone proof, in §4.10; r4 said "and
 fixation" here, which was pre-D-153 residue.) Candidate-mode tool
 authentication compares the executing bytes — in `$CLONE/scripts/` — to the
 digests recorded in `$MANIFEST`; it does not use committed-blob equality and
-cannot be selected by sidecar presence (`arm_readiness.py:10408-10449`). The S-0
+cannot be selected by sidecar presence (`arm_readiness.py:10477-10518`). The S-0
 marker stays outside the Git worktree.
 
 ```zsh
@@ -2220,7 +2229,7 @@ separate published-green step in §3.10.
 
 **Pre-declared expected refusal.** Under the stdlib `$PY`, the
 `u11-arm-reverification` leg refuses with
-`readiness_identity_artifact_unreadable` (`arm_readiness.py:7586` calls
+`readiness_identity_artifact_unreadable` (`arm_readiness.py:7655` calls
 `_run_identity_arm_reverification`, defined at `:5235`, which resolves the
 runtime backend the same way §3.2 does). That refusal is EXPECTED and admissible here — the eleven
 asserted `want` kinds below exclude the identity item — and it is pre-declared
@@ -2230,7 +2239,7 @@ the real transaction in the measurement environment, not by S-0.
 **Early governed refusal tolerance.** `generate_arm_receipt` can return a
 governed REFUSE with `receipt_path: null` before it writes any receipt (for
 example when the family-publication or histsem gate refuses at
-`arm_readiness.py:7468`). R2 asserted `d["receipt_path"]` unconditionally and
+`arm_readiness.py:7537`). R2 asserted `d["receipt_path"]` unconditionally and
 would have died on that shape. The block below records the null case, skips the
 paired `verify` for that pack, and continues; a null receipt path for **all
 three** packs is a STOP, because then nothing was armed at all.
@@ -2343,13 +2352,13 @@ S-0 must not fabricate T0 or measurement evidence.
 a route worth naming.** r4's first draft said it was,
 and the delta re-audit corrected that: `arm`'s own *discovery* does find zero
 generic items (it calls `_discover_evidence` with `include_pack=False`,
-`arm_readiness.py:7533`, and `_discover_evidence` drops the `PACK` namespace at
+`arm_readiness.py:7602`, and `_discover_evidence` drops the `PACK` namespace at
 `:5655-5657`), yet the eleven kinds still reach the arm receipt by a second
-route — `_freeze_evidence_for_arm` (`:6625-6677`) deep-copies the freeze
+route — `_freeze_evidence_for_arm` (`:6694-6746`) deep-copies the freeze
 receipt's evidence, and `evidence_items.extend(freeze_items)` merges it at
-**`:7574`**. A clean arm therefore *does* carry the eleven kinds. They are absent
+**`:7643`**. A clean arm therefore *does* carry the eleven kinds. They are absent
 today for one reason only: R4-O1's changed-set refusal empties `freeze_items` at
-`:7564-7566`.
+`:7633-7635`.
 
 Two consequences, both binding:
 
@@ -2371,7 +2380,7 @@ and both assertions already run earlier in this runsheet:
   `041-applicability-census.json`. That is the authoring coordinate.
 - **§3.6** — the clean freeze PASS is the discovery coordinate.
   `generate_freeze_receipt` calls `_discover_evidence` with the default
-  `include_pack=True` (`:6874`), so the pack namespace IS scanned; a missing,
+  `include_pack=True` (`:6943`), so the pack namespace IS scanned; a missing,
   unreadable, or inventory-violating evidence directory becomes a refusal and
   the freeze cannot return `status:PASS` with an empty `reason_codes`. §3.6
   asserts exactly that for all three packs, and a committed freeze receipt
@@ -2388,7 +2397,7 @@ and both assertions already run earlier in this runsheet:
 > `tests/test_receipt_histsem.py` is a changed path outside the ruled 112 (all
 > 112 are under `configs/`), so `validate_r1_evidence_lifecycle` raised
 > `DEPENDENCY_CHANGED_SET` (`:4422-4465`) — which also emptied `freeze_items` at
-> `:7564-7566` and took the eleven kinds out of the arm receipt with it. The
+> `:7633-7635` and took the eleven kinds out of the arm receipt with it. The
 > interim ruling pre-declared that refusal as expected and pinned it to its
 > cause.
 >
@@ -2500,7 +2509,7 @@ for path in receipts:
  forbidden=sorted(bad & present)
  assert not forbidden, (str(path), forbidden)
  # THE ELEVEN-KIND CENSUS, RETURNED (D-153 W2).  The kinds reach the arm
- # receipt through the freeze-item merge at arm_readiness.py:7574, which
+ # receipt through the freeze-item merge at arm_readiness.py:7643, which
  # survives now that no R1 refusal empties freeze_items.
  kinds={e.get("receipt_kind") for e in d["evidence"]}
  assert want <= kinds, (str(path), sorted(want-kinds))
@@ -2565,7 +2574,7 @@ window-close head does not.
 There is a mechanical corroboration inside the tool: publication-lane marker
 replay refuses `head_unpublished` unless the marker's own
 `publication_git.head_commit` equals live `origin/main`
-(`arm_readiness.py:10844-10850`). The marker is built BEFORE fixation, at the
+(`arm_readiness.py:10913-10919`). The marker is built BEFORE fixation, at the
 head whose bytes it binds. So the tool itself will only admit a published head
 that the pre-fixation marker names — which is the window-close head, never a
 later fixation commit.
@@ -2743,7 +2752,7 @@ no_traceback 101-ordinary || die 'ordinary-path probe traceback'
 Pass iff the exact registry code for `DEPENDENCY_CHANGED_SET` appears and no
 pack bytes change. This probe reaches the R1 gate through the **replay** path:
 at `$PROBE_BASE` the pack already carries a plan-pinned `freeze-0004`, so
-`generate_freeze_receipt` enters `_load_freeze_reference` (`:6410-6622`), where
+`generate_freeze_receipt` enters `_load_freeze_reference` (`:6475-6691`), where
 the changed-set gate runs. Authority: R4 r4-2; R5 V-1;
 `arm_readiness.py:4229-4277,4300-4322`.
 
@@ -2751,14 +2760,14 @@ the changed-set gate runs. Authority: R4 r4-2; R5 V-1;
 
 R2 ran this at the `arm` verb against the pack's own evidence directory. That
 cannot work: `arm` calls `_discover_evidence` with `include_pack=False`
-(`arm_readiness.py:7533`), so the pack namespace is dropped from the scan
+(`arm_readiness.py:7602`), so the pack namespace is dropped from the scan
 (`_evidence_directories`, `:5400-5406`) and what actually refuses is the
 pack-digest / changed-set code, not `readiness_evidence_unreadable`. The single
 directory-inventory check at `:5659-5686` governs **both** namespaces, so it
 takes two probes to exercise it in both.
 
 **4(b.1) — window-custody namespace, at `arm`, pack untouched.** The custody
-pack root is `<window custody root>/<pack name>` (`:7514`), and that namespace
+pack root is `<window custody root>/<pack name>` (`:7583`), and that namespace
 IS scanned at arm.
 
 *Expected rc, derived* (the r3 ratification flagged this as unverified): the
@@ -2824,7 +2833,7 @@ test -z "$(git -C "$CLONE" status --porcelain=v1)" || die 'the probe dirtied the
 ```
 
 **4(b.2) — pack namespace, at the freeze mint path.** `include_pack` defaults to
-true and `generate_freeze_receipt` uses the default (`:6874`), so the pack
+true and `generate_freeze_receipt` uses the default (`:6943`), so the pack
 namespace is scanned there. The case is cut at `$EVIDENCE_COMMIT`, before
 `freeze-0004` exists, so the mint path runs rather than the replay path — the
 mint path performs no changed-set comparison (it passes `head_commit=None`), so
@@ -2853,7 +2862,7 @@ git -C "$CASE" diff --exit-code -- "$FIRST_PACK/arm_readiness.evidence" \
 ```
 
 Pass iff both namespaces refuse through the directory-inventory check.
-Authority: R4 r4-2; R5 V-2; `arm_readiness.py:5400-5406,5514-5541,6725,7384` (second `include_pack=False` site: `:7764`);
+Authority: R4 r4-2; R5 V-2; `arm_readiness.py:5400-5406,5514-5541,6725,7384` (second `include_pack=False` site: `:7833`);
 the CLI enforces read-only pack snapshots for non-freeze verbs at
 `scripts/generate_arm_readiness.py:100-110,113-174`; AUDIT F-6.
 
@@ -3075,14 +3084,14 @@ grep -F 'readiness_pack_digest_mismatch' "$TRANS/110-tamper-plan-sidecar.stdout.
 # pinset-json is the ONE class whose expected refusal is the C-to-S one, and
 # it can produce NO histsem_* code at all.  Re-derived from the raise sites:
 # generate_freeze_receipt calls _gate_receipt_histsem on the PREDECESSOR pack
-# first (arm_readiness.py:6705), but this tamper re-renders the successor
+# first (arm_readiness.py:6774), but this tamper re-renders the successor
 # pinset as canonical, schema-valid JSON with the same pack identities, so the
 # chain loads clean and that gate returns without raising.  Execution then
 # reaches _require_confirmed_conditional_path (:4312-4367), whose refuse()
 # helper is hardwired to the DEPENDENCY_CHANGED_SET role (D-151 condition 1e:
 # no new refusal codes), and the replay boundary returns
 # reason_codes=[DEPENDENCY_CHANGED_SET] with that raise's detail
-# (:6814-6821).  r5 first asked for a histsem_* code here as well; the two
+# (:6883-6890).  r5 first asked for a histsem_* code here as well; the two
 # assertions are mutually unreachable, and the C-to-S one is correct.
 grep -F "$CHANGED_CODE" "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null || die 'pinset-json class'
 "$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["reason_codes"]==[sys.argv[2]], d["reason_codes"]' \
@@ -3242,8 +3251,8 @@ against Ed's confirmed table and the family-publication marker, which live only
 there, and copying them into a probe root would change the very bytes under
 test. The consequence is recorded here rather than discovered later:
 `generate_arm_receipt` numbers receipts from the existing namespace
-(`number = max(...) + 1`, `:7515-7519`) and records a `supersedes` binding
-(`:7643-7654`), so **this probe mints `arm-0002`, which supersedes the
+(`number = max(...) + 1`, `:7584-7588`) and records a `supersedes` binding
+(`:7712-7723`), so **this probe mints `arm-0002`, which supersedes the
 transaction's `arm-0001`.** Two rules follow, both already enforced above:
 
 1. §3.9's census block globs `arm-0001.json` by exact ordinal, never `arm-*`,
@@ -3526,7 +3535,7 @@ first result to `mutated:false` with no freeze or plan write, record **NO**,
 retain the preflight as a defence-in-depth check, and verify no pack bytes
 changed. Any third outcome (partial write, traceback, or replay not idempotent)
 reopens the mechanism. Authority: R4 r4-2 poison question; R5 V-2;
-`arm_readiness.py:6410-6622,6760-6806`.
+`arm_readiness.py:6475-6691,6760-6806`.
 
 ---
 
