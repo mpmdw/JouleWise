@@ -10,6 +10,46 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T23 night (2026-08-25 pre-dawn) — the D-153 sweep CURED and
+RE-RATIFIED; estate 6 struck, estate 7 running and held at the step-6
+Ed-confirmation boundary; kernel 97 -> 99.**
+
+Estate 6 is STRUCK under synthesis R-3 — its §3.9 arms all refused for a
+missing consumer argument, which the runsheet's own failure semantics
+classify as an instrument failure (cure on main, re-ratify, restart from
+§1.1) — with its custody preserved READ-ONLY and its `091-*` REFUSE
+transcripts retained as live negative-leg evidence that the C→S gate
+does refuse when no confirmed digest is supplied. The cure came from a
+two-seat cross-model sweep at 7d586a69 (Opus contract-lens
+epoch-timeline seat, findings F0–F15; Sol xhigh semantic seat, findings
+1–62), whose near-total overlap is itself evidence the haul is real:
+one shared root cause (consumers written against interfaces and
+orderings that D-153 and the step-6 contract later moved out from under
+them, with no assertion class capable of noticing) and a nineteen-item
+consolidated cure list, landed as PR #186 (the `074-*` §3.8/§4.10
+sequencing), PR #187 (runsheet items 2–19, r4→r5), and PR #188 (the
+`freeze --step6-confirmation-table` supply line), each through its own
+cross-model refuter, then a JOINT delta re-audit of both final heads
+together — which returned FAIL on one cross-stream join blocker (B1: six
+`generate_arm_readiness.py` line citations, one of them the EXECUTED
+§1.1 audit spec, went stale the moment the other stream's +6 lines
+landed; invisible to both single-stream refuters by construction, and
+the §0.3 anchor map stayed 15/15 through it), cured at the bench and
+re-ratified PASS at #187 `9fd5bace` / #188 `43525fb9`; that PASS plus
+synthesis R-4 is the re-ratification the failure semantics require.
+Estate 7 was cut at the merged head `f82247ee`, has executed §§1.1–3.8
+with the marker over that span built and the THIRD _v4 mint taken, and
+is HOLDING at the step-6 Ed-confirmation boundary, where the
+operator-pasted confirmation digest is the next input (per R-2: pasted
+per enforcing block, cross-checked against `085-*`, never sourced from
+it). Kernel this wave: PAPER-REPLAY-FENCE-01 CLOSED on PR #189
+(94a93e3a squashed at b186710a; 43/43 fenced values live-re-derived and
+matched, no `joulewise/` or pinned-file change; its three returned
+decision points recorded in the closure note), and the sweep's three
+reserved follow-ups registered — EPOCH-LINT-01 (R-5),
+CONSUME-CONFIRMATION-SUPPLY-01 (R-4 / Opus 3f), LINE-AUDIT-GUARD-01
+(joint re-audit adjudication item 4) — 97 - 1 + 3 = 99 live rows.
+
 **T23 continued (2026-08-24 afternoon/evening) — the transaction prefix
 CONQUERED: first _v4 mint, five instrument-caught defects cured, P06
 closed end-to-end, D-152/D-153 ruled, twelve PRs merged today.**
@@ -4749,7 +4789,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-24). Latest report: [T21–T22 session 2026-08-22/23: the gauntlet that merged — _v4 candidate through the full adversarial gauntlet, S-1 merge wave landed, S-0 clone-head gate SATISFIED at 33aa594](docs/run_reports/2026-08-23-t21-t22-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-25). Latest report: [T21–T22 session 2026-08-22/23: the gauntlet that merged — _v4 candidate through the full adversarial gauntlet, S-1 merge wave landed, S-0 clone-head gate SATISFIED at 33aa594](docs/run_reports/2026-08-23-t21-t22-session.md).
 
 ### [ED-EXTERNAL]
 

@@ -22,36 +22,29 @@ Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-08-22)
+## Current activity (refreshed each work block; last: 2026-08-25)
 
-**Just completed (2026-08-21/22):** the paper's methodology section was
-rewritten to the replication bar — a reader should be able to rebuild
-the mechanism from the text alone — and merged after four review
-rounds. A new verifier landed that re-checks every historical frozen
-pack receipt against the actual repository history it claims, so a
-rewritten or inconsistent receipt chain is refused rather than trusted.
-A family of timing defects in one heavily-raced test module was closed
-out one by one (each with its own recorded cause and fix, none waved
-through as "flaky"), and one earlier "root-caused and fixed" record was
-formally amended after review showed the failure recurred once post-fix
-under heavy machine load — whether the fix was incomplete or the load
-caused it is recorded as an open question, not smoothed over.
+**Just completed (2026-08-24/25):** the full-dress rehearsal of the real
+measurement transaction was run again on a throwaway copy of the
+repository, and a two-model review of the rehearsal script found
+nineteen defects in it — steps that named a piece of code before it
+existed, steps that called a tool without an input that tool requires,
+and line references that had drifted. All nineteen were fixed and
+merged, including one defect that was invisible to each reviewer alone
+and only appeared when the two fix branches were checked against each
+other. A separate check now re-derives the two worked examples in the
+paper's method section from the original measured files and refuses any
+number that no longer matches (43 of 43 matched on the live data).
 
-**In progress (2026-08-22):** two desk audits run while measurement is
-paused — a bounded timing/synchronization sweep of that raced test
-module, and a re-binding of the paper's results-fill registry (the
-document that says exactly which measured artifact is allowed to supply
-each number in the results section) to the current draft, so results
-render the moment real window data exists.
+**In progress (2026-08-25):** the rehearsal is paused at the one step
+that needs a person — the operator reads the table of files about to be
+frozen and confirms its fingerprint by hand, which is deliberately the
+one thing the automation is not allowed to do for itself.
 
-**Next — waiting on one operator action:** building the
-fourth-generation campaign family requires a permission rule that only
-the human operator may install (the instrument's own governance forbids
-the automation from granting itself measurement-freeze rights). Once
-installed: build the family, run the readiness sitting, then the first
-fresh calibration captures and quiet measurement windows under the
-corrected instrument — the data the paper's results tables are waiting
-for.
+**Next:** finish the rehearsal, then build the fourth-generation
+campaign family for real and run the first fresh calibration captures
+and quiet measurement windows under the corrected instrument — the data
+the paper's results tables are waiting for.
 ## Current State
 
 Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete
