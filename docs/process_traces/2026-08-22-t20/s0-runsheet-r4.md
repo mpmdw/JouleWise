@@ -2240,14 +2240,14 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 #   hC = ED_STEP6_CONFIRMED_SHA256, the digest Ed confirmed OUT OF BAND.
 # _authenticate_confirmation_table refuses if EITHER is None, and that refusal
 # carries the same registry code an ordinary changed path produces.  r4 handed
-# neither half to any live consumer, so all three of estate 6 arms refused
+# neither half to any live consumer, so all three of estate 6's arms refused
 # here with "no expected confirmation digest supplied" and no assertion in the
 # instrument could tell that apart from the refusal the step was testing for.
 #
 # hC is RE-PASTED BY THE OPERATOR INTO THIS BLOCK, exactly as in §3.8.  It is
 # never written to env.sh and never carried across blocks, because the
-# contract image is that the operator supplies the digest to each consumer
-# through that consumer own explicit input, and the rehearsal must rehearse
+# contract's image is that the operator supplies the digest to each consumer
+# through that consumer's own explicit input, and the rehearsal must rehearse
 # that.  A mistyped paste fails loudly at the next line; an in-band supply
 # would fail silently, as a norm.
 #
