@@ -13,6 +13,15 @@ this branch — it was refused by both ratification seats and no estate ran it.
 
 ## Revision history
 
+**S0-O2 recorded (2026-08-24).** Estate 5 ran clean through §3.7's mint and
+refused at the §3.8 candidate marker build. The supply-line trace and the
+step-6 contract's acyclicity clause are recorded in §3.8: the block order there
+is contract-correct and is NOT the cause, so it is left unchanged; the defect is
+that the marker build evaluates a C→S condition it has no contract-sanctioned
+way to satisfy. The estate resumes at §3.8 without a re-cut once that code
+question is ruled.
+
+
 **Anchor refresh + builder cure (2026-08-24).** +40 anchor shift from the
 pinset-builder cure, re-verified mechanically. The cure inserts into
 `joulewise/arm_readiness.py`, so every `arm_readiness.py` anchor and citation was
@@ -1820,6 +1829,63 @@ test "$MARKER_BRANCH" = 'BUILD-AT-BOUNDARY' \
   || die "manifest marker_branch is $MARKER_BRANCH, not BUILD-AT-BOUNDARY"
 printf '%s\n' "$MARKER_BRANCH" > "$TRANS/080-marker-decision.txt"
 ```
+
+> **STOP — S0-O2. The candidate marker build cannot satisfy the C→S condition,
+> and the block order below is NOT the cause.** Estate 5 ran clean through the
+> mint and then refused here; recorded, not decided.
+>
+> *The observed refusal* (estate 5, transcript 081):
+> check_id evidence_set_mismatch, reason readiness_r1_family_publication,
+> detail "digest-conditional allowlist path
+> 'configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json': no expected
+> confirmation digest supplied".
+>
+> *The supply-line trace, end to end.* build_family_publication_marker calls
+> _family_member at arm_readiness.py:10468 as
+> _family_member(repository, root, registry, reference) — with NEITHER
+> step6_confirmation_table NOR expected_confirmation_digest, both of which
+> default to None. _family_member forwards those Nones into
+> _load_freeze_reference (:10336-10338), whose R1 lifecycle evaluation reaches
+> the digest-conditional allowlist path because the successor was minted into
+> the changed set at PINSET_MINT_HEAD. _require_confirmed_conditional_path then
+> calls _authenticate_confirmation_table(None, None), which raises
+> confirmation_missing at :10604-10607. The FamilyPublicationError is caught at
+> :10340-10345 and re-raised as evidence_set_mismatch. **There is no supply
+> line**: build_family_marker.py's CLI has no --confirmation and no
+> --expected-confirmation-digest flag, and build_family_publication_marker does
+> not accept either parameter. The verifier has both flags and passes them at
+> :10724-10735 — but suppresses them when phase is candidate.
+>
+> *Why reordering the blocks below does NOT fix it, and would make things
+> worse.* The step-6 contract is explicit that the table C contains hM in
+> family_publication and hS in successor_pinset, that the only edges are C→M and
+> C→S, and that "neither M nor S names C, so the graph is acyclic" — the marker
+> binds this table's contract identifier and the required decision YES, "never
+> the table path, digest, or event time"
+> (docs/contracts/d117_step6_confirmation_table.md:21-25). So the table can only
+> be rendered AFTER the marker exists, because it carries the marker's digest.
+> Building the table first would require the marker first, which is the cycle
+> the contract says does not exist. The contract's own enforcement clause names
+> the entry points that supply the table as "the arm, freeze, verification, and
+> marker-REPLAY entry points" (:143-160) — marker-BUILD is deliberately absent
+> from that list. **The block order below is contract-correct and is left
+> unchanged.**
+>
+> *What this leaves.* The defect is code-side: the marker build evaluates a
+> condition that, by contract, it must not be able to satisfy. Two candidate
+> cures, neither taken here because both touch manifest-pinned custody and
+> contract semantics: (i) the marker build suppresses the C→S conditional the
+> way the verifier does for the candidate phase, so a minted successor in the
+> changed set is not evaluated at build time; or (ii) build_family_marker.py
+> gains the verifier's two flags and the runsheet supplies the table on the
+> replay path only. (i) matches the contract's acyclicity argument; (ii)
+> contradicts it unless restricted to replay.
+>
+> *Estate resumption.* Estate 5 holds at block-21-complete. The refusal was
+> fail-closed — the marker-candidate directory is empty and no clone mutation
+> occurred — so once the code question is ruled the estate RESUMES at this
+> section unchanged. **No re-cut and no re-ordering are required**, and none of
+> §§1-3.7's completed work is invalidated.
 
 After freeze ×3, successor verification and fixation, run the reviewed
 constructor and consumer in explicit **candidate** mode. Candidate-mode tool
