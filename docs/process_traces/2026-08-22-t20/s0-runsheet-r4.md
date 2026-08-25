@@ -574,7 +574,15 @@ commit_case() {
 }
 
 new_case() {
-  local name=\$1 commit=\$2 target="\$CASES/\$name"
+  # zsh expands every word of a single `local` statement BEFORE performing any
+  # of its assignments, so target="\$CASES/\$name" read an UNSET \$name under
+  # nounset — and the abort inside a \$(...) substitution returned rc 0,
+  # yielding an empty result instead of a failure (found by real execution at
+  # §3.5, fourth estate; same class as the §0.1 backtick rule). One
+  # declaration per line; forward references only to completed assignments.
+  local name=\$1
+  local commit=\$2
+  local target="\$CASES/\$name"
   test ! -e "\$target" || die "probe case \$name already exists"
   git clone --no-local "\$CLONE" "\$target" >/dev/null
   git -C "\$target" checkout --detach "\$commit" >/dev/null
