@@ -10188,21 +10188,34 @@ def validate_family_publication_marker(
         "family marker.conditional_paths_deferred",
     )
     deferred_paths = deferred["deferred_paths"]
+
+    def _disclosure_refusal() -> FamilyPublicationError:
+        # The subset rule is what stops the field being a laundering channel:
+        # a marker cannot claim to have deferred an arbitrary relevant path,
+        # only one the code constant already marks digest-conditional.
+        return FamilyPublicationError(
+            "marker_schema_mismatch", "marker deferral disclosure is not the governed one"
+        )
+
+    # SHAPE FIRST, then ordering.  `sorted()` and `dict.fromkeys()` raise
+    # TypeError on a heterogeneous or unhashable list -- ``[1, "a"]`` compares
+    # int to str -- and TypeError is not one of the exception types the CLI
+    # wrappers catch, so it would escape as a traceback instead of a structured
+    # refusal.  Every element is therefore proven to be a ``str`` before any
+    # sort, dedup, or set operation touches the list (refuter round F1).
     if (
         deferred["gate"] != R1_DIGEST_CONDITIONAL_GATE_ID
         or deferred["enforced_at_entry_points"]
         != list(R1_DIGEST_CONDITIONAL_ENTRY_POINTS)
         or not isinstance(deferred_paths, list)
-        or deferred_paths != sorted(dict.fromkeys(deferred_paths))
         or any(not isinstance(item, str) for item in deferred_paths)
+    ):
+        raise _disclosure_refusal()
+    if (
+        deferred_paths != sorted(dict.fromkeys(deferred_paths))
         or not set(deferred_paths) <= R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS
     ):
-        # The subset rule is what stops the field being a laundering channel:
-        # a marker cannot claim to have deferred an arbitrary relevant path,
-        # only one the code constant already marks digest-conditional.
-        raise FamilyPublicationError(
-            "marker_schema_mismatch", "marker deferral disclosure is not the governed one"
-        )
+        raise _disclosure_refusal()
     context = _family_exact(
         marker["authoring_context"],
         frozenset(

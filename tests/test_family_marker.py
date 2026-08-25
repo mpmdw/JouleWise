@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -1556,6 +1557,69 @@ class ConditionalDeferralDisclosureTests(unittest.TestCase):
                         candidate, first_generation=4
                     )
                 self.assertEqual(caught.exception.check_id, "marker_schema_mismatch")
+
+    def test_malformed_disclosure_elements_refuse_instead_of_raising_typeerror(
+        self,
+    ) -> None:
+        """Refuter round F1: shape is proven before the list is ever ordered.
+
+        ``sorted()`` and ``dict.fromkeys()`` raise ``TypeError`` on a
+        heterogeneous or unhashable list -- ``[1, "a"]`` compares int to str,
+        ``[[]]`` is unhashable.  ``TypeError`` is NOT one of the exception types
+        ``scripts/verify_family_marker.py`` catches, so an ordering check placed
+        before the element type check let a malformed marker escape the governed
+        refusal boundary as a traceback.  Every element must therefore be proven
+        to be a ``str`` first.
+
+        The end-to-end half of this test is what actually matters: the CLI must
+        emit a structured REFUSE document, because that is the artifact an
+        operator reads and a transcript records.
+        """
+
+        for label, value in (
+            ("mixed int and str", [1, "a"]),
+            ("ints only", [2, 1]),
+            ("unhashable element", [[]]),
+            ("bool element", [True]),
+            ("not a list at all", "configs/x.json"),
+            ("mapping instead of list", {"a": 1}),
+        ):
+            with self.subTest(case=label):
+                candidate = marker()
+                candidate["conditional_paths_deferred"]["deferred_paths"] = value
+                with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                    readiness.validate_family_publication_marker(
+                        candidate, first_generation=4
+                    )
+                self.assertEqual(caught.exception.check_id, "marker_schema_mismatch")
+
+        # End to end through the consumer CLI: a REFUSE document on stdout and a
+        # nonzero exit, never a traceback on stderr.
+        with tempfile.TemporaryDirectory() as temporary:
+            live = FamilyMarkerLiveFixtureTests()
+            repository, custody = live.fixture_repository(Path(temporary))
+            value = live.live_marker(repository)
+            value["conditional_paths_deferred"]["deferred_paths"] = [1, "a"]
+            marker_path = live.write_marker(custody, value)
+            completed = subprocess.run(
+                (
+                    sys.executable,
+                    str(ROOT / "scripts/verify_family_marker.py"),
+                    "--repository", str(repository),
+                    "--marker", str(marker_path),
+                    "--phase", "candidate",
+                ),
+                capture_output=True, text=True,
+            )
+        self.assertNotEqual(completed.returncode, 0, completed.stdout)
+        self.assertNotIn("Traceback", completed.stderr)
+        self.assertNotIn("TypeError", completed.stderr)
+        receipt = json.loads(completed.stdout)
+        self.assertEqual(receipt["status"], "REFUSE")
+        self.assertEqual(
+            [check["check_id"] for check in receipt["checks"]],
+            ["marker_schema_mismatch"],
+        )
 
     def test_candidate_replay_refuses_a_disclosure_it_did_not_reproduce(self) -> None:
         """The candidate lane re-derives the ledger and compares it.

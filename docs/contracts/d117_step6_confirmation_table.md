@@ -219,6 +219,32 @@ the suppression is disclosed**. Concretely:
   contradiction and refuses `DEPENDENCY_CHANGED_SET`. The build lane and the
   enforcing lanes are mutually exclusive; no call site can be in both.
 
+#### Recorded waiver: the required key was added under the `.v1` schema id
+
+Adding a required key to an exact-key schema would ordinarily force the schema
+id to `.v2`. It does not here, by ruling, and the reason is recorded rather than
+left implicit (magistrate ruling on the S0-O2 refuter round, PR #184).
+
+`conditional_paths_deferred` was added under
+`joulewise.d117_family_publication_marker.v1`, whose key set is now exactly
+fourteen. **No thirteen-key marker was ever successfully built** — the S0-O2
+defect prevented the builder from instantiating one at any post-mint head — so
+no persisted artifact changes meaning under the wider key set. A thirteen-key
+document presented to the validator refuses at the exact-key check, which is the
+intended fail-closed behaviour and not a compatibility break. The id advances to
+`.v2` only on the next semantic change to an **instantiated** shape.
+
+#### Accepted residual: the disclosure is verified, not self-proving
+
+The disclosure is a statement the builder makes about its own evaluation, so it
+cannot prove itself. Two mechanisms bound the residual, and it is recorded as
+defence in depth rather than closed (refuter round, PR #184): a build that
+truncated the disclosure to `[]` is caught at the mandatory candidate-replay
+gate, which rebuilds the ledger from its own evaluation and refuses any marker
+whose published disclosure it did not reproduce; and a post-build tamper of the
+field refuses through the `C → M` byte binding, because the step-6 table names
+`hM` over the exact marker bytes.
+
 Nothing about arm, freeze, verification, or the publication/pre-arm/T-0 lanes of
 marker replay changes. Those four still supply `C` and `hC` and still refuse
 without them; a deferral is never passed on those paths. The C → S edge is
