@@ -42,8 +42,10 @@ flag's contract.
   string `digest-conditional allowlist path`.
 - **The `118-*` byte-pin probe moves to §4.10, after the fixation commit**, and
   its tamper becomes a SHAPE-PRESERVING canonical re-mint: a naive byte tamper
-  is already caught pre-fixation by the canonicality check, so only a re-mint
-  of identical shape isolates the hS byte pin as the discriminator (F1, F2).
+  is already caught pre-fixation by the canonicality check; the re-mint of
+  identical shape reaches the fixation head with canonical bytes, and the byte
+  pin's OWN failure is then proven by name, independent of which other tests
+  also redden (F1, F2).
 - **Epoch prose, A6 vocabulary and file citations are repaired**: §3.9's
   heading, §3.8's fixation wording, the reserved "window close" spellings, the
   fixation commit message, the post-W1 `tests/test_receipt_histsem.py` line
@@ -78,7 +80,7 @@ semantics.
 §3.8's marker build — the first estate past the S0-O2 boundary — and the §3.8
 Ed-confirmation block then refused at its final stanza: it reads
 `074-successor-sha256.txt`, which this runsheet only produced in §4.10. The
-inversion is D-153 fallout: fixation (and its transcript family 073–075/077)
+inversion is D-153 fallout: fixation (and its transcript family 073–075/077–078)
 moved from the mint side to §4.10, and the §3.8 consumer kept reading a record
 that no longer existed yet. A mechanical producer/consumer sweep over every
 `$TRANS/` reference found exactly this one inversion. Cure: §3.7 step 3 now
@@ -532,8 +534,8 @@ names its symbol so the next drift is detectable by name rather than by line.
 - U11 projection `joulewise/identity_pins.py:1826-1935`.
 - Generic applicability rows `joulewise/arm_readiness_evidence.py:1709-1731`;
   authoring implementation `:2379-2618`.
-- CLIs: freeze/arm/verify `scripts/generate_arm_readiness.py:28-186` (exit
-  semantics `:169-186`: 0 PASS, 1 governed REFUSE, 2 raised
+- CLIs: freeze/arm/verify `scripts/generate_arm_readiness.py:28-192` (exit
+  semantics `:175-192`: 0 PASS, 1 governed REFUSE, 2 raised
   `ArmReadinessError`); identity U11 `scripts/project_identity_pins.py:23-60`;
   histsem `scripts/verify_receipt_histsem.py:22-73`; evidence author
   `scripts/author_arm_readiness_evidence.py:25-112`.
@@ -1008,7 +1010,7 @@ for spec in \
   'joulewise/arm_readiness.py 1050,1076p;1999,2120p;3168,3228p;3605,3636p;3639,3707p;4115,4163p;4166,4253p;4256,4399p;5214,5263p;5266,5485p;5488,5743p;6098,6224p;6227,6262p;6265,6475p;6531,6807p;7307,7553p;10160,10261p;10370,10514p' \
   'joulewise/identity_pins.py 1826,1935p' \
   'joulewise/arm_readiness_evidence.py 1709,1731p;2379,2618p' \
-  'scripts/generate_arm_readiness.py 28,186p' \
+  'scripts/generate_arm_readiness.py 28,192p' \
   'scripts/project_identity_pins.py 23,60p' \
   'scripts/verify_receipt_histsem.py 22,73p' \
   'scripts/author_arm_readiness_evidence.py 25,112p' \
@@ -2520,7 +2522,7 @@ exactly that.
 
 Authority: R4 r4-2; R5 V-1.iii, V-2; actual changed-set site
 `arm_readiness.py:4426-4465`; CLI exit semantics
-`scripts/generate_arm_readiness.py:169-186`; AUDIT F-12.
+`scripts/generate_arm_readiness.py:175-192`; AUDIT F-12.
 
 ### 3.10 Two-part green record — local conditional, then PUBLISHED
 
@@ -2765,7 +2767,7 @@ inventory check **appends** to the governed refusal list rather than raising —
 `:5669` and `:5678` — so `generate_arm_receipt` returns a result mapping with
 `status: "REFUSE"`, not an `ArmReadinessError`. The CLI maps that to
 `return 0 if result.get("status") not in {"REFUSE"} else 1`
-(`scripts/generate_arm_readiness.py:186`), i.e. **rc 1**. rc 2 would mean a
+(`scripts/generate_arm_readiness.py:192`), i.e. **rc 1**. rc 2 would mean a
 raised `ArmReadinessError` — a different, non-governed path — and is a failure
 of this probe, not a pass. Under D-153 this arm carries no R1 code at all, so
 `readiness_evidence_unreadable` is the refusal under test in isolation. Nothing in the repository is modified, so this probe proves
@@ -2853,7 +2855,7 @@ git -C "$CASE" diff --exit-code -- "$FIRST_PACK/arm_readiness.evidence" \
 Pass iff both namespaces refuse through the directory-inventory check.
 Authority: R4 r4-2; R5 V-2; `arm_readiness.py:5400-5406,5514-5541,6725,7384` (second `include_pack=False` site: `:7764`);
 the CLI enforces read-only pack snapshots for non-freeze verbs at
-`scripts/generate_arm_readiness.py:95-105,108-168`; AUDIT F-6.
+`scripts/generate_arm_readiness.py:100-110,113-174`; AUDIT F-6.
 
 ### 4(c). Non-freeze mutation in current **and** sibling plan trees
 
