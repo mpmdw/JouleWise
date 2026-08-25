@@ -36,6 +36,11 @@ def _parser() -> argparse.ArgumentParser:
     freeze = subparsers.add_parser("freeze")
     freeze.add_argument("--pack-root", type=Path, required=True)
     freeze.add_argument(
+        "--step6-confirmation-table",
+        type=Path,
+        help="path to the D-117 step-6 confirmation table",
+    )
+    freeze.add_argument(
         "--expected-confirmation-digest",
         default=argparse.SUPPRESS,
         help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
@@ -116,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             result = generate_freeze_receipt(
                 args.pack_root,
                 predecessor_pack_root=args.predecessor_pack_root,
+                step6_confirmation_table=args.step6_confirmation_table,
                 expected_confirmation_digest=args.expected_confirmation_digest,
             )
         elif args.command == "dry-run":
