@@ -3243,20 +3243,20 @@
         "summary": "The pinset builder's F1 should-fix is closed against the refuter's own custodied wording."
       },
       "authority": {
-        "label": "PR #182 pinset-builder cure, refuter round F1 — envelope NOT in the repository record at registration (see status_note)",
-        "path": "scripts/build_v4_histsem_pinset.py"
+        "label": "PR #182 pinset-builder cure, refuter round F1 envelope (custodied; recovered post-hoc from the T23 session record)",
+        "path": "docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Close the F1 should-fix from the PR #182 pinset-builder refuter round: a GRAMMAR-BOUND EXCLUSION in the pinset builder. The builder decides custody membership by literal path-name matching — scripts/build_v4_histsem_pinset.py:112-117 tests PurePosixPath(path).parts[0] against arm_readiness._HISTSEM_CUSTODY_DIRECTORIES, and the modified set against the four literal filenames of _HISTSEM_ALLOWED_MODIFICATIONS. Custody the refuter envelope, restate the finding from it, then fix what it names.",
+      "goal": "Close the F1 should-fix from the PR #182 pinset-builder refuter round, restated from the custodied envelope's own text (docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md, section \"The should_fix to carry (F1)\"): the projection-receipt exception is implemented as a WHOLE-DIRECTORY exception. The shared predicate _histsem_tree_has_authoring_custody tests only PurePosixPath(path).parts[0] (joulewise/arm_readiness.py:2906-2918), so every nested path under identity_pin_projection.receipts is excluded from the pre-authoring custody set, and what actually refuses a nested tamper is adjacent machinery (the identity membrane, the PACK_AUTHENTICATION exact-addition fence) rather than this gate. PRIMARY CURE (a): bound the pre-authoring exclusion to the projection freeze grammar - projection-NNNN.json / projection-NNNN.sha256, four or more digits, directly under the directory - the same grammar identity_pins.py:957-964 already enforces. MINIMAL ALTERNATIVE (b): add the nested-authoring-custody case to PreAuthoringProjectionCustodyTests (tests/test_receipt_histsem.py:882-887 is today the only positive projection case) so the layered refusal is pinned by test rather than by adjacency. Refuter severity: should_fix, not blocker - the adjudicated verdict on PR #182 was SOUND FOR MERGE and post-merge follow-up is acceptable.",
       "id": "PINSET-GRAMMAR-EXCLUSION-01",
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 95,
       "status": "queued",
-      "status_note": "ANOMALY AT REGISTRATION: the finding's authoritative wording is nowhere in the repository record (searched RUN_STATE, decision log, docs/process_traces, PR #182 comments and reviews, the codex-bridge response archive). The goal above states only the code surface the hook names; custody the envelope before acting.",
+      "status_note": "REGISTRATION ANOMALY CURED: the refuter envelope that was nowhere in the repository record at registration was recovered POST-HOC on 2026-08-24 from the T23 session record - PR #182 merged while the refuter (agent task-id afa98fc4eaa4512e1, adjudicated verdict SOUND FOR MERGE) was still running - and is custodied verbatim at docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md. The goal is now restated from the envelope's own wording, satisfying the first acceptance clause; what remains is the fix or recorded waiver.",
       "stop_card": null
     },
     "PLANTEST-RGLOB-RACE-01": {
