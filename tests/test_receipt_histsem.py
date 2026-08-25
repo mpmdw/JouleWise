@@ -33,6 +33,28 @@ PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"
 PINSET_SHA256 = "d81515505d677c2ca045238e721c87eae8f38439a89a5377e58fa9064eaf2f21"
 REPRESENTATIVE_PACK = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
 
+# The versioned successor member of the code-enumerated chain.  It does not
+# exist until S-0 mints it, and the chain loader treats an absent enumerated
+# member as contributing no rows rather than as a refusal
+# (arm_readiness.py:3196-3199; docs/contracts/receipt_histsem_verifier.md:53-57).
+# Every assertion about it below is therefore PRESENCE-CONDITIONAL: vacuous
+# before the mint, active after it.
+SUCCESSOR_PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
+# D-151 condition-3 ruled shape literals.  These are CONSISTENCY CHECKS ONLY and
+# are explicitly NOT byte authenticators: condition 2 forbids this file from
+# authenticating the successor, whose only byte authenticator is the hS literal
+# pinned by the post-window fixation commit (D-153 A1).  Asserting shape here
+# must never be read as, or relied on as, authenticating the minted bytes.
+SUCCESSOR_PACK_COUNT = 3
+SUCCESSOR_RECEIPT_COUNT = 33
+SUCCESSOR_PACK_IDS = frozenset(
+    {
+        "d117_contrast_qwen25_1p5b_vs_7b_v4",
+        "d117_floor_qwen25_1p5b_v4",
+        "d117_floor_qwen25_7b_v4",
+    }
+)
+
 
 def git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -143,6 +165,58 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         self.assertEqual(len(value["packs"]), 9)
         self.assertEqual(sum(row["receipt_count"] for row in value["packs"]), 99)
 
+    def test_successor_member_shape_when_present(self) -> None:
+        """Presence-conditional shape check on the versioned successor member.
+
+        THIS IS NOT AN AUTHENTICATOR.  D-151 condition 2 forbids this file from
+        authenticating the successor: allowlist membership makes it eligible for
+        subtraction but never proves its bytes.  The successor's ONLY byte
+        authenticator is the hS literal that the post-window fixation commit
+        pins (D-153 A1), and nothing here may be relied on in its place.  What
+        this method does is cheaper and different: it checks that the minted
+        artifact has the SHAPE D-151 condition 3 ruled for it, so a
+        structurally wrong mint is caught by the ordinary suite instead of
+        surviving to the confirmation table.
+
+        It is vacuous until the successor exists.  An absent enumerated member
+        contributes no rows and is not a refusal (arm_readiness.py:3196-3199;
+        docs/contracts/receipt_histsem_verifier.md:53-57), so before the mint
+        this method asserts only that absence is handled as ruled -- which is
+        why it can live in the PRE-DERIVATION candidate without being
+        mint-falsifiable (D-153 A2).
+        """
+
+        if not SUCCESSOR_PINSET.exists():
+            # Absence semantics: the chain still loads, and it holds exactly the
+            # v1 member's rows.  Nothing about the successor is asserted.
+            rows = readiness._load_histsem_pinset(ROOT)
+            self.assertEqual(
+                len(rows), len(json.loads(PINSET.read_bytes())["packs"])
+            )
+            self.skipTest("successor member not minted yet; shape check is vacuous")
+
+        raw = SUCCESSOR_PINSET.read_bytes()
+        # Canonical D-134 encoding: the committed bytes must already be the
+        # canonical rendering, not merely parseable JSON.
+        value = readiness.parse_json_bytes(raw, require_canonical=True)
+        self.assertEqual(raw, render_json(value))
+        # D-151 condition-3 ruled literals, used as consistency checks only.
+        self.assertEqual(len(value["packs"]), SUCCESSOR_PACK_COUNT)
+        self.assertEqual(
+            sum(row["receipt_count"] for row in value["packs"]),
+            SUCCESSOR_RECEIPT_COUNT,
+        )
+        self.assertEqual(
+            {row["pack_id"] for row in value["packs"]}, set(SUCCESSOR_PACK_IDS)
+        )
+        # The v1 member is unchanged by the mint; the chain is the union of both.
+        self.assertEqual(hashlib.sha256(PINSET.read_bytes()).hexdigest(), PINSET_SHA256)
+        rows = readiness._load_histsem_pinset(ROOT)
+        self.assertEqual(
+            len(rows),
+            len(json.loads(PINSET.read_bytes())["packs"]) + SUCCESSOR_PACK_COUNT,
+        )
+
     def test_verifier_cli_refusal_is_canonical_and_exit_two(self) -> None:
         completed = subprocess.run(
             (
@@ -163,9 +237,12 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
         self.assertEqual(completed.stdout, render_json(payload))
 
-    def test_differential_self_test_all_nine_packs(self) -> None:
-        value = json.loads(PINSET.read_bytes())
-        for row in value["packs"]:
+    def test_differential_self_test_all_governed_packs(self) -> None:
+        # Iterates the LOADED CHAIN rather than the v1 file, so the method stays
+        # true in both coordinates: nine rows before the successor is minted,
+        # twelve after, with no edit at the mint.  The old name asserted a count
+        # that the mint falsifies (D-153 A2).
+        for row in readiness._load_histsem_pinset(ROOT):
             with self.subTest(pack=row["pack_id"]):
                 pack = ROOT / row["pack_path"]
                 self.assertEqual(
@@ -176,8 +253,29 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
     def test_full_corpus_verifies_two_coordinates_and_facts(self) -> None:
         result = verify_all_receipt_histsem(ROOT, require_published=True)
         self.assertEqual(result["status"], "PASS")
-        self.assertEqual(result["pack_count"], 9)
-        self.assertEqual(result["receipt_count"], 99)
+        # Corpus totals are DERIVED FROM THE LOADED CHAIN, never literal 9/99.
+        # The mint alone would redden a literal pair here, which is precisely the
+        # published-head-suite trap D-153 A2 removes: no mint-falsifiable
+        # assertion may sit in a pre-derivation test.
+        chain = readiness._load_histsem_pinset(ROOT)
+        self.assertEqual(result["pack_count"], len(chain))
+        self.assertEqual(
+            result["receipt_count"],
+            sum(int(row["receipt_count"]) for row in chain),
+        )
+        # Every governed receipt in the chain resolves at its recorded path and
+        # carries at least one fact -- the two-coordinate/facts property, stated
+        # over whatever the chain currently holds.
+        for row in chain:
+            for item in row["receipts"]:
+                receipt_path = ROOT / row["pack_path"] / item["path"]
+                with self.subTest(pack=row["pack_id"], receipt=item["path"]):
+                    self.assertTrue(
+                        json.loads(receipt_path.read_bytes())["facts"],
+                        "governed receipt carries no facts",
+                    )
+        # The v1 member's own fact subtotal keeps its literal: v1 is archival and
+        # byte-pinned by PINSET_SHA256, so the mint cannot move it.
         pinset = json.loads(PINSET.read_bytes())
         fact_count = sum(
             len(json.loads((ROOT / row["pack_path"] / item["path"]).read_bytes())["facts"])

@@ -13,15 +13,18 @@ this branch — it was refused by both ratification seats and no estate ran it.
 
 ## Revision history
 
-**Anchor refresh (2026-08-24).** +40 anchor shift from the pinset-builder cure,
-re-verified mechanically: the cure inserts into `joulewise/arm_readiness.py`, so
-every `arm_readiness.py` anchor and citation was re-derived from an exact
-old→new line map (113 substitutions) rather than by a blanket offset — the shift
-is **piecewise**, +43 for sites between the insertion point and the second hunk
-(`_load_histsem_pinset` `:3168-3228` → `:3211-3271`) and +40 after it. §0.2's
+**Anchor refresh + builder cure (2026-08-24).** +40 anchor shift from the
+pinset-builder cure, re-verified mechanically. The cure inserts into
+`joulewise/arm_readiness.py`, so every `arm_readiness.py` anchor and citation was
+re-derived from an exact old→new line map rather than by a blanket offset — the
+shift is **piecewise**, +43 for sites between the cure's two hunks
+(`_load_histsem_pinset` `:3168-3228` → `:3211-3271`) and +40 after them. §0.2's
 anchor table, the embedded `s0_anchor_map.py` ANCHORS tuple, §0.3's pinned
 mechanics map and every inline citation are updated together; the AST checker
-returns 13/13 at the cure head.
+returns 13/13 at the cure head. The remap was recomputed against the W2
+restructure at merge time, not carried over from the pre-W2 computation. §3.7's
+`--historical-head` is corrected to `$EVIDENCE_DERIVATION_HEAD` in the same
+round, with the reason stated in place.
 
 
 **r4 (2026-08-24).** A targeted delta over the refused r3 draft. Both r3
@@ -41,20 +44,25 @@ difference, plus one finding r4 surfaces without deciding.
 | F-10 | §4(e.1) writes into the transaction's own `$CUSTODY/windows` and mints `arm-0002`, superseding `arm-0001`. | note | folded: recorded as deliberate custody mixing, and every arm-receipt read is ordinal-pinned to `arm-0001` |
 | F-11 | §2.2's `check_census.py` heredoc was never run in the r2 estate while §3.4 invoked it. | note | folded: §2.2 materialization is a checked step with transcript `011-*`, and §3.4 asserts the tool first |
 
-**R4-O1 — RULED (interim); the §3.9 hold is discharged.** Surfaced while curing
-N-2, named by neither r3 seat, confirmed by the r4 delta re-audit: at a reviewed
-head containing the fixation commit, `tests/test_receipt_histsem.py` is a
-changed path outside the ruled 112 (all 112 are under `configs/`), so
-`validate_r1_evidence_lifecycle` raises `DEPENDENCY_CHANGED_SET` — which is also
-the real mechanism behind N-2. The magistrate adopted resolution (ii):
-**`DEPENDENCY_CHANGED_SET` is the EXPECTED arm outcome at `$FIXATION_COMMIT`**,
-carrying the positive obligation that the gate's residue is exactly
-`['tests/test_receipt_histsem.py']` and nothing else (transcript `098-*`), paired
-with a diagnostic arm at `$WINDOW_CLOSE_HEAD` proving the residue there is EMPTY
-(`099-*`) — the two together isolate the fixation commit as the sole cause. The
-interim ruling governs **S-0 only**; whether D-151 condition 3 is reopened so
-the REAL transaction arms cleanly is a separate cold process (packet 5) that
-gates the real transaction, not this runsheet. Full record in §3.9.
+**Packet-5 errata (2026-08-24), from D-153 — work order W2.** Packet 5 ruled
+alpha-prime SPLIT-AND-SEQUENCE in amendment form and recorded it as D-153. Four
+changes land here, and together they RESOLVE R4-O1.
+
+| D-153 | Change |
+|---|---|
+| A6 | `WINDOW_CLOSE_HEAD` is renamed **`PINSET_MINT_HEAD`** throughout (17 sites). "Window close" is reserved for the r4-3 commit-freeze close; the mint-side event this runsheet performs is the ALLOWLIST-CONTRACT CLOSURE. Binding the two names together is what created R4-O1. `PINSET_COMMIT` is recorded alongside it as the same commit under its transaction-facing name. |
+| A1 | The fixation steps move out of §3.7 and become **§4.10**, after the probe battery, renumbered 1–4. The marker (§3.8), the arm and verify (§3.9), the local green record (§3.10) and every §4 probe now run at `$PINSET_MINT_HEAD`, on a tree with no fixation commit on it. §4.10 states in its own text that this late placement is **CLONE-PROOF-ONLY** and that the REAL transaction fixates post-window per D-153 A1. |
+| W2(c) | The **clean-arm block** is appended to §3.9: empty residue at `$PINSET_MINT_HEAD` (transcript `098-clean-arm-residue.json`), no `$CHANGED_CODE`, and **the eleven-kind census, RETURNED** — `want <= kinds` over the arm receipt. |
+| A2 | The fixation delta shrinks to the hS byte pin plus its sentinel guard. Every digest-independent chain consequence moved into the pre-derivation candidate (work order W1). |
+
+**R4-O1 is RESOLVED, not merely re-priced.** D-153 finding 1 settles that the
+whole-tree R1 diff is intended design, not a defect: packet 5 repaired a
+vocabulary collision and a sequencing trap around a correct gate. With fixation
+last, the arm's changed set is fully allowlisted, the residue is empty,
+`freeze_items` survives, and the census that r4 recorded as deferred is asserted
+again. The interim "expected `DEPENDENCY_CHANGED_SET`" machinery, its `099-*`
+isolating diagnostic, and the "positive obligation" framing are all withdrawn;
+the §3.9 blockquote retains the history.
 
 **§3.2 amendment (2026-08-24), from REAL EXECUTION.** The first cut of r4 was
 executed against a fresh estate and reached §3.2, where the first U11 freeze
@@ -220,7 +228,7 @@ block below:
   ALL=$(grep -cE '^[[:space:]]*```zsh' "$RUNSHEET")
   COL0=$(grep -c '^```zsh' "$RUNSHEET")
   test "$((ALL - COL0))" = 2 || echo "INDENTED-BLOCK INVARIANT BROKEN: $((ALL - COL0))"
-  test "$COL0" = 49 || echo "EXECUTABLE BLOCK COUNT CHANGED: $COL0"
+  test "$COL0" = 48 || echo "EXECUTABLE BLOCK COUNT CHANGED: $COL0"
   ```
 
   Both must print nothing (grep exits 1). A hit is a defect in the
@@ -257,7 +265,7 @@ block. Therefore:
   once. It contains `set -euo pipefail`, every path variable, the pack arrays,
   and the helper functions. Heads computed mid-transaction
   (`$S0_BOOTSTRAP_HEAD`, `$EVIDENCE_DERIVATION_HEAD`, `$EVIDENCE_COMMIT`,
-  `$FREEZE_COMMIT`, `$WINDOW_CLOSE_HEAD`, `$FIXATION_COMMIT`,
+  `$FREEZE_COMMIT`, `$PINSET_MINT_HEAD`, `$FIXATION_COMMIT`,
   `$FORGED_ORIGIN_MAIN_OID`, `$PROBE_BASE`) are **appended** to it by
   `record_env` at the moment they are computed.
 - **Every command block below begins with the literal line**
@@ -1677,7 +1685,7 @@ PY
 
 Authority: MARKER-RULING split S-5; S-1 MANIFEST §§6 and 9.1 G-4; AUDIT F-1.
 
-### 3.7 Mint the versioned successor, close the 112-path window, then fix it
+### 3.7 Mint the versioned successor and close the 112-path allowlist contract
 
 The reviewed custody tool executes from the clone. Its exact interface:
 
@@ -1728,7 +1736,7 @@ checkout swapping, or network. K5 and K12 are load-bearing; K7 is layered
 bootstrap hardening, never sole closure. Authority: RH-8 ruled design items 1–8
 and normative annexes, especially consolidated items D2–D8 and D10–D15.
 
-**Step 2 — assert the minted shape and close the window.**
+**Step 2 — assert the minted shape and close the ALLOWLIST CONTRACT.**
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
@@ -1748,12 +1756,14 @@ PY
 git -C "$CLONE" diff --exit-code -- "$BASE_PINSET" || die 'the v1 pinset member was modified'
 git -C "$CLONE" add -- "$SUCCESSOR_PINSET"
 git -C "$CLONE" commit -m 'S-0 mint v4 historical-semantics successor pinset'
-WINDOW_CLOSE_HEAD=$(git -C "$CLONE" rev-parse HEAD)
-git -C "$CLONE" update-ref refs/heads/main "$WINDOW_CLOSE_HEAD"
-git -C "$CLONE" update-ref refs/remotes/origin/main "$WINDOW_CLOSE_HEAD"
-record_env WINDOW_CLOSE_HEAD "$WINDOW_CLOSE_HEAD"
-record_env PINSET_COMMIT "$WINDOW_CLOSE_HEAD"
-printf '%s\n' "$WINDOW_CLOSE_HEAD" > "$TRANS/071-window-close-head.txt"
+PINSET_MINT_HEAD=$(git -C "$CLONE" rev-parse HEAD)
+git -C "$CLONE" update-ref refs/heads/main "$PINSET_MINT_HEAD"
+git -C "$CLONE" update-ref refs/remotes/origin/main "$PINSET_MINT_HEAD"
+record_env PINSET_MINT_HEAD "$PINSET_MINT_HEAD"
+# PINSET_COMMIT is the same commit under its transaction-facing name; both are
+# recorded so downstream text can use whichever reads better at its site.
+record_env PINSET_COMMIT "$PINSET_MINT_HEAD"
+printf '%s\n' "$PINSET_MINT_HEAD" > "$TRANS/071-pinset-mint-head.txt"
 ```
 
 **Step 3 — close the contract at exactly 112 and verify the present chain.**
@@ -1763,7 +1773,7 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 "$PY" "$CUSTODY/tools/s0_allowlist_contract.py" \
   --registry "$REGISTRY" --repo "$CLONE" \
-  --derivation "$EVIDENCE_DERIVATION_HEAD" --head "$WINDOW_CLOSE_HEAD" \
+  --derivation "$EVIDENCE_DERIVATION_HEAD" --head "$PINSET_MINT_HEAD" \
   > "$TRANS/090-final-allowlist-contract.json" || die 'the 112-path window did not close; see 090'
 capture 072-histsem-present "$PY" "$CLONE/scripts/verify_receipt_histsem.py" \
   --repository-root "$CLONE" --require-published \
@@ -1780,94 +1790,15 @@ changed-set contract is a property of this closed window, not a standing
 repository invariant, and no authenticator path enters it. Authority: D-151
 conditions 2, 5, 7 and 8.
 
-**Step 4 — apply the reviewed fixation delta. This precedes the suite run.**
-
-The **first commit after window close** is the fixation commit. At this hard
-review boundary, apply the reviewed mechanical fixation delta committed beside
-this runsheet. Its digest was authenticated in §3.6.1 against both the manifest
-and its own GNU sidecar. The operator does not invent the edits at the bench:
-the delta owns them, and it substitutes exactly one value — the successor's
-SHA-256, which cannot exist before the mint. The delta's header explains that
-design choice in full.
-
-```zsh
-source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
-cd "$CLONE"
-
-test -z "$(git status --porcelain=v1)" || die 'tree is dirty before the fixation delta'
-git apply --check "$DELTA" || die 'the reviewed fixation delta does not apply cleanly: STOP'
-git apply "$DELTA"
-git diff --name-only > "$TRANS/073-fixation-changed-paths.txt"
-test "$(cat "$TRANS/073-fixation-changed-paths.txt")" = 'tests/test_receipt_histsem.py' \
-  || die 'the fixation delta touched something other than tests/test_receipt_histsem.py'
-```
-
-**Step 5 — substitute the one bench value and prove the substitution happened.**
-
-```zsh
-source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
-
-"$PY" - "$CLONE" > "$TRANS/074-successor-sha256.txt" <<'PY'
-import hashlib, pathlib, sys
-root = pathlib.Path(sys.argv[1])
-pinset = root / "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
-digest = hashlib.sha256(pinset.read_bytes()).hexdigest()
-target = root / "tests/test_receipt_histsem.py"
-text = target.read_text(encoding="utf-8")
-sentinel = '"S0-FIXATION-SUBSTITUTION-PENDING"'
-assert text.count(sentinel) == 1, f"sentinel appears {text.count(sentinel)} times"
-target.write_text(text.replace(sentinel, f'"{digest}"'), encoding="utf-8")
-print(digest)
-PY
-if grep -qF 'S0-FIXATION-SUBSTITUTION-PENDING' "$CLONE/tests/test_receipt_histsem.py"; then
-  die 'the fixation sentinel survived the substitution'
-fi
-grep -qF "$(cat "$TRANS/074-successor-sha256.txt")" "$CLONE/tests/test_receipt_histsem.py" \
-  || die 'the substituted successor digest is not present in the fixed test file'
-git -C "$CLONE" diff --name-only > "$TRANS/075-fixation-changed-paths-after-substitution.txt"
-test "$(cat "$TRANS/075-fixation-changed-paths-after-substitution.txt")" = 'tests/test_receipt_histsem.py' \
-  || die 'substitution widened the changed set'
-```
-
-**Step 6 — run the suite over the fixed file, then make the fixation commit.**
-
-```zsh
-source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
-cd "$CLONE"
-
-set +e
-"$PY" -m unittest -v tests.test_receipt_histsem \
-  > "$TRANS/076-histsem-differential-bytepin-tests.txt" 2>&1
-HISTSEM_RC=$?
-set -e
-test "$HISTSEM_RC" = 0 || die "post-fixation histsem suite failed with rc $HISTSEM_RC; see 076"
-
-git -C "$CLONE" diff --exit-code "$WINDOW_CLOSE_HEAD" -- "$BASE_PINSET" \
-  || die 'the v1 pinset member changed after window close'
-git -C "$CLONE" add -- tests/test_receipt_histsem.py
-git -C "$CLONE" commit -m 'S-0 fix successor pinset SHA and counts after window close'
-FIXATION_COMMIT=$(git -C "$CLONE" rev-parse HEAD)
-test "$(git -C "$CLONE" rev-list --count "$WINDOW_CLOSE_HEAD..$FIXATION_COMMIT")" = 1 \
-  || die 'the fixation commit is not the FIRST commit after window close'
-git -C "$CLONE" update-ref refs/heads/main "$FIXATION_COMMIT"
-git -C "$CLONE" update-ref refs/remotes/origin/main "$FIXATION_COMMIT"
-record_env FIXATION_COMMIT "$FIXATION_COMMIT"
-printf '%s\n' "$FIXATION_COMMIT" > "$TRANS/077-fixation-commit.txt"
-```
-
-**Step 7 — independent recomputation.** An independent reviewer recomputes the
-successor SHA-256 and its pack/receipt counts from the committed blob at
-`$FIXATION_COMMIT`, checks them against `074-successor-sha256.txt` and against
-the substituted literal in `tests/test_receipt_histsem.py`, and later checks the
-same SHA against Ed's exact step-6 table (§3.8). A mismatch is a mechanism
-failure, not an invitation to reseal.
-
-The local chain verification and fixation tests are necessary but remain
-forged-`origin/main`-conditional in this clone. Transcript labels must say
-exactly that; they must not say "suite green." R2's activation delta over the 21
-`S0-BLOCKED` methods is STRUCK (see §5.1): those are A84/A85 work and no
-activation edit over them belongs to the fixation commit. Authority: D-151
-conditions 3–4 and Consequences; S-1 MANIFEST §§9.3 and 9.3.5; AUDIT F-2.
+The 112-path allowlist contract is now closed at `$PINSET_MINT_HEAD`. **Fixation
+does NOT happen here.** Under D-153 A1 "window close" is the r4-3 commit-freeze
+close, and fixation is the first commit after *that*; the mint-side event this
+section performs is the ALLOWLIST-CONTRACT CLOSURE, whose head is
+`$PINSET_MINT_HEAD` (D-153 A6). The fixation steps therefore run at the very end
+of this runsheet, in §4.10, after the probe battery. Everything between here and
+there — the marker, the arm and verify, the local green record, and every probe
+— executes at `$PINSET_MINT_HEAD`, on a tree that does NOT yet contain the
+fixation commit. That is what makes the arm clean; see §3.9.
 
 ### 3.8 Family marker — D-150 option (a) only, custody-external
 
@@ -1894,7 +1825,7 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 mkdir -p "$CUSTODY/marker-candidate"
 "$PY" "$CLONE/scripts/build_family_marker.py" \
-  --repository "$CLONE" --head "$FIXATION_COMMIT" \
+  --repository "$CLONE" --head "$PINSET_MINT_HEAD" \
   --pack-root "$FIRST_PACK" --pack-root "$SECOND_PACK" --pack-root "$THIRD_PACK" \
   --output "$CUSTODY/marker-candidate/d117_family_publication_v4.json" \
   --phase candidate \
@@ -1954,7 +1885,7 @@ test "$(shasum -a 256 "$STEP6_CANDIDATE" | awk '{print $1}')" = "$ED_STEP6_CONFI
 
 "$PY" - "$CLONE" "$STEP6_CANDIDATE" \
   "$CUSTODY/marker-candidate/d117_family_publication_v4.json" \
-  "$SUCCESSOR_PINSET" "$FIXATION_COMMIT" <<'PY'
+  "$SUCCESSOR_PINSET" "$PINSET_MINT_HEAD" <<'PY'
 import hashlib,json,pathlib,sys
 root=pathlib.Path(sys.argv[1]); table_path=pathlib.Path(sys.argv[2])
 marker_path=pathlib.Path(sys.argv[3]); successor=sys.argv[4]; head=sys.argv[5]
@@ -2007,8 +1938,9 @@ table. Authority: D-151 conditions 2–3; MARKER-RULING ratified items 1–2.
 
 ### 3.9 Arm and verify all three after window closure and fixation
 
-The exact 112 window was already closed at `$WINDOW_CLOSE_HEAD` in §3.7; the
-post-window fixation commit does not retroactively enlarge it. This clone proof
+The exact 112 allowlist contract was closed at `$PINSET_MINT_HEAD` in §3.7, and
+this section runs at that same head: under D-153 the fixation commit is made
+last, in §4.10, so it is not present here and cannot enlarge anything. This clone proof
 may arm only after the exact marker and Ed-confirmed table have been placed in
 `$CUSTODY/windows/family_publication`. Any arm or verify result here is
 non-claim-bearing and forged-ref-conditional; publication acceptance is the
@@ -2035,7 +1967,10 @@ three** packs is a STOP, because then nothing was armed at all.
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 FINAL_HEAD=$(git -C "$CLONE" rev-parse HEAD)
-test "$FINAL_HEAD" = "$FIXATION_COMMIT" || die 'HEAD is not the fixation commit'
+# Under D-153 the arm runs at the ALLOWLIST-CONTRACT CLOSURE head, BEFORE the
+# fixation commit (which §4.10 makes last).  This is what makes the arm clean.
+test "$FINAL_HEAD" = "$PINSET_MINT_HEAD" \
+  || die 'HEAD is not the allowlist-contract closure head; fixation must not have run yet'
 record_env FINAL_HEAD "$FINAL_HEAD"
 record_env PROBE_BASE "$FINAL_HEAD"
 
@@ -2088,8 +2023,8 @@ legitimately present. Otherwise a **governed**, non-null arm receipt and
 canonical verify REFUSE (often `readiness_dependency_refused`) is acceptable;
 S-0 must not fabricate T0 or measurement evidence.
 
-**The eleven-kind census is not asserted at §3.9 under the interim ruling — but
-NOT because it is structurally unreachable there.** r4's first draft said it was,
+**The eleven-kind census IS asserted at §3.9, and it reaches the arm receipt by
+a route worth naming.** r4's first draft said it was,
 and the delta re-audit corrected that: `arm`'s own *discovery* does find zero
 generic items (it calls `_discover_evidence` with `include_pack=False`,
 `arm_readiness.py:7424`, and `_discover_evidence` drops the `PACK` namespace at
@@ -2107,11 +2042,10 @@ Two consequences, both binding:
   census pass. The generic receipts live in the pack, which is where the ruled
   design puts them; seeding would fabricate the artifacts the proof exists to
   authenticate.
-- **The census RETURNS to §3.9** if the pending D-151 condition-3 ruling
-  (packet 5) restores a clean arm. It is deferred, not retired. When that ruling
-  lands, the assertion to restore is `want <= kinds` over the arm receipt's
-  `evidence[].receipt_kind`, and it becomes meaningful the moment `freeze_items`
-  survives.
+- **The census has RETURNED.** Packet 5 (D-153) restored a clean arm by putting
+  fixation last, so `freeze_items` survives and `want <= kinds` over the arm
+  receipt's `evidence[].receipt_kind` is asserted in the clean-arm block below.
+  It was deferred for one revision, never retired.
 
 Meanwhile the eleven kinds are asserted where they are proven unconditionally,
 and both assertions already run earlier in this runsheet:
@@ -2129,56 +2063,44 @@ and both assertions already run earlier in this runsheet:
   against `d117_floor_qwen25_1p5b_v3/…/freeze-0003.json`: twelve items, eleven
   generic kinds).
 
-> **R4-O1 — RULED (interim), 2026-08-24. `DEPENDENCY_CHANGED_SET` is the
-> EXPECTED arm outcome at `$FIXATION_COMMIT`.** Surfaced while curing N-2, named
-> by neither r3 ratification seat, confirmed by the r4 delta re-audit. The
-> magistrate adopted candidate resolution (ii): the transaction accepts the
-> refusal as the pre-declared, governed consequence of fixation, and the proof
-> obligation moves from "no changed-set code" to **"the code refuses for exactly
-> the fixation path and nothing else."** This blockquote is retained as the
-> record; the earlier "do not execute §3.9" hold is DISCHARGED by that ruling.
+> **R4-O1 — RESOLVED by packet 5 (D-153), 2026-08-24.** Recorded here as the
+> instrument's own history, because the resolution changed what this section
+> asserts.
 >
-> *The trace.* At §3.9 the arm's reviewed head is `$FIXATION_COMMIT` and each
-> generic receipt's `derivation_commit` is `$EVIDENCE_DERIVATION_HEAD`.
-> `validate_r1_evidence_lifecycle` computes
-> `changed_paths = _r1_changed_paths(root, derivation_commit, current_head, …)`
-> and then `outstanding = set(changed_paths) - (allowlist - conditional)`,
-> `relevant = sorted(outstanding)`, `if relevant: raise … DEPENDENCY_CHANGED_SET`
-> (`:4336-4362`). There is **no** filter restricting the changed set to
-> pack-relevant paths: every changed path outside the 112 is `relevant`. The
-> fixation commit changes `tests/test_receipt_histsem.py`; the ruled allowlist is
-> 112 entries, all under `configs/` — verified: zero `tests/` entries. So
-> `relevant == ['tests/test_receipt_histsem.py']`.
+> *What it was.* Surfaced while curing N-2 and confirmed by the r4 delta
+> re-audit: r4 armed at `$FIXATION_COMMIT`, where
+> `tests/test_receipt_histsem.py` is a changed path outside the ruled 112 (all
+> 112 are under `configs/`), so `validate_r1_evidence_lifecycle` raised
+> `DEPENDENCY_CHANGED_SET` (`:4336-4362`) — which also emptied `freeze_items` at
+> `:7455-7457` and took the eleven kinds out of the arm receipt with it. The
+> interim ruling pre-declared that refusal as expected and pinned it to its
+> cause.
 >
-> *Why it is one defect, not two.* It is also the mechanism behind N-2, through
-> the `freeze_items = []` path at `:7455-7457` described above.
+> *What packet 5 settled.* D-153 finding 1: **the whole-tree R1 diff is intended
+> design, not a defect.** Packet 5 never reopened a wrong ruling — it repaired a
+> vocabulary collision and a sequencing trap around a correct gate. D-153
+> finding 2: "window close" is the r4-3 commit-freeze close, and binding it to
+> the mint commit is what created R4-O1; the mint-side head is renamed
+> `PINSET_MINT_HEAD` (A6). D-153 A1 puts fixation after the window, and this
+> runsheet consequently makes the fixation commit LAST, in §4.10.
 >
-> *What it touches, all annotated in place.* The forbidden-code block below;
-> §4(e.1)'s changed-set expectation; §5's r4-2 and V-1.vi boxes; §6's "an
-> ordinary non-allowlisted path crosses" clause.
->
-> *Scope of the interim ruling.* It governs **S-0, this clone proof, only.**
-> Whether D-151 condition 3 should be reopened so that the REAL transaction
-> arms cleanly is a SEPARATE cold process (packet 5) which gates the real
-> transaction and not this runsheet. S-0 executes now under the form below.
+> *What follows for this section.* The arm now runs at `$PINSET_MINT_HEAD`, a
+> head with no fixation commit on it, so the changed set is fully allowlisted,
+> the residue is EMPTY, `$CHANGED_CODE` does not appear, and `freeze_items`
+> survives — which means **the eleven-kind census RETURNS** (D-153 W2). The
+> interim form's expected-refusal machinery is gone; what replaces it is the
+> clean-arm block below, which asserts the positive outcome directly.
 
-**The positive obligation.** A bare "the changed-set code appeared" proves
-nothing — it is satisfied equally by the fixation path and by a genuine
-mechanism failure. The refusal must be pinned to its cause. Note a code fact
-that shapes how: `EvidenceLifecycleError.refusal()` returns only
-`{type, code, row_id, evidence_id}` (`:1071-1077`) and `_receipt_refusal` the
-same (`:4766-4778`), so **the refused path list is not carried in the receipt or
-in the CLI payload** — the `relevant!r` list lives only in the discarded
-exception message. The obligation is therefore discharged by recomputing the
-gate's own arithmetic from primary evidence — the registry allowlist, the real
-constant, and `git diff` — and requiring the residue to be exactly the fixation
-path.
+**The clean-arm block.** Three assertions, all now achievable because fixation
+has not yet happened. The residue computation is the same arithmetic the gate
+itself runs (`arm_readiness.py:4336-4362`), recomputed from primary evidence —
+the registry allowlist, the real digest-conditional constant, and `git diff`.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
-"$PY" - "$CLONE" "$REGISTRY" "$EVIDENCE_DERIVATION_HEAD" "$FIXATION_COMMIT" \
-  > "$TRANS/098-r4o1-changed-set-residue.json" <<'PY'
+"$PY" - "$CLONE" "$REGISTRY" "$EVIDENCE_DERIVATION_HEAD" "$PINSET_MINT_HEAD" \
+  > "$TRANS/098-clean-arm-residue.json" <<'PY'
 import json, pathlib, subprocess, sys
 clone, registry_path, derivation, head = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 sys.path.insert(0, clone)
@@ -2197,78 +2119,22 @@ changed = sorted(item for item in raw.decode().split("\0") if item)
 
 # Exactly the gate's arithmetic at arm_readiness.py:4336-4362.
 outstanding = set(changed) - (allowlist - conditional)
-# Ed's confirmed table discharges the digest-conditional member; what is left
-# is what the gate reports as `relevant`.
+# Ed's confirmed table discharges the digest-conditional member.
 residue = sorted(outstanding - conditional)
 
-expected = ["tests/test_receipt_histsem.py"]
-assert residue == expected, {"residue": residue, "expected": expected}
+assert residue == [], {
+    "residue": residue,
+    "meaning": "a path outside the ruled 112 changed between the derivation head "
+               "and the allowlist-contract closure; under D-153 this head must be "
+               "clean, so this is a mechanism failure",
+}
 print(json.dumps({"status": "PASS", "changed_paths": len(changed),
-                  "allowlisted": len(allowlist), "residue": residue,
-                  "ruling": "R4-O1 interim: this residue is the EXPECTED cause of "
-                            "DEPENDENCY_CHANGED_SET at the fixation head"},
+                  "allowlisted": len(allowlist), "residue": [],
+                  "ruling": "D-153: at PINSET_MINT_HEAD the changed set is fully "
+                            "allowlisted; the arm is clean"},
                  indent=2, sort_keys=True))
 PY
 ```
-
-If the residue is anything other than exactly `['tests/test_receipt_histsem.py']`
-— an extra path, a missing one, an empty list — the interim ruling does not
-cover it and this is a STOP under §6 mechanism failures. An empty residue at the
-fixation head would mean the gate refused for a reason nobody has identified.
-
-**The isolating diagnostic.** The pair of assertions is what isolates the
-fixation commit as the sole cause: the residue is exactly the fixation path at
-`$FIXATION_COMMIT`, and it is EMPTY one commit earlier. The second half runs a
-throwaway `new_case` at `$WINDOW_CLOSE_HEAD` — diagnostic only, never promoted,
-never custody for any claim.
-
-```zsh
-source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
-
-CASE=$(new_case r4o1-window-close-diagnostic "$WINDOW_CLOSE_HEAD")
-
-"$PY" - "$CASE" "$REGISTRY" "$EVIDENCE_DERIVATION_HEAD" "$WINDOW_CLOSE_HEAD" \
-  > "$TRANS/099-r4o1-window-close-residue.json" <<'PY'
-import json, pathlib, subprocess, sys
-case, registry_path, derivation, head = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-sys.path.insert(0, case)
-from joulewise import arm_readiness as r
-
-lifecycle = json.loads(pathlib.Path(registry_path).read_bytes())["freeze_evidence_lifecycle"]
-allowlist = set(lifecycle["irrelevant_path_allowlist"])
-conditional = allowlist & set(r.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
-raw = subprocess.run(["git", "-C", case, "diff", "--name-only", "-z",
-                      f"{derivation}..{head}", "--"],
-                     check=True, capture_output=True).stdout
-changed = sorted(item for item in raw.decode().split("\0") if item)
-residue = sorted((set(changed) - (allowlist - conditional)) - conditional)
-assert residue == [], {"residue": residue,
-                       "meaning": "the window did NOT close at exactly 112"}
-print(json.dumps({"status": "PASS", "changed_paths": len(changed), "residue": [],
-                  "meaning": "at window close the changed set is fully allowlisted; "
-                             "the fixation commit is the sole cause of R4-O1"},
-                 indent=2, sort_keys=True))
-PY
-
-# The live arm at the same head confirms the arithmetic against the code itself.
-capture 099-r4o1-diagnostic-arm "$PY" "$CASE/scripts/generate_arm_readiness.py" arm \
-  --pack-root "$CASE/$FIRST_PACK" --arm-context "$ARM_CONTEXT" \
-  --window-custody-root "$CUSTODY/windows"
-no_traceback 099-r4o1-diagnostic-arm || die 'diagnostic arm failed ugly'
-if grep -F "$CHANGED_CODE" "$TRANS/099-r4o1-diagnostic-arm.stdout.json" > /dev/null; then
-  die "R4-O1 diagnostic: the changed-set code fires at WINDOW_CLOSE_HEAD too, so the fixation commit is NOT the sole cause"
-fi
-```
-
-This diagnostic arm is EXPECTED to refuse for other reasons — the marker and
-Ed's table were built at `$FIXATION_COMMIT`, so the family-publication gate
-refuses at a head that predates them. That is pre-declared and is not a finding.
-The only thing asserted here is the ABSENCE of `$CHANGED_CODE`.
-
-**What the arm side then proves.** `$MANIFEST_CODE` must not appear; no
-traceback occurs; an arm receipt is written; and `$CHANGED_CODE` appears if and
-only if the residue above is exactly the fixation path. Resolve the two
-candidate-owned spellings mechanically:
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
@@ -2277,19 +2143,17 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 import json,pathlib,sys
 reg=json.load(open(sys.argv[1]))["freeze_evidence_lifecycle"]
 codes={x["role"]:x["code"] for x in reg["refusal_vocabulary"]}
-# R4-O1 interim ruling: DEPENDENCY_CHANGED_SET is the EXPECTED outcome at the
-# fixation head and is pinned to its cause by transcript 098 (the residue is
-# exactly tests/test_receipt_histsem.py).  DEPENDENCY_MANIFEST stays forbidden:
-# nothing in the ruling licenses a manifest-binding failure.
-expected={codes["DEPENDENCY_CHANGED_SET"]}
-bad={codes["DEPENDENCY_MANIFEST"]}
+# D-153: BOTH R1 codes are forbidden at a clean arm.  The interim ruling's
+# "CHANGED_SET is expected" is withdrawn -- it was an artifact of arming at the
+# fixation commit, which this runsheet no longer does.
+bad={codes["DEPENDENCY_CHANGED_SET"],codes["DEPENDENCY_MANIFEST"]}
+want={"ACCEPTANCE_OWNER","DOCTRINE_PIN","ESTIMATOR_IDENTITY","MINT_TRUST",
+"MULTICELL_MINT","PACK_AUTHENTICATION","PACK_FAMILY","REASON_CODE_COVERAGE",
+"RECEIPT_ORACLE","RECOVERY_LEDGER_TEST","THREE_WINDOW_REGRESSION"}
 root=pathlib.Path(sys.argv[2])
-# arm-0001 ONLY.  Section 4(e.1)'s probe 123 arms against this SAME custody
-# root -- it must, because the marker and Ed's table live here -- and mints
-# arm-0002, which supersedes arm-0001 (arm_readiness.py:7534-7545).  A bare
-# arm-*.json glob re-read after section 4 would therefore read a PROBE receipt
-# as transaction evidence.  Pinning the ordinal keeps this block re-runnable at
-# any later point in the proof.
+# arm-0001 ONLY: section 4(e.1)'s probe mints arm-0002 into this same custody
+# root (recorded there as deliberate custody mixing), so a bare arm-*.json glob
+# would read a PROBE receipt as transaction evidence.
 receipts=sorted(root.glob("*/arm_readiness.receipts/arm-0001.json"))
 assert receipts, "no transaction arm receipt (arm-0001) under the window custody root"
 seen=0
@@ -2298,14 +2162,23 @@ for path in receipts:
  present={r["code"] for r in d["refusals"]}
  forbidden=sorted(bad & present)
  assert not forbidden, (str(path), forbidden)
+ # THE ELEVEN-KIND CENSUS, RETURNED (D-153 W2).  The kinds reach the arm
+ # receipt through the freeze-item merge at arm_readiness.py:7465, which
+ # survives now that no R1 refusal empties freeze_items.
+ kinds={e.get("receipt_kind") for e in d["evidence"]}
+ assert want <= kinds, (str(path), sorted(want-kinds))
  seen+=1
 print(json.dumps({"status":"PASS","transaction_arm_receipts":seen,
- "ordinal_pinned":"arm-0001","crossed_actual_gate":"arm_readiness.py:4340-4362",
- "forbidden_codes":sorted(bad),"expected_under_r4o1":sorted(expected),
- "changed_set_cause_pinned_by":"098-r4o1-changed-set-residue.json"},
- indent=2, sort_keys=True))
+ "ordinal_pinned":"arm-0001","eleven_kind_census":"PASS (returned under D-153)",
+ "crossed_actual_gate":"arm_readiness.py:4340-4362",
+ "forbidden_codes":sorted(bad)}, indent=2, sort_keys=True))
 PY
 ```
+
+**What the arm side then proves, under D-153.** Neither `$CHANGED_CODE` nor
+`$MANIFEST_CODE` appears; the residue at `$PINSET_MINT_HEAD` is empty; the arm
+receipt carries all eleven generic `receipt_kind` values; no traceback occurs;
+and an arm receipt is written. The two blocks above assert exactly that.
 
 Authority: R4 r4-2; R5 V-1.iii, V-2; actual changed-set site
 `arm_readiness.py:4340-4362`; CLI exit semantics
@@ -2414,9 +2287,8 @@ inventory check **appends** to the governed refusal list rather than raising —
 `return 0 if result.get("status") not in {"REFUSE"} else 1`
 (`scripts/generate_arm_readiness.py:186`), i.e. **rc 1**. rc 2 would mean a
 raised `ArmReadinessError` — a different, non-governed path — and is a failure
-of this probe, not a pass. Note that under R4-O1 this arm will also carry
-`$CHANGED_CODE`; refusals accumulate, so the `readiness_evidence_unreadable`
-assertion below is unaffected either way. Nothing in the repository is modified, so this probe proves
+of this probe, not a pass. Under D-153 this arm carries no R1 code at all, so
+`readiness_evidence_unreadable` is the refusal under test in isolation. Nothing in the repository is modified, so this probe proves
 exactly what r2's prose claimed: a governed arm REFUSE naming
 `readiness_evidence_unreadable`, an external refusal receipt, and an unchanged
 pack snapshot.
@@ -2699,26 +2571,28 @@ set -e
 test "$CTOS_RC" = 0 || die "C-to-S unit probes failed with rc $CTOS_RC; see 122"
 
 # Transaction PASS side: section 3.9's 091-* arms used Ed's exact table at
-# $CUSTODY/windows/family_publication.  (under R4-O1 -- see 3.9) The PASS-side
-# property is NOT "no changed-set code": R4-O1 makes that code the expected
-# consequence of the fixation commit.  What the C->S edge actually claims is
-# that Ed's exact table DISCHARGED the digest-conditional successor, i.e. the
-# successor path is absent from the gate's residue.  Transcript 098 computes
-# that residue with the gate's own arithmetic, so assert against it.
+# $CUSTODY/windows/family_publication.  (D-153) Under the clean arm the PASS
+# side is BOTH properties at once: no changed-set code appears in any arm
+# transcript, AND Ed's exact table discharged the digest-conditional successor,
+# i.e. the successor path is absent from the gate's residue (which is empty).
+# Transcript 098 computes that residue with the gate's own arithmetic.
 checked=0
 for p in "$TRANS"/091-arm-*.stdout.json; do
   test -s "$p" || die "arm transcript $p is empty"
+  if grep -F "$CHANGED_CODE" "$p" > /dev/null; then
+    die "arm transcript $p carries the changed-set code; under D-153 the arm at PINSET_MINT_HEAD must be clean"
+  fi
   checked=$((checked + 1))
 done
 test "$checked" = 3 || die "checked $checked arm transcripts, expected 3"
-"$PY" - "$TRANS/098-r4o1-changed-set-residue.json" "$SUCCESSOR_PINSET" <<'PY'
+"$PY" - "$TRANS/098-clean-arm-residue.json" "$SUCCESSOR_PINSET" <<'PY'
 import json, sys
 residue = json.load(open(sys.argv[1]))["residue"]
 successor = sys.argv[2]
 assert successor not in residue, (
     "the successor pinset is in the changed-set residue: Ed's confirmed table "
     "did NOT discharge the digest-conditional path", residue)
-assert residue == ["tests/test_receipt_histsem.py"], residue
+assert residue == [], residue
 print(json.dumps({"status": "PASS",
                   "c_to_s_edge": "successor discharged by Ed's confirmed digest",
                   "residue": residue}, indent=2, sort_keys=True))
@@ -2761,11 +2635,11 @@ no_traceback 123-c-to-s-later-rewrite || die 'C-to-S rewrite probe traceback'
 ```
 
 Pass iff the valid transaction crosses the changed-set gate only against Ed's
-exact table digest **(under R4-O1 — see §3.9: "crosses" here means the successor
-path is discharged out of the gate's residue, not that the changed-set code is
-absent; the fixation path keeps it present)**, while the later committed rewrite
-is refused by `DEPENDENCY_CHANGED_SET` before it can be forgiven by allowlist
-membership. The
+exact table digest **(D-153: at `$PINSET_MINT_HEAD` the residue is empty and no
+arm transcript carries the changed-set code, so "crosses" means both that the
+successor was discharged and that nothing else was outstanding)**, while the
+later committed rewrite is refused by `DEPENDENCY_CHANGED_SET` before it can be
+forgiven by allowlist membership. The
 table and its sidecar are immutable during the probe. Authority: D-151
 condition 2; `docs/contracts/d117_step6_confirmation_table.md` "Where the
 `C → S` edge is enforced."
@@ -2908,8 +2782,8 @@ expect_rc 131-histsem-out-of-enumeration 2 || die 'the override probe did not ex
 ```
 
 Pass iff the closed v1→successor chain verifies, arms cross the actual
-changed-set gate only under the confirmed C→S condition **(under R4-O1 — see
-§3.9)**, an absent **enumerated**
+changed-set gate only under the confirmed C→S condition **(D-153: cleanly, at
+`$PINSET_MINT_HEAD`)**, an absent **enumerated**
 member produces `histsem_pinset_absent`, an out-of-enumeration override produces
 `histsem_pinset_invalid`, and all three malformed candidate variants of §4(d)
 fail. D-151 condition 6 preserves the rule-11 clarification unchanged: an absent
@@ -2955,6 +2829,121 @@ reopens the mechanism. Authority: R4 r4-2 poison question; R5 V-2;
 
 ---
 
+### 4.10 FIXATION — the last commit of the clone proof
+
+**Ordering note: this placement is CLONE-PROOF-ONLY.** In S-0 the fixation
+commit is made *after* the probe battery, so that the marker, the arm and
+verify, the local green record and every probe in §4 all run at
+`$PINSET_MINT_HEAD` — a tree that does not yet contain
+`tests/test_receipt_histsem.py`'s fixation edit. That is what makes the arm
+clean and is the direct cure for R4-O1 (§3.9).
+
+**The REAL transaction does not do this.** Under D-153 A1 the real transaction
+fixates POST-WINDOW: "window close" is the r4-3 commit-freeze close, and the
+fixation commit is the first commit after it. S-0's late placement is an
+artifact of the clone proof needing to exercise arm, verify and the probes
+against the contract head; it is not a claim about transaction sequencing and
+must not be cited as one. Authority: D-153 A1 and A6; D-151 condition 3 as
+amended.
+
+The delta this applies is the post-D-153 one: it carries ONLY the hS byte pin
+and its loud-fail sentinel guard. Every digest-independent consequence of the
+chain read now lives in the pre-derivation candidate (D-153 A2), so nothing
+mint-falsifiable sits in this commit.
+
+**Step 1 — apply the reviewed fixation delta. This precedes the suite run.**
+
+The fixation commit is the first commit after the ALLOWLIST-CONTRACT CLOSURE in
+this clone proof, and it is made only now, after the probe battery. At this hard
+review boundary, apply the reviewed mechanical fixation delta committed beside
+this runsheet. Its digest was authenticated in §3.6.1 against both the manifest
+and its own GNU sidecar. The operator does not invent the edits at the bench:
+the delta owns them, and it substitutes exactly one value — the successor's
+SHA-256, which cannot exist before the mint. The delta's header explains that
+design choice in full.
+
+```zsh
+source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+cd "$CLONE"
+
+test -z "$(git status --porcelain=v1)" || die 'tree is dirty before the fixation delta'
+git apply --check "$DELTA" || die 'the reviewed fixation delta does not apply cleanly: STOP'
+git apply "$DELTA"
+git diff --name-only > "$TRANS/073-fixation-changed-paths.txt"
+test "$(cat "$TRANS/073-fixation-changed-paths.txt")" = 'tests/test_receipt_histsem.py' \
+  || die 'the fixation delta touched something other than tests/test_receipt_histsem.py'
+```
+
+**Step 2 — substitute the one bench value and prove the substitution happened.**
+
+```zsh
+source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+"$PY" - "$CLONE" > "$TRANS/074-successor-sha256.txt" <<'PY'
+import hashlib, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+pinset = root / "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
+digest = hashlib.sha256(pinset.read_bytes()).hexdigest()
+target = root / "tests/test_receipt_histsem.py"
+text = target.read_text(encoding="utf-8")
+sentinel = '"S0-FIXATION-SUBSTITUTION-PENDING"'
+assert text.count(sentinel) == 1, f"sentinel appears {text.count(sentinel)} times"
+target.write_text(text.replace(sentinel, f'"{digest}"'), encoding="utf-8")
+print(digest)
+PY
+if grep -qF 'S0-FIXATION-SUBSTITUTION-PENDING' "$CLONE/tests/test_receipt_histsem.py"; then
+  die 'the fixation sentinel survived the substitution'
+fi
+grep -qF "$(cat "$TRANS/074-successor-sha256.txt")" "$CLONE/tests/test_receipt_histsem.py" \
+  || die 'the substituted successor digest is not present in the fixed test file'
+git -C "$CLONE" diff --name-only > "$TRANS/075-fixation-changed-paths-after-substitution.txt"
+test "$(cat "$TRANS/075-fixation-changed-paths-after-substitution.txt")" = 'tests/test_receipt_histsem.py' \
+  || die 'substitution widened the changed set'
+```
+
+**Step 3 — run the suite over the fixed file, then make the fixation commit.**
+
+```zsh
+source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+cd "$CLONE"
+
+set +e
+"$PY" -m unittest -v tests.test_receipt_histsem \
+  > "$TRANS/076-histsem-differential-bytepin-tests.txt" 2>&1
+HISTSEM_RC=$?
+set -e
+test "$HISTSEM_RC" = 0 || die "post-fixation histsem suite failed with rc $HISTSEM_RC; see 076"
+
+git -C "$CLONE" diff --exit-code "$PINSET_MINT_HEAD" -- "$BASE_PINSET" \
+  || die 'the v1 pinset member changed after window close'
+git -C "$CLONE" add -- tests/test_receipt_histsem.py
+git -C "$CLONE" commit -m 'S-0 fix successor pinset SHA and counts after window close'
+FIXATION_COMMIT=$(git -C "$CLONE" rev-parse HEAD)
+test "$(git -C "$CLONE" rev-list --count "$PINSET_MINT_HEAD..$FIXATION_COMMIT")" = 1 \
+  || die 'the fixation commit is not the FIRST commit after the allowlist-contract closure'
+git -C "$CLONE" update-ref refs/heads/main "$FIXATION_COMMIT"
+git -C "$CLONE" update-ref refs/remotes/origin/main "$FIXATION_COMMIT"
+record_env FIXATION_COMMIT "$FIXATION_COMMIT"
+printf '%s\n' "$FIXATION_COMMIT" > "$TRANS/077-fixation-commit.txt"
+```
+
+**Step 4 — independent recomputation.** An independent reviewer recomputes the
+successor SHA-256 and its pack/receipt counts from the committed blob at
+`$FIXATION_COMMIT`, checks them against `074-successor-sha256.txt` and against
+the substituted literal in `tests/test_receipt_histsem.py`, and later checks the
+same SHA against Ed's exact step-6 table (§3.8). A mismatch is a mechanism
+failure, not an invitation to reseal.
+
+The local chain verification and fixation tests are necessary but remain
+forged-`origin/main`-conditional in this clone. Transcript labels must say
+exactly that; they must not say "suite green." R2's activation delta over the 21
+`S0-BLOCKED` methods is STRUCK (see §5.1): those are A84/A85 work and no
+activation edit over them belongs to the fixation commit. Authority: D-151
+conditions 3–4 and Consequences; S-1 MANIFEST §§9.3 and 9.3.5; AUDIT F-2.
+
+
+---
+
 # 5. ACCEPTANCE CHECKLIST
 
 Evidence root: `$CUSTODY/transcripts` (all referenced artifacts are clone-proof
@@ -2964,10 +2953,10 @@ reading its named artifacts.
 - [ ] **r4-2** — One full three-pack sequence is evidenced by `030-*`, `031-*`,
   `032-*`, `040-*`, `042-*`, `050-*`, `060-*`, `061-*`, `070-*`–`077-*`,
   `080-*`, `081-*`, `082-*`, `084-*`, `085-*`, `090-*`, `091-*`, `092-*` and
-  `097-*` (there is no `083-*`: no step produces one), plus `098-*`/`099-*`;
-  every pack crosses the actual changed-set gate **(under R4-O1 — see §3.9: the
-  expected refusal is pinned to its cause by `098-*`, and `099-*` isolates the
-  fixation commit as the sole cause)**; ordinary path, both unexpected-output namespaces,
+  `097-*` (there is no `083-*`: no step produces one), plus `098-*`;
+  every pack crosses the actual changed-set gate CLEANLY **(D-153: the residue at
+  `$PINSET_MINT_HEAD` is empty, no arm transcript carries the changed-set code,
+  and the eleven-kind census has returned)**; ordinary path, both unexpected-output namespaces,
   both plan-tree directions, candidate-shape triplet, C→S, and poison probes
   adjudicate as specified. Every cardinality assertion (`3` packs, `8` tamper
   classes, `3` arm transcripts) is recorded, not assumed.
@@ -2977,8 +2966,8 @@ reading its named artifacts.
 - [ ] **V-1.vi / D-151 C→S** — All eight path classes in `110-*` and `118-*`
   have independent tamper refusals, including the two manifest halves;
   `122-*`/`123-*` prove that successor subtraction is conditional on Ed's exact
-  table digest and that a later rewrite refuses **(under R4-O1 — see §3.9; the
-  subtraction is evidenced by the successor's ABSENCE from `098-*`'s residue)**;
+  table digest and that a later rewrite refuses **(D-153; the subtraction is
+  evidenced by the successor's ABSENCE from `098-*`'s empty residue)**;
   any unauthenticated class has
   triggered the derived-manifest reopen rather than being waived. Authority:
   D-151 condition 2.
@@ -3044,10 +3033,9 @@ over them belongs to the S-0 fixation commit, and S-0 does not run a
 # 6. FAILURE SEMANTICS
 
 **Mechanism failures — trip V-1.vi and REOPEN to the derived authenticated
-manifest.** An ordinary non-allowlisted path crosses **(under R4-O1 — see
-§3.9: `tests/test_receipt_histsem.py` at the fixation head is the one
-pre-declared, ruled exception, and it must REFUSE, not cross; anything else
-appearing in `098-*`'s residue is this failure)**; an unexpected evidence
+manifest.** An ordinary non-allowlisted path crosses **(D-153: at
+`$PINSET_MINT_HEAD` the residue must be EMPTY; anything appearing in `098-*`'s
+residue is this failure)**; an unexpected evidence
 output is accepted in either namespace; either current or sibling coherent
 non-freeze plan mutation crosses R1; any missing/extra/unused candidate variant
 is accepted; any one of the eight allowlisted classes lacks an independent
@@ -3105,7 +3093,9 @@ R-5; custody 035.
 
 O-1-D is controlling: the successor path replaces v1 in the 112-member contract;
 S-0 mints into the successor; subtraction is conditional on Ed's unified-table
-C→S edge; and fixation is the first commit after window close. The refuted
+C→S edge; and fixation is the first commit after window close — which D-153 A1
+binds to the r4-3 COMMIT-FREEZE close, not to the mint (this clone proof's own
+late placement in §4.10 is clone-proof-only). The refuted
 113-path/test-source option is not an alternate lane. Authority: D-151 Ruling
 and Consequences.
 

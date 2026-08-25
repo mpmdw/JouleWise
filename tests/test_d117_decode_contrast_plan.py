@@ -9,6 +9,7 @@ import subprocess
 import sys
 import re
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from typing import Any, Iterable
@@ -57,20 +58,230 @@ EXACT_SHAS = {
 FROZEN_GENERATOR_SHA256 = "550035ae92199185e9ad21ae0277593e4821c1788f645ee5345bd6d3268a1c09"
 POSITIONS = ["A1", "B1", "B2", "A2"]
 LABELS = ["A", "B", "B", "A"]
+_INVENTORY_EXCLUDED_DIR_NAMES = frozenset({".git", "__pycache__"})
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _inventory_walk_error(error: OSError) -> None:
+    raise error
+
+
 def checkout_inventory(root: Path) -> set[Path]:
-    return {
-        path.relative_to(root)
-        for path in root.rglob("*")
-        if path.is_file()
-        and ".git" not in path.parts
-        and "__pycache__" not in path.parts
-    }
+    """Return an exact inventory by pruning only already-excluded subtrees.
+
+    Pruning is exact rather than tolerant: excluded directories could never
+    contribute a result, while errors anywhere still walked are re-raised.
+    """
+    inventory: set[Path] = set()
+    for dirpath, dirnames, filenames in os.walk(
+        root, topdown=True, onerror=_inventory_walk_error
+    ):
+        dirnames[:] = [
+            d for d in dirnames if d not in _INVENTORY_EXCLUDED_DIR_NAMES
+        ]
+        for filename in filenames:
+            path = Path(dirpath) / filename
+            if (
+                path.is_file()
+                and ".git" not in path.parts
+                and "__pycache__" not in path.parts
+            ):
+                inventory.add(path.relative_to(root))
+    return inventory
+
+
+class _MaterializedScandir:
+    def __init__(self, entries: list[os.DirEntry[str]]) -> None:
+        self._entries = iter(entries)
+
+    def __iter__(self) -> _MaterializedScandir:
+        return self
+
+    def __next__(self) -> os.DirEntry[str]:
+        return next(self._entries)
+
+    def __enter__(self) -> _MaterializedScandir:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        pass
+
+
+class _VanishingDirectoryHarness:
+    def __init__(
+        self,
+        test_case: unittest.TestCase,
+        victim_dir: Path,
+    ) -> None:
+        self._test_case = test_case
+        self._victim_dir = victim_dir
+        self._real_scandir = os.scandir
+        self.scandir_paths: list[Path] = []
+        self.vanish_now = threading.Event()
+        self.vanished = threading.Event()
+        self.hook_fired = False
+        self.worker_errors: list[BaseException] = []
+        self._patcher = mock.patch("os.scandir", self._scandir)
+        self._worker = threading.Thread(target=self._remove_victim)
+
+    def _scandir(self, path: os.PathLike[str] | str) -> _MaterializedScandir:
+        scandir_path = Path(path)
+        self.scandir_paths.append(scandir_path)
+        if scandir_path == self._victim_dir and not self.hook_fired:
+            self.hook_fired = True
+            self.vanish_now.set()
+            self._test_case.assertTrue(
+                self.vanished.wait(timeout=5.0),
+                "victim directory did not vanish before traversal resumed",
+            )
+        with self._real_scandir(path) as real_it:
+            entries = list(real_it)
+        return _MaterializedScandir(entries)
+
+    def _remove_victim(self) -> None:
+        self.vanish_now.wait(timeout=5.0)
+        if self.hook_fired:
+            try:
+                # Keep rmtree's private fd-based scandir calls outside the
+                # traversal hook while the inventory thread is paused.
+                with mock.patch("os.scandir", self._real_scandir):
+                    shutil.rmtree(self._victim_dir)
+            except BaseException as error:
+                self.worker_errors.append(error)
+            finally:
+                self.vanished.set()
+
+    def __enter__(self) -> _VanishingDirectoryHarness:
+        self._patcher.start()
+        self._worker.start()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.vanish_now.set()
+        self._worker.join(timeout=5.0)
+        self._patcher.stop()
+        self._test_case.assertFalse(
+            self._worker.is_alive(), "directory-removal worker did not stop"
+        )
+        self._test_case.assertEqual([], self.worker_errors)
+
+
+class CheckoutInventoryWalkTests(unittest.TestCase):
+    _INVENTORY_FILES = (
+        Path("a.txt"),
+        Path("sub/b.txt"),
+        Path("sub/deep/c.txt"),
+        Path("sub/deep/d.txt"),
+        Path(".git/objects/19/object"),
+        Path(".git/objects/2a/object"),
+        Path(".git/objects/pack/pack-file"),
+        Path("sub/.git/objects/aa/object"),
+        Path("__pycache__/x.pyc"),
+    )
+
+    def _build_inventory_tree(self, root: Path) -> None:
+        for relative in self._INVENTORY_FILES:
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(relative.as_posix(), encoding="utf-8")
+
+    def test_git_object_store_is_never_walked_and_cannot_toll_the_inventory(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._build_inventory_tree(root)
+            # Hosted provenance: run 32745254371 attempt 1, job
+            # `test (3.11, 3)`, FileNotFoundError: [Errno 2] No such file or
+            # directory: '/tmp/d117-downgrade-guard-0jnss73p/.git/objects/19'.
+            with _VanishingDirectoryHarness(
+                self,
+                root / ".git" / "objects" / "19",
+            ) as race:
+                inventory = checkout_inventory(root)
+
+            self.assertEqual(
+                {
+                    Path("a.txt"),
+                    Path("sub/b.txt"),
+                    Path("sub/deep/c.txt"),
+                    Path("sub/deep/d.txt"),
+                },
+                inventory,
+            )
+            excluded_roots = (
+                root / ".git",
+                root / "sub" / ".git",
+                root / "__pycache__",
+            )
+            for scandir_path in race.scandir_paths:
+                self.assertFalse(
+                    any(
+                        scandir_path == excluded_root
+                        or excluded_root in scandir_path.parents
+                        for excluded_root in excluded_roots
+                    ),
+                    f"excluded subtree was walked: {scandir_path}",
+                )
+            # Not firing is the green result: pruning removes the race window.
+            self.assertFalse(race.hook_fired)
+
+    def test_inventory_raises_when_a_real_directory_vanishes_mid_walk(self) -> None:
+        with tempfile.TemporaryDirectory() as untouched_temp_dir:
+            untouched_root = Path(untouched_temp_dir)
+            self._build_inventory_tree(untouched_root)
+            untouched_inventory = checkout_inventory(untouched_root)
+            # A blanket FileNotFoundError catch or non-raising onerror would
+            # silently drop exactly sub/deep/c.txt and sub/deep/d.txt.
+            self.assertIn(Path("sub/deep/c.txt"), untouched_inventory)
+            self.assertIn(Path("sub/deep/d.txt"), untouched_inventory)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._build_inventory_tree(root)
+            with _VanishingDirectoryHarness(
+                self,
+                root / "sub" / "deep",
+            ) as race:
+                with self.assertRaises(FileNotFoundError):
+                    checkout_inventory(root)
+
+            self.assertTrue(race.hook_fired)
+
+    def test_inventory_matches_the_rglob_semantics_it_replaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            for relative in (
+                Path("regular.txt"),
+                Path("target.txt"),
+                Path("real-directory/inside.txt"),
+                Path(".git/objects/hidden"),
+                Path("__pycache__/hidden.pyc"),
+            ):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(relative.as_posix(), encoding="utf-8")
+            (root / "empty-directory").mkdir()
+            (root / "file-link").symlink_to("target.txt")
+            (root / "directory-link").symlink_to(
+                "real-directory", target_is_directory=True
+            )
+            (root / "dangling-link").symlink_to("missing.txt")
+
+            original_inventory = {
+                path.relative_to(root)
+                for path in root.rglob("*")
+                if path.is_file()
+                and ".git" not in path.parts
+                and "__pycache__" not in path.parts
+            }
+            self.assertEqual(original_inventory, checkout_inventory(root))
 
 
 def initialize_git_tracked_checkout(
