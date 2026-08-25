@@ -1005,7 +1005,7 @@ The manifest digest is the candidate-mode tool authority. Sidecars prove
 transfer integrity, but the executing marker tools are authenticated against the
 already-written `s0-candidate-manifest.json` `custody_tools` digests, never
 against committed blobs and never by recomputing a self-authenticating sidecar
-(`arm_readiness.py:10335-10436`). Production and publication phases retain
+(`arm_readiness.py:10348-10436`). Production and publication phases retain
 committed-blob equality. Because the manifest is generated from the committed
 bytes at `$BASE`, that equality is exact by construction; what §3.6.1 then
 proves is that the executing worktree files were not modified after the manifest
@@ -1669,7 +1669,7 @@ V-1.v; RH-8.
 Every custody tool executes from `$CLONE/scripts/`. Before the first one runs,
 each executing file's SHA-256 must equal the digest the reviewed manifest
 records for its repo-relative path. This is the same comparison the library
-performs internally in candidate mode (`arm_readiness.py:10335-10436`); doing it
+performs internally in candidate mode (`arm_readiness.py:10348-10436`); doing it
 here first means a mismatch stops S-0 at a named step instead of surfacing as a
 `tool_mismatch` refusal in the middle of the marker build.
 
@@ -1692,7 +1692,7 @@ for relative, digest in sorted(recorded.items()):
     actual = hashlib.sha256(executing.read_bytes()).hexdigest()
     assert actual == digest, (relative, actual, digest)
     # The builder is located as a SIBLING of the executing consumer
-    # (arm_readiness.py:10922), so both must live in the same directory.
+    # (arm_readiness.py:10935), so both must live in the same directory.
     assert executing.parent == clone / "scripts", executing
 print(json.dumps({"status": "PASS", "tools_authenticated": len(recorded),
                   "lane": "candidate", "rule": "manifest digest, not committed blob"},
@@ -1852,7 +1852,7 @@ printf '%s\n' "$MARKER_BRANCH" > "$TRANS/080-marker-decision.txt"
 > confirmation digest supplied".
 >
 > *The supply-line trace, end to end.* build_family_publication_marker calls
-> _family_member at arm_readiness.py:10612 as
+> _family_member at arm_readiness.py:10625 as
 > _family_member(repository, root, registry, reference) — with NEITHER
 > step6_confirmation_table NOR expected_confirmation_digest, both of which
 > default to None. _family_member forwards those Nones into
@@ -1902,7 +1902,7 @@ After freeze ×3, successor verification and fixation, run the reviewed
 constructor and consumer in explicit **candidate** mode. Candidate-mode tool
 authentication compares the executing bytes — in `$CLONE/scripts/` — to the
 digests recorded in `$MANIFEST`; it does not use committed-blob equality and
-cannot be selected by sidecar presence (`arm_readiness.py:10382-10436`). The S-0
+cannot be selected by sidecar presence (`arm_readiness.py:10395-10436`). The S-0
 marker stays outside the Git worktree.
 
 ```zsh
