@@ -264,3 +264,12 @@ Ed `YES`, strict four-way equality of publication head, HEAD, local main and
 origin/main, a clean tree, and semantic replay. Absence, mutation, unknown
 keys, wrong section bindings, or any attempt to substitute separately
 confirmed family/pinset records refuses publication.
+
+## Related contracts
+
+The histsem verifier never compares a freeze receipt's
+`pack_identity.pack_root` (its "Archival location rule" in
+[`receipt_histsem_verifier.md`](receipt_histsem_verifier.md)); the
+freeze-replay gate compares it repository-relatively for `_v4`+ generations
+and absolutely below the registry's family-publication generation threshold,
+per the 2026-08-25 D-154 ruling.
