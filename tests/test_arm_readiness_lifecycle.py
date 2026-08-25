@@ -1099,6 +1099,88 @@ class FreezeSuccessorChainTests(unittest.TestCase):
             self.assertEqual(code, expected_code)
         return json.loads(buffer.getvalue().decode("utf-8"))
 
+    def post_mint_replay_fixture(self) -> tuple[Path, Path, Path, str]:
+        """Build the synthetic C-to-S edge on a real freeze replay path."""
+
+        from tests.test_arm_readiness_evidence import content_source_and_receipt
+        from tests.test_family_marker import confirmation
+        from tests.test_receipt_histsem import write_custody_json
+
+        repo, pack, predecessor = self.successor_fixture()
+        histsem = mock.patch.object(
+            readiness, "_gate_receipt_histsem", return_value=None
+        )
+        histsem.start()
+        self.addCleanup(histsem.stop)
+        rederive = mock.patch(
+            "joulewise.arm_readiness_evidence._r1_rederive_at_arm",
+            return_value=None,
+        )
+        rederive.start()
+        self.addCleanup(rederive.stop)
+
+        (repo / "dependency.txt").write_text("stable\n", encoding="utf-8")
+        git(repo, "add", "dependency.txt")
+        git(repo, "commit", "-qm", "dependency baseline")
+        derivation = git_text(repo, "rev-parse", "HEAD").strip()
+        source, receipt = content_source_and_receipt(repo, derivation)
+        registry = json.loads(
+            (repo / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes()
+        )
+        policy = next(
+            item
+            for item in registry["freeze_evidence_lifecycle"]["evidence_policies"]
+            if item["kind"] == "DOCTRINE_PIN"
+        )
+        source["freshness_policy_id"] = policy["freshness_policy_id"]
+        receipt["freshness_policy_id"] = policy["freshness_policy_id"]
+        source_raw = render_json(source)
+        source_digest = hashlib.sha256(source_raw).hexdigest()
+        receipt["dependency_manifest_sha256"] = source_digest
+        receipt["facts"][0]["source_sha256"] = source_digest
+
+        source_path = pack / "arm_readiness.sources/doctrine-pin.json"
+        source_path.parent.mkdir()
+        source_path.write_bytes(source_raw)
+        receipt_path = pack / "arm_readiness.evidence/evidence-doctrine-pin.json"
+        receipt_path.parent.mkdir()
+        receipt_raw = render_json(receipt)
+        receipt_path.write_bytes(receipt_raw)
+        receipt_path.with_name(f"{receipt_path.name}.sha256").write_bytes(
+            gnu_sidecar(hashlib.sha256(receipt_raw).hexdigest(), receipt_path.name)
+        )
+        git(repo, "add", ".")
+        git(repo, "commit", "-qm", "install synthetic R1 evidence")
+
+        minted = self.mint(pack, predecessor)
+        self.assertTrue(minted["mutated"])
+        git(repo, "add", ".")
+        git(repo, "commit", "-qm", "mint freeze receipt")
+
+        successor_relative = readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1]
+        successor = repo / successor_relative
+        successor.parent.mkdir(parents=True, exist_ok=True)
+        successor_raw = b'{"packs": []}\n'
+        successor.write_bytes(successor_raw)
+        git(repo, "add", successor_relative.as_posix())
+        git(repo, "commit", "-qm", "mint successor pinset")
+
+        table_value = confirmation()
+        table_value["successor_pinset"]["sha256"] = hashlib.sha256(
+            successor_raw
+        ).hexdigest()
+        table = write_custody_json(
+            repo.parent / "step6-custody",
+            "confirmation.json",
+            table_value,
+        )
+        return (
+            pack,
+            predecessor,
+            table,
+            hashlib.sha256(table.read_bytes()).hexdigest(),
+        )
+
     # R-1 / R-7 -------------------------------------------------------------
     def test_pass_predecessor_mints_a_singleton_freeze_0002(self) -> None:
         repo, pack, predecessor = self.successor_fixture()
@@ -1843,6 +1925,114 @@ class FreezeSuccessorChainTests(unittest.TestCase):
             verify_receipt(pack, Path(result["receipt_path"]))
 
     # CLI -------------------------------------------------------------------
+    def test_cli_freeze_accepts_valid_confirmation_pair_on_post_mint_replay(
+        self,
+    ) -> None:
+        pack, predecessor, table, digest = self.post_mint_replay_fixture()
+        result = self.run_freeze_cli(
+            [
+                "freeze",
+                "--pack-root",
+                str(pack),
+                "--step6-confirmation-table",
+                str(table),
+                "--expected-confirmation-digest",
+                digest,
+                "--predecessor-pack-root",
+                str(predecessor),
+            ],
+            1,
+        )
+        self.assertFalse(result["mutated"])
+        self.assertNotIn(
+            "readiness_r1_dependency_changed_set", result["reason_codes"]
+        )
+
+    def test_cli_freeze_refuses_confirmation_digest_without_table(self) -> None:
+        pack, predecessor, _table, digest = self.post_mint_replay_fixture()
+        refusal = self.run_freeze_cli(
+            [
+                "freeze",
+                "--pack-root",
+                str(pack),
+                "--expected-confirmation-digest",
+                digest,
+                "--predecessor-pack-root",
+                str(predecessor),
+            ],
+            1,
+        )
+        self.assertEqual(
+            refusal["reason_codes"], ["readiness_r1_dependency_changed_set"]
+        )
+        self.assertIn("no step-6 confirmation table supplied", refusal["detail"])
+
+    def test_cli_freeze_refuses_confirmation_table_without_digest(self) -> None:
+        pack, predecessor, table, _digest = self.post_mint_replay_fixture()
+        refusal = self.run_freeze_cli(
+            [
+                "freeze",
+                "--pack-root",
+                str(pack),
+                "--step6-confirmation-table",
+                str(table),
+                "--predecessor-pack-root",
+                str(predecessor),
+            ],
+            1,
+        )
+        self.assertEqual(
+            refusal["reason_codes"], ["readiness_r1_dependency_changed_set"]
+        )
+        self.assertIn("no expected confirmation digest supplied", refusal["detail"])
+
+    def test_cli_freeze_refuses_malformed_confirmation_digest(self) -> None:
+        pack, predecessor, table, _digest = self.post_mint_replay_fixture()
+        refusal = self.run_freeze_cli(
+            [
+                "freeze",
+                "--pack-root",
+                str(pack),
+                "--step6-confirmation-table",
+                str(table),
+                "--expected-confirmation-digest",
+                "A" * 64,
+                "--predecessor-pack-root",
+                str(predecessor),
+            ],
+            1,
+        )
+        self.assertEqual(
+            refusal["reason_codes"], ["readiness_r1_dependency_changed_set"]
+        )
+        self.assertIn(
+            "supplied expected confirmation digest is malformed", refusal["detail"]
+        )
+
+    def test_cli_freeze_refuses_confirmation_table_digest_mismatch(self) -> None:
+        pack, predecessor, table, _digest = self.post_mint_replay_fixture()
+        refusal = self.run_freeze_cli(
+            [
+                "freeze",
+                "--pack-root",
+                str(pack),
+                "--step6-confirmation-table",
+                str(table),
+                "--expected-confirmation-digest",
+                "0" * 64,
+                "--predecessor-pack-root",
+                str(predecessor),
+            ],
+            1,
+        )
+        self.assertEqual(
+            refusal["reason_codes"], ["readiness_r1_dependency_changed_set"]
+        )
+        self.assertIn(
+            "table bytes differ from the expected confirmation digest",
+            refusal["detail"],
+        )
+
     def test_cli_freeze_accepts_and_requires_a_predecessor_pack_root(self) -> None:
         repo, pack, predecessor = self.successor_fixture()
         # In-process: the successor pack lives in this test's patched profile
