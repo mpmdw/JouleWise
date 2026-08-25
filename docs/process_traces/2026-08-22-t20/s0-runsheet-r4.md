@@ -13,6 +13,67 @@ this branch — it was refused by both ratification seats and no estate ran it.
 
 ## Revision history
 
+**r5 (2026-08-24): D-153 sweep cure.** A revision of this file, not a new
+instrument: the filename, the estate layout and every r4 record below stand
+unchanged. Authority: the two-seat D-153 fixation-family / confirmation-supply
+sweep and its ruling — `docs/process_traces/2026-08-24-d153-sweep/03-MAGISTRATE-SYNTHESIS.md`
+(rulings R-1 through R-6), over `01-opus-contract-lens-seat.md` (contract-lens
+findings F0–F15) and `02-sol-semantic-seat.md` (semantic findings 1–62 and the
+consolidated cure list). The sweep's shared root cause, in one sentence: this
+runsheet's consumers were written against interfaces and orderings that D-153
+and the step-6 contract later moved out from under them, and the instrument
+carried no assertion class able to notice. Cure items 2–19 land here; item 1 is
+the parallel code change that gives the `freeze` verb a
+`--step6-confirmation-table` flag, and this revision is written against that
+flag's contract.
+
+- **The confirmation pair now reaches every post-mint enforcing consumer**
+  (ruling R-2, Sol 45–55). Each such block re-pastes
+  `ED_STEP6_CONFIRMED_SHA256` — Ed's out-of-band confirmed digest `hC` over the
+  step-6 table — validates it as lowercase 64-hex, and cross-checks it against
+  the `085-*` witness; `freeze` replays additionally pass
+  `--step6-confirmation-table`. Before this revision **no live post-mint call
+  in this runsheet supplied the pair at all**, which is why all three of estate
+  6's §3.9 arms refused with "no expected confirmation digest supplied."
+- **Refusals are asserted by DETAIL, not by refusal code alone** (Opus F0). The
+  digest-conditional raise runs BEFORE the ordinary-changed-path raise and both
+  carry the same registry code, so a code-only grep cannot tell the two causes
+  apart. Every R1 probe now also asserts the presence or absence of the detail
+  string `digest-conditional allowlist path`.
+- **The `118-*` byte-pin probe moves to §4.10, after the fixation commit**, and
+  its tamper becomes a SHAPE-PRESERVING canonical re-mint: a naive byte tamper
+  is already caught pre-fixation by the canonicality check, so only a re-mint
+  of identical shape isolates the hS byte pin as the discriminator (F1, F2).
+- **Epoch prose, A6 vocabulary and file citations are repaired**: §3.9's
+  heading, §3.8's fixation wording, the reserved "window close" spellings, the
+  fixation commit message, the post-W1 `tests/test_receipt_histsem.py` line
+  coordinates (now also symbol-anchored), and the `084-*` transcript rename
+  (F4–F14).
+- **§5 acceptance** now requires pair-bearing evidence, splits the
+  pre-fixation and post-fixation coordinates, and states correctly what
+  `074-*` evidences.
+- **§3.10's published-green half** names the WINDOW-CLOSE head rather than the
+  fixation head (F11; D-153 A1 + A3) and carries an explicit, pair-bearing
+  publication marker-replay block.
+
+**Estate 6 is STRUCK (2026-08-24).** Not a discretionary call. §6's own failure
+semantics classify both "a command that names a file, flag or refusal code that
+does not exist" and "a step sequenced after the step that needs its output" as
+INSTRUMENT failures — cured on main, re-ratified, restarted from §1.1 — and
+estate 6 hit both: first the §3.8 `074-*` producer/consumer inversion (S0-O3),
+then three §3.9 arms refusing because the runsheet never handed any consumer
+`hC`. A same-estate continuation was not available either: it would have had to
+re-run blocks that call `record_env` three times over already-recorded names,
+and a `record_env` duplicate independently supersedes an estate under §6's
+execution-defect clause. **Custody is preserved, READ-ONLY, and nothing is
+deleted.** Estate 6's `091-*` REFUSE transcripts are RETAINED as live
+NEGATIVE-LEG evidence: they are the standing demonstration that the C→S gate
+really does fail closed when the confirmation pair is absent, which is the
+mirror of the positive legs the cured blocks below now run. Its
+instrument-correction notes stand. Estate 7 is cut only after the cure PRs land
+AND re-ratification is recorded. Authority: synthesis R-3; §6 failure
+semantics.
+
 **S0-O3 recorded and cured (2026-08-24, estate 6).** Estate 6 ran clean through
 §3.8's marker build — the first estate past the S0-O2 boundary — and the §3.8
 Ed-confirmation block then refused at its final stanza: it reads
@@ -166,10 +227,14 @@ the R-3 executability audit are cured. Binding records:
    document written before execution, never against a self-recomputed sidecar.
 3. **The fixation delta now exists (F-2).** `s0-fixation-delta.patch` and its
    GNU sidecar are committed beside this runsheet, digest-bound in the
-   candidate manifest, and applied in §3.7 **before** the step that runs
+   candidate manifest, and applied **before** the step that runs
    `tests.test_receipt_histsem`. R2 sequenced the apply after the suite run and
    named a delta that had never been authored; that combination made the step-6
-   suite red by construction.
+   suite red by construction. **That was the r3 cure, and it applied the delta
+   in §3.7**; it is retained here as the record of what r3 settled. D-153 A1
+   then moved the delta application, the suite run and the byte-pin probe out
+   of §3.7 and into **§4.10**, after the probe battery — the apply-before-suite
+   ordering the F-2 cure established is preserved there, at the new site.
 4. **§4(h) probes what it claims to probe (F-3).** An out-of-enumeration
    `--pinset` override refuses `histsem_pinset_invalid`, not
    `histsem_pinset_absent` (`arm_readiness.py:3293-3304`, and the committed
@@ -264,11 +329,22 @@ block below:
   ALL=$(grep -cE '^[[:space:]]*```zsh' "$RUNSHEET")
   COL0=$(grep -c '^```zsh' "$RUNSHEET")
   test "$((ALL - COL0))" = 2 || echo "INDENTED-BLOCK INVARIANT BROKEN: $((ALL - COL0))"
-  test "$COL0" = 48 || echo "EXECUTABLE BLOCK COUNT CHANGED: $COL0"
+  test "$COL0" = 49 || echo "EXECUTABLE BLOCK COUNT CHANGED: $COL0"
   ```
 
   Both must print nothing (grep exits 1). A hit is a defect in the
   instrument, not in the bench.
+
+  **`zsh -n` is run PER BLOCK, and §1.1's first block is the one exemption.**
+  Concatenating the blocks and parsing the result is meaningless — later blocks
+  legitimately reopen constructs the earlier ones closed — so the pass runs on
+  each extracted block separately. Every block parses clean except §1.1's
+  first, and that one cannot: its four operator inputs are written
+  `NAME=<description>`, and an unsubstituted `<`/`>` is a redirection with no
+  target. That block is the block the operator substitutes before running, so
+  the exemption is bounded and disclosed here rather than rediscovered as
+  drift. Any OTHER block failing `zsh -n` is an instrument defect. (Recorded
+  by r5, from running the pass.)
 
 - **The `env.sh` heredoc is UNQUOTED (`<<ENVEOF`) on purpose**, so that the
   operator's `$SESSION`, `$BASE` and `$CI_RUN_ID` are baked into the file as
@@ -326,12 +402,24 @@ do not delete the line.
 **Transcripts.** Every tool run is captured as a stdout/stderr/rc triplet under
 `$TRANS`. The magistrate reads every one. Authority: R4 r4-2; R5 V-2.
 
-### 0.2 Anchor map — verified 13/13 at `d19df05`, validated through the AST
+### 0.2 Anchor map — 15 anchors, validated through the AST
 
-The R-3 executability audit verified all thirteen anchors at `d19df05`
-(2026-08-24). They are the drift tripwire for every inline citation in this
-runsheet; §1.1 re-checks them mechanically against `$BASE` before any
-transaction work.
+The R-3 executability audit verified the first thirteen anchors at `d19df05`
+(2026-08-24). **r5 adds two more** — the two `tests/test_receipt_histsem.py`
+methods this runsheet cites — because the D-153 sweep found (Opus F13) that
+every citation into that file was still in PRE-W1 coordinates while being read
+at a post-W1 head, and no mechanical check could see it: §1.1's line audit
+asserts only that its extract is non-empty, so it was green over the wrong
+lines. A symbol anchor catches the next shift by NAME. Both new anchors were
+derived from the committed file at the r5 head. All fifteen are the drift
+tripwire for every inline citation in this runsheet; §1.1 re-checks them
+mechanically against `$BASE` before any transaction work.
+
+**The two test-file coordinates are epoch-bound.** They are valid at E0–E3 —
+the post-W1 candidate through the allowlist-contract closure — which is where
+`$BASE` and every step before §4.10 sit. The fixation delta adds lines to the
+same file, so anything cited from a post-fixation head shifts again and is not
+covered by this map.
 
 **Text equality is not enough, and r3 relied on it.** Both r3 ratification
 seats executed the same forge: a commit whose files contain the pinned line
@@ -342,7 +430,7 @@ the forge; r4's checker: `REFUSE 0/13`. Each anchor therefore now carries a
 **kind** and an **owner**, and §1.1's checker validates them through Python's
 `ast`:
 
-- the file must **parse** at `$BASE` — a non-parsing file is never 13/13;
+- the file must **parse** at `$BASE` — a non-parsing file is never 15/15;
 - a **symbol** anchor must be a real `def`/`class` of the named symbol
   *beginning* at the pinned line;
 - a **statement** anchor must be executable code beginning at the pinned line,
@@ -355,12 +443,12 @@ A single-line string on the pinned line is not a forge — real code such as
 `allowlist = set(governed["irrelevant_path_allowlist"])` contains one. The
 check is for the pinned line sitting in the *body* of a multi-line literal,
 which is what a docstring forge always produces. Non-Python anchors would fall
-back to text equality and be labelled as such; all thirteen are Python today,
+back to text equality and be labelled as such; all fifteen are Python today,
 so none does.
 
 **The anchor map is a DRIFT TRIPWIRE, never an integrity control, and no step
 below may be read as relying on it for integrity.** It answers one question —
-"do the thirteen citations in this runsheet still point at the code they
+"do the fifteen citations in this runsheet still point at the code they
 claim?" — and nothing more. The r4 delta re-audit made the limit concrete with a
 second forge: a commit whose functions keep their names and signatures at the
 pinned lines but whose BODIES are gutted passes the AST check 13/13, because
@@ -386,6 +474,8 @@ not a strength of the check.
 | 11 | `scripts/generate_arm_readiness.py` | 28 | symbol | `_parser` | `def _parser() -> argparse.ArgumentParser:` |
 | 12 | `scripts/project_identity_pins.py` | 23 | symbol | `parse_args` | `def parse_args(argv: list[str] \| None = None) -> argparse.Namespace:` |
 | 13 | `scripts/verify_receipt_histsem.py` | 22 | symbol | `_parser` | `def _parser() -> argparse.ArgumentParser:` |
+| 14 | `tests/test_receipt_histsem.py` | 160 | symbol | `test_pinset_is_byte_pinned_and_has_no_update_lane` | `def test_pinset_is_byte_pinned_and_has_no_update_lane(self) -> None:` |
+| 15 | `tests/test_receipt_histsem.py` | 220 | symbol | `test_verifier_cli_refusal_is_canonical_and_exit_two` | `def test_verifier_cli_refusal_is_canonical_and_exit_two(self) -> None:` |
 
 ### 0.3 Pinned mechanics map — re-derived at `d19df05`
 
@@ -450,9 +540,16 @@ names its symbol so the next drift is detectable by name rather than by line.
   its CLI `:2657-2681`.
 - Python is `>=3.11`, core dependencies are empty: `pyproject.toml:1-16`. Note
   that `[project.optional-dependencies]` is where `mac` lives — see §1.2.
-- The v1 pinset byte pin is `tests/test_receipt_histsem.py:32` and is asserted
-  with no update/reseal lane at `:138-145`; the explicit-override CLI refusal
-  test at `:146-165` expects `histsem_pinset_invalid`.
+- The v1 pinset byte pin literal `PINSET_SHA256` is
+  `tests/test_receipt_histsem.py:33` (`:32` is `PINSET`, the path it hashes),
+  and it is asserted with no update/reseal lane by
+  `test_pinset_is_byte_pinned_and_has_no_update_lane` at `:160-166`; the
+  explicit-override CLI refusal test
+  `test_verifier_cli_refusal_is_canonical_and_exit_two` at `:220-238` expects
+  `histsem_pinset_invalid`. **These are POST-W1 coordinates** (D-153 work order
+  W1 shifted this file by +22 below ~line 145); r4 and earlier carried the
+  pre-W1 numbers `:138-145` and `:146-165`, which now land on unrelated code.
+  Authority: Opus F13.
 
 ### 0.4 Binding-source shorthand
 
@@ -700,14 +797,14 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
 cat > "$CUSTODY/tools/s0_anchor_map.py" <<'PY'
 #!/usr/bin/env python3
-"""Re-check the thirteen pinned anchors against a committed revision.
+"""Re-check the fifteen pinned anchors against a committed revision.
 
 Text equality alone is forgeable: a commit that moves the pinned line into a
 docstring, a comment, or any string literal -- or that does not parse as Python
-at all -- still matches the text and would pass a text-only check 13/13. Every
+at all -- still matches the text and would pass a text-only check 15/15. Every
 Python anchor is therefore validated through the AST:
 
-  * the file must PARSE at the revision (a non-parsing file is never 13/13);
+  * the file must PARSE at the revision (a non-parsing file is never 15/15);
   * a "symbol" anchor must be a real ``def``/``class`` of the named symbol
     starting exactly at the pinned line;
   * a "statement" anchor must be executable code at the pinned line, inside the
@@ -749,6 +846,18 @@ ANCHORS = (
   "def parse_args(argv: list[str] | None = None) -> argparse.Namespace:"),
  ("scripts/verify_receipt_histsem.py", 22, "symbol", "_parser",
   "def _parser() -> argparse.ArgumentParser:"),
+ # r5 (Opus F13): the two test-file methods this runsheet cites.  A SYMBOL
+ # anchor is used deliberately -- W1 shifted this file by +22 and every prose
+ # citation into it went stale silently, because the only mechanical check that
+ # touched those coordinates (the line audit below) asserts non-emptiness, not
+ # content.  A symbol anchor fails by NAME on the next shift.  Coordinates are
+ # valid at E0-E3 only; the fixation delta shifts this file again.
+ ("tests/test_receipt_histsem.py", 160, "symbol",
+  "test_pinset_is_byte_pinned_and_has_no_update_lane",
+  "def test_pinset_is_byte_pinned_and_has_no_update_lane(self) -> None:"),
+ ("tests/test_receipt_histsem.py", 220, "symbol",
+  "test_verifier_cli_refusal_is_canonical_and_exit_two",
+  "def test_verifier_cli_refusal_is_canonical_and_exit_two(self) -> None:"),
 )
 
 DEFS = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
@@ -882,8 +991,8 @@ PY
 chmod 0555 "$CUSTODY/tools/s0_anchor_map.py"
 "$PY" "$CUSTODY/tools/s0_anchor_map.py" "$CLONE" "$BASE" \
   > "$TRANS/005-anchor-map.json" || die "anchor map drifted at BASE; see 005"
-"$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["matched"]==13, d["matched"]' \
-  "$TRANS/005-anchor-map.json" || die "anchor map is not 13/13"
+"$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["matched"]==15, d["matched"]' \
+  "$TRANS/005-anchor-map.json" || die "anchor map is not 15/15"
 ```
 
 **Immutable line audit.** Run next, in its own shell. The ranges are the §0.3
@@ -901,7 +1010,7 @@ for spec in \
   'scripts/project_identity_pins.py 23,60p' \
   'scripts/verify_receipt_histsem.py 22,73p' \
   'scripts/author_arm_readiness_evidence.py 25,112p' \
-  'tests/test_receipt_histsem.py 30,33p;138,165p' \
+  'tests/test_receipt_histsem.py 30,33p;160,166p;220,238p' \
   'configs/campaigns/d117_floor_qwen25_1p5b_v3/generate_configs.py 1942,1955p;2657,2681p' \
   'pyproject.toml 1,16p'
 do
@@ -1931,8 +2040,10 @@ printf '%s\n' "$MARKER_BRANCH" > "$TRANS/080-marker-decision.txt"
 > section unchanged. **No re-cut and no re-ordering are required**, and none of
 > §§1-3.7's completed work is invalidated.
 
-After freeze ×3, successor verification and fixation, run the reviewed
-constructor and consumer in explicit **candidate** mode. Candidate-mode tool
+After freeze ×3 and successor verification, and **before** fixation, run the
+reviewed constructor and consumer in explicit **candidate** mode. (Under D-153
+A1 fixation is the last commit of this clone proof, in §4.10; r4 said "and
+fixation" here, which was pre-D-153 residue.) Candidate-mode tool
 authentication compares the executing bytes — in `$CLONE/scripts/` — to the
 digests recorded in `$MANIFEST`; it does not use committed-blob equality and
 cannot be selected by sidecar presence (`arm_readiness.py:10408-10449`). The S-0
@@ -1990,8 +2101,13 @@ print(json.dumps({"status": "PASS", "deferral_disclosed": disclosure["deferred_p
                   "gate": disclosure["gate"]}, indent=2, sort_keys=True))
 MARKERPY
 
+# F14: this transcript classifies the MARKER's forged-ref conditionality, not
+# the local suite.  §3.10 writes the local-green classification to
+# 094-local-green-classification.txt; two files sharing a basename stem while
+# meaning different things is how §5 came to cite them as if they were one
+# family.  The name states which is which.
 printf 'FORGED_ORIGIN_MAIN_OID=%s\nclassification=forged-ref-conditional; not published PASS\n' \
-  "$FORGED_ORIGIN_MAIN_OID" > "$TRANS/084-local-green-classification.txt"
+  "$FORGED_ORIGIN_MAIN_OID" > "$TRANS/084-marker-forged-ref-classification.txt"
 ```
 
 Expected marker schema: `joulewise.d117_family_publication_marker.v1`, all three
@@ -2054,10 +2170,14 @@ assert table["successor_pinset"]["receipt_count"] == 33
 PY
 printf '%s\n' "$ED_STEP6_CONFIRMED_SHA256" > "$TRANS/085-ed-step6-confirmed-sha256.txt"
 
-# The successor digest Ed confirmed must be the one the fixation delta pinned.
+# The successor digest Ed confirmed must equal the MINT-TIME successor digest
+# recorded at §3.7 step 3.  Nothing is pinned yet at this point in the
+# transaction: §4.10 has not run, so there is no fixation pin to compare
+# against.  What §4.10 then proves is the other half — that the bytes did not
+# move between this comparison and the substitution.
 test "$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1]))["successor_pinset"]["sha256"])' \
   "$STEP6_CANDIDATE")" = "$(cat "$TRANS/074-successor-sha256.txt")" \
-  || die "Ed's table names a successor digest different from the fixation pin"
+  || die "Ed's table names a successor digest different from the mint-time record (074)"
 ```
 
 The `sys.path.insert` in that block is required: `$PY` is the estate venv and
@@ -2084,7 +2204,7 @@ cmp "$STEP6_CANDIDATE" "$PUBLISHED_DIR/d117_step6_confirmation_table_v4.json" \
 Promotion copies exact immutable bytes; it never edits either consumer or the
 table. Authority: D-151 conditions 2–3; MARKER-RULING ratified items 1–2.
 
-### 3.9 Arm and verify all three after window closure and fixation
+### 3.9 Arm and verify all three at the allowlist-contract closure head
 
 The exact 112 allowlist contract was closed at `$PINSET_MINT_HEAD` in §3.7, and
 this section runs at that same head: under D-153 the fixation commit is made
@@ -2114,6 +2234,38 @@ three** packs is a STOP, because then nothing was armed at all.
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
+# ---- CONFIRMATION PAIR — the standard post-mint preamble (ruling R-2) ----
+# Every post-mint ENFORCING consumer needs BOTH halves of the step-6 pair:
+#   C  = the promoted confirmation table (a file path), and
+#   hC = ED_STEP6_CONFIRMED_SHA256, the digest Ed confirmed OUT OF BAND.
+# _authenticate_confirmation_table refuses if EITHER is None, and that refusal
+# carries the same registry code an ordinary changed path produces.  r4 handed
+# neither half to any live consumer, so all three of estate 6 arms refused
+# here with "no expected confirmation digest supplied" and no assertion in the
+# instrument could tell that apart from the refusal the step was testing for.
+#
+# hC is RE-PASTED BY THE OPERATOR INTO THIS BLOCK, exactly as in §3.8.  It is
+# never written to env.sh and never carried across blocks, because the
+# contract image is that the operator supplies the digest to each consumer
+# through that consumer own explicit input, and the rehearsal must rehearse
+# that.  A mistyped paste fails loudly at the next line; an in-band supply
+# would fail silently, as a norm.
+#
+# $TRANS/085-ed-step6-confirmed-sha256.txt is the WITNESS of the §3.8 paste,
+# NEVER THE SOURCE.  It is read only to compare against what the operator has
+# just typed, which turns a transcription slip into an immediate, well-named
+# refusal.  No block in this runsheet recovers hC from 085.
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+# -------------------------------------------------------------------------
+
 FINAL_HEAD=$(git -C "$CLONE" rev-parse HEAD)
 # Under D-153 the arm runs at the ALLOWLIST-CONTRACT CLOSURE head, BEFORE the
 # fixation commit (which §4.10 makes last).  This is what makes the arm clean.
@@ -2136,10 +2288,17 @@ armed=0
 receipts=0
 for pack in "${PACKS[@]}"; do
   label=$(basename "$pack")
+  # The table path resolves from --window-custody-root; hC is the half the CLI
+  # cannot derive, so it is passed explicitly on every arm.
   capture "091-arm-$label" "$PY" "$CLONE/scripts/generate_arm_readiness.py" arm \
     --pack-root "$CLONE/$pack" --arm-context "$ARM_CONTEXT" \
-    --window-custody-root "$CUSTODY/windows"
+    --window-custody-root "$CUSTODY/windows" \
+    --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
   no_traceback "091-arm-$label" || die "arm traceback for $label"
+  if grep -F 'no expected confirmation digest supplied' \
+      "$TRANS/091-arm-$label.stdout.json" "$TRANS/091-arm-$label.stderr.txt" > /dev/null; then
+    die "arm for $label refused for want of hC: the confirmation pair did not reach the gate"
+  fi
   rc=$(cat "$TRANS/091-arm-$label.rc")
   if [ "$rc" != 0 ] && [ "$rc" != 1 ]; then
     die "arm rc=$rc for $label (2 means a raised ArmReadinessError, not a governed refusal)"
@@ -2154,8 +2313,13 @@ for pack in "${PACKS[@]}"; do
   fi
   receipts=$((receipts + 1))
   capture "092-verify-$label" "$PY" "$CLONE/scripts/generate_arm_readiness.py" verify \
-    --pack-root "$CLONE/$pack" --arm-receipt "$ARM_RECEIPT"
+    --pack-root "$CLONE/$pack" --arm-receipt "$ARM_RECEIPT" \
+    --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
   no_traceback "092-verify-$label" || die "verify traceback for $label"
+  if grep -F 'no expected confirmation digest supplied' \
+      "$TRANS/092-verify-$label.stdout.json" "$TRANS/092-verify-$label.stderr.txt" > /dev/null; then
+    die "verify for $label refused for want of hC: the confirmation pair did not reach the gate"
+  fi
   vrc=$(cat "$TRANS/092-verify-$label.rc")
   if [ "$vrc" != 0 ] && [ "$vrc" != 1 ] && [ "$vrc" != 2 ]; then
     die "verify rc=$vrc for $label"
@@ -2238,6 +2402,27 @@ and both assertions already run earlier in this runsheet:
 > survives — which means **the eleven-kind census RETURNS** (D-153 W2). The
 > interim form's expected-refusal machinery is gone; what replaces it is the
 > clean-arm block below, which asserts the positive outcome directly.
+>
+> **ERRATUM (r5, 2026-08-24) — the CAUSE recorded above is REOPENED.** The
+> original text is left exactly as it was written; this note is appended, not
+> substituted. What is withdrawn is not the resolution but the *diagnosis of
+> why* r4's arm refused. The record above attributes the
+> `DEPENDENCY_CHANGED_SET` refusal to `tests/test_receipt_histsem.py` being a
+> changed path outside the ruled 112. Opus finding F0 shows that attribution is
+> UNPROVEN and probably wrong: inside `validate_r1_evidence_lifecycle` the
+> digest-conditional loop raises **before** the ordinary-path check, and both
+> raises carry the same registry role and therefore the same refusal code
+> (`arm_readiness.py:4426-4465`). At any post-mint head where no `hC` was
+> supplied — which is every head r4 armed at — the refusal is the C→S one
+> regardless of what else is outstanding. r4 could not have noticed, because it
+> asserted the refusal CODE alone. That is now mechanical: every R1 probe below
+> also asserts the refusal DETAIL shape, requiring the string
+> `digest-conditional allowlist path` to be ABSENT wherever an ordinary or
+> manifest cause is claimed and PRESENT in `123-*`, where the C→S cause is the
+> whole point of the probe. The next estate settles the attribution by
+> execution rather than by inference. Authority:
+> `docs/process_traces/2026-08-24-d153-sweep/01-opus-contract-lens-seat.md` F0;
+> `03-MAGISTRATE-SYNTHESIS.md` item 18.
 
 **The clean-arm block.** Three assertions, all now achievable because fixation
 has not yet happened. The residue computation is the same arithmetic the gate
@@ -2324,9 +2509,12 @@ PY
 ```
 
 **What the arm side then proves, under D-153.** Neither `$CHANGED_CODE` nor
-`$MANIFEST_CODE` appears; the residue at `$PINSET_MINT_HEAD` is empty; the arm
-receipt carries all eleven generic `receipt_kind` values; no traceback occurs;
-and an arm receipt is written. The two blocks above assert exactly that.
+`$MANIFEST_CODE` appears; no arm or verify transcript carries "no expected
+confirmation digest supplied", so each one crossed the gate with the complete
+`C + hC` pair rather than dying before it; the residue at `$PINSET_MINT_HEAD`
+is empty; the arm receipt carries all eleven generic `receipt_kind` values; no
+traceback occurs; and an arm receipt is written. The blocks above assert
+exactly that.
 
 Authority: R4 r4-2; R5 V-1.iii, V-2; actual changed-set site
 `arm_readiness.py:4426-4465`; CLI exit semantics
@@ -2354,16 +2542,140 @@ printf 'classification=LOCAL GREEN — FORGED-origin/main-CONDITIONAL\noid=%s\n'
   "$FORGED_ORIGIN_MAIN_OID" > "$TRANS/094-local-green-classification.txt"
 ```
 
-Acceptance does **not** close here. After the lead actually publishes the
-accepted fixation head, a clean checkout must prove strict four-way equality
-(publication head == HEAD == local main == `origin/main`), run the complete
-suite against that real published ref, and record `PUBLISHED GREEN` with its OID
-in separate immutable custody. Candidate marker verification from §3.8 is not
-reusable: publication verification must use the Ed-confirmed table,
-committed-blob tool equality, semantic replay, and a transcript with
-`lane: "published"` and `gate_admissible: true`. No S-0 clone command may forge
-that claim. Authority: D-151 condition 4; MARKER-RULING ratified items 2–3 and
-split S-1.
+Acceptance does **not** close here, and r5 corrects **which head** closes it.
+
+**The published head is the WINDOW-CLOSE head, and fixation follows
+publication.** r4 said acceptance waits until "the lead actually publishes the
+accepted fixation head." That names the wrong commit and rebuilds the exact
+collision D-153 A6 was written to break. Two ruled facts settle it. Under
+**D-153 A1**, fixation is the FIRST COMMIT AFTER the r4-3 commit-freeze window
+close — so the fixation commit does not exist yet when the window closes, and
+the head that closes the window is the head that gets published. Under **D-153
+A3**, the green being published is green *without* the byte pin: the pin's
+value is the successor digest, which cannot be substituted before the mint that
+produces it, so requiring the published head to carry the pin is requiring the
+head to contain a value derived from itself. Binding publication acceptance to
+the fixation head therefore recreates the sequencing trap; binding it to the
+window-close head does not.
+
+There is a mechanical corroboration inside the tool: publication-lane marker
+replay refuses `head_unpublished` unless the marker's own
+`publication_git.head_commit` equals live `origin/main`
+(`arm_readiness.py:10844-10850`). The marker is built BEFORE fixation, at the
+head whose bytes it binds. So the tool itself will only admit a published head
+that the pre-fixation marker names — which is the window-close head, never a
+later fixation commit.
+
+(This clone proof's §4.10 placement of fixation is a separate, CLONE-PROOF-ONLY
+artifact of needing to run arm, verify and the probes at the contract head. It
+is not evidence about either the real ordering or the published head; see
+§4.10's own note. Authority for this paragraph: D-153 A1 and A3; Opus F11;
+synthesis item 19.)
+
+A clean checkout at the published window-close head must then prove strict
+four-way equality (publication head == HEAD == local `main` == `origin/main`),
+run the complete suite against that real published ref, and record
+`PUBLISHED GREEN` with its OID in separate immutable custody. Candidate marker
+verification from §3.8 is NOT reusable: publication verification runs in the
+COMMITTED-BLOB lane — no `--candidate-manifest` — with the Ed-confirmed table
+and its out-of-band digest both supplied, semantic replay, and a transcript
+carrying `lane: "published"` and `gate_admissible: true`. No S-0 clone command
+may forge that claim.
+
+**r4 specified all of that as prose and none of it as a command**, which is the
+defect Sol finding 59 records: the publication replay IS an enforcing entry
+point under the step-6 contract, so it needs the confirmation pair exactly like
+every other enforcing consumer, and "must use the Ed-confirmed table" supplies
+nothing to any process. The block below is that command. **It does not run
+inside the clone estate**: it runs later, in the real published checkout, and
+writes into a custody directory of its own. It sources `env.sh` only for `$PY`,
+`$CUSTODY`, `die` and the promoted table, and it takes the same operator-pasted
+`hC` as every other enforcing block.
+
+```zsh
+source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+# Two operator inputs, substituted HERE and nowhere else.  The guards below
+# refuse an unsubstituted block rather than letting it run against a literal.
+PUBLISHED_HEAD=REPLACE_WITH_PUBLISHED_WINDOW_CLOSE_HEAD_SHA
+PUBLISHED_CHECKOUT=REPLACE_WITH_ABSOLUTE_PATH_OF_CLEAN_PUBLISHED_CHECKOUT
+test "$PUBLISHED_HEAD" != REPLACE_WITH_PUBLISHED_WINDOW_CLOSE_HEAD_SHA \
+  || die 'substitute the published WINDOW-CLOSE head (not the fixation commit) first'
+test "$PUBLISHED_CHECKOUT" != REPLACE_WITH_ABSOLUTE_PATH_OF_CLEAN_PUBLISHED_CHECKOUT \
+  || die 'substitute the published checkout path first'
+
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+
+PUBGREEN="$CUSTODY/published-green"
+test ! -e "$PUBGREEN" || die 'published-green custody already exists; this step runs once'
+mkdir -p "$PUBGREEN"
+
+# Strict four-way ref equality at the PUBLISHED head.
+test "$(git -C "$PUBLISHED_CHECKOUT" rev-parse HEAD)" = "$PUBLISHED_HEAD" \
+  || die 'the published checkout HEAD is not the published head'
+test "$(git -C "$PUBLISHED_CHECKOUT" rev-parse refs/heads/main)" = "$PUBLISHED_HEAD" \
+  || die 'local main is not the published head'
+test "$(git -C "$PUBLISHED_CHECKOUT" rev-parse refs/remotes/origin/main)" = "$PUBLISHED_HEAD" \
+  || die 'origin/main is not the published head'
+test -z "$(git -C "$PUBLISHED_CHECKOUT" status --porcelain=v1)" \
+  || die 'the published checkout is dirty; a live marker consult requires a clean tree'
+printf 'four_way=publication_head==HEAD==main==origin/main\noid=%s\n' \
+  "$PUBLISHED_HEAD" > "$PUBGREEN/150-four-way-equality.txt"
+
+# Publication-lane marker replay.  No --candidate-manifest: the committed-blob
+# tool lane is selected by --phase alone, and the pair is passed explicitly.
+"$PY" "$PUBLISHED_CHECKOUT/scripts/verify_family_marker.py" \
+  --repository "$PUBLISHED_CHECKOUT" \
+  --marker "$CUSTODY/windows/family_publication/d117_family_publication_v4.json" \
+  --phase publication \
+  --confirmation "$STEP6_TABLE" \
+  --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256" \
+  > "$PUBGREEN/151-marker-publication-replay.json" \
+  || die 'publication-lane marker replay refused; see 151'
+"$PY" - "$PUBGREEN/151-marker-publication-replay.json" "$PUBLISHED_HEAD" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["status"] == "PASS", d
+assert d["phase"] == "publication" and d["lane"] == "published", d
+assert d["gate_admissible"] is True and d["publication_authorized"] is True, d
+assert d["consulted_git"]["origin_main_commit"] == sys.argv[2], d["consulted_git"]
+assert d["confirmation"] is not None, d
+ids = {c["check_id"] for c in d["checks"]}
+assert {"confirmation_missing", "confirmation_mismatch"} <= ids, sorted(ids)
+print(json.dumps({"status": "PASS", "lane": "published",
+                  "gate_admissible": True,
+                  "confirmation_checks_executed": True},
+                 indent=2, sort_keys=True))
+PY
+
+cd "$PUBLISHED_CHECKOUT"
+set +e
+"$PY" -m unittest discover -s tests > "$PUBGREEN/152-published-green.txt" 2>&1
+PUBLISHED_SUITE_RC=$?
+set -e
+test "$PUBLISHED_SUITE_RC" = 0 \
+  || die "the published-ref suite failed with rc $PUBLISHED_SUITE_RC; see 152"
+printf 'classification=PUBLISHED GREEN\nhead=%s\nlane=published\ngate_admissible=true\n' \
+  "$PUBLISHED_HEAD" > "$PUBGREEN/153-published-green-classification.txt"
+```
+
+Pass iff the four-way equality holds at the published window-close head, the
+marker replay returns `lane: "published"` with `gate_admissible: true` **and
+with the two confirmation checks in its executed-checks list** (which is how the
+transcript proves the pair was actually authenticated rather than skipped), and
+the suite is rc 0 against the real ref. Authority: D-151 condition 4;
+MARKER-RULING ratified items 2–3 and split S-1; D-153 A1 and A3; the step-6
+contract's enforcing-entry-point clause; Sol finding 59; Opus F11.
 
 ---
 
@@ -2394,15 +2706,33 @@ sourcing rather than by re-deriving.
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+
 CASE=$(new_case ordinary-path "$PROBE_BASE")
 printf 'S-0 ordinary-path probe\n' > "$CASE/s0-ordinary-probe.txt"
 commit_case "$CASE" 'S-0 probe ordinary changed path'
 capture 101-ordinary "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}"
+  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --step6-confirmation-table "$STEP6_TABLE" \
+  --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 rc=$(cat "$TRANS/101-ordinary.rc")
 if [ "$rc" != 1 ] && [ "$rc" != 2 ]; then die "ordinary-path probe rc=$rc"; fi
 grep -F "$CHANGED_CODE" "$TRANS/101-ordinary.stdout.json" > /dev/null \
   || die 'ordinary changed path did not produce the DEPENDENCY_CHANGED_SET code'
+if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
+    "$TRANS/101-ordinary.stdout.json" "$TRANS/101-ordinary.stderr.txt" > /dev/null; then
+  die 'the ordinary-path probe refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
+fi
 no_traceback 101-ordinary || die 'ordinary-path probe traceback'
 ```
 
@@ -2444,6 +2774,18 @@ pack snapshot.
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+
 PROBE_CUSTODY="$CUSTODY/probes/102-unexpected"
 mkdir -p "$PROBE_CUSTODY/$(basename "$FIRST_PACK")/arm_readiness.evidence"
 mkdir -p "$PROBE_CUSTODY/family_publication"
@@ -2451,12 +2793,27 @@ cp -p "$CUSTODY/windows/family_publication/"* "$PROBE_CUSTODY/family_publication
 printf 'unexpected\n' \
   > "$PROBE_CUSTODY/$(basename "$FIRST_PACK")/arm_readiness.evidence/unexpected.txt"
 BEFORE=$(git -C "$CLONE" rev-parse HEAD)
+# The table path resolves from $PROBE_CUSTODY/family_publication, copied above;
+# hC is the half the CLI cannot derive, so it is passed explicitly.
 capture 102-unexpected "$PY" "$CLONE/scripts/generate_arm_readiness.py" arm \
   --pack-root "$CLONE/$FIRST_PACK" --arm-context "$ARM_CONTEXT" \
-  --window-custody-root "$PROBE_CUSTODY"
+  --window-custody-root "$PROBE_CUSTODY" \
+  --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 expect_rc 102-unexpected 1 || die 'custody-namespace probe did not return a governed REFUSE'
 grep -F 'readiness_evidence_unreadable' "$TRANS/102-unexpected.stdout.json" > /dev/null \
   || die 'custody-namespace probe did not name readiness_evidence_unreadable'
+# The isolation claim in the prose above is only true if NO R1 code and no
+# confirmation refusal appears alongside it.
+if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
+    "$TRANS/102-unexpected.stdout.json" "$TRANS/102-unexpected.stderr.txt" > /dev/null; then
+  die 'the custody-namespace probe refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
+fi
+if grep -F "$CHANGED_CODE" "$TRANS/102-unexpected.stdout.json" > /dev/null; then
+  die 'the custody-namespace probe carries an R1 changed-set code; readiness_evidence_unreadable is not isolated'
+fi
+if grep -F "$MANIFEST_CODE" "$TRANS/102-unexpected.stdout.json" > /dev/null; then
+  die 'the custody-namespace probe carries an R1 manifest code; readiness_evidence_unreadable is not isolated'
+fi
 no_traceback 102-unexpected || die 'custody-namespace probe traceback'
 test "$(git -C "$CLONE" rev-parse HEAD)" = "$BEFORE" || die 'the probe moved the clone HEAD'
 test -z "$(git -C "$CLONE" status --porcelain=v1)" || die 'the probe dirtied the clone'
@@ -2514,26 +2871,62 @@ p.with_name("plan_tree.sha256").write_text(hashlib.sha256(raw).hexdigest()+"  pl
 PY
 chmod 0555 "$CUSTODY/tools/mutate_plan.py"
 
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+
 CASE=$(new_case plan-current "$PROBE_BASE")
 "$PY" "$CUSTODY/tools/mutate_plan.py" "$CASE/$FIRST_PACK/plan_tree.json"
 commit_case "$CASE" 'S-0 probe current plan non-freeze mutation'
 capture 104-plan-current "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}"
+  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --step6-confirmation-table "$STEP6_TABLE" \
+  --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 grep -F "$MANIFEST_CODE" "$TRANS/104-plan-current.stdout.json" > /dev/null \
   || die 'current-plan mutation did not produce the DEPENDENCY_MANIFEST code'
+if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
+    "$TRANS/104-plan-current.stdout.json" "$TRANS/104-plan-current.stderr.txt" > /dev/null; then
+  die 'the current-plan probe refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
+fi
 no_traceback 104-plan-current || die 'current-plan probe traceback'
 ```
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+
 CASE=$(new_case plan-sibling "$PROBE_BASE")
 "$PY" "$CUSTODY/tools/mutate_plan.py" "$CASE/$SECOND_PACK/plan_tree.json"
 commit_case "$CASE" 'S-0 probe sibling plan non-freeze mutation'
 capture 105-plan-sibling "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}"
+  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --step6-confirmation-table "$STEP6_TABLE" \
+  --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 grep -F "$MANIFEST_CODE" "$TRANS/105-plan-sibling.stdout.json" > /dev/null \
   || die 'sibling-plan mutation did not produce the DEPENDENCY_MANIFEST code'
+if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
+    "$TRANS/105-plan-sibling.stdout.json" "$TRANS/105-plan-sibling.stderr.txt" > /dev/null; then
+  die 'the sibling-plan probe refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
+fi
 no_traceback 105-plan-sibling || die 'sibling-plan probe traceback'
 ```
 
@@ -2601,6 +2994,18 @@ that is necessary to reach the intended authenticator.
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+
 cat > "$CUSTODY/tools/tamper_class.py" <<'PY'
 import argparse,hashlib,json,pathlib
 ap=argparse.ArgumentParser(); ap.add_argument("kind"); ap.add_argument("repo",type=pathlib.Path); ap.add_argument("pack")
@@ -2637,8 +3042,16 @@ for kind in source-json evidence-json evidence-sidecar freeze-json freeze-sideca
     || die "tamper driver failed for $kind"
   commit_case "$CASE" "S-0 per-class tamper $kind"
   capture "110-tamper-$kind" "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-    --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}"
+    --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+    --step6-confirmation-table "$STEP6_TABLE" \
+    --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
   test "$(cat "$TRANS/110-tamper-$kind.rc")" != 0 || die "tamper class $kind was ACCEPTED"
+  # No class may refuse for want of the pair: that refusal precedes every
+  # authenticator this probe is testing and would mask all eight of them.
+  if grep -F 'no expected confirmation digest supplied' \
+      "$TRANS/110-tamper-$kind.stdout.json" "$TRANS/110-tamper-$kind.stderr.txt" > /dev/null; then
+    die "tamper class $kind refused for want of the confirmation digest, not for its own tamper"
+  fi
   no_traceback "110-tamper-$kind" || die "tamper class $kind failed ugly"
   tampered=$((tampered + 1))
 done
@@ -2656,6 +3069,26 @@ grep -F 'readiness_freeze_receipt_mismatch' "$TRANS/110-tamper-freeze-sidecar.st
 grep -F "$MANIFEST_CODE" "$TRANS/110-tamper-plan-json.stdout.json" > /dev/null || die 'plan-json class'
 grep -F 'readiness_pack_digest_mismatch' "$TRANS/110-tamper-plan-sidecar.stdout.json" > /dev/null || die 'plan-sidecar class'
 grep -E '"histsem_[a-z0-9_]*(mismatch|invalid)"' "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null || die 'pinset-json class'
+
+# DETAIL-SHAPE assertions (Opus F0).  The digest-conditional raise runs BEFORE
+# the ordinary-path raise and shares its registry code, so the seven ordinary
+# classes must show NO digest-conditional detail at all -- if one does, the
+# pair failed to discharge the successor and the class was never reached.
+for kind in source-json evidence-json evidence-sidecar freeze-json freeze-sidecar plan-json plan-sidecar; do
+  if grep -F 'digest-conditional allowlist path' \
+      "$TRANS/110-tamper-$kind.stdout.json" "$TRANS/110-tamper-$kind.stderr.txt" > /dev/null; then
+    die "tamper class $kind refused on the digest-conditional path, not on its own tamper"
+  fi
+done
+# The pinset-json class is the ONE class whose intended refusal IS the
+# digest-conditional one, because the tamper rewrites the successor bytes the
+# confirmed table names.  It must be the AUTHENTICATED mismatch, never the
+# missing-input refusal.
+grep -F 'digest-conditional allowlist path' "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null \
+  || die 'the pinset-json class did not reach the digest-conditional C-to-S check'
+grep -F "bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest" \
+  "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null \
+  || die 'the pinset-json class did not refuse with the authenticated C-to-S bytes-differ detail'
 ```
 
 The complete enumerated classes and counts are:
@@ -2669,26 +3102,46 @@ The complete enumerated classes and counts are:
 | freeze sidecar (3) | replace its digest | `readiness_freeze_receipt_mismatch` |
 | plan-tree JSON (3) | coherent non-freeze mutation plus corrected sidecar | `$MANIFEST_CODE` (also §4(c)) |
 | plan-tree sidecar (3) | replace its digest only | `readiness_pack_digest_mismatch` |
-| successor pinset JSON (1) | change one governed `_v4` row's `plan_sha256` | a `histsem_*_mismatch` refusal and a C→S digest-condition refusal; after fixation, byte-only tamper must also fail the successor SHA assertion |
+| successor pinset JSON (1) | change one governed `_v4` row's `plan_sha256` | a `histsem_*_mismatch` refusal **and** the AUTHENTICATED C→S refusal, whose detail is `bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest`. The hS byte pin is a POST-FIXATION property and is probed separately, at `$FIXATION_COMMIT`, in §4.10 step 4 |
 
-For the pinset byte authenticator additionally run, inside the
-`tamper-pinset-json` case, the suite that carries the fixation pin. This is the
-step the fixation delta exists to make meaningful: `SUCCESSOR_PINSET_SHA256` is
-a literal, so a byte-only edit of the minted pinset fails here even when every
-structural check would have passed.
+**Two coordinates, and r4 collapsed them into one.** r4 ran the byte-pin probe
+here, inside the `tamper-pinset-json` case, from a case cut at `$PROBE_BASE`.
+Three things were wrong with that, and all three are cured by moving the probe
+(Sol 24–25; Opus F1–F2; ruling item 9):
 
-```zsh
-source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
-cd "$CASES/tamper-pinset-json"
+1. **The method did not exist at this coordinate.** `SUCCESSOR_PINSET_SHA256`
+   and `test_successor_pinset_hs_byte_pin` are added by the fixation delta,
+   which §4.10 applies. A case cut at `$PROBE_BASE` contains neither.
+2. **The grep named a method that exists nowhere.** r4 grepped
+   `test_successor_pinset_is_byte_pinned_at_fixation` — a name that exists
+   nowhere in the repository, and which appears in this runsheet only in this
+   sentence, as the record of the defect, never again as a command. The delta
+   defines `test_successor_pinset_hs_byte_pin`. Under §6 that is an instrument failure
+   — "a command that names a file, flag or refusal code that does not exist" —
+   not a typo to be fixed at the bench.
+3. **Deleting the grep would have made it worse, not better.** The suite would
+   still have gone red in that case, because the tamper reddens the whole-corpus
+   verifier test. The probe would then have PASSED for a reason with nothing to
+   do with a byte pin — the most expensive kind of green.
 
-set +e
-"$PY" -m unittest -v tests.test_receipt_histsem > "$TRANS/118-pinset-byte-pin.txt" 2>&1
-BYTE_PIN_RC=$?
-set -e
-test "$BYTE_PIN_RC" != 0 || die 'the tampered successor pinset PASSED the byte-pin suite'
-grep -F 'test_successor_pinset_is_byte_pinned_at_fixation' "$TRANS/118-pinset-byte-pin.txt" > /dev/null \
-  || die 'the byte-pin method did not run in the tampered case'
-```
+There is a fourth defect in the *case design*, and it is the one that matters
+most: **this tamper is not byte-only.** It rewrites `plan_sha256` and
+re-renders canonical JSON, so pack/receipt shape and canonicality both change,
+and `tests/test_receipt_histsem.py`'s canonicality check already catches that
+BEFORE fixation. A tamper that only the hS pin can catch has to be a
+SHAPE-PRESERVING canonical re-mint: identical `pack_count`, `receipt_count` and
+`pack_ids`, canonical bytes, one differing `plan_sha256`. That case is what
+§4.10 step 4 runs, and it is the only case in which the byte pin is the sole
+discriminator.
+
+So the two coordinates are now stated separately and evidenced separately:
+
+- **`110-*` stays PRE-FIXATION**, at `$PROBE_BASE`. It evidences the seven
+  ordinary tamper classes plus the successor's structural and authenticated
+  C→S refusals. None of these needs the hS pin.
+- **`118-*` moves POST-FIXATION**, to a case cut at `$FIXATION_COMMIT` in §4.10
+  step 4, where the pin exists. It evidences one property only: the hS byte
+  pin as sole discriminator over a shape-preserving re-mint.
 
 Pass iff **all eight** classes refuse through an independent digest, binding or
 semantic-replay authenticator. For the successor class, the Ed-confirmed C→S
@@ -2768,6 +3221,18 @@ transaction's `arm-0001`.** Two rules follow, both already enforced above:
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+
 # Transaction refusal side: keep Ed's table fixed, mutate the committed
 # successor bytes at a later reviewed head, and require DEPENDENCY_CHANGED_SET.
 # NOTE: this arms into $CUSTODY/windows and mints arm-0002 (see above).
@@ -2776,9 +3241,25 @@ printf '\n' >> "$CASE/$SUCCESSOR_PINSET"
 commit_case "$CASE" 'S-0 C-to-S probe: later successor rewrite'
 capture 123-c-to-s-later-rewrite "$PY" "$CASE/scripts/generate_arm_readiness.py" arm \
   --pack-root "$CASE/$FIRST_PACK" --arm-context "$ARM_CONTEXT" \
-  --window-custody-root "$CUSTODY/windows"
+  --window-custody-root "$CUSTODY/windows" \
+  --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 grep -F "$CHANGED_CODE" "$TRANS/123-c-to-s-later-rewrite.stdout.json" > /dev/null \
   || die 'a later successor rewrite was NOT refused by DEPENDENCY_CHANGED_SET'
+# This is the ONE probe whose intended cause IS the digest-conditional path, so
+# here the detail must be PRESENT -- and it must be the AUTHENTICATED mismatch.
+# Without the pair the same code arrives with the detail "no expected
+# confirmation digest supplied", which proves nothing about a later rewrite.
+grep -F 'digest-conditional allowlist path' \
+  "$TRANS/123-c-to-s-later-rewrite.stdout.json" > /dev/null \
+  || die 'the later-rewrite probe did not refuse on the digest-conditional path'
+grep -F "bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest" \
+  "$TRANS/123-c-to-s-later-rewrite.stdout.json" > /dev/null \
+  || die 'the later-rewrite refusal is not the authenticated C-to-S bytes-differ detail'
+if grep -F 'no expected confirmation digest supplied' \
+    "$TRANS/123-c-to-s-later-rewrite.stdout.json" \
+    "$TRANS/123-c-to-s-later-rewrite.stderr.txt" > /dev/null; then
+  die 'the later-rewrite probe refused for want of hC, not for the rewrite'
+fi
 no_traceback 123-c-to-s-later-rewrite || die 'C-to-S rewrite probe traceback'
 ```
 
@@ -2802,6 +3283,18 @@ source-digest authenticator and reaches `arm_readiness.py:4467-4484`.
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
+
 CASE=$(new_case manifest-binding "$PROBE_BASE")
 "$PY" - "$CASE/$FIRST_PACK" <<'PY'
 import hashlib,json,pathlib,sys
@@ -2817,9 +3310,15 @@ rec.with_name(rec.name+".sha256").write_text(hashlib.sha256(rraw).hexdigest()+" 
 PY
 commit_case "$CASE" 'S-0 manifest source-receipt conjunct'
 capture 119-manifest-binding "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}"
+  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --step6-confirmation-table "$STEP6_TABLE" \
+  --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 grep -F "$MANIFEST_CODE" "$TRANS/119-manifest-binding.stdout.json" > /dev/null \
   || die 'the source/receipt conjunct half did not refuse with DEPENDENCY_MANIFEST'
+if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
+    "$TRANS/119-manifest-binding.stdout.json" "$TRANS/119-manifest-binding.stderr.txt" > /dev/null; then
+  die 'the manifest-binding probe refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
+fi
 no_traceback 119-manifest-binding || die 'manifest-binding probe traceback'
 ```
 
@@ -2837,6 +3336,18 @@ genuinely different validators.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
+# 085 is a cross-check and never the source).
+STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
+test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
+test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
+  || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+  "$ED_STEP6_CONFIRMED_SHA256" \
+  || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
+test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
+  || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
 
 CASE=$(new_case s6-dual "$PROBE_BASE")
 "$PY" "$CUSTODY/tools/mutate_plan.py" "$CASE/$FIRST_PACK/plan_tree.json"
@@ -2865,9 +3376,15 @@ else
 fi
 
 capture 121-s6-r1 "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}"
+  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --step6-confirmation-table "$STEP6_TABLE" \
+  --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 grep -F "$MANIFEST_CODE" "$TRANS/121-s6-r1.stdout.json" > /dev/null \
   || die 'the R1 half of the S-6 dual falsifier did not refuse'
+if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
+    "$TRANS/121-s6-r1.stdout.json" "$TRANS/121-s6-r1.stderr.txt" > /dev/null; then
+  die 'the S-6 R1 half refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
+fi
 no_traceback 121-s6-r1 || die 'S-6 R1 probe traceback'
 ```
 
@@ -2891,7 +3408,9 @@ invented path (`$CASES/definitely-absent-pinset.json`) as `--pinset` and expecte
 `histsem_pinset_absent`. That is unreachable: `_load_histsem_pinset`
 (`:3285-3345`) rejects any override outside the closed enumeration with
 `histsem_pinset_invalid` at `:3301-3304` before it ever reads a file, and the
-committed `tests/test_receipt_histsem.py:146-165` pins exactly that behaviour.
+committed `tests/test_receipt_histsem.py:220-238`
+(`test_verifier_cli_refusal_is_canonical_and_exit_two`, post-W1 coordinates)
+pins exactly that behaviour.
 The only path to `histsem_pinset_absent` is the `present == 0` branch at
 `:3340-3344`, reached by naming an **enumerated** member that is absent from the
 worktree. The probe therefore removes the successor member in a fresh case and
@@ -2939,7 +3458,7 @@ enumerated member does not tighten the library's default HEAD-absence semantics;
 only this explicit CLI/worktree verifier path promises `histsem_pinset_absent`.
 Authority: D-151 conditions 2 and 6; RH-8 and normative annexes;
 HISTSEM-CONTRACT "Failure semantics"; `verify_receipt_histsem.py:22-73`;
-`arm_readiness.py:3285-3345`; `tests/test_receipt_histsem.py:146-165`; AUDIT F-3.
+`arm_readiness.py:3285-3345`; `tests/test_receipt_histsem.py:220-238`; AUDIT F-3.
 
 ### 4(i). Poison question — direct code-path probe
 
@@ -3031,19 +3550,26 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 # digest is RECOMPUTED from the worktree bytes and compared against that
 # record before it is substituted — the successor pinset must not have moved
 # between the allowlist-contract closure and fixation.
+# Both checks below are the load-bearing ones in this step, so neither may be
+# a bare assert statement: python -O strips assert statements, and a
+# substitution that silently skipped its equality check would pin an unverified
+# digest into the permanent record.  An explicit raise cannot be optimized away.
 "$PY" - "$CLONE" "$(cat "$TRANS/074-successor-sha256.txt")" <<'PY'
 import hashlib, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 recorded = sys.argv[2].strip()
 pinset = root / "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
 digest = hashlib.sha256(pinset.read_bytes()).hexdigest()
-assert digest == recorded, (
-    "successor pinset bytes moved between mint and fixation: "
-    f"recorded {recorded}, recomputed {digest}")
+if digest != recorded:
+    raise SystemExit(
+        "successor pinset bytes moved between the allowlist-contract closure "
+        f"and fixation: recorded {recorded}, recomputed {digest}")
 target = root / "tests/test_receipt_histsem.py"
 text = target.read_text(encoding="utf-8")
 sentinel = '"S0-FIXATION-SUBSTITUTION-PENDING"'
-assert text.count(sentinel) == 1, f"sentinel appears {text.count(sentinel)} times"
+count = text.count(sentinel)
+if count != 1:
+    raise SystemExit(f"sentinel appears {count} times, expected exactly 1")
 target.write_text(text.replace(sentinel, f'"{digest}"'), encoding="utf-8")
 print(digest)
 PY
@@ -3057,7 +3583,11 @@ test "$(cat "$TRANS/075-fixation-changed-paths-after-substitution.txt")" = 'test
   || die 'substitution widened the changed set'
 ```
 
-**Step 3 — run the suite over the fixed file, then make the fixation commit.**
+**Step 3 — run the suite over the FIXED WORKTREE, then make the fixation
+commit.** The suite below runs after the substitution and **before** the
+fixation commit exists, so it is the fixed-worktree pre-commit run, not a
+"post-fixation" one; r4 called it post-fixation, which named a commit that had
+not been made yet (Sol 33).
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
@@ -3068,13 +3598,32 @@ set +e
   > "$TRANS/076-histsem-differential-bytepin-tests.txt" 2>&1
 HISTSEM_RC=$?
 set -e
-test "$HISTSEM_RC" = 0 || die "post-fixation histsem suite failed with rc $HISTSEM_RC; see 076"
+test "$HISTSEM_RC" = 0 \
+  || die "fixed-worktree histsem suite failed with rc $HISTSEM_RC; see 076"
+# The byte-pin method must have RUN and PASSED here, on the untampered pinset.
+# Its failing counterpart at §4.10 step 4 is what makes this PASS informative.
+grep -F 'test_successor_pinset_hs_byte_pin' \
+  "$TRANS/076-histsem-differential-bytepin-tests.txt" > /dev/null \
+  || die 'the hS byte-pin method did not run in the fixed worktree; see 076'
+if grep -E '^(FAIL|ERROR): test_successor_pinset_hs_byte_pin' \
+    "$TRANS/076-histsem-differential-bytepin-tests.txt" > /dev/null; then
+  die 'the hS byte-pin method FAILED on the untampered pinset; the substitution is wrong'
+fi
 
 git -C "$CLONE" diff --exit-code "$PINSET_MINT_HEAD" -- "$BASE_PINSET" \
-  || die 'the v1 pinset member changed after window close'
+  || die 'the v1 pinset member changed after the allowlist-contract closure'
 git -C "$CLONE" add -- tests/test_receipt_histsem.py
-git -C "$CLONE" commit -m 'S-0 fix successor pinset SHA and counts after window close'
+# A6 vocabulary, and A2 content: this commit pins the successor hS byte digest
+# and NOTHING else.  The counts moved into the pre-derivation candidate under
+# D-153 A2, so r4 message ("SHA and counts after window close") named a change
+# this commit does not make, in a reserved vocabulary, in the permanent record.
+git -C "$CLONE" commit -m 'S-0 fixation: pin successor pinset SHA-256 (hS) after the allowlist-contract closure'
 FIXATION_COMMIT=$(git -C "$CLONE" rev-parse HEAD)
+# CLONE-PROOF-ONLY evidence.  This proves the fixation commit is the first
+# commit in THIS CLONE after the allowlist-contract closure head.  It is NOT
+# evidence that fixation is the first commit after the r4-3 commit-freeze
+# window close -- the clone proof has no commit-freeze window at all, and §5
+# records the real first-post-window placement as a separate obligation.
 test "$(git -C "$CLONE" rev-list --count "$PINSET_MINT_HEAD..$FIXATION_COMMIT")" = 1 \
   || die 'the fixation commit is not the FIRST commit after the allowlist-contract closure'
 git -C "$CLONE" update-ref refs/heads/main "$FIXATION_COMMIT"
@@ -3083,7 +3632,83 @@ record_env FIXATION_COMMIT "$FIXATION_COMMIT"
 printf '%s\n' "$FIXATION_COMMIT" > "$TRANS/077-fixation-commit.txt"
 ```
 
-**Step 4 — independent recomputation.** An independent reviewer recomputes the
+**Step 4 — the hS byte pin as SOLE discriminator (`118-*`), at the fixation
+head.** Relocated here from §4(e) by ruling item 9 (Opus F1/F2, Sol 25). This
+is the first head at which `SUCCESSOR_PINSET_SHA256` and
+`test_successor_pinset_hs_byte_pin` exist at all, so it is the first head at
+which the probe can mean anything.
+
+The tamper is a **shape-preserving canonical re-mint**: same `pack_count`, same
+`receipt_count`, same `pack_ids`, canonically rendered bytes, one differing
+`plan_sha256`. That shape is chosen for one reason. A crude byte edit is caught
+before fixation by this file's canonicality check, and a shape change is caught
+by the shape tests, so neither isolates the pin. Only a well-formed re-mint of
+identical shape leaves hS as the sole thing that can notice — which is exactly
+the property the fixation delta's own docstring claims for it.
+
+The assertion is not "the suite went red." It is that this NAMED METHOD is in
+the failure list: a tampered pinset reddens other tests too, and r4's probe
+would have passed on that noise alone.
+
+```zsh
+source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+
+CASE=$(new_case pinset-hs-byte-pin "$FIXATION_COMMIT")
+"$PY" - "$CASE/$SUCCESSOR_PINSET" <<'PY'
+import hashlib, json, pathlib, sys
+
+path = pathlib.Path(sys.argv[1])
+raw_before = path.read_bytes()
+before = json.loads(raw_before.decode("utf-8"))
+
+
+def shape(value):
+    return (len(value["packs"]),
+            sum(row["receipt_count"] for row in value["packs"]),
+            sorted(row["pack_id"] for row in value["packs"]))
+
+
+after = json.loads(raw_before.decode("utf-8"))
+row = after["packs"][0]
+row["plan_sha256"] = "1" * 64 if row["plan_sha256"] == "0" * 64 else "0" * 64
+raw_after = (json.dumps(after, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+
+if shape(after) != shape(before):
+    raise SystemExit("the re-mint changed the pinset shape; it is no longer a byte-pin-only case")
+reround = (json.dumps(json.loads(raw_after.decode("utf-8")), indent=2,
+                      sort_keys=True, ensure_ascii=False) + "\n").encode()
+if reround != raw_after:
+    raise SystemExit("the re-mint is not canonical; canonicality would catch it before hS does")
+if hashlib.sha256(raw_after).hexdigest() == hashlib.sha256(raw_before).hexdigest():
+    raise SystemExit("the re-mint did not change the bytes; there is nothing for hS to catch")
+path.write_bytes(raw_after)
+print(json.dumps({"status": "PASS",
+                  "shape_preserved": True,
+                  "canonical": True,
+                  "sha256_before": hashlib.sha256(raw_before).hexdigest(),
+                  "sha256_after": hashlib.sha256(raw_after).hexdigest()},
+                 indent=2, sort_keys=True))
+PY
+commit_case "$CASE" 'S-0 probe: shape-preserving canonical re-mint of the successor pinset'
+cd "$CASE"
+
+set +e
+"$PY" -m unittest -v tests.test_receipt_histsem > "$TRANS/118-pinset-byte-pin.txt" 2>&1
+BYTE_PIN_RC=$?
+set -e
+test "$BYTE_PIN_RC" != 0 || die 'the re-minted successor pinset PASSED the byte-pin suite'
+grep -F 'test_successor_pinset_hs_byte_pin' "$TRANS/118-pinset-byte-pin.txt" > /dev/null \
+  || die 'the hS byte-pin method did not run in the re-minted case'
+grep -E '^(FAIL|ERROR): test_successor_pinset_hs_byte_pin' \
+  "$TRANS/118-pinset-byte-pin.txt" > /dev/null \
+  || die 'the suite went red without the hS byte-pin method failing: this probe proves nothing'
+```
+
+Pass iff the re-mint is shape-preserving and canonical, and
+`test_successor_pinset_hs_byte_pin` is named in the transcript FAIL/ERROR list.
+Authority: D-151 condition 3; D-153 A2; Opus F1 and F2; synthesis item 9.
+
+**Step 5 — independent recomputation.** An independent reviewer recomputes the
 successor SHA-256 and its pack/receipt counts from the committed blob at
 `$FIXATION_COMMIT`, checks them against `074-successor-sha256.txt` and against
 the substituted literal in `tests/test_receipt_histsem.py`, and later checks the
@@ -3107,34 +3732,70 @@ custody, never a measurement checkout). Check a box only after independently
 reading its named artifacts.
 
 - [ ] **r4-2** — One full three-pack sequence is evidenced by `030-*`, `031-*`,
-  `032-*`, `040-*`, `042-*`, `050-*`, `060-*`, `061-*`, `070-*`–`077-*`,
-  `080-*`, `081-*`, `082-*`, `084-*`, `085-*`, `090-*`, `091-*`, `092-*` and
-  `097-*` (there is no `083-*`: no step produces one), plus `098-*`;
-  every pack crosses the actual changed-set gate CLEANLY **(D-153: the residue at
-  `$PINSET_MINT_HEAD` is empty, no arm transcript carries the changed-set code,
-  and the eleven-kind census has returned)**; ordinary path, both unexpected-output namespaces,
-  both plan-tree directions, candidate-shape triplet, C→S, and poison probes
-  adjudicate as specified. Every cardinality assertion (`3` packs, `8` tamper
-  classes, `3` arm transcripts) is recorded, not assumed.
+  `032-*`, `040-*`, `042-*`, `050-*`, `060-*`, `061-*`, `070-*`–`077-*`
+  (**073, 075, 076 and 077 are produced at §4.10, not at the mint; `074-*` is
+  positional-historic — it is produced at §3.7 step 3 and keeps its ordinal so
+  its consumers read the same name**), `080-*`, `081-*`, `082-*`,
+  `084-marker-forged-ref-classification.txt` (the MARKER's forged-ref
+  classification — not to be confused with `094-*`, the local-green one),
+  `085-*`, `090-*`, `091-*`, `092-*` and `097-*` (there is no `083-*`: no step
+  produces one), plus `098-*`; every pack crosses the actual changed-set gate
+  CLEANLY **(D-153: the residue at `$PINSET_MINT_HEAD` is empty, no arm
+  transcript carries the changed-set code, and the eleven-kind census has
+  returned)**; ordinary path, both unexpected-output namespaces, both plan-tree
+  directions, candidate-shape triplet, C→S, and poison probes adjudicate as
+  specified. **Every post-mint enforcing transcript was produced with the
+  complete `C + hC` confirmation pair**: no transcript in `091-*`, `092-*`,
+  `101-*`, `102-*`, `104-*`, `105-*`, `110-*`, `119-*`, `121-*` or `123-*`
+  contains "no expected confirmation digest supplied". Every cardinality
+  assertion (`3` packs, `8` tamper classes, `3` arm transcripts) is recorded,
+  not assumed.
 - [ ] **V-2** — Lead/magistrate custody and nondelegation are recorded in
   `001-*` through `010-*`; S-6 both validators are `120-*`/`121-*`; governed arm
   and verify and every transcript have been read with no fail-ugly traceback.
-- [ ] **V-1.vi / D-151 C→S** — All eight path classes in `110-*` and `118-*`
-  have independent tamper refusals, including the two manifest halves;
-  `122-*`/`123-*` prove that successor subtraction is conditional on Ed's exact
-  table digest and that a later rewrite refuses **(D-153; the subtraction is
-  evidenced by the successor's ABSENCE from `098-*`'s empty residue)**;
-  any unauthenticated class has
-  triggered the derived-manifest reopen rather than being waived. Authority:
-  D-151 condition 2.
-- [ ] **rh-8 / D-151 successor** — The 112 arithmetic and exact window-close
-  contract are PASS in `020-*`/`090-*`; present chain and arm crossing are
-  `072-*`/`091-*`; explicit enumerated-member absence is `130-*` and the
-  out-of-enumeration refusal is `131-*`; missing/extra/unused are
-  `106-*`–`108-*`; all three `_v4` rows and local-Git provenance are in the
-  create-only successor at `070-*`; the v1 member is byte-unchanged; fixation is
-  the first post-window commit (`077-*` plus the `rev-list --count` assertion).
-  Authority: D-151 conditions 1–3 and 6.
+  **Refusal DETAIL, not only refusal code, has been read on every R1
+  transcript** (Opus F0): `digest-conditional allowlist path` is ABSENT from
+  `101-*`, `104-*`, `105-*`, the seven ordinary `110-*` classes, `119-*` and
+  `121-*`, and PRESENT — as the authenticated `bytes at the reviewed HEAD
+  differ from Ed's confirmed step-6 digest` detail — in `110-tamper-pinset-json`
+  and `123-*`. A code-only reading cannot separate the two causes and is not
+  acceptance.
+- [ ] **V-1.vi / D-151 C→S** — Split by COORDINATE and by AUTHENTICATOR, which
+  r4 ran together and could not have satisfied:
+  - **Pre-fixation, at `$PROBE_BASE` (`110-*`, eight cases).** The seven
+    ordinary classes each refuse through their own digest, binding or
+    semantic-replay authenticator, with no digest-conditional detail present;
+    the successor class refuses through BOTH its structural `histsem_*` check
+    and the authenticated C→S mismatch. The two manifest halves are `104-*`,
+    `105-*` and `119-*`.
+  - **Post-fixation, at `$FIXATION_COMMIT` (`118-*`, one case).** The
+    shape-preserving canonical re-mint fails `test_successor_pinset_hs_byte_pin`
+    BY NAME in the transcript's FAIL/ERROR list — the hS byte pin as sole
+    discriminator. This case cannot exist pre-fixation, because the method does
+    not exist there.
+  - **C→S conditionality (`122-*`/`123-*`).** Successor subtraction is
+    conditional on Ed's exact table digest, and a later rewrite refuses with the
+    authenticated bytes-differ detail rather than a missing-input one **(D-153;
+    the subtraction is evidenced by the successor's ABSENCE from `098-*`'s empty
+    residue)**.
+  Any unauthenticated class has triggered the derived-manifest reopen rather
+  than being waived. Authority: D-151 condition 2; synthesis items 9, 10 and 15.
+- [ ] **rh-8 / D-151 successor** — The 112 arithmetic and the exact
+  **ALLOWLIST-CONTRACT CLOSURE** are PASS in `020-*`/`090-*` (A6: "window close"
+  is reserved for the r4-3 commit-freeze close and is not what `090-*`
+  evidences); present chain and arm crossing are `072-*`/`091-*`; explicit
+  enumerated-member absence is `130-*` and the out-of-enumeration refusal is
+  `131-*`; missing/extra/unused are `106-*`–`108-*`; all three `_v4` rows and
+  local-Git provenance are in the create-only successor at `070-*`; the v1
+  member is byte-unchanged. **Fixation placement is TWO separate obligations,
+  and only the first is discharged here:** (i) in this clone, `077-*` plus the
+  `rev-list --count` assertion prove the fixation commit is the first commit
+  after the allowlist-contract closure head — CLONE-PROOF-ONLY, since the clone
+  has no commit-freeze window at all; (ii) in the REAL transaction, fixation
+  being the first commit after the r4-3 commit-freeze window close is an
+  EXTERNAL obligation discharged by that transaction's own record, and no
+  transcript in this runsheet may be cited for it. Authority: D-151 conditions
+  1–3 and 6; D-153 A1 and A6; Opus F9 and F10.
 - [ ] **D-150 marker** — Only `BUILD-AT-BOUNDARY`, CUSTODY-EXTERNAL ran;
   candidate transcript `082-*` says `lane: candidate`, `gate_admissible: false`,
   and names the forged OID; the built marker carries its
@@ -3149,17 +3810,23 @@ reading its named artifacts.
   the four executing custody tools in `$CLONE/scripts/` matched their manifest
   `custody_tools` digests before any tool ran (§3.6.1); the fixation delta
   matched both its manifest `custody_inputs` digest and its committed GNU
-  sidecar; the anchor map re-checked 13/13 at `$BASE` (`005-*`); and HEADs, Git
+  sidecar; the anchor map re-checked 15/15 at `$BASE` (`005-*`); and HEADs, Git
   statuses and complete stdout/stderr/exit-code triplets are present under the
   custody root. There is **no** candidate patch, no `$INPUT` tool set and no
   tool sidecar check in this lane: the merge supersedes all three. Authority:
   S-1 MANIFEST §§2.4, 4, 6 and 9.1 G-1/G-4; AUDIT F-1, F-8.
 - [ ] **Fixation delta** — `s0-fixation-delta.patch` applied cleanly
-  (`073-*`), touched only `tests/test_receipt_histsem.py` (`073-*`/`075-*`), its
-  single sentinel was substituted with the minted successor digest (`074-*`),
-  the sentinel does not survive anywhere in the fixed file, the post-fixation
-  histsem suite is rc 0 (`076-*`), and Ed's confirmed table names the same
-  successor digest. Authority: D-151 condition 3; AUDIT F-2.
+  (`073-*`) and touched only `tests/test_receipt_histsem.py` (`073-*`/`075-*`).
+  Its single sentinel was substituted with the digest **recomputed from the
+  worktree at fixation time and proven equal to the mint-time record** — that
+  record is `074-*`, which is what `074-*` evidences; the substitution itself is
+  evidenced by `075-*`, by the sentinel-absence grep, and by step 2's stdout
+  (Opus F12). The sentinel does not survive anywhere in the fixed file. The
+  **fixed-worktree pre-commit** histsem suite is rc 0 (`076-*`) and
+  `test_successor_pinset_hs_byte_pin` ran and PASSED in it by name; its failing
+  counterpart over the shape-preserving re-mint is `118-*`. Ed's confirmed table
+  names the same successor digest. Authority: D-151 condition 3; AUDIT F-2;
+  Opus F12; Sol 40.
 - ~~S0-BLOCKED addendum~~ **STRUCK 2026-08-23 by magistrate ruling** (recorded in
   the S-1 fix-round packet and MANIFEST §9.3): the 21-method flip theory was
   DISPROVEN BY MEASUREMENT — the partition is S0-BLOCKED 0 / STRUCTURAL 17 /
@@ -3168,10 +3835,17 @@ reading its named artifacts.
   (FIXTURE-MODERNIZATION-01) and the 4 crash entries A85 (MLX-ACID-SIGABRT-01,
   which also requires A84).
 - [ ] **Two-part green** — `093-*`/`094-*` are recorded only as local
-  forged-`origin/main`-conditional with the exact forged OID; a separate clean,
+  forged-`origin/main`-conditional with the exact forged OID. A separate clean,
   strict-four-way real-ref run records PUBLISHED GREEN before acceptance
-  closure. No transcript calls local green "suite green." Authority: D-151
-  condition 4.
+  closure, **at the published WINDOW-CLOSE head — never at the fixation commit**
+  (D-153 A1 + A3; Opus F11), and it is EVIDENCED BY COMMANDS, not by prose:
+  `150-*` (four-way ref equality), `151-*` (publication-lane marker replay,
+  committed-blob lane, carrying the confirmation pair, `lane: "published"`,
+  `gate_admissible: true`, with `confirmation_missing` and
+  `confirmation_mismatch` in its executed-checks list) and `152-*`/`153-*` (the
+  real-ref suite and its classification), all under
+  `$CUSTODY/published-green`. No transcript calls local green "suite green."
+  Authority: D-151 condition 4; D-153 A1 and A3; Sol 59.
 - [ ] No command touched or read `/Users/edr/JouleWise-measurement-20260818`; no
   quiet-Mac measurement, freeze outside the clone, dry-run, arm launch, consume
   or publication occurred. §3.2's read-only use of
