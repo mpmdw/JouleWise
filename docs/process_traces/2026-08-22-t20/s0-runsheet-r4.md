@@ -339,9 +339,11 @@ block below:
   Concatenating the blocks and parsing the result is meaningless — later blocks
   legitimately reopen constructs the earlier ones closed — so the pass runs on
   each extracted block separately. Every block parses clean except §1.1's
-  first, and that one cannot: its four operator inputs are written
-  `NAME=<description>`, and an unsubstituted `<`/`>` is a redirection with no
-  target. That block is the block the operator substitutes before running, so
+  first, and that one cannot: its three `NAME=<description>` operator
+  placeholders (`SESSION`, `BASE`, `CI_RUN_ID`) leave an unsubstituted
+  `<`/`>`, which is a redirection with no target. (`MEASURE_PY`, the fourth
+  operator input named above, is not one of them — it is written into `env.sh`
+  as a literal path, not as a placeholder.) That block is the block the operator substitutes before running, so
   the exemption is bounded and disclosed here rather than rediscovered as
   drift. Any OTHER block failing `zsh -n` is an instrument defect. (Recorded
   by r5, from running the pass.)
@@ -3068,7 +3070,22 @@ grep -F 'readiness_freeze_receipt_mismatch' "$TRANS/110-tamper-freeze-json.stdou
 grep -F 'readiness_freeze_receipt_mismatch' "$TRANS/110-tamper-freeze-sidecar.stdout.json" > /dev/null || die 'freeze-sidecar class'
 grep -F "$MANIFEST_CODE" "$TRANS/110-tamper-plan-json.stdout.json" > /dev/null || die 'plan-json class'
 grep -F 'readiness_pack_digest_mismatch' "$TRANS/110-tamper-plan-sidecar.stdout.json" > /dev/null || die 'plan-sidecar class'
-grep -E '"histsem_[a-z0-9_]*(mismatch|invalid)"' "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null || die 'pinset-json class'
+# pinset-json is the ONE class whose expected refusal is the C-to-S one, and
+# it can produce NO histsem_* code at all.  Re-derived from the raise sites:
+# generate_freeze_receipt calls _gate_receipt_histsem on the PREDECESSOR pack
+# first (arm_readiness.py:6705), but this tamper re-renders the successor
+# pinset as canonical, schema-valid JSON with the same pack identities, so the
+# chain loads clean and that gate returns without raising.  Execution then
+# reaches _require_confirmed_conditional_path (:4312-4367), whose refuse()
+# helper is hardwired to the DEPENDENCY_CHANGED_SET role (D-151 condition 1e:
+# no new refusal codes), and the replay boundary returns
+# reason_codes=[DEPENDENCY_CHANGED_SET] with that raise's detail
+# (:6814-6821).  r5 first asked for a histsem_* code here as well; the two
+# assertions are mutually unreachable, and the C-to-S one is correct.
+grep -F "$CHANGED_CODE" "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null || die 'pinset-json class'
+"$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["reason_codes"]==[sys.argv[2]], d["reason_codes"]' \
+  "$TRANS/110-tamper-pinset-json.stdout.json" "$CHANGED_CODE" \
+  || die 'the pinset-json class did not return reason_codes exactly [DEPENDENCY_CHANGED_SET]'
 
 # DETAIL-SHAPE assertions (Opus F0).  The digest-conditional raise runs BEFORE
 # the ordinary-path raise and shares its registry code, so the seven ordinary
@@ -3083,7 +3100,8 @@ done
 # The pinset-json class is the ONE class whose intended refusal IS the
 # digest-conditional one, because the tamper rewrites the successor bytes the
 # confirmed table names.  It must be the AUTHENTICATED mismatch, never the
-# missing-input refusal.
+# missing-input refusal.  This is the same refusal the code line above
+# asserts; here the DETAIL is pinned, there the CODE is.
 grep -F 'digest-conditional allowlist path' "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null \
   || die 'the pinset-json class did not reach the digest-conditional C-to-S check'
 grep -F "bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest" \
@@ -3102,7 +3120,7 @@ The complete enumerated classes and counts are:
 | freeze sidecar (3) | replace its digest | `readiness_freeze_receipt_mismatch` |
 | plan-tree JSON (3) | coherent non-freeze mutation plus corrected sidecar | `$MANIFEST_CODE` (also §4(c)) |
 | plan-tree sidecar (3) | replace its digest only | `readiness_pack_digest_mismatch` |
-| successor pinset JSON (1) | change one governed `_v4` row's `plan_sha256` | a `histsem_*_mismatch` refusal **and** the AUTHENTICATED C→S refusal, whose detail is `bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest`. The hS byte pin is a POST-FIXATION property and is probed separately, at `$FIXATION_COMMIT`, in §4.10 step 4 |
+| successor pinset JSON (1) | change one governed `_v4` row's `plan_sha256` | the AUTHENTICATED C→S refusal and nothing else: `reason_codes` is exactly `[DEPENDENCY_CHANGED_SET]`, with detail `digest-conditional allowlist path …: bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest`. **No `histsem_*` code is reachable on this path** — the tamper stays canonical and schema-valid, so the histsem gate loads the chain and returns before raising. The hS byte pin is a POST-FIXATION property and is probed separately, at `$FIXATION_COMMIT`, in §4.10 step 4 |
 
 **Two coordinates, and r4 collapsed them into one.** r4 ran the byte-pin probe
 here, inside the `tamper-pinset-json` case, from a case cut at `$PROBE_BASE`.
@@ -3128,11 +3146,22 @@ There is a fourth defect in the *case design*, and it is the one that matters
 most: **this tamper is not byte-only.** It rewrites `plan_sha256` and
 re-renders canonical JSON, so pack/receipt shape and canonicality both change,
 and `tests/test_receipt_histsem.py`'s canonicality check already catches that
-BEFORE fixation. A tamper that only the hS pin can catch has to be a
-SHAPE-PRESERVING canonical re-mint: identical `pack_count`, `receipt_count` and
-`pack_ids`, canonical bytes, one differing `plan_sha256`. That case is what
-§4.10 step 4 runs, and it is the only case in which the byte pin is the sole
-discriminator.
+BEFORE fixation — i.e. the case cannot show the byte pin doing any work the
+file was not already doing. The case that can is a SHAPE-PRESERVING canonical
+re-mint: identical `pack_count`, `receipt_count` and `pack_ids`, canonical
+bytes, one differing `plan_sha256`. That case is what §4.10 step 4 runs, and it
+is the case in which the byte pin's own failure is attributable to the byte pin
+rather than to canonicality or shape.
+
+**It is NOT the only test that reddens on that case, and this runsheet does not
+claim it is.** The same re-mint changes a governed row's `plan_sha256`, which
+the full-corpus test independently catches as `histsem_binding_mismatch`. That
+is fine and expected. What §4.10 step 4 proves is narrower and stronger than
+"only this test fails": it proves that
+`test_successor_pinset_hs_byte_pin` — the byte pin's own assertion — is itself
+in the failure list, BY NAME. That claim is independent of how many other tests
+also go red, which is exactly why the probe asserts the method name rather than
+the suite's exit code.
 
 So the two coordinates are now stated separately and evidenced separately:
 
@@ -3140,8 +3169,11 @@ So the two coordinates are now stated separately and evidenced separately:
   ordinary tamper classes plus the successor's structural and authenticated
   C→S refusals. None of these needs the hS pin.
 - **`118-*` moves POST-FIXATION**, to a case cut at `$FIXATION_COMMIT` in §4.10
-  step 4, where the pin exists. It evidences one property only: the hS byte
-  pin as sole discriminator over a shape-preserving re-mint.
+  step 4, where the pin exists. It evidences one property: over a
+  shape-preserving canonical re-mint, `test_successor_pinset_hs_byte_pin`
+  itself fails, by name. Other tests fail on that case too
+  (`histsem_binding_mismatch` in the full-corpus test); the by-name assertion
+  is what makes the evidence about the byte pin regardless.
 
 Pass iff **all eight** classes refuse through an independent digest, binding or
 semantic-replay authenticator. For the successor class, the Ed-confirmed C→S
@@ -3554,7 +3586,8 @@ source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 # a bare assert statement: python -O strips assert statements, and a
 # substitution that silently skipped its equality check would pin an unverified
 # digest into the permanent record.  An explicit raise cannot be optimized away.
-"$PY" - "$CLONE" "$(cat "$TRANS/074-successor-sha256.txt")" <<'PY'
+"$PY" - "$CLONE" "$(cat "$TRANS/074-successor-sha256.txt")" \
+  > "$TRANS/078-fixation-substituted-digest.txt" <<'PY'
 import hashlib, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 recorded = sys.argv[2].strip()
@@ -3573,6 +3606,14 @@ if count != 1:
 target.write_text(text.replace(sentinel, f'"{digest}"'), encoding="utf-8")
 print(digest)
 PY
+# The digest actually substituted is now an ARTIFACT, not just stdout on the
+# operator's terminal: §5 has to be checkable by a reviewer who was not in the
+# room, and r5's first cut cited "step 2's stdout" as evidence when nothing
+# captured it.
+test -s "$TRANS/078-fixation-substituted-digest.txt" \
+  || die 'the substituted-digest record is empty'
+test "$(cat "$TRANS/078-fixation-substituted-digest.txt")" = "$(cat "$TRANS/074-successor-sha256.txt")" \
+  || die 'the substituted digest is not the mint-time record from 074'
 if grep -qF 'S0-FIXATION-SUBSTITUTION-PENDING' "$CLONE/tests/test_receipt_histsem.py"; then
   die 'the fixation sentinel survived the substitution'
 fi
@@ -3632,23 +3673,31 @@ record_env FIXATION_COMMIT "$FIXATION_COMMIT"
 printf '%s\n' "$FIXATION_COMMIT" > "$TRANS/077-fixation-commit.txt"
 ```
 
-**Step 4 — the hS byte pin as SOLE discriminator (`118-*`), at the fixation
-head.** Relocated here from §4(e) by ruling item 9 (Opus F1/F2, Sol 25). This
-is the first head at which `SUCCESSOR_PINSET_SHA256` and
-`test_successor_pinset_hs_byte_pin` exist at all, so it is the first head at
-which the probe can mean anything.
+**Step 4 — the hS byte pin fails BY NAME over a shape-preserving re-mint
+(`118-*`), at the fixation head.** Relocated here from §4(e) by ruling item 9
+(Opus F1/F2, Sol 25). This is the first head at which `SUCCESSOR_PINSET_SHA256`
+and `test_successor_pinset_hs_byte_pin` exist at all, so it is the first head
+at which the probe can mean anything.
 
 The tamper is a **shape-preserving canonical re-mint**: same `pack_count`, same
 `receipt_count`, same `pack_ids`, canonically rendered bytes, one differing
 `plan_sha256`. That shape is chosen for one reason. A crude byte edit is caught
 before fixation by this file's canonicality check, and a shape change is caught
-by the shape tests, so neither isolates the pin. Only a well-formed re-mint of
-identical shape leaves hS as the sole thing that can notice — which is exactly
-the property the fixation delta's own docstring claims for it.
+by the shape tests, so on either of those cases the pin's verdict is redundant
+with a check that already existed. A well-formed re-mint of identical shape is
+the case where the pin's verdict is its own.
 
-The assertion is not "the suite went red." It is that this NAMED METHOD is in
-the failure list: a tampered pinset reddens other tests too, and r4's probe
-would have passed on that noise alone.
+**Other tests redden on this case too, and that is expected.** Changing a
+governed row's `plan_sha256` also trips `histsem_binding_mismatch` in the
+full-corpus test. This step makes no claim that the byte pin is the only thing
+that notices; the runsheet does not need that claim and it is not true.
+
+What this step DOES claim is narrower and is the reason the assertion is
+written the way it is: **the byte pin's own assertion fails, and is named as
+having failed.** So the check is not "the suite went red" — r4's probe would
+have passed on that noise alone — but `^(FAIL|ERROR):
+test_successor_pinset_hs_byte_pin` in the transcript's failure list. That holds
+however many other tests also fail.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
@@ -3732,10 +3781,10 @@ custody, never a measurement checkout). Check a box only after independently
 reading its named artifacts.
 
 - [ ] **r4-2** — One full three-pack sequence is evidenced by `030-*`, `031-*`,
-  `032-*`, `040-*`, `042-*`, `050-*`, `060-*`, `061-*`, `070-*`–`077-*`
-  (**073, 075, 076 and 077 are produced at §4.10, not at the mint; `074-*` is
-  positional-historic — it is produced at §3.7 step 3 and keeps its ordinal so
-  its consumers read the same name**), `080-*`, `081-*`, `082-*`,
+  `032-*`, `040-*`, `042-*`, `050-*`, `060-*`, `061-*`, `070-*`–`078-*`
+  (**073, 075, 076, 077 and 078 are produced at §4.10, not at the mint; `074-*`
+  is positional-historic — it is produced at §3.7 step 3 and keeps its ordinal
+  so its consumers read the same name**), `080-*`, `081-*`, `082-*`,
   `084-marker-forged-ref-classification.txt` (the MARKER's forged-ref
   classification — not to be confused with `094-*`, the local-green one),
   `085-*`, `090-*`, `091-*`, `092-*` and `097-*` (there is no `083-*`: no step
@@ -3764,15 +3813,21 @@ reading its named artifacts.
   r4 ran together and could not have satisfied:
   - **Pre-fixation, at `$PROBE_BASE` (`110-*`, eight cases).** The seven
     ordinary classes each refuse through their own digest, binding or
-    semantic-replay authenticator, with no digest-conditional detail present;
-    the successor class refuses through BOTH its structural `histsem_*` check
-    and the authenticated C→S mismatch. The two manifest halves are `104-*`,
-    `105-*` and `119-*`.
+    semantic-replay authenticator, with no digest-conditional detail present.
+    The successor class refuses through the authenticated C→S edge ALONE:
+    `reason_codes` exactly `[DEPENDENCY_CHANGED_SET]` plus the bytes-differ
+    detail. **No `histsem_*` code is expected or admissible for that class** —
+    the tamper stays canonical and schema-valid, so the histsem gate returns
+    before raising, and the C→S raise owns the refusal. The two manifest halves
+    are `104-*`, `105-*` and `119-*`.
   - **Post-fixation, at `$FIXATION_COMMIT` (`118-*`, one case).** The
     shape-preserving canonical re-mint fails `test_successor_pinset_hs_byte_pin`
-    BY NAME in the transcript's FAIL/ERROR list — the hS byte pin as sole
-    discriminator. This case cannot exist pre-fixation, because the method does
-    not exist there.
+    BY NAME in the transcript's FAIL/ERROR list. Other tests fail on that case
+    as well — the changed `plan_sha256` also trips `histsem_binding_mismatch`
+    in the full-corpus test — and no claim is made that the byte pin is the
+    only thing that notices; the by-name assertion is what makes this evidence
+    about the byte pin. This case cannot exist pre-fixation, because the method
+    does not exist there.
   - **C→S conditionality (`122-*`/`123-*`).** Successor subtraction is
     conditional on Ed's exact table digest, and a later rewrite refuses with the
     authenticated bytes-differ detail rather than a missing-input one **(D-153;
@@ -3820,8 +3875,9 @@ reading its named artifacts.
   Its single sentinel was substituted with the digest **recomputed from the
   worktree at fixation time and proven equal to the mint-time record** — that
   record is `074-*`, which is what `074-*` evidences; the substitution itself is
-  evidenced by `075-*`, by the sentinel-absence grep, and by step 2's stdout
-  (Opus F12). The sentinel does not survive anywhere in the fixed file. The
+  evidenced by `075-*`, by the sentinel-absence grep, and by
+  `078-fixation-substituted-digest.txt`, which records the digest step 2
+  actually substituted and is asserted equal to `074-*` (Opus F12). The sentinel does not survive anywhere in the fixed file. The
   **fixed-worktree pre-commit** histsem suite is rc 0 (`076-*`) and
   `test_successor_pinset_hs_byte_pin` ran and PASSED in it by name; its failing
   counterpart over the shape-preserving re-mint is `118-*`. Ed's confirmed table
