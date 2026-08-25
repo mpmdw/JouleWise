@@ -110,6 +110,13 @@ def marker() -> dict[str, object]:
             "confirmation_schema": readiness.STEP6_CONFIRMATION_TABLE_SCHEMA,
             "required_decision": "YES",
         },
+        "conditional_paths_deferred": {
+            "gate": readiness.R1_DIGEST_CONDITIONAL_GATE_ID,
+            "deferred_paths": sorted(readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS),
+            "enforced_at_entry_points": list(
+                readiness.R1_DIGEST_CONDITIONAL_ENTRY_POINTS
+            ),
+        },
         "authoring_context": {
             "transaction_id": f"d117-v4@{OID}",
             "source_commit_time_utc": "2026-08-22T00:00:00Z",
@@ -921,7 +928,23 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
             )
             common_head = str(value["common_evidence_git"]["head_commit"])
 
-            def replay(_repository, root, _registry, _reference, **_kwargs):
+            def replay(
+                _repository,
+                root,
+                _registry,
+                _reference,
+                *,
+                conditional_deferral=None,
+                **_kwargs,
+            ):
+                # The stub stands in for a member evaluation on a repository
+                # whose successor pinset HAS been minted, which is the state the
+                # fixture marker's disclosure declares.  Honouring the ledger
+                # here is also the assertion that the candidate lane hands the
+                # replay a live deferral and every other lane hands it None.
+                if conditional_deferral is not None:
+                    for path in readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS:
+                        conditional_deferral.record(path)
                 return copy.deepcopy(by_id[root.name]), {common_head}
 
             with mock.patch.object(readiness, "_family_member", side_effect=replay):
@@ -996,7 +1019,23 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
             common_head = str(value["common_evidence_git"]["head_commit"])
             target = repository / str(value["members"][0]["pack_path"])
 
-            def replay(_repository, root, _registry, _reference, **_kwargs):
+            def replay(
+                _repository,
+                root,
+                _registry,
+                _reference,
+                *,
+                conditional_deferral=None,
+                **_kwargs,
+            ):
+                # The stub stands in for a member evaluation on a repository
+                # whose successor pinset HAS been minted, which is the state the
+                # fixture marker's disclosure declares.  Honouring the ledger
+                # here is also the assertion that the candidate lane hands the
+                # replay a live deferral and every other lane hands it None.
+                if conditional_deferral is not None:
+                    for path in readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS:
+                        conditional_deferral.record(path)
                 return copy.deepcopy(by_id[root.name]), {common_head}
 
             with mock.patch.object(readiness, "_family_member", side_effect=replay):
@@ -1201,6 +1240,360 @@ class FamilyMarkerLiveFixtureTests(unittest.TestCase):
             self.assertEqual(
                 self.refusal(repository, marker_path), "head_unpublished"
             )
+
+
+
+class ConditionalDeferralDisclosureTests(unittest.TestCase):
+    """S0-O2: the marker BUILD lane defers the C -> S condition and says so.
+
+    Background, in the order a reader needs it.  The step-6 confirmation table
+    ``C`` carries the marker's own digest ``hM``
+    (``docs/contracts/d117_step6_confirmation_table.md``, "Acyclic digest
+    graph"), so ``C`` cannot exist until after the marker bytes exist.  The R1
+    changed-set gate the marker build replays nevertheless reaches the
+    digest-conditional allowlist path -- the successor histsem pinset -- as soon
+    as that pinset has been minted into the changed set, and that gate demands
+    ``C``.  Marker BUILD therefore evaluated a condition it could not satisfy at
+    any head, which is why estate 5 refused at runsheet r4 section 3.8 with
+    ``evidence_set_mismatch`` / "no expected confirmation digest supplied".
+
+    The cure is suppression WITH disclosure: build (both phases) and the
+    candidate-lane replay treat the conditional path as discharged for that
+    evaluation and record it in the marker's ``conditional_paths_deferred``
+    field, naming the path and the four entry points that still enforce it.
+    These tests hold each half in place -- the suppression works, and nothing
+    that used to enforce stopped enforcing.
+    """
+
+    SUCCESSOR = readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1].as_posix()
+
+    def minted_successor_repository(self) -> tuple[Path, dict, dict, dict, str]:
+        """A repository whose successor pinset IS in the R1 changed set.
+
+        This is the state that made the build unsatisfiable: the evidence
+        receipt derives from a commit before the mint, and the mint commit is
+        the reviewed HEAD, so the conditional allowlist path is outstanding.
+        """
+
+        from tests.test_arm_readiness_evidence import (
+            content_source_and_receipt,
+            lifecycle_registry,
+            plan_tree,
+        )
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name) / "repository"
+        repository.mkdir()
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ("git", "-C", str(repository), *args),
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+
+        git("init", "-q")
+        git("config", "user.email", "test@example.invalid")
+        git("config", "user.name", "S0-O2 cure")
+        (repository / "dependency.txt").write_text("stable\n")
+        (repository / "pack").mkdir()
+        (repository / "pack/plan_tree.json").write_bytes(plan_tree(frozen=False))
+        git("add", ".")
+        git("commit", "-qm", "derivation")
+        derivation = git("rev-parse", "HEAD")
+        source, receipt = content_source_and_receipt(repository, derivation)
+        registry = lifecycle_registry(allowlist=(self.SUCCESSOR,))
+        registry["successor_policy"]["family_publication_first_generation"] = 4
+        successor = repository / self.SUCCESSOR
+        successor.parent.mkdir(parents=True, exist_ok=True)
+        successor.write_bytes(b'{"packs": []}\n')
+        git("add", self.SUCCESSOR)
+        git("commit", "-qm", "mint successor pinset")
+        return repository, registry, source, receipt, git("rev-parse", "HEAD")
+
+    def family_member_over_the_real_gate(
+        self, repository: Path, registry, source, receipt, head: str, deferral
+    ):
+        """Run ``_family_member`` with the REAL R1 gate under its freeze replay.
+
+        ``_family_member``'s two replay call sites are stubbed only far enough
+        to reach the gate with the confirmation arguments they were handed, so
+        what is exercised here is the actual supply line the estate hit.
+        """
+
+        def gate(**kwargs) -> None:
+            readiness.validate_r1_evidence_lifecycle(
+                repository,
+                receipt,
+                source,
+                registry,
+                current_head=head,
+                expected_freshness_class="RE_DERIVABLE",
+                plan_tree_path="pack/plan_tree.json",
+                step6_confirmation_table=kwargs.get("step6_confirmation_table"),
+                expected_confirmation_digest=kwargs.get(
+                    "expected_confirmation_digest"
+                ),
+                conditional_deferral=kwargs.get("conditional_deferral"),
+            )
+
+        freeze = {
+            "schema_version": readiness.FREEZE_RECEIPT_V2_SCHEMA,
+            "receipt_id": "freeze-0004",
+            "status": "PASS",
+            "pack_identity": {"plan_path": "calibration_plan.json"},
+        }
+
+        def load_freeze_reference(*_args, **kwargs):
+            gate(**kwargs)
+            return freeze, {"path": "arm_readiness.freeze.receipts/freeze-0004.json"}
+
+        def freeze_evidence_for_arm(*_args, **kwargs):
+            gate(**kwargs)
+            return [], {}
+
+        with (
+            mock.patch.object(readiness, "_plan_profile", return_value="ALPHA"),
+            mock.patch.object(readiness, "_plan_tree", return_value=({}, b"{}\n")),
+            mock.patch.object(
+                readiness, "_load_freeze_reference", side_effect=load_freeze_reference
+            ),
+            mock.patch.object(
+                readiness,
+                "_freeze_evidence_for_arm",
+                side_effect=freeze_evidence_for_arm,
+            ),
+        ):
+            with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                readiness._family_member(
+                    repository,
+                    repository / "pack",
+                    registry,
+                    {"plan_profile": "ALPHA"},
+                    conditional_deferral=deferral,
+                )
+        return caught.exception
+
+    def test_uncured_family_member_reproduces_the_estate_five_refusal(self) -> None:
+        """RED: the pre-cure supply line, exactly as the estate observed it.
+
+        ``conditional_deferral=None`` is what ``build_family_publication_marker``
+        used to pass unconditionally.  The refusal reproduced here -- check id
+        ``evidence_set_mismatch``, detail naming the digest-conditional path and
+        the absent expected digest -- is the estate-5 transcript 081 signature.
+        """
+
+        repository, registry, source, receipt, head = (
+            self.minted_successor_repository()
+        )
+        exception = self.family_member_over_the_real_gate(
+            repository, registry, source, receipt, head, None
+        )
+        self.assertEqual(exception.check_id, "evidence_set_mismatch")
+        self.assertIn("digest-conditional allowlist path", str(exception))
+        self.assertIn(self.SUCCESSOR, str(exception))
+        self.assertIn("no expected confirmation digest supplied", str(exception))
+
+    def test_cured_family_member_passes_the_gate_and_ledgers_the_path(self) -> None:
+        """GREEN: with a deferral the same fixture clears the changed-set gate.
+
+        The call still ends in a refusal, but a LATER one: ``plan_binding_``
+        ``mismatch`` is the next check after the freeze replay, and it needs the
+        real ``_v4`` pack files that only S-0 mints.  What matters is that the
+        changed-set refusal is gone and the ledger names the deferred path.
+        """
+
+        repository, registry, source, receipt, head = (
+            self.minted_successor_repository()
+        )
+        deferral = readiness.R1ConditionalDeferral()
+        exception = self.family_member_over_the_real_gate(
+            repository, registry, source, receipt, head, deferral
+        )
+        self.assertEqual(exception.check_id, "plan_binding_mismatch")
+        self.assertNotIn("digest-conditional", str(exception))
+        self.assertEqual(deferral.deferred_paths, (self.SUCCESSOR,))
+
+    def test_build_defers_in_both_phases_and_verify_only_in_candidate(self) -> None:
+        """The lane rule, read off the two entry points' own call sites.
+
+        Marker BUILD is not one of the contract's four enforcement entry points
+        in EITHER phase, so both phases hand the member replay a live ledger.
+        Marker REPLAY is one of them, so only its candidate lane -- which by
+        construction has no table either -- gets a ledger; publication, pre-arm
+        and t0 get ``None`` and enforce the condition for real.
+        """
+
+        recorded: list[object] = []
+
+        def probe(*_args, conditional_deferral=None, **_kwargs):
+            recorded.append(conditional_deferral)
+            raise readiness.FamilyPublicationError("roster_mismatch", "probe")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            live = FamilyMarkerLiveFixtureTests()
+            repository, custody = live.fixture_repository(base)
+            registry = json.loads(
+                (repository / readiness.ROW_REGISTRY_RELATIVE_PATH).read_bytes()
+            )
+            roster = registry["freeze_evidence_lifecycle"]["successor_policy"][
+                "successor_pack_ids"
+            ]
+            pack_roots = []
+            for pack_id in roster.values():
+                root = repository / "configs/campaigns" / pack_id
+                root.mkdir(parents=True, exist_ok=True)
+                pack_roots.append(root)
+            head = readiness.reviewed_main(repository)["head_commit"]
+
+            with (
+                mock.patch.object(readiness, "_family_member", side_effect=probe),
+                mock.patch.object(readiness, "_plan_profile", return_value="ALPHA"),
+            ):
+                for phase in ("candidate", "publication"):
+                    with self.subTest(entry_point="build", phase=phase):
+                        recorded.clear()
+                        with self.assertRaises(readiness.FamilyPublicationError):
+                            readiness.build_family_publication_marker(
+                                repository,
+                                head,
+                                pack_roots,
+                                base / "out" / f"{phase}.json",
+                                builder_tool=ROOT / "scripts/build_family_marker.py",
+                                consumer_tool=ROOT / "scripts/verify_family_marker.py",
+                                phase=phase,
+                            )
+                        self.assertTrue(recorded)
+                        self.assertIsInstance(
+                            recorded[0], readiness.R1ConditionalDeferral
+                        )
+
+            value, marker_path, table_path, table_digest, _by_id = (
+                live.published_artifacts(repository, custody)
+            )
+            with mock.patch.object(readiness, "_family_member", side_effect=probe):
+                for phase, expects_ledger in (
+                    ("candidate", True),
+                    ("publication", False),
+                    ("pre-arm", False),
+                    ("t0", False),
+                ):
+                    with self.subTest(entry_point="replay", phase=phase):
+                        recorded.clear()
+                        with self.assertRaises(readiness.FamilyPublicationError):
+                            readiness.verify_family_publication_marker(
+                                repository,
+                                marker_path,
+                                phase=phase,
+                                confirmation_path=(
+                                    None if phase == "candidate" else table_path
+                                ),
+                                expected_confirmation_digest=(
+                                    None if phase == "candidate" else table_digest
+                                ),
+                            )
+                        self.assertTrue(recorded)
+                        if expects_ledger:
+                            self.assertIsInstance(
+                                recorded[0], readiness.R1ConditionalDeferral
+                            )
+                        else:
+                            self.assertIsNone(recorded[0])
+
+    def test_disclosure_field_is_exact_and_cannot_launder_a_path(self) -> None:
+        """The published field is governed, not free-form.
+
+        A marker that named an arbitrary repository path here would be claiming
+        the changed-set gate had been waived for it.  The validator accepts only
+        the fixed gate id, the fixed entry-point list, and a sorted duplicate-free
+        subset of the code-enumerated conditional class.
+        """
+
+        value = marker()
+        self.assertEqual(
+            readiness.validate_family_publication_marker(value, first_generation=4),
+            value,
+        )
+
+        empty = marker()
+        empty["conditional_paths_deferred"]["deferred_paths"] = []
+        self.assertEqual(
+            readiness.validate_family_publication_marker(empty, first_generation=4),
+            empty,
+        )
+
+        laundered = marker()
+        laundered["conditional_paths_deferred"]["deferred_paths"] = [
+            "joulewise/arm_readiness.py"
+        ]
+        wrong_gate = marker()
+        wrong_gate["conditional_paths_deferred"]["gate"] = "R1_ANYTHING"
+        wrong_entry_points = marker()
+        wrong_entry_points["conditional_paths_deferred"][
+            "enforced_at_entry_points"
+        ] = ["arm"]
+        duplicated = marker()
+        duplicated["conditional_paths_deferred"]["deferred_paths"] = [
+            self.SUCCESSOR,
+            self.SUCCESSOR,
+        ]
+        unknown_key = marker()
+        unknown_key["conditional_paths_deferred"]["waived"] = True
+        absent = marker()
+        absent.pop("conditional_paths_deferred")
+        for label, candidate in (
+            ("path outside the conditional class", laundered),
+            ("wrong gate id", wrong_gate),
+            ("truncated entry-point list", wrong_entry_points),
+            ("duplicated path", duplicated),
+            ("unknown key", unknown_key),
+            ("field absent entirely", absent),
+        ):
+            with self.subTest(case=label):
+                with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                    readiness.validate_family_publication_marker(
+                        candidate, first_generation=4
+                    )
+                self.assertEqual(caught.exception.check_id, "marker_schema_mismatch")
+
+    def test_candidate_replay_refuses_a_disclosure_it_did_not_reproduce(self) -> None:
+        """The candidate lane re-derives the ledger and compares it.
+
+        Candidate replay runs the build's own evaluation, so its ledger must
+        equal what the marker published.  A marker that overstates what it
+        deferred is refused rather than believed.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary:
+            live = FamilyMarkerLiveFixtureTests()
+            repository, custody = live.fixture_repository(Path(temporary))
+            value = live.live_marker(repository)
+            reviewed = readiness.reviewed_main(repository)
+            value["common_evidence_git"] = {
+                "head_commit": reviewed["head_commit"],
+                "head_tree_oid": reviewed["head_tree_oid"],
+            }
+            for item in value["members"]:
+                (repository / str(item["pack_path"])).mkdir(parents=True, exist_ok=True)
+            by_id = {str(item["pack_id"]): item for item in value["members"]}
+            marker_path = live.write_marker(custody, value)
+
+            def replay(_repository, root, _registry, _reference, **_kwargs):
+                # Deliberately does NOT record anything: this stands in for a
+                # replay that found nothing to defer, against a marker claiming
+                # the successor path was deferred.
+                return copy.deepcopy(by_id[root.name]), {
+                    str(reviewed["head_commit"])
+                }
+
+            with mock.patch.object(readiness, "_family_member", side_effect=replay):
+                with self.assertRaises(readiness.FamilyPublicationError) as caught:
+                    readiness.verify_family_publication_marker(
+                        repository, marker_path, phase="candidate"
+                    )
+        self.assertEqual(caught.exception.check_id, "marker_schema_mismatch")
+        self.assertIn("candidate replay ledger", str(caught.exception))
 
 
 if __name__ == "__main__":
