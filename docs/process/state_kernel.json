@@ -1591,6 +1591,36 @@
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
     },
+    "FROZEN-RECEIPT-CONSTANT-STALE-01": {
+      "acceptance": {
+        "evidence": [
+          "The stale-constant behaviour is characterized per generation with executed evidence: the bare --check outcome for the ordinal-1 pack and for each successor",
+          "A ruling records whether the constant is refreshed per generation or the authentication path stops depending on it, with the regression that pins the chosen shape"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/FROZEN-RECEIPT-CONSTANT-STALE-01/acceptance",
+          "label": "FROZEN-RECEIPT-CONSTANT-STALE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Successor-family authentication no longer rests on a constant that names the predecessor's freeze receipt."
+      },
+      "authority": {
+        "label": "RUN_STATE 2026-08-24 T23 morning entry — two independent soundness rows surfaced for the next kernel wave",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the first soundness row from the S-0 §3.4 PACK_AUTHENTICATION round: every successor family inherits a STALE CURRENT_FROZEN_RECEIPT_SHA256 — the generator constant names the PREDECESSOR's freeze receipt, so PRESERVE_CURRENT_FROZEN_BYTES is false and only the ordinal-1 pack can authenticate by a bare generator --check; every later generation exits 1 with 'the current frozen identity requires preserve mode'. Decide whether the constant is refreshed per generation or the authentication path stops depending on it.",
+      "id": "FROZEN-RECEIPT-CONSTANT-STALE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 93,
+      "status": "queued",
+      "status_note": "Surfaced by the §3.4 round on S-0 estate 2; independent of the projected-pack cure that landed in PR #178. Executed corroboration (all six _v2/_v3 successor generators exit 1) is recorded in docs/process_traces/2026-08-19-prep-sprint/ready-packet/rows/ROW-L5.md.",
+      "stop_card": null
+    },
     "MET-WINDOW-C-01": {
       "acceptance": {
         "evidence": [
@@ -1695,6 +1725,36 @@
       "rank": 1,
       "status": "blocked",
       "status_note": "D-113 clauses 7 and 9: the former remainder-only scope is SUPERSEDED. A fresh-claim plan is required; no Window B member enters a replacement claim basis. If the full replacement exceeds the runbook's 2-4 hour envelope with at least 20 percent margin, split it prospectively across windows C and D.",
+      "stop_card": null
+    },
+    "MIDCAMPAIGN-CURE-GENERATION-01": {
+      "acceptance": {
+        "evidence": [
+          "The limitation is written into the _v4 transaction record in the wording D-153 registered",
+          "The paper's limitations carry it if a campaign is interrupted, stated as the conditional it is"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/MIDCAMPAIGN-CURE-GENERATION-01/acceptance",
+          "label": "MIDCAMPAIGN-CURE-GENERATION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The mid-campaign cure limitation is recorded where a reader of the transaction and of the paper will meet it."
+      },
+      "authority": {
+        "label": "D-153 packet-5 magistrate synthesis, work order W5 (registered limitation; luna's mid-campaign-hotfix analysis)",
+        "path": "docs/process_traces/2026-08-24-packet5/04-MAGISTRATE-SYNTHESIS-PACKET5.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Carry D-153's registered limitation into the record: any non-config cure mid-campaign forces a NEW FAMILY GENERATION under every option (alpha, beta and gamma alike) — no option safely injects a cure into an already-running foreground chain. Write it into the _v4 transaction record, and into the paper's limitations if a campaign is interrupted.",
+      "id": "MIDCAMPAIGN-CURE-GENERATION-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 92,
+      "status": "queued",
+      "status_note": "D-153 work order W5. The limitation is already REGISTERED by the ruling; this row tracks its carriage into the transaction record and the paper. Documentation only, no code change.",
       "stop_card": null
     },
     "MINT-GENERALIZE-01": {
@@ -3078,6 +3138,36 @@
       "status": "blocked",
       "stop_card": null
     },
+    "PACKAUTH-PRESERVE-TAUTOLOGY-01": {
+      "acceptance": {
+        "evidence": [
+          "What a bare --check and a preserve-mode --check each PROVE for an ordinal-1 pack is characterized with executed evidence",
+          "Either a non-tautological derivation lands with a regression, or the limit is recorded at every site that consumes the PACK_AUTHENTICATION verdict"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PACKAUTH-PRESERVE-TAUTOLOGY-01/acceptance",
+          "label": "PACKAUTH-PRESERVE-TAUTOLOGY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The ordinal-1 PACK_AUTHENTICATION claim is either made non-tautological or stated honestly wherever it is consumed."
+      },
+      "authority": {
+        "label": "RUN_STATE 2026-08-24 T23 morning entry — two independent soundness rows surfaced for the next kernel wave",
+        "path": "RUN_STATE.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the second soundness row from the same §3.4 round: preserve mode makes ordinal-1 PACK_AUTHENTICATION a TAUTOLOGY. When PRESERVE_CURRENT_FROZEN_BYTES is true the generator takes the echo path — it re-emits the committed frozen bytes instead of re-deriving them — so a check that compares generator output against the committed pack compares those bytes with themselves. Establish what the kind actually claims for an ordinal-1 pack.",
+      "id": "PACKAUTH-PRESERVE-TAUTOLOGY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 94,
+      "status": "queued",
+      "status_note": "Second of the two independent soundness rows from the §3.4 round; distinct from the projected-pack cure (PR #178) and from the stale-constant row. 'Echo path' is the ready-packet ROW-L5 term for the preserve-mode branch.",
+      "stop_card": null
+    },
     "PAPER-REPLAY-FENCE-01": {
       "acceptance": {
         "evidence": [
@@ -3137,6 +3227,36 @@
       "rank": 55,
       "status": "queued",
       "status_note": "Minted 2026-07-25 from the attribution-limit adjudication. Potentially the largest single win available for Splitwise sizing, at no instrument cost.",
+      "stop_card": null
+    },
+    "PINSET-GRAMMAR-EXCLUSION-01": {
+      "acceptance": {
+        "evidence": [
+          "The PR #182 refuter envelope is custodied under docs/process_traces/ and the finding is restated from its own text, not reconstructed",
+          "The exclusion the finding names is fixed or waived with recorded reasons, with a regression if any code changes"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PINSET-GRAMMAR-EXCLUSION-01/acceptance",
+          "label": "PINSET-GRAMMAR-EXCLUSION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The pinset builder's F1 should-fix is closed against the refuter's own custodied wording."
+      },
+      "authority": {
+        "label": "PR #182 pinset-builder cure, refuter round F1 envelope (custodied; recovered post-hoc from the T23 session record)",
+        "path": "docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Close the F1 should-fix from the PR #182 pinset-builder refuter round, restated from the custodied envelope's own text (docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md, section \"The should_fix to carry (F1)\"): the projection-receipt exception is implemented as a WHOLE-DIRECTORY exception. The shared predicate _histsem_tree_has_authoring_custody tests only PurePosixPath(path).parts[0] (joulewise/arm_readiness.py:2906-2918), so every nested path under identity_pin_projection.receipts is excluded from the pre-authoring custody set, and what actually refuses a nested tamper is adjacent machinery (the identity membrane, the PACK_AUTHENTICATION exact-addition fence) rather than this gate. PRIMARY CURE (a): bound the pre-authoring exclusion to the projection freeze grammar - projection-NNNN.json / projection-NNNN.sha256, four or more digits, directly under the directory - the same grammar identity_pins.py:957-964 already enforces. MINIMAL ALTERNATIVE (b): add the nested-authoring-custody case to PreAuthoringProjectionCustodyTests (tests/test_receipt_histsem.py:882-887 is today the only positive projection case) so the layered refusal is pinned by test rather than by adjacency. Refuter severity: should_fix, not blocker - the adjudicated verdict on PR #182 was SOUND FOR MERGE and post-merge follow-up is acceptable.",
+      "id": "PINSET-GRAMMAR-EXCLUSION-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 95,
+      "status": "queued",
+      "status_note": "REGISTRATION ANOMALY CURED: the refuter envelope that was nowhere in the repository record at registration was recovered POST-HOC on 2026-08-24 from the T23 session record - PR #182 merged while the refuter (agent task-id afa98fc4eaa4512e1, adjudicated verdict SOUND FOR MERGE) was still running - and is custodied verbatim at docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md. The goal is now restated from the envelope's own wording, satisfying the first acceptance clause; what remains is the fix or recorded waiver.",
       "stop_card": null
     },
     "PLANTEST-RGLOB-RACE-01": {
@@ -3819,6 +3939,44 @@
       "status_note": "S-0 UNDER THE RATIFIED r4 INSTRUMENT (2026-08-24 morning): runsheet advanced r2->r4 through two-seat cold ratification, delta re-audit, and fix rounds (PRs #175/#177); §§1-2 + §3.1 + the U11 environment PROVEN BY REAL EXECUTION (first real U11 freeze ever passed, measurement venv); §3.2 per-pack freeze->commit interleave verified red-before/green-after with three real MLX freezes. R4-O1 interim-ruled (DEPENDENCY_CHANGED_SET expected at fixation with exactly-one-path obligation); PACKET 5 (D-151 condition-3 reopening) REGISTERED as a separate cold process gating the REAL transaction. Second estate cut pending main green at c5b17b5. Retained verbatim: S-0 is lead-executed at the bench; the magistrate's own reading of the S-0 transcript remains the final verification gate. BIG per D-144: gauntlet + Fable final review + ONE pre-merge two-seat pass over the composed S-1..S-5 merge. Horizon and marker rulings gate mint-side steps.",
       "stop_card": null
     },
+    "WINDOW-STATUS-FREEZE-GUARD-01": {
+      "acceptance": {
+        "evidence": [
+          "scripts/window_status.sh refuses (or writes without committing) while the commit-freeze span is open, proven by a regression that exercises both the in-span and out-of-span branches",
+          "Out-of-span publishing behaviour is unchanged (WINDOW_STATUS.md still written, committed and pushed)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/WINDOW-STATUS-FREEZE-GUARD-01/acceptance",
+          "label": "WINDOW-STATUS-FREEZE-GUARD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The status publisher can no longer break the commit-freeze or add changed-set residue."
+      },
+      "authority": {
+        "label": "D-153 packet-5 magistrate synthesis, work order W4 (terra's verified bonus hazard)",
+        "path": "docs/process_traces/2026-08-24-packet5/04-MAGISTRATE-SYNTHESIS-PACKET5.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-153 packet-5 synthesis, W4",
+            "path": "docs/process_traces/2026-08-24-packet5/04-MAGISTRATE-SYNTHESIS-PACKET5.md"
+          },
+          "rule": "Guard scope is the freeze span: refuse or write-without-commit there; ordinary out-of-span behaviour is unchanged"
+        }
+      ],
+      "flags": [],
+      "goal": "Guard scripts/window_status.sh:92-104 against the commit-freeze span: the publisher writes, commits AND pushes WINDOW_STATUS.md, a path outside the 112 configs-only allowlist, so a status commit inside the freeze span breaks the r4-3 commit-freeze and adds changed-set residue. Make it refuse, or write without committing, during the freeze span.",
+      "id": "WINDOW-STATUS-FREEZE-GUARD-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 91,
+      "status": "queued",
+      "status_note": "D-153 work order W4, pending kernel registration since the 2026-08-24 ruling (W1/W2 landed via PR #181 and the errata; W3 had no target). Hazard is verified by inspection, not yet executed.",
+      "stop_card": null
+    },
     "WO-CENSUS-SEMANTICS": {
       "acceptance": {
         "evidence": [
@@ -4059,5 +4217,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-23"
+  "updated": "2026-08-24"
 }

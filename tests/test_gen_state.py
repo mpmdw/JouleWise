@@ -27,10 +27,15 @@ EXPECTED_IDS = {
     "D144-SEATPASS-FOLLOWUPS",
     "ED-HANDS-BATCH-01",
     "EDQ-L9-3-CAPTURE-01",
+    "FROZEN-RECEIPT-CONSTANT-STALE-01",
+    "MIDCAMPAIGN-CURE-GENERATION-01",
+    "PACKAUTH-PRESERVE-TAUTOLOGY-01",
     "PAPER-REPLAY-FENCE-01",
+    "PINSET-GRAMMAR-EXCLUSION-01",
     "PLANTEST-RGLOB-RACE-01",
     "PREWINDOW-REGEX-01",
     "REGISTRY-ID-NAMING-01",
+    "WINDOW-STATUS-FREEZE-GUARD-01",
     "READY-WO-BATCH-01",
     "SITTING2-PRECONDITIONS-01",
     "UNVERIFIED-REAUDIT-01",
@@ -357,9 +362,17 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # checkout_inventory scandir race, run 32745254371), and
         # PAPER-REPLAY-FENCE-01 (the retained §2-fill replay fence,
         # acceptance item 3 of the retention verification):
-        # 89 + 3 = 92 exact live records.
+        # 89 + 3 = 92; the 2026-08-24 T23 evening wave registers the two
+        # pending D-153 packet-5 work orders — WINDOW-STATUS-FREEZE-GUARD-01
+        # (W4, the status publisher's commit inside the freeze span) and
+        # MIDCAMPAIGN-CURE-GENERATION-01 (W5, the registered mid-campaign
+        # cure limitation) — plus the two independent soundness rows from
+        # the S-0 §3.4 round, FROZEN-RECEIPT-CONSTANT-STALE-01 and
+        # PACKAUTH-PRESERVE-TAUTOLOGY-01, and the PR #182 pinset-builder
+        # should-fix PINSET-GRAMMAR-EXCLUSION-01:
+        # 92 + 5 = 97 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 92)
+        self.assertEqual(len(self.tasks), 97)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
