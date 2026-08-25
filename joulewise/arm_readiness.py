@@ -6431,10 +6431,7 @@ def _freeze_pack_identity_mismatch_detail(
     )
     if not successor_relative:
         if recorded["pack_root"] != current["pack_root"]:
-            return (
-                "freeze receipt archival location differs; the 2026-08-20 ruling "
-                "keeps pre-v4 replay location-bound"
-            )
+            return "freeze receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)"
         return None
 
     _repository, _pack_prefix, pack_relative = _repository_and_pack_relative(

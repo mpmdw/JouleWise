@@ -1298,8 +1298,7 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         )
         self.assertEqual(
             str(caught.exception),
-            "freeze receipt archival location differs; the 2026-08-20 ruling "
-            "keeps pre-v4 replay location-bound",
+            "freeze receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)",
         )
 
     def test_every_non_pack_root_identity_term_uses_content_detail(self) -> None:
@@ -1356,6 +1355,71 @@ class FreezeSuccessorChainTests(unittest.TestCase):
             f"/historical/clone/other/{pack.name}",
         )
         for recorded_root in invalid_roots:
+            with self.subTest(recorded_root=recorded_root):
+                recorded = copy.deepcopy(current)
+                recorded["pack_root"] = recorded_root
+                self.assertEqual(
+                    readiness._freeze_pack_identity_mismatch_detail(
+                        recorded, current, pack, registry
+                    ),
+                    "freeze receipt repository-relative pack location differs",
+                )
+
+    def test_v4_pack_below_a_raised_threshold_uses_absolute_semantics(self) -> None:
+        _repository, _clone, pack, _predecessor = self.frozen_clone_fixture()
+        tree, _tree_raw = readiness._plan_tree(pack)
+        registry, _registry_raw, _reference = readiness._registry_reference(pack)
+        raised = copy.deepcopy(registry)
+        raised["freeze_evidence_lifecycle"]["successor_policy"][
+            "family_publication_first_generation"
+        ] = 5
+        current = readiness._pack_identity(pack, tree)
+        _repo, _prefix, pack_relative = readiness._repository_and_pack_relative(
+            pack
+        )
+
+        # Exact-path replay still authenticates below the raised threshold.
+        self.assertIsNone(
+            readiness._freeze_pack_identity_mismatch_detail(
+                copy.deepcopy(current), current, pack, raised
+            )
+        )
+        # A location mismatch falls back to ABSOLUTE semantics: even a recorded
+        # root carrying the correct repository-relative suffix refuses with the
+        # legacy detail, because generation 4 < threshold 5.
+        relocated = copy.deepcopy(current)
+        relocated["pack_root"] = f"/historical/clone/{pack_relative}"
+        self.assertEqual(
+            readiness._freeze_pack_identity_mismatch_detail(
+                relocated, current, pack, raised
+            ),
+            "freeze receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)",
+        )
+
+    def test_v4_pack_root_projection_rejection_spellings(self) -> None:
+        _repository, _clone, pack, _predecessor = self.frozen_clone_fixture()
+        tree, _tree_raw = readiness._plan_tree(pack)
+        registry, _registry_raw, _reference = readiness._registry_reference(pack)
+        current = readiness._pack_identity(pack, tree)
+        _repo, _prefix, pack_relative = readiness._repository_and_pack_relative(
+            pack
+        )
+
+        rejected = (
+            pack_relative,  # relative
+            f"./{pack_relative}",  # "./"-prefixed
+            "",  # empty
+            ".",  # bare dot
+            "/",  # root only
+            f"//historical/clone/{pack_relative}",  # "//"-prefixed
+            f"/historical/../clone/{pack_relative}",  # ".." component
+            f"/historical/./clone/{pack_relative}",  # "." component
+            f"/historical/clone/{pack_relative}/",  # trailing slash
+            f"/historical//clone/{pack_relative}",  # internal "//"
+            f"/historical/clone//{pack_relative}",  # non-canonical spelling
+            123,  # non-string
+        )
+        for recorded_root in rejected:
             with self.subTest(recorded_root=recorded_root):
                 recorded = copy.deepcopy(current)
                 recorded["pack_root"] = recorded_root
