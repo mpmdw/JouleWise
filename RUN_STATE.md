@@ -10,6 +10,52 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T23 continued (2026-08-24 afternoon/evening) — the transaction prefix
+CONQUERED: first _v4 mint, five instrument-caught defects cured, P06
+closed end-to-end, D-152/D-153 ruled, twelve PRs merged today.**
+
+- **S-0 now executes through §3.7 IN THE LIVE ESTATE** (fifth cut, BASE
+  762366c): three real U11 freezes, §3.4 authoring x3 under the merged
+  composed authenticator, §3.5 sacrificial preflight PASS (first ever),
+  §3.6 freeze-0004 x3, §3.7 MINT PASS. Holds fail-closed at §3.8 on
+  S0-O2 (the marker BUILDER unconditionally demands the C-to-S
+  confirmation digest that cannot exist at build time — the verifier
+  already has the correct phase-conditional; contract acyclicity proves
+  the marker precedes the table). Ruled cure (builder mirrors the
+  verifier, deferral disclosed in the marker's own evidence) in flight
+  with a full §3.8 replay as acceptance. The chain of instrument-caught
+  real defects now: §3.2 interleave, §3.4 PACK_AUTHENTICATION (PR #178),
+  §3.7 pinset-builder gates (PR #182, first successful mint, 12-pack/
+  132-receipt chain verify), §3.5 zsh local-expansion + the backtick
+  self-bite (both cured on main), §3.8 S0-O2. Every one would have
+  fired at T-0.
+- **PACKET 5 RULED (D-153)**: three-family cold panel -> alpha-prime
+  SPLIT-AND-SEQUENCE in amendment form; "window close" = the r4-3
+  commit-freeze close; the digest-independent test consequences moved
+  into the reviewed candidate (PR #181, with the two-coordinate
+  verification: post-mint suite green without the hS pin, shape
+  assertion active and falsified on all four properties, coordinate C
+  demonstrating shape-check-vs-authenticator separation); the fixation
+  delta is now exactly the hS pin. W3 had no target; W4/W5 pending
+  kernel registration.
+- **D-152 (Ed, four rulings)**: C3 sizing 0.25; C4 tau 1e-6 J
+  (conditional resolved by scale arithmetic); C5 six held-out probes;
+  R1/R2 no-fallback dual-limb. Spec updated in place; P06 is
+  freeze-ready with zero ED-INPUT blockers.
+- **P06 chain fully landed**: schema+contract+§5 rewrite (PR #176),
+  reproducibility Appendix A (PR #179 — steps 1-6 executed as printed),
+  registry/template with the 23 bindings + AP-CH rows + D-152
+  alignment (PR #180).
+- **CI red FULLY CLOSED**: mutation-race shapes D and E admitted (the
+  fifth shape exposed a wrong topology assumption), the rglob/scandir
+  race pruned exactly (plus a genuine 3.13+ silent-short-inventory bug),
+  PR #183 first-pass green on the exact jobs that flaked.
+- Merged today: #168-#183 (sixteen PRs). Loop discipline notes: the
+  backtick rule bit the magistrate's own cure comment (§0.1 lints now
+  mandatory on EVERY instrument edit); the drafter correctly REFUSED a
+  magistrate reorder instruction on contract grounds (acyclicity) —
+  dissent-then-overrule working as designed, in both directions.
+
 **T23 continued (2026-08-24 morning) — S-0 EXECUTES FOR REAL and catches
 a transaction-blocking candidate defect; P06 schema RATIFIED and landed.**
 
