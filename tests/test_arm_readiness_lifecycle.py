@@ -1944,8 +1944,16 @@ class FreezeSuccessorChainTests(unittest.TestCase):
             1,
         )
         self.assertFalse(result["mutated"])
-        self.assertNotIn(
-            "readiness_r1_dependency_changed_set", result["reason_codes"]
+        # Pin the replay-return shape specifically: a written receipt path and
+        # exactly the fixture-inherent refusals prove the conditional gate RAN
+        # and was discharged, not merely that some earlier check short-circuited.
+        self.assertIsNotNone(result["receipt_path"])
+        self.assertEqual(
+            result["reason_codes"],
+            [
+                "readiness_clock_preflight_refused",
+                "readiness_dependency_refused",
+            ],
         )
 
     def test_cli_freeze_refuses_confirmation_digest_without_table(self) -> None:
