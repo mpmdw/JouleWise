@@ -514,8 +514,10 @@ def compare(literals: dict[str, Any], derived: dict[str, Any]) -> list[dict[str,
         ordinal is not None and literals["pulse_ordinal_word"] == ordinal,
     )
 
+    # strict=True so a table that gained or lost a row cannot be compared
+    # against a truncated pairing and reported as agreement.
     for index, (printed, computed) in enumerate(
-        zip(literals["clock_stamps"], derived["clock_stamps"])
+        zip(literals["clock_stamps"], derived["clock_stamps"], strict=True)
     ):
         label = f"clock_stamps[{index}]"
         add(f"{label}.stamp", printed["stamp"], computed["stamp"], printed["stamp"] == computed["stamp"])
