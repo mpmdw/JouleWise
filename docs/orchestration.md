@@ -317,7 +317,8 @@ Pointer map only; mechanics stay in their owning files.
 - Project bridge: `scripts/codex-bridge`; writes prompt snapshots,
   response snapshots, logs, status files, and
   `.codex-bridge/invocation_manifest.jsonl` rows with prompt/output/log
-  hashes.
+  hashes plus the `sandbox` mode the launch actually received
+  (`review` is read-only; `new` and `resume` are workspace-write).
 - Workspace-write bridge ceremony: `scripts/bridge session-open` and
   `session-close`; the reduced discussion header, tolerant return envelope,
   receipt anchoring, and recovery primitives are defined only in

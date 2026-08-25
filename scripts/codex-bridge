@@ -15,6 +15,10 @@ Each invocation also writes a durable local audit trail under .codex-bridge/:
 prompt snapshots, response snapshots, logs, status files, and
 invocation_manifest.jsonl rows with prompt/output hashes and session ids.
 
+Sandbox: review runs read-only; new and resume run workspace-write. The mode
+is passed to the launch and recorded in the manifest and observer rows from
+one variable, so the recorded sandbox is always the enforced one.
+
 Defaults: model gpt-5.6-sol, reasoning effort high. Callers select xhigh for
 hard individual work or ultra only for sessions that must spawn subagents by
 setting CODEX_REASONING_EFFORT deliberately.
@@ -208,6 +212,15 @@ elif [[ "$mode" == "resume" ]]; then
   observer_resume="1"
 fi
 
+# CODEX-BRIDGE-SANDBOX-01: `observer_sandbox` is the ONE sandbox value. It is
+# recorded in the observer events and in the invocation manifest, and it is the
+# same value handed to the launch through `sandbox_args`. No launch site may
+# spell a sandbox mode literally: a literal is how review came to record
+# read-only while launching under the CLI default (live inspection 2026-08-05).
+# `-s` is an option of `codex exec` itself, so it must precede the `review` /
+# `resume` subcommand word — those subcommands do not accept `-s` of their own.
+sandbox_args=(-s "$observer_sandbox")
+
 cleanup_bridge() {
   local rc=$?
   if [[ "$observer_started" == "1" && "$observer_finished" == "0" ]]; then
@@ -366,6 +379,7 @@ finish_invocation() {
     printf ',"model":%s' "$(json_quote "$codex_model")"
     printf ',"reasoning_effort":%s' "$(json_quote "$codex_effort")"
     printf ',"service_tier":%s' "$(json_quote "$codex_service_tier")"
+    printf ',"sandbox":%s' "$(json_quote "$observer_sandbox")"
     printf ',"session_id":%s' "$(json_quote "$session_id")"
     printf ',"target_session_id":%s' "$(json_quote "$target_session_id")"
     printf ',"prompt_source":%s' "$(json_quote "$prompt_source")"
@@ -420,25 +434,25 @@ case "$mode" in
     if [[ "$app_bridge_enabled" == "1" ]]; then
       run_app_and_record
     elif [[ "$prompt_source" == "argv" ]]; then
-      run_and_record "" exec "${fresh_model_args[@]}" -C "$repo_root" -s workspace-write -o "$response_file" "$*"
+      run_and_record "" exec "${fresh_model_args[@]}" "${sandbox_args[@]}" -C "$repo_root" -o "$response_file" "$*"
     else
-      run_and_record "$prompt_file" exec "${fresh_model_args[@]}" -C "$repo_root" -s workspace-write -o "$response_file" -
+      run_and_record "$prompt_file" exec "${fresh_model_args[@]}" "${sandbox_args[@]}" -C "$repo_root" -o "$response_file" -
     fi
     ;;
   resume)
     if [[ $# -eq 0 ]]; then
       target_session_id="--last"
       write_empty_prompt
-      run_and_record "" exec "${resume_model_args[@]}" resume --last -o "$response_file"
+      run_and_record "" exec "${resume_model_args[@]}" "${sandbox_args[@]}" resume --last -o "$response_file"
     elif [[ "$1" == "--last" ]]; then
       shift
       target_session_id="--last"
       if [[ $# -gt 0 ]]; then
         write_prompt_from_args "$@"
-        run_and_record "" exec "${resume_model_args[@]}" resume --last -o "$response_file" "$*"
+        run_and_record "" exec "${resume_model_args[@]}" "${sandbox_args[@]}" resume --last -o "$response_file" "$*"
       else
         write_prompt_from_stdin
-        run_and_record "$prompt_file" exec "${resume_model_args[@]}" resume --last -o "$response_file" -
+        run_and_record "$prompt_file" exec "${resume_model_args[@]}" "${sandbox_args[@]}" resume --last -o "$response_file" -
       fi
     else
       session_id="$1"
@@ -446,10 +460,10 @@ case "$mode" in
       target_session_id="$session_id"
       if [[ $# -gt 0 ]]; then
         write_prompt_from_args "$@"
-        run_and_record "" exec "${resume_model_args[@]}" resume -o "$response_file" "$session_id" "$*"
+        run_and_record "" exec "${resume_model_args[@]}" "${sandbox_args[@]}" resume -o "$response_file" "$session_id" "$*"
       else
         write_prompt_from_stdin
-        run_and_record "$prompt_file" exec "${resume_model_args[@]}" resume -o "$response_file" "$session_id" -
+        run_and_record "$prompt_file" exec "${resume_model_args[@]}" "${sandbox_args[@]}" resume -o "$response_file" "$session_id" -
       fi
     fi
     ;;
@@ -462,9 +476,9 @@ case "$mode" in
     if [[ "$app_bridge_enabled" == "1" ]]; then
       run_app_and_record
     elif [[ "$prompt_source" == "argv" ]]; then
-      run_and_record "" exec "${fresh_model_args[@]}" review -o "$response_file" "$*"
+      run_and_record "" exec "${fresh_model_args[@]}" "${sandbox_args[@]}" review -o "$response_file" "$*"
     else
-      run_and_record "$prompt_file" exec "${fresh_model_args[@]}" review -o "$response_file" -
+      run_and_record "$prompt_file" exec "${fresh_model_args[@]}" "${sandbox_args[@]}" review -o "$response_file" -
     fi
     ;;
   help|-h|--help)
