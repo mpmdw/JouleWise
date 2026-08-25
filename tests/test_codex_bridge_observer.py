@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -32,7 +33,9 @@ raise SystemExit(int(os.environ.get("FAKE_EXIT", "0")))
 '''
 
 
-class CodexBridgeObserverTests(unittest.TestCase):
+class _BridgeHarness:
+    """Launch machinery shared by the bridge test classes."""
+
     def launch(
         self,
         tmp_path: Path,
@@ -61,6 +64,9 @@ class CodexBridgeObserverTests(unittest.TestCase):
             "FAKE_DELAY": str(delay),
             "FAKE_EXIT": str(exit_code),
             "FAKE_SESSION_ID": session_id,
+            # These tests exercise the standalone CLI transport; the desktop
+            # app transport is a different launch path with its own helper.
+            "CODEX_APP_BRIDGE": "off",
         }
         environment.pop("CODEX_SERVICE_TIER", None)
         if service_tier is not None:
@@ -115,6 +121,8 @@ class CodexBridgeObserverTests(unittest.TestCase):
             time.sleep(0.02)
         self.fail(f"observer did not emit {event}: {self.events(index)}")
 
+
+class CodexBridgeObserverTests(_BridgeHarness, unittest.TestCase):
     def test_background_run_is_observable_before_bridge_finishes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             args_log = Path(tmp) / "args.json"
@@ -217,6 +225,126 @@ class CodexBridgeObserverTests(unittest.TestCase):
             events = self.wait_for_event(index, "FINISHED")
             self.assertTrue(events[-1]["status"].startswith("FAILED rc="))
             self.assertIn("before normal completion", events[-1]["message"])
+
+
+class CodexBridgeSandboxEnforcementTests(_BridgeHarness, unittest.TestCase):
+    """CODEX-BRIDGE-SANDBOX-01.
+
+    Before this row, `scripts/codex-bridge review` recorded
+    `sandbox=read-only` in its observer events while launching
+    `codex exec review` with no sandbox flag at all, so the audit trail
+    misstated what was actually enforced (live inspection, 2026-08-05).
+
+    The cure is one variable — `observer_sandbox` — that is both the recorded
+    value and the launched value. These tests hold that binding from three
+    sides: the argv the launch really received, the manifest row that claims
+    to describe it, and the script source (no launch site may spell a sandbox
+    mode as a literal again).
+    """
+
+    SANDBOX_MODES = ("read-only", "workspace-write", "danger-full-access")
+
+    def run_bridge(
+        self, tmp: str, *bridge_args: str
+    ) -> tuple[list[str], dict, list[dict]]:
+        """Run one bridge invocation; return (launched argv, manifest, events)."""
+        args_log = Path(tmp) / "args.json"
+        process, index, bridge_dir = self.launch(
+            Path(tmp), *bridge_args, args_log=args_log
+        )
+        _, stderr = process.communicate(timeout=10)
+        self.assertEqual(process.returncode, 0, stderr)
+        arguments = json.loads(args_log.read_text(encoding="utf-8"))
+        manifest = json.loads(
+            (bridge_dir / "invocation_manifest.jsonl").read_text(encoding="utf-8")
+        )
+        return arguments, manifest, self.events(index)
+
+    def assert_launch_sandbox(self, arguments: list[str], expected: str) -> str:
+        """Assert exactly one -s flag, its value, and its position.
+
+        `-s` belongs to `codex exec` itself: `codex exec review` and
+        `codex exec resume` reject a `-s` of their own, so the flag must sit
+        before the subcommand word.
+        """
+        flag_positions = [
+            position
+            for position, argument in enumerate(arguments)
+            if argument in ("-s", "--sandbox")
+        ]
+        self.assertEqual(len(flag_positions), 1, arguments)
+        flag_index = flag_positions[0]
+        value = arguments[flag_index + 1]
+        self.assertEqual(value, expected, arguments)
+        for subcommand in ("review", "resume"):
+            if subcommand in arguments:
+                self.assertLess(flag_index, arguments.index(subcommand), arguments)
+        return value
+
+    def test_review_launches_read_only_and_records_what_it_launched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            arguments, manifest, events = self.run_bridge(
+                tmp, "review", "review sandbox proof"
+            )
+
+            self.assertIn("review", arguments)
+            launched = self.assert_launch_sandbox(arguments, "read-only")
+            self.assertEqual(manifest["mode"], "review")
+            self.assertEqual(manifest["sandbox"], "read-only")
+            # The defect being cured was precisely a recorded/launched gap.
+            self.assertEqual(manifest["sandbox"], launched)
+            self.assertTrue(events)
+            for event in events:
+                self.assertEqual(event["sandbox"], launched)
+
+    def test_new_launches_workspace_write_and_records_what_it_launched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            arguments, manifest, events = self.run_bridge(
+                tmp, "new", "new sandbox proof"
+            )
+
+            launched = self.assert_launch_sandbox(arguments, "workspace-write")
+            self.assertEqual(manifest["mode"], "new")
+            self.assertEqual(manifest["sandbox"], launched)
+            for event in events:
+                self.assertEqual(event["sandbox"], launched)
+
+    def test_resume_launches_workspace_write_and_records_what_it_launched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            arguments, manifest, events = self.run_bridge(
+                tmp, "resume", "--last", "resume sandbox proof"
+            )
+
+            self.assertIn("resume", arguments)
+            launched = self.assert_launch_sandbox(arguments, "workspace-write")
+            self.assertEqual(manifest["mode"], "resume")
+            self.assertEqual(manifest["sandbox"], launched)
+            for event in events:
+                self.assertEqual(event["sandbox"], launched)
+
+    def test_no_launch_site_spells_a_sandbox_mode_literally(self) -> None:
+        """Recorded and launched sandbox cannot drift apart again.
+
+        Drift was possible because a launch site named its sandbox mode in
+        source while the audit metadata named a different one in a variable.
+        Every sandbox flag must therefore take its value from a variable.
+        """
+        source_lines = [
+            line
+            for line in BRIDGE.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("#")
+        ]
+        source = "\n".join(source_lines)
+
+        literal_flag = re.compile(
+            r"(?:-s|--sandbox)[ \t=]+\"?(?:%s)\b" % "|".join(self.SANDBOX_MODES)
+        )
+        self.assertIsNone(
+            literal_flag.search(source),
+            "a sandbox flag names a mode literally; use the observer_sandbox "
+            "variable so the launched value is the recorded value",
+        )
+        self.assertIn('sandbox_args=(-s "$observer_sandbox")', source)
 
 
 if __name__ == "__main__":
