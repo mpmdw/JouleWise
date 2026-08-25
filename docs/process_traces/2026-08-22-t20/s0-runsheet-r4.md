@@ -13,6 +13,22 @@ this branch — it was refused by both ratification seats and no estate ran it.
 
 ## Revision history
 
+**S0-O3 recorded and cured (2026-08-24, estate 6).** Estate 6 ran clean through
+§3.8's marker build — the first estate past the S0-O2 boundary — and the §3.8
+Ed-confirmation block then refused at its final stanza: it reads
+`074-successor-sha256.txt`, which this runsheet only produced in §4.10. The
+inversion is D-153 fallout: fixation (and its transcript family 073–075/077)
+moved from the mint side to §4.10, and the §3.8 consumer kept reading a record
+that no longer existed yet. A mechanical producer/consumer sweep over every
+`$TRANS/` reference found exactly this one inversion. Cure: §3.7 step 3 now
+records the successor digest from the bytes committed at `$PINSET_MINT_HEAD`
+(the moment the digest first exists) into `074-successor-sha256.txt`; §3.8's
+consumer is unchanged; §4.10 step 2 recomputes the digest from the worktree at
+fixation time and refuses if it differs from the mint-time record before
+substituting the sentinel — a strictly stronger check than the old
+produce-at-fixation shape, which could not have noticed the successor moving
+inside the window. The 074 ordinal stays positional-historic with its family.
+
 **Anchor remap round 3 + S0-O2 cure expectations (2026-08-24).** The marker
 cure inserts into joulewise/arm_readiness.py, so every arm_readiness.py anchor
 and citation was re-derived from a fresh difflib map (116 substitutions). The
@@ -1808,6 +1824,23 @@ capture 072-histsem-present "$PY" "$CLONE/scripts/verify_receipt_histsem.py" \
   --pack-root "$FIRST_PACK" --pack-root "$SECOND_PACK" --pack-root "$THIRD_PACK"
 expect_rc 072-histsem-present 0 || die 'present-chain verification did not PASS'
 no_traceback 072-histsem-present || die 'present-chain verification traceback'
+
+# S0-O3 cure: record the successor pinset digest from the bytes COMMITTED at
+# the mint head, at the moment the digest first exists.  Section 3.8 compares
+# Ed's confirmed table against this record, and section 4.10 proves the bytes
+# never moved between mint and fixation.  The 074 ordinal is
+# positional-historic: it rides with the fixation family that D-153 moved to
+# section 4.10, and it keeps its number so every existing consumer reads the
+# same transcript name.
+"$PY" - "$CLONE" "$PINSET_MINT_HEAD" > "$TRANS/074-successor-sha256.txt" <<'PY'
+import hashlib, subprocess, sys
+raw = subprocess.run(
+    ["git", "-C", sys.argv[1], "show",
+     sys.argv[2] + ":configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"],
+    check=True, capture_output=True).stdout
+print(hashlib.sha256(raw).hexdigest())
+PY
+test -s "$TRANS/074-successor-sha256.txt" || die 'the successor digest record is empty'
 ```
 
 `090-final-allowlist-contract.json` closes the changed-set window at exactly 112.
@@ -2994,11 +3027,19 @@ test "$(cat "$TRANS/073-fixation-changed-paths.txt")" = 'tests/test_receipt_hist
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
-"$PY" - "$CLONE" > "$TRANS/074-successor-sha256.txt" <<'PY'
+# S0-O3 cure: 074 is now PRODUCED in section 3.7 at the mint head.  Here the
+# digest is RECOMPUTED from the worktree bytes and compared against that
+# record before it is substituted — the successor pinset must not have moved
+# between the allowlist-contract closure and fixation.
+"$PY" - "$CLONE" "$(cat "$TRANS/074-successor-sha256.txt")" <<'PY'
 import hashlib, pathlib, sys
 root = pathlib.Path(sys.argv[1])
+recorded = sys.argv[2].strip()
 pinset = root / "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
 digest = hashlib.sha256(pinset.read_bytes()).hexdigest()
+assert digest == recorded, (
+    "successor pinset bytes moved between mint and fixation: "
+    f"recorded {recorded}, recomputed {digest}")
 target = root / "tests/test_receipt_histsem.py"
 text = target.read_text(encoding="utf-8")
 sentinel = '"S0-FIXATION-SUBSTITUTION-PENDING"'
