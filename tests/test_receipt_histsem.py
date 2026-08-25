@@ -889,5 +889,214 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
         )
 
 
+def load_v4_builder():
+    """Import `scripts/build_v4_histsem_pinset.py` as a module.
+
+    The import is local, not module-level: `docs/process_traces/2026-08-22-t20/
+    s0-runsheet-r4.md` §0.3 pins this file's lines 32 and 138-165, and a new
+    top-level import would silently drift all three.
+    """
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "build_v4_histsem_pinset", ROOT / "scripts/build_v4_histsem_pinset.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class PreAuthoringProjectionCustodyTests(unittest.TestCase):
+    """The pre-authoring test must admit U11 projection custody.
+
+    The ruled `_v4` transaction order (runsheet §3.2) commits each pack's
+    identity-pin projection receipt BEFORE any evidence is authored, because
+    the v2 issuance gate refuses to freeze a dirty tree.  The generic receipts
+    authored at §3.4 therefore record a `derivation_commit` -- the historical
+    coordinate the builder is handed -- whose pack tree ALREADY contains
+    `identity_pin_projection.receipts/`.
+
+    Uncured, that made the builder's two gates mutually unsatisfiable:
+
+    * Gate A (the pre-authoring test) refused any historical head whose pack
+      tree held ANY member of `_HISTSEM_CUSTODY_DIRECTORIES`, projection
+      receipts included -- so it refused the derivation head.
+    * Gate B requires the historical head to equal the coordinate the authored
+      receipts recorded, which IS the derivation head -- so the only head Gate
+      A accepted (the pre-projection bootstrap) failed Gate B.
+
+    The cure narrows Gate A to AUTHORING custody.  These tests pin both
+    directions: projection custody passes, authoring and freeze custody still
+    refuse.
+    """
+
+    PACK_RELATIVE = "configs/campaigns/d117_synthetic_v4"
+
+    def _repository(self, temporary: str, historical_custody: tuple[str, ...]) -> tuple[Path, Path, str, str]:
+        """Build a repo whose historical coordinate carries `historical_custody`.
+
+        Returns `(repository, pack_root, historical_head, current_head)`.
+        History: bootstrap (plan tree only) -> historical (custody added) ->
+        current (an allowed producer-contract modification), mirroring the
+        runsheet's generate -> custody -> later-commit shape.
+        """
+
+        repository = Path(temporary)
+        pack = repository / self.PACK_RELATIVE
+        pack.mkdir(parents=True)
+        # No `arm_attachments`: every cured run must reach -- and stop at --
+        # the plan-tree gate that follows the pre-authoring test.
+        (pack / "plan_tree.json").write_bytes(render_json({"arm_attachments": {}}))
+        (pack / "producer_contract.json").write_bytes(render_json({"revision": 1}))
+        git(repository, "init", "-q", "-b", "main")
+        git(repository, "config", "user.name", "histsem test")
+        git(repository, "config", "user.email", "histsem@invalid")
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "bootstrap")
+
+        for directory in historical_custody:
+            write_custody_json(pack / directory, "record-0001.json", {"kind": directory})
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "historical custody")
+        historical_head = git(repository, "rev-parse", "HEAD").stdout.strip()
+
+        (pack / "producer_contract.json").write_bytes(render_json({"revision": 2}))
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "later commit")
+        current_head = git(repository, "rev-parse", "HEAD").stdout.strip()
+        return repository, pack, historical_head, current_head
+
+    def _row_error(self, historical_custody: tuple[str, ...]) -> str:
+        builder = load_v4_builder()
+        with tempfile.TemporaryDirectory() as temporary:
+            repository, pack, historical, current = self._repository(
+                temporary, historical_custody
+            )
+            with self.assertRaises(builder.BuildError) as caught:
+                builder._row(repository, pack, self.PACK_RELATIVE, historical, current)
+            return str(caught.exception)
+
+    def test_projection_custody_at_the_historical_head_passes_the_gate(self) -> None:
+        # RED before the cure: this raised "historical coordinate is not
+        # pre-authoring".  GREEN after: execution reaches the NEXT gate.
+        detail = self._row_error(("identity_pin_projection.receipts",))
+        self.assertNotIn("pre-authoring", detail)
+        self.assertEqual(detail, "plan tree has no pinned freeze receipt")
+
+    def test_authoring_and_freeze_custody_still_refuse(self) -> None:
+        for directory in (
+            "arm_readiness.evidence",
+            "arm_readiness.freeze.receipts",
+            "arm_readiness.sources",
+        ):
+            with self.subTest(custody=directory):
+                self.assertEqual(
+                    self._row_error((directory,)),
+                    "historical coordinate is not pre-authoring",
+                )
+
+    def test_projection_custody_does_not_mask_authoring_custody(self) -> None:
+        self.assertEqual(
+            self._row_error(
+                ("identity_pin_projection.receipts", "arm_readiness.evidence")
+            ),
+            "historical coordinate is not pre-authoring",
+        )
+
+    def test_custody_frozenset_is_unchanged_and_authoring_is_its_subset(self) -> None:
+        # The ruling forbids editing the frozenset itself: the post-authoring
+        # DELTA envelope still admits projection bytes as a legitimate addition.
+        self.assertEqual(
+            readiness._HISTSEM_CUSTODY_DIRECTORIES,
+            frozenset(
+                {
+                    "arm_readiness.evidence",
+                    "arm_readiness.freeze.receipts",
+                    "arm_readiness.sources",
+                    "identity_pin_projection.receipts",
+                }
+            ),
+        )
+        self.assertEqual(
+            readiness._HISTSEM_AUTHORING_CUSTODY_DIRECTORIES,
+            readiness._HISTSEM_CUSTODY_DIRECTORIES
+            - {"identity_pin_projection.receipts"},
+        )
+        self.assertFalse(
+            readiness._histsem_tree_has_authoring_custody(
+                ("identity_pin_projection.receipts/projection-0001.json",)
+            )
+        )
+        for path in (
+            "arm_readiness.evidence/evidence-acceptance-owner.json",
+            "arm_readiness.freeze.receipts/freeze-0004.json",
+            "arm_readiness.sources/source-0001.json",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(
+                    readiness._histsem_tree_has_authoring_custody((path,))
+                )
+
+    def test_both_pre_authoring_call_sites_share_one_predicate(self) -> None:
+        """Neither gate may drift back to the full custody frozenset."""
+
+        for relative in (
+            "joulewise/arm_readiness.py",
+            "scripts/build_v4_histsem_pinset.py",
+        ):
+            source = (ROOT / relative).read_text(encoding="utf-8")
+            # Strip comments AND strings: the prose above each gate names both
+            # constants deliberately, and only executable code is being pinned.
+            code_only = "".join(
+                token.string
+                for token in tokenize.generate_tokens(io.StringIO(source).readline)
+                if token.type not in (tokenize.COMMENT, tokenize.STRING)
+            )
+            with self.subTest(module=relative):
+                self.assertIn("_histsem_tree_has_authoring_custody", code_only)
+                # Executable uses of the FULL frozenset that must survive:
+                # its own definition, the authoring-subset definition, and the
+                # post-authoring delta envelope in `joulewise/` (3); the
+                # builder keeps only its own delta envelope (1).  Any further
+                # occurrence means a pre-authoring gate drifted back.
+                self.assertEqual(
+                    code_only.count("_HISTSEM_CUSTODY_DIRECTORIES"),
+                    3 if relative.startswith("joulewise/") else 1,
+                )
+
+    def test_verifier_still_refuses_an_authoring_coordinate(self) -> None:
+        """The verifier shares the gate, so it must keep the negative too.
+
+        HEAD's representative pack carries `arm_readiness.evidence/`, so a row
+        pinned at HEAD is a genuine post-authoring coordinate.  The row's
+        historical digest is recomputed at that head so the digest check ahead
+        of the gate passes and the gate itself is what refuses.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary:
+            pinset = Path(temporary) / "pinset.json"
+            row_head = git(ROOT, "rev-parse", "HEAD").stdout.strip()
+            digest = historical_pack_tree_sha256(
+                ROOT, f"configs/campaigns/{REPRESENTATIVE_PACK.name}", row_head
+            )
+            write_pinset(
+                pinset,
+                lambda row: row.update(
+                    {"head_commit": row_head, "historical_pack_sha256": digest}
+                ),
+            )
+            rows = readiness._validate_histsem_pinset(
+                readiness.parse_json_bytes(pinset.read_bytes(), require_canonical=True)
+            )
+            with self.assertRaises(HistoricalSemanticsError) as caught:
+                verify_receipt_histsem_pack(REPRESENTATIVE_PACK, _pinset_rows=rows)
+            self.assertEqual(
+                caught.exception.reason_code,
+                "histsem_historical_tree_not_pre_authoring",
+            )
+
+
+
 if __name__ == "__main__":
     unittest.main()
