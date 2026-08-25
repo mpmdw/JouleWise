@@ -2867,6 +2867,80 @@ hash to the digest Ed recorded in the step-6 confirmation table's matching
 section (the C -> S edge).  Without that confirmation the path stays in the
 relevant set and the gate refuses ``DEPENDENCY_CHANGED_SET``.
 """
+R1_DIGEST_CONDITIONAL_GATE_ID = "R1_DIGEST_CONDITIONAL"
+"""Stable identifier for the C -> S digest-conditional gate in disclosures."""
+
+R1_DIGEST_CONDITIONAL_ENTRY_POINTS = ("arm", "freeze", "verification", "marker-replay")
+"""The entry points that enforce the C -> S edge.
+
+This tuple is the code copy of the enumerated list in
+``docs/contracts/d117_step6_confirmation_table.md`` section "Where the ``C -> S``
+edge is enforced": the arm, freeze, verification, and marker-REPLAY entry points
+are the four places that supply the step-6 confirmation table.  Marker *build*
+is deliberately absent from that list, and the absence is structural rather than
+an oversight -- see :class:`R1ConditionalDeferral`.
+"""
+
+
+class R1ConditionalDeferral:
+    """A build-lane ledger of C -> S conditional paths that were not evaluated.
+
+    **The forcing problem.**  The step-6 confirmation table ``C`` contains the
+    marker digest ``hM`` (contract, "Acyclic digest graph"), so ``C`` can only
+    be rendered *after* the marker bytes ``M`` exist.  A marker build therefore
+    runs at a moment when no table can exist by construction.  But the R1
+    changed-set gate the build replays reaches the digest-conditional allowlist
+    path as soon as the successor pinset has been minted into the changed set,
+    and that gate demands the table.  Demanding at build time an artifact whose
+    only lawful construction happens after build time is the cycle the contract
+    says does not exist; the build cannot satisfy it at any head.
+
+    **The cure.**  At the marker-build entry point -- and at the candidate-lane
+    marker replay, which is the same evaluation re-run without a table -- the
+    conditional is SUPPRESSED rather than evaluated: the path is treated as
+    discharged *for this evaluation only*, and the fact that it was discharged
+    without proof is written into this ledger.  The built marker carries the
+    ledger's disclosure in its ``conditional_paths_deferred`` field, so a reader
+    of the marker bytes can see exactly which paths went unevaluated and which
+    entry points still owe the evaluation.  Deferral is disclosure, never a
+    silent drop, and never a change to what arm, freeze, verification, or
+    marker-REPLAY enforce.
+
+    Only paths named by :data:`R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS` may be
+    deferred.  Recording anything else raises, so the disclosure field cannot
+    become a laundering channel for an arbitrary relevant path.
+    """
+
+    __slots__ = ("_paths",)
+
+    def __init__(self) -> None:
+        self._paths: set[str] = set()
+
+    def record(self, relative_path: str) -> None:
+        """Ledger one deferred conditional path; refuse anything not conditional."""
+
+        if relative_path not in R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS:
+            raise ArmReadinessError(
+                "readiness_row_registry_mismatch",
+                "only a digest-conditional allowlist path may be deferred: "
+                f"{relative_path!r}",
+            )
+        self._paths.add(relative_path)
+
+    @property
+    def deferred_paths(self) -> tuple[str, ...]:
+        return tuple(sorted(self._paths))
+
+    def disclosure(self) -> dict[str, Any]:
+        """Render the exact, deterministic object the marker publishes."""
+
+        return {
+            "gate": R1_DIGEST_CONDITIONAL_GATE_ID,
+            "deferred_paths": list(self.deferred_paths),
+            "enforced_at_entry_points": list(R1_DIGEST_CONDITIONAL_ENTRY_POINTS),
+        }
+
+
 _HISTSEM_CUSTODY_DIRECTORIES = frozenset(
     {
         "arm_readiness.evidence",
@@ -4304,8 +4378,20 @@ def validate_r1_evidence_lifecycle(
     plan_tree_path: str,
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
+    conditional_deferral: "R1ConditionalDeferral | None" = None,
 ) -> tuple[str, ...]:
-    """Apply R1's changed-set primary gate and manifest conjunct."""
+    """Apply R1's changed-set primary gate and manifest conjunct.
+
+    ``conditional_deferral`` is the marker-BUILD lane's suppression of the
+    C -> S digest-conditional gate (:class:`R1ConditionalDeferral`).  When it is
+    supplied, a digest-conditional allowlist path in the changed set is
+    subtracted without evaluating the condition and is recorded in the ledger
+    instead of being proved; when it is ``None`` -- the default, and what every
+    enumerated enforcement entry point uses -- the condition is enforced exactly
+    as before.  Supplying a deferral together with confirmation inputs is a
+    caller contradiction and fails closed, so no call site can be simultaneously
+    in both lanes.
+    """
 
     root = Path(repository).resolve(strict=True)
     governed = validate_r1_lifecycle_registry(registry)
@@ -4340,16 +4426,33 @@ def validate_r1_evidence_lifecycle(
     allowlist = set(governed["irrelevant_path_allowlist"])
     conditional = allowlist & R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS
     outstanding = set(changed_paths) - (allowlist - conditional)
-    for conditional_path in sorted(outstanding & conditional):
-        _require_confirmed_conditional_path(
-            root,
-            current_head,
-            conditional_path,
+    if conditional_deferral is not None and (
+        step6_confirmation_table is not None
+        or expected_confirmation_digest is not None
+    ):
+        raise EvidenceLifecycleError(
             governed,
-            step6_confirmation_table,
-            expected_confirmation_digest=expected_confirmation_digest,
+            "DEPENDENCY_CHANGED_SET",
+            "a conditional deferral and a step-6 confirmation input were both "
+            "supplied; the build lane and the enforcing lanes are exclusive",
             evidence_id=str(validated_receipt["evidence_id"]),
         )
+    for conditional_path in sorted(outstanding & conditional):
+        if conditional_deferral is not None:
+            # Marker-BUILD lane: no table can exist yet (contract acyclicity),
+            # so the condition is deferred to the enumerated entry points and
+            # disclosed in the marker rather than evaluated here.
+            conditional_deferral.record(conditional_path)
+        else:
+            _require_confirmed_conditional_path(
+                root,
+                current_head,
+                conditional_path,
+                governed,
+                step6_confirmation_table,
+                expected_confirmation_digest=expected_confirmation_digest,
+                evidence_id=str(validated_receipt["evidence_id"]),
+            )
         outstanding.discard(conditional_path)
     relevant = sorted(outstanding)
     if relevant:
@@ -5317,6 +5420,7 @@ def _authenticate_generic_evidence_item(
     lifecycle_registry: Mapping[str, Any] | None = None,
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
+    conditional_deferral: "R1ConditionalDeferral | None" = None,
 ) -> Mapping[str, Any]:
     _validate_evidence_item(item, "evidence item")
     if item["schema_version"] not in GENERIC_EVIDENCE_RECEIPT_SCHEMAS:
@@ -5511,6 +5615,7 @@ def _authenticate_generic_evidence_item(
             plan_tree_path=f"{pack_relative}/plan_tree.json",
             step6_confirmation_table=step6_confirmation_table,
             expected_confirmation_digest=expected_confirmation_digest,
+            conditional_deferral=conditional_deferral,
         )
         if expected_class == "RE_DERIVABLE":
             try:
@@ -6311,6 +6416,7 @@ def _load_freeze_reference(
     require_pass: bool = True,
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
+    conditional_deferral: "R1ConditionalDeferral | None" = None,
 ) -> tuple[Mapping[str, Any], dict[str, Any]]:
     attachments = tree.get("arm_attachments")
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
@@ -6419,6 +6525,7 @@ def _load_freeze_reference(
                 lifecycle_registry=lifecycle_registry,
                 step6_confirmation_table=step6_confirmation_table,
                 expected_confirmation_digest=expected_confirmation_digest,
+                conditional_deferral=conditional_deferral,
             )
         )
     identity_items = [
@@ -6523,6 +6630,7 @@ def _freeze_evidence_for_arm(
     *,
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
+    conditional_deferral: "R1ConditionalDeferral | None" = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Mapping[str, Any]]]:
     items = copy.deepcopy(list(freeze_receipt["evidence"]))
     receipts: dict[str, Mapping[str, Any]] = {}
@@ -6552,6 +6660,7 @@ def _freeze_evidence_for_arm(
                 lifecycle_registry=lifecycle_registry,
                 step6_confirmation_table=step6_confirmation_table,
                 expected_confirmation_digest=expected_confirmation_digest,
+                conditional_deferral=conditional_deferral,
             )
         elif item["schema_version"] == IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA:
             if item != plan_identity_item or plan_identity_receipt is None:
@@ -9809,6 +9918,7 @@ _FAMILY_MARKER_KEYS = frozenset(
         "members",
         "terminal_review",
         "publication_authority",
+        "conditional_paths_deferred",
         "authoring_context",
         "assurance",
     }
@@ -10068,6 +10178,44 @@ def validate_family_publication_marker(
         "required_decision": "YES",
     }:
         raise FamilyPublicationError("marker_schema_mismatch", "confirmation contract differs")
+    # The build lane's C -> S deferral disclosure (see R1ConditionalDeferral).
+    # It is exact-key and always present -- an empty ``deferred_paths`` list is
+    # the positive statement "nothing was deferred", which a missing field could
+    # not distinguish from a marker built by code that never disclosed at all.
+    deferred = _family_exact(
+        marker["conditional_paths_deferred"],
+        frozenset({"gate", "deferred_paths", "enforced_at_entry_points"}),
+        "family marker.conditional_paths_deferred",
+    )
+    deferred_paths = deferred["deferred_paths"]
+
+    def _disclosure_refusal() -> FamilyPublicationError:
+        # The subset rule is what stops the field being a laundering channel:
+        # a marker cannot claim to have deferred an arbitrary relevant path,
+        # only one the code constant already marks digest-conditional.
+        return FamilyPublicationError(
+            "marker_schema_mismatch", "marker deferral disclosure is not the governed one"
+        )
+
+    # SHAPE FIRST, then ordering.  `sorted()` and `dict.fromkeys()` raise
+    # TypeError on a heterogeneous or unhashable list -- ``[1, "a"]`` compares
+    # int to str -- and TypeError is not one of the exception types the CLI
+    # wrappers catch, so it would escape as a traceback instead of a structured
+    # refusal.  Every element is therefore proven to be a ``str`` before any
+    # sort, dedup, or set operation touches the list (refuter round F1).
+    if (
+        deferred["gate"] != R1_DIGEST_CONDITIONAL_GATE_ID
+        or deferred["enforced_at_entry_points"]
+        != list(R1_DIGEST_CONDITIONAL_ENTRY_POINTS)
+        or not isinstance(deferred_paths, list)
+        or any(not isinstance(item, str) for item in deferred_paths)
+    ):
+        raise _disclosure_refusal()
+    if (
+        deferred_paths != sorted(dict.fromkeys(deferred_paths))
+        or not set(deferred_paths) <= R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS
+    ):
+        raise _disclosure_refusal()
     context = _family_exact(
         marker["authoring_context"],
         frozenset(
@@ -10309,6 +10457,7 @@ def _family_member(
     *,
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
+    conditional_deferral: "R1ConditionalDeferral | None" = None,
 ) -> tuple[dict[str, Any], set[str]]:
     # A roster member that cannot be resolved or read at all is a family
     # diagnosis too.  Without these two wrappers the failure escapes as a bare
@@ -10336,6 +10485,7 @@ def _family_member(
             require_pass=True,
             step6_confirmation_table=step6_confirmation_table,
             expected_confirmation_digest=expected_confirmation_digest,
+            conditional_deferral=conditional_deferral,
         )
     except EvidenceLifecycleError as exc:
         raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
@@ -10355,6 +10505,7 @@ def _family_member(
             registry,
             step6_confirmation_table=step6_confirmation_table,
             expected_confirmation_digest=expected_confirmation_digest,
+            conditional_deferral=conditional_deferral,
         )
     except (ArmReadinessError, EvidenceLifecycleError) as exc:
         raise FamilyPublicationError("evidence_set_mismatch", str(exc)) from exc
@@ -10460,12 +10611,20 @@ def build_family_publication_marker(
         "sha256": sha256_bytes(registry_raw),
         "plan_profile": None,
     }
+    # Marker BUILD is not one of the contract's enumerated C -> S enforcement
+    # entry points, and cannot be: the confirmation table carries this marker's
+    # own digest, so no table exists at build time for ANY head.  Both build
+    # phases therefore suppress the digest-conditional gate and disclose the
+    # suppression in the marker instead of refusing something unsatisfiable.
+    deferral = R1ConditionalDeferral()
     members: list[dict[str, Any]] = []
     derivation_heads: set[str] = set()
     for root in roots:
         reference = dict(registry_reference)
         reference["plan_profile"] = _plan_profile(root, registry)
-        member, heads = _family_member(repository, root, registry, reference)
+        member, heads = _family_member(
+            repository, root, registry, reference, conditional_deferral=deferral
+        )
         members.append(member)
         derivation_heads.update(heads)
     members.sort(key=lambda member: ("ALPHA", "BETA", "GAMMA").index(member["profile"]))
@@ -10526,6 +10685,7 @@ def build_family_publication_marker(
             "confirmation_schema": STEP6_CONFIRMATION_TABLE_SCHEMA,
             "required_decision": "YES",
         },
+        "conditional_paths_deferred": deferral.disclosure(),
         "authoring_context": {
             "transaction_id": f"d117-v4@{head}",
             "source_commit_time_utc": commit_time.isoformat().replace("+00:00", "Z"),
@@ -10712,6 +10872,12 @@ def verify_family_publication_marker(
         table, table_raw = _authenticate_confirmation_table(
             confirmation_path, expected_confirmation_digest
         )
+    # The candidate lane replays the build's evaluation with no table -- the
+    # same construction that forbids a table at build time forbids one here --
+    # so it suppresses the C -> S conditional the same way and rebuilds the
+    # ledger, which is then compared against what the marker discloses.  Every
+    # other phase is an enumerated enforcement entry point and gets no deferral.
+    replay_deferral = R1ConditionalDeferral() if phase == "candidate" else None
     common_heads: set[str] = set()
     for expected_member in marker["members"]:
         root = repository / str(expected_member["pack_path"])
@@ -10732,10 +10898,22 @@ def verify_family_publication_marker(
             expected_confirmation_digest=(
                 expected_confirmation_digest if phase != "candidate" else None
             ),
+            conditional_deferral=replay_deferral,
         )
         if observed != expected_member:
             raise FamilyPublicationError("pack_digest_mismatch", f"member replay differs: {root.name}")
         common_heads.update(heads)
+    if replay_deferral is not None and marker["conditional_paths_deferred"] != (
+        replay_deferral.disclosure()
+    ):
+        # Candidate replay runs the build's own evaluation, so the ledger it
+        # rebuilds must equal the one the marker published.  Any difference
+        # means the marker's disclosure does not describe the evaluation that
+        # produced it.
+        raise FamilyPublicationError(
+            "marker_schema_mismatch",
+            "marker deferral disclosure differs from the candidate replay ledger",
+        )
     if len(common_heads) != 1:
         raise FamilyPublicationError("evidence_set_mismatch", "replayed family has mixed derivation heads")
     common_head = next(iter(common_heads))
@@ -11045,6 +11223,10 @@ __all__ = [
     "LaunchLineageError",
     "PACK_DIGEST_ALGORITHM",
     "READINESS_REASON_CODES",
+    "R1ConditionalDeferral",
+    "R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS",
+    "R1_DIGEST_CONDITIONAL_ENTRY_POINTS",
+    "R1_DIGEST_CONDITIONAL_GATE_ID",
     "R1_FRESHNESS_CLASSES",
     "R1_LIFECYCLE_REGISTRY_PLACEHOLDER",
     "R1_LIFECYCLE_REGISTRY_SCHEMA",

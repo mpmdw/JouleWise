@@ -875,6 +875,98 @@ class SuccessorPinsetDigestConditionTests(unittest.TestCase):
             )
         self.assertEqual(caught.exception.role, "DEPENDENCY_CHANGED_SET")
 
+    def test_build_lane_deferral_subtracts_without_a_table_and_ledgers_it(self) -> None:
+        """S0-O2 cure, primary arm: the build lane subtracts and discloses.
+
+        Same minted-successor fixture as the enforcing tests above, with the
+        one difference that defines the marker-BUILD lane: no table, no
+        out-of-band digest, and a deferral ledger in their place.  The path is
+        subtracted from the changed set (the gate returns it as accounted for),
+        and the ledger names it, so the marker built from this evaluation can
+        say exactly which condition went unevaluated.
+        """
+
+        repository, custody, registry, source, receipt = self.build()
+        head, _digest = self.commit_successor(repository, b'{"packs": []}\n')
+
+        # Control: the same head with neither table nor deferral still refuses.
+        with self.assertRaises(readiness.EvidenceLifecycleError) as caught:
+            self.gate(repository, receipt, source, registry, head, None, None)
+        self.assertEqual(caught.exception.role, "DEPENDENCY_CHANGED_SET")
+        self.assertIn("no expected confirmation digest supplied", str(caught.exception))
+
+        deferral = readiness.R1ConditionalDeferral()
+        changed = readiness.validate_r1_evidence_lifecycle(
+            repository,
+            receipt,
+            source,
+            registry,
+            current_head=head,
+            expected_freshness_class="RE_DERIVABLE",
+            plan_tree_path="pack/plan_tree.json",
+            conditional_deferral=deferral,
+        )
+        self.assertEqual(changed, (self.SUCCESSOR,))
+        self.assertEqual(deferral.deferred_paths, (self.SUCCESSOR,))
+        self.assertEqual(
+            deferral.disclosure(),
+            {
+                "gate": readiness.R1_DIGEST_CONDITIONAL_GATE_ID,
+                "deferred_paths": [self.SUCCESSOR],
+                "enforced_at_entry_points": [
+                    "arm",
+                    "freeze",
+                    "verification",
+                    "marker-replay",
+                ],
+            },
+        )
+
+    def test_deferral_and_confirmation_inputs_together_fail_closed(self) -> None:
+        """The build lane and the enforcing lanes are exclusive, not additive.
+
+        A caller that hands the gate both a deferral and a confirmation input
+        has not said which lane it is in.  Rather than silently preferring one,
+        the gate refuses with the changed-set role it already owns.
+        """
+
+        repository, custody, registry, source, receipt = self.build()
+        head, digest = self.commit_successor(repository, b'{"packs": []}\n')
+        table_path = self.table(custody, "table.json", sha256=digest)
+        expected_digest = hashlib.sha256(table_path.read_bytes()).hexdigest()
+        for label, table, expected in (
+            ("table only", table_path, None),
+            ("digest only", None, expected_digest),
+            ("both", table_path, expected_digest),
+        ):
+            with self.subTest(case=label):
+                with self.assertRaises(readiness.EvidenceLifecycleError) as caught:
+                    readiness.validate_r1_evidence_lifecycle(
+                        repository,
+                        receipt,
+                        source,
+                        registry,
+                        current_head=head,
+                        expected_freshness_class="RE_DERIVABLE",
+                        plan_tree_path="pack/plan_tree.json",
+                        step6_confirmation_table=table,
+                        expected_confirmation_digest=expected,
+                        conditional_deferral=readiness.R1ConditionalDeferral(),
+                    )
+                self.assertEqual(caught.exception.role, "DEPENDENCY_CHANGED_SET")
+                self.assertIn("exclusive", str(caught.exception))
+
+    def test_ledger_refuses_paths_outside_the_conditional_class(self) -> None:
+        """The disclosure field cannot be turned into a laundering channel."""
+
+        deferral = readiness.R1ConditionalDeferral()
+        with self.assertRaises(readiness.ArmReadinessError) as caught:
+            deferral.record("joulewise/arm_readiness.py")
+        self.assertEqual(
+            caught.exception.reason_code, "readiness_row_registry_mismatch"
+        )
+        self.assertEqual(deferral.deferred_paths, ())
+
     def test_conditional_class_is_exactly_the_successor_pinset(self) -> None:
         self.assertEqual(
             readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS,

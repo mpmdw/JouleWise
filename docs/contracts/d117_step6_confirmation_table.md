@@ -180,6 +180,76 @@ bytes still hash to the digest inside that authenticated table. Any later
 rewrite of either file refuses until the operator supplies a newly confirmed
 out-of-band digest.
 
+### Where the `C → S` edge is *not* enforced: marker build
+
+The four entry points named above are exhaustive. Marker **build** is not one
+of them, and its absence is structural rather than an omission.
+
+The forcing problem is the acyclicity argument at the top of this document,
+read forwards. The final table bytes `C` contain the marker digest `hM`, so `C`
+cannot be rendered until the marker bytes `M` exist. A marker build therefore
+runs at a moment when no table exists for any head. But the R1 changed-set gate
+that the build replays for each family member reaches the digest-conditional
+allowlist path as soon as the successor pinset has been minted into the changed
+set, and that gate demands `C`. Requiring at build time an artifact whose only
+lawful construction happens after build time is exactly the cycle this contract
+says does not exist, and it made the build refuse at every post-mint head.
+
+At the marker-build entry point the condition is therefore **suppressed, and
+the suppression is disclosed**. Concretely:
+
+- Both build phases (`candidate` and `publication`) pass the changed-set gate a
+  deferral ledger (`R1ConditionalDeferral` in `joulewise/arm_readiness.py`)
+  instead of a table. A digest-conditional path in the changed set is subtracted
+  without evaluating the condition, and is recorded in that ledger.
+- The built marker carries the ledger verbatim in a required, exact-key
+  `conditional_paths_deferred` object: the fixed gate identifier
+  `R1_DIGEST_CONDITIONAL`, the sorted `deferred_paths` list, and
+  `enforced_at_entry_points` — the same four entry points enumerated above. An
+  empty `deferred_paths` list is the positive statement that nothing was
+  deferred, which is why the field is never absent.
+- Only paths named by `R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS` may appear in
+  `deferred_paths`. The marker validator rejects anything else, so the field
+  cannot be used to claim the changed-set gate was waived for an arbitrary path.
+- The **candidate lane** of marker replay is the same evaluation re-run without
+  a table — by the same construction, no table can exist for a candidate marker
+  either — so it defers identically, rebuilds the ledger, and refuses the marker
+  if what it rebuilds differs from what the marker published.
+- Supplying a deferral together with a table or an expected digest is a caller
+  contradiction and refuses `DEPENDENCY_CHANGED_SET`. The build lane and the
+  enforcing lanes are mutually exclusive; no call site can be in both.
+
+#### Recorded waiver: the required key was added under the `.v1` schema id
+
+Adding a required key to an exact-key schema would ordinarily force the schema
+id to `.v2`. It does not here, by ruling, and the reason is recorded rather than
+left implicit (magistrate ruling on the S0-O2 refuter round, PR #184).
+
+`conditional_paths_deferred` was added under
+`joulewise.d117_family_publication_marker.v1`, whose key set is now exactly
+fourteen. **No thirteen-key marker was ever successfully built** — the S0-O2
+defect prevented the builder from instantiating one at any post-mint head — so
+no persisted artifact changes meaning under the wider key set. A thirteen-key
+document presented to the validator refuses at the exact-key check, which is the
+intended fail-closed behaviour and not a compatibility break. The id advances to
+`.v2` only on the next semantic change to an **instantiated** shape.
+
+#### Accepted residual: the disclosure is verified, not self-proving
+
+The disclosure is a statement the builder makes about its own evaluation, so it
+cannot prove itself. Two mechanisms bound the residual, and it is recorded as
+defence in depth rather than closed (refuter round, PR #184): a build that
+truncated the disclosure to `[]` is caught at the mandatory candidate-replay
+gate, which rebuilds the ledger from its own evaluation and refuses any marker
+whose published disclosure it did not reproduce; and a post-build tamper of the
+field refuses through the `C → M` byte binding, because the step-6 table names
+`hM` over the exact marker bytes.
+
+Nothing about arm, freeze, verification, or the publication/pre-arm/T-0 lanes of
+marker replay changes. Those four still supply `C` and `hC` and still refuse
+without them; a deferral is never passed on those paths. The C → S edge is
+enforced later, not dropped, and the marker bytes say so on their face.
+
 ## Candidate and publication lanes
 
 Candidate verification may prove marker-intrinsic and pinset-intrinsic
