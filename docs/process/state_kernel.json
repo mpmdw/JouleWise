@@ -4038,15 +4038,15 @@
           "S-0 full three-pack clone proof passes all ruled probes (incl. per-class tamper, dual-validator falsifiers, the poison answer)",
           "Registry bytes + four code-delta sets land in one commit; load-closure check refuses unclosed codes",
           "freeze-0004 x3 minted at the measurement checkout, predecessor-bound to freeze-0003, consume-by deadlines recorded in run cards",
-          "file-09 probe P1/P2/P3 OK at the _v4 family + one dry-run ceremony (no real arm)",
-          "Ed's step-6 exact-byte confirmation precedes publication; the commit-freeze stop-card is active for the span"
+          "Dry-run ceremony x3 at the _v4 family, NO real arm (D-155 NR-6): per pack status PASS with refusals [], the same-head pack-binding check PASS with head_binding == ATTESTATION_HEAD, and receipt_kind/mode dry_run + arm_disposition NOT_APPLICABLE + evidence [] as the positive statement that no arm occurred. The file-09 probe P1/P2/P3 is STRUCK AS SPECIFIED (P1/P2 are already executed inside the dry run; P3 requires the arm B-4 forbids), with P3 discharged at the shakedown GO receipt and arm-side U11 at the shakedown arm",
+          "Step-6 exact-byte confirmation EXECUTED UNDER THE D-150b DELEGATION by the magistrate (authority ED, decision YES, statement records the delegation and what was independently recomputed) and, per D-155 NR-3, it follows the push: the ruled publication-phase order is E1 build -> E3 render -> E4 confirm/hC -> E2 verify -> E5 promote, because a publication-phase verify requires the confirmation pair. The commit-freeze stop-card is active for the span, opened at the C11 attestation commit (ATTESTATION_HEAD = published head; PINSET_MINT_HEAD stays the allowlist-contract closure head) and guarded by the custody-external freeze sentinel"
         ],
         "pointer": {
           "json_pointer": "/tasks/V4-TRANSACTION-01/acceptance",
           "label": "V4-TRANSACTION-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The _v4 family exists, armable past the changed-set gate, registry installed, published on Ed's exact-byte yes, shakedown complete with GO receipts."
+        "summary": "The _v4 family exists, armable past the changed-set gate, registry installed, published under the D-150b-delegated exact-byte confirmation (authority ED), shakedown complete with GO receipts."
       },
       "authority": {
         "label": "D-148.5 r5 FINAL (cold-ratified with two attached sentences)",
@@ -4113,7 +4113,7 @@
       "priority": "p1_phase_gate",
       "rank": 91,
       "status": "queued",
-      "status_note": "D-153 work order W4, pending kernel registration since the 2026-08-24 ruling (W1/W2 landed via PR #181 and the errata; W3 had no target). Hazard is verified by inspection, not yet executed.",
+      "status_note": "D-153 work order W4, registered 2026-08-24. RULED 2026-08-26 by D-155 NR-13 (docs/process_traces/2026-08-22-t20/nr-synthesis-ruling.md): a code guard, not an operational fence, and the binding deadline is EARLIER than the freeze span - the guard's own files are not among the 112 allowlisted paths, so it must land before EVIDENCE_DERIVATION_HEAD, i.e. before Phase C1 of the real transaction. Ruled shape: a sentinel file OUTSIDE the repository (default /Users/edr/JouleWise-window-custody/COMMIT_FREEZE_OPEN, env-overridable for tests); when present the script writes WINDOW_STATUS.md locally and exits 0 BEFORE git add; out-of-span behaviour byte-identical; two-branch regression. D-150a visibility is unaffected (the committed channel is the push notification, not the git push). Landing vehicle: the D-155 W-2 code PR, together with the NR-11 two-parser trailer cure - IN FLIGHT, NOT MERGED, so this row stays queued until that PR lands. Hazard is verified by inspection, not yet executed.",
       "stop_card": null
     },
     "WO-CENSUS-SEMANTICS": {

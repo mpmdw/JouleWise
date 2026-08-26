@@ -812,37 +812,91 @@ machine behavior: the refusal is evidence that the reboot fence worked, not a
 fault to work around. The lead confirmed both the raw `sysctl` read and the
 shipped derivation outside a sandbox on the same boot.
 
-**Lead-owned terminal-review attestation — required producer step.** After
-all repair/freeze review is complete and before the dry run or T-0, the lead
-operates at the reviewed tree, computes the committed pack digest, and creates
-one empty attestation commit. This is not delegated and is not an Ed hardware
-step:
+**Magistrate-executed terminal-review attestation — required producer step.**
+After all repair/freeze review is complete and before the dry run or T-0, the
+operator works at the reviewed tree, computes each pack's committed pack-tree
+digest, and creates one empty attestation commit carrying the review trailers.
+
+**Owner (amended 2026-08-26 under D-155, NR-12).** The original text read
+"This is not delegated and is not an Ed hardware step". The second half
+stands: it is still not an Ed hardware step. The first half is amended.
+D-150b (Ed, 2026-08-23) delegates the terminal review **by name** to the
+magistrate, executed as a mechanical comparison with every digest
+independently recomputed from the artifacts rather than accepted from the
+producing session's report. So this step **is** delegated — to the
+magistrate, and to no one else.
+
+**Placement (amended 2026-08-26 under D-155, NR-12).** For a multi-pack
+family under a commit freeze, this commit is the **last commit before
+publication**: it is made at the mint tree, after the allowlist contract
+closes at `PINSET_MINT_HEAD`, and the head it produces is
+`ATTESTATION_HEAD`, which is the published head. `PINSET_MINT_HEAD` remains
+the allowlist-contract closure head and the coordinate `hS` is computed
+from. An empty commit changes no bytes, so it moves neither the tree nor
+`hS`. The real-lane step-by-step sequence lives in
+`docs/process_traces/2026-08-22-t20/real-transaction-runbook.md` Phase C11.
+
+**One commit, one trailer line per pack.** The `_v4` family is three packs
+that arm against a single frozen head, and each pack has its own committed
+pack-tree digest. The producer therefore emits **three**
+`JouleWise-Terminal-Review-Pack-Sha256` lines — one per pack, in
+ALPHA/BETA/GAMMA order — alongside exactly one `PASS` line and exactly one
+`Tree-Oid` line. A single-pack family emits one such line and the block
+below is unchanged in shape.
 
 ```sh
 cd /Users/edr/JouleWise-measurement-20260813
-. /Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness/window-plan/window.env
 test -z "$(git status --porcelain=v1 --untracked-files=all)"
 TREE_OID="$(git rev-parse HEAD^{tree})"
-PACK_SHA256="$(.venv/bin/python - "$PACK_ROOT" <<'PY'
+set -- -m 'JouleWise terminal review attestation' \
+       -m 'JouleWise-Terminal-Review: PASS' \
+       -m "JouleWise-Terminal-Review-Tree-Oid: $TREE_OID"
+for PACK_ROOT in \
+  configs/campaigns/d117_floor_qwen25_1p5b_v4 \
+  configs/campaigns/d117_floor_qwen25_7b_v4 \
+  configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4
+do
+  PACK_SHA256="$(.venv/bin/python3 - "$PACK_ROOT" <<'PY'
 import sys
 from joulewise.arm_readiness import committed_pack_tree_sha256
 print(committed_pack_tree_sha256(sys.argv[1]))
 PY
 )"
-git commit --allow-empty --cleanup=verbatim \
-  -m 'JouleWise terminal review attestation' \
-  -m 'JouleWise-Terminal-Review: PASS' \
-  -m "JouleWise-Terminal-Review-Tree-Oid: $TREE_OID" \
-  -m "JouleWise-Terminal-Review-Pack-Sha256: $PACK_SHA256"
+  test -n "$PACK_SHA256" || { echo "empty pack digest for $PACK_ROOT" >&2; exit 1; }
+  set -- "$@" -m "JouleWise-Terminal-Review-Pack-Sha256: $PACK_SHA256"
+done
+git commit --allow-empty --cleanup=verbatim "$@"
 ```
 
-The lead then lands that exact commit as reviewed `main`; the measurement
-checkout, local `main`, and `origin/main` must all name it. The tree OID is
-unchanged by the empty commit. Every `capture_t0_step.py` invocation verifies
-that HEAD contains exactly one of each trailer with the current tree and pack
-digest, and the author's existing terminal-review check independently repeats
-the proof. A later tree or pack change requires a new reviewed attestation
-commit; trailers from an ancestor do not transfer.
+Two details of that block are load-bearing rather than stylistic. The
+interpreter is spelled `.venv/bin/python3`, not `.venv/bin/python`: they are
+the same interpreter, but the harness permission rules match on the literal
+string, so the two spellings prompt differently (D-155, NR-10). And the
+window plan's `window.env` is no longer sourced for `$PACK_ROOT`: that file
+names one campaign, and this commit must name every pack in the family, so
+the pack roots are listed explicitly.
+
+**This three-line form requires the NR-11 membership cure to be on the
+reviewed head first.** Both trailer parsers — `_derive_terminal_review` in
+`joulewise/arm_readiness_evidence_t0.py` and its twin `_verify_terminal_review`
+in `scripts/capture_t0_step.py` — historically required *exactly one*
+`Pack-Sha256` value, so a three-line message refuses at both. D-155 rules
+`PASS` and `Tree-Oid` to stay exactly-once while `Pack-Sha256` becomes
+**non-empty, duplicate-free, and containing the arming pack's digest**; that
+change lands as D-155 work order W-2, before the evidence-derivation head. If
+W-2 is not on the head being attested, do not emit three lines and do not
+work around the refusal — stop, and read the D-151 condition-7 warning in the
+real-transaction runbook's C11 step.
+
+The operator then lands that exact commit as reviewed `main`; the
+measurement checkout, local `main`, and `origin/main` must all name it. The
+tree OID is unchanged by the empty commit. Every `capture_t0_step.py`
+invocation verifies that HEAD carries exactly one `PASS` line, exactly one
+`Tree-Oid` line matching the current tree, and this pack's digest among the
+`Pack-Sha256` lines; the author's terminal-review check independently
+repeats the same proof. A later tree change, or a pack whose digest is not
+among those lines, requires a new reviewed attestation commit; trailers from
+an ancestor do not transfer.
 
 **Lead live verification — desk evidence, not live-night authority
 (rule 1, non-delegable).**

@@ -82,6 +82,52 @@ the V4 reason-code-delta proof vehicle; until the shakedown arm, that
 proof rests on dry-run + load-closure + gauntlet regressions, and THE
 SHAKEDOWN GO RECEIPT IS NAMED AS THE V4-DELTA PROOF POINT.
 
+### AMENDED 2026-08-26 (D-155, NR-6) — the ceremony is the dry run, and `file-09 probe P1/P2/P3` is struck as specified
+
+The B-4 text above is preserved unchanged. Its first half — one
+`generate_arm_readiness.py dry-run` per pack, no real arm, the shakedown
+window's arm as the family's first real arm under its D-149 GO receipt —
+**stands and is reinforced**: a ceremony arm is not free, for the three
+reasons B-3 enumerates (it burns attempt/session identifiers under D-131
+cl. 4, it requires the ED-FIRST T-0 lane, and it prepends a supersession
+link to the claim family's arm chain), and the ED-FIRST clause alone breaks
+the transaction night's "Ed present for Phases B and C only" budget.
+
+Its second half — "plus the file-09 probe P1/P2/P3 OK" — is **struck as
+specified**. The probe's three properties, as written in the design source,
+are P1 the live registry reference loads, P2 the freeze reference
+authenticates, and P3 arm semantics cross the registry gate. Read against
+the code, P1 and P2 are already executed *inside* the dry run — the dry-run
+receipt generator loads the registry reference and the freeze reference on
+its own path — while P3 requires an arm. The dry-run receipt records
+`arm_disposition: NOT_APPLICABLE` and `evidence: []`: no arm occurs, so no
+arm semantics cross any gate. **P3 is therefore unsatisfiable inside the
+ceremony B-4 itself defines**, which is why it is struck rather than
+written.
+
+The ceremony's acceptance is now these **named assertions over the dry-run
+receipts**, one set per pack:
+
+- `status: PASS` with `refusals: []` — this *entails* P1 and P2, because a
+  failure of either surfaces as a refusal on the same code path;
+- the same-head pack-binding check PASS, with the head binding equal to
+  `ATTESTATION_HEAD` (the published head; see the D-155 amendment to r4-3);
+- `receipt_kind: dry_run`, `mode: dry_run`, `arm_disposition:
+  NOT_APPLICABLE`, `evidence: []` — the positive statement that no arm
+  occurred, rather than the mere absence of arm evidence.
+
+**P3 is recorded as discharged at the shakedown GO receipt**, which B-3
+already names as the V4-delta proof point and which B-3 makes a *non-claim*
+window — so deferring it costs no claim-bearing exposure. The arm-side U11
+re-verification obligation travels with it for the same mechanical reason:
+that leg runs only on the arm path and never on the dry-run path, so it is
+discharged at the shakedown arm and is named there.
+
+Recorded dissent: the Sol adjudication seat proposed a read-only
+reformulation of P3 that a dry run could satisfy. It was declined —
+renaming an unsatisfiable ruled property to a satisfiable weaker one is the
+quiet-weakening shape this process exists to refuse.
+
 ## B-5 (envelope fallback — amends A-5.2; G6+G7 accepted)
 
 The stagger clause is struck (staggered per-pack mints are partial

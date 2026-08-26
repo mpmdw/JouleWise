@@ -5,8 +5,9 @@ This document is the ONE normative home for
 historical-semantics contracts reference this contract; neither defines a
 second confirmation artifact or schema.
 
-Authority is the 2026-08-22 family-marker magistrate ruling and D-151
-conditions 2 and 7. The table is a custody-external authenticator. Its path
+Authority is the 2026-08-22 family-marker magistrate ruling, D-151
+conditions 2 and 7, and D-150b (delegated execution of the exact-byte
+confirmation). The table is a custody-external authenticator. Its path
 must never enter an irrelevant-path, changed-set, transaction-output, or any
 other allowlist. Adding an authenticator path to an allowlist is a D-151
 fixed-point tripwire, not an amendment lane.
@@ -35,10 +36,28 @@ and one trailing newline. Its adjacent sidecar is exact GNU SHA-256 form:
 ```
 
 The table contains no self-digest and no timestamp. Event time belongs in the
-immutable transaction transcript. Before Ed is asked, the producer renders
-the final bytes including the literal proposed `YES`, computes `hC`, and
-presents both. Ed's yes names `hC`; publication promotes the same bytes
-without mutation.
+immutable transaction transcript. The producer renders the final bytes
+including the literal proposed `YES` and computes `hC` over them.
+
+**Under D-150b (Ed, 2026-08-23) the exact-byte confirmation is a STANDING
+DELEGATION to the magistrate.** The confirming party independently recomputes
+every digest the table asserts — `hM` from the marker bytes on disk, `hS` from
+the bytes committed at the mint head — from the artifacts themselves, never
+from the producing session's report, and only then evaluates equality.
+`confirmation.authority` remains `"ED"` and `confirmation.decision` remains
+`"YES"`; `confirmation.statement` records that the confirmation was executed
+under the D-150b delegation and names what was independently recomputed. Any
+mismatch is a refusal and a ping to Ed, never a re-render. Ed is notified after
+execution rather than blocked on it; judgment-bearing publication decisions
+remain Ed's. Publication promotes the confirmed bytes without mutation.
+
+(Amended 2026-08-26 under D-155, which adopted this text from the Opus
+adjudication seat; the D-150b delegation itself is Ed's ruling of 2026-08-23.
+The superseded text read: "Before Ed is asked, the producer renders the final
+bytes including the literal proposed `YES`, computes `hC`, and presents both.
+Ed's yes names `hC`; publication promotes the same bytes without mutation." It
+is preserved here because an operator who has memorised the old sentence must
+be able to see that it was replaced, not merely fail to find it.)
 
 The adjacent `.sha256` sidecar is **transport integrity only, never
 authentication**. It is computed from the same bytes it accompanies, so a
@@ -76,7 +95,7 @@ hexadecimal characters.
   "confirmation": {
     "authority": "ED",
     "decision": "YES",
-    "statement": "I confirm these exact D-117 v4 step-6 bytes."
+    "statement": "Confirmed under the D-150b standing delegation: hM recomputed from the marker bytes on disk and hS from the bytes committed at the mint head; both matched the values this table asserts."
   },
   "family_id": "d117-v4",
   "family_publication": {

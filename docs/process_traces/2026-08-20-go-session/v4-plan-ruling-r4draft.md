@@ -59,6 +59,116 @@ checkout pinned. Docs-only commits to main DISARM T-0
 commit-freeze on the measurement checkout's main from attestation
 through window close.
 
+### AMENDED 2026-08-26 (D-155) — three amendments to r4-3
+
+The original r4-3 text above is preserved unchanged. These three amendments
+were adopted by the D-155 magistrate synthesis ruling
+(`docs/process_traces/2026-08-22-t20/nr-synthesis-ruling.md`), on two
+independent adjudication seats recorded beside it. Read the original for the
+converged ten-step order; read this for the three places that order now
+differs and why.
+
+**A. ORDER — publication precedes the marker build (NR-3 → branch A).**
+r4-3 as written puts "marker candidate + Ed's exact-byte step-6 → atomic
+publication", i.e. the marker is built and confirmed and only then is the
+head pushed. *That order cannot execute.* `build_family_publication_marker`
+calls `reviewed_main()` before it branches on phase, and `reviewed_main()`
+passes only when, in the repository owning the pack roots,
+`HEAD == refs/heads/main == refs/remotes/origin/main` with a clean working
+tree. Until the head is pushed, `refs/remotes/origin/main` names an older
+commit, so the build refuses `head_mismatch`. The rehearsal (S-0) never met
+this because it forged `refs/remotes/origin/main` to whatever head it had
+just made; the real lane has no forge. **The amended order is
+push-then-build:** publish the mint-and-attestation head, fetch it back at
+the measurement checkout, then build the marker in the publication phase.
+
+A second consequence follows and is part of this amendment: a marker
+*verify* at `--phase publication` requires the confirmation pair (the
+step-6 table and its digest `hC`) — a non-candidate verify calls
+`_authenticate_confirmation_table`, which raises `confirmation_missing`
+when no expected digest is supplied. So the publication phase's five steps
+run **E1 build → E3 render the step-6 table → E4 execute the delegated
+confirmation and compute `hC` → E2 verify → E5 promote**, not E1→E2→E3→E4→E5.
+The step numbers keep their original names so that transcripts, the runbook,
+and this ruling agree on which step is which; only their order changed.
+
+Losing side, recorded: the written order preserves "nothing is published
+until the confirmation gates it". It loses because gate authority is
+conferred by the marker receipt's `gate_admissible` and
+`publication_authorized` fields and by the verify gate — not by the push. A
+pushed head carrying no admissible marker authorizes nothing, so
+push-then-build reorders a git operation, not the authority.
+
+**B. THE TERMINAL-REVIEW ATTESTATION — last commit before publication, and
+the magistrate performs it (NR-12 → branch B).**
+r4-3 places "Ed's tree-preserving terminal-review attestation (THE common
+derivation head)" *before* evidence authoring. Two things about that
+sentence are amended.
+
+*Placement.* The attestation is three trailers on a Git commit message
+(`JouleWise-Terminal-Review: PASS`, `…-Tree-Oid`, `…-Pack-Sha256`) which the
+arming code compares against the arming context's own tree object id. Under
+r4-3's placement the tree then moves three more times — evidence, freeze,
+mint — so by arm time the recorded `Tree-Oid` names a tree that is no longer
+`HEAD`'s and the attestation is dead. The window runbook already states the
+governing rule in terms: "trailers from an ancestor do not transfer." The
+attestation therefore becomes **step C11, the last commit before
+publication**: one empty, tree-preserving commit made at the mint tree.
+
+*Two heads, each named.* That commit's head is **`ATTESTATION_HEAD`**, and
+it is the **published head**. `PINSET_MINT_HEAD` remains the
+**allowlist-contract closure head** and the coordinate `hS` is computed
+from; an empty commit changes no bytes, so `hS` is unaffected. Closure head
+and published head are now two different commits, and every step naming
+"the head" must say which one it means.
+
+*Owner.* D-150b (Ed, 2026-08-23) post-dates both this ruling and the window
+runbook's producer text and delegates "the TERMINAL REVIEW" by name to the
+magistrate, executed as a mechanical comparison with every digest
+independently recomputed. So "Ed's … attestation" in the original text is
+amended to **the magistrate's**, under D-150b. It remains not an Ed hardware
+step.
+
+*Corroboration recorded:* r4-3's own commit-freeze sentence — "the runsheet
+carries a commit-freeze on the measurement checkout's main from attestation
+through window close" — is false under r4-3's own placement, because r4-3
+then schedules four more commits after the attestation. Under this
+amendment the sentence is exactly true. The Opus seat found this
+independently; it is recorded here because it is evidence for the
+amendment, not decoration.
+
+**C. THE CEREMONY — dry-run only, and `file-09-probe P1/P2/P3` is struck as
+specified (NR-6 → branch B).**
+The original text at the ceremony step reads "dry-run ceremony (B-4 form:
+dry-run + file-09-probe P1/P2/P3; NO real arm)". The "NO real arm" half
+stands and is reinforced. The `file-09-probe P1/P2/P3` half is **struck as
+specified**, because its third property cannot be satisfied inside the
+ceremony B-4 defines: P1 (the live registry reference loads) and P2 (the
+freeze reference authenticates) are both already executed inside the
+dry-run itself, but P3 requires arm semantics to cross the registry gate,
+and a dry-run receipt carries `arm_disposition: NOT_APPLICABLE` and
+`evidence: []` — no arm occurs, so nothing crosses. Satisfying P3 requires
+the real arm B-4 forbids.
+
+The probe is replaced by **named assertions over the dry-run receipts**, one
+set per pack: `status: PASS` with `refusals: []` (a failure of P1 or P2
+surfaces as a refusal, so this entails both); the same-head pack-binding
+check PASS with the head binding equal to `ATTESTATION_HEAD`; and
+`receipt_kind: dry_run` / `mode: dry_run` / `arm_disposition:
+NOT_APPLICABLE` / `evidence: []` as the positive statement that no arm
+occurred. **P3 is recorded as discharged at the shakedown GO receipt**,
+which B-3 already names as the V4-delta proof point and which is a non-claim
+window.
+
+The same disposition carries the arm-side U11 re-verification obligation:
+that leg runs only on the arm path, never on the dry-run path, so it is
+discharged at the shakedown arm, and is named there.
+
+Recorded dissent: the Sol seat proposed a read-only reformulation of P3
+that a dry-run *could* satisfy. It was declined — renaming an unsatisfiable
+ruled property to a satisfiable weaker one is the quiet-weakening shape this
+process exists to refuse.
+
 ## r4-4 (HORIZON — to Ed; the transaction is unmintable without)
 
 168h (604_800_000_000_000 ns; policy id
