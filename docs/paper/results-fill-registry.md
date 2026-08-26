@@ -23,9 +23,22 @@ above every draft site listed below, so all forty-two line locators moved down b
 two lines. Each new number was re-derived the same way as the 2026-08-24
 revision — by searching the draft for that site's own anchor text — rather than
 by applying the offset blind, and every one of the forty-two was confirmed to sit
-on its stated line. Nothing else in this file changed: no marker string,
-supplier, fill rule, freeze status, or census figure was touched, and the draft's
-rendered prose and bracket-marker count are unchanged.
+on its stated line. That pass changed nothing else: no marker string, supplier,
+fill rule, freeze status, or census figure was touched, and the draft's rendered
+prose and bracket-marker count were unchanged.
+
+DS-08 marker re-bind, 2026-08-25. The magistrate ruled that Section 5 may carry
+the retained point-floor and corner-widened-floor energies as labelled instrument
+diagnostics, which requires DS-08's hold sentence to name the section it now
+exempts. The exact-marker cell below therefore reads "Sections 3, 5, and 7" where
+it read "Sections 3 and 7", byte-identical to the amended sentence at its draft
+site; DS-08's supplier, campaign/cell, fill rule (`DERIVE`), freeze status, and
+sources are unchanged, and no other row is affected. The Section 5 and Section 6
+edits behind it are in-place text changes that added no lines to the draft, so
+every line locator below still resolves — re-confirmed by anchor-text search over
+all forty-two after the edit. The bracket-marker census is unaffected: the draft
+still carries the same thirty-five `PENDING`-family marker sites, with DS-08's
+site changing its text rather than the set gaining or losing a site.
 
 This is the binding crosswalk for result rendering. It inventories the generic
 markers in `docs/paper/draft-v1.md` by site and the exact fill-key vocabulary in
@@ -437,7 +450,7 @@ anchor text.
 | DS-05 — Section 5 characterization specification row, line 351 | `\| Phase accounting \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_phase` plus licensed additivity/invariance diagnostics, only after an authenticated characterization report is issued | characterization / phase attribution | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
 | DS-06 — Section 5 characterization specification row, line 352 | `\| Drift and recovery \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_drift` plus licensed excursion/recovery diagnostics, only after an authenticated characterization report is issued | characterization / drift and settling | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
 | DS-07 — Section 5 characterization specification row, line 353 | `\| Between-session stability \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_between_sessions` and `N_C_eligible_sessions`, only after an authenticated characterization report is issued | characterization / between sessions | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
-| DS-08 — Section 6 results branch hold, line 405 | `[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3 and 7.]` | Exactly one guarded template result variant; template-internal section labels are not draft section locators | alpha, beta, gamma | DERIVE | DRAFT_GENERIC; no historical or diagnostic result is a supplier | DRAFT, TPL, LINT |
+| DS-08 — Section 6 results branch hold, line 405 | `[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3, 5, and 7.]` | Exactly one guarded template result variant; template-internal section labels are not draft section locators | alpha, beta, gamma | DERIVE | DRAFT_GENERIC; no historical or diagnostic result is a supplier | DRAFT, TPL, LINT |
 | DS-09 — Table 2 prompt/1.5B gross cell, line 411, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_request` with lower and upper interval endpoints | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
 | DS-10 — Table 2 prompt/1.5B per-token cell, line 411, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_token` | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
 | DS-11 — Table 2 prompt/1.5B floor cell, line 411, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `F_1p5B_prompt_operative_J` plus cell label branch | alpha / prompt floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
