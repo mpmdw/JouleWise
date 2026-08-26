@@ -24,27 +24,37 @@ Live state, gates, and work selection are owned by
 
 ## Current activity (refreshed each work block; last: 2026-08-25)
 
-**Just completed (2026-08-24/25):** the full-dress rehearsal of the real
-measurement transaction was run again on a throwaway copy of the
-repository, and a two-model review of the rehearsal script found
-nineteen defects in it — steps that named a piece of code before it
-existed, steps that called a tool without an input that tool requires,
-and line references that had drifted. All nineteen were fixed and
-merged, including one defect that was invisible to each reviewer alone
-and only appeared when the two fix branches were checked against each
-other. A separate check now re-derives the two worked examples in the
-paper's method section from the original measured files and refuses any
-number that no longer matches (43 of 43 matched on the live data).
+**Just completed (2026-08-25): the rehearsal is finished.** The *freeze
+transaction* is the governed sequence that locks the campaign plan and
+its supporting files, issues the fourth-generation campaign family, and
+records a person's hand-checked confirmation of exactly which bytes were
+locked. Because that sequence has to be right the first time on the real
+measuring machine, it is first run in full on a throwaway copy of the
+repository — a rehearsal, so that any defect is found before real
+measurement data depends on it.
 
-**In progress (2026-08-25):** the rehearsal is paused at the one step
-that needs a person — the operator reads the table of files about to be
-frozen and confirms its fingerprint by hand, which is deliberately the
-one thing the automation is not allowed to do for itself.
+Ten rehearsal attempts were made in all. The first nine each stopped on a
+genuine defect in the instrument, and each one would have stopped the
+real run: a step that demanded an input which cannot exist yet at the
+moment it asks for it; a record written at the wrong step of the
+sequence; a comparison that reported "these bytes differ" when in truth
+only the folder path differed; line references that had drifted out of
+date; and six tamper checks that were never reaching the check they were
+written to test, because an earlier gate refused first. Every one was
+diagnosed, fixed, reviewed, and merged before the next attempt started.
 
-**Next:** finish the rehearsal, then build the fourth-generation
-campaign family for real and run the first fresh calibration captures
-and quiet measurement windows under the corrected instrument — the data
-the paper's results tables are waiting for.
+The tenth attempt ran end to end with no failures: three real freezes on
+the measuring runtime, the confirmation table read and confirmed by hand,
+all three frozen packs passing the readiness checks that gate a real run,
+and every tamper check refusing for exactly the reason predicted from the
+code beforehand.
+
+**Next:** run the same transaction for real. That needs the measuring
+machine itself — a person at the keyboard approving each freeze, a
+reboot, and a quiet machine with nothing else running — after which the
+fresh calibration captures and quiet measurement windows begin, and those
+produce the data the paper's results tables are waiting for.
+
 ## Current State
 
 Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete

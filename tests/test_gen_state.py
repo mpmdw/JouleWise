@@ -137,8 +137,13 @@ EXPECTED_IDS = {
     # retired after PR #103 in the 2026-08-05 batch.
     "QUIET-GUARD-01", "SEC5A-REMOTE-01", "WO-T3-VIS-01",
     # 2026-08-05 registration batch: four agent-lane follow-ons.
-    "T3-PROV-SCHEMA-01", "CODEX-BRIDGE-SANDBOX-01",
+    # (CODEX-BRIDGE-SANDBOX-01 closed 2026-08-25 with PR #191 — argv-capture
+    # proof plus the source-level no-literal guard — and retired to the
+    # completed table.)
+    "T3-PROV-SCHEMA-01",
     "COLDGATE-HANDOFF-01", "CGV-HARDEN-01",
+    # 2026-08-25 T24 closure wave: the two rows the S-0 close-out reserved.
+    "MINT-CHECKOUT-DECLARATION-01", "ARM-PACKROOT-COMPARISON-01",
     # [QUIET-MAC]
     "D117-W-ALPHA", "D117-W-BETA", "D117-W-GAMMA",
     "MET-WINDOW-C-01",
@@ -160,7 +165,8 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "MET-DANGLER-DISPOSITION-01", "MANIFEST-CONTRAST-01",
                 "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01",
                 "CAL-BRACKET-D079-01", "T3-AMEND-01",
-                "COLDGATE-VALIDATOR-01", "WINB-R06-DISPOSITION-01"}
+                "COLDGATE-VALIDATOR-01", "WINB-R06-DISPOSITION-01",
+                "CODEX-BRIDGE-SANDBOX-01"}
 
 
 def load_kernel():
@@ -389,9 +395,19 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # CONSUME-CONFIRMATION-SUPPLY-01 (synthesis R-4's registration of
         # Opus finding 3f), and LINE-AUDIT-GUARD-01 (joint delta re-audit
         # adjudication item 4):
-        # 97 - 1 + 3 = 99 exact live records.
+        # 97 - 1 + 3 = 99; the 2026-08-25 T24 S-0-closure wave closes
+        # CODEX-BRIDGE-SANDBOX-01 (PR #191, 9fd185ac: argv-capture proof plus
+        # the source-level no-literal guard; all three acceptance bullets met)
+        # and registers the two rows the S-0 close-out reserved —
+        # MINT-CHECKOUT-DECLARATION-01 (D-154 ruling R-3, the mint-time
+        # measurement-checkout declaration check that re-sites the locality
+        # lens the R-1 replay cure retired, fenced outside the transaction
+        # window) and ARM-PACKROOT-COMPARISON-01 (the PR #192 refuter's D7
+        # finding: the two arm-side whole-dict pack comparisons repeat the
+        # untruthful bytes-differ detail on a location-only difference):
+        # 99 - 1 + 2 = 100 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 99)
+        self.assertEqual(len(self.tasks), 100)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
