@@ -931,16 +931,25 @@ def _derive_terminal_review(context: _Context) -> _DerivedRow:
         match = _re.fullmatch(r"(JouleWise-Terminal-Review(?:-Tree-Oid|-Pack-Sha256)?):\s*(\S+)", line)
         if match:
             trailers.setdefault(match.group(1), []).append(match.group(2))
-    expected = {
+    expected_exact = {
         "JouleWise-Terminal-Review": "PASS",
         "JouleWise-Terminal-Review-Tree-Oid": context.head_tree_oid,
-        "JouleWise-Terminal-Review-Pack-Sha256": context.pack_sha256,
     }
-    if any(trailers.get(name) != [value] for name, value in expected.items()):
+    packs = trailers.get("JouleWise-Terminal-Review-Pack-Sha256", [])
+    if (
+        any(
+            trailers.get(name) != [value]
+            for name, value in expected_exact.items()
+        )
+        or not packs
+        or any(_SHA_RE.fullmatch(pack) is None for pack in packs)
+        or len(set(packs)) != len(packs)
+        or context.pack_sha256 not in packs
+    ):
         raise _refuse(
             kind,
             "evidence_author_t0_terminal_review_record_missing",
-            "HEAD commit lacks the exact PASS/tree/pack terminal-review trailers",
+            "HEAD commit lacks exact PASS/tree and valid pack-membership terminal-review trailers",
         )
     primary = tuple(
         _committed_artifact(context.repository, relative, kind=kind)[0]

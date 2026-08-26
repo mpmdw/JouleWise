@@ -39,6 +39,93 @@ class _Clock:
 class CaptureT0StepTests(unittest.TestCase):
     maxDiff = None
 
+    @staticmethod
+    def _terminal_review_message(tree_oid: str, packs: tuple[str, ...]) -> str:
+        return "\n".join(
+            (
+                "terminal review",
+                "",
+                "JouleWise-Terminal-Review: PASS",
+                f"JouleWise-Terminal-Review-Tree-Oid: {tree_oid}",
+                *(
+                    f"JouleWise-Terminal-Review-Pack-Sha256: {pack}"
+                    for pack in packs
+                ),
+            )
+        )
+
+    def _verify_terminal_review_for(
+        self, message: str, *, pack_sha256: str
+    ) -> None:
+        with (
+            mock.patch.object(
+                readiness,
+                "reviewed_main",
+                return_value={"clean": True, "exact_match": True},
+            ),
+            mock.patch.object(
+                capture,
+                "_git_text",
+                side_effect=[message, "1" * 40],
+            ),
+        ):
+            capture._verify_terminal_review(
+                Path("."), Path("."), pack_sha256=pack_sha256
+            )
+
+    def _assert_terminal_review_refuses(
+        self, message: str, *, pack_sha256: str
+    ) -> None:
+        with self.assertRaises(capture.CaptureT0Error) as caught:
+            self._verify_terminal_review_for(message, pack_sha256=pack_sha256)
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_capture_terminal_review_missing",
+        )
+
+    def test_terminal_review_three_pack_message_accepts_each_pack(self) -> None:
+        tree_oid = "1" * 40
+        packs = ("a" * 64, "b" * 64, "c" * 64)
+        message = self._terminal_review_message(tree_oid, packs)
+        for pack_sha256 in packs:
+            with self.subTest(pack_sha256=pack_sha256):
+                self._verify_terminal_review_for(
+                    message, pack_sha256=pack_sha256
+                )
+
+    def test_terminal_review_foreign_pack_list_refuses(self) -> None:
+        message = self._terminal_review_message(
+            "1" * 40, ("b" * 64, "c" * 64)
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_duplicate_pack_line_refuses(self) -> None:
+        message = self._terminal_review_message(
+            "1" * 40, ("a" * 64, "a" * 64)
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_single_pack_message_still_passes(self) -> None:
+        message = self._terminal_review_message("1" * 40, ("a" * 64,))
+        self._verify_terminal_review_for(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_pack_line_with_trailing_token_refuses(self) -> None:
+        message = self._terminal_review_message("1" * 40, ()).replace(
+            "JouleWise-Terminal-Review-Tree-Oid: " + "1" * 40,
+            "JouleWise-Terminal-Review-Tree-Oid: "
+            + "1" * 40
+            + "\nJouleWise-Terminal-Review-Pack-Sha256: "
+            + "a" * 64
+            + " trailing",
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_malformed_pack_digest_refuses(self) -> None:
+        message = self._terminal_review_message(
+            "1" * 40, ("a" * 64, "not-a-sha256")
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
     def _producer_fixture(self):
         temporary, repository, pack, custody, context, input_root = make_t0_fixture()
         self.addCleanup(temporary.cleanup)
