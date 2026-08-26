@@ -51,8 +51,11 @@ changed:
   class's `reason_codes` LIST and `detail` STRING are compared for equality,
   which strictly subsumes r5's substring greps and its two separate absence
   sweeps. Three class expectations were re-derived: `freeze-json` now recomputes
-  its sidecar and expects `readiness_freeze_receipt_mismatch` / "plan freeze
-  reference is not exact"; `freeze-sidecar` expects
+  its sidecar and expects `readiness_freeze_receipt_mismatch` / "existing freeze
+  receipt is not plan-pinned" (**amended in the r6 fix round** — the consult
+  predicted the exactness detail from `:6503-6506`, but the plan-pin filter at
+  `:6848-6862` discards the tampered receipt first; two concurring derivations,
+  ruled in `03-FREEZE-JSON-AMENDMENT.md`); `freeze-sidecar` expects
   `readiness_receipt_namespace_anomalous` / "sidecar mismatch for
   freeze-0004.json"; `plan-json` uses the manifest-only mutation.
 - **`119` propagates the digest chain** so the evidence-digest authenticator at
@@ -537,9 +540,9 @@ not a strength of the check.
 | 4 | `joulewise/arm_readiness.py` | 4229 | symbol | `_r1_changed_paths` | `def _r1_changed_paths(` |
 | 5 | `joulewise/arm_readiness.py` | 4426 | statement | `validate_r1_evidence_lifecycle` | `allowlist = set(governed["irrelevant_path_allowlist"])` |
 | 6 | `joulewise/arm_readiness.py` | 5409 | symbol | `_authenticate_generic_evidence_item` | `def _authenticate_generic_evidence_item(` |
-| 7 | `joulewise/arm_readiness.py` | 6410 | symbol | `_load_freeze_reference` | `def _load_freeze_reference(` |
-| 8 | `joulewise/arm_readiness.py` | 6680 | symbol | `generate_freeze_receipt` | `def generate_freeze_receipt(` |
-| 9 | `joulewise/arm_readiness.py` | 6721 | statement | `generate_freeze_receipt` | `generation = _pack_generation(root.name)` |
+| 7 | `joulewise/arm_readiness.py` | 6475 | symbol | `_load_freeze_reference` | `def _load_freeze_reference(` |
+| 8 | `joulewise/arm_readiness.py` | 6749 | symbol | `generate_freeze_receipt` | `def generate_freeze_receipt(` |
+| 9 | `joulewise/arm_readiness.py` | 6790 | statement | `generate_freeze_receipt` | `generation = _pack_generation(root.name)` |
 | 10 | `joulewise/identity_pins.py` | 1826 | symbol | `freeze_projection` | `def freeze_projection(pack_root: Path \| str) -> Mapping[str, Any]:` |
 | 11 | `scripts/generate_arm_readiness.py` | 28 | symbol | `_parser` | `def _parser() -> argparse.ArgumentParser:` |
 | 12 | `scripts/project_identity_pins.py` | 23 | symbol | `parse_args` | `def parse_args(argv: list[str] \| None = None) -> argparse.Namespace:` |
@@ -3171,14 +3174,26 @@ drops by one accordingly.
 
 Three class expectations were re-derived from the raise sites at `5a034f84`:
 
-- **`freeze-json`** changed its shape, not just its expectation. Bumping
-  `issued_at_utc` invalidates the freeze receipt's own GNU sidecar, and
+- **`freeze-json`** changed its shape, not just its expectation, and then
+  changed its expectation again in the r6 fix round. Bumping `issued_at_utc`
+  invalidates the freeze receipt's own GNU sidecar, and
   `generate_freeze_receipt()` scans the receipt namespace at `:6848` — which
-  authenticates every sidecar at `:4713-4725` — BEFORE `_load_freeze_reference()`
-  can compare the plan's recorded freeze pin at `:6503-6506`. So the tamper now
-  recomputes the freeze JSON's sidecar and leaves the PLAN's recorded freeze
-  SHA fixed: namespace authentication passes, and the exact plan-reference check
-  is what refuses.
+  authenticates every sidecar at `:4713-4725` — BEFORE anything downstream can
+  look at the plan's recorded freeze pin. So the tamper recomputes the freeze
+  JSON's sidecar and leaves the PLAN's recorded freeze SHA fixed, and namespace
+  authentication passes. **What refuses next is the PLAN-PIN FILTER, not the
+  exactness check.** Immediately after the namespace scan, `:6848-6862` compares
+  each scanned receipt's `{path, sha256}` pair against the plan's recorded pin
+  and discards any receipt that does not match, refusing before
+  `_load_freeze_reference()` is ever called. The recomputed sidecar changed the
+  receipt's own SHA, so the tampered receipt is exactly the receipt that filter
+  rejects. The expected pair is therefore
+  `[readiness_freeze_receipt_mismatch]` with detail **"existing freeze receipt
+  is not plan-pinned"**, at `rc=2` — not the exactness detail "plan freeze
+  reference is not exact" that the consult predicted from `:6503-6506`, which is
+  reached only by a receipt that survives plan-pinning. Both fix-round seats
+  re-derived this independently and concurred; the correction is ruled in
+  `docs/process_traces/2026-08-25-probe-reachability/03-FREEZE-JSON-AMENDMENT.md`.
 - **`freeze-sidecar`** is the class whose expectation r5 got wrong for the same
   reason and in the opposite direction: zeroing that sidecar is precisely a
   namespace-authentication failure, so its refusal is
@@ -3314,7 +3329,7 @@ expected = {
     ),
     "freeze-json": (
         ["readiness_freeze_receipt_mismatch"],
-        "plan freeze reference is not exact",
+        "existing freeze receipt is not plan-pinned",
     ),
     "freeze-sidecar": (
         ["readiness_receipt_namespace_anomalous"],
@@ -3349,7 +3364,7 @@ The complete enumerated classes and counts are, with the exact
 | source JSON (33) | change one primary-artifact digest without changing its receipt | 2 | `[readiness_evidence_digest_mismatch]` | `evidence fact source digest mismatch` |
 | evidence JSON (33) | change one receipt byte | 2 | `[readiness_evidence_digest_mismatch]` | `evidence item digest differs from authenticated bytes` |
 | evidence sidecar (33) | replace its digest with 64 zeroes | 2 | `[readiness_evidence_digest_mismatch]` | `evidence item digest differs from authenticated bytes` |
-| freeze JSON (3) | change its still-valid timestamp **and recompute its own sidecar**, leaving the plan's recorded freeze SHA fixed | 2 | `[readiness_freeze_receipt_mismatch]` | `plan freeze reference is not exact` |
+| freeze JSON (3) | change its still-valid timestamp **and recompute its own sidecar**, leaving the plan's recorded freeze SHA fixed | 2 | `[readiness_freeze_receipt_mismatch]` | `existing freeze receipt is not plan-pinned` |
 | freeze sidecar (3) | replace its digest with 64 zeroes | 2 | `[readiness_receipt_namespace_anomalous]` | `sidecar mismatch for freeze-0004.json` |
 | plan-tree JSON (3) | manifest-only `window_identity.evidence_root_id` change plus corrected sidecar (the §4(c) mutation) | 1 | `[$MANIFEST_CODE]` | `current dependency differs from its derivation binding: $FIRST_PACK/plan_tree.json` |
 | plan-tree sidecar (3) | replace its digest only | 2 | `[readiness_pack_digest_mismatch]` | `plan-tree sidecar does not authenticate exact bytes` |
@@ -4258,7 +4273,12 @@ reading its named artifacts.
     mismatch for freeze-0004.json"), because zeroing that sidecar IS a
     namespace-authentication failure; and `freeze-json`, whose tamper now
     recomputes its own sidecar, refuses `readiness_freeze_receipt_mismatch` with
-    the detail "plan freeze reference is not exact". The two R1 classes
+    the detail "existing freeze receipt is not plan-pinned" — the PLAN-PIN
+    FILTER at `:6848-6862`, which discards any scanned receipt whose
+    `{path, sha256}` disagrees with the plan's pin before
+    `_load_freeze_reference()` runs at all, and therefore before the exactness
+    check the consult originally predicted (r6 fix round; see
+    `03-FREEZE-JSON-AMENDMENT.md`). The two R1 classes
     (`plan-json`, `pinset-json`) exit `1` and the other six exit `2`; the block
     asserts the exit code per class, not merely nonzero. The successor class
     refuses through the authenticated C→S edge ALONE: `reason_codes` exactly
