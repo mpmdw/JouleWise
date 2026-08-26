@@ -936,12 +936,12 @@ def _derive_terminal_review(context: _Context) -> _DerivedRow:
         "JouleWise-Terminal-Review-Tree-Oid": context.head_tree_oid,
     }
     packs = trailers.get("JouleWise-Terminal-Review-Pack-Sha256", [])
+    # An empty Pack-Sha256 list refuses via the membership clause below.
     if (
         any(
             trailers.get(name) != [value]
             for name, value in expected_exact.items()
         )
-        or not packs
         or any(_SHA_RE.fullmatch(pack) is None for pack in packs)
         or len(set(packs)) != len(packs)
         or context.pack_sha256 not in packs

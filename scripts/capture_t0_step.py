@@ -309,12 +309,12 @@ def _verify_terminal_review(
         "JouleWise-Terminal-Review-Tree-Oid": tree_oid,
     }
     packs = trailers.get("JouleWise-Terminal-Review-Pack-Sha256", [])
+    # An empty Pack-Sha256 list refuses via the membership clause below.
     if (
         any(
             trailers.get(name) != [value]
             for name, value in expected_exact.items()
         )
-        or not packs
         or any(re.fullmatch(r"[0-9a-f]{64}", pack) is None for pack in packs)
         or len(set(packs)) != len(packs)
         or pack_sha256 not in packs

@@ -126,6 +126,25 @@ class CaptureT0StepTests(unittest.TestCase):
         )
         self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
 
+    def test_terminal_review_duplicate_pass_line_refuses(self) -> None:
+        message = (
+            self._terminal_review_message("1" * 40, ("a" * 64,))
+            + "\nJouleWise-Terminal-Review: PASS"
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_duplicate_tree_oid_line_refuses(self) -> None:
+        message = (
+            self._terminal_review_message("1" * 40, ("a" * 64,))
+            + "\nJouleWise-Terminal-Review-Tree-Oid: "
+            + "1" * 40
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_empty_pack_list_refuses(self) -> None:
+        message = self._terminal_review_message("1" * 40, ())
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
     def _producer_fixture(self):
         temporary, repository, pack, custody, context, input_root = make_t0_fixture()
         self.addCleanup(temporary.cleanup)
