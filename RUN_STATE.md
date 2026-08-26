@@ -10,6 +10,116 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T24 (2026-08-25) — S-0 IS COMPLETE. The clone proof ran END TO END with
+zero failures at estate 10; the magistrate's §5 acceptance read returned
+ALL BOXES PASS. Kernel 99 -> 100. Everything that remains on the `_v4`
+transaction needs Ed's machine.**
+
+Record of account:
+`docs/process_traces/2026-08-22-t20/S0-COMPLETION-RECORD.md`. Session
+report: `docs/run_reports/2026-08-25-t23-t24-session.md`.
+
+- **Estate 10** was cut at BASE `f125ae70` (the runsheet-r6 head; CI run
+  32915894409 green) and executed the whole instrument: §§1.1–3.7 scripted
+  band with three real MLX U11 freezes; §3.8 marker build with the S0-O2
+  deferral disclosed and candidate verify PASS; Ed's step-6 YES over hC
+  `adbd116d7dcaa3dd5b0d6f1e5c9127282232b29ea74b03b9c6b8077ec9da36bc`
+  (recorded in `085-*`, table authenticated); §3.9 all three packs ARMED
+  and verified with the C+hC pair, clean-arm residue empty, eleven-kind
+  census PASS; §3.10 local green in the clone with the published half
+  DEFERRED BY DESIGN (`095-*`); §4 probe battery ALL GREEN — including the
+  six r6 re-derived probes, so every code-derived prediction was CONFIRMED
+  BY EXECUTION and the r6 caveat is discharged — plus the post-fixation
+  118 shape-preserving re-mint byte pin; §4.10 fixation (`078-*` equals
+  the mint-time `074-*` record); block-level §5 checks green. Fifth `_v4`
+  mint; clone mint head `9a6f8880`.
+- **Ten estates were cut in total, and estates 1–9 each terminated on a
+  REAL instrument defect whose cure is now on main** — S0-O2 (the marker
+  builder demanding a confirmation digest that cannot exist at build
+  time), S0-O3 (the `074-*` successor-digest record sited at the wrong
+  step), the confirmation-supply family, D-154 `pack_root`, the anchor
+  remaps, and probe reachability. That progression is the clone proof
+  doing exactly what it was built to do: every halt is a defect found
+  BEFORE a live window, not during one.
+- **Estate dispositions, all with custody preserved READ-ONLY.** Estate 6
+  STRUCK under the D-153 sweep synthesis (its `091-*` REFUSE transcripts
+  retained as live negative-leg evidence). Estate 7 STRUCK as instrument
+  failure under **D-154 R-4**, with its positive results explicitly
+  retained as EVIDENCE OF EXECUTABILITY for §§1.1–3.10-local and
+  explicitly NOT claim custody. Estate 8 halted at §1.1 after six
+  transcripts when the anchor gate refused PR #192's own line drift
+  (superseded; cured by the round-4 remap in PR #193). Estate 9's six
+  probe-block failures dispositioned ordinary-defect under the
+  probe-reachability adjudication — the estate's greens stand; the
+  failures were instrument-side probe shapes and no estate precondition
+  was false. Estate 10 complete.
+- **The confirmation gate was supplied by hand FOUR times across the ten
+  estates**, not five: estates 6 (`3f761ce8…`), 7 (`e5a1caaf…`), 9
+  (`cf7102eb…`) and 10 (`adbd116d…`), each read from that estate's own
+  `085-ed-step6-confirmed-sha256.txt`. Estates 1–4 never reached §3.8,
+  estate 5 halted AT the marker build, and estate 8 halted at §1.1 — none
+  of them could have produced one. A fifth digest was searched for across
+  the whole scratchpad, all three consult trace directories, the
+  completion record, this file, and every arc commit message, and does not
+  exist.
+- **D-154 (the `pack_root` ruling)** came out of estate 7: probe 4(a)
+  refused at the pack-identity equality before reaching the changed-set
+  gate, because the recorded `pack_identity.pack_root` is the ABSOLUTE
+  minting path, so every `new_case` freeze replay in §4 refused on
+  LOCATION, not content. Two seats (Opus contract lens, Sol xhigh),
+  cross-model per the diversity directive; the Opus seat's empirical sweep
+  turned an S-0 bug into a repo-wide finding (7/7 resolvable committed
+  receipts on main differ from this checkout ONLY on `pack_root`). Ruling:
+  R-1 adopts Sol's successor-scoped shape (repo-relative structural
+  identity at generations ≥ `family_publication_first_generation`; `_v3`
+  and earlier keep absolute semantics, so the 2026-08-20 location ruling
+  is not silently superseded), R-2 makes each refusal detail true per
+  branch with no new reason codes, R-3 re-sites the locality lens at MINT
+  rather than retiring it, R-4 strikes estate 7, R-5 sets the
+  implementation gauntlet. Landed as PR #192 after a fresh cross-model
+  refuter. Custody:
+  `docs/process_traces/2026-08-25-packroot-consult/`.
+- **The r6 probe cure.** Estate 9 ran the §4 battery continue-on-fail and
+  six probe blocks failed with ONE shared signature: the refusal each
+  probe was written to elicit was masked by an earlier gate in the real
+  execution order. A Sol xhigh read-only seat traced the actual
+  first-firing gate for each, derived a better-shaped mutation from the
+  same case base where one exists, and said plainly where a gate is
+  unreachable — `105-plan-sibling`'s intended claim is unreachable BY
+  DESIGN (per-pack R1 manifests derive dependencies from the pack's own
+  evidence sources), so its family-wide-allowlist goal was ratified as
+  already covered by `106–108`. The lieutenant replayed every claim
+  line-level before the magistrate accepted the six replacement blocks
+  verbatim as r6, with the standing caveat that the expected reason codes
+  and details were code-derived PREDICTIONS whose confirmation was estate
+  10's job — and estate 10 confirmed all of them. Custody:
+  `docs/process_traces/2026-08-25-probe-reachability/`.
+- **PRs #184–#194 are all merged** (eleven): #184 marker C→S
+  deferred-and-disclosed at build (S0-O2 cure); #185 kernel wave 92→97;
+  #186 S0-O3 cure (074 moves to mint time, fixation compares instead of
+  produces); #187 runsheet r5, the D-153 sweep's consolidated items 2–19;
+  #188 the `freeze --step6-confirmation-table` supply line; #189 the paper
+  §2 replay fence; #190 kernel wave 97→99; #191 CODEX-BRIDGE-SANDBOX-01
+  (the bridge's recorded sandbox bound to the launched one); #192 the
+  D-154 cure; #193 anchor remap round 4 (15/15 at `bf88212e`); #194
+  runsheet r6, the probe-reachability cure.
+- **Kernel this wave (99 → 100):** CODEX-BRIDGE-SANDBOX-01 CLOSED on PR
+  #191 (argv-capture proof, records agreement, and a source-level
+  no-literal guard — the "cannot drift apart" clause made mechanical);
+  MINT-CHECKOUT-DECLARATION-01 registered from D-154 R-3 (the mint-time
+  measurement-checkout declaration check, fenced outside the transaction
+  window); ARM-PACKROOT-COMPARISON-01 registered from the PR #192
+  refuter's D7 finding (the two arm-side whole-dict pack comparisons
+  repeat the untruthful bytes-differ detail on a location-only
+  difference), for post-transaction cure. V4-TRANSACTION-01's status note
+  is rewritten to record S-0 complete and to scope what is left.
+- **WHAT REMAINS ON `_v4`, in full** — none of it is S-0's scope and all
+  of it needs Ed's machine: (a) Ed's D-150(1) live permission prompts and
+  the D-150a reboot; (b) a quiet machine window; (c) the real
+  commit-freeze window close; (d) the published-green half that §3.10
+  deferred, at the real published head; (e) post-window fixation ordering
+  per D-153.
+
 **T23 night (2026-08-25 pre-dawn) — the D-153 sweep CURED and
 RE-RATIFIED; estate 6 struck, estate 7 running and held at the step-6
 Ed-confirmation boundary; kernel 97 -> 99.**
@@ -4789,7 +4899,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-25). Latest report: [T21–T22 session 2026-08-22/23: the gauntlet that merged — _v4 candidate through the full adversarial gauntlet, S-1 merge wave landed, S-0 clone-head gate SATISFIED at 33aa594](docs/run_reports/2026-08-23-t21-t22-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-25). Latest report: [T23-T24 session 2026-08-24/25: S-0 clone proof COMPLETE - the marker cure through estates 6-10, three consults, eleven PRs merged](docs/run_reports/2026-08-25-t23-t24-session.md).
 
 ### [ED-EXTERNAL]
 
