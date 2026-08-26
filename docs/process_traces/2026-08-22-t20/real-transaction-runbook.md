@@ -198,11 +198,18 @@ a stop at the machine.
   `docs/phase_2/window_runbook.md` §1. **RULED (D-155, NR-1): it is
   `/Users/edr/JouleWise-measurement-20260813`**, fast-forwarded to the reviewed
   head. It is already the literal in the window runbook §1, in the `window.env`
-  template, and in the §5C producer, so choosing it edits nothing. Its head
-  `49dcc49` was verified to be an ancestor of the reviewed head
-  (`git merge-base --is-ancestor` passes), so
+  template, and in the §5C producer, so choosing it edits nothing.
+
+  Its head `49dcc49` was verified to be an **ancestor** of the reviewed head —
+  meaning the reviewed head can be reached from `49dcc49` by following commits
+  forward, so the checkout's history is a prefix of the reviewed history and
+  contains nothing the reviewed head does not (`git merge-base --is-ancestor`
+  exits 0). That is what makes a **fast-forward** available: moving the branch
+  pointer forward to the reviewed head, with no new commit created and no
+  content combined, so the resulting tree is byte-identical to the reviewed one.
   `git fetch origin && git merge --ff-only origin/main` on a clean tree is
-  sufficient — no merge, no rebase.
+  therefore sufficient, and `--ff-only` makes it refuse rather than silently
+  create a merge commit if the ancestry claim were ever false.
 
   `/Users/edr/JouleWise-measurement-20260818` is **rejected** on three grounds,
   the third of which is mechanical and decisive: it is not on `main`; its
@@ -381,8 +388,13 @@ What *does* bind:
 - [ ] **The prompt inventory delivered to Ed** (RULED, D-155, NR-10; work
   order W-6). Enumerate every command this runbook issues in Phases A–H,
   predict prompt / no-prompt against the harness's effective allow rules, and
-  hand Ed a table of ALLOW / ASK / DENY with the exact command strings and the
-  exact expected prompt count *before* he sits down. Where a prediction is
+  hand Ed a table with the exact command strings and the exact expected prompt
+  count *before* he sits down. Each command lands in one of three classes:
+  **ALLOW** — an allow rule matches, so the command runs with no prompt and Ed
+  sees nothing; **ASK** — no allow rule matches, or the harness classifier
+  blocks the command class outright, so a prompt fires and waits for Ed's
+  approval; **DENY** — the command must not run in this session at all, and is
+  listed so that a prompt for it is recognised immediately as a defect. Where a prediction is
   uncertain, run a harmless `--help` variant **of the same spelling in the same
   working directory** and observe the actual behaviour.
 
@@ -904,20 +916,29 @@ edge, because `C` carries the marker's own digest and so cannot exist yet. An
 **empty** `deferred_paths` would be the positive statement that nothing was
 deferred, which is why the key is required rather than optional.
 
-### E3 — Render the step-6 confirmation table (MAGISTRATE)
+### E3 — Render the DRAFT step-6 confirmation table (MAGISTRATE)
 
 Render `C` exactly per `docs/contracts/d117_step6_confirmation_table.md`: strict
 canonical JSON (UTF-8, sorted keys, two-space indent, one trailing newline, no
-timestamp, no self-digest), plus its GNU-form `.sha256` sidecar. Its fields bind
-the marker digest `hM`, the successor digest `hS`, the registry digest, the
-published head and its tree, and the three member rows in ALPHA/BETA/GAMMA
-order. `confirmation.authority` is `"ED"`, `confirmation.decision` is `"YES"`,
-and `confirmation.statement` is free text — which E4 fills.
+timestamp, no self-digest). Its fields bind the marker digest `hM`, the
+successor digest `hS`, the registry digest, the published head and its tree,
+and the three member rows in ALPHA/BETA/GAMMA order.
+`confirmation.authority` is `"ED"` and `confirmation.decision` is `"YES"`.
+
+**What E3 produces is a DRAFT, and it gets no sidecar.**
+`confirmation.statement` is not yet filled — E4 writes it, because only E4
+knows what was independently recomputed — so these are not the final bytes.
+**Write no `.sha256` sidecar here.** The contract defines the sidecar as
+"computed from the same bytes it accompanies"; a sidecar over draft bytes
+would accompany bytes that are about to change, and the mismatch would surface
+at E2's verify as a refusal. The sidecar is written once, at E4, over the
+final bytes. That there is no sidecar on disk between E3 and E4 is **by
+design**, not an omission — do not "repair" it.
 
 ### E4 — Execute the delegated confirmation (MAGISTRATE, D-150b)
 
-This is what replaces "Ed types YES". It has three parts and the independence
-requirement is the whole point of it:
+This is what replaces "Ed types YES". It has six parts, and the independence
+requirement in the first two is the whole point of it:
 
 1. **Recompute `hM` from the marker file on disk**, and `hS` from the bytes
    committed at `PINSET_MINT_HEAD` for the successor pinset path — read from
@@ -929,9 +950,22 @@ requirement is the whole point of it:
    ping to Ed, never a re-render.
 3. **Write the delegation into `confirmation.statement`**: that this
    confirmation was executed under D-150b's standing delegation, and what was
-   independently recomputed. Then compute `hC` over the final bytes and record
-   it **in transaction custody only**. `hC` never enters a repository path, in
-   this transaction or any other.
+   independently recomputed.
+4. **Render the FINAL canonical bytes** — the same strict D-134 canonical form
+   E3 used, now with `statement` filled. These bytes, and only these, are `C`.
+5. **Compute `hC` over those final bytes**, and record it **in transaction
+   custody only**. `hC` never enters a repository path, in this transaction or
+   any other.
+6. **Only now write the adjacent `.sha256` sidecar**, in exact GNU form, over
+   the bytes just rendered.
+
+**Render final, then sidecar — in that order, and not before.** No sidecar
+exists on disk before this point, by design: the contract defines the sidecar
+as computed from the same bytes it accompanies, so a sidecar written at E3
+would have accompanied draft bytes that step 3 then changed, and E2's
+publication-phase verify would refuse on the mismatch. The sidecar is
+transport integrity only and never authentication — the authenticator of
+record is `hC`, supplied to every consumer out of band from custody.
 
 The contract's own prose now records this delegation — it was amended under
 D-155 and no longer tells a bench operator to wait for Ed.
@@ -1070,10 +1104,38 @@ long suite runs on the separate published checkout.
 
 | Step | What |
 |---|---|
-| H1 | Seal transaction custody read-only. Every command's stdout, stderr and exit code is a preserved triplet; the magistrate reads all of them. |
-| H2 | Record the state in `RUN_STATE.md`'s header line: transaction published, push freeze ON, span open. |
+| H1 | **Seal the transaction phases' transcripts read-only** — Phases A through G. Every command's stdout, stderr and exit code is a preserved triplet; the magistrate reads all of them. The seal is append-only-with-one-named-exception, not final closure: see the continuation clause below. |
+| H2 | **STRUCK.** No `RUN_STATE.md` header update on transaction night — see below. |
 | H3 | Send the D-150a notification: campaign span open; per-window notices to follow. |
 | H4 | Record the registered limitation (D-153 W5): a mid-campaign non-configuration cure forces a new family generation. There is no patching a published `_v4`. |
+
+**H1's continuation clause — what "sealed" means here.** Sealing exists to make
+the record non-repudiable: **nothing already written is ever mutated, reworded,
+or removed, at any later point.** That property is what H1 establishes and it
+never lapses. But custody cannot be *finally* closed on transaction night,
+because one ruled artifact does not exist yet: `campaign-close.json`, written at
+campaign close (H5), days later. So H1 seals the transaction phases' transcripts
+read-only and leaves custody open for **exactly one appended record** — the
+campaign-close record and its transcript, the named exception. Custody closes
+fully once that record is written and its digest recorded. Appending the ruled
+record is not a breach of the seal; editing anything already sealed is, and
+nothing in H5 does that.
+
+**H2 is struck, and the reason is mechanical, not stylistic.** D-150a asks that
+the current state be carried in `RUN_STATE.md`'s header line. Writing that line
+on transaction night would require a commit to `main`, and two ruled things
+forbid it. First, the commit freeze is open from C11: any ordinary commit
+invalidates every armed pack for the rest of the campaign, and a `RUN_STATE`
+header edit is an ordinary commit. Second, D-153 A1 reserves the **first commit
+after the freeze closes** for the fixation commit; a `RUN_STATE` update written
+into that slot takes it. So the header update moves to **H5's post-fixation
+tail**, at its ruled position in the record order.
+
+Ed's visibility on the night is not reduced by this. D-150a's committed
+visibility channel is the **push notification** (§4), not a repository file, and
+the window status publisher still writes `WINDOW_STATUS.md` **locally** under
+the C11.1 sentinel guard. What is withheld until fixation is only the *published*
+copy.
 
 ### H5 — Declaring the campaign closed (RULED, D-155, NR-8)
 
@@ -1086,9 +1148,22 @@ been whatever a stray script wrote.
 **The triggering fact is determinable, not judged.** The campaign's member set
 is fixed at publication — the marker names three members and their plans — so
 "the last consuming arm" can be *read off the published plan* rather than
-decided. The predicate: the final consuming arm's whole-window closeout is
-complete, **and** every preregistered slot sits at a final disposition
-(completed, refused-final, superseded-final, or Ed-cancelled).
+decided.
+
+**The predicate is an equality, and nothing else.** The magistrate declares the
+campaign closed when, and only when:
+
+> the **executed arm set equals the published campaign plan** — every arm the
+> published plan names was executed and consumed, and no arm outside it was.
+
+That is a set comparison against bytes fixed at publication, which is exactly
+the mechanical class D-150b delegates. **Any other outcome is Ed's ruling, not
+the magistrate's** — an arm that refused, an arm superseded by a re-run, a
+window cancelled, a slot abandoned, or a decision to stop early. Each of those
+makes the executed set differ from the planned set, and deciding whether a
+campaign that did *not* run its plan is nonetheless complete is judgment-bearing
+by construction. The magistrate's move in that case is to stop and put the
+question to Ed with the two sets side by side, never to declare.
 
 **The declaration names both coordinates at once**, because two different
 windows close at two different events and the vocabulary has been confused
@@ -1100,12 +1175,11 @@ before:
 2. the **completion of that window's consume** — this permits the
    **commit-freeze close** (D-153 A1).
 
-**Owner: the magistrate**, under D-150b's own boundary. Comparing the executed
-arm set against the published campaign plan is a mechanical comparison, which
-is exactly the delegated class. **What stays Ed's is stopping early:** if the
-executed set does *not* equal the planned set — early termination, a waiver, an
-abandoned slot — then declaring the campaign complete is judgment-bearing, and
-that is Ed's ruling, not the magistrate's.
+**Owner: the magistrate**, under D-150b's own boundary — the equality above is
+a comparison against bytes fixed at publication, which is exactly the mechanical
+class D-150b delegates. **The boundary is where that mechanism ends:**
+everything on the non-equality side of the predicate is judgment-bearing by
+construction and is Ed's ruling, not the magistrate's.
 
 **The record, and its order is strict.** Getting this order wrong takes the
 fixation commit's ruled slot, which is the trap:
@@ -1113,7 +1187,8 @@ fixation commit's ruled slot, which is the trap:
 1. **Declaration transcript** into transaction custody — no commit. The
    canonical artifact is `campaign-close.json`, carrying the slot ledger, the
    artifact digests, the predicate results and the times; its SHA-256 goes into
-   the transcript.
+   the transcript. This is the one appended record H1's continuation clause
+   reserves; it adds to custody and mutates nothing already sealed there.
 2. **Freeze close declared.**
 3. **D-150a notification:** campaign done, freeze OFF.
 4. **THE FIXATION COMMIT — first, before anything else.** It carries exactly
@@ -1123,6 +1198,9 @@ fixation commit's ruled slot, which is the trap:
    decision-log row, and everything else.
 6. **Only after the fixation commit is pushed** does the C11.1 commit-freeze
    sentinel come off.
+7. **Custody seals fully** — the appended record is written and its digest is
+   recorded, so the exception H1 reserved is now spent and nothing further is
+   ever added.
 
 A `RUN_STATE` header update written before fixation would occupy the slot
 D-153 A1 reserves for the fixation commit. That is why step 5 is numbered
@@ -1163,7 +1241,7 @@ estimate against that floor, not a measurement.
 | | **Phase C subtotal** | | **40–75 min** | Ed present through C10; C11 needs no prompts. |
 | D | Publication | MAGISTRATE | 5–10 min | |
 | E1 | Marker build (`--phase publication`) | MAGISTRATE | 2–4 min | |
-| E3–E4 | Table render + delegated confirmation, `hC` computed | MAGISTRATE | 20–40 min | Careful desk work; the independent recomputation is the point. |
+| E3–E4 | Draft table render, then delegated confirmation: final bytes, `hC`, sidecar | MAGISTRATE | 20–40 min | Careful desk work; the independent recomputation is the point. No sidecar exists until E4 writes it over the final bytes. |
 | E2 | Marker verify, with the confirmation pair | MAGISTRATE | 1–2 min | Runs **after** E4 — a publication-phase verify needs `hC` (D-155, NR-3). |
 | E5 | Promote | MAGISTRATE | 1–2 min | |
 | F1–F2 | Four-way + publication replay | SCRIPTED | 2–5 min | |

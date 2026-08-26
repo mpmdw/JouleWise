@@ -868,6 +868,36 @@ done
 git commit --allow-empty --cleanup=verbatim "$@"
 ```
 
+**AMENDED 2026-08-26 under D-155 (NR-11, NR-12, NR-10). The producer command
+block above replaced a single-pack block; the superseded block is preserved
+here so that nothing is silently rewritten:**
+
+```sh
+cd /Users/edr/JouleWise-measurement-20260813
+. /Users/edr/JouleWise-window-custody/d117-alpha-YYYYMMDD/readiness/window-plan/window.env
+test -z "$(git status --porcelain=v1 --untracked-files=all)"
+TREE_OID="$(git rev-parse HEAD^{tree})"
+PACK_SHA256="$(.venv/bin/python - "$PACK_ROOT" <<'PY'
+import sys
+from joulewise.arm_readiness import committed_pack_tree_sha256
+print(committed_pack_tree_sha256(sys.argv[1]))
+PY
+)"
+git commit --allow-empty --cleanup=verbatim \
+  -m 'JouleWise terminal review attestation' \
+  -m 'JouleWise-Terminal-Review: PASS' \
+  -m "JouleWise-Terminal-Review-Tree-Oid: $TREE_OID" \
+  -m "JouleWise-Terminal-Review-Pack-Sha256: $PACK_SHA256"
+```
+
+Three things changed and nothing else did: the single `$PACK_ROOT` sourced
+from one campaign's `window.env` became an explicit loop over the family's
+three pack roots emitting one `Pack-Sha256` line each; `.venv/bin/python`
+became `.venv/bin/python3`; and a non-empty check on each computed digest was
+added so a silent empty value cannot become a trailer. The commit shape —
+`--allow-empty`, `--cleanup=verbatim`, one `PASS` line, one `Tree-Oid` line —
+is unchanged.
+
 Two details of that block are load-bearing rather than stylistic. The
 interpreter is spelled `.venv/bin/python3`, not `.venv/bin/python`: they are
 the same interpreter, but the harness permission rules match on the literal
