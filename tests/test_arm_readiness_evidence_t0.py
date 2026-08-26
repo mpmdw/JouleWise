@@ -686,6 +686,110 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     maxDiff = None
 
+    @staticmethod
+    def _terminal_review_message(tree_oid: str, packs: tuple[str, ...]) -> str:
+        return "\n".join(
+            (
+                "terminal review",
+                "",
+                "JouleWise-Terminal-Review: PASS",
+                f"JouleWise-Terminal-Review-Tree-Oid: {tree_oid}",
+                *(
+                    f"JouleWise-Terminal-Review-Pack-Sha256: {pack}"
+                    for pack in packs
+                ),
+            )
+        )
+
+    def _derive_terminal_review_for(
+        self, message: str, *, pack_sha256: str
+    ) -> t0._DerivedRow:
+        context = SimpleNamespace(
+            repository=ROOT,
+            head_tree_oid="1" * 40,
+            pack_sha256=pack_sha256,
+        )
+        artifact = ({"path": "synthetic", "sha256": "f" * 64}, b"synthetic")
+        with (
+            mock.patch.object(t0, "_git_message", return_value=message),
+            mock.patch.object(t0, "_committed_artifact", return_value=artifact),
+        ):
+            return t0._derive_terminal_review(context)
+
+    def _assert_terminal_review_refuses(
+        self, message: str, *, pack_sha256: str
+    ) -> None:
+        with self.assertRaises(T0EvidenceAuthoringError) as caught:
+            self._derive_terminal_review_for(message, pack_sha256=pack_sha256)
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_terminal_review_record_missing",
+        )
+
+    def test_terminal_review_three_pack_message_accepts_each_pack(self) -> None:
+        tree_oid = "1" * 40
+        packs = ("a" * 64, "b" * 64, "c" * 64)
+        message = self._terminal_review_message(tree_oid, packs)
+        for pack_sha256 in packs:
+            with self.subTest(pack_sha256=pack_sha256):
+                row = self._derive_terminal_review_for(
+                    message, pack_sha256=pack_sha256
+                )
+                self.assertEqual(row.value["same_pack_digest"], True)
+
+    def test_terminal_review_foreign_pack_list_refuses(self) -> None:
+        message = self._terminal_review_message(
+            "1" * 40, ("b" * 64, "c" * 64)
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_duplicate_pack_line_refuses(self) -> None:
+        message = self._terminal_review_message(
+            "1" * 40, ("a" * 64, "a" * 64)
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_single_pack_message_still_passes(self) -> None:
+        message = self._terminal_review_message("1" * 40, ("a" * 64,))
+        row = self._derive_terminal_review_for(message, pack_sha256="a" * 64)
+        self.assertEqual(row.value["terminal_review_status"], "PASS")
+
+    def test_terminal_review_pack_line_with_trailing_token_refuses(self) -> None:
+        message = self._terminal_review_message("1" * 40, ()).replace(
+            "JouleWise-Terminal-Review-Tree-Oid: " + "1" * 40,
+            "JouleWise-Terminal-Review-Tree-Oid: "
+            + "1" * 40
+            + "\nJouleWise-Terminal-Review-Pack-Sha256: "
+            + "a" * 64
+            + " trailing",
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_malformed_pack_digest_refuses(self) -> None:
+        message = self._terminal_review_message(
+            "1" * 40, ("a" * 64, "not-a-sha256")
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_duplicate_pass_line_refuses(self) -> None:
+        message = (
+            self._terminal_review_message("1" * 40, ("a" * 64,))
+            + "\nJouleWise-Terminal-Review: PASS"
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_duplicate_tree_oid_line_refuses(self) -> None:
+        message = (
+            self._terminal_review_message("1" * 40, ("a" * 64,))
+            + "\nJouleWise-Terminal-Review-Tree-Oid: "
+            + "1" * 40
+        )
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
+    def test_terminal_review_empty_pack_list_refuses(self) -> None:
+        message = self._terminal_review_message("1" * 40, ())
+        self._assert_terminal_review_refuses(message, pack_sha256="a" * 64)
+
     def test_t0_row_census_site_resolves_a_historical_pack(self) -> None:
         """The T-0 census site keeps resolving a historical v1 identity.
 

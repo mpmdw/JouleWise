@@ -29,8 +29,9 @@
 
 set -euo pipefail
 
-REPO=/Users/edr/code/JouleWise
+REPO="${JOULEWISE_STATUS_REPO:-/Users/edr/code/JouleWise}"
 STATUS_FILE="$REPO/WINDOW_STATUS.md"
+COMMIT_FREEZE_SENTINEL="${JOULEWISE_COMMIT_FREEZE_SENTINEL:-/Users/edr/JouleWise-window-custody/COMMIT_FREEZE_OPEN}"
 
 STATE="${1:?state required: ready|running|complete|failed|between|blocked|idle}"
 HEADLINE="${2:?headline required}"
@@ -90,6 +91,11 @@ NOW_UTC="$(TZ=UTC date '+%Y-%m-%dT%H:%M:%SZ')"
   echo "finished, something went wrong in a way that stopped the session from"
   echo "reporting. That is the one case worth waking the machine for."
 } > "$STATUS_FILE"
+
+if [ -e "$COMMIT_FREEZE_SENTINEL" ]; then
+  echo "freeze span open: status written locally, not published."
+  exit 0
+fi
 
 cd "$REPO"
 git add WINDOW_STATUS.md

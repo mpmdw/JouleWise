@@ -304,15 +304,24 @@ def _verify_terminal_review(
         )
         if match:
             trailers.setdefault(match.group(1), []).append(match.group(2))
-    expected = {
+    expected_exact = {
         "JouleWise-Terminal-Review": "PASS",
         "JouleWise-Terminal-Review-Tree-Oid": tree_oid,
-        "JouleWise-Terminal-Review-Pack-Sha256": pack_sha256,
     }
-    if any(trailers.get(name) != [value] for name, value in expected.items()):
+    packs = trailers.get("JouleWise-Terminal-Review-Pack-Sha256", [])
+    # An empty Pack-Sha256 list refuses via the membership clause below.
+    if (
+        any(
+            trailers.get(name) != [value]
+            for name, value in expected_exact.items()
+        )
+        or any(re.fullmatch(r"[0-9a-f]{64}", pack) is None for pack in packs)
+        or len(set(packs)) != len(packs)
+        or pack_sha256 not in packs
+    ):
         raise _refuse(
             "evidence_author_t0_capture_terminal_review_missing",
-            "HEAD lacks the exact lead-owned PASS/tree/pack terminal-review trailers",
+            "HEAD lacks exact lead-owned PASS/tree and valid pack-membership terminal-review trailers",
         )
 
 

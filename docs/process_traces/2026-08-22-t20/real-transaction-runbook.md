@@ -422,6 +422,12 @@ What *does* bind:
   transcript and the lock file's SHA-256 in transaction custody (work order
   W-1). This runs first of everything, because its failure changes which
   checkout the transaction uses.
+- [ ] **Freeze-span sentinel guard ARMED** *(D-155 amendment, 2026-08-26)*: with
+  the sentinel file present at its custody path, run `scripts/window_status.sh`
+  once and require the literal line `freeze span open: status written locally,
+  not published.` on stdout. A mistyped sentinel path or a missing custody
+  directory leaves the guard silently off; the assertion is the observed line,
+  not the file's existence.
 - [ ] The D-150a announcement sent: transaction open, push freeze ON.
 
 ---
