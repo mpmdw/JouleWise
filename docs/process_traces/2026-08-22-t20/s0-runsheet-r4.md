@@ -13,6 +13,66 @@ this branch — it was refused by both ratification seats and no estate ran it.
 
 ## Revision history
 
+**r6 (2026-08-25): probe-reachability cure.** A revision of this file, not a new
+instrument: the filename, the estate layout and every record below stand
+unchanged. Estate 9 (BASE `5a034f84`) ran the §4 probe battery continue-on-fail
+and six probe blocks failed with ONE shared signature — the refusal each probe
+was written to elicit is masked by a gate that fires EARLIER in the real
+execution order, so the probe stopped on a refusal it was not testing for and
+the gate under test was never reached. The six: `104-plan-current`,
+`105-plan-sibling`, the `110-*` class block (at `freeze-json`), `119-manifest-binding`,
+`121-s6-r1` and `123-c-to-s-later-rewrite`. None of them impeaches an estate-9
+green: every failure is instrument-side probe SHAPE, and no estate precondition
+was false — the magistrate dispositions them as §6 ordinary defects and sends
+estate 10 to run the cured battery at the merged head.
+
+Authority: the read-only Sol xhigh reachability consult and the ruling over it,
+custodied at `docs/process_traces/2026-08-25-probe-reachability/`
+(`01-sol-consult.md`, `02-MAGISTRATE-ADJUDICATION.md`). The consult traced each
+probe's ACTUAL first-firing gate in `joulewise/arm_readiness.py` at `5a034f84`,
+re-derived a mutation that reaches the INTENDED gate from the same case base,
+and wrote the replacement block; the ruling accepts all six verbatim. What
+changed:
+
+- **`window_id` → `evidence_root_id` in every plan-tree mutation** (`104`,
+  `105`, `121`, and the `110-*` `plan-json` class). `window_id` is one of the
+  six terms `_pack_identity()` binds (`arm_readiness.py:4959`), and freeze
+  replay compares pack identity at `:6513-6521` before R1 ever runs.
+  `evidence_root_id` is manifest-visible and identity-invisible: see §4(c).
+- **`105` changes VEHICLE.** Its original claim — that the FIRST pack's replay
+  refuses a mutation to a SIBLING pack's plan tree — is unreachable by design,
+  because a pack's R1 manifest derives its dependencies only from that pack's
+  own evidence sources (`arm_readiness.py:4280-4309`). Estate 9 returned
+  `rc=0`/`PASS`/`mutated=false`, which is the mechanism behaving correctly. The
+  probe now mutates the SECOND pack's plan tree and replays the SECOND pack; the
+  family-wide-allowlist goal the old claim was reaching for stays with the
+  candidate-shape triplet `106-*`/`107-*`/`108-*` in §4(d).
+- **`110-*` collapses to ONE block with EXACT per-class assertions** — each
+  class's `reason_codes` LIST and `detail` STRING are compared for equality,
+  which strictly subsumes r5's substring greps and its two separate absence
+  sweeps. Three class expectations were re-derived: `freeze-json` now recomputes
+  its sidecar and expects `readiness_freeze_receipt_mismatch` / "existing freeze
+  receipt is not plan-pinned" (**amended in the r6 fix round** — the consult
+  predicted the exactness detail from `:6503-6506`, but the plan-pin filter at
+  `:6848-6862` discards the tampered receipt first; two concurring derivations,
+  ruled in `03-FREEZE-JSON-AMENDMENT.md`); `freeze-sidecar` expects
+  `readiness_receipt_namespace_anomalous` / "sidecar mismatch for
+  freeze-0004.json"; `plan-json` uses the manifest-only mutation.
+- **`119` propagates the digest chain** so the evidence-digest authenticator at
+  `:5460-5465` cannot fire first, and **`123` mutates a SIBLING pinset row
+  canonically** so the arm-entry histsem gate at `:7537-7546` cannot fire first.
+- **The confirmation-pair preamble is unchanged in SUBSTANCE and shortened in
+  COMMENT.** All six replacement blocks re-paste `ED_STEP6_CONFIRMED_SHA256`,
+  validate it as lowercase 64-hex and cross-check it against the `085-*`
+  witness, exactly as ruling R-2 requires; only the inline comment is now the
+  one-liner "CONFIRMATION PAIR, re-pasted per block." The full statement of why
+  `085-*` is a cross-check and never the source lives in §3.9 and is unchanged.
+- **Predictions, not observations.** Every expected `reason_codes` and `detail`
+  in the six replacement blocks is CODE-DERIVED — read off the raise sites at
+  `5a034f84`, not observed in a run. Estate 10 confirms them by execution. A
+  mismatch there is a FINDING to adjudicate, never a license to improvise the
+  assertion at the bench (§6 applies unchanged).
+
 **Anchor remap round 4 (2026-08-25, D-154).** PR #192 inserted the
 `_freeze_pack_identity_mismatch_detail` helper into `joulewise/arm_readiness.py`
 (+65 lines before the old comparison site, +69 after it), so every
@@ -340,7 +400,7 @@ block below:
   ALL=$(grep -cE '^[[:space:]]*```zsh' "$RUNSHEET")
   COL0=$(grep -c '^```zsh' "$RUNSHEET")
   test "$((ALL - COL0))" = 2 || echo "INDENTED-BLOCK INVARIANT BROKEN: $((ALL - COL0))"
-  test "$COL0" = 49 || echo "EXECUTABLE BLOCK COUNT CHANGED: $COL0"
+  test "$COL0" = 48 || echo "EXECUTABLE BLOCK COUNT CHANGED: $COL0"
   ```
 
   Both must print nothing (grep exits 1). A hit is a defect in the
@@ -480,9 +540,9 @@ not a strength of the check.
 | 4 | `joulewise/arm_readiness.py` | 4229 | symbol | `_r1_changed_paths` | `def _r1_changed_paths(` |
 | 5 | `joulewise/arm_readiness.py` | 4426 | statement | `validate_r1_evidence_lifecycle` | `allowlist = set(governed["irrelevant_path_allowlist"])` |
 | 6 | `joulewise/arm_readiness.py` | 5409 | symbol | `_authenticate_generic_evidence_item` | `def _authenticate_generic_evidence_item(` |
-| 7 | `joulewise/arm_readiness.py` | 6410 | symbol | `_load_freeze_reference` | `def _load_freeze_reference(` |
-| 8 | `joulewise/arm_readiness.py` | 6680 | symbol | `generate_freeze_receipt` | `def generate_freeze_receipt(` |
-| 9 | `joulewise/arm_readiness.py` | 6721 | statement | `generate_freeze_receipt` | `generation = _pack_generation(root.name)` |
+| 7 | `joulewise/arm_readiness.py` | 6475 | symbol | `_load_freeze_reference` | `def _load_freeze_reference(` |
+| 8 | `joulewise/arm_readiness.py` | 6749 | symbol | `generate_freeze_receipt` | `def generate_freeze_receipt(` |
+| 9 | `joulewise/arm_readiness.py` | 6790 | statement | `generate_freeze_receipt` | `generation = _pack_generation(root.name)` |
 | 10 | `joulewise/identity_pins.py` | 1826 | symbol | `freeze_projection` | `def freeze_projection(pack_root: Path \| str) -> Mapping[str, Any]:` |
 | 11 | `scripts/generate_arm_readiness.py` | 28 | symbol | `_parser` | `def _parser() -> argparse.ArgumentParser:` |
 | 12 | `scripts/project_identity_pins.py` | 23 | symbol | `parse_args` | `def parse_args(argv: list[str] \| None = None) -> argparse.Namespace:` |
@@ -1400,9 +1460,11 @@ PY
 
 Every tool this runsheet writes as a heredoc is materialized by RUNNING the
 block that contains it. `011-custody-tools-materialized.txt` is the record that
-the three tools needed before §3 exist on disk with their digests; §4's
-`mutate_plan.py` and `tamper_class.py` are materialized and checked in their own
-sections. §3.4 re-asserts the census tool before invoking it.
+the three tools needed before §3 exist on disk with their digests; §4's one
+remaining custody tool, `tamper_class.py`, is materialized and checked in its own
+section. (r6 removed `mutate_plan.py`: §4(c), §4(e) and §4(g) each mutate a
+different plan tree now, so each carries its own driver as a block-local
+heredoc.) §3.4 re-asserts the census tool before invoking it.
 
 Any future issued-acceptance corpus growth must mechanically change the census
 to 12 slugs per pack and the contract to 120 paths; no operator may preserve 112
@@ -2866,88 +2928,173 @@ Authority: R4 r4-2; R5 V-2; `arm_readiness.py:5400-5406,5514-5541,6725,7384` (se
 the CLI enforces read-only pack snapshots for non-freeze verbs at
 `scripts/generate_arm_readiness.py:100-110,113-174`; AUDIT F-6.
 
-### 4(c). Non-freeze mutation in current **and** sibling plan trees
+### 4(c). Manifest-only plan mutation — the current pack, and the sibling pack replaying itself
 
-For each direction separately, mutate the existing schema-valid string
-`window_identity.window_id`, re-render canonical JSON and its sidecar, commit,
-then replay the first pack's freeze.
+**What "manifest-only" means, and why r5's mutation could not reach the gate.**
+The R1 `DEPENDENCY_MANIFEST` gate compares the bytes a pack's dependencies have
+NOW against the derivation binding that pack's own receipts recorded. To reach
+it, a mutation has to change bytes the manifest binds while leaving untouched
+every term an EARLIER authenticator reads. r5 mutated
+`window_identity.window_id`. That field is one of the six terms
+`_pack_identity()` binds (`arm_readiness.py:4959`), and existing-receipt freeze
+replay compares pack identity at `:6513-6521` — before it authenticates generic
+evidence at `:6577-6598` and long before R1 lifecycle validation at
+`:5608-5619`. Estate 9 executed the block and got exactly that ordering: `rc=2`,
+`readiness_freeze_receipt_mismatch`, detail "freeze receipt pack identity
+differs from committed pack bytes". The refusal was real, it just was not the
+one the probe exists to obtain, and a substring grep for the manifest code could
+not tell the difference between "the gate refused" and "the gate was never
+reached."
+
+`window_identity.evidence_root_id` is the field that does reach it, and the two
+properties that make it the right vehicle are worth naming separately.
+MANIFEST-VISIBLE: it lives in `plan_tree.json`, so changing it changes the
+normalized plan-tree bytes the R1 manifest binds, and R1 sees a current
+dependency that no longer matches its recorded derivation.
+IDENTITY-INVISIBLE: it is NOT one of `_pack_identity()`'s six terms, so the
+identity comparison at `:6513-6521` still passes — as do the calibration-plan
+digest, the U11 binding, the freeze receipt and the evidence receipt, none of
+which bind it. Nothing upstream of R1 has anything to complain about, so
+execution runs on to R1 and refuses there, by name.
+
+Each block below carries its own mutation driver as an inline heredoc rather
+than sharing a materialized `custody/tools/mutate_plan.py`. r5 used a shared
+file because a shell function does not survive from one block to the next; r6
+does not, because the three plan mutations are no longer the same mutation (the
+current pack, the sibling pack, and §4(g)'s S-6 case each write their own
+target) and a heredoc driver is already block-local. `tamper_class.py` in §4(e)
+is still a materialized file, because its eight classes share one driver.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
-cat > "$CUSTODY/tools/mutate_plan.py" <<'PY'
-import hashlib,json,pathlib,sys
-p=pathlib.Path(sys.argv[1]); d=json.loads(p.read_text())
-d["window_identity"]["window_id"] += "-s0-mutation"
-raw=(json.dumps(d,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode(); p.write_bytes(raw)
-p.with_name("plan_tree.sha256").write_text(hashlib.sha256(raw).hexdigest()+"  plan_tree.json\n")
-PY
-chmod 0555 "$CUSTODY/tools/mutate_plan.py"
-
-# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
-# 085 is a cross-check and never the source).
+# CONFIRMATION PAIR, re-pasted per block.
 STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
 test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
 test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
   || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
-"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}",sys.argv[1]) else 1)' \
   "$ED_STEP6_CONFIRMED_SHA256" \
   || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
 test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
   || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
 
 CASE=$(new_case plan-current "$PROBE_BASE")
-"$PY" "$CUSTODY/tools/mutate_plan.py" "$CASE/$FIRST_PACK/plan_tree.json"
-commit_case "$CASE" 'S-0 probe current plan non-freeze mutation'
+"$PY" - "$CASE/$FIRST_PACK/plan_tree.json" <<'PY' \
+  || die 'current-plan mutation driver failed'
+import hashlib, json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+d = json.loads(p.read_text())
+d["window_identity"]["evidence_root_id"] += "-s0-mutation"
+raw = (json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+p.write_bytes(raw)
+p.with_name("plan_tree.sha256").write_text(
+    hashlib.sha256(raw).hexdigest() + "  plan_tree.json\n"
+)
+PY
+commit_case "$CASE" 'S-0 probe current plan manifest-only mutation'
+
 capture 104-plan-current "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --pack-root "$CASE/$FIRST_PACK" \
+  --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
   --step6-confirmation-table "$STEP6_TABLE" \
   --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
-grep -F "$MANIFEST_CODE" "$TRANS/104-plan-current.stdout.json" > /dev/null \
-  || die 'current-plan mutation did not produce the DEPENDENCY_MANIFEST code'
-if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
-    "$TRANS/104-plan-current.stdout.json" "$TRANS/104-plan-current.stderr.txt" > /dev/null; then
-  die 'the current-plan probe refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
-fi
+expect_rc 104-plan-current 1 \
+  || die 'current-plan manifest probe did not return rc 1'
+"$PY" - "$TRANS/104-plan-current.stdout.json" "$MANIFEST_CODE" "$FIRST_PACK" <<'PY' \
+  || die 'current-plan mutation did not reach the exact DEPENDENCY_MANIFEST gate'
+import json, sys
+d = json.load(open(sys.argv[1]))
+detail = f"current dependency differs from its derivation binding: {sys.argv[3]}/plan_tree.json"
+if d.get("reason_codes") != [sys.argv[2]] or d.get("detail") != detail:
+    raise SystemExit(repr(d))
+PY
 no_traceback 104-plan-current || die 'current-plan probe traceback'
 ```
+
+**The sibling direction changes VEHICLE, because its original claim is
+unreachable by design.** r5's `105` mutated the SECOND pack's plan tree and then
+replayed the FIRST pack, asserting that the first pack's freeze refuses with
+`DEPENDENCY_MANIFEST`. Estate 9 returned `rc=0`, `status=PASS`,
+`mutated=false` — no gate fired at all — and none can:
+`_r1_manifest_dependencies()` (`arm_readiness.py:4280-4309`) derives a pack's
+dependencies ONLY from the evidence sources that pack's own receipts name, so
+the first pack's manifest never mentions the second pack's plan tree and cannot
+notice it moving. (The changed-set computation at `:4423-4458` separately
+subtracts all three allowlisted plan paths, so nothing else notices either, and
+the replay returns PASS at `:6902-6911`.) The claim "the first pack's replay
+rejects a sibling-plan mutation via `DEPENDENCY_MANIFEST`" is therefore FALSE
+ABOUT THE MECHANISM, not merely unproven, and is retired rather than repaired.
+
+What the sibling direction can prove — and what `105` now proves — is that the
+manifest binding is a PER-PACK property that holds in a pack other than
+`$FIRST_PACK`: the second pack's own replay refuses its own manifest-only
+mutation, with the same code and the same detail shape, naming its own plan
+path. The goal r5's `105` was reaching for, that family-wide allowlist
+membership is exact so no pack's plan can be forgiven by another pack's
+allowlist entry, is enforced elsewhere and evidenced elsewhere: the
+candidate-shape triplet `106-missing`, `107-extra` and `108-unused` in §4(d).
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
-# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
-# 085 is a cross-check and never the source).
+# CONFIRMATION PAIR, re-pasted per block.
 STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
 test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
 test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
   || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
-"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}",sys.argv[1]) else 1)' \
   "$ED_STEP6_CONFIRMED_SHA256" \
   || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
 test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
   || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
 
 CASE=$(new_case plan-sibling "$PROBE_BASE")
-"$PY" "$CUSTODY/tools/mutate_plan.py" "$CASE/$SECOND_PACK/plan_tree.json"
-commit_case "$CASE" 'S-0 probe sibling plan non-freeze mutation'
+"$PY" - "$CASE/$SECOND_PACK/plan_tree.json" <<'PY' \
+  || die 'second-pack plan mutation driver failed'
+import hashlib, json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+d = json.loads(p.read_text())
+d["window_identity"]["evidence_root_id"] += "-s0-mutation"
+raw = (json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+p.write_bytes(raw)
+p.with_name("plan_tree.sha256").write_text(
+    hashlib.sha256(raw).hexdigest() + "  plan_tree.json\n"
+)
+PY
+commit_case "$CASE" 'S-0 probe second-pack plan manifest mutation'
+
 capture 105-plan-sibling "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --pack-root "$CASE/$SECOND_PACK" \
+  --predecessor-pack-root "$CASE/${PRED_OF[$SECOND_PACK]}" \
   --step6-confirmation-table "$STEP6_TABLE" \
   --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
-grep -F "$MANIFEST_CODE" "$TRANS/105-plan-sibling.stdout.json" > /dev/null \
-  || die 'sibling-plan mutation did not produce the DEPENDENCY_MANIFEST code'
-if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
-    "$TRANS/105-plan-sibling.stdout.json" "$TRANS/105-plan-sibling.stderr.txt" > /dev/null; then
-  die 'the sibling-plan probe refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
-fi
-no_traceback 105-plan-sibling || die 'sibling-plan probe traceback'
+expect_rc 105-plan-sibling 1 \
+  || die 'second-pack manifest probe did not return rc 1'
+"$PY" - "$TRANS/105-plan-sibling.stdout.json" "$MANIFEST_CODE" "$SECOND_PACK" <<'PY' \
+  || die 'second-pack mutation did not reach the exact DEPENDENCY_MANIFEST gate'
+import json, sys
+d = json.load(open(sys.argv[1]))
+detail = f"current dependency differs from its derivation binding: {sys.argv[3]}/plan_tree.json"
+if d.get("reason_codes") != [sys.argv[2]] or d.get("detail") != detail:
+    raise SystemExit(repr(d))
+PY
+no_traceback 105-plan-sibling || die 'second-pack manifest probe traceback'
 ```
 
-The mutation is a real file now rather than a shell function, because a shell
-function defined in one block does not exist in the next. Pass iff both
-directions refuse with the exact `DEPENDENCY_MANIFEST` code, despite
-`plan_tree.json` and its sidecar being allowlisted. This is L5-F2's outstanding
-mutation falsifier. Authority: R4 r4-2; SIT-C3 and seat-L5 F2; R5 S-6, V-1.vi;
+Pass iff both directions return `rc=1` with `reason_codes` exactly
+`[$MANIFEST_CODE]` and the exact detail `current dependency differs from its
+derivation binding: <that pack>/plan_tree.json`, despite `plan_tree.json` and its
+sidecar both being allowlisted paths. Asserting the exact code LIST and the
+exact DETAIL — rather than grepping for the code as a substring — is what makes
+the r5 masking visible at all: a masked run carries a different code entirely,
+and a confirmation-path refusal carries the SAME code with a different detail.
+This is L5-F2's outstanding mutation falsifier. Both expected details are
+CODE-DERIVED predictions (r6); estate 10 confirms them by execution, and a
+mismatch is adjudicated under §6, never patched at the bench. Authority:
+`docs/process_traces/2026-08-25-probe-reachability/` (`01-sol-consult.md`
+finding rows `104-plan-current` and `105-plan-sibling`,
+`02-MAGISTRATE-ADJUDICATION.md`); R4 r4-2; SIT-C3 and seat-L5 F2; R5 S-6, V-1.vi;
 `arm_readiness.py:4485-4542`.
 
 ### 4(d). Missing, extra, and unused candidate entries all fail
@@ -3004,47 +3151,135 @@ Install the exact tamper driver, then run one fresh case per class and replay
 `freeze-0004` for the affected pack. Each mutation remains schema-shaped where
 that is necessary to reach the intended authenticator.
 
+**What r6 changed here, and why it is one block instead of two.** r5 ran the
+tamper loop in one block and its per-class verdicts in a second, and both used
+substring greps: `grep -F <code>` for the expected code, plus two sweeps for
+strings that must be absent (`no expected confirmation digest supplied` on every
+class, `digest-conditional allowlist path` on the seven ordinary ones). A
+substring grep cannot distinguish "this class refused through the authenticator
+under test" from "this class refused earlier, for something else, and the code
+happens to appear in the payload." Estate 9 proved that the hard way: the loop
+stopped at `freeze-json`, which returned `readiness_receipt_namespace_anomalous`
+rather than the expected freeze-receipt mismatch, and the run never reached the
+second block at all — leaving two further class expectations (`freeze-sidecar`
+and `plan-json`) untested and, as it turns out, also wrong.
+
+r6 asserts each class by EQUALITY on both fields at once: `reason_codes` must
+equal the expected one-element list and `detail` must equal the expected string.
+That is strictly stronger than everything r5 checked — an exact detail match
+entails the absence of both forbidden strings — so the two absence sweeps are
+subsumed and the second block is gone rather than merely moved. The whole class
+battery therefore lives in ONE block, and the executable-block count in §0.1
+drops by one accordingly.
+
+Three class expectations were re-derived from the raise sites at `5a034f84`:
+
+- **`freeze-json`** changed its shape, not just its expectation, and then
+  changed its expectation again in the r6 fix round. Bumping `issued_at_utc`
+  invalidates the freeze receipt's own GNU sidecar, and
+  `generate_freeze_receipt()` scans the receipt namespace at `:6848` — which
+  authenticates every sidecar at `:4713-4725` — BEFORE anything downstream can
+  look at the plan's recorded freeze pin. So the tamper recomputes the freeze
+  JSON's sidecar and leaves the PLAN's recorded freeze SHA fixed, and namespace
+  authentication passes. **What refuses next is the PLAN-PIN FILTER, not the
+  exactness check.** Immediately after the namespace scan, `:6848-6862` compares
+  each scanned receipt's `{path, sha256}` pair against the plan's recorded pin
+  and discards any receipt that does not match, refusing before
+  `_load_freeze_reference()` is ever called. The recomputed sidecar changed the
+  receipt's own SHA, so the tampered receipt is exactly the receipt that filter
+  rejects. The expected pair is therefore
+  `[readiness_freeze_receipt_mismatch]` with detail **"existing freeze receipt
+  is not plan-pinned"**, at `rc=2` — not the exactness detail "plan freeze
+  reference is not exact" that the consult predicted from `:6503-6506`, which is
+  reached only by a receipt that survives plan-pinning. Both fix-round seats
+  re-derived this independently and concurred; the correction is ruled in
+  `docs/process_traces/2026-08-25-probe-reachability/03-FREEZE-JSON-AMENDMENT.md`.
+- **`freeze-sidecar`** is the class whose expectation r5 got wrong for the same
+  reason and in the opposite direction: zeroing that sidecar is precisely a
+  namespace-authentication failure, so its refusal is
+  `readiness_receipt_namespace_anomalous`, never a freeze-receipt mismatch.
+- **`plan-json`** carried r5's `window_id` mutation and would have reproduced
+  `104`'s identity masking exactly. It now makes the manifest-only
+  `evidence_root_id` change of §4(c), with the corrected plan sidecar.
+
+The two classes whose refusal is an R1 refusal — `plan-json` and `pinset-json` —
+exit `1`; the other six exit `2`. The loop asserts the exit code per class
+rather than merely asserting nonzero, because "refused with the wrong exit code"
+is a mechanism finding and r5's `!= 0` test could not see it.
+
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
-# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
-# 085 is a cross-check and never the source).
+# CONFIRMATION PAIR, re-pasted per block.
 STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
 test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
 test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
   || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
-"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}",sys.argv[1]) else 1)' \
   "$ED_STEP6_CONFIRMED_SHA256" \
   || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
 test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
   || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
 
 cat > "$CUSTODY/tools/tamper_class.py" <<'PY'
-import argparse,hashlib,json,pathlib
-ap=argparse.ArgumentParser(); ap.add_argument("kind"); ap.add_argument("repo",type=pathlib.Path); ap.add_argument("pack")
-a=ap.parse_args(); root=a.repo/a.pack
-def render(p,d): p.write_bytes((json.dumps(d,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode())
-def zero_sidecar(p,target): p.write_text("0"*64+"  "+target+"\n")
-if a.kind=="source-json":
- p=root/"arm_readiness.sources/acceptance-owner.json"; d=json.loads(p.read_text())
- d["primary_artifacts"][0]["sha256"]="0"*64; render(p,d)
-elif a.kind=="evidence-json":
- p=root/"arm_readiness.evidence/evidence-acceptance-owner.json"; p.write_bytes(p.read_bytes()+b" ")
-elif a.kind=="evidence-sidecar":
- p=root/"arm_readiness.evidence/evidence-acceptance-owner.json.sha256"; zero_sidecar(p,"evidence-acceptance-owner.json")
-elif a.kind=="freeze-json":
- p=root/"arm_readiness.freeze.receipts/freeze-0004.json"; d=json.loads(p.read_text())
- d["issued_at_utc"]=d["issued_at_utc"].replace("2026-","2027-",1); render(p,d)
-elif a.kind=="freeze-sidecar":
- p=root/"arm_readiness.freeze.receipts/freeze-0004.json.sha256"; zero_sidecar(p,"freeze-0004.json")
-elif a.kind=="plan-json":
- p=root/"plan_tree.json"; d=json.loads(p.read_text()); d["window_identity"]["window_id"]+="-s0-tamper"; render(p,d)
- raw=p.read_bytes(); p.with_name("plan_tree.sha256").write_text(hashlib.sha256(raw).hexdigest()+"  plan_tree.json\n")
-elif a.kind=="plan-sidecar": zero_sidecar(root/"plan_tree.sha256","plan_tree.json")
-elif a.kind=="pinset-json":
- p=a.repo/"configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"; d=json.loads(p.read_text())
- d["packs"][0]["plan_sha256"]="0"*64; render(p,d)
-else: raise SystemExit("unknown class")
+import argparse, hashlib, json, pathlib
+ap = argparse.ArgumentParser()
+ap.add_argument("kind")
+ap.add_argument("repo", type=pathlib.Path)
+ap.add_argument("pack")
+a = ap.parse_args()
+root = a.repo / a.pack
+
+def render(path, value):
+    raw = (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+    path.write_bytes(raw)
+    return raw
+
+def sidecar(path, raw):
+    path.with_name(path.name + ".sha256").write_text(
+        hashlib.sha256(raw).hexdigest() + "  " + path.name + "\n"
+    )
+
+def zero_sidecar(path, target):
+    path.write_text("0" * 64 + "  " + target + "\n")
+
+if a.kind == "source-json":
+    p = root / "arm_readiness.sources/acceptance-owner.json"
+    d = json.loads(p.read_text())
+    d["primary_artifacts"][0]["sha256"] = "0" * 64
+    render(p, d)
+elif a.kind == "evidence-json":
+    p = root / "arm_readiness.evidence/evidence-acceptance-owner.json"
+    p.write_bytes(p.read_bytes() + b" ")
+elif a.kind == "evidence-sidecar":
+    p = root / "arm_readiness.evidence/evidence-acceptance-owner.json.sha256"
+    zero_sidecar(p, "evidence-acceptance-owner.json")
+elif a.kind == "freeze-json":
+    p = root / "arm_readiness.freeze.receipts/freeze-0004.json"
+    d = json.loads(p.read_text())
+    d["issued_at_utc"] = d["issued_at_utc"].replace("2026-", "2027-", 1)
+    raw = render(p, d)
+    sidecar(p, raw)
+elif a.kind == "freeze-sidecar":
+    p = root / "arm_readiness.freeze.receipts/freeze-0004.json.sha256"
+    zero_sidecar(p, "freeze-0004.json")
+elif a.kind == "plan-json":
+    p = root / "plan_tree.json"
+    d = json.loads(p.read_text())
+    d["window_identity"]["evidence_root_id"] += "-s0-tamper"
+    raw = render(p, d)
+    p.with_name("plan_tree.sha256").write_text(
+        hashlib.sha256(raw).hexdigest() + "  plan_tree.json\n"
+    )
+elif a.kind == "plan-sidecar":
+    zero_sidecar(root / "plan_tree.sha256", "plan_tree.json")
+elif a.kind == "pinset-json":
+    p = a.repo / "configs/arm_readiness/legacy_receipt_histsem_pinset_v4_v1.json"
+    d = json.loads(p.read_text())
+    d["packs"][0]["plan_sha256"] = "0" * 64
+    render(p, d)
+else:
+    raise SystemExit("unknown class")
 PY
 chmod 0555 "$CUSTODY/tools/tamper_class.py"
 
@@ -3055,83 +3290,110 @@ for kind in source-json evidence-json evidence-sidecar freeze-json freeze-sideca
     || die "tamper driver failed for $kind"
   commit_case "$CASE" "S-0 per-class tamper $kind"
   capture "110-tamper-$kind" "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-    --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+    --pack-root "$CASE/$FIRST_PACK" \
+    --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
     --step6-confirmation-table "$STEP6_TABLE" \
     --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
-  test "$(cat "$TRANS/110-tamper-$kind.rc")" != 0 || die "tamper class $kind was ACCEPTED"
-  # No class may refuse for want of the pair: that refusal precedes every
-  # authenticator this probe is testing and would mask all eight of them.
-  if grep -F 'no expected confirmation digest supplied' \
-      "$TRANS/110-tamper-$kind.stdout.json" "$TRANS/110-tamper-$kind.stderr.txt" > /dev/null; then
-    die "tamper class $kind refused for want of the confirmation digest, not for its own tamper"
-  fi
+  case "$kind" in
+    plan-json|pinset-json)
+      expect_rc "110-tamper-$kind" 1 \
+        || die "tamper class $kind did not return rc 1"
+      ;;
+    *)
+      expect_rc "110-tamper-$kind" 2 \
+        || die "tamper class $kind did not return rc 2"
+      ;;
+  esac
   no_traceback "110-tamper-$kind" || die "tamper class $kind failed ugly"
   tampered=$((tampered + 1))
 done
 test "$tampered" = 8 || die "ran $tampered tamper classes, expected 8"
+
+"$PY" - "$TRANS" "$FIRST_PACK" "$MANIFEST_CODE" "$CHANGED_CODE" "$SUCCESSOR_PINSET" <<'PY' \
+  || die 'one or more tamper classes returned the wrong exact refusal'
+import json, pathlib, sys
+t = pathlib.Path(sys.argv[1])
+pack, manifest, changed, pinset = sys.argv[2:]
+expected = {
+    "source-json": (
+        ["readiness_evidence_digest_mismatch"],
+        "evidence fact source digest mismatch",
+    ),
+    "evidence-json": (
+        ["readiness_evidence_digest_mismatch"],
+        "evidence item digest differs from authenticated bytes",
+    ),
+    "evidence-sidecar": (
+        ["readiness_evidence_digest_mismatch"],
+        "evidence item digest differs from authenticated bytes",
+    ),
+    "freeze-json": (
+        ["readiness_freeze_receipt_mismatch"],
+        "existing freeze receipt is not plan-pinned",
+    ),
+    "freeze-sidecar": (
+        ["readiness_receipt_namespace_anomalous"],
+        "sidecar mismatch for freeze-0004.json",
+    ),
+    "plan-json": (
+        [manifest],
+        f"current dependency differs from its derivation binding: {pack}/plan_tree.json",
+    ),
+    "plan-sidecar": (
+        ["readiness_pack_digest_mismatch"],
+        "plan-tree sidecar does not authenticate exact bytes",
+    ),
+    "pinset-json": (
+        [changed],
+        f"digest-conditional allowlist path {pinset!r}: "
+        "bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest",
+    ),
+}
+for kind, pair in expected.items():
+    observed = json.load(open(t / f"110-tamper-{kind}.stdout.json"))
+    if (observed.get("reason_codes"), observed.get("detail")) != pair:
+        raise SystemExit(f"{kind}: {observed!r}")
+PY
 ```
 
-```zsh
-source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
+The complete enumerated classes and counts are, with the exact
+`reason_codes`/`detail` pair each one must return:
 
-grep -F 'readiness_evidence_digest_mismatch' "$TRANS/110-tamper-source-json.stdout.json" > /dev/null || die 'source-json class'
-grep -F 'readiness_evidence_digest_mismatch' "$TRANS/110-tamper-evidence-json.stdout.json" > /dev/null || die 'evidence-json class'
-grep -F 'readiness_evidence_digest_mismatch' "$TRANS/110-tamper-evidence-sidecar.stdout.json" > /dev/null || die 'evidence-sidecar class'
-grep -F 'readiness_freeze_receipt_mismatch' "$TRANS/110-tamper-freeze-json.stdout.json" > /dev/null || die 'freeze-json class'
-grep -F 'readiness_freeze_receipt_mismatch' "$TRANS/110-tamper-freeze-sidecar.stdout.json" > /dev/null || die 'freeze-sidecar class'
-grep -F "$MANIFEST_CODE" "$TRANS/110-tamper-plan-json.stdout.json" > /dev/null || die 'plan-json class'
-grep -F 'readiness_pack_digest_mismatch' "$TRANS/110-tamper-plan-sidecar.stdout.json" > /dev/null || die 'plan-sidecar class'
-# pinset-json is the ONE class whose expected refusal is the C-to-S one, and
-# it can produce NO histsem_* code at all.  Re-derived from the raise sites:
-# generate_freeze_receipt calls _gate_receipt_histsem on the PREDECESSOR pack
-# first (arm_readiness.py:6774), but this tamper re-renders the successor
-# pinset as canonical, schema-valid JSON with the same pack identities, so the
-# chain loads clean and that gate returns without raising.  Execution then
-# reaches _require_confirmed_conditional_path (:4312-4367), whose refuse()
-# helper is hardwired to the DEPENDENCY_CHANGED_SET role (D-151 condition 1e:
-# no new refusal codes), and the replay boundary returns
-# reason_codes=[DEPENDENCY_CHANGED_SET] with that raise's detail
-# (:6883-6890).  r5 first asked for a histsem_* code here as well; the two
-# assertions are mutually unreachable, and the C-to-S one is correct.
-grep -F "$CHANGED_CODE" "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null || die 'pinset-json class'
-"$PY" -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["reason_codes"]==[sys.argv[2]], d["reason_codes"]' \
-  "$TRANS/110-tamper-pinset-json.stdout.json" "$CHANGED_CODE" \
-  || die 'the pinset-json class did not return reason_codes exactly [DEPENDENCY_CHANGED_SET]'
+| Class (count) | Representative mutation | rc | Expected `reason_codes` | Expected `detail` |
+|---|---|---|---|---|
+| source JSON (33) | change one primary-artifact digest without changing its receipt | 2 | `[readiness_evidence_digest_mismatch]` | `evidence fact source digest mismatch` |
+| evidence JSON (33) | change one receipt byte | 2 | `[readiness_evidence_digest_mismatch]` | `evidence item digest differs from authenticated bytes` |
+| evidence sidecar (33) | replace its digest with 64 zeroes | 2 | `[readiness_evidence_digest_mismatch]` | `evidence item digest differs from authenticated bytes` |
+| freeze JSON (3) | change its still-valid timestamp **and recompute its own sidecar**, leaving the plan's recorded freeze SHA fixed | 2 | `[readiness_freeze_receipt_mismatch]` | `existing freeze receipt is not plan-pinned` |
+| freeze sidecar (3) | replace its digest with 64 zeroes | 2 | `[readiness_receipt_namespace_anomalous]` | `sidecar mismatch for freeze-0004.json` |
+| plan-tree JSON (3) | manifest-only `window_identity.evidence_root_id` change plus corrected sidecar (the §4(c) mutation) | 1 | `[$MANIFEST_CODE]` | `current dependency differs from its derivation binding: $FIRST_PACK/plan_tree.json` |
+| plan-tree sidecar (3) | replace its digest only | 2 | `[readiness_pack_digest_mismatch]` | `plan-tree sidecar does not authenticate exact bytes` |
+| successor pinset JSON (1) | change one governed `_v4` row's `plan_sha256`, re-rendered canonically | 1 | `[$CHANGED_CODE]` | `digest-conditional allowlist path '$SUCCESSOR_PINSET': bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest` |
 
-# DETAIL-SHAPE assertions (Opus F0).  The digest-conditional raise runs BEFORE
-# the ordinary-path raise and shares its registry code, so the seven ordinary
-# classes must show NO digest-conditional detail at all -- if one does, the
-# pair failed to discharge the successor and the class was never reached.
-for kind in source-json evidence-json evidence-sidecar freeze-json freeze-sidecar plan-json plan-sidecar; do
-  if grep -F 'digest-conditional allowlist path' \
-      "$TRANS/110-tamper-$kind.stdout.json" "$TRANS/110-tamper-$kind.stderr.txt" > /dev/null; then
-    die "tamper class $kind refused on the digest-conditional path, not on its own tamper"
-  fi
-done
-# The pinset-json class is the ONE class whose intended refusal IS the
-# digest-conditional one, because the tamper rewrites the successor bytes the
-# confirmed table names.  It must be the AUTHENTICATED mismatch, never the
-# missing-input refusal.  This is the same refusal the code line above
-# asserts; here the DETAIL is pinned, there the CODE is.
-grep -F 'digest-conditional allowlist path' "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null \
-  || die 'the pinset-json class did not reach the digest-conditional C-to-S check'
-grep -F "bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest" \
-  "$TRANS/110-tamper-pinset-json.stdout.json" > /dev/null \
-  || die 'the pinset-json class did not refuse with the authenticated C-to-S bytes-differ detail'
-```
+Two rows carry a claim that is easy to lose, so it is stated rather than
+implied. **The successor-pinset class can produce NO `histsem_*` code at all.**
+`generate_freeze_receipt` calls `_gate_receipt_histsem` on the PREDECESSOR pack
+first (`arm_readiness.py:6774`), but this tamper re-renders the successor pinset
+as canonical, schema-valid JSON with the same pack identities, so the chain
+loads clean and that gate returns without raising. Execution then reaches
+`_require_confirmed_conditional_path` (`:4312-4367`), whose `refuse()` helper is
+hardwired to the `DEPENDENCY_CHANGED_SET` role (D-151 condition 1e: no new
+refusal codes), and the replay boundary returns that role's code with that
+raise's detail (`:6883-6890`). r5 first asked for a `histsem_*` code here as
+well; the two assertions are mutually unreachable, and the C→S one is correct.
+The hS byte pin is a POST-FIXATION property and is probed separately, at
+`$FIXATION_COMMIT`, in §4.10 step 4. **And the digest-conditional detail is the
+discriminator, not decoration**: the digest-conditional raise runs BEFORE the
+ordinary-path raise and shares its registry code, so `pinset-json` must show the
+AUTHENTICATED bytes-differ detail above and never the missing-input refusal
+`no expected confirmation digest supplied`, while the seven ordinary classes
+must show their own details and therefore no digest-conditional detail at all.
+The equality assertions in the block enforce both directions at once.
 
-The complete enumerated classes and counts are:
-
-| Class (count) | Representative mutation | Expected authenticator/refusal |
-|---|---|---|
-| source JSON (33) | change one primary-artifact digest without changing its receipt | `readiness_evidence_digest_mismatch` |
-| evidence JSON (33) | change one receipt byte | `readiness_evidence_digest_mismatch` |
-| evidence sidecar (33) | replace its digest with 64 zeroes | `readiness_evidence_digest_mismatch` |
-| freeze JSON (3) | change its still-valid timestamp | `readiness_freeze_receipt_mismatch` |
-| freeze sidecar (3) | replace its digest | `readiness_freeze_receipt_mismatch` |
-| plan-tree JSON (3) | coherent non-freeze mutation plus corrected sidecar | `$MANIFEST_CODE` (also §4(c)) |
-| plan-tree sidecar (3) | replace its digest only | `readiness_pack_digest_mismatch` |
-| successor pinset JSON (1) | change one governed `_v4` row's `plan_sha256` | the AUTHENTICATED C→S refusal and nothing else: `reason_codes` is exactly `[DEPENDENCY_CHANGED_SET]`, with detail `digest-conditional allowlist path …: bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest`. **No `histsem_*` code is reachable on this path** — the tamper stays canonical and schema-valid, so the histsem gate loads the chain and returns before raising. The hS byte pin is a POST-FIXATION property and is probed separately, at `$FIXATION_COMMIT`, in §4.10 step 4 |
+All eight `detail` strings above are CODE-DERIVED predictions read off the raise
+sites at `5a034f84`, not observations from a run (r6). Estate 10 confirms them by
+execution; a mismatch is a finding adjudicated under §6, not an assertion to
+relax at the bench.
 
 **Two coordinates, and r4 collapsed them into one.** r4 ran the byte-pin probe
 here, inside the `tamper-pinset-json` case, from a case cut at `$PROBE_BASE`.
@@ -3261,49 +3523,86 @@ transaction's `arm-0001`.** Two rules follow, both already enforced above:
    `$CUSTODY/windows` must pin the ordinal the same way. An `arm-*` glob after
    this point is a custody error, not a convenience.
 
+**Why the later rewrite must be CANONICAL, and confined to a sibling row.**
+r5 produced the "later rewrite" by appending a newline to the committed
+successor pinset. That is a byte change, but it is also a CANONICALITY change,
+and the `arm` verb's very first act is `_gate_receipt_histsem(root)`
+(`arm_readiness.py:7535-7546`), whose canonical-parse check refuses
+`histsem_pinset_invalid` at `:3792-3799` — before `_load_freeze_reference()` at
+`:7564` and before any R1 validation whatsoever. Estate 9 executed it and got
+exactly that: `rc=1`, `histsem_pinset_invalid`, detail "committed
+receipt-histsem pinset is invalid". The C→S gate was never reached, and the
+probe's real subject was untested.
+
+r6 rewrites the pinset the way an actual later commit would: it changes ONE
+field — a SIBLING row's `plan_sha256` — and re-renders the whole file
+canonically. Three properties follow, and all three are needed. The file stays
+schema-valid and canonical, so the histsem shape check passes. The row the arm
+actually verifies is the TARGET pack's row, and `:3497-3519` examines only that
+row, which this mutation leaves fixed — so target histsem verification passes
+too. What HAS changed is the file's whole-file digest, and that is precisely the
+value R1 compares against Ed's confirmed step-6 table at `:4364-4367`. The
+refusal is therefore the authenticated C→S one, reached by the intended route.
+
+**This probe is the arm-entry route, not the primary C→S vehicle.** The
+synthetic unit battery `122-*` and the freeze-path `110-tamper-pinset-json`
+class remain the primary vehicles for the digest-conditional edge; what the
+amended `123` adds, and the only thing it is now claimed to add, is that the
+same edge is enforced when the transaction is entered through `arm` rather than
+through freeze replay — an entry point with a different gate order in front of
+it, as estate 9 demonstrated.
+
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
-# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
-# 085 is a cross-check and never the source).
+# CONFIRMATION PAIR, re-pasted per block.
 STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
 test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
 test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
   || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
-"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}",sys.argv[1]) else 1)' \
   "$ED_STEP6_CONFIRMED_SHA256" \
   || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
 test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
   || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
 
-# Transaction refusal side: keep Ed's table fixed, mutate the committed
-# successor bytes at a later reviewed head, and require DEPENDENCY_CHANGED_SET.
-# NOTE: this arms into $CUSTODY/windows and mints arm-0002 (see above).
 CASE=$(new_case c-to-s-later-rewrite "$PROBE_BASE")
-printf '\n' >> "$CASE/$SUCCESSOR_PINSET"
-commit_case "$CASE" 'S-0 C-to-S probe: later successor rewrite'
+"$PY" - "$CASE/$SUCCESSOR_PINSET" "$FIRST_PACK" <<'PY' \
+  || die 'later-rewrite sibling-row mutation failed'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+target = pathlib.PurePosixPath(sys.argv[2]).name
+d = json.loads(p.read_text())
+siblings = [row for row in d["packs"] if row["pack_id"] != target]
+if not siblings:
+    raise SystemExit("pinset has no sibling row")
+siblings[0]["plan_sha256"] = "0" * 64
+p.write_bytes(
+    (json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+)
+PY
+commit_case "$CASE" 'S-0 C-to-S probe: schema-valid sibling-row rewrite'
+
 capture 123-c-to-s-later-rewrite "$PY" "$CASE/scripts/generate_arm_readiness.py" arm \
-  --pack-root "$CASE/$FIRST_PACK" --arm-context "$ARM_CONTEXT" \
+  --pack-root "$CASE/$FIRST_PACK" \
+  --arm-context "$ARM_CONTEXT" \
   --window-custody-root "$CUSTODY/windows" \
   --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
-grep -F "$CHANGED_CODE" "$TRANS/123-c-to-s-later-rewrite.stdout.json" > /dev/null \
-  || die 'a later successor rewrite was NOT refused by DEPENDENCY_CHANGED_SET'
-# This is the ONE probe whose intended cause IS the digest-conditional path, so
-# here the detail must be PRESENT -- and it must be the AUTHENTICATED mismatch.
-# Without the pair the same code arrives with the detail "no expected
-# confirmation digest supplied", which proves nothing about a later rewrite.
-grep -F 'digest-conditional allowlist path' \
-  "$TRANS/123-c-to-s-later-rewrite.stdout.json" > /dev/null \
-  || die 'the later-rewrite probe did not refuse on the digest-conditional path'
-grep -F "bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest" \
-  "$TRANS/123-c-to-s-later-rewrite.stdout.json" > /dev/null \
-  || die 'the later-rewrite refusal is not the authenticated C-to-S bytes-differ detail'
-if grep -F 'no expected confirmation digest supplied' \
-    "$TRANS/123-c-to-s-later-rewrite.stdout.json" \
-    "$TRANS/123-c-to-s-later-rewrite.stderr.txt" > /dev/null; then
-  die 'the later-rewrite probe refused for want of hC, not for the rewrite'
-fi
-no_traceback 123-c-to-s-later-rewrite || die 'C-to-S rewrite probe traceback'
+expect_rc 123-c-to-s-later-rewrite 1 \
+  || die 'later-rewrite probe did not return rc 1'
+"$PY" - "$TRANS/123-c-to-s-later-rewrite.stdout.json" "$CHANGED_CODE" "$SUCCESSOR_PINSET" <<'PY' \
+  || die 'later rewrite did not reach the authenticated C-to-S gate'
+import json, sys
+d = json.load(open(sys.argv[1]))
+detail = (
+    f"digest-conditional allowlist path {sys.argv[3]!r}: "
+    "bytes at the reviewed HEAD differ from Ed's confirmed step-6 digest"
+)
+if d.get("reason_codes") != [sys.argv[2]] or d.get("detail") != detail:
+    raise SystemExit(repr(d))
+PY
+no_traceback 123-c-to-s-later-rewrite \
+  || die 'C-to-S rewrite probe traceback'
 ```
 
 Pass iff the valid transaction crosses the changed-set gate only against Ed's
@@ -3314,120 +3613,240 @@ later committed rewrite is refused by `DEPENDENCY_CHANGED_SET` before it can be
 forgiven by allowlist membership. The
 table and its sidecar are immutable during the probe. Authority: D-151
 condition 2; `docs/contracts/d117_step6_confirmation_table.md` "Where the
-`C → S` edge is enforced."
+`C → S` edge is enforced." The `123` block's expected `reason_codes` and detail
+are CODE-DERIVED predictions (r6, `docs/process_traces/2026-08-25-probe-reachability/`);
+estate 10 confirms them by execution.
 
 ### 4(f). `DEPENDENCY_MANIFEST` conjunct — both halves
 
-**Source/receipt half.** Coherently change a source and its facts'
-`source_sha256`, re-sidecar the receipt, but deliberately leave the receipt's
-`dependency_manifest_sha256` at its old value. This crosses the ordinary
-source-digest authenticator and reaches `arm_readiness.py:4467-4484`.
+**Source/receipt half — and the digest chain the mutation must carry with it.**
+The subject of this half is one specific inconsistency: an evidence receipt
+whose facts point at the CURRENT source bytes while its
+`dependency_manifest_sha256` still records the OLD ones. To put that
+inconsistency in front of R1, every OTHER digest binding between the mutated
+source and the pack's plan tree has to be made consistent first, because each
+one is authenticated earlier and each one would otherwise refuse first.
+
+r5 propagated only half the chain: it changed the source, updated the receipt's
+`facts[*].source_sha256`, and re-sidecarred the receipt — but left the FROZEN
+receipt's evidence item still recording the receipt's old SHA.
+`_authenticate_generic_evidence_item()` checks exactly that binding at
+`:5460-5465`, before it reads fact sources at `:5531-5570` and before lifecycle
+validation at `:5608-5619`. Estate 9 executed it and got `rc=2`,
+`readiness_evidence_digest_mismatch`, "evidence item digest differs from
+authenticated bytes" — a true statement about a binding the probe broke by
+accident, not the manifest disagreement it exists to show.
+
+r6 propagates the whole chain, in the order the authenticators read it:
+
+1. mutate `arm_readiness.sources/acceptance-owner.json` (one primary-artifact
+   digest zeroed) and re-render it canonically;
+2. write the source's NEW SHA into every `facts[*].source_sha256` of
+   `arm_readiness.evidence/evidence-acceptance-owner.json`, and **deliberately
+   leave `dependency_manifest_sha256` at its old value** — this is the mutation
+   under test, and the block asserts the old and new source digests actually
+   differ so the case cannot silently degenerate;
+3. re-render the receipt canonically and recompute its `.sha256` sidecar;
+4. write the receipt's new SHA into the matching `evidence[]` item of the frozen
+   receipt the plan's `arm_attachments.arm_readiness.freeze_receipt` names,
+   re-render that freeze receipt and recompute its sidecar;
+5. write the freeze receipt's new SHA into that same plan freeze slot, re-render
+   `plan_tree.json` and recompute `plan_tree.sha256`.
+
+Step 5 is the one that looks dangerous and is not: touching the plan tree is
+exactly what §4(c) does to trip R1's manifest gate, so the obvious worry is that
+this probe now has two manifest causes and cannot attribute its refusal. The
+freeze slot is an ENUMERATED SUBTRACTION at `:4170-4213` — the manifest
+deliberately does not bind the freeze-receipt pointer, because that pointer is
+rewritten by every legitimate freeze — so propagating it creates no competing
+manifest failure. Execution reaches the source/receipt conjunct at
+`:4467-4484`, which is the only manifest disagreement left standing.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
-# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
-# 085 is a cross-check and never the source).
+# CONFIRMATION PAIR, re-pasted per block.
 STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
 test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
 test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
   || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
-"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}",sys.argv[1]) else 1)' \
   "$ED_STEP6_CONFIRMED_SHA256" \
   || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
 test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
   || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
 
 CASE=$(new_case manifest-binding "$PROBE_BASE")
-"$PY" - "$CASE/$FIRST_PACK" <<'PY'
-import hashlib,json,pathlib,sys
-r=pathlib.Path(sys.argv[1]); src=r/"arm_readiness.sources/acceptance-owner.json"
-rec=r/"arm_readiness.evidence/evidence-acceptance-owner.json"
-s=json.loads(src.read_text()); s["primary_artifacts"][0]["sha256"]="0"*64
-sraw=(json.dumps(s,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode(); src.write_bytes(sraw)
-d=json.loads(rec.read_text()); new=hashlib.sha256(sraw).hexdigest()
-for fact in d["facts"]: fact["source_sha256"]=new
-# Intentionally do not change d["dependency_manifest_sha256"].
-rraw=(json.dumps(d,indent=2,sort_keys=True,ensure_ascii=False)+"\n").encode(); rec.write_bytes(rraw)
-rec.with_name(rec.name+".sha256").write_text(hashlib.sha256(rraw).hexdigest()+"  "+rec.name+"\n")
+"$PY" - "$CASE/$FIRST_PACK" <<'PY' \
+  || die 'manifest-binding mutation driver failed'
+import hashlib, json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+
+def render(path, value):
+    raw = (json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+    path.write_bytes(raw)
+    return raw
+
+def sidecar(path, raw):
+    path.with_name(path.name + ".sha256").write_text(
+        hashlib.sha256(raw).hexdigest() + "  " + path.name + "\n"
+    )
+
+source_path = root / "arm_readiness.sources/acceptance-owner.json"
+receipt_path = root / "arm_readiness.evidence/evidence-acceptance-owner.json"
+plan_path = root / "plan_tree.json"
+
+source = json.loads(source_path.read_text())
+source["primary_artifacts"][0]["sha256"] = "0" * 64
+source_raw = render(source_path, source)
+source_sha = hashlib.sha256(source_raw).hexdigest()
+
+receipt = json.loads(receipt_path.read_text())
+old_manifest_sha = receipt["dependency_manifest_sha256"]
+if old_manifest_sha == source_sha:
+    raise SystemExit("mutation did not change the source digest")
+for fact in receipt["facts"]:
+    fact["source_sha256"] = source_sha
+# Deliberately leave dependency_manifest_sha256 fixed.
+receipt_raw = render(receipt_path, receipt)
+sidecar(receipt_path, receipt_raw)
+receipt_sha = hashlib.sha256(receipt_raw).hexdigest()
+
+plan = json.loads(plan_path.read_text())
+freeze_ref = plan["arm_attachments"]["arm_readiness"]["freeze_receipt"]
+freeze_path = root / freeze_ref["path"]
+freeze = json.loads(freeze_path.read_text())
+matches = [
+    item for item in freeze["evidence"]
+    if item["path"] == "arm_readiness.evidence/evidence-acceptance-owner.json"
+]
+if len(matches) != 1:
+    raise SystemExit(f"expected one acceptance-owner freeze item, got {len(matches)}")
+matches[0]["sha256"] = receipt_sha
+freeze_raw = render(freeze_path, freeze)
+sidecar(freeze_path, freeze_raw)
+freeze_ref["sha256"] = hashlib.sha256(freeze_raw).hexdigest()
+
+plan_raw = render(plan_path, plan)
+plan_path.with_name("plan_tree.sha256").write_text(
+    hashlib.sha256(plan_raw).hexdigest() + "  plan_tree.json\n"
+)
 PY
-commit_case "$CASE" 'S-0 manifest source-receipt conjunct'
+commit_case "$CASE" 'S-0 authenticated manifest source-receipt conjunct'
+
 capture 119-manifest-binding "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --pack-root "$CASE/$FIRST_PACK" \
+  --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
   --step6-confirmation-table "$STEP6_TABLE" \
   --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
-grep -F "$MANIFEST_CODE" "$TRANS/119-manifest-binding.stdout.json" > /dev/null \
-  || die 'the source/receipt conjunct half did not refuse with DEPENDENCY_MANIFEST'
-if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
-    "$TRANS/119-manifest-binding.stdout.json" "$TRANS/119-manifest-binding.stderr.txt" > /dev/null; then
-  die 'the manifest-binding probe refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
-fi
+expect_rc 119-manifest-binding 1 \
+  || die 'manifest-binding probe did not return rc 1'
+"$PY" - "$TRANS/119-manifest-binding.stdout.json" "$MANIFEST_CODE" <<'PY' \
+  || die 'source/receipt conjunct did not reach DEPENDENCY_MANIFEST'
+import json, sys
+d = json.load(open(sys.argv[1]))
+if (
+    d.get("reason_codes") != [sys.argv[2]]
+    or d.get("detail")
+    != "evidence source and receipt dependency-manifest bindings disagree"
+):
+    raise SystemExit(repr(d))
+PY
 no_traceback 119-manifest-binding || die 'manifest-binding probe traceback'
 ```
 
-**Derivation/current dependency half.** The exact coherent current-plan and
-sibling-plan commands are §4(c), transcripts `104-plan-current` and
-`105-plan-sibling`. Both must contain `$MANIFEST_CODE` from
-`arm_readiness.py:4485-4542`. All three outputs must be nonzero and
+**Derivation/current dependency half.** The exact coherent manifest-only plan
+commands are §4(c), transcripts `104-plan-current` (the first pack, replaying
+itself) and `105-plan-sibling` (the second pack, replaying itself — see §4(c)
+for why the cross-pack form of this claim is unreachable by design). Both must
+return `reason_codes` exactly `[$MANIFEST_CODE]` from
+`arm_readiness.py:4485-4542`, each with the current-dependency detail naming its
+OWN pack's `plan_tree.json`. All three outputs must be nonzero and
 traceback-free. Both logical halves are conjunctive; one does not substitute for
-the other. Authority: R5 S-6 and V-1.vi; SIT-C3; `arm_readiness.py:4467-4542`.
+the other. The `119` block's expected detail — `evidence source and receipt
+dependency-manifest bindings disagree` — is a CODE-DERIVED prediction (r6);
+estate 10 confirms it by execution. Authority:
+`docs/process_traces/2026-08-25-probe-reachability/`; R5 S-6 and V-1.vi; SIT-C3;
+`arm_readiness.py:4467-4542`.
 
 ### 4(g). S-6 dual-validator falsifiers
 
-In a fresh case make the coherent plan mutation from §4(c), then run both
-genuinely different validators.
+In a fresh case make the SAME manifest-only plan mutation as §4(c) — the
+`window_identity.evidence_root_id` change, never the `window_id` one — then run
+both genuinely different validators over that one case. r5 used the shared
+`mutate_plan.py` and therefore inherited §4(c)'s masking exactly: estate 9
+returned `rc=2` and `readiness_freeze_receipt_mismatch` here for the same
+reason, the identity comparison at `arm_readiness.py:6513-6521` firing ahead of
+R1. The mutation is now inline in this block (see §4(c) on why the shared driver
+file is gone), and the S-6 preserve-mode half of the probe is unchanged in
+substance: it still records which of the two admissible dispositions the
+candidate is in, and it now applies the fail-ugly traceback check in BOTH
+branches rather than only in the nonzero one, since a traceback under `rc=0` is
+just as much a mechanism failure.
 
 ```zsh
 source "${S0_ENV:?paste the assignment line from 000-source-line.txt first}"
 
-# CONFIRMATION PAIR, re-pasted per block (ruling R-2; §3.9 states in full why
-# 085 is a cross-check and never the source).
+# CONFIRMATION PAIR, re-pasted per block.
 STEP6_TABLE="$CUSTODY/windows/family_publication/d117_step6_confirmation_table_v4.json"
 test -f "$STEP6_TABLE" || die 'the promoted step-6 confirmation table is absent'
 test -n "${ED_STEP6_CONFIRMED_SHA256:-}" \
   || die "Ed's step-6 confirmation digest (hC) is not pasted into this block"
-"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}", sys.argv[1]) else 1)' \
+"$PY" -c 'import re,sys; raise SystemExit(0 if re.fullmatch("[0-9a-f]{64}",sys.argv[1]) else 1)' \
   "$ED_STEP6_CONFIRMED_SHA256" \
   || die 'ED_STEP6_CONFIRMED_SHA256 is not a lowercase 64-hex digest'
 test "$ED_STEP6_CONFIRMED_SHA256" = "$(cat "$TRANS/085-ed-step6-confirmed-sha256.txt")" \
   || die 'the pasted hC differs from the 085 witness of the §3.8 confirmation'
 
 CASE=$(new_case s6-dual "$PROBE_BASE")
-"$PY" "$CUSTODY/tools/mutate_plan.py" "$CASE/$FIRST_PACK/plan_tree.json"
-commit_case "$CASE" 'S-0 S-6 dual-validator mutation'
+"$PY" - "$CASE/$FIRST_PACK/plan_tree.json" <<'PY' \
+  || die 'S-6 plan mutation driver failed'
+import hashlib, json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+d = json.loads(p.read_text())
+d["window_identity"]["evidence_root_id"] += "-s0-s6-mutation"
+raw = (json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+p.write_bytes(raw)
+p.with_name("plan_tree.sha256").write_text(
+    hashlib.sha256(raw).hexdigest() + "  plan_tree.json\n"
+)
+PY
+commit_case "$CASE" 'S-0 S-6 dual-validator manifest-only mutation'
+
 set +e
 "$PY" "$CASE/$FIRST_PACK/generate_configs.py" --check \
-  --pack-id d117_contrast_qwen25_1p5b_vs_7b_v4 --family-suffix _v4 \
+  --pack-id d117_contrast_qwen25_1p5b_vs_7b_v4 \
+  --family-suffix _v4 \
   --preserve-current-frozen-bytes \
   > "$TRANS/120-s6-preserve-check.txt" 2>&1
 PRESERVE_RC=$?
 set -e
-printf 'preserve_check_rc=%s\n' "$PRESERVE_RC" >> "$TRANS/120-s6-preserve-check.txt"
-
+if grep -Eq 'Traceback \(most recent call last\)|^[A-Za-z]+Error:' \
+    "$TRANS/120-s6-preserve-check.txt"; then
+  die "preserve-mode --check failed ugly (rc $PRESERVE_RC)"
+fi
 if [ "$PRESERVE_RC" = 0 ]; then
-  printf 'disposition=ECHO-HOLE PRESENT (expected at the pinned candidate)\n' \
-    >> "$TRANS/120-s6-preserve-check.txt"
+  printf 'disposition=ECHO-HOLE PRESENT\n' >> "$TRANS/120-s6-preserve-check.txt"
 else
-  # Governed-nonzero alternative: the candidate deliberately fixed the echo
-  # hole.  That is admissible, but only as a GOVERNED refusal -- a traceback or
-  # a crash is a mechanism failure, not the fix.
-  if grep -Eq 'Traceback \(most recent call last\)' "$TRANS/120-s6-preserve-check.txt"; then
-    die "preserve-mode --check failed ugly (rc $PRESERVE_RC); this is not the governed fix"
-  fi
-  printf 'disposition=ECHO-HOLE FIXED (governed nonzero check, rc %s)\n' "$PRESERVE_RC" \
-    >> "$TRANS/120-s6-preserve-check.txt"
+  printf 'disposition=ECHO-HOLE FIXED (governed nonzero check, rc %s)\n' \
+    "$PRESERVE_RC" >> "$TRANS/120-s6-preserve-check.txt"
 fi
 
 capture 121-s6-r1 "$PY" "$CASE/scripts/generate_arm_readiness.py" freeze \
-  --pack-root "$CASE/$FIRST_PACK" --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
+  --pack-root "$CASE/$FIRST_PACK" \
+  --predecessor-pack-root "$CASE/${PRED_OF[$FIRST_PACK]}" \
   --step6-confirmation-table "$STEP6_TABLE" \
   --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
-grep -F "$MANIFEST_CODE" "$TRANS/121-s6-r1.stdout.json" > /dev/null \
-  || die 'the R1 half of the S-6 dual falsifier did not refuse'
-if grep -E 'digest-conditional allowlist path|no expected confirmation digest supplied' \
-    "$TRANS/121-s6-r1.stdout.json" "$TRANS/121-s6-r1.stderr.txt" > /dev/null; then
-  die 'the S-6 R1 half refused on the CONFIRMATION path, not on its own mutation: the pair did not reach the intended gate'
-fi
+expect_rc 121-s6-r1 1 \
+  || die 'S-6 R1 half did not return rc 1'
+"$PY" - "$TRANS/121-s6-r1.stdout.json" "$MANIFEST_CODE" "$FIRST_PACK" <<'PY' \
+  || die 'S-6 R1 half did not reach the exact DEPENDENCY_MANIFEST gate'
+import json, sys
+d = json.load(open(sys.argv[1]))
+detail = f"current dependency differs from its derivation binding: {sys.argv[3]}/plan_tree.json"
+if d.get("reason_codes") != [sys.argv[2]] or d.get("detail") != detail:
+    raise SystemExit(repr(d))
+PY
 no_traceback 121-s6-r1 || die 'S-6 R1 probe traceback'
 ```
 
@@ -3438,7 +3857,16 @@ checked-out bytes into its comparison
 admissible and both are recorded: if the candidate intentionally fixed the echo
 hole, the first result becomes a **governed nonzero check** and the S-1 manifest
 must say so. The R1 half is mandatory either way; only that half can fail this
-probe. Authority: R5 S-6; SIT-C3; AUDIT F-9.
+probe. The `121` expectation is the SAME exact pair as `104` — `reason_codes`
+exactly `[$MANIFEST_CODE]`, detail `current dependency differs from its
+derivation binding: $FIRST_PACK/plan_tree.json` — because it is the same
+mutation on the same pack; that identity is deliberate, and any divergence
+between the two transcripts is itself a finding. The pair is a CODE-DERIVED
+prediction (r6); estate 10 confirms it by execution. The `120-*` transcript no
+longer carries a bare `preserve_check_rc=` line: the disposition line records
+the rc where it is not already implied (`ECHO-HOLE PRESENT` is rc 0 by
+construction), and the fail-ugly check now runs before either branch. Authority:
+`docs/process_traces/2026-08-25-probe-reachability/`; R5 S-6; SIT-C3; AUDIT F-9.
 
 ### 4(h). Histsem and pinset probes
 
@@ -3807,9 +4235,15 @@ reading its named artifacts.
   specified. **Every post-mint enforcing transcript was produced with the
   complete `C + hC` confirmation pair**: no transcript in `091-*`, `092-*`,
   `101-*`, `102-*`, `104-*`, `105-*`, `110-*`, `119-*`, `121-*` or `123-*`
-  contains "no expected confirmation digest supplied". Every cardinality
-  assertion (`3` packs, `8` tamper classes, `3` arm transcripts) is recorded,
-  not assumed.
+  contains "no expected confirmation digest supplied". **(r6: for `104-*`,
+  `105-*`, every `110-*` class, `119-*`, `121-*` and `123-*` this is now proven
+  MECHANICALLY rather than by a separate grep — each of those probes asserts its
+  `detail` string by EQUALITY, and no confirmation-path detail can equal the
+  expected one.)** Every cardinality assertion (`3` packs, `8` tamper classes,
+  `3` arm transcripts) is recorded, not assumed. **The `105-*` transcript is the
+  SECOND pack replaying itself (r6)**, not the first pack replaying a sibling
+  mutation; §4(c) records why the cross-pack claim was unreachable by design and
+  was retired rather than repaired.
 - [ ] **V-2** — Lead/magistrate custody and nondelegation are recorded in
   `001-*` through `010-*`; S-6 both validators are `120-*`/`121-*`; governed arm
   and verify and every transcript have been read with no fail-ugly traceback.
@@ -3819,18 +4253,41 @@ reading its named artifacts.
   `121-*`, and PRESENT — as the authenticated `bytes at the reviewed HEAD
   differ from Ed's confirmed step-6 digest` detail — in `110-tamper-pinset-json`
   and `123-*`. A code-only reading cannot separate the two causes and is not
-  acceptance.
+  acceptance. **(r6) The reading is now an EQUALITY reading, not a
+  presence/absence one**: `104-*`, `105-*`, all eight `110-*` classes, `119-*`,
+  `121-*` and `123-*` each assert an exact `reason_codes` LIST and an exact
+  `detail` STRING, which is what makes the difference between "the gate under
+  test refused" and "an earlier gate refused first" visible at all — the failure
+  mode estate 9 found in all six of them. Every one of those expected pairs is a
+  CODE-DERIVED prediction until estate 10 executes it; where an estate's
+  observation disagrees, the transcript is the finding and the runsheet is
+  amended by ruling, never at the bench.
 - [ ] **V-1.vi / D-151 C→S** — Split by COORDINATE and by AUTHENTICATOR, which
   r4 ran together and could not have satisfied:
-  - **Pre-fixation, at `$PROBE_BASE` (`110-*`, eight cases).** The seven
-    ordinary classes each refuse through their own digest, binding or
-    semantic-replay authenticator, with no digest-conditional detail present.
-    The successor class refuses through the authenticated C→S edge ALONE:
-    `reason_codes` exactly `[DEPENDENCY_CHANGED_SET]` plus the bytes-differ
-    detail. **No `histsem_*` code is expected or admissible for that class** —
-    the tamper stays canonical and schema-valid, so the histsem gate returns
-    before raising, and the C→S raise owns the refusal. The two manifest halves
-    are `104-*`, `105-*` and `119-*`.
+  - **Pre-fixation, at `$PROBE_BASE` (`110-*`, eight cases).** Each of the
+    seven ordinary classes refuses through its own digest, binding or
+    semantic-replay authenticator, matching the exact `reason_codes`/`detail`
+    pair tabulated in §4(e) — which entails that no digest-conditional detail is
+    present. **(r6) Two of those seven pairs are not what r5 recorded**:
+    `freeze-sidecar` refuses `readiness_receipt_namespace_anomalous` ("sidecar
+    mismatch for freeze-0004.json"), because zeroing that sidecar IS a
+    namespace-authentication failure; and `freeze-json`, whose tamper now
+    recomputes its own sidecar, refuses `readiness_freeze_receipt_mismatch` with
+    the detail "existing freeze receipt is not plan-pinned" — the PLAN-PIN
+    FILTER at `:6848-6862`, which discards any scanned receipt whose
+    `{path, sha256}` disagrees with the plan's pin before
+    `_load_freeze_reference()` runs at all, and therefore before the exactness
+    check the consult originally predicted (r6 fix round; see
+    `03-FREEZE-JSON-AMENDMENT.md`). The two R1 classes
+    (`plan-json`, `pinset-json`) exit `1` and the other six exit `2`; the block
+    asserts the exit code per class, not merely nonzero. The successor class
+    refuses through the authenticated C→S edge ALONE: `reason_codes` exactly
+    `[DEPENDENCY_CHANGED_SET]` plus the bytes-differ detail. **No `histsem_*`
+    code is expected or admissible for that class** — the tamper stays canonical
+    and schema-valid, so the histsem gate returns before raising, and the C→S
+    raise owns the refusal. The manifest halves are `104-*` and `105-*` (the
+    derivation/current-dependency half, each pack replaying ITSELF) and `119-*`
+    (the source/receipt half).
   - **Post-fixation, at `$FIXATION_COMMIT` (`118-*`, one case).** The
     shape-preserving canonical re-mint fails `test_successor_pinset_hs_byte_pin`
     BY NAME in the transcript's FAIL/ERROR list. Other tests fail on that case
@@ -3843,7 +4300,13 @@ reading its named artifacts.
     conditional on Ed's exact table digest, and a later rewrite refuses with the
     authenticated bytes-differ detail rather than a missing-input one **(D-153;
     the subtraction is evidenced by the successor's ABSENCE from `098-*`'s empty
-    residue)**.
+    residue)**. **(r6) The primary C→S vehicles are `122-*` (the synthetic unit
+    battery) and `110-tamper-pinset-json` (the freeze path); `123-*` is the
+    ARM-ENTRY route** — the same edge reached through the `arm` verb, whose gate
+    order puts `_gate_receipt_histsem` in front of everything else. Its rewrite
+    is therefore a canonical change to a SIBLING pinset row, leaving the armed
+    pack's own row fixed, so neither the pinset shape check nor target-row
+    histsem verification can claim the refusal first.
   Any unauthenticated class has triggered the derived-manifest reopen rather
   than being waived. Authority: D-151 condition 2; synthesis items 9, 10 and 15.
 - [ ] **rh-8 / D-151 successor** — The 112 arithmetic and the exact
