@@ -5,8 +5,13 @@ This document is the ONE normative home for
 historical-semantics contracts reference this contract; neither defines a
 second confirmation artifact or schema.
 
-Authority is the 2026-08-22 family-marker magistrate ruling and D-151
-conditions 2 and 7. The table is a custody-external authenticator. Its path
+Authority is the 2026-08-22 family-marker magistrate ruling, D-151
+conditions 2 and 7, and D-150b (delegated execution of the exact-byte
+confirmation). *(The D-150b clause was appended 2026-08-26 under D-155; the
+sentence previously ended at "D-151 conditions 2 and 7." See the amendment
+record at the end of this contract.)*
+
+The table is a custody-external authenticator. Its path
 must never enter an irrelevant-path, changed-set, transaction-output, or any
 other allowlist. Adding an authenticator path to an allowlist is a D-151
 fixed-point tripwire, not an amendment lane.
@@ -19,7 +24,12 @@ There are exactly two immutable consumers:
 - the successor histsem pinset bytes `S`, with digest `hS`.
 
 The final table bytes `C` contain `hM` in `family_publication` and `hS` in
-`successor_pinset`. Ed confirms the digest `hC` over those exact final bytes.
+`successor_pinset`. The confirming party — under D-150b the magistrate, acting
+on Ed's standing delegation, with `confirmation.authority` still `"ED"` —
+confirms the digest `hC` over those exact final bytes. *(Amended 2026-08-26
+under D-155; the superseded sentence read: "Ed confirms the digest `hC` over
+those exact final bytes." See the amendment record at the end of this
+contract.)*
 The only edges are `C → M` and `C → S`; neither `M` nor `S` names `C`, so the
 graph is acyclic. The marker binds this table's contract identifier and the
 required decision `YES`, never the table path, digest, or event time.
@@ -35,10 +45,27 @@ and one trailing newline. Its adjacent sidecar is exact GNU SHA-256 form:
 ```
 
 The table contains no self-digest and no timestamp. Event time belongs in the
-immutable transaction transcript. Before Ed is asked, the producer renders
+immutable transaction transcript. The producer renders the final bytes
+including the literal proposed `YES` and computes `hC` over them.
+
+**Under D-150b (Ed, 2026-08-23) the exact-byte confirmation is a STANDING
+DELEGATION to the magistrate.** The confirming party independently recomputes
+every digest the table asserts — `hM` from the marker bytes on disk, `hS` from
+the bytes committed at the mint head — from the artifacts themselves, never
+from the producing session's report, and only then evaluates equality.
+`confirmation.authority` remains `"ED"` and `confirmation.decision` remains
+`"YES"`; `confirmation.statement` records that the confirmation was executed
+under the D-150b delegation and names what was independently recomputed. Any
+mismatch is a refusal and a ping to Ed, never a re-render. Ed is notified after
+execution rather than blocked on it; judgment-bearing publication decisions
+remain Ed's. Publication promotes the confirmed bytes without mutation.
+
+*(Amended 2026-08-26 under D-155, which adopted this replacement text from the
+Opus adjudication seat; the D-150b delegation itself is Ed's ruling of
+2026-08-23. The superseded text read: "Before Ed is asked, the producer renders
 the final bytes including the literal proposed `YES`, computes `hC`, and
-presents both. Ed's yes names `hC`; publication promotes the same bytes
-without mutation.
+presents both. Ed's yes names `hC`; publication promotes the same bytes without
+mutation." See the amendment record at the end of this contract.)*
 
 The adjacent `.sha256` sidecar is **transport integrity only, never
 authentication**. It is computed from the same bytes it accompanies, so a
@@ -76,7 +103,7 @@ hexadecimal characters.
   "confirmation": {
     "authority": "ED",
     "decision": "YES",
-    "statement": "I confirm these exact D-117 v4 step-6 bytes."
+    "statement": "Confirmed under the D-150b standing delegation: hM recomputed from the marker bytes on disk and hS from the bytes committed at the mint head; both matched the values this table asserts."
   },
   "family_id": "d117-v4",
   "family_publication": {
@@ -129,6 +156,13 @@ hexadecimal characters.
   "transaction_id": "<nonempty transaction identifier>"
 }
 ```
+
+*(The `confirmation.statement` literal in the example above was replaced
+2026-08-26 under D-155 with a D-150b-shaped exemplar. The superseded literal
+read: `"I confirm these exact D-117 v4 step-6 bytes."` The field is free text
+and any non-empty string is schema-valid, so nothing about the schema changed;
+the exemplar changed so the example shows what a delegated confirmation
+actually records. See the amendment record at the end of this contract.)*
 
 The `family_publication.members` array order is exactly ALPHA, BETA, GAMMA.
 Its four visible fields per row must equal the immutable marker. The marker
@@ -273,3 +307,40 @@ The histsem verifier never compares a freeze receipt's
 freeze-replay gate compares it repository-relatively for `_v4`+ generations
 and absolutely below the registry's family-publication generation threshold,
 per the 2026-08-25 D-154 ruling.
+
+---
+
+## Amendment record — 2026-08-26 (D-155)
+
+D-155 (magistrate synthesis,
+`docs/process_traces/2026-08-22-t20/nr-synthesis-ruling.md`, over two
+independent adjudication seats) made **four** edits to this contract, all of
+them recording the standing delegation Ed ruled as D-150b on 2026-08-23. Every
+superseded sentence is preserved — at its own site and again here — because an
+operator who has memorised an old sentence must be able to see that it was
+replaced, rather than merely fail to find it.
+
+1. **The authority sentence** (§ opening) gained ", and D-150b (delegated
+   execution of the exact-byte confirmation)". It previously ended at "D-151
+   conditions 2 and 7."
+2. **The acyclic-digest-graph sentence** now names the confirming party under
+   the delegation. It previously read: "Ed confirms the digest `hC` over those
+   exact final bytes."
+3. **The producer/confirmation paragraph** in *Encoding and sidecar* was
+   replaced by the D-150b delegation text. It previously read: "Before Ed is
+   asked, the producer renders the final bytes including the literal proposed
+   `YES`, computes `hC`, and presents both. Ed's yes names `hC`; publication
+   promotes the same bytes without mutation."
+4. **The schema example's `confirmation.statement` literal** became a
+   D-150b-shaped exemplar. It previously read: `"I confirm these exact D-117 v4
+   step-6 bytes."`
+
+**No schema key, no required value, and no digest edge changed.**
+`confirmation.authority` remains `"ED"` and `confirmation.decision` remains
+`"YES"`; both are D-150b constraints, not incidental defaults. The delegation
+changes *who executes the comparison*, never *whose authority the table
+records*.
+
+This record does not supersede the earlier D-153 A5 repair noted inline in
+*Custody and transport* (the `hC`/`hS` confusion); that amendment stands as
+written.

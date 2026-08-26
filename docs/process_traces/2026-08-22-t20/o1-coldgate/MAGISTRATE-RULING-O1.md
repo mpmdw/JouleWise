@@ -63,6 +63,28 @@ NORMATIVE. Its spine:
    truth boundary / D-139 A1 with the phase-by-phase controls listed;
    no claim-bearing arm occurs in it (r4-3: dry-run only until
    publication).
+
+   **AMENDED 2026-08-26 under D-155 (NR-7). Re-scoped, not struck; the
+   original clause is preserved immediately above.** D-153 A4 amended this
+   same clause by re-pricing the interval as mint → *post-window* fixation
+   (up to about eight days). That longer interval contains every campaign
+   window, and campaign-window arms are claim-bearing — so the
+   parenthetical "no claim-bearing arm occurs in it" is false of the
+   re-priced interval as a whole. It remains true, and load-bearing, of a
+   sub-interval. The terra seat used the literal reading of this clause as
+   one of two grounds for killing option beta, so it is a clause that has
+   demonstrably driven a real disposition, not inert prose; that is why it
+   is restated rather than deleted. This is the ONE home for the re-scoped
+   text (`docs/decision_log.md`'s D-151 index row carries a pointer, not a
+   second definition). Condition 5 now reads:
+
+   > 5. The residual runs **mint → post-window fixation** (≤ ~8 days worst
+   > case, D-153 A4), with the per-phase controls named. Within it: the
+   > sub-interval **mint → the first consuming arm** carries no arm of any
+   > kind (r4-3 / B-4: dry-run ceremony only); the sub-interval **first
+   > consuming arm → post-window fixation** carries the campaign's
+   > claim-bearing arms under the published marker and confirmed table,
+   > which is the controlled state the residual prices.
 6. Chain integrity: closed enumeration (un-enumerated pinset files
    govern nothing); cross-member duplicate `(pack_id, pack_path)`
    refuses `histsem_pinset_invalid`; absent enumerated member keeps
