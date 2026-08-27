@@ -1212,46 +1212,78 @@ A `RUN_STATE` header update written before fixation would occupy the slot
 D-153 A1 reserves for the fixation commit. That is why step 5 is numbered
 after step 4 rather than left to judgement.
 
-### H6 — Finalization: the desk step between the fixation commit and any claim (registered 2026-08-27, S9-07)
+### H6 — Finalization: the desk step between the fixation commit and any claim (registered 2026-08-26, S9-07)
 
 **Why this section exists.** Neither this runbook nor
 `docs/phase_2/window_runbook.md` named the step that turns a campaign's
-collected evidence into something a claim consumer will accept. Without it the
-record stops at H5 step 7 and the next honest act is undefined.
+collected evidence into a form a claim consumer will accept. Without it the
+record stopped at H5 step 7 and the next honest act was undefined.
 
-**What the step is.** A *prospective* analysis manifest is written before
-collection: it fixes what will be analysed, so the analysis cannot be chosen
-after the numbers are seen. Once the campaign closes, that prospective manifest
-must be turned into a **finalized** one, which is the only form
-`analyze-claims` consumes. `scripts/finalize_analysis_manifest.py` performs
-that transition.
+**What the step is.** A campaign's *analysis manifest* states what will be
+analysed and how. It is written in a **prospective** form before collection, so
+the analysis cannot be chosen after the numbers are seen. `analyze-claims` —
+the tool that turns collected evidence into claim verdicts — reads several
+manifest forms, but it **refuses the prospective one specifically**, with
+`analysis_manifest_prospective_not_consumable`
+(`joulewise/analysis_engine/inputs.py:602`). So a campaign carrying a
+prospective manifest has no consumable claim until that manifest is turned into
+a **finalized** one. `scripts/finalize_analysis_manifest.py` performs exactly
+that transition, once.
 
 **What it authenticates, in one sentence:** it re-reads the prospective
-manifest against the plan tree and the campaign's postcollection custody — the
-run corpus, the whole-window verdict, the bracket binding, the calibration
-ledger, and the aggregate floor artifact — and writes one immutable finalized
-manifest binding all of them, **without reading an effect estimate**, so
-finalization cannot be steered by the result it is about to enable.
+manifest against the plan tree and against the campaign's postcollection
+custody — the run corpus, the whole-window verdict, the bracket binding, the
+calibration ledger, and the aggregate floor artifact — and writes one immutable
+finalized manifest binding all of them, **without computing or reading the
+effect estimate**, so finalization cannot be steered by the result it is about
+to enable.
 
-**Where it sits, and why exactly there.** After H5 step 4, the fixation commit,
-and before any claim consumption. Not earlier: the finalized manifest binds the
-campaign's complete custody, which does not exist until the last window is
-collected and the campaign is declared closed at H5. Not later than the first
-claim: `analyze-claims` refuses a `…v3.prospective` manifest outright, so
-nothing can be claimed until this has run. Running it before fixation would
-also add custody bytes inside the window H5 step 4 reserves.
+Two boundaries on that sentence, both worth stating because the looser version
+would be false. It is the *estimate* the finalizer never touches; the paired
+contrast is computed later, inside `analyze-claims`
+(`joulewise/analysis_engine/__init__.py:1009`). The finalizer does hash and
+replay outcome-*bearing* files along the way — `summary_metrics.json`, and the
+whole-window replay's energy-envelope points — so "reads no outcome-bearing
+bytes" would be untrue. And the finalizer takes no `campaign-close.json`, no
+fixation-commit reference, and no published head: **it does not verify that H5
+happened.** The ordering below is a procedural obligation on the magistrate,
+not a condition the tool enforces.
 
-**The command.** Every argument is required, and `--output-dir` must be the
-same directory as `--custody-root` — the finalizer refuses with
-`analysis_finalization_noncanonical` otherwise, because consumer-relative
-lineage is only stable when the finalized manifest sits in the custody root it
-describes. The prospective manifest and the plan tree must both live under that
-custody root.
+**Where it sits.** After H5 step 4, the fixation commit, and before any claim
+consumption. Not earlier: the finalized manifest binds the campaign's complete
+postcollection custody, which does not exist until the last window is collected
+and the campaign is declared closed at H5. Not later than the first claim: the
+prospective refusal above means nothing can be claimed until this has run.
+
+> **OPEN — needs a magistrate ruling before H6 is executed (registered
+> 2026-08-26, S9-07).** Two gaps in this section are not mine to close.
+>
+> 1. **Which custody root.** The finalizer requires `--output-dir` to equal
+>    `--custody-root` and requires the prospective manifest and plan tree to be
+>    regular files beneath it, so it *writes into* that root. H5 step 7 says
+>    the freeze transaction's custody "seals fully" and "nothing further is
+>    ever added." Those two are compatible only if the analysis custody root is
+>    a different tree from the transaction custody H5 seals — which is what the
+>    inputs suggest, since the prospective manifest and plan tree are campaign
+>    artifacts rather than transaction-session records. **This runbook has never
+>    said so, and this section does not have the authority to declare it.** If
+>    they are the same tree, H6 is a post-seal write and its slot must move.
+> 2. **The concrete paths.** The command below names its inputs by role. This
+>    runbook binds none of them to a path, so H6 is not yet replicable from its
+>    own text. Fixing that requires deciding item 1 first, since every path
+>    hangs off the custody root.
+
+**The command.** Every argument is required. `--output-dir` must resolve to the
+same directory as `--custody-root`, or the finalizer refuses with
+`analysis_finalization_noncanonical` — consumer-relative lineage is only stable
+when the finalized manifest sits in the custody root it describes. The
+prospective manifest and the plan tree must each be a regular file beneath that
+same root.
 
 ```sh
 .venv/bin/python scripts/finalize_analysis_manifest.py \
-  --prospective-manifest "$CUSTODY_ROOT/<prospective manifest>.json" \
-  --plan-tree "$CUSTODY_ROOT/<plan tree>.json" \
+  --prospective-manifest "$PROSPECTIVE_MANIFEST" \
+  --plan-tree "$PLAN_TREE" \
   --custody-root "$CUSTODY_ROOT" \
   --runs-root "$RUNS_ROOT" \
   --whole-window-verdict "$WHOLE_WINDOW_VERDICT" \
@@ -1261,9 +1293,19 @@ custody root.
   --output-dir "$CUSTODY_ROOT"
 ```
 
-It prints the finalized manifest's path on success, and on refusal prints
-`{"status": "REFUSE", "reason": …, "detail": …}` and exits 2. Only then is the
-claim consumer admissible:
+On refusal it prints `{"status": "REFUSE", "reason": …, "detail": …}` and exits
+2. On success it prints a JSON object, **not a bare path**:
+`{"status": "FINALIZED", "manifest_id": …, "output": "<path>"}`, where `output`
+is the finalized manifest, named for the prospective manifest's id with
+`.finalized.json` appended. Read the path out of that field:
+
+```sh
+# FINALIZE_RESULT is the stdout of the command above, captured verbatim.
+FINALIZED_MANIFEST="$(printf '%s' "$FINALIZE_RESULT" \
+  | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["output"])')"
+```
+
+Only then is the claim consumer admissible:
 
 ```sh
 python3 -m joulewise.cli analyze-claims \
@@ -1273,10 +1315,14 @@ python3 -m joulewise.cli analyze-claims \
   --output "$CUSTODY_ROOT/claim_verdicts.json"
 ```
 
-`--evidence-root ID=PATH` is additionally required once per declared
-`evidence_root_id` when the manifest declares floor-evidence roots, and
-`--legacy-l1-mechanics` is a mechanics-only legacy mode that has no place in a
-`_v4` claim.
+`--evidence-root ID=PATH` maps a floor-evidence root id to the directory
+holding it. The ids come from the authenticated floor artifact, not from the
+manifest. With no mapping given, zero or one declared root falls back to
+`--runs-root`; **only two or more distinct roots make the mapping mandatory**,
+and omitting it then refuses with `evidence_root_mapping_required`. Repeat the
+flag once per id in that case. `--legacy-l1-mechanics` restricts the run to a
+frozen six-bundle allowlist under a legacy ceiling and has no place in a `_v4`
+claim.
 
 ---
 

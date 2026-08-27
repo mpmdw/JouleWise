@@ -1405,19 +1405,20 @@ record its SHA-256 before closing all agents. `window.env` must additionally
 bind the absolute `ARM_RECEIPT`, `ARM_READINESS_CUSTODY_ROOT`, and
 `LAUNCH_MANIFEST` paths used by E-10:
 
-> **OPEN DEFECT (registered 2026-08-27; S9-08a; NEEDS A MAGISTRATE RULING) —
+> **OPEN DEFECT (registered 2026-08-26; S9-08a; NEEDS A MAGISTRATE RULING) —
 > the chain has no supply line for three of its own inputs.** Two separate
 > problems meet here, and both are about getting a value into a chain that runs
 > after Ed has walked away.
 >
-> **What this does and does not gate.** It does **not** gate transaction night:
+> **What this does and does not gate.** It does **not** gate transaction night.
 > `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md` governs that
-> session, and its Phase G is the dry-run ceremony with no real arm (D-155,
-> NR-6), so nothing on that night invokes this chain. It **does** gate every
+> session and states in terms that `scripts/launch_window.py` is never invoked
+> during it (§6 item 1); its Phase G is a ceremony with no real arm at all
+> (D-155, NR-6). Nothing that night reaches this chain. It **does** gate every
 > later measurement window, which cannot run this chain until the defect is
 > cured. The cure being assessed is **T-0 parser unification** — one parser
-> shared by `capture_t0_step.py` and the chain, so a key the chain needs cannot
-> be a key `window.env` refuses — under stream **S2**.
+> shared by `capture_t0_step.py` and the chain, so that a key the chain must
+> read cannot be a key `window.env` is forbidden to hold — under stream **S2**.
 >
 > *First, the one that predates this note.* The paragraph immediately above
 > tells the operator to bind `ARM_RECEIPT` and `LAUNCH_MANIFEST` in
@@ -2082,7 +2083,7 @@ replace instrument uncertainty, and it is never silently omitted.
 
 ## 12. Close-out record
 
-**What this window's close-out is not (registered 2026-08-27, S9-07).** Closing
+**What this window's close-out is not (registered 2026-08-26, S9-07).** Closing
 a window is not closing the campaign, and neither one produces a claim. After
 the LAST window of a campaign, three further acts happen at the desk, in this
 order, and they are governed by
@@ -2093,10 +2094,13 @@ and only then is the campaign's *prospective* analysis manifest turned into a
 finalizer re-reads the prospective manifest against the plan tree and the
 campaign's postcollection custody — run corpus, whole-window verdict, bracket
 binding, calibration ledger, aggregate floor artifact — and writes one immutable
-finalized manifest binding all of them, without reading an effect estimate.
-`analyze-claims` refuses a `…v3.prospective` manifest, so **no claim exists
-until that step has run.** Do not run it after a single window: it binds the
-whole campaign's custody, which does not exist until the last window is in.
+finalized manifest binding all of them, without computing or reading the effect
+estimate. `analyze-claims` reads several manifest forms but refuses the
+prospective one specifically, so **a campaign carrying a prospective manifest
+has no consumable claim until that step has run.** Do not run it after a single
+window: it binds the whole campaign's custody, which does not exist until the
+last window is in. H6 carries an OPEN item — which custody root it writes into
+is not yet settled — so read it there before executing.
 
 Record:
 
