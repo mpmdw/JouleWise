@@ -1398,7 +1398,23 @@ do not.
 
 1. **No measurement window.** No campaign run, no dry-run, no launch, no
    `[QUIET-MAC]` command of any kind. The windows follow this session, on their
-   own nights, under `docs/phase_2/window_runbook.md`.
+   own nights, under `docs/phase_2/window_runbook.md`. **Hand-off note
+   (2026-08-27):** `scripts/launch_window.py` is never invoked in this session
+   — deliberately, per item 5 below and Phase G — but the windows that follow
+   consume two things this session produces: the published step-6 confirmation
+   table `C` and its out-of-band digest `hC`. Every launcher call that replays
+   the consumption takes them as `--step6-confirmation-table <C>` and
+   `--expected-confirmation-digest <hC>`, and `hC` must be carried from this
+   session's custody transcript of Ed's step-6 confirmation, never recomputed
+   from `C`'s own bytes. Because §2 Phase E4 keeps `hC` in transaction custody
+   only, that transcript is the sole route by which a later window can satisfy
+   the check. Ed's own E-10 command can supply both. The frozen
+   `window-chain.zsh` currently **cannot** — it needs the pair at its
+   `--lifecycle-event start` call, `execve` does not carry E-10's argv into it,
+   and `window.env` cannot hold the values because `capture_t0_step.py`
+   enforces an exact key allowlist. That gap is registered as an OPEN DEFECT in
+   `docs/phase_2/window_runbook.md` and awaits a magistrate ruling; it gates the
+   windows, not this session.
 2. **No fixation commit.** Fixation is the first commit after the commit freeze
    closes, and the freeze closes after the *last consuming window*, which is
    days away (D-153 A1 and A4 price the mint-to-fixation interval at up to about

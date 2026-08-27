@@ -1201,15 +1201,60 @@ arming; they do not authorize the live night.
    so Ed can personally inspect the complete `PASS`/`GO` result. No verdict,
    author, verifier, or other automated command may cross this boundary.
 3. **E-10 — Ed's deliberate physical launch:** after that inspection, Ed
-   personally invokes the sole reviewed launcher exactly once:
+   personally invokes the sole reviewed launcher exactly once.
+
+   **Two values the command needs, built before they appear in it.** The freeze
+   transaction that produced this pack family published a small JSON file named
+   `d117_step6_confirmation_table_v4.json`. It records Ed's `YES` over that
+   family, and in a section called `successor_pinset` it records the SHA-256 of
+   one specific repository file — the successor-pinset file — as that file was
+   committed at the reviewed head. Call the JSON file **the table**; the
+   variable `$STEP6_CONFIRMATION_TABLE` below is its absolute path. Separately,
+   the same transaction computed the SHA-256 **of the table's own bytes** and
+   recorded it in transaction custody. That digest is written `hC` in the
+   transaction record, and the variable `$ED_STEP6_CONFIRMED_SHA256` below
+   holds it. Path and digest are two different things about the same file, and
+   the launcher needs both.
+
+   **Why both.** Before it consumes anything, the launcher re-derives the arm
+   receipt's contents from the repository and compares them to what the receipt
+   says — a replay, to prove the receipt still describes reality. That replay
+   reaches a check which refuses to treat the successor-pinset file as reviewed
+   unless Ed's table vouches for it. The check will not read a single field out
+   of the table until it has hashed the table's bytes and found them equal to
+   `hC`, so it needs the file to hash and the digest to compare against, and it
+   refuses when it has one without the other.
 
    ```sh
    .venv/bin/python scripts/launch_window.py \
      --pack-root "$PACK_ROOT" \
      --arm-receipt "$ARM_RECEIPT" \
      --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
-     --launch-manifest "$LAUNCH_MANIFEST"
+     --launch-manifest "$LAUNCH_MANIFEST" \
+     --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \
+     --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
    ```
+
+   **`hC` is carried here, never recomputed here.** Take
+   `$ED_STEP6_CONFIRMED_SHA256` from the freeze transaction's custody record of
+   Ed's step-6 confirmation — the `085-ed-step6-confirmed-sha256.txt`
+   transcript, written at the moment that confirmation was executed. Do **not**
+   produce it with `shasum -a 256 "$STEP6_CONFIRMATION_TABLE"`. That would hash
+   the file under test to make the value the file under test is then checked
+   against, so it would agree no matter what the file contained; the table's own
+   contract calls that out and forbids it. The digest is worth something only
+   because it reached this command from Ed's out-of-band confirmation rather
+   than from the bytes it is meant to authenticate.
+
+   **What omitting the path argument does.** `--step6-confirmation-table` is
+   optional. Omitted, the launcher looks for the table at
+   `$ARM_READINESS_CUSTODY_ROOT/family_publication/d117_step6_confirmation_table_v4.json`
+   and proceeds if it finds it there — so omitting the flag is not itself a
+   refusal, and only a missing digest, or a table that is neither supplied nor
+   present at that default location, is. Pass the path anyway: it makes the
+   exact file under test explicit in the command Ed is inspecting rather than
+   implied by a default, and it is the only route when custody keeps the table
+   somewhere else.
 
    This one invocation generates the anonymous-FD handoff, atomically creates
    and fsyncs the no-clobber consumption primary (the single-use
@@ -1339,6 +1384,43 @@ record its SHA-256 before closing all agents. `window.env` must additionally
 bind the absolute `ARM_RECEIPT`, `ARM_READINESS_CUSTODY_ROOT`, and
 `LAUNCH_MANIFEST` paths used by E-10:
 
+> **OPEN DEFECT — the chain has no supply line for three of its own inputs
+> (registered 2026-08-27; NEEDS A MAGISTRATE RULING; do not launch a `_v4`
+> window on this chain until it is ruled).** Two separate problems meet here,
+> and both are about getting a value into a chain that runs after Ed has walked
+> away.
+>
+> *First, the two that predate this note.* The paragraph immediately above tells
+> the operator to bind `ARM_RECEIPT` and `LAUNCH_MANIFEST` in `window.env`, and
+> the chain below dereferences both under `set -u`. But `window.env` is read by
+> `scripts/capture_t0_step.py`, whose `_parse_window_environment` compares the
+> file's keys against an exact 25-key allowlist, `_ENV_KEYS`, and refuses with
+> `evidence_author_t0_capture_environment_invalid` on any key that is missing
+> *or* unknown. `ARM_RECEIPT` and `LAUNCH_MANIFEST` are not in that allowlist.
+> So binding them makes T-0 refuse, and not binding them makes the chain abort
+> on an unbound variable at its first launcher call. There is no third option
+> today.
+>
+> *Second, the confirmation pair.* The chain's `--lifecycle-event start` call
+> below replays the consumption, so it crosses the same table check E-10
+> crosses and refuses without the table and `hC`. It cannot inherit them from
+> E-10: E-10 replaced itself with this chain by calling `execve`, which carries
+> open file descriptors across but not the argument vector, so the chain's
+> launcher call has to state the pair in its own argv. `window.env` cannot
+> carry them either, for the exact-allowlist reason above. And no operator is
+> present to type them — the chain begins after Ed steps away, which is the
+> whole point of the frozen chain.
+>
+> The pair is therefore **deliberately absent from the `start` command below**:
+> writing the flags in against undefined variables would only move the abort
+> from the gate to `set -u`. Naming a supply line is a design decision with a
+> recorded history — `docs/process_traces/2026-08-24-d153-sweep/01-opus-contract-lens-seat.md`
+> "Cure for 3a-3d" holds that `hC` is operator-pasted per use and never stored
+> in an environment file, and `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md`
+> §2 Phase E4 keeps `hC` in transaction custody only — so it belongs to the
+> magistrate, not to this document. E-10 above is unaffected: Ed types that
+> command himself and can supply both values.
+
 ```zsh
 #!/bin/zsh
 set -euo pipefail
@@ -1352,6 +1434,13 @@ PY="$REPO/.venv/bin/python"
 # First executable action: consume the inherited one-use FD and mint start
 # custody. Direct shell invocation has no FD 198 and refuses
 # launch_handoff_invalid before settle or collection.
+#
+# INCOMPLETE, BY DECISION: this call replays the consumption, so it also needs
+# --step6-confirmation-table and --expected-confirmation-digest and will refuse
+# without them. It cannot inherit them from E-10 (execve does not carry argv),
+# window.env cannot hold them (exact-key allowlist), and no operator is here to
+# type them. See the OPEN DEFECT note above this chain; the supply line is a
+# magistrate ruling, not something to improvise at the bench.
 "$PY" "$REPO/scripts/launch_window.py" \
   --pack-root "$PACK_ROOT" \
   --arm-receipt "$ARM_RECEIPT" \
@@ -1493,6 +1582,10 @@ echo "$(timestamp) chain_start" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 # Final settle is chain-owned (D-117 §5C): operator activity ends at launch,
 # and §1's post-activity settle happens here, before the pre-calibration.
 settle
+# No confirmation pair here, and none at completion below, even once the open
+# defect above is ruled: only the start event replays the consumption, so
+# settle and completion never reach the table check. Their omission is
+# deliberate.
 "$PY" "$REPO/scripts/launch_window.py" \
   --pack-root "$PACK_ROOT" \
   --arm-receipt "$ARM_RECEIPT" \
