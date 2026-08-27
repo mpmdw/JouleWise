@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import json
 import os
@@ -15,9 +16,11 @@ from unittest import mock
 
 from scripts import capture_t0_step as capture
 from tests.test_arm_readiness_evidence_t0 import (
+    OTHER_BOOT_SESSION_ID,
     SYNTHETIC_MONOTONIC_NS,
     SYNTHETIC_UTC_NOW,
     TEST_BOOT_SESSION_ID,
+    _clock_reference_value,
     author_arm_readiness_evidence_t0,
     author_environment,
     make_t0_fixture,
@@ -164,7 +167,7 @@ class CaptureT0StepTests(unittest.TestCase):
             session_receipt,
         )
 
-    def test_produces_all_nine_inputs_then_author_reaches_normal_derivation(self) -> None:
+    def test_produces_all_eight_inputs_then_author_reaches_normal_derivation(self) -> None:
         (
             _temporary,
             repository,
@@ -182,17 +185,19 @@ class CaptureT0StepTests(unittest.TestCase):
         window_root = custody / "window-plan"
         clock = _Clock(SYNTHETIC_MONOTONIC_NS - 900 * 1_000_000_000)
 
-        def prompt(message: str) -> str:
-            if "trusted-clock" in message:
-                return "2026-08-13T20:30:01Z"
-            if "prior network-time" in message:
-                return "Network Time: On"
-            raise AssertionError(message)
-
         def execute(argv, *, cwd):
             command = tuple(argv)
-            if "-setusingnetworktime" in command:
-                stdout = stderr = b""
+            if Path(command[1]).name == "collect_clock_reference.py":
+                stdout = readiness.render_json(
+                    _clock_reference_value(
+                        boot_session_id=TEST_BOOT_SESSION_ID,
+                        anchor_monotonic_raw_ns=clock.value,
+                    )
+                )
+                stderr = b""
+            elif "-setusingnetworktime" in command:
+                stdout = readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT.encode("utf-8")
+                stderr = b""
             elif Path(command[1]).name == "quiet_mac_prep.sh":
                 stdout = (
                     b"OK: passwordless powermetrics works.\n"
@@ -241,10 +246,8 @@ class CaptureT0StepTests(unittest.TestCase):
                     pack,
                     custody,
                     window_root,
-                    prompt=prompt,
                     execute=execute,
                     monotonic_ns=clock.monotonic_ns,
-                    utc_now=lambda: SYNTHETIC_UTC_NOW,
                 )
                 self.assertEqual(result["status"], "PASS")
 
@@ -252,9 +255,8 @@ class CaptureT0StepTests(unittest.TestCase):
             {path.name for path in input_root.iterdir()},
             {
                 "arm-context.json",
-                "clock-attestation.json",
                 "clock-disable.json",
-                "clock-prior-state.json",
+                "clock-reference.json",
                 "launch-manifest.json",
                 "ledger-readiness.json",
                 "ledger-reservation.json",
@@ -282,17 +284,17 @@ class CaptureT0StepTests(unittest.TestCase):
             diagnostic["frozen_plan"],
             {"path": str(plan_path), "plan_id": plan_id, "sha256": plan_sha},
         )
-        prior = json.loads(
-            (input_root / "clock-prior-state.json").read_text(encoding="utf-8")
+        reference = json.loads(
+            (input_root / "clock-reference.json").read_text(encoding="utf-8")
         )
         disable = json.loads(
             (input_root / "clock-disable.json").read_text(encoding="utf-8")
         )
         self.assertEqual(
-            prior["argv"],
+            reference["argv"],
             [
-                "operator-interactive",
-                "network-time-prior-state",
+                str(repository / ".venv/bin/python"),
+                str(repository / "scripts/collect_clock_reference.py"),
             ],
         )
         self.assertEqual(
@@ -363,8 +365,23 @@ class CaptureT0StepTests(unittest.TestCase):
             context = capture._load_context(pack, custody, custody / "window-plan")
         input_root.mkdir(parents=True)
         outputs = {
-            "clock-prior-state": ("Network Time: On\n", "", 10, 20),
-            "clock-disable": ("", "", 30, 40),
+            "clock-reference": (
+                readiness.render_json(
+                    _clock_reference_value(
+                        boot_session_id=TEST_BOOT_SESSION_ID,
+                        anchor_monotonic_raw_ns=10,
+                    )
+                ).decode("utf-8"),
+                "",
+                10,
+                20,
+            ),
+            "clock-disable": (
+                readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT,
+                "",
+                30,
+                40,
+            ),
             "quiet-mac-prep": (
                 "OK: passwordless powermetrics works.\n"
                 "OK: display verification reports all online displays asleep.\n"
@@ -451,7 +468,7 @@ class CaptureT0StepTests(unittest.TestCase):
     def test_sequence_refuses_malformed_predecessor_capture(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / capture.STEP_FILENAMES["clock-prior-state"]).write_text(
+            (root / capture.STEP_FILENAMES["clock-reference"]).write_text(
                 "invalid", encoding="utf-8"
             )
             with self.assertRaises(capture.CaptureT0Error) as caught:
@@ -463,7 +480,7 @@ class CaptureT0StepTests(unittest.TestCase):
             "evidence_author_t0_capture_sequence_invalid",
         )
 
-    def test_clock_prior_state_is_interactive_and_never_executes_privileged_get(
+    def test_clock_reference_executes_the_fixed_unit1_collector(
         self,
     ) -> None:
         (
@@ -476,14 +493,18 @@ class CaptureT0StepTests(unittest.TestCase):
             _receipt,
         ) = self._producer_fixture()
 
-        def prompt(message: str) -> str:
-            if "trusted-clock" in message:
-                return "2026-08-13T20:30:01Z"
-            if "prior network-time" in message:
-                return "Network Time: On"
-            raise AssertionError(message)
-
-        execute = mock.Mock(side_effect=AssertionError("must not execute E-4 get"))
+        completed = subprocess.CompletedProcess(
+            (),
+            0,
+            readiness.render_json(
+                _clock_reference_value(
+                    boot_session_id=TEST_BOOT_SESSION_ID,
+                    anchor_monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS,
+                )
+            ),
+            b"",
+        )
+        execute = mock.Mock(return_value=completed)
         with (
             mock.patch.object(capture, "REPO_ROOT", repository),
             mock.patch.object(
@@ -493,25 +514,165 @@ class CaptureT0StepTests(unittest.TestCase):
             ),
         ):
             result = capture._capture_step_for_test(
-                "clock-prior-state",
+                "clock-reference",
                 pack,
                 custody,
                 custody / "window-plan",
-                prompt=prompt,
                 execute=execute,
                 monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS,
-                utc_now=lambda: SYNTHETIC_UTC_NOW,
             )
-        execute.assert_not_called()
+        execute.assert_called_once()
         self.assertEqual(result["status"], "PASS")
-        prior = json.loads(
-            (input_root / "clock-prior-state.json").read_text(encoding="utf-8")
+        reference = json.loads(
+            (input_root / "clock-reference.json").read_text(encoding="utf-8")
         )
         self.assertEqual(
-            prior["argv"],
-            ["operator-interactive", "network-time-prior-state"],
+            reference["argv"],
+            [
+                str(repository / ".venv/bin/python"),
+                str(repository / "scripts/collect_clock_reference.py"),
+            ],
         )
-        self.assertEqual(prior["stdout"], "Network Time: On\n")
+        self.assertEqual(json.loads(reference["stdout"])["sample_policy_id"],
+                         "clock.machine_reference.apple_pool_nist_3x_t2_quorum2.v1")
+
+    def test_capture_refuses_boot_change_during_command_execution(self) -> None:
+        (
+            _temporary,
+            repository,
+            pack,
+            custody,
+            _context,
+            input_root,
+            _receipt,
+        ) = self._producer_fixture()
+        completed = subprocess.CompletedProcess(
+            (),
+            0,
+            readiness.render_json(
+                _clock_reference_value(
+                    boot_session_id=TEST_BOOT_SESSION_ID,
+                    anchor_monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS,
+                )
+            ),
+            b"",
+        )
+        execute = mock.Mock(return_value=completed)
+        with (
+            mock.patch.object(capture, "REPO_ROOT", repository),
+            mock.patch.object(
+                capture,
+                "_current_boot_session_id",
+                side_effect=(
+                    TEST_BOOT_SESSION_ID,
+                    TEST_BOOT_SESSION_ID,
+                    OTHER_BOOT_SESSION_ID,
+                ),
+            ),
+            self.assertRaises(capture.CaptureT0Error) as caught,
+        ):
+            capture._capture_step_for_test(
+                "clock-reference",
+                pack,
+                custody,
+                custody / "window-plan",
+                execute=execute,
+                monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS,
+            )
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_capture_boot_probe_failed",
+        )
+        self.assertEqual(str(caught.exception), "boot session changed during command execution")
+        execute.assert_called_once()
+        self.assertFalse((input_root / "clock-reference.json").exists())
+
+    def test_capture_module_has_no_prompt_or_stdin_read(self) -> None:
+        source = inspect.getsource(capture)
+        tree = ast.parse(source)
+        self.assertNotIn("operator-interactive", source)
+        self.assertFalse(
+            any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in {"input", "prompt"}
+                for node in ast.walk(tree)
+            )
+        )
+        self.assertNotIn("sys.stdin", source)
+
+    def test_clock_reference_must_precede_clock_disable(self) -> None:
+        self.assertLess(
+            capture.STEP_ORDER.index("clock-reference"),
+            capture.STEP_ORDER.index("clock-disable"),
+        )
+        self.assertNotIn("clock-prior-state", capture.STEP_ORDER)
+
+    def test_clock_disable_zero_exit_wrong_exact_stdout_refuses_result_invalid(
+        self,
+    ) -> None:
+        with self.assertRaises(capture.CaptureT0Error) as caught:
+            capture._validate_result(
+                SimpleNamespace(), "clock-disable", "Network Time: Off\n", ""
+            )
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_capture_result_invalid",
+        )
+        self.assertIn("exactly prove", str(caught.exception))
+
+    def test_clock_disable_nonzero_refuses_command_failed(self) -> None:
+        (
+            _temporary,
+            repository,
+            pack,
+            custody,
+            _context,
+            _input_root,
+            _receipt,
+        ) = self._producer_fixture()
+        reference = subprocess.CompletedProcess(
+            (),
+            0,
+            readiness.render_json(
+                _clock_reference_value(
+                    boot_session_id=TEST_BOOT_SESSION_ID,
+                    anchor_monotonic_raw_ns=SYNTHETIC_MONOTONIC_NS,
+                )
+            ),
+            b"",
+        )
+        with (
+            mock.patch.object(capture, "REPO_ROOT", repository),
+            mock.patch.object(
+                capture,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+        ):
+            capture._capture_step_for_test(
+                "clock-reference",
+                pack,
+                custody,
+                custody / "window-plan",
+                execute=mock.Mock(return_value=reference),
+                monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS,
+            )
+            with self.assertRaises(capture.CaptureT0Error) as caught:
+                capture._capture_step_for_test(
+                    "clock-disable",
+                    pack,
+                    custody,
+                    custody / "window-plan",
+                    execute=mock.Mock(
+                        return_value=subprocess.CompletedProcess((), 1, b"", b"failed")
+                    ),
+                    monotonic_ns=lambda: SYNTHETIC_MONOTONIC_NS + 1,
+                )
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_capture_command_failed",
+        )
 
     def test_capture_paths_contain_no_privileged_network_time_get(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -541,6 +702,7 @@ class CaptureT0StepTests(unittest.TestCase):
         ):
             self.assertIs(capture._execute(("/usr/bin/true",), cwd=Path(".")), completed)
         environment = run.call_args.kwargs["env"]
+        self.assertIs(run.call_args.kwargs["stdin"], subprocess.DEVNULL)
         self.assertEqual(
             environment,
             {
@@ -609,11 +771,10 @@ class CaptureT0StepTests(unittest.TestCase):
             self.assertRaises(capture.CaptureT0Error) as caught,
         ):
             capture._capture_step_for_test(
-                "clock-prior-state",
+                "clock-reference",
                 pack,
                 custody,
                 custody / "window-plan",
-                prompt=lambda _message: "2026-08-13T20:30:01Z",
                 execute=mock.Mock(side_effect=AssertionError("must not execute")),
             )
         self.assertEqual(

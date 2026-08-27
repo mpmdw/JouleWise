@@ -242,6 +242,7 @@ class ArmReadinessRegistryTests(unittest.TestCase):
             )
             overlay = [
                 "joulewise/arm_readiness.py",
+                "joulewise/clock_reference.py",
                 "configs/arm_readiness/d117_row_registry_v2.json",
             ]
             for pack_name in PACKS.values():
