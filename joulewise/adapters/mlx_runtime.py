@@ -8,11 +8,13 @@ mapping and event shape with fakes, while real runs use the same adapter path.
 from __future__ import annotations
 
 import importlib
+import importlib.machinery
 import inspect
 import json
 import operator
 import os
 import subprocess
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
@@ -52,6 +54,74 @@ from joulewise.suite import (
 DEFAULT_OUTPUT_TOKENS = 8
 WARMUP_TOKENS = 4
 SYNTHETIC_PROMPT_SEED = "JouleWise synthetic prompt token sequence."
+
+# ``mlx.core`` is a nanobind extension whose native initializer ABORTS the
+# process if it runs a second time and finds its types already registered
+# ("Critical nanobind error: refusing to add duplicate key ..."). Nothing in
+# Python catches that. Any code that removes "mlx.core" from ``sys.modules``
+# after it has been loaded therefore arms a fatal re-import, and
+# ``mock.patch.dict(sys.modules, ...)`` does exactly that on exit for every
+# module imported inside its block.
+#
+# So the adapter keeps its own reference to the loaded extension. Only a
+# GENUINE extension module is ever remembered -- see ``_is_loaded_extension``.
+_MLX_CORE_MODULE: Any | None = None
+
+# Distinguishes "no such key in sys.modules" from a key whose value is None.
+# ``sys.modules["mlx.core"] = None`` is Python's blocked-import sentinel: an
+# import must raise ImportError, and so must this adapter's probe.
+_MODULE_KEY_ABSENT = object()
+
+
+def _is_loaded_extension(module: Any) -> bool:
+    """True only for a module backed by a native shared object.
+
+    The remembered reference is what survives an eviction, so it must never be
+    a test stand-in. A stand-in built with ``ModuleType("mlx.core")``, or a
+    fixture's ``core.py``, is loaded by something other than
+    ``ExtensionFileLoader``; the real ``mlx/core.cpython-*.so`` is not. That
+    keeps stand-ins authoritative for as long as they sit in ``sys.modules``
+    and forgotten the moment they leave it, while a real extension imported by
+    any component -- including ``mlx_lm.load()`` before the memory snapshot
+    runs -- is retained.
+    """
+
+    return isinstance(
+        getattr(module, "__loader__", None),
+        importlib.machinery.ExtensionFileLoader,
+    )
+
+
+def _resolve_mlx_core() -> Any:
+    """Return ``mlx.core`` without ever initialising the extension twice."""
+
+    global _MLX_CORE_MODULE
+
+    # Never trust the remembered module without re-checking what it is. Only
+    # an extension can protect anyone, and only an extension is safe to put
+    # back into ``sys.modules`` below.
+    if _MLX_CORE_MODULE is not None and not _is_loaded_extension(_MLX_CORE_MODULE):
+        _MLX_CORE_MODULE = None
+
+    module = sys.modules.get("mlx.core", _MODULE_KEY_ABSENT)
+    if module is None:
+        raise ImportError("import of mlx.core is blocked by sys.modules")
+    if module is _MODULE_KEY_ABSENT:
+        # Evicted, or never imported. A remembered extension answers without
+        # re-running the native initializer; otherwise this is a first import.
+        module = _MLX_CORE_MODULE
+        if module is None:
+            # A real import registers itself in ``sys.modules``.
+            module = importlib.import_module("mlx.core")
+        else:
+            # Repair the eviction rather than merely stepping around it. While
+            # the key is missing, ANY importer in the process -- not just this
+            # adapter -- would re-run the native initializer and abort. Putting
+            # the loaded extension back closes the window for all of them.
+            sys.modules["mlx.core"] = module
+    if _is_loaded_extension(module):
+        _MLX_CORE_MODULE = module
+    return module
 
 
 @dataclass(frozen=True)
@@ -1156,7 +1226,7 @@ def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
         "peak_memory_bytes": None,
     }
     try:
-        mx = importlib.import_module("mlx.core")
+        mx = _resolve_mlx_core()
     except ImportError:
         errors["mlx_metal"] = "mlx_core_not_found"
         return unavailable

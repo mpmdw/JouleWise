@@ -23,7 +23,6 @@ FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 EXPECTED_IDS = {
     "ARM-PACKET-01",
     "CALEXITS-EVIDENCE-BYTES-01",
-    "CALEXITS-FOURTH-SHAPE-01",
     "D144-SEATPASS-FOLLOWUPS",
     "ED-HANDS-BATCH-01",
     "EDQ-L9-3-CAPTURE-01",
@@ -34,7 +33,11 @@ EXPECTED_IDS = {
     # to main at b186710a): 43/43 fenced values live-re-derived and matched,
     # no joulewise/ or ESTIMATOR_CODE_PATHS-pinned file touched.)
     "PINSET-GRAMMAR-EXCLUSION-01",
-    "PLANTEST-RGLOB-RACE-01",
+    # (MLX-ACID-SIGABRT-01, CALEXITS-FOURTH-SHAPE-01 and PLANTEST-RGLOB-RACE-01
+    # closed 2026-08-27 on PR #203. The first was cured there; the other two
+    # were already cured on main -- ddb1f633 and a28b55bf -- and the rows simply
+    # predated their cures. CALEXITS-EVIDENCE-BYTES-01 stays live: its reported
+    # deterministic failure does not reproduce at the bench.)
     "PREWINDOW-REGEX-01",
     "REGISTRY-ID-NAMING-01",
     "READY-WO-BATCH-01",
@@ -114,7 +117,7 @@ EXPECTED_IDS = {
     "T0-CLOCK-ROW-RENAME-01",
     "T0-UNATTENDED-01",
     "UNATTENDED-LAUNCH-01",
-    "FIXTURE-MODERNIZATION-01", "MLX-ACID-SIGABRT-01",
+    "FIXTURE-MODERNIZATION-01",
     # (CALWRITER-ACK-TIMEOUT-01 minted T20 on the second firing, broadened
     # to the shared driver at E-2, closed T22: H4 driver + 4s nominal cure,
     # both exclusive shards green at 42df510.)
@@ -164,7 +167,10 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01",
                 "CAL-BRACKET-D079-01", "T3-AMEND-01",
                 "COLDGATE-VALIDATOR-01", "WINB-R06-DISPOSITION-01",
-                "CODEX-BRIDGE-SANDBOX-01"}
+                "CODEX-BRIDGE-SANDBOX-01",
+                # 2026-08-27 T26 S5 test-reliability wave (PR #203).
+                "MLX-ACID-SIGABRT-01", "CALEXITS-FOURTH-SHAPE-01",
+                "PLANTEST-RGLOB-RACE-01"}
 
 
 def load_kernel():
@@ -415,9 +421,23 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # "bytes differ from the confirmed digest" rather than for want of an
         # input; seven regressions including a real-chain reach proof down to
         # _authenticate_confirmation_table):
-        # 99 - 1 = 98 exact live records.
+        # 99 - 1 = 98;
+        # the 2026-08-27 T26 S5 test-reliability wave closes
+        # MLX-ACID-SIGABRT-01 (PR #203: the nanobind double-registration abort
+        # cured code-side on both halves -- an adapter-owned handle on the
+        # imported extension plus single-key sys.modules patching in
+        # author_environment; the four ACID tests stay skipped on A84 alone),
+        # CALEXITS-FOURTH-SHAPE-01 (already landed at ddb1f633: the
+        # absent-pack-child shape of run 32739939880 classifies NO_PACK_CHILD
+        # and the mutation test guards its completeness assertion; shapes A-E
+        # each carry a synthetic-topology regression) and
+        # PLANTEST-RGLOB-RACE-01 (already landed at a28b55bf: checkout_inventory
+        # prunes the git object store before descending, with three
+        # deterministic vanishing-directory regressions) -- the latter two rows
+        # predated their cures:
+        # 98 - 3 = 95 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 98)
+        self.assertEqual(len(self.tasks), 95)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

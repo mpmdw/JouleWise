@@ -1,0 +1,61 @@
+2026-08-26T13:34:20.2301064Z test_cli_refuses_unknown_identity_override_options (test_identity_pins.DerivationOnlyArmPathTests.test_cli_refuses_unknown_identity_override_options) ... ok
+2026-08-26T13:34:20.2303074Z test_projection_reason_vocabulary_is_closed (test_identity_pins.DerivationOnlyArmPathTests.test_projection_reason_vocabulary_is_closed) ... ok
+2026-08-26T13:34:20.2312445Z test_projection_reasons_are_registered_in_d078_decision_vocabulary (test_identity_pins.DerivationOnlyArmPathTests.test_projection_reasons_are_registered_in_d078_decision_vocabulary) ... ok
+2026-08-26T13:34:20.2338026Z test_unprojected_pack_refuses_serialized_operator_pin_values (test_identity_pins.DerivationOnlyArmPathTests.test_unprojected_pack_refuses_serialized_operator_pin_values) ... ok
+2026-08-26T13:34:20.3112431Z test_deleted_worktree_successor_still_supersedes_from_head (test_identity_pins.ProjectionLifecycleTests.test_deleted_worktree_successor_still_supersedes_from_head) ... ok
+2026-08-26T13:34:20.3882358Z test_detached_head_still_finds_semantic_successor (test_identity_pins.ProjectionLifecycleTests.test_detached_head_still_finds_semantic_successor) ... ok
+2026-08-26T13:34:20.4550566Z test_five_digit_successor_receipt_number_still_supersedes (test_identity_pins.ProjectionLifecycleTests.test_five_digit_successor_receipt_number_still_supersedes) ... ok
+2026-08-26T13:34:20.4870688Z test_freeze_writes_authenticated_exact_key_receipt_and_is_idempotent (test_identity_pins.ProjectionLifecycleTests.test_freeze_writes_authenticated_exact_key_receipt_and_is_idempotent) ... ok
+2026-08-26T13:34:20.5271740Z test_frozen_pin_mutation_refuses_with_frozen_mismatch (test_identity_pins.ProjectionLifecycleTests.test_frozen_pin_mutation_refuses_with_frozen_mismatch) ... ok
+2026-08-26T13:34:20.5923453Z test_mint_whole_repository_dirty_gate_controls_freeze_and_verify (test_identity_pins.ProjectionLifecycleTests.test_mint_whole_repository_dirty_gate_controls_freeze_and_verify) ... ok
+2026-08-26T13:34:20.7065537Z test_nonconforming_committed_receipt_name_refuses_never_passes (test_identity_pins.ProjectionLifecycleTests.test_nonconforming_committed_receipt_name_refuses_never_passes) ... ERROR
+2026-08-26T13:34:20.7713978Z test_one_byte_model_perturbation_changes_hash_and_refuses_dirty (test_identity_pins.ProjectionLifecycleTests.test_one_byte_model_perturbation_changes_hash_and_refuses_dirty) ... ok
+2026-08-26T13:34:20.8322421Z test_pack_freeze_commit_does_not_change_derivation_identity (test_identity_pins.ProjectionLifecycleTests.test_pack_freeze_commit_does_not_change_derivation_identity) ... ok
+2026-08-26T13:34:20.8762500Z test_receipt_id_only_rebind_refuses_committed_anchor_mismatch (test_identity_pins.ProjectionLifecycleTests.test_receipt_id_only_rebind_refuses_committed_anchor_mismatch) ... ok
+2026-08-26T13:34:20.9429459Z test_same_commit_successor_semantically_supersedes_predecessor (test_identity_pins.ProjectionLifecycleTests.test_same_commit_successor_semantically_supersedes_predecessor) ... ok
+2026-08-26T13:34:20.9818908Z test_same_repository_head_unresolvable_returns_authenticated_refusal (test_identity_pins.ProjectionLifecycleTests.test_same_repository_head_unresolvable_returns_authenticated_refusal) ... ok
+2026-08-26T13:34:21.0579950Z test_shallow_history_without_pack_change_commit_refuses (test_identity_pins.ProjectionLifecycleTests.test_shallow_history_without_pack_change_commit_refuses) ... ok
+2026-08-26T13:34:21.1494117Z test_sibling_commit_successor_semantically_supersedes_after_merge (test_identity_pins.ProjectionLifecycleTests.test_sibling_commit_successor_semantically_supersedes_after_merge) ... ok
+2026-08-26T13:34:21.2461822Z test_successor_reissue_appends_supersession_without_reusing_receipt (test_identity_pins.ProjectionLifecycleTests.test_successor_reissue_appends_supersession_without_reusing_receipt) ... ok
+2026-08-26T13:34:21.2985026Z test_u8_consumption_seam_can_fail_closed_on_u11_result (test_identity_pins.ProjectionLifecycleTests.test_u8_consumption_seam_can_fail_closed_on_u11_result) ... ok
+2026-08-26T13:34:21.3687564Z test_verify_is_pack_read_only_and_writes_custody_receipt (test_identity_pins.ProjectionLifecycleTests.test_verify_is_pack_read_only_and_writes_custody_receipt) ... ok
+2026-08-26T13:34:21.4015732Z test_verify_refuses_when_pack_git_state_is_unresolvable (test_identity_pins.ProjectionLifecycleTests.test_verify_refuses_when_pack_git_state_is_unresolvable) ... ok
+2026-08-26T13:34:21.4032681Z test_directory_inventory_is_lexical_and_file_symlink_records_target (test_identity_pins.SharedDerivationTests.test_directory_inventory_is_lexical_and_file_symlink_records_target) ... ok
+2026-08-26T13:34:21.4284652Z test_synthetic_pack_triple_equals_generalized_mint_rederivation (test_identity_pins.SharedDerivationTests.test_synthetic_pack_triple_equals_generalized_mint_rederivation) ... ok
+2026-08-26T13:34:21.4286020Z 
+2026-08-26T13:34:21.4286256Z ======================================================================
+2026-08-26T13:34:21.4287695Z ERROR: test_nonconforming_committed_receipt_name_refuses_never_passes (test_identity_pins.ProjectionLifecycleTests.test_nonconforming_committed_receipt_name_refuses_never_passes)
+2026-08-26T13:34:21.4289183Z ----------------------------------------------------------------------
+2026-08-26T13:34:21.4289811Z Traceback (most recent call last):
+2026-08-26T13:34:21.4299507Z   File "/home/runner/work/JouleWise/JouleWise/tests/test_identity_pins.py", line 396, in tearDown
+2026-08-26T13:34:21.4300784Z     self.temporary.cleanup()
+2026-08-26T13:34:21.4301234Z     ~~~~~~~~~~~~~~~~~~~~~~^^
+2026-08-26T13:34:21.4302087Z   File "/opt/hostedtoolcache/Python/3.14.7/x64/lib/python3.14/tempfile.py", line 976, in cleanup
+2026-08-26T13:34:21.4303110Z     self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+2026-08-26T13:34:21.4303867Z     ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-08-26T13:34:21.4304814Z   File "/opt/hostedtoolcache/Python/3.14.7/x64/lib/python3.14/tempfile.py", line 956, in _rmtree
+2026-08-26T13:34:21.4305624Z     _shutil.rmtree(name, onexc=onexc)
+2026-08-26T13:34:21.4306064Z     ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+2026-08-26T13:34:21.4306816Z   File "/opt/hostedtoolcache/Python/3.14.7/x64/lib/python3.14/shutil.py", line 852, in rmtree
+2026-08-26T13:34:21.4307629Z     _rmtree_impl(path, dir_fd, onexc)
+2026-08-26T13:34:21.4308078Z     ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+2026-08-26T13:34:21.4308995Z   File "/opt/hostedtoolcache/Python/3.14.7/x64/lib/python3.14/shutil.py", line 721, in _rmtree_safe_fd
+2026-08-26T13:34:21.4309978Z     _rmtree_safe_fd_step(stack, onexc)
+2026-08-26T13:34:21.4310743Z     ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+2026-08-26T13:34:21.4311751Z   File "/opt/hostedtoolcache/Python/3.14.7/x64/lib/python3.14/shutil.py", line 802, in _rmtree_safe_fd_step
+2026-08-26T13:34:21.4312749Z     onexc(func, path, err)
+2026-08-26T13:34:21.4313201Z     ~~~~~^^^^^^^^^^^^^^^^^
+2026-08-26T13:34:21.4314130Z   File "/opt/hostedtoolcache/Python/3.14.7/x64/lib/python3.14/shutil.py", line 753, in _rmtree_safe_fd_step
+2026-08-26T13:34:21.4315423Z     os.rmdir(name, dir_fd=dirfd)
+2026-08-26T13:34:21.4315870Z     ~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+2026-08-26T13:34:21.4316472Z OSError: [Errno 39] Directory not empty: '/tmp/tmpxbynrw01/.git/info'
+2026-08-26T13:34:21.4316999Z 
+2026-08-26T13:34:21.4317260Z ----------------------------------------------------------------------
+2026-08-26T13:34:21.4317860Z Ran 25 tests in 1.202s
+2026-08-26T13:34:21.4318110Z 
+2026-08-26T13:34:21.4318248Z FAILED (errors=1)
+2026-08-26T13:34:21.4319136Z MODULE FAIL tests.test_identity_pins tests=25 failures=0 errors=1 skipped=0 seconds=1.203
+2026-08-26T13:34:21.4319988Z MODULE START tests.test_idle_admission
+2026-08-26T13:34:21.4321634Z test_140_70_140_precedent_is_flagged_with_transitions (test_idle_admission.AdapterWattageContinuityTests.test_140_70_140_precedent_is_flagged_with_transitions) ... ok
+2026-08-26T13:34:21.4323666Z test_description_change_is_flagged (test_idle_admission.AdapterWattageContinuityTests.test_description_change_is_flagged) ... ok
+2026-08-26T13:34:21.4325734Z test_extract_adapter_observation_normalizes_fail_soft (test_idle_admission.AdapterWattageContinuityTests.test_extract_adapter_observation_normalizes_fail_soft) ... ok

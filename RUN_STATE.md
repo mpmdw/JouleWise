@@ -4942,7 +4942,7 @@ No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; th
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-25). Latest report: [T23-T24 session 2026-08-24/25: S-0 clone proof COMPLETE - the marker cure through estates 6-10, three consults, eleven PRs merged](docs/run_reports/2026-08-25-t23-t24-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-27). Latest report: [T23-T24 session 2026-08-24/25: S-0 clone proof COMPLETE - the marker cure through estates 6-10, three consults, eleven PRs merged](docs/run_reports/2026-08-25-t23-t24-session.md).
 
 ### [ED-EXTERNAL]
 

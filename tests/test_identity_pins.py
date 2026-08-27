@@ -6,6 +6,7 @@ import hashlib
 import inspect
 import io
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -34,6 +35,12 @@ from scripts import project_identity_pins
 
 
 MINT_GIT_ANCHOR = identity_pins._mint_git_anchor
+GIT_MAINTENANCE_CONTROLS = (
+    ("maintenance.auto", "false"),
+    ("gc.auto", "0"),
+    ("maintenance.autoDetach", "false"),
+    ("gc.autoDetach", "false"),
+)
 
 
 def render_json(value: object) -> bytes:
@@ -62,6 +69,11 @@ def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 def init_git(root: Path) -> None:
     git(root, "init", "-q")
+    # Detached auto-maintenance can write .git/info while TemporaryDirectory
+    # tears it down. Hosted run 32974766555 attempt 1, job 98196695324:
+    # [Errno 39] Directory not empty: '/tmp/.../.git/info'.
+    for key, value in GIT_MAINTENANCE_CONTROLS:
+        git(root, "config", "--local", key, value)
     git(root, "config", "user.name", "Identity Pin Test")
     git(root, "config", "user.email", "identity-pin-test@example.invalid")
 
@@ -308,6 +320,82 @@ def rebind_frozen_chain(
 
 
 class SharedDerivationTests(unittest.TestCase):
+    def test_fixture_commits_start_no_detached_maintenance_process(self) -> None:
+        """A fixture commit must leave nothing running behind it.
+
+        Without ``maintenance.auto=false`` in ``init_git``, a commit in this
+        fixture spawns `git maintenance run --auto --quiet --detach`. A
+        DETACHED child can still be running after the test body returns, and
+        whatever it writes into the repository then races
+        `TemporaryDirectory.cleanup()` -- which is how run 32974766555
+        attempt 1 (job 98196695324) died in teardown with
+        `[Errno 39] Directory not empty: '/tmp/tmpxbynrw01/.git/info'`, and
+        run 32813091203 (job 97696108102) before it.
+
+        Reading the config keys back is not enough on its own: it proves the
+        settings are stored, not that no process starts. Git's own Trace2
+        event stream names every child a commit spawns, so the absence is
+        asserted directly.
+
+        What each half pins, measured by deleting one control at a time from
+        ``GIT_MAINTENANCE_CONTROLS`` (git 2.50.1, one-commit fixture):
+
+        * ``maintenance.auto`` is the load-bearing one. Remove it and this
+          test fails with the child's argv in the message.
+        * ``gc.auto``, ``maintenance.autoDetach`` and ``gc.autoDetach`` are
+          each survivable at this fixture size -- one commit never crosses
+          gc's loose-object threshold, and the autoDetach keys only matter
+          once maintenance runs at all. They are kept because they are the
+          repo's established tuple for git-backed fixtures and because
+          fixtures grow, and they are pinned as CONFIGURATION by the subtests
+          below, not as demonstrated necessity.
+        """
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            init_git(root)
+            payload = root / "payload.txt"
+            payload.write_text("fixture\n", encoding="utf-8")
+            git(root, "add", "--", "payload.txt")
+
+            trace = Path(temporary).parent / f"trace2-{root.name}.json"
+            self.addCleanup(lambda: trace.unlink(missing_ok=True))
+            environment = {**os.environ, "GIT_TRACE2_EVENT": str(trace)}
+            subprocess.run(
+                ["git", "commit", "-q", "-m", "fixture commit"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            events = [
+                json.loads(line)
+                for line in trace.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertTrue(events, "git emitted no Trace2 events")
+            children = [
+                event.get("argv", [])
+                for event in events
+                if event.get("event") == "child_start"
+            ]
+            self.assertEqual(
+                [
+                    argv
+                    for argv in children
+                    if "maintenance" in argv or "gc" in argv
+                ],
+                [],
+                f"the fixture commit spawned a maintenance child: {children}",
+            )
+
+            for key, expected in GIT_MAINTENANCE_CONTROLS:
+                with self.subTest(key=key):
+                    actual = git(root, "config", "--get", key).stdout.strip()
+                    self.assertEqual(actual, expected)
+
     def test_synthetic_pack_triple_equals_generalized_mint_rederivation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
