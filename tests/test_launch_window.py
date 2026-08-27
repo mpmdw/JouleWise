@@ -18,6 +18,8 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise import arm_readiness
+from joulewise import arm_readiness_evidence_t0 as t0_evidence
+from joulewise import clock_reference
 from joulewise.analysis_engine import inputs as analysis_inputs
 from joulewise import floor_extraction, whole_window
 from tests import test_arm_readiness as arm_readiness_tests
@@ -431,7 +433,6 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         from tests.test_arm_readiness_evidence_author import make_author_fixture
         from tests.test_arm_readiness_evidence_t0 import (
             _install_synthetic_identity_inputs,
-            _representable_t0_fixture_now,
             _valid_session_receipt,
             author_arm_readiness_evidence_t0,
             author_environment,
@@ -453,10 +454,14 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
         }
         live_fixture_now = time.monotonic_ns()
-        fixture_now = _representable_t0_fixture_now(live_fixture_now)
+        # Give the synthetic command-capture timeline a complete positive
+        # ten-minute history even when a Linux runner booted only seconds ago.
+        # The subprocess clock remains live: this offset is confined to the
+        # in-process T-0 author and cannot mint the arm capability deadline.
+        fixture_now = live_fixture_now + t0_evidence._MIN_IDLE_NS + 1_000
         temporary, repository, pack, custody, context, input_root = (
             make_t0_fixture(
-                now_monotonic_ns=live_fixture_now,
+                now_monotonic_ns=fixture_now,
                 synthetic_clock=False,
                 # This test is the only one that reaches the real `os.execve`,
                 # so its frozen argv must name a program that exists on the CI
@@ -710,9 +715,36 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         reservation_capture_path.write_bytes(
             arm_readiness.render_json(reservation_capture)
         )
+        # Main now derives the attestation from this captured R0 reference.
+        # Preserve the fixture's synthetic timeline, but give it the ambient
+        # REALTIME-minus-MONOTONIC_RAW relation that the real ARM subprocess
+        # independently resamples and checks within the production 5 ms gate.
+        # Sample here, immediately before authoring and ARM, so Linux clock
+        # discipline cannot accumulate avoidable RAW/realtime drift during the
+        # comparatively expensive synthetic mint setup above.
+        live_clock_anchor = clock_reference.sample_anchor()
+        live_clock_offset_ns = (
+            live_clock_anchor.realtime_ns - live_clock_anchor.monotonic_raw_ns
+        )
+        clock_capture_path = input_root / "clock-reference.json"
+        clock_capture = json.loads(clock_capture_path.read_text())
+        r0_reference = json.loads(clock_capture["stdout"])
+        r0_reference["anchor_realtime_ns"] = (
+            live_clock_offset_ns + r0_reference["anchor_monotonic_raw_ns"]
+        )
+        clock_capture["stdout"] = arm_readiness.render_json(r0_reference).decode(
+            "utf-8"
+        )
+        clock_capture_path.write_bytes(arm_readiness.render_json(clock_capture))
+        author_clock_anchor = clock_reference.ClockAnchor(
+            realtime_ns=live_clock_offset_ns + fixture_now,
+            monotonic_raw_ns=fixture_now,
+            read_skew_ns=1_000,
+        )
         with author_environment(
             repository,
             now_monotonic_ns=fixture_now,
+            sample_anchor=lambda: author_clock_anchor,
         ):
             authored_t0 = author_arm_readiness_evidence_t0(pack, custody)
         self.assertEqual(authored_t0["status"], "PASS", authored_t0)
