@@ -553,27 +553,32 @@ def target_versioned_id(stem: str, *, separator: str = "-") -> str:
     return f"{stem}{separator}{version}"
 
 
-def producer_floor_cell_id(measurement_arm: str, arm: str) -> str:
-    """Select the dedicated absolute floor cell from the frozen producer plan."""
+def producer_floor_artifact_id(measurement_arm: str, arm: str) -> str:
+    """Select and generation-thread one producer floor-artifact identity."""
 
-    source = REPO_ROOT / FROZEN_FLOOR_PACKS[arm] / "calibration_plan.json"
-    plan = json.loads(source.read_text(encoding="utf-8"))
-    metric = metric_for(measurement_arm)
-    family_marker = "prefill-p256" if measurement_arm == "prefill_p256" else "decode"
+    source = REPO_ROOT / FROZEN_FLOOR_PACKS[arm] / "producer_contract.json"
+    contract = json.loads(source.read_text(encoding="utf-8"))
     matches = [
-        cell
-        for cell in plan.get("floor_cells", [])
-        if isinstance(cell, dict)
-        and cell.get("kind") == "absolute"
-        and cell.get("metric") == metric
-        and family_marker in str(cell.get("condition_family_id", ""))
+        role
+        for role in contract.get("roles", [])
+        if isinstance(role, dict) and role.get("role") == measurement_arm
     ]
-    if len(matches) != 1 or not isinstance(matches[0].get("cell_id"), str):
+    if (
+        len(matches) != 1
+        or not isinstance(matches[0].get("artifact_cell_id"), str)
+        or not matches[0]["artifact_cell_id"]
+    ):
         raise ValueError(
-            f"frozen floor plan {source} does not identify one dedicated "
-            f"{measurement_arm} absolute cell"
+            f"frozen floor contract {source} does not identify exactly one "
+            f"{measurement_arm} floor artifact"
         )
-    return str(matches[0]["cell_id"])
+    artifact_id = str(matches[0]["artifact_cell_id"])
+    identity = active_generation()
+    return (
+        artifact_id
+        if identity.target_is_current
+        else _successor_token(artifact_id, identity)
+    )
 
 
 def producer_transport_group_id(measurement_arm: str, arm: str) -> str:
@@ -867,14 +872,14 @@ def consumer_declaration() -> dict[str, Any]:
         ),
         "consumer_family_id": "d117-qwen25-1p5b-vs-7b-gamma-consumer-v3",
         "decode_floor_cells": {
-            "condition_a": "d117-qwen25-1p5b-decode-floor-v3",
-            "condition_b": "d117-qwen25-7b-decode-floor-v3",
+            "condition_a": producer_floor_artifact_id("decode", "A"),
+            "condition_b": producer_floor_artifact_id("decode", "B"),
             "derivation": "deterministic plan-factory floor artifact vocabulary",
             "floor_rule": "cross_stack_armwise_max.v1",
         },
         "prefill_p256_floor_dependency": {
             "cell_ids": [
-                producer_floor_cell_id("prefill_p256", arm)
+                producer_floor_artifact_id("prefill_p256", arm)
                 for arm in ("A", "B")
             ],
             "transport_rule": {
@@ -1555,9 +1560,7 @@ def build_analysis_manifest(
     family_instance_id = target_versioned_id(
         "fam-d117-gamma-decode-prefill-p256-primary-holm"
     )
-    family_metric_tag = target_versioned_id(
-        "phase_decode_prefill_p256_energy", separator="_"
-    )
+    family_metric_tag = "phase_decode_prefill_p256_energy"
 
     def contrast_id(measurement_arm: str) -> str:
         return f"ctr-d117-{measurement_arm.replace('_', '-')}-qwen25-1p5b-vs-7b"
@@ -1610,11 +1613,10 @@ def build_analysis_manifest(
             "contrast_id": contrast_id(measurement_arm),
             "measurement_arm": measurement_arm,
             "metric": metric_for(measurement_arm),
-            "metric_tag": target_versioned_id(
+            "metric_tag": (
                 "phase_decode_energy"
                 if measurement_arm == "decode"
-                else "phase_prefill_p256_energy",
-                separator="_",
+                else "phase_prefill_p256_energy"
             ),
             "target_precheck_path": ["phase", "decode" if measurement_arm == "decode" else "prefill"],
             "condition_a_id": family_id(measurement_arm, "A"),
@@ -1695,7 +1697,11 @@ def build_analysis_manifest(
                 "allowed_replacement_reasons": [],
             },
             "randomization": {
-                "scheme": "deterministic_abba",
+                # The ABBA arm order is deterministic: assignment is fixed by
+                # position, not drawn. No randomization reference distribution
+                # exists, so the licensed production result is "not required";
+                # label-swap schemes would assert unratified exchangeability.
+                "scheme": "deterministic_rotation",
                 "exchangeability": "none",
                 "seed": None,
             },
@@ -2004,22 +2010,27 @@ def readme_bytes() -> bytes:
     # lower-ordinal target before any write, so its legacy "unfrozen draft" /
     # "not armable" wording can never reach emitted bytes.
     if identity.target_is_successor_family:
+        p256_floor_ids = [
+            producer_floor_artifact_id("prefill_p256", arm) for arm in ("A", "B")
+        ]
         content = f"""# D-117 gamma contrast pack {version} — status governed by the D-134 freeze receipt
 
 {identity_statement}This description does not carry freeze status. The committed D-134 freeze
 receipt and its plan-tree attachment are authoritative for this pack's frozen
 state; the receipt pins `calibration_plan.json` by SHA, so this text and every
-serialized `draft_status` field stay exactly as generated on both sides of the
-freeze. An external unexpired PASS/GO arm receipt is required before launch.
+serialized status field stay exactly as generated on both sides of the freeze.
+The generated `calibration_plan.json` and `plan_tree.json` carry
+`draft_status = {SUCCESSOR_EMITTED_STATUS}`; the prospective
+`analysis_manifest_v3.json` instead carries `freeze_status = frozen`.
+An external unexpired PASS/GO arm receipt is required before launch.
 
 This pack stages both prospectively required gamma arms: a 40-member decode
 ABBA contrast and the D-122 40-member 256-token prefill ABBA contrast. It makes
 no data, verdict, receipt, or artifact-byte claim.
 
-Authority order is D-117, D-122, D-123, D-124, then D-125. D-122 supersedes
-the older design-memo and plan-factory decode-only text. The plan tree uses
-the shared `joulewise.d117_plan_tree.v1` schema family and every top-level
-artifact declares `draft_status = {SUCCESSOR_EMITTED_STATUS}`.
+Authority order is D-117, D-122, D-123, D-124, D-125, D-139, then D-157.
+D-122 supersedes the older design-memo and plan-factory decode-only text. The
+plan tree uses the shared `joulewise.d117_plan_tree.v1` schema family.
 
 The binding 40-member cadence is
 `docs/process_traces/2026-08-07-plan-factory/DRAFT-U5U7.md` §6, “U7 — gamma
@@ -2036,14 +2047,16 @@ this text, is what pins them.
 
 The consumer-family artifact is declaration-only. It names the deterministic
 alpha/beta decode cell IDs but contains no aggregate-artifact SHA and is not a
-pinset. A 256-token prefill floor or a ruled 128-to-256 transport rule remains
-an explicit EMPTY slot.
+pinset. Its dedicated 256-token prefill floor dependencies are
+`{p256_floor_ids[0]}` and `{p256_floor_ids[1]}`. Both use
+`exact_stack_only` under `{EXACT_STACK_RULE_ID}`; no cross-length transport is
+licensed or needed.
 
 The receipt oracle is replay-derived from `{oracle['source']['module']}` and
 records {oracle['receipt_count']} physical receipts for
 {oracle['logical_operation_count']} logical operations per finalized pre/post
 bracket session. Actual receipt bytes and the absolute terminal sequence remain
-empty until arm and collection. Identity pins remain EMPTY pending U11. The
+empty until arm and collection. Identity pins remain unpopulated pending U11.
 Both shared-edge ABBA contrast cells register the canonical D-124 common-mode
 floor estimator treatment required to match their floor-calibration cells.
 
