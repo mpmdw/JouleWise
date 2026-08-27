@@ -66,8 +66,7 @@ essentially every physical locator. Each of the 139 pre-existing explicit line
 locators was checked by searching the current draft for that row's own anchor
 text, never by applying an offset; 135 moved, and 136 live anchors were
 confirmed by re-reading the stated line. DG-063's `10.818 ms` anchor no longer
-occurs, so its stale locator remains unchanged pending a ruling rather than
-being guessed. DS-04 and DS-07 remain the already-retired, absent-anchor
+occurs; ruling item 58 retired the row with a superseded note (round 6). DS-04 and DS-07 remain the already-retired, absent-anchor
 provenance rows, byte-for-byte. This locator-only pass changed nothing else: no
 marker string, supplier, campaign or cell, fill rule, freeze status, source
 list, or census figure was touched. The additive appendix bindings required by
@@ -617,7 +616,7 @@ Path abbreviations below are exact:
 | DG-060 — Section 4 screen in seconds, line 161 | 0.009724 s | S17#decimal_derivation.ratified_operatives.bracket_screen_s | diagnostic calibration / n17 | MEASURED | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
 | DG-061 — Section 4 screen reference, line 164 | 9.724-ms | S17#decimal_derivation.ratified_operatives.bracket_screen_s ×1000 | diagnostic calibration / n17 | DERIVE | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
 | DG-062 — Section 4 repeated screen, line 164 | 9.724 ms | same S17 bracket_screen_s ×1000 | diagnostic calibration / n17 | DERIVE | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
-| DG-063 — Section 4 superseded screen, line 194 | 10.818 ms | S19#decimal_derivation.ratified_operatives.bracket_screen_s ×1000 | diagnostic calibration / n19 superseded | DERIVE | DIAGNOSTIC_ERA / SUPERSEDED_ISSUED_CONFIG; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-063 — RETIRED (ruling item 58): Section 4 superseded 10.818 ms screen; the sentence was removed by item 32 and the value no longer appears in the draft | 10.818 ms (superseded; not in draft) | S19#decimal_derivation.ratified_operatives.bracket_screen_s ×1000 | diagnostic calibration / n19 superseded | DERIVE | RETIRED / SUPERSEDED_ISSUED_CONFIG; NON_CLAIM_BEARING | RETIRED |
 | DG-064 — Section 4 superseded corpus count, line 164 | nineteen | S19#derivation_corpus.n | diagnostic calibration / n19 superseded | MEASURED | DIAGNOSTIC_ERA / SUPERSEDED_ISSUED_CONFIG; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-065 — Section 4 current corpus count, line 164 | seventeen | S17#derivation_corpus.n | diagnostic calibration / n17 | MEASURED | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
 | DG-066 — Section 6 diagnostic population, line 247 | 50 | NR#stack_summaries[stack=1.5B].bundle_count | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |

@@ -309,3 +309,84 @@ None marked `[[NEEDS-VALUE:]]`. Every number and rule in the prose is traceable 
 1. The pulse-0 fit values (amplitude 40.6667 W, d_on 0.016, d_off −0.011, the two regions) come from the retained capture's first-issued `instrument_evidence.json`, anchored with the earlier v2 estimator's point (1784757336.5528765). The v3 point used for the paper's bound is 1784757336.5526073, 0.27 ms earlier; the prose now says so in plain words. No refit was run; the four anchor terms and B_fiducial_v3 are taken from the recorded v3 re-derivation (`r4-derivation.json`).
 3. The code fixes MIN_NATIVE_ROLLOVERS = 2 and MAX_FIRST_PARSE_LAG_S = 0.25 s without a recorded rationale for those particular numbers; the prose states what each gate tests and its value, and does not invent a justification for the magnitude.
 2. The claim that "any exact LP solver returns the same optimal values" is a mathematical property of linear programmes (optimal value is unique), stated to make the estimator replicable without reproducing the Seidel implementation; it is not asserted anywhere in the code.
+
+## 11. Executable verification order
+
+Moved here from Appendix A.4 of the paper (round 6, ruling item 58); the paper keeps a pointer.
+
+
+First obtain the release manifest. It must supply the repository revision, archive root, bundle identifiers, plan and policy files, drift-bound artifact, whole-window consumption semantics and any custody-store arguments, extraction specification, evaluation-basis fingerprint, floor artifact, and analysis manifest. Do not infer a missing value from a nearby file.
+
+**1. Fix the code and plan bytes.** Check out the exact released revision with full history. Then verify every plan or policy sidecar named by the release, for example:
+
+```sh
+shasum -a 256 -c <plan sidecar> <calibration-plan sidecar>
+```
+
+A mismatch stops the replay. This establishes byte identity, not whether the scientific criteria passed.
+
+**2. Rebuild each run's trace and phase energies.** Work on a copy of the archive and write the replay outside the immutable bundle:
+
+```sh
+python3 -m joulewise.cli validate-bundle --strict <runs root>/<run id>
+python3 -m joulewise.cli reduce <runs root>/<run id> \
+  --output <replay output>/<run id>.summary.json
+```
+
+Strict validation checks the stored `power_trace.csv` against the trace derived from `raw/powermetrics.plist`, then compares `summary_metrics.json` with a fresh reduction of the raw artifacts. The reducer reads the phase start and end times from `events.jsonl`. For interval-supported powermetrics samples it recomputes phase energy as the sum of `power_w` times the overlap duration between each sample interval and the phase interval; point traces instead use linear interpolation and trapezoidal integration. Multiple intervals with one phase name are summed. Compare the replay's `phase_energy_j` values with the released summary before continuing.
+
+**3. Rebuild the trace anchor and pulse-edge bound.** For each bracketing calibration, run:
+
+```sh
+python3 -c "
+import json, pathlib
+from joulewise.powermetrics_fiducial import verify_stored_evidence_physics
+d = pathlib.Path('<runs root>/<run id>/instrument_calibration')
+e = json.loads((d / 'instrument_evidence.json').read_text())
+b = verify_stored_evidence_physics(
+    e,
+    (d / 'raw' / 'powermetrics.plist').read_bytes(),
+    (d / 'events.jsonl').read_bytes(),
+)
+print('verified effective pulse bound (s):', b)
+print('stored pulse bound (s):', e['b_fiducial_s'])
+"
+```
+
+This route ignores stored pulse fits while calculating: paired clock readings and native trace records rebuild the trace's time anchor; command stamps come from the calibration event log; every pulse is refitted; and the anchor bound is added to the largest fitted edge residual. The verifier checks that the refits lie within the stored pulse intervals and returns the wider of the fresh and stored effective bounds, so replay cannot narrow the publication. Repeat for both sides of the window. This proves the calibration-regime bound from raw bytes. It does **not** test transport of that bound from commanded GPU pulses to sustained mixed inference load; Section 7 retains that limitation.
+
+**4. Reproduce the complete-window decision.** Use the exact consumption semantics and additional custody arguments recorded by the release; different semantics are not interchangeable. Run this against the archive copy because it appends to the replay log:
+
+```sh
+python3 scripts/run_campaign.py --whole-window-verdict \
+  --runs-dir <runs root> --log <replay output>/campaign_log.jsonl \
+  --campaign-policy <policy>.json --neg8-drift-bound <drift bound>.json \
+  --consumption-semantics-id <release-recorded id> \
+  <release-recorded custody and membership arguments>
+```
+
+The recomputation checks declared membership, replacements, admissions, calibration bracket, policy, and drift evidence. Its status and reason names must equal the released whole-window verdict. For `d078_minted_envelopes_v1`, include `--calibration-custody-store` when the release records one. For `salvage_dangler_exclusion_v1`, both `--window-membership-binding` and `--salvage-closure` are required. An archive that omits its required arguments is not sufficient for replay; do not guess them.
+
+**5. Re-extract the largest false difference this measurement system can manufacture.** The result is the cell's resolution bound — the artifact calls it the detection floor:
+
+```sh
+python3 scripts/extract_detection_floors.py \
+  --runs-root <runs root> --spec <extraction spec>.json \
+  --out <replay output>/floors.json \
+  --manifest-id <release-recorded manifest id> \
+  --evaluation-basis-sha256 <released basis fingerprint> \
+  --consumption-semantics-id <release-recorded id>
+```
+
+Compare each replayed cell's point repeatability term, corner-widened timing term, drift-widened gate, label, and refusal list with the release. Include `--hash-bundles` only if the released invocation did. If the code conditionally omits the point-only term, the release must supply its desk derivation from emitted per-cell repeatability statistics plus the replay-fenced self-consistency check against every cell where the code emitted the same diagnostic; absence of that derivation is a release blocker. Exit `0` means all cells extracted. Exit `1` means the report was written with one or more recorded cell refusals; it may be the correct reproduction. Exit `2` means the specification or path was invalid and no report was produced.
+
+**6. Reproduce the contrast verdict.** This step becomes executable when the gamma analysis manifest is reissued: the manifest as currently generated is inadmissible, because it freezes the decode family at one member while the ratified family has two, and the reissue (tracked as W-10) gates the `_v4` transaction night. Until it lands, steps 1 through 5 replay in full and this step does not. Use the released floor artifact only after its extraction binding passes the L1 closure named above:
+
+```sh
+python3 -m joulewise.cli analyze-claims \
+  --analysis-manifest <analysis manifest>.json --runs-root <runs root> \
+  --floor-artifact <authenticated floor artifact>.json \
+  --output <replay output>/claim_verdicts.json
+```
+
+Compare the point estimate, `deterministic_bounds.total`, full interval, Holm multiplicity with alpha = 0.05 and m = 2, floor gate, direction gate, outcome, and reason names. The clock-anchor shift bound is only one deterministic term, not the total.
