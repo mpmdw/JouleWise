@@ -718,12 +718,19 @@ and a relative path refuses. It is the literal confirmed at A6.
 Per pack, assert `status: PASS`, `mutated: true`, empty `reason_codes`, and a
 `receipt_path` ending `freeze-0004.json`. Then one freeze commit for all three.
 
-**A REFUSE here cannot be retried — with one narrow exception.** The receipt is
-plan-pinned; the slot is spent. See §5. The exception is the
-measurement-checkout declaration itself: an absent, relative, non-existent, or
-wrong-directory declaration refuses *before any receipt byte is written*, so it
-spends no slot and the operator may correct the command and re-run it. Every
-other refusal at C8 is terminal for the attempt.
+**Assume a REFUSE here cannot be retried.** The receipt is plan-pinned; the slot
+is spent. See §5. A few refusals do fire before any receipt byte is written and
+so spend nothing — the measurement-checkout declaration is one — but do not try
+to classify them at the bench from the refusal text. §5.2 lists the ones that
+are known to precede the first write; anything not on that list is terminal for
+the attempt.
+
+**A missing flag is not a refusal at all.** `--measurement-checkout` is required
+by the argument parser, which runs before any repository code. Omit it and the
+command prints argparse usage text and exits 2 — no JSON, no `status`, no reason
+code. That is safe and costs nothing: nothing ran. It is a different event from
+a declaration that was supplied but wrong, which does reach the gate and does
+emit a JSON refusal.
 
 ### C9 — Authenticate the executing custody tools (SCRIPTED, runsheet §3.6.1)
 
@@ -1341,7 +1348,7 @@ prospective manifest and the plan tree must each be a regular file beneath that
 same root.
 
 ```sh
-.venv/bin/python scripts/finalize_analysis_manifest.py \
+.venv/bin/python3 scripts/finalize_analysis_manifest.py \
   --prospective-manifest "$PROSPECTIVE_MANIFEST" \
   --plan-tree "$PLAN_TREE" \
   --custody-root "$CUSTODY_ROOT" \
@@ -1528,16 +1535,37 @@ measurement checkout while nothing has been pushed. C7's sacrificial screen
 exists precisely to make this outcome nearly impossible; if it happens anyway,
 the screen itself is suspect and the failure is a mechanism failure.
 
-**The one refusal at C8 that spends nothing: the measurement-checkout
-declaration.** "Spending the slot" means the code wrote
-`freeze-0004.json` and the plan tree recorded its digest, after which no second
-attempt can occupy that filename. The declaration check is evaluated *before*
-any receipt byte is written — it refuses an absent, relative, non-existent, or
-wrong-directory `--measurement-checkout` with the reason code
-`readiness_r1_measurement_checkout`, and no file is created. So this refusal is
-recoverable at the bench: correct the command and re-run it. Distinguish it by
-that reason code alone; do not generalise it. Every other refusal at C8 still
-spends the slot, and the blanket rule above governs them all.
+**Which C8 refusals spend the slot, and which spend nothing.** "Spending the
+slot" means the code wrote `freeze-0004.json` and the plan tree recorded its
+digest, after which no second attempt can ever occupy that filename. Some checks
+run *before* that first write, so their refusals create no file and cost
+nothing but the time to correct the command.
+
+Verified against the implementation, three refusals precede the first write:
+
+- **A supplied-but-wrong `--measurement-checkout`** — relative, non-existent,
+  unreadable, or naming a different directory than the repository that owns the
+  pack. Reason code `readiness_r1_measurement_checkout`.
+- **A predecessor that fails historical-semantics gating** — the `_v3` pack
+  handed to `--predecessor-pack-root` is checked first of all, and refuses with
+  `mutated: false` and no receipt path.
+- **A predecessor that fails authentication or ancestry** — reason code
+  `readiness_successor_chain_invalid`. The implementation states outright that
+  invalid ancestry never mints a REFUSE receipt.
+
+**Treat every other REFUSE at C8 as terminal**, and do not extend this list by
+reasoning from a refusal message at the bench: the property that matters is
+where in the code the check sits, which is not visible in the output. If a
+refusal you did not expect appears, stop and escalate rather than re-running.
+
+**A missing required flag is not in this taxonomy at all.** Both
+`--pack-root` and `--measurement-checkout` are required by the argument parser,
+which runs before any repository code. Omitting one prints argparse usage text
+and exits 2, with no JSON, no `status` field and no reason code. Nothing ran and
+nothing mutated, so it is always safe — but it also means the reason code above
+cannot be used to recognise this case. Recognise it by the absence of JSON.
+
+Recovery for all of the above is the same: correct the command and re-issue it.
 
 **Mechanism failures** — a path outside the 112 crossing the gate; an unexpected
 evidence output accepted; the successor subtracted without the authenticated
