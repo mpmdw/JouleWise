@@ -34,6 +34,16 @@ e. Run the affected test modules locally, then push the branch and open a PR wit
    the footer `🤖 Generated with [Claude Code](https://claude.com/claude-code)`). Do NOT merge.
    Wait for CI (`gh pr checks --watch`) and report the result.
 
+
+## THE WAKE GAP (read twice)
+You are a subagent. NOTHING re-invokes you when a background job, a
+Monitor, a `gh pr checks --watch`, or a `run_in_background` command
+finishes — the harness's wake guarantee reaches the main loop only.
+Every wait is a bounded FOREGROUND loop: `until [ -f out.status ]; do
+sleep 30; done` (each Bash call under the tool timeout; chain calls).
+Never end a turn on "waiting for X to wake me" — three directors did
+that in T26 and each stalled until the magistrate noticed.
+
 ## Hard rules
 - Wait FOREGROUND on every codex-run (bounded shell waits under the tool timeout; poll the out-file
   `.status`). Never background a run and end your turn — nothing wakes you.
