@@ -209,6 +209,8 @@ def install_synthetic_finalization_fixture(
     *,
     shared_family: bool = False,
     transport_mode: str = "exact_stack_only",
+    runtime_backend: str = "mlx",
+    telemetry_backend: str = "powermetrics",
 ) -> dict:
     root = Path(root)
     prospective_path, plan_tree_path, prospective = (
@@ -216,6 +218,8 @@ def install_synthetic_finalization_fixture(
             root,
             shared_family=shared_family,
             transport_mode=transport_mode,
+            runtime_backend=runtime_backend,
+            telemetry_backend=telemetry_backend,
         )
     )
     runs_root = root / "runs"
@@ -241,6 +245,14 @@ def install_synthetic_finalization_fixture(
                 "a" if member["arm"] == "A" else "b"
             )
             metadata = _metadata_for_config(config, model_token)
+            if runtime_backend != "mlx" or telemetry_backend != "powermetrics":
+                metadata["adapters"]["runtime"]["name"] = runtime_backend
+                metadata["adapters"]["telemetry"]["name"] = telemetry_backend
+                metadata["device"]["telemetry"] = telemetry_backend
+                metadata["device"]["rail_manifest"] = [telemetry_backend]
+                metadata["connection"] = {
+                    "transport": config["hardware_target"]["transport"]
+                }
             metadata["config_sha256"] = hashlib.sha256(config_raw).hexdigest()
             metadata_raw = (
                 json.dumps(
@@ -259,7 +271,7 @@ def install_synthetic_finalization_fixture(
                             -1000.0 if contrast["measurement_arm"] == "prefill_p256" else 1000.0
                         ),
                         "measurement_quality": {
-                            "telemetry_source": "powermetrics",
+                            "telemetry_source": telemetry_backend,
                         },
                     },
                     sort_keys=True,
@@ -468,6 +480,7 @@ def install_synthetic_finalization_fixture(
                 metric=contrast["metric"],
                 regime=make_regime(stack_identity=stack),
             )
+            cell["key"]["backend"] = telemetry_backend
             cell["key"]["window_class"] = "phase"
             cell["key"]["condition_family_definition"] = condition_definition
             cell["key"]["condition_family_sha256"] = condition_row[
@@ -478,7 +491,7 @@ def install_synthetic_finalization_fixture(
             groups.append(
                 build_transport_group(
                     transport_group_id=group_id,
-                    backend="powermetrics",
+                    backend=telemetry_backend,
                     metric=contrast["metric"],
                     window_class="phase",
                     stack_identity=stack,

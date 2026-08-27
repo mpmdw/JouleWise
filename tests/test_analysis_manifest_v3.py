@@ -92,6 +92,8 @@ def install_synthetic_prospective_fixture(
     *,
     shared_family: bool = False,
     transport_mode: str = "exact_stack_only",
+    runtime_backend: str = "mlx",
+    telemetry_backend: str = "powermetrics",
 ) -> tuple[Path, Path, dict]:
     """Install a resolved, shape-true gamma declaration in temporary custody.
 
@@ -103,6 +105,47 @@ def install_synthetic_prospective_fixture(
     campaign = Path(root) / "pack"
     shutil.copytree(GAMMA_DIR, campaign)
     draft = json.loads((campaign / "analysis_manifest_v3.json").read_text())
+    if runtime_backend != "mlx" or telemetry_backend != "powermetrics":
+        config_sha256_by_path: dict[str, str] = {}
+        for source in draft["contrasts"]:
+            for member in source["members"]:
+                relative = member["config"]
+                config_path = campaign / relative
+                config = json.loads(config_path.read_text())
+                config["hardware_target"]["runtime_backend"] = runtime_backend
+                config["hardware_target"]["telemetry_backend"] = telemetry_backend
+                raw = (json.dumps(config, indent=2) + "\n").encode()
+                config_path.write_bytes(raw)
+                digest = hashlib.sha256(raw).hexdigest()
+                member["config_sha256"] = digest
+                config_sha256_by_path[relative] = digest
+
+        stage_sha256_by_path: dict[str, str] = {}
+        for stage in draft["stage_manifests"]:
+            stage_relative = stage["manifest_path"]
+            stage_path = campaign / stage_relative
+            stage_manifest = json.loads(stage_path.read_text())
+            stage_root = Path(stage_relative).parent
+            for row in stage_manifest["executed_order"]:
+                config_relative = (stage_root / row["config"]).as_posix()
+                row["config_sha256"] = config_sha256_by_path[config_relative]
+            stage_raw = (json.dumps(stage_manifest, indent=2) + "\n").encode()
+            stage_path.write_bytes(stage_raw)
+            digest = hashlib.sha256(stage_raw).hexdigest()
+            stage["manifest_sha256"] = digest
+            stage_sha256_by_path[stage_relative] = digest
+
+        root_order_path = campaign / draft["root_order_manifest"]["path"]
+        root_order = json.loads(root_order_path.read_text())
+        for row in root_order["executed_order"]:
+            row["config_sha256"] = config_sha256_by_path[row["config"]]
+        for row in root_order["subcampaign_order"]:
+            row["manifest_sha256"] = stage_sha256_by_path[row["manifest_path"]]
+        root_order_raw = (json.dumps(root_order, indent=2) + "\n").encode()
+        root_order_path.write_bytes(root_order_raw)
+        draft["root_order_manifest"]["sha256"] = hashlib.sha256(
+            root_order_raw
+        ).hexdigest()
     families = []
     contrasts = []
     for index, source in enumerate(draft["contrasts"]):
