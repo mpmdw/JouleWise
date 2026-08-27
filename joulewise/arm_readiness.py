@@ -16,6 +16,7 @@ import json
 import math
 import os
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -3622,16 +3623,57 @@ def _histsem_rederive_pack_authentication(
             ) from exc
 
 
+def _histsem_remove_scratch_tree(path: Path) -> None:
+    """Remove a scratch checkout in-process, repairing read-only entries first.
+
+    ``shutil.rmtree(ignore_errors=True)`` alone leaves a subtree behind when a
+    directory inside it is not writable (an S13 refuter produced this with a
+    0500 child directory), so every directory and file is made owner-writable
+    on the way down, exactly as ``TemporaryDirectory.cleanup`` does.  Symlinks
+    are unlinked, never followed.  Best-effort: a failure here is swallowed and
+    the caller's ``histsem_history_unavailable`` refusal is what surfaces.
+    """
+
+    if os.path.islink(path):
+        # Never traverse through a symlinked root: chmod/rmtree would reach the
+        # target tree.  Drop the link itself and stop.
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        return
+    try:
+        os.chmod(path, 0o700)
+        for directory, subdirectories, files in os.walk(path):
+            for name in (*subdirectories, *files):
+                entry = os.path.join(directory, name)
+                if not os.path.islink(entry):
+                    try:
+                        os.chmod(entry, 0o700)
+                    except OSError:
+                        pass
+    except OSError:
+        pass
+    shutil.rmtree(path, ignore_errors=True)
+
+
 @contextmanager
 def _histsem_temporary_workspace() -> Iterable[Path]:
     """Translate the complete temporary-checkout lifecycle into histsem refusal."""
 
+    scratch_path: Path | None = None
     try:
         with tempfile.TemporaryDirectory(prefix="joulewise-histsem-") as scratch:
-            yield Path(scratch)
+            scratch_path = Path(scratch)
+            yield scratch_path
     except HistoricalSemanticsError:
         raise
     except OSError as exc:
+        # A cleanup error raised BEFORE removal (D3, S3 delta re-audit 2)
+        # would otherwise leave the populated checkout on disk while both
+        # boundaries refuse.  Unwind it here: bounded, in-process, best-effort.
+        if scratch_path is not None:
+            _histsem_remove_scratch_tree(scratch_path)
         raise HistoricalSemanticsError(
             "histsem_history_unavailable",
             f"historical PACK_AUTHENTICATION temporary workspace is unavailable: {exc}",

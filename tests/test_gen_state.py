@@ -35,7 +35,6 @@ EXPECTED_IDS = {
     "PIPELINE-SMOKE-TIER2-01",
     "PIPELINE-SMOKE-LIVE-01",
     "HISTPACK-PROMISOR-NOFETCH-01",
-    "HISTPACK-TEMP-CLEANUP-01",
     "GAMMA-UNIT-ROSTER-GUARD-01",
     "AUTHENTICATOR-ALLOWLIST-GUARD-01",
     "TRANSACTION-RULED-ARTIFACTS-01",
@@ -492,9 +491,13 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # BRACKET-BINDING-CLI-01 in flight on PR #217, T0-ENV-PARSER-UNIFY-01,
         # PIPELINE-SMOKE-TIER2-01, PIPELINE-SMOKE-LIVE-01, the two HISTPACK
         # rows from S3 delta2, and the six S9 should-fixes):
-        # 90 + 18 = 108 exact live records.
+        # 90 + 18 = 108;
+        # 108 - 1 = 107; the 2026-08-27 T26 S13 stream closes
+        # HISTPACK-TEMP-CLEANUP-01 (PR #PRNUM: the histsem scratch checkout
+        # is unwound when cleanup raises before removal):
+        # 108 - 1 = 107 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 108)
+        self.assertEqual(len(self.tasks), 107)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
