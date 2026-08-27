@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Build one canonical calibration-bracket binding under H6 custody."""
+"""Build one canonical calibration-bracket binding before window evaluation."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import secrets
@@ -29,30 +30,13 @@ from joulewise.calibration_ledger import (  # noqa: E402
 )
 
 
-WHOLE_WINDOW_SCHEMA = "joulewise.idle_admission_whole_window_verdict.v1"
-DESCRIPTOR_IDENTITY_FIELDS = (
-    "bracket_session_id",
-    "bracket_window_id",
-    "bracket_plan_id",
-    "bracket_plan_sha256",
-    "bracket_evidence_root_id",
-    "bracket_runs_root",
-)
-DESCRIPTOR_ENDPOINT_FIELDS = (
-    "attempt_id",
-    "ledger_receipt_digest",
-    "content_id",
-)
-
 REFUSAL_INPUT_INVALID = "bracket_binding_input_invalid"
 REFUSAL_CUSTODY_INVALID = "bracket_binding_custody_invalid"
-REFUSAL_DESCRIPTOR_INVALID = "bracket_binding_descriptor_invalid"
-REFUSAL_DESCRIPTOR_MISMATCH = "bracket_binding_descriptor_mismatch"
+REFUSAL_PLAN_INVALID = "bracket_binding_frozen_plan_invalid"
 REFUSAL_LEDGER_REFUSED = "bracket_binding_ledger_refused"
 REFUSAL_SESSION_IDENTITY_MISMATCH = "bracket_binding_session_identity_mismatch"
 REFUSAL_SESSION_NOT_FINALIZED = "bracket_binding_session_not_finalized"
 REFUSAL_SESSION_ENDPOINTS_INVALID = "bracket_binding_session_endpoints_invalid"
-REFUSAL_ENDPOINT_MISMATCH = "bracket_binding_endpoint_mismatch"
 REFUSAL_BUILD_REFUSED = "bracket_binding_build_refused"
 REFUSAL_OUTPUT_EXISTS = "bracket_binding_output_exists"
 REFUSAL_OUTPUT_FAILED = "bracket_binding_output_failed"
@@ -186,87 +170,52 @@ def _new_custody_file(
     return resolved_parent / candidate.name
 
 
-def _read_custody_object(path: Path, *, label: str) -> Mapping[str, Any]:
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        raise BracketBindingRefusal(
-            REFUSAL_INPUT_INVALID, f"cannot read {label}: {exc}"
-        ) from exc
-    return _strict_json_object(raw, label=label)
+def _required_text(value: Any, *, label: str) -> str:
+    if not isinstance(value, str) or not value or value.strip() != value:
+        _refuse(REFUSAL_INPUT_INVALID, f"{label} must be a nonempty trimmed string")
+    return value
 
 
-def _window_descriptors(
-    verdict: Mapping[str, Any],
-) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
-    basis = verdict.get("evaluation_basis")
-    bracket_set = (
-        basis.get("calibration_bracket_set")
-        if isinstance(basis, Mapping)
-        else None
-    )
-    core = verdict.get("idle_admission_core")
-    stored_bracket = (
-        core.get("instrument_calibration_bracket")
-        if isinstance(core, Mapping)
-        else None
-    )
-    stored_pre = (
-        stored_bracket.get("pre") if isinstance(stored_bracket, Mapping) else None
-    )
-    stored_post = (
-        stored_bracket.get("post") if isinstance(stored_bracket, Mapping) else None
-    )
-    pre = bracket_set.get("pre") if isinstance(bracket_set, Mapping) else None
-    post = bracket_set.get("post") if isinstance(bracket_set, Mapping) else None
+def _frozen_plan_preflight(
+    plan_path: Path,
+    *,
+    plan_id: str,
+    plan_sha256: str,
+) -> None:
     if (
-        verdict.get("schema_version") != WHOLE_WINDOW_SCHEMA
-        or verdict.get("record_type") != "idle_admission_whole_window_verdict"
-        or verdict.get("status") != "passed"
-        or verdict.get("claim_licensing") is not True
-        or not isinstance(basis, Mapping)
-        or basis.get("sha256")
-        != canonical_sha256(
-            {key: value for key, value in basis.items() if key != "sha256"}
-        )
-        or not isinstance(pre, Mapping)
-        or not isinstance(post, Mapping)
-        or stored_pre != pre
-        or stored_post != post
+        len(plan_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in plan_sha256)
     ):
         _refuse(
-            REFUSAL_DESCRIPTOR_INVALID,
-            "whole-window verdict lacks one self-authenticating pre/post bracket set",
+            REFUSAL_PLAN_INVALID,
+            "--plan-sha256 must contain exactly 64 lowercase hexadecimal characters",
         )
-    if pre.get("bracket_slot") != "pre" or post.get("bracket_slot") != "post":
+    try:
+        raw = plan_path.read_bytes()
+    except OSError as exc:
+        raise BracketBindingRefusal(
+            REFUSAL_PLAN_INVALID, f"cannot read frozen plan: {exc}"
+        ) from exc
+    plan = _strict_json_object(raw, label="frozen plan")
+    if (
+        plan.get("plan_id") != plan_id
+        or hashlib.sha256(raw).hexdigest() != plan_sha256
+    ):
         _refuse(
-            REFUSAL_DESCRIPTOR_INVALID,
-            "whole-window bracket descriptors have invalid slot roles",
+            REFUSAL_PLAN_INVALID,
+            "frozen plan bytes do not match --plan-id/--plan-sha256",
         )
-    values = [
-        pre.get(field)
-        for field in (*DESCRIPTOR_IDENTITY_FIELDS, *DESCRIPTOR_ENDPOINT_FIELDS)
-    ] + [post.get(field) for field in DESCRIPTOR_ENDPOINT_FIELDS]
-    if any(not isinstance(value, str) or not value for value in values):
-        _refuse(
-            REFUSAL_DESCRIPTOR_INVALID,
-            "whole-window bracket descriptors are missing required string fields",
-        )
-    disagreements = [
-        field
-        for field in DESCRIPTOR_IDENTITY_FIELDS
-        if pre.get(field) != post.get(field)
-    ]
-    if disagreements:
-        _refuse(
-            REFUSAL_DESCRIPTOR_MISMATCH,
-            "pre/post bracket descriptors disagree on: " + ", ".join(disagreements),
-        )
-    return pre, post
 
 
 def _session_preflight(
-    snapshot: CalibrationLedgerSnapshot, descriptor: Mapping[str, Any]
+    snapshot: CalibrationLedgerSnapshot,
+    *,
+    session_id: str,
+    window_id: str,
+    plan_id: str,
+    plan_sha256: str,
+    evidence_root_id: str,
+    runs_root: str,
 ) -> None:
     if snapshot.refusal_reasons:
         _refuse(
@@ -274,9 +223,7 @@ def _session_preflight(
             "calibration ledger snapshot refused: "
             + ", ".join(snapshot.refusal_reasons),
         )
-    session = snapshot.bracket_session_by_id.get(
-        str(descriptor["bracket_session_id"])
-    )
+    session = snapshot.bracket_session_by_id.get(session_id)
     if session is None or (
         session.window_id,
         session.plan_id,
@@ -284,15 +231,15 @@ def _session_preflight(
         session.evidence_root_id,
         session.runs_root,
     ) != (
-        descriptor["bracket_window_id"],
-        descriptor["bracket_plan_id"],
-        descriptor["bracket_plan_sha256"],
-        descriptor["bracket_evidence_root_id"],
-        descriptor["bracket_runs_root"],
+        window_id,
+        plan_id,
+        plan_sha256,
+        evidence_root_id,
+        runs_root,
     ):
         _refuse(
             REFUSAL_SESSION_IDENTITY_MISMATCH,
-            "no ledger session matches the whole-window frozen identity",
+            "no finalized-ledger session matches the supplied frozen identity",
         )
     if session.state != "finalized":
         _refuse(
@@ -313,18 +260,23 @@ def _session_preflight(
 
 def _build_binding(
     snapshot: CalibrationLedgerSnapshot,
-    pre: Mapping[str, Any],
-    post: Mapping[str, Any],
+    *,
+    session_id: str,
+    window_id: str,
+    plan_id: str,
+    plan_sha256: str,
+    evidence_root_id: str,
+    runs_root: str,
 ) -> dict[str, Any]:
     try:
         binding = build_calibration_bracket_binding(
             snapshot,
-            session_id=str(pre["bracket_session_id"]),
-            window_id=str(pre["bracket_window_id"]),
-            plan_id=str(pre["bracket_plan_id"]),
-            plan_sha256=str(pre["bracket_plan_sha256"]),
-            evidence_root_id=str(pre["bracket_evidence_root_id"]),
-            runs_root=str(pre["bracket_runs_root"]),
+            session_id=session_id,
+            window_id=window_id,
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
+            evidence_root_id=evidence_root_id,
+            runs_root=runs_root,
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise BracketBindingRefusal(REFUSAL_BUILD_REFUSED, str(exc)) from exc
@@ -338,28 +290,16 @@ def _build_binding(
     if validate_calibration_bracket_binding(
         binding,
         snapshot,
-        window_id=str(pre["bracket_window_id"]),
-        plan_id=str(pre["bracket_plan_id"]),
-        plan_sha256=str(pre["bracket_plan_sha256"]),
-        evidence_root_id=str(pre["bracket_evidence_root_id"]),
-        runs_root=str(pre["bracket_runs_root"]),
+        window_id=window_id,
+        plan_id=plan_id,
+        plan_sha256=plan_sha256,
+        evidence_root_id=evidence_root_id,
+        runs_root=runs_root,
     ) is None:
         _refuse(
             REFUSAL_BUILD_REFUSED,
             "authoritative validator rejected the in-memory binding",
         )
-    for role, descriptor in (("pre", pre), ("post", post)):
-        endpoint = binding["endpoints"][role]
-        if (
-            endpoint["attempt_id"] != descriptor.get("attempt_id")
-            or endpoint["receipt_digest"]
-            != descriptor.get("ledger_receipt_digest")
-            or endpoint["content_digest"] != descriptor.get("content_id")
-        ):
-            _refuse(
-                REFUSAL_ENDPOINT_MISMATCH,
-                f"{role} descriptor does not authenticate against the ledger endpoint",
-            )
     return binding
 
 
@@ -443,7 +383,18 @@ def _publish_no_clobber(path: Path, raw: bytes) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(description=__doc__)
     parser.add_argument("--custody-root", required=True, type=Path)
-    parser.add_argument("--whole-window-verdict", required=True, type=Path)
+    parser.add_argument("--session-id", required=True)
+    parser.add_argument("--window-id", required=True)
+    parser.add_argument("--plan-id", required=True)
+    parser.add_argument("--plan-sha256", required=True)
+    parser.add_argument(
+        "--frozen-plan",
+        required=True,
+        type=Path,
+        help="exact frozen calibration-plan bytes authenticated by --plan-sha256",
+    )
+    parser.add_argument("--evidence-root-id", required=True)
+    parser.add_argument("--runs-root", required=True, type=Path)
     parser.add_argument("--calibration-ledger", required=True, type=Path)
     parser.add_argument(
         "--head-pin",
@@ -466,11 +417,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
         lexical_root, resolved_root = _custody_root(args.custody_root)
-        verdict_path = _existing_custody_path(
-            args.whole_window_verdict,
+        frozen_plan_path = _existing_custody_path(
+            args.frozen_plan,
             lexical_root,
             resolved_root,
-            label="whole-window verdict",
+            label="frozen plan",
             directory=False,
         )
         ledger_path = _existing_custody_path(
@@ -506,20 +457,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             resolved_root,
             label="bracket binding output",
         )
-        verdict = _read_custody_object(verdict_path, label="whole-window verdict")
-        pre, post = _window_descriptors(verdict)
-        runs_text = str(pre["bracket_runs_root"])
-        if not Path(runs_text).is_absolute():
+        session_id = _required_text(args.session_id, label="--session-id")
+        window_id = _required_text(args.window_id, label="--window-id")
+        plan_id = _required_text(args.plan_id, label="--plan-id")
+        plan_sha256 = _required_text(args.plan_sha256, label="--plan-sha256")
+        evidence_root_id = _required_text(
+            args.evidence_root_id, label="--evidence-root-id"
+        )
+        runs_text = str(args.runs_root)
+        if not args.runs_root.is_absolute():
             _refuse(
                 REFUSAL_CUSTODY_INVALID,
-                "authenticated runs root must use its absolute ledger spelling",
+                "--runs-root must use its absolute ledger spelling",
+            )
+        if str(args.runs_root.absolute()) != runs_text:
+            _refuse(
+                REFUSAL_CUSTODY_INVALID,
+                "--runs-root must be a canonical absolute lexical path",
             )
         _existing_custody_path(
-            Path(runs_text),
+            args.runs_root,
             lexical_root,
             resolved_root,
-            label="bracket-authenticated runs root",
+            label="runs root",
             directory=True,
+        )
+        # Custody is established against the resolved root above, but the
+        # builder receives the exact lexical bytes recorded at reservation.
+        _frozen_plan_preflight(
+            frozen_plan_path,
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
         )
         snapshot = load_calibration_ledger_snapshot(
             ledger_path,
@@ -552,8 +520,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                     + ", ".join(finalizer_snapshot.refusal_reasons),
                 )
             snapshot = finalizer_snapshot
-        _session_preflight(snapshot, pre)
-        binding = _build_binding(snapshot, pre, post)
+        _session_preflight(
+            snapshot,
+            session_id=session_id,
+            window_id=window_id,
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
+            evidence_root_id=evidence_root_id,
+            runs_root=runs_text,
+        )
+        binding = _build_binding(
+            snapshot,
+            session_id=session_id,
+            window_id=window_id,
+            plan_id=plan_id,
+            plan_sha256=plan_sha256,
+            evidence_root_id=evidence_root_id,
+            runs_root=runs_text,
+        )
         _publish_no_clobber(output_path, canonical_json_bytes(binding) + b"\n")
     except BracketBindingRefusal as exc:
         print(

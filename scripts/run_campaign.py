@@ -28,6 +28,7 @@ import math
 import os
 import secrets
 import shlex
+import stat
 import subprocess
 import sys
 import tempfile
@@ -168,9 +169,11 @@ from joulewise.salvage_dangler import (  # noqa: E402
 from joulewise.calibration_bracketing import (  # noqa: E402
     calibration_bracket_for_bundles,
     load_calibration_acceptance_bound,
+    validate_calibration_bracket_binding,
 )
 from joulewise.calibration_ledger import (  # noqa: E402
     CalibrationLedgerSnapshot,
+    canonical_json_bytes as calibration_canonical_json_bytes,
     load_calibration_ledger_snapshot,
 )
 from joulewise.cooldown import cooldown_disposition_from_raw  # noqa: E402
@@ -683,6 +686,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--bracket-binding",
+        help=(
+            "Canonical calibration-bracket binding under --runs-dir custody; "
+            "consumed only by --whole-window-verdict"
+        ),
+    )
+    parser.add_argument(
         "--consumption-semantics-id",
         choices=(
             MINTED_CONSUMPTION_SEMANTICS_ID,
@@ -798,12 +808,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         args.window_membership_binding is not None
         or args.salvage_closure is not None
         or args.calibration_custody_store is not None
+        or args.bracket_binding is not None
         or args.consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID
     )
     if whole_window_only and not args.whole_window_verdict:
         parser.error(
             "--consumption-semantics-id, --window-membership-binding, and "
-            "--salvage-closure, and --calibration-custody-store are "
+            "--salvage-closure, --calibration-custody-store, and "
+            "--bracket-binding are "
             "whole-window-verdict options"
         )
     if (
@@ -4399,6 +4411,128 @@ def _load_calibration_snapshot_for_evaluation(
     )
 
 
+def _strict_bracket_binding_bytes(raw: bytes) -> dict[str, Any] | None:
+    """Parse only the canonical object wire emitted by the binding producer."""
+
+    def object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON key {key!r}")
+            result[key] = value
+        return result
+
+    def nonfinite(value: str) -> None:
+        raise ValueError(f"non-finite JSON number {value!r}")
+
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=object_pairs,
+            parse_constant=nonfinite,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    if raw != calibration_canonical_json_bytes(value) + b"\n":
+        return None
+    return value
+
+
+def _load_bracket_binding_for_evaluation(
+    path_text: str | Path,
+    *,
+    runs_root: Path,
+) -> dict[str, Any] | None:
+    """Read one no-symlink canonical binding beneath the exact runs root."""
+
+    lexical_root = Path(runs_root).absolute()
+    try:
+        root_mode = lexical_root.lstat().st_mode
+        if stat.S_ISLNK(root_mode) or not stat.S_ISDIR(root_mode):
+            return None
+        resolved_root = lexical_root.resolve(strict=True)
+        candidate = Path(path_text)
+        candidate = candidate if candidate.is_absolute() else lexical_root / candidate
+        try:
+            relative = candidate.relative_to(lexical_root)
+        except ValueError:
+            relative = candidate.relative_to(resolved_root)
+        if (
+            not relative.parts
+            or any(part in {"", ".", ".."} for part in relative.parts)
+        ):
+            return None
+        current = resolved_root
+        for part in relative.parts:
+            current = current / part
+            if stat.S_ISLNK(current.lstat().st_mode):
+                return None
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(resolved_root)
+        if not stat.S_ISREG(resolved.stat().st_mode):
+            return None
+        raw = resolved.read_bytes()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return _strict_bracket_binding_bytes(raw)
+
+
+def _bracket_identity_for_runs_root(
+    snapshot: CalibrationLedgerSnapshot,
+    runs_root: Path,
+) -> dict[str, str] | None:
+    """Select identity from the ledger, independently of the supplied binding."""
+
+    if not isinstance(snapshot, CalibrationLedgerSnapshot) or not snapshot.valid:
+        return None
+    exact_runs_root = str(Path(runs_root).absolute())
+    sessions = [
+        session
+        for session in snapshot.bracket_sessions
+        if session.state == "finalized" and session.runs_root == exact_runs_root
+    ]
+    if len(sessions) != 1:
+        return None
+    session = sessions[0]
+    return {
+        "session_id": session.session_id,
+        "window_id": session.window_id,
+        "plan_id": session.plan_id,
+        "plan_sha256": session.plan_sha256,
+        "evidence_root_id": session.evidence_root_id,
+        "runs_root": session.runs_root,
+    }
+
+
+def _validated_bracket_binding_input(
+    path_text: str | Path | None,
+    *,
+    snapshot: CalibrationLedgerSnapshot,
+    runs_root: Path,
+) -> tuple[Mapping[str, Any] | None, Mapping[str, str] | None]:
+    """Return the supplied wire plus its independent authenticated identity."""
+
+    identity = _bracket_identity_for_runs_root(snapshot, runs_root)
+    if path_text is None:
+        return None, identity
+    binding = _load_bracket_binding_for_evaluation(path_text, runs_root=runs_root)
+    if binding is None or identity is None:
+        return {}, identity
+    if validate_calibration_bracket_binding(
+        binding,
+        snapshot,
+        window_id=identity["window_id"],
+        plan_id=identity["plan_id"],
+        plan_sha256=identity["plan_sha256"],
+        evidence_root_id=identity["evidence_root_id"],
+        runs_root=identity["runs_root"],
+    ) is None:
+        return {}, identity
+    return binding, identity
+
+
 def _idle_admission_core_evaluation(
     evaluations: Sequence[MemberEvaluation],
     policy_binding: CampaignPolicyBinding,
@@ -4408,6 +4542,9 @@ def _idle_admission_core_evaluation(
     neg8_drift_bound: Mapping[str, Any] | None = None,
     evaluation_timestamp_s: float | None = None,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    calibration_bracket_binding: Mapping[str, Any] | None = None,
+    calibration_bracket_identity: Mapping[str, str] | None = None,
+    calibration_bracket_binding_supplied: bool = False,
 ) -> _IdleAdmissionCoreEvaluation:
     """Evaluate the core and prospective per-member diagnostic surface.
 
@@ -4643,6 +4780,11 @@ def _idle_admission_core_evaluation(
         else None
     )
     if whole_window:
+        bracket_identity = (
+            calibration_bracket_identity
+            if isinstance(calibration_bracket_identity, Mapping)
+            else {}
+        )
         calibration_bracket, calibration_reasons = calibration_bracket_for_bundles(
             runs_root
             if runs_root is not None
@@ -4652,7 +4794,22 @@ def _idle_admission_core_evaluation(
             [evaluation.bundle_path for evaluation in evaluations],
             policy_binding.policy.calibration_bracketing,
             ledger_snapshot=calibration_ledger_snapshot,
+            bracket_binding=calibration_bracket_binding,
+            bracket_window_id=bracket_identity.get("window_id"),
+            bracket_plan_id=bracket_identity.get("plan_id"),
+            bracket_plan_sha256=bracket_identity.get("plan_sha256"),
+            bracket_evidence_root_id=bracket_identity.get("evidence_root_id"),
         )
+        if (
+            calibration_bracket_binding_supplied
+            and "calibration_bracket_binding_missing" in calibration_reasons
+        ):
+            calibration_reasons = tuple(
+                "calibration_bracket_binding_invalid"
+                if reason == "calibration_bracket_binding_missing"
+                else reason
+                for reason in calibration_reasons
+            )
         section["instrument_calibration_bracket"] = calibration_bracket
         if extension.claim_bearing:
             conditions.update(calibration_reasons)
@@ -4672,6 +4829,9 @@ def idle_admission_core_verdict(
     neg8_drift_bound: Mapping[str, Any] | None = None,
     evaluation_timestamp_s: float | None = None,
     calibration_ledger_snapshot: CalibrationLedgerSnapshot | None = None,
+    calibration_bracket_binding: Mapping[str, Any] | None = None,
+    calibration_bracket_identity: Mapping[str, str] | None = None,
+    calibration_bracket_binding_supplied: bool = False,
 ) -> dict[str, Any]:
     """Compatibility wrapper returning the unchanged core-only surface."""
 
@@ -4683,6 +4843,9 @@ def idle_admission_core_verdict(
         neg8_drift_bound=neg8_drift_bound,
         evaluation_timestamp_s=evaluation_timestamp_s,
         calibration_ledger_snapshot=calibration_ledger_snapshot,
+        calibration_bracket_binding=calibration_bracket_binding,
+        calibration_bracket_identity=calibration_bracket_identity,
+        calibration_bracket_binding_supplied=calibration_bracket_binding_supplied,
     ).core
 
 
@@ -5574,6 +5737,14 @@ def _run_whole_window_verdict_locked(
         "consumption_semantics_id",
         MINTED_CONSUMPTION_SEMANTICS_ID,
     )
+    calibration_snapshot = _load_calibration_snapshot_for_evaluation(
+        getattr(args, "calibration_custody_store", None)
+    )
+    bracket_binding, bracket_identity = _validated_bracket_binding_input(
+        getattr(args, "bracket_binding", None),
+        snapshot=calibration_snapshot,
+        runs_root=runs_dir,
+    )
     consumption_session: AuthenticatedConsumptionSession | None = None
     consumption_provenance: dict[str, Mapping[str, Any]] | None = None
     if consumption_semantics_id in {
@@ -5584,6 +5755,8 @@ def _run_whole_window_verdict_locked(
             runs_dir,
             {evaluation.bundle_id for evaluation in included},
             consumption_semantics_id=consumption_semantics_id,
+            calibration_ledger_snapshot=calibration_snapshot,
+            calibration_bracket_binding=bracket_binding,
         )
         consumption_session._prepare(
             bundle_paths={
@@ -5626,12 +5799,11 @@ def _run_whole_window_verdict_locked(
         whole_window=True,
         runs_root=runs_dir,
         neg8_drift_bound=neg8_drift_bound,
-        calibration_ledger_snapshot=(
-            consumption_session.calibration_ledger_snapshot
-            if consumption_session is not None
-            else _load_calibration_snapshot_for_evaluation(
-                getattr(args, "calibration_custody_store", None)
-            )
+        calibration_ledger_snapshot=calibration_snapshot,
+        calibration_bracket_binding=bracket_binding,
+        calibration_bracket_identity=bracket_identity,
+        calibration_bracket_binding_supplied=(
+            getattr(args, "bracket_binding", None) is not None
         ),
     )
     core = core_evaluation.core

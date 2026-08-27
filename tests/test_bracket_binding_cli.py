@@ -7,9 +7,10 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from joulewise.analysis_manifest_v3 import FINALIZED_BASENAME_SUFFIX
@@ -27,10 +28,13 @@ from joulewise.calibration_ledger import (
     load_calibration_ledger_snapshot,
     terminal_head_pin_for_session,
 )
-from joulewise.whole_window import AuthenticatedConsumptionSession
+from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA
 from scripts import build_bracket_binding as binding_cli
 from scripts.finalize_analysis_manifest import main as finalize_main
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
+from tests import test_calibration_live_three_window as live_three_window_module
+from tests.test_run_campaign import read_all_jsonl, run_campaign_module
+from tests.receipt_corpus import ReceiptCorpus
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -40,70 +44,33 @@ def _write_json(path: Path, value: object) -> None:
 def _install_cli_fixture(
     root: Path,
     *,
-    edit_descriptors: object | None = None,
     complete_custody_store: bool = False,
 ) -> dict:
+    root = root.resolve()
     fixture = install_synthetic_finalization_fixture(root)
     if complete_custody_store:
         _rebuild_complete_calibration_session(fixture)
     binding = json.loads(fixture["bracket_path"].read_text())
-    fixture["original_verdict_bytes"] = fixture["verdict_path"].read_bytes()
-    fixture["original_campaign_log_bytes"] = (
-        fixture["runs_root"] / "campaign_log.jsonl"
-    ).read_bytes()
-
-    def descriptor(role: str) -> dict[str, str]:
-        endpoint = binding["endpoints"][role]
-        return {
-            "bracket_session_id": binding["session_id"],
-            "bracket_slot": role,
-            "bracket_window_id": binding["window_id"],
-            "bracket_plan_id": binding["plan_id"],
-            "bracket_plan_sha256": binding["plan_sha256"],
-            "bracket_evidence_root_id": binding["evidence_root_id"],
-            "bracket_runs_root": binding["runs_root"],
-            "attempt_id": endpoint["attempt_id"],
-            "ledger_receipt_digest": endpoint["receipt_digest"],
-            "content_id": endpoint["content_digest"],
-        }
-
-    pre = descriptor("pre")
-    post = descriptor("post")
-    if edit_descriptors is not None:
-        edit_descriptors(pre, post)
-
-    verdict = json.loads(fixture["verdict_path"].read_text())
-    bracket_set = verdict["evaluation_basis"]["calibration_bracket_set"]
-    bracket_set["pre"] = copy.deepcopy(pre)
-    bracket_set["post"] = copy.deepcopy(post)
-    stored_bracket = verdict["idle_admission_core"][
-        "instrument_calibration_bracket"
-    ]
-    stored_bracket["pre"] = copy.deepcopy(pre)
-    stored_bracket["post"] = copy.deepcopy(post)
-    basis = verdict["evaluation_basis"]
-    basis["sha256"] = canonical_sha256(
-        {key: value for key, value in basis.items() if key != "sha256"}
-    )
-    _write_json(fixture["verdict_path"], verdict)
-
-    log_path = fixture["runs_root"] / "campaign_log.jsonl"
-    rows = [json.loads(line) for line in log_path.read_text().splitlines() if line]
-    matches = [
-        index
-        for index, row in enumerate(rows)
-        if row.get("record_type") == "idle_admission_whole_window_verdict"
-    ]
-    if len(matches) != 1:
-        raise AssertionError(f"synthetic fixture has {len(matches)} verdict rows")
-    rows[matches[0]] = verdict
-    log_path.write_bytes(b"".join(canonical_json_bytes(row) + b"\n" for row in rows))
-
     fixture["head_pin_path"] = fixture["ledger_path"].with_name(
         "calibration_ledger_head.json"
     )
-    fixture["produced_path"] = root / "produced_bracket_binding.json"
-    fixture["descriptors"] = {"pre": pre, "post": post}
+    fixture["produced_path"] = (
+        fixture["runs_root"] / "produced_bracket_binding.json"
+    )
+    fixture["identity"] = {
+        key: binding[key]
+        for key in (
+            "session_id",
+            "window_id",
+            "plan_id",
+            "plan_sha256",
+            "evidence_root_id",
+            "runs_root",
+        )
+    }
+    fixture["frozen_plan_path"] = fixture["prospective_path"].parent / fixture[
+        "prospective"
+    ]["plan"]["path"]
     return fixture
 
 
@@ -197,26 +164,32 @@ def _rebuild_complete_calibration_session(fixture: dict) -> None:
     _write_json(fixture["bracket_path"], binding)
 
 
-def _restore_original_whole_window_fixture(fixture: dict) -> None:
-    """Restore the helper's deliberately descriptor-free calibration seam."""
-
-    fixture["verdict_path"].write_bytes(fixture["original_verdict_bytes"])
-    (fixture["runs_root"] / "campaign_log.jsonl").write_bytes(
-        fixture["original_campaign_log_bytes"]
-    )
-
-
 def _binding_args(
     fixture: dict,
     *,
     output: Path | None = None,
     custody_store: Path | None = None,
+    identity: dict | None = None,
+    frozen_plan: Path | None = None,
 ) -> list[str]:
+    selected = identity or fixture["identity"]
     args = [
         "--custody-root",
         str(fixture["root"]),
-        "--whole-window-verdict",
-        str(fixture["verdict_path"]),
+        "--session-id",
+        selected["session_id"],
+        "--window-id",
+        selected["window_id"],
+        "--plan-id",
+        selected["plan_id"],
+        "--plan-sha256",
+        selected["plan_sha256"],
+        "--frozen-plan",
+        str(frozen_plan or fixture["frozen_plan_path"]),
+        "--evidence-root-id",
+        selected["evidence_root_id"],
+        "--runs-root",
+        selected["runs_root"],
         "--calibration-ledger",
         str(fixture["ledger_path"]),
         "--head-pin",
@@ -233,6 +206,8 @@ def _run_binding_cli(
     *,
     output: Path | None = None,
     custody_store: Path | None = None,
+    identity: dict | None = None,
+    frozen_plan: Path | None = None,
 ) -> tuple[int, dict]:
     stdout = io.StringIO()
     with redirect_stdout(stdout):
@@ -241,6 +216,8 @@ def _run_binding_cli(
                 fixture,
                 output=output,
                 custody_store=custody_store,
+                identity=identity,
+                frozen_plan=frozen_plan,
             )
         )
     return code, json.loads(stdout.getvalue())
@@ -327,29 +304,247 @@ def _rewrite_binding_digest(binding: dict) -> None:
     ).hexdigest()
 
 
+def _install_three_window_e2e_fixture(
+    root: Path,
+    source: type[live_three_window_module.CalibrationLiveThreeWindowTests],
+) -> dict:
+    """Adapt the issued three-window ledger to the finalizer's gamma corpus."""
+
+    root = root.resolve()
+    fixture = _install_cli_fixture(root)
+    roots = {
+        "alpha": root / "calibration-windows" / "alpha",
+        "beta": root / "calibration-windows" / "beta",
+        "gamma": fixture["runs_root"],
+    }
+    for path in roots.values():
+        path.mkdir(parents=True, exist_ok=True)
+
+    identities = {
+        name: {
+            key: value
+            for key, value in source.windows[name].items()
+            if key
+            in {
+                "session_id",
+                "window_id",
+                "plan_id",
+                "plan_sha256",
+                "evidence_root_id",
+            }
+        }
+        | {"runs_root": str(roots[name])}
+        for name in ("alpha", "beta", "gamma")
+    }
+    prospective = fixture["prospective"]
+    identities["gamma"].update(
+        {
+            "window_id": prospective["plan"]["plan_id"],
+            "plan_id": prospective["plan"]["plan_id"],
+            "plan_sha256": prospective["plan"]["sha256"],
+            "evidence_root_id": prospective["evidence_root_id"],
+        }
+    )
+    identity_by_session = {
+        value["session_id"]: value for value in identities.values()
+    }
+    receipts = ReceiptCorpus(
+        json.loads(line)
+        for line in source.final_ledger_bytes.splitlines()
+        if line.strip()
+    )
+
+    def rebind(row: dict) -> dict:
+        value = copy.deepcopy(row)
+        identity = identity_by_session.get(value.get("session_id"))
+        if identity is None:
+            return value
+        for field in (
+            "window_id",
+            "plan_id",
+            "plan_sha256",
+            "evidence_root_id",
+            "runs_root",
+        ):
+            if field in value:
+                value[field] = identity[field]
+        slots = value.get("slots")
+        if isinstance(slots, dict):
+            for slot in slots.values():
+                if isinstance(slot, dict) and isinstance(slot.get("attempt_id"), str):
+                    slot["custody_locator"] = str(
+                        Path(identity["runs_root"])
+                        / "instrument_validation"
+                        / slot["attempt_id"]
+                    )
+        if isinstance(value.get("attempt_id"), str) and "custody_locator" in value:
+            value["custody_locator"] = str(
+                Path(identity["runs_root"])
+                / "instrument_validation"
+                / value["attempt_id"]
+            )
+        return value
+
+    rebound = ReceiptCorpus(rebind(row) for row in receipts)
+    rechained = source._rechain(rebound)
+    fixture["ledger_path"].write_bytes(
+        b"".join(canonical_json_bytes(row) + b"\n" for row in rechained)
+    )
+    terminal = next(reversed(tuple(rechained)))
+    _write_json(
+        fixture["head_pin_path"],
+        {
+            "sequence": terminal["sequence"],
+            "head_digest": terminal["receipt_digest"],
+            "ledger_schema": LEDGER_SCHEMA,
+        },
+    )
+    snapshot = load_calibration_ledger_snapshot(
+        fixture["ledger_path"],
+        fixture["head_pin_path"],
+        baseline_sequence=source.base_sequence,
+        baseline_digest=source.base_digest,
+        require_committed_pin=False,
+        verify_custody=False,
+    )
+    if snapshot.refusal_reasons:
+        raise AssertionError(snapshot.refusal_reasons)
+    fixture["snapshot"] = snapshot
+    fixture["three_window_identities"] = identities
+    fixture["identity"] = dict(identities["gamma"])
+    fixture["produced_path"] = fixture["runs_root"] / "produced_bracket_binding.json"
+
+    log_path = fixture["runs_root"] / "campaign_log.jsonl"
+    retained = [
+        row
+        for row in read_all_jsonl(log_path)
+        if row.get("record_type") != "idle_admission_whole_window_verdict"
+    ]
+    log_path.write_bytes(
+        b"".join(canonical_json_bytes(row) + b"\n" for row in retained)
+    )
+    fixture["verdict_path"].unlink(missing_ok=True)
+    return fixture
+
+
+@contextmanager
+def _three_window_runtime(
+    fixture: dict,
+    source: type[live_three_window_module.CalibrationLiveThreeWindowTests],
+):
+    gamma = source.windows["gamma"]
+    reader = SimpleNamespace(
+        measured_window=lambda: SimpleNamespace(
+            start_s=gamma["window_start_s"],
+            end_s=gamma["window_end_s"],
+        ),
+        metadata=lambda: {
+            "instrument_calibration": {"bindings": dict(source.t1)}
+        },
+    )
+    with (
+        mock.patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+        mock.patch.object(
+            run_campaign_module, "_final_idle_admission_attempt", return_value=1
+        ),
+        mock.patch.object(
+            run_campaign_module, "_load_idle_rich_telemetry", return_value=[]
+        ),
+        mock.patch.object(
+            run_campaign_module, "post_run_environment_refusals", return_value=()
+        ),
+        mock.patch.object(
+            run_campaign_module,
+            "evaluate_cpu_idle_admission",
+            return_value={"decision": "admitted", "conditions": []},
+        ),
+        mock.patch.object(
+            run_campaign_module, "_adapter_observations_for", return_value=[]
+        ),
+        mock.patch.object(
+            run_campaign_module,
+            "evaluate_adapter_wattage_continuity",
+            return_value={
+                "schema_version": ADAPTER_CONTINUITY_SCHEMA,
+                "decision": "stable",
+                "conditions": [],
+            },
+        ),
+        mock.patch.object(
+            run_campaign_module,
+            "_neg8_reference_scientific_config_sha256",
+            return_value="8" * 64,
+        ),
+        mock.patch.object(
+            run_campaign_module,
+            "_load_calibration_snapshot_for_evaluation",
+            return_value=fixture["snapshot"],
+        ),
+        mock.patch(
+            "joulewise.calibration_bracketing.load_calibration_acceptance_bound",
+            return_value=source.acceptance,
+        ),
+        mock.patch(
+            "joulewise.calibration_bracketing._candidate_from_observation",
+            side_effect=source._candidate,
+        ),
+        mock.patch(
+            "joulewise.calibration_bracketing.BundleReader",
+            return_value=reader,
+        ),
+        mock.patch(
+            "joulewise.calibration_ledger.load_calibration_ledger_snapshot",
+            return_value=fixture["snapshot"],
+        ),
+    ):
+        yield
+
+
+def _run_whole_window_evaluation(
+    fixture: dict,
+    *,
+    binding_path: Path | None,
+) -> tuple[int, dict]:
+    arguments = [
+        "--whole-window-verdict",
+        "--runs-dir",
+        str(fixture["runs_root"]),
+        "--campaign-policy",
+        str(
+            Path(__file__).resolve().parents[1]
+            / "configs"
+            / "campaign_policies"
+            / "quiet_mac_p2_production.json"
+        ),
+        "--neg8-drift-bound",
+        str(fixture["root"] / "neg8_drift_bound.json"),
+    ]
+    if binding_path is not None:
+        arguments.extend(("--bracket-binding", str(binding_path)))
+    args = run_campaign_module.parse_args(arguments)
+    with redirect_stdout(io.StringIO()):
+        code = run_campaign_module.run_whole_window_verdict(args)
+    verdict = read_all_jsonl(fixture["runs_root"] / "campaign_log.jsonl")[-1]
+    return code, verdict
+
+
 class BracketBindingCliTests(unittest.TestCase):
-    def test_emits_canonical_bytes_identical_to_whole_window_producer(self) -> None:
+    @classmethod
+    def setUpClass(cls) -> None:
+        live_three_window_module.CalibrationLiveThreeWindowTests.setUpClass()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        live_three_window_module.CalibrationLiveThreeWindowTests.tearDownClass()
+
+    def test_emits_canonical_bytes_identical_to_in_memory_producer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _install_cli_fixture(Path(tmp))
             code, result = _run_binding_cli(fixture)
             self.assertEqual(code, 0)
             self.assertEqual(result["status"], "BUILT")
 
-            snapshot = load_calibration_ledger_snapshot(
-                fixture["ledger_path"],
-                fixture["head_pin_path"],
-                require_committed_pin=False,
-                verify_custody=True,
-            )
-            verdict = json.loads(fixture["verdict_path"].read_text())
-            session = AuthenticatedConsumptionSession(
-                fixture["runs_root"],
-                set(),
-                evaluation_basis_sha256=verdict["evaluation_basis"]["sha256"],
-                calibration_ledger_snapshot=snapshot,
-            )
-            in_memory = session._basis_bracket_binding()
-            self.assertIsNotNone(in_memory)
+            in_memory = json.loads(fixture["bracket_path"].read_text())
             expected = canonical_json_bytes(in_memory) + b"\n"
             self.assertEqual(fixture["produced_path"].read_bytes(), expected)
 
@@ -365,19 +560,182 @@ class BracketBindingCliTests(unittest.TestCase):
                 ),
             )
 
-    def test_finalizer_accepts_cli_output(self) -> None:
+    def test_build_evaluate_finalize_preserves_binding_and_verdict_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            fixture = _install_cli_fixture(Path(tmp))
-            self.assertEqual(_run_binding_cli(fixture)[0], 0)
-            # The shared finalizer helper intentionally patches its production
-            # calibration bracket down to {schema,status,b_fiducial_s}; restore
-            # that otherwise-valid whole-window row after exercising the CLI's
-            # real descriptor path. Bracket/ledger authentication remains real.
-            _restore_original_whole_window_fixture(fixture)
-            code, result = _run_finalizer(fixture)
+            fixture = _install_three_window_e2e_fixture(
+                Path(tmp), live_three_window_module.CalibrationLiveThreeWindowTests
+            )
+            with mock.patch.object(
+                binding_cli,
+                "load_calibration_ledger_snapshot",
+                return_value=fixture["snapshot"],
+            ):
+                self.assertEqual(_run_binding_cli(fixture)[0], 0)
+            binding_before = hashlib.sha256(
+                fixture["produced_path"].read_bytes()
+            ).hexdigest()
+
+            with _three_window_runtime(
+                fixture, live_three_window_module.CalibrationLiveThreeWindowTests
+            ):
+                evaluate_code, verdict = _run_whole_window_evaluation(
+                    fixture, binding_path=fixture["produced_path"]
+                )
+            self.assertEqual(evaluate_code, 0)
+            self.assertEqual(verdict["status"], "passed")
+            binding = json.loads(fixture["produced_path"].read_text())
+            bracket_set = verdict["evaluation_basis"]["calibration_bracket_set"]
+            for role in ("pre", "post"):
+                endpoint = binding["endpoints"][role]
+                descriptor = bracket_set[role]
+                self.assertEqual(descriptor["attempt_id"], endpoint["attempt_id"])
+                self.assertEqual(
+                    descriptor["content_id"], endpoint["content_digest"]
+                )
+                self.assertEqual(
+                    descriptor["ledger_receipt_digest"], endpoint["receipt_digest"]
+                )
+                for descriptor_field, binding_field in (
+                    ("bracket_session_id", "session_id"),
+                    ("bracket_window_id", "window_id"),
+                    ("bracket_plan_id", "plan_id"),
+                    ("bracket_plan_sha256", "plan_sha256"),
+                    ("bracket_evidence_root_id", "evidence_root_id"),
+                    ("bracket_runs_root", "runs_root"),
+                ):
+                    self.assertEqual(
+                        descriptor[descriptor_field], binding[binding_field]
+                    )
+                self.assertEqual(descriptor["bracket_slot"], role)
+
+            campaign_log_path = fixture["runs_root"] / "campaign_log.jsonl"
+            campaign_log_raw_before = campaign_log_path.read_bytes()
+            campaign_verdict_row = campaign_log_raw_before.splitlines(keepends=True)[-1]
+            fixture["verdict_path"].write_bytes(campaign_verdict_row)
+            verdict_raw_before = fixture["verdict_path"].read_bytes()
+            self.assertEqual(verdict_raw_before, campaign_verdict_row)
+            verdict_before = hashlib.sha256(verdict_raw_before).hexdigest()
+            campaign_log_before = hashlib.sha256(campaign_log_raw_before).hexdigest()
+            campaign_row_before = hashlib.sha256(campaign_verdict_row).hexdigest()
+            with _three_window_runtime(
+                fixture, live_three_window_module.CalibrationLiveThreeWindowTests
+            ):
+                code, result = _run_finalizer(fixture)
             self.assertEqual(code, 0)
             self.assertEqual(result["status"], "FINALIZED")
-            self.assertTrue(Path(result["output"]).is_file())
+            finalized_path = Path(result["output"])
+            self.assertTrue(finalized_path.is_file())
+            finalized = json.loads(finalized_path.read_text())
+            self.assertEqual(
+                finalized["evidence"]["bracket_binding"]["sha256"],
+                binding_before,
+            )
+            self.assertEqual(
+                finalized["evidence"]["whole_window_verdict"]["sha256"],
+                verdict_before,
+            )
+            self.assertEqual(
+                hashlib.sha256(fixture["produced_path"].read_bytes()).hexdigest(),
+                binding_before,
+            )
+            self.assertEqual(
+                hashlib.sha256(fixture["verdict_path"].read_bytes()).hexdigest(),
+                verdict_before,
+            )
+            self.assertEqual(
+                hashlib.sha256(campaign_log_path.read_bytes()).hexdigest(),
+                campaign_log_before,
+            )
+            self.assertEqual(
+                hashlib.sha256(
+                    campaign_log_path.read_bytes().splitlines(keepends=True)[-1]
+                ).hexdigest(),
+                campaign_row_before,
+            )
+
+    def test_whole_window_evaluation_without_binding_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _install_three_window_e2e_fixture(
+                Path(tmp), live_three_window_module.CalibrationLiveThreeWindowTests
+            )
+            with mock.patch.object(
+                binding_cli,
+                "load_calibration_ledger_snapshot",
+                return_value=fixture["snapshot"],
+            ):
+                self.assertEqual(_run_binding_cli(fixture)[0], 0)
+            with _three_window_runtime(
+                fixture, live_three_window_module.CalibrationLiveThreeWindowTests
+            ):
+                code, verdict = _run_whole_window_evaluation(
+                    fixture, binding_path=None
+                )
+
+            self.assertEqual(code, 1)
+            self.assertEqual(verdict["status"], "failed")
+            self.assertEqual(
+                verdict["idle_admission_core"]["conditions"],
+                ["calibration_bracket_binding_missing"],
+            )
+
+    def test_whole_window_evaluation_refuses_wrong_or_tampered_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _install_three_window_e2e_fixture(
+                Path(tmp), live_three_window_module.CalibrationLiveThreeWindowTests
+            )
+            with mock.patch.object(
+                binding_cli,
+                "load_calibration_ledger_snapshot",
+                return_value=fixture["snapshot"],
+            ):
+                self.assertEqual(_run_binding_cli(fixture)[0], 0)
+
+            alpha = fixture["three_window_identities"]["alpha"]
+            wrong_binding = build_calibration_bracket_binding(
+                fixture["snapshot"],
+                session_id=alpha["session_id"],
+                window_id=alpha["window_id"],
+                plan_id=alpha["plan_id"],
+                plan_sha256=alpha["plan_sha256"],
+                evidence_root_id=alpha["evidence_root_id"],
+                runs_root=alpha["runs_root"],
+            )
+            wrong_path = fixture["runs_root"] / "wrong-window-binding.json"
+            wrong_path.write_bytes(canonical_json_bytes(wrong_binding) + b"\n")
+
+            tampered = json.loads(fixture["produced_path"].read_text())
+            replacement = "0" if tampered["binding_digest"][0] != "0" else "1"
+            tampered["binding_digest"] = replacement + tampered["binding_digest"][1:]
+            tampered_path = fixture["runs_root"] / "tampered-binding.json"
+            tampered_path.write_bytes(canonical_json_bytes(tampered) + b"\n")
+
+            outside_path = fixture["root"] / "outside-binding.json"
+            outside_path.write_bytes(fixture["produced_path"].read_bytes())
+            symlink_path = fixture["runs_root"] / "symlink-binding.json"
+            symlink_path.symlink_to(fixture["produced_path"])
+            noncanonical_path = fixture["runs_root"] / "noncanonical-binding.json"
+            _write_json(noncanonical_path, json.loads(fixture["produced_path"].read_text()))
+
+            for name, binding_path in (
+                ("different-window-plan-session", wrong_path),
+                ("flipped-binding-digest", tampered_path),
+                ("outside-runs-custody", outside_path),
+                ("symlink", symlink_path),
+                ("noncanonical-json", noncanonical_path),
+            ):
+                with self.subTest(name=name), _three_window_runtime(
+                    fixture, live_three_window_module.CalibrationLiveThreeWindowTests
+                ):
+                    code, verdict = _run_whole_window_evaluation(
+                        fixture, binding_path=binding_path
+                    )
+                self.assertEqual(code, 1)
+                self.assertEqual(verdict["status"], "failed")
+                self.assertEqual(
+                    verdict["idle_admission_core"]["conditions"],
+                    ["calibration_bracket_binding_invalid"],
+                )
+                self.assertNotEqual(verdict["status"], "passed")
 
     def test_finalizer_refuses_runs_root_different_from_authenticated_binding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -539,33 +897,27 @@ class BracketBindingCliTests(unittest.TestCase):
             )
             self.assertFalse(fixture["produced_path"].exists())
 
-    def test_refuses_endpoint_digest_not_authenticated_by_ledger(self) -> None:
+    def test_refuses_frozen_plan_identity_disagreement(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            fixture = _install_cli_fixture(
-                Path(tmp),
-                edit_descriptors=lambda pre, post: pre.__setitem__(
-                    "ledger_receipt_digest", "0" * 64
-                ),
-            )
-            code, refusal = _run_binding_cli(fixture)
+            fixture = _install_cli_fixture(Path(tmp))
+            identity = dict(fixture["identity"])
+            identity["plan_id"] = "different-plan"
+            code, refusal = _run_binding_cli(fixture, identity=identity)
             self.assertEqual(code, 2)
             self.assertEqual(
-                refusal["reason"], binding_cli.REFUSAL_ENDPOINT_MISMATCH
+                refusal["reason"], binding_cli.REFUSAL_PLAN_INVALID
             )
             self.assertFalse(fixture["produced_path"].exists())
 
-    def test_refuses_disagreeing_pre_post_descriptors(self) -> None:
+    def test_refuses_explicit_identity_disagreement_with_ledger(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            fixture = _install_cli_fixture(
-                Path(tmp),
-                edit_descriptors=lambda pre, post: post.__setitem__(
-                    "bracket_plan_id", "substituted-plan"
-                ),
-            )
-            code, refusal = _run_binding_cli(fixture)
+            fixture = _install_cli_fixture(Path(tmp))
+            identity = dict(fixture["identity"])
+            identity["window_id"] = "different-window"
+            code, refusal = _run_binding_cli(fixture, identity=identity)
             self.assertEqual(code, 2)
             self.assertEqual(
-                refusal["reason"], binding_cli.REFUSAL_DESCRIPTOR_MISMATCH
+                refusal["reason"], binding_cli.REFUSAL_SESSION_IDENTITY_MISMATCH
             )
             self.assertFalse(fixture["produced_path"].exists())
 
@@ -576,14 +928,10 @@ class BracketBindingCliTests(unittest.TestCase):
             custody.mkdir()
             outside_runs = container / "outside-runs"
             outside_runs.mkdir()
-            fixture = _install_cli_fixture(
-                custody,
-                edit_descriptors=lambda pre, post: (
-                    pre.__setitem__("bracket_runs_root", str(outside_runs)),
-                    post.__setitem__("bracket_runs_root", str(outside_runs)),
-                ),
-            )
-            code, refusal = _run_binding_cli(fixture)
+            fixture = _install_cli_fixture(custody)
+            identity = dict(fixture["identity"])
+            identity["runs_root"] = str(outside_runs)
+            code, refusal = _run_binding_cli(fixture, identity=identity)
             self.assertEqual(code, 2)
             self.assertEqual(
                 refusal["reason"], binding_cli.REFUSAL_CUSTODY_INVALID
@@ -669,7 +1017,9 @@ class BracketBindingCliTests(unittest.TestCase):
                 "reason": "bracket_binding_invocation_invalid",
                 "detail": (
                     "the following arguments are required: --custody-root, "
-                    "--whole-window-verdict, --calibration-ledger, --output"
+                    "--session-id, --window-id, --plan-id, --plan-sha256, "
+                    "--frozen-plan, --evidence-root-id, --runs-root, "
+                    "--calibration-ledger, --output"
                 ),
             },
         )

@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from scripts.run_campaign import (
     ShakedownGateError,
@@ -6908,6 +6908,25 @@ class CampaignCalibrationCustodyStoreTests(unittest.TestCase):
 
     _OMITTED = object()
 
+    def test_bracket_binding_is_a_whole_window_only_cli_option(self) -> None:
+        binding_path = Path("runs") / "calibration_bracket_binding.json"
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--bracket-binding",
+                str(binding_path),
+            ]
+        )
+        self.assertEqual(args.bracket_binding, str(binding_path))
+        with self.assertRaises(SystemExit):
+            run_campaign_module.parse_args(
+                [
+                    str(ROOT / "configs" / "examples"),
+                    "--bracket-binding",
+                    str(binding_path),
+                ]
+            )
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -9533,6 +9552,55 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 1)
         snapshot_loader.assert_called_once_with(str(custody_store))
 
+    def test_whole_window_runner_threads_binding_into_consumption_session(self) -> None:
+        _policy_binding, args = self._install_passing_whole_window_verdict_fixture(
+            bound_lineage={"schema_version": "test-lineage", "plan_id": "plan-1"}
+        )
+        args.consumption_semantics_id = (
+            run_campaign_module.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+        )
+        args.bracket_binding = str(self.root / "calibration_bracket_binding.json")
+        snapshot = object()
+        bracket_binding = {"schema_version": "test-binding"}
+        bracket_identity = {
+            "window_id": "window-1",
+            "plan_id": "plan-1",
+            "plan_sha256": "a" * 64,
+            "evidence_root_id": "evidence-1",
+        }
+        session = Mock()
+        session._prepare.side_effect = RuntimeError("stop after session construction")
+
+        with (
+            patch.object(
+                run_campaign_module,
+                "_load_calibration_snapshot_for_evaluation",
+                return_value=snapshot,
+            ),
+            patch.object(
+                run_campaign_module,
+                "_validated_bracket_binding_input",
+                return_value=(bracket_binding, bracket_identity),
+            ),
+            patch.object(
+                run_campaign_module,
+                "AuthenticatedConsumptionSession",
+                return_value=session,
+            ) as session_type,
+            self.assertRaisesRegex(RuntimeError, "stop after session construction"),
+        ):
+            run_campaign_module.run_whole_window_verdict(args)
+
+        session_type.assert_called_once_with(
+            self.root,
+            set(),
+            consumption_semantics_id=(
+                run_campaign_module.MAX_BRACKET_CONSUMPTION_SEMANTICS_ID
+            ),
+            calibration_ledger_snapshot=snapshot,
+            calibration_bracket_binding=bracket_binding,
+        )
+
     def test_whole_window_cli_uses_campaign_membership_and_strict_validation(self) -> None:
         lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
         _binding, args = self._install_passing_whole_window_verdict_fixture(
@@ -9985,6 +10053,11 @@ def d100_real_salvage_leaf_patches():
 
     with (
         patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+        patch.object(
+            run_campaign_module,
+            "_load_calibration_snapshot_for_evaluation",
+            return_value=calibration_snapshot,
+        ),
         patch.object(
             run_campaign_module,
             "calibration_bracket_for_bundles",
