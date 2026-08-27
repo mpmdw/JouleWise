@@ -27,6 +27,7 @@ from joulewise.calibration_ledger import (
     LEDGER_SCHEMA,
     artifact_hashes,
     append_bracket_session_receipt,
+    canonical_json_bytes,
     finalize_bracket_session_slot,
     load_calibration_ledger_snapshot,
     terminal_head_pin_for_session,
@@ -200,7 +201,7 @@ def _install_calibration_session(
         runs_root=runs_root,
     )
     binding_path = root / "bracket_binding.json"
-    _write_json(binding_path, binding)
+    binding_path.write_bytes(canonical_json_bytes(binding) + b"\n")
     return ledger, binding_path
 
 
@@ -720,6 +721,42 @@ class AnalysisFinalizerTests(unittest.TestCase):
                     aggregate_floor_artifact_path=fixture["floor_path"],
                     output_dir=fixture["root"],
                 )
+            output = fixture["root"] / (
+                fixture["prospective"]["manifest_id"]
+                + FINALIZED_BASENAME_SUFFIX
+            )
+            self.assertFalse(output.exists())
+
+    def test_reformatted_bracket_binding_bytes_refuse_before_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = install_synthetic_finalization_fixture(Path(tmp))
+            bracket = json.loads(fixture["bracket_path"].read_bytes())
+            fixture["bracket_path"].write_bytes(
+                (json.dumps(bracket, indent=2, sort_keys=True) + "\n").encode(
+                    "utf-8"
+                )
+            )
+
+            with self.assertRaisesRegex(
+                AnalysisManifestFinalizationError,
+                "analysis_finalization_bracket_binding_mismatch",
+            ) as raised:
+                finalize_prospective_analysis_manifest_v3(
+                    fixture["prospective_path"],
+                    plan_tree_path=fixture["plan_tree_path"],
+                    custody_root=fixture["root"],
+                    runs_root=fixture["runs_root"],
+                    whole_window_verdict_path=fixture["verdict_path"],
+                    bracket_binding_path=fixture["bracket_path"],
+                    calibration_ledger_path=fixture["ledger_path"],
+                    aggregate_floor_artifact_path=fixture["floor_path"],
+                    output_dir=fixture["root"],
+                )
+            self.assertEqual(
+                raised.exception.reason_code,
+                "analysis_finalization_bracket_binding_mismatch",
+            )
+            self.assertIn("bracket binding bytes", raised.exception.detail)
             output = fixture["root"] / (
                 fixture["prospective"]["manifest_id"]
                 + FINALIZED_BASENAME_SUFFIX

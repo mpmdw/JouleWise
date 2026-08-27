@@ -679,6 +679,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--whole-window-verdict-output",
+        metavar="VERDICT_JSON",
+        help=(
+            "Atomically publish the exact appended whole-window verdict row "
+            "without overwriting an existing file"
+        ),
+    )
+    parser.add_argument(
         "--calibration-custody-store",
         help=(
             "Content-addressed calibration custody store used exclusively "
@@ -809,13 +817,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         or args.salvage_closure is not None
         or args.calibration_custody_store is not None
         or args.bracket_binding is not None
+        or args.whole_window_verdict_output is not None
         or args.consumption_semantics_id != MINTED_CONSUMPTION_SEMANTICS_ID
     )
     if whole_window_only and not args.whole_window_verdict:
         parser.error(
             "--consumption-semantics-id, --window-membership-binding, and "
             "--salvage-closure, --calibration-custody-store, and "
-            "--bracket-binding are "
+            "--bracket-binding, and --whole-window-verdict-output are "
             "whole-window-verdict options"
         )
     if (
@@ -1381,12 +1390,13 @@ def append_log(
     row: dict[str, Any],
     *,
     lock_token: CampaignLockToken | None = None,
-) -> None:
+) -> bytes:
     """Durably append one JSONL row with one ``O_APPEND`` write.
 
     A prior valid but unterminated row receives its separator in the same
     write.  A malformed unterminated tail is the one tolerated torn-tail
     artifact and is truncated before appending; earlier corruption refuses.
+    Return the exact row bytes, excluding any separator repaired before it.
     """
 
     if lock_token is None:
@@ -1425,7 +1435,8 @@ def append_log(
                     os.fsync(truncate_fd)
                 finally:
                     os.close(truncate_fd)
-    payload = prefix + (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+    row_payload = (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
+    payload = prefix + row_payload
     fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
     try:
         written = os.write(fd, payload)
@@ -1436,6 +1447,7 @@ def append_log(
         os.fsync(fd)
     finally:
         os.close(fd)
+    return row_payload
 
 
 def log_row(
@@ -2964,6 +2976,62 @@ def _write_campaign_provenance_tmp(path: Path, payload: bytes) -> Path:
         raise
     assert tmp is not None
     return tmp
+
+
+def _publish_whole_window_verdict_output(
+    path: Path,
+    payload: bytes,
+    *,
+    lock_token: CampaignLockToken,
+) -> None:
+    """Atomically install one exact verdict row without clobbering a target."""
+
+    _validated_campaign_lock_ownership(lock_token)
+    path = Path(path)
+    temporary: Path | None = None
+    directory_descriptor: int | None = None
+    target_installed = False
+    succeeded = False
+    try:
+        temporary = _write_campaign_provenance_tmp(path, payload)
+        # The sibling hard link is the no-clobber commit point: EEXIST is a
+        # refusal, while rename/replace would silently destroy prior custody.
+        os.link(temporary, path, follow_symlinks=False)
+        target_installed = True
+        temporary.unlink()
+        temporary = None
+
+        directory_descriptor = os.open(path.parent, os.O_RDONLY)
+        os.fsync(directory_descriptor)
+        closing_directory = directory_descriptor
+        directory_descriptor = None
+        os.close(closing_directory)
+        succeeded = True
+    except FileExistsError as exc:
+        raise FileExistsError(
+            "refusing to overwrite existing whole-window verdict output "
+            f"{path}"
+        ) from exc
+    except OSError as exc:
+        raise OSError(
+            f"cannot publish whole-window verdict output {path}: {exc}"
+        ) from exc
+    finally:
+        if directory_descriptor is not None:
+            try:
+                os.close(directory_descriptor)
+            except OSError:
+                pass
+        if not succeeded and target_installed:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
 
 
 def _append_campaign_provenance_attestation_if_missing(
@@ -5920,7 +5988,16 @@ def _run_whole_window_verdict_locked(
         bundle_ids=row["bundle_ids"],
         source_manifests=source_descriptors,
     )
-    append_log(log_path, row, lock_token=lock_token)
+    verdict_row_raw = append_log(log_path, row, lock_token=lock_token)
+    verdict_output = getattr(args, "whole_window_verdict_output", None)
+    if verdict_output is not None:
+        # The log row is the authoritative record. If publication fails after
+        # append, preserve that row and surface a non-zero CLI refusal.
+        _publish_whole_window_verdict_output(
+            Path(verdict_output),
+            verdict_row_raw,
+            lock_token=lock_token,
+        )
     print(f"NEG-8 WHOLE-WINDOW VERDICT: {status}")
     print(f"  decision: {bracket_decision}")
     for condition in core["conditions"]:

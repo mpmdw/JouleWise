@@ -6927,6 +6927,25 @@ class CampaignCalibrationCustodyStoreTests(unittest.TestCase):
                 ]
             )
 
+    def test_verdict_output_is_a_whole_window_only_cli_option(self) -> None:
+        output_path = Path("runs") / "whole_window_verdict.json"
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--whole-window-verdict-output",
+                str(output_path),
+            ]
+        )
+        self.assertEqual(args.whole_window_verdict_output, str(output_path))
+        with self.assertRaises(SystemExit):
+            run_campaign_module.parse_args(
+                [
+                    str(ROOT / "configs" / "examples"),
+                    "--whole-window-verdict-output",
+                    str(output_path),
+                ]
+            )
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -9666,6 +9685,121 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             MINTED_CONSUMPTION_SEMANTICS_ID,
         )
         self.assertEqual(verdict["evaluation_basis"]["launch_lineage"], lineage)
+
+    def test_existing_verdict_output_refuses_after_one_log_append(self) -> None:
+        lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
+        _binding, args = self._install_passing_whole_window_verdict_fixture(
+            bound_lineage=lineage
+        )
+        output_path = self.root / "whole_window_verdict.json"
+        occupied = b"occupied\n"
+        output_path.write_bytes(occupied)
+        args.whole_window_verdict_output = str(output_path)
+        calibration_bracket = {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "b_fiducial_s": 0.02,
+            "pre": {"bracket_runs_root": str(self.root)},
+            "post": {},
+        }
+        stderr = io.StringIO()
+        with (
+            patch.object(run_campaign_module, "parse_args", return_value=args),
+            patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(calibration_bracket, ()),
+            ),
+            patch(
+                "joulewise.whole_window.authenticate_launch_lineage",
+                side_effect=lambda value, **_kwargs: {
+                    "launch_lineage": dict(value)
+                },
+            ),
+            patch(
+                "joulewise.whole_window._authenticated_bundle_launch_lineage_set",
+                return_value=lineage,
+            ),
+            patch(
+                "joulewise.whole_window._calibration_launch_lineages",
+                return_value=(lineage, lineage),
+            ),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(stderr),
+        ):
+            self.assertEqual(run_campaign_module.main([]), 2)
+
+        self.assertIn(
+            "refusing to overwrite existing whole-window verdict output",
+            stderr.getvalue(),
+        )
+        verdict_rows = [
+            row
+            for row in read_all_jsonl(self.root / "campaign_log.jsonl")
+            if row.get("record_type") == "idle_admission_whole_window_verdict"
+        ]
+        self.assertEqual(len(verdict_rows), 1)
+        self.assertEqual(output_path.read_bytes(), occupied)
+        self.assertFalse((self.root / "campaign.lock").exists())
+
+    def test_verdict_output_publish_failure_leaves_no_target_and_one_log_row(self) -> None:
+        lineage = {"schema_version": "test-lineage", "plan_id": "plan-1"}
+        _binding, args = self._install_passing_whole_window_verdict_fixture(
+            bound_lineage=lineage
+        )
+        output_path = self.root / "whole_window_verdict.json"
+        args.whole_window_verdict_output = str(output_path)
+        calibration_bracket = {
+            "schema_version": "joulewise.instrument_calibration_bracket.v1",
+            "status": "passed",
+            "b_fiducial_s": 0.02,
+            "pre": {"bracket_runs_root": str(self.root)},
+            "post": {},
+        }
+        stderr = io.StringIO()
+        with (
+            patch.object(run_campaign_module, "parse_args", return_value=args),
+            patch.object(
+                run_campaign_module.os, "link", side_effect=OSError("injected link failure")
+            ),
+            patch.object(run_campaign_module, "validate_bundle", return_value=[]),
+            patch.object(
+                run_campaign_module,
+                "calibration_bracket_for_bundles",
+                return_value=(calibration_bracket, ()),
+            ),
+            patch(
+                "joulewise.whole_window.authenticate_launch_lineage",
+                side_effect=lambda value, **_kwargs: {
+                    "launch_lineage": dict(value)
+                },
+            ),
+            patch(
+                "joulewise.whole_window._authenticated_bundle_launch_lineage_set",
+                return_value=lineage,
+            ),
+            patch(
+                "joulewise.whole_window._calibration_launch_lineages",
+                return_value=(lineage, lineage),
+            ),
+            redirect_stdout(io.StringIO()),
+            redirect_stderr(stderr),
+        ):
+            self.assertEqual(run_campaign_module.main([]), 2)
+
+        self.assertIn("injected link failure", stderr.getvalue())
+        verdict_rows = [
+            row
+            for row in read_all_jsonl(self.root / "campaign_log.jsonl")
+            if row.get("record_type") == "idle_admission_whole_window_verdict"
+        ]
+        self.assertEqual(len(verdict_rows), 1)
+        self.assertFalse(output_path.exists())
+        self.assertEqual(
+            list(output_path.parent.glob(f"{output_path.name}.tmp-*")), []
+        )
+        self.assertFalse((self.root / "campaign.lock").exists())
 
     def test_whole_window_verdict_refuses_mismatched_bound_lineage(self) -> None:
         member_lineage = {

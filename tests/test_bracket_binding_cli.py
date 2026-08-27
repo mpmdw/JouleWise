@@ -504,6 +504,7 @@ def _run_whole_window_evaluation(
     fixture: dict,
     *,
     binding_path: Path | None,
+    verdict_output_path: Path | None = None,
 ) -> tuple[int, dict]:
     arguments = [
         "--whole-window-verdict",
@@ -521,6 +522,10 @@ def _run_whole_window_evaluation(
     ]
     if binding_path is not None:
         arguments.extend(("--bracket-binding", str(binding_path)))
+    if verdict_output_path is not None:
+        arguments.extend(
+            ("--whole-window-verdict-output", str(verdict_output_path))
+        )
     args = run_campaign_module.parse_args(arguments)
     with redirect_stdout(io.StringIO()):
         code = run_campaign_module.run_whole_window_verdict(args)
@@ -579,7 +584,9 @@ class BracketBindingCliTests(unittest.TestCase):
                 fixture, live_three_window_module.CalibrationLiveThreeWindowTests
             ):
                 evaluate_code, verdict = _run_whole_window_evaluation(
-                    fixture, binding_path=fixture["produced_path"]
+                    fixture,
+                    binding_path=fixture["produced_path"],
+                    verdict_output_path=fixture["verdict_path"],
                 )
             self.assertEqual(evaluate_code, 0)
             self.assertEqual(verdict["status"], "passed")
@@ -611,12 +618,34 @@ class BracketBindingCliTests(unittest.TestCase):
             campaign_log_path = fixture["runs_root"] / "campaign_log.jsonl"
             campaign_log_raw_before = campaign_log_path.read_bytes()
             campaign_verdict_row = campaign_log_raw_before.splitlines(keepends=True)[-1]
-            fixture["verdict_path"].write_bytes(campaign_verdict_row)
             verdict_raw_before = fixture["verdict_path"].read_bytes()
             self.assertEqual(verdict_raw_before, campaign_verdict_row)
             verdict_before = hashlib.sha256(verdict_raw_before).hexdigest()
             campaign_log_before = hashlib.sha256(campaign_log_raw_before).hexdigest()
             campaign_row_before = hashlib.sha256(campaign_verdict_row).hexdigest()
+            self.assertEqual(verdict_before, campaign_row_before)
+
+            reformatted_path = (
+                fixture["runs_root"] / "reformatted_bracket_binding.json"
+            )
+            _write_json(
+                reformatted_path,
+                json.loads(fixture["produced_path"].read_bytes()),
+            )
+            with _three_window_runtime(
+                fixture, live_three_window_module.CalibrationLiveThreeWindowTests
+            ):
+                refused_code, refused = _run_finalizer(
+                    fixture, binding_path=reformatted_path
+                )
+            self.assertEqual(refused_code, 2)
+            self.assertEqual(refused["status"], "REFUSE")
+            self.assertEqual(
+                refused["reason"],
+                "analysis_finalization_bracket_binding_mismatch",
+            )
+            self.assertFalse(_finalized_path(fixture).exists())
+
             with _three_window_runtime(
                 fixture, live_three_window_module.CalibrationLiveThreeWindowTests
             ):
@@ -658,12 +687,13 @@ class BracketBindingCliTests(unittest.TestCase):
             fixture = _install_three_window_e2e_fixture(
                 Path(tmp), live_three_window_module.CalibrationLiveThreeWindowTests
             )
-            with mock.patch.object(
-                binding_cli,
-                "load_calibration_ledger_snapshot",
-                return_value=fixture["snapshot"],
-            ):
-                self.assertEqual(_run_binding_cli(fixture)[0], 0)
+            binding = build_calibration_bracket_binding(
+                fixture["snapshot"],
+                **fixture["identity"],
+            )
+            fixture["produced_path"].write_bytes(
+                canonical_json_bytes(binding) + b"\n"
+            )
             with _three_window_runtime(
                 fixture, live_three_window_module.CalibrationLiveThreeWindowTests
             ):
