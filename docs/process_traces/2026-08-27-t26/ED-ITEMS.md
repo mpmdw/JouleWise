@@ -26,9 +26,17 @@ gate named beside it.
    (the magistrate merges by hand outside the freeze span).
    Item 1 (venv relock) is being run by the magistrate under custody — no
    hands needed; result recorded below when the empty-diff gate returns.
-3. Notification cadence: immediate (recommended) or batched.
-4. Transaction night — now the first free night AFTER W-10 (D-157) and
-   W-11 (D-158) merge and estate 11 is green; ~2026-08-29/30.
+3. ~~Notification cadence~~ DECIDED under Ed's 2026-08-27 delegation ("handle everything but the ssh edit"): IMMEDIATE pings per desk event. Ed may reverse by a word.
+4. Transaction calendar — PROPOSED under the same delegation (veto by a word):
+   Thu 08-27 (today): merge #209 + the last pre-mint code (S12/S13/#217),
+   run ESTATE 11 at the new reviewed head; evening: the 20-minute LIVE smoke
+   collection (finalize once the bracket-binding producer lands).
+   Fri 08-28 night: SHAKEDOWN (D-139 shakedown-first; instrument-verification
+   runs, no claims). Sat 08-29 night: the `_v4` transaction — mint, arm,
+   first window; 168-hour campaign clock from the evidence commit → clean-
+   nightly ≈ Tue 09-01, full-weather ≈ Fri 09-04, campaign close ≈ Sat 09-05.
+   All of it runs under lead custody (D-148 (4)); the six licensed prompts
+   reach Ed in this session wherever he is.
 
 ## BLOCKING THE MINT — one two-line edit only your hands can make (W-10, PR #209)
 0. The reviewed pinset `configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json`
