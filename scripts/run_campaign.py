@@ -200,6 +200,7 @@ STATUSES = (
 ORDER_MANIFEST_NAME = "order_manifest.json"
 ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
 PROSPECTIVE_ANALYSIS_MANIFEST_V3_NAME = "analysis_manifest_v3.json"
+MAX_ANALYSIS_MANIFEST_V3_ANCESTOR_DEPTH = 6
 NON_CONFIG_SIDECARS = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
 CAMPAIGN_VERDICT_SCHEMA = "joulewise.campaign_verdict.v2"
 CAMPAIGN_PROVENANCE_SCHEMA = CAMPAIGN_PROVENANCE_SCHEMA_V2
@@ -1315,17 +1316,59 @@ def _prospective_manifest_resolution_error(
 def _reachable_analysis_manifest_v3(
     config_dir: Path,
 ) -> tuple[Path, Path | None]:
-    """Resolve a stage physically, then find its nearest real pack marker.
-
-    The walk is bounded by the filesystem root rather than an arbitrary pack
-    depth.  That admits nested stage groupings while ensuring a symlinked stage
-    cannot hide a marker located beside its physical ancestors.
-    """
+    """Find the nearest bounded real marker that names this physical stage."""
 
     resolved_config_dir = Path(config_dir).resolve()
-    for ancestor in (resolved_config_dir, *resolved_config_dir.parents):
+    try:
+        config_device = resolved_config_dir.stat().st_dev
+    except OSError:
+        return resolved_config_dir, None
+    for depth, ancestor in enumerate(
+        (resolved_config_dir, *resolved_config_dir.parents)
+    ):
+        if depth > MAX_ANALYSIS_MANIFEST_V3_ANCESTOR_DEPTH:
+            break
+        try:
+            if ancestor.stat().st_dev != config_device:
+                break
+        except OSError:
+            break
         candidate = ancestor / PROSPECTIVE_ANALYSIS_MANIFEST_V3_NAME
-        if candidate.is_file():
+        if not candidate.is_file():
+            continue
+        try:
+            marker = json.loads(candidate.read_bytes())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(marker, Mapping):
+            continue
+        expected_manifest_path = (
+            resolved_config_dir.relative_to(ancestor) / ORDER_MANIFEST_NAME
+        ).as_posix()
+        stage_manifests = marker.get("stage_manifests")
+        stage_paths = (
+            [
+                entry.get("manifest_path")
+                for entry in stage_manifests
+                if isinstance(entry, Mapping)
+            ]
+            if isinstance(stage_manifests, list)
+            else []
+        )
+        if marker.get("schema_version") == FINALIZED_V3_SCHEMA_VERSION:
+            source = marker.get("source")
+            finalized_stages = (
+                source.get("stage_order_manifests")
+                if isinstance(source, Mapping)
+                else None
+            )
+            if isinstance(finalized_stages, list):
+                stage_paths.extend(
+                    entry.get("path")
+                    for entry in finalized_stages
+                    if isinstance(entry, Mapping)
+                )
+        if expected_manifest_path in stage_paths:
             return resolved_config_dir, candidate.resolve()
     return resolved_config_dir, None
 
@@ -1680,8 +1723,10 @@ def _existing_bundle_analysis_identity_problem(
     runs_dir: Path,
     log_path: Path,
     analysis_manifest_id: str | None,
+    *,
+    unowned_bundle_ids: list[str] | None = None,
 ) -> CampaignAnalysisIdentityError | None:
-    """Authenticate the originating invoked provenance of existing bundles."""
+    """Refuse existing bundles owned under a different analysis identity."""
 
     if analysis_manifest_id is None:
         return None
@@ -1720,14 +1765,17 @@ def _existing_bundle_analysis_identity_problem(
 
     for bundle_dir in existing_bundle_dirs:
         owners = invoked_owners.get(bundle_dir.name, [])
-        if len(owners) != 1:
-            return CampaignAnalysisIdentityError(
-                f"pre-existing bundle {bundle_dir.name!r} has {len(owners)} "
-                "authenticated invoked provenance owners; exactly one is required",
-                path=bundle_dir,
-            )
-        owner_path, owner_identity = owners[0]
-        if owner_identity != analysis_manifest_id:
+        if not owners:
+            if unowned_bundle_ids is not None:
+                unowned_bundle_ids.append(bundle_dir.name)
+            continue
+        conflicting_owners = [
+            (owner_path, owner_identity)
+            for owner_path, owner_identity in owners
+            if owner_identity != analysis_manifest_id
+        ]
+        if conflicting_owners:
+            owner_path, owner_identity = conflicting_owners[0]
             return CampaignAnalysisIdentityError(
                 f"pre-existing bundle {bundle_dir.name!r} is owned by "
                 f"{owner_path.name} with analysis_manifest_id={owner_identity!r}, "
@@ -7697,28 +7745,6 @@ def run_campaign(args: argparse.Namespace) -> int:
             analysis_manifest=analysis_manifest,
             dry_run=args.dry_run,
         )
-    if (
-        policy_binding.policy.profile.value == "production"
-        and analysis_manifest is None
-        and prospective_analysis_manifest is None
-    ):
-        resolved_config_dir, reachable_v3 = _reachable_analysis_manifest_v3(
-            config_dir
-        )
-        if reachable_v3 is None:
-            return refuse_unresolvable_prospective_analysis_manifest_v3(
-                ProspectiveManifestResolutionError(
-                    "analysis_manifest_prospective_not_consumable",
-                    "production collection requires a v1/v2 analysis manifest "
-                    "or a reachable analysis_manifest_v3.json pack marker",
-                    path=resolved_config_dir,
-                ),
-                runs_dir=runs_dir,
-                log_path=log_path,
-                policy_binding=policy_binding,
-                analysis_manifest=analysis_manifest,
-                dry_run=args.dry_run,
-            )
     collection_analysis_manifest_id = (
         prospective_analysis_manifest.manifest_id
         if prospective_analysis_manifest is not None
@@ -7915,12 +7941,23 @@ def run_campaign(args: argparse.Namespace) -> int:
                 collection_analysis_manifest_id,
             )
             if identity_error is None:
+                unowned_bundle_ids: list[str] = []
                 identity_error = _existing_bundle_analysis_identity_problem(
                     config_infos,
                     runs_dir,
                     log_path,
                     collection_analysis_manifest_id,
+                    unowned_bundle_ids=unowned_bundle_ids,
                 )
+                if unowned_bundle_ids:
+                    preflight["analysis_manifest_identity"] = {
+                        "status": "warning",
+                        "detail": (
+                            "pre-existing bundles have no authenticated invoked "
+                            "provenance owner and may be adopted by this collection"
+                        ),
+                        "unowned_bundle_ids": unowned_bundle_ids,
+                    }
             if identity_error is not None:
                 return refuse_campaign_analysis_identity_mismatch(
                     identity_error,

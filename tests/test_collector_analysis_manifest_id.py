@@ -4,9 +4,12 @@ import copy
 import hashlib
 import json
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise.analysis_engine.inputs import (
     _manifest_collection_id,
@@ -21,6 +24,7 @@ from joulewise.analysis_manifest_v3 import (
     validate_prospective_analysis_manifest_v3,
 )
 from scripts.run_campaign import resolve_prospective_analysis_manifest_v3
+import scripts.run_campaign as run_campaign_module
 from tests.test_analysis_manifest_v3 import install_synthetic_prospective_fixture
 from tests.test_run_campaign import (
     ROOT,
@@ -312,43 +316,63 @@ class CollectorAnalysisManifestIdentityTests(unittest.TestCase):
             self.assertIsNone(campaign["analysis_manifest_id"])
             self.assertNotIn("analysis_manifest_sha256", campaign)
 
-    def test_production_collection_without_any_analysis_marker_refuses(self) -> None:
+    def test_production_collection_without_any_analysis_marker_stays_null(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            stage_dir = root / "production-science-without-manifest"
+            stage_dir = root / "production-null-bound"
             stage_dir.mkdir()
-            write_config(stage_dir, "science.json", "science-bundle")
+            write_config(stage_dir, "member.json", "production-null-bundle")
             runs_dir = root / "runs"
             sentinel = root / "bundle-invoked"
             fake_cli = make_fake_cli(root, sentinel)
-
-            result = run_campaign(
-                stage_dir,
-                runs_dir,
-                cli_cmd=cli_cmd_for(fake_cli),
-                campaign_policy=(
-                    ROOT
-                    / "configs"
-                    / "campaign_policies"
-                    / "quiet_mac_p2_production.json"
-                ),
+            args = run_campaign_module.parse_args(
+                [
+                    str(stage_dir),
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--cli-cmd",
+                    cli_cmd_for(fake_cli),
+                    "--campaign-policy",
+                    str(
+                        ROOT
+                        / "configs"
+                        / "campaign_policies"
+                        / "quiet_mac_p2_production.json"
+                    ),
+                ]
             )
+            clean_environment = {
+                "power_source": "AC Power",
+                "power": {"external_connected": True},
+                "low_power_mode": False,
+                "display_power_state": "all_asleep",
+                "screensaver_engaged": False,
+                "thermal_pressure": "nominal",
+                "load_average_1m": 0.0,
+            }
 
-            self.assertEqual(result.returncode, 1, result.stderr)
-            self.assertFalse(sentinel.exists())
-            self.assertIn(
-                "analysis_manifest_prospective_not_consumable", result.stderr
-            )
+            with patch.object(
+                run_campaign_module,
+                "collect_environment_snapshot",
+                return_value=clean_environment,
+            ):
+                result = run_campaign_module.run_campaign(args)
+
+            self.assertEqual(result, 0)
+            self.assertTrue(sentinel.is_file())
+            _, campaign = _campaign_manifest(runs_dir)
+            self.assertIsNone(campaign["analysis_manifest_id"])
             verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
-            self.assertEqual(
-                verdict["collection"]["reasons"],
-                ["analysis_manifest_prospective_not_consumable"],
-            )
+            self.assertIsNone(verdict["analysis_manifest"])
+            self.assertEqual(verdict["collection"]["verdict"], "usable")
 
-    def test_non_parent_ancestor_marker_collects_with_canonical_identity(self) -> None:
+    def test_deeply_nested_stage_collects_with_canonical_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            fixture = _install_valid_v3_pack(root, stage_group=("group",))
+            fixture = _install_valid_v3_pack(
+                root,
+                stage_group=("groups", "decode", "blocks", "batch", "science"),
+            )
             runs_dir = root / "runs"
             sentinel = root / "bundle-invoked"
             fake_cli = make_fake_cli(root, sentinel)
@@ -378,6 +402,39 @@ class CollectorAnalysisManifestIdentityTests(unittest.TestCase):
             self.assertIsNotNone(identity)
             assert identity is not None
             self.assertEqual(identity.manifest_id, fixture["manifest_id"])
+
+    def test_stray_unrelated_ancestor_marker_is_not_captured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = _install_valid_v3_pack(root)
+            pack_root = fixture["pack_root"]
+            assert isinstance(pack_root, Path)
+            stray_stage = pack_root / "unrelated" / "three" / "levels" / "stage"
+            stray_stage.mkdir(parents=True)
+
+            identity = resolve_prospective_analysis_manifest_v3(stray_stage)
+
+            self.assertIsNone(identity)
+
+    def test_nested_pack_binds_to_inner_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outer = _install_valid_v3_pack(root / "outer")
+            outer_pack_root = outer["pack_root"]
+            assert isinstance(outer_pack_root, Path)
+            inner = _install_valid_v3_pack(outer_pack_root / "nested")
+            inner_id = _reidentify_fixture(
+                inner, design_suffix="-inner-pack"
+            )
+
+            identity = resolve_prospective_analysis_manifest_v3(
+                inner["stage_dir"]
+            )
+
+            self.assertIsNotNone(identity)
+            assert identity is not None
+            self.assertEqual(identity.manifest_id, inner_id)
+            self.assertNotEqual(identity.manifest_id, outer["manifest_id"])
 
     def test_splitwise_decode_v1_finalized_marker_preserves_null_collection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -579,6 +636,77 @@ class CollectorAnalysisManifestIdentityTests(unittest.TestCase):
                 sorted(path.name for path in manifest_dir.glob("*.json")),
                 ["original-owner.json"],
             )
+
+    def test_same_id_resume_adopts_bundle_missing_provenance_member(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = _install_valid_v3_pack(root)
+            stage_dir = fixture["stage_dir"]
+            assert isinstance(stage_dir, Path)
+            config_paths = sorted(
+                path
+                for path in stage_dir.glob("*.json")
+                if path.name != "order_manifest.json"
+            )
+            first_config = config_paths[0]
+            run_id = json.loads(first_config.read_text(encoding="utf-8"))[
+                "run_id"
+            ]
+            runs_dir = root / "runs"
+            fake_cli = make_fake_cli(root)
+            finalized = subprocess.run(
+                [
+                    sys.executable,
+                    str(fake_cli),
+                    "run",
+                    str(first_config),
+                    "--runs-dir",
+                    str(runs_dir),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(finalized.returncode, 0, finalized.stderr)
+            (runs_dir / "campaign_manifests").mkdir()
+            _write_json(
+                runs_dir / "campaign_manifests" / "crashed-session.json",
+                {
+                    "schema_version": "joulewise.campaign_provenance.v1",
+                    "session_id": "crashed-session",
+                    "analysis_manifest_id": fixture["manifest_id"],
+                    "first_physical_run_id": run_id,
+                    "members": [],
+                },
+            )
+
+            resumed = run_campaign(
+                stage_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+            )
+
+            self.assertEqual(resumed.returncode, 0, resumed.stderr)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "usable")
+            self.assertEqual(
+                verdict["preflight"]["analysis_manifest_identity"],
+                {
+                    "status": "warning",
+                    "detail": (
+                        "pre-existing bundles have no authenticated invoked "
+                        "provenance owner and may be adopted by this collection"
+                    ),
+                    "unowned_bundle_ids": [run_id],
+                },
+            )
+            resumed_provenance = json.loads(
+                Path(
+                    verdict["campaign_provenance"]["manifest_path"]
+                ).read_text(encoding="utf-8")
+            )
+            self.assertEqual(len(resumed_provenance["members"]), len(config_paths))
 
     def test_cross_id_campaign_log_append_refuses_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
