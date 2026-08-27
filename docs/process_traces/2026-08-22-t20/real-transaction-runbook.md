@@ -22,6 +22,21 @@ Two rules govern how to read it.
    names the runsheet section and states only what changes in the real lane. It
    does not restate command text that has already been proven, because a second
    copy of a command is a second thing that can drift.
+
+   **Which runsheet cut owns them, as of 2026-08-27: r5, not r4.** `r4` is
+   pinned to reviewed head `3c96b18f` and **predates PR #208**, which makes
+   `--measurement-checkout` a *required* argument of both
+   `scripts/generate_arm_readiness.py freeze` and
+   `scripts/author_arm_readiness_evidence.py`. Three of r4's command blocks
+   (§3.4 authoring, §3.5 the sacrificial screen, §3.6 the primary freeze)
+   therefore exit 2 at argument parsing if copied verbatim at the new head. r4
+   is **not edited** — it is the record of what estate 10 actually ran. The S-0
+   clone proof re-runs as **estate 11** at the new reviewed head, and the r5 cut
+   taken at that time carries the flag. The authority for exactly what r5 must
+   carry, with the exact strings and the per-call-site value, is
+   `docs/process_traces/2026-08-27-t26/d139-families/01-estate-11-delta.md`.
+   Until r5 exists, treat r4's three freeze/author command blocks as superseded
+   by that delta file and this document's C6 and C8.
 2. **Every difference from the runsheet is stated inline, at the step it
    affects.** The rehearsal ran inside a throwaway clone with a forged remote
    reference; the real transaction runs on the real repository with real
@@ -1560,11 +1575,11 @@ This is the whole rule, and it is deliberately the only rule. Many checks do run
 before that write — the measurement-checkout declaration, predecessor gating and
 authentication, registry and plan-tree validation, family-publication gating,
 the committed-pack proof, and others — so a refusal at C8 often costs nothing.
-But an earlier draft of this section tried to LIST them, and a review found the
-list still missing at least seven more reachable cases. An incomplete list is
-worse than no list, because it makes an operator abandon a live attempt over a
-mistyped path that spent nothing. The directory listing answers the question
-completely and cannot go stale as the code changes.
+**No list of them is given here, deliberately: two attempts to enumerate that
+set were each found incomplete by review, and an incomplete list is worse than
+none because it makes an operator abandon a live attempt over a mistyped path
+that spent nothing.** The directory listing answers the question completely,
+needs no catalogue, and cannot go stale as the code changes.
 
 **A missing required flag never reaches any of this.** Both `--pack-root` and
 `--measurement-checkout` are required by the argument parser, which runs before
