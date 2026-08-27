@@ -1,0 +1,20 @@
+diff --git a/configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json b/configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json
+index 13af836..58c6230 100644
+--- a/configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json
++++ b/configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json
+@@ -117,7 +117,7 @@
+   "issued_at_utc": "2026-08-14T03:03:12.905708Z",
+   "pack_identity": {
+     "pack_id": "d117_floor_qwen25_1p5b_v1",
+-    "pack_root": "/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v1",
++    "pack_root": "/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v1-tampered",
+     "plan_id": "plan-d117-floor-qwen25-1p5b-decode-p128-prefill-rider-v1",
+     "plan_path": "calibration_plan.json",
+     "plan_sha256": "2afabe9854a8ac8c9d3d212bb0236fa787d660cf5ef452c66f2d84f97d4f227d",
+diff --git a/configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json.sha256 b/configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json.sha256
+index 0f46cf5..3789680 100644
+--- a/configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json.sha256
++++ b/configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json.sha256
+@@ -1 +1 @@
+-ddbbb40974c1b747516f403b3d319079519269892ee48e052a028d9f16b1e738  freeze-0001.json
++2daf804ae91aae8a9d4d8b6f233a1112432b0601d7e1639a4b65ad73dfe19978  freeze-0001.json

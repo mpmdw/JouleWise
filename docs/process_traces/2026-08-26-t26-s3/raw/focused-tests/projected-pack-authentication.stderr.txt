@@ -1,0 +1,10 @@
+test_projected_pack_authenticates_through_the_composed_check (tests.test_arm_readiness_evidence_packauth.ProjectedPackAuthenticationTests.test_projected_pack_authenticates_through_the_composed_check) ... /Users/edr/code/JouleWise-wt-s3-packauth/joulewise/arm_readiness_evidence.py:1298: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+/Users/edr/code/JouleWise-wt-s3-packauth/joulewise/arm_readiness_evidence.py:1298: DeprecationWarning: Python 3.14 will, by default, filter extracted tar archives and reject files or modify their metadata. Use the filter argument to control this behavior.
+  tar.extractall(destination)
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.240s
+
+OK

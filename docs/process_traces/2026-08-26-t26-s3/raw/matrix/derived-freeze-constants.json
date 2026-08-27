@@ -1,0 +1,83 @@
+[
+  {
+    "actual_freeze_receipt_sha256": "2ef73bf042f2f0e43d4e65fa4658f82c242269478cf68de05494456ba3d3106f",
+    "compiled_current_frozen_receipt_sha256": "2ef73bf042f2f0e43d4e65fa4658f82c242269478cf68de05494456ba3d3106f",
+    "constant_matches_actual": true,
+    "freeze_receipt_path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/arm_readiness.freeze.receipts/freeze-0001.json",
+    "generator_path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py",
+    "pack": "d117_contrast_qwen25_1p5b_vs_7b_v1",
+    "plan_tree_freeze_reference_sha256": "2ef73bf042f2f0e43d4e65fa4658f82c242269478cf68de05494456ba3d3106f"
+  },
+  {
+    "actual_freeze_receipt_sha256": "18855647c38ec8cf521167fcaae62a06914a8ab7087aeded96835cb418f9607e",
+    "compiled_current_frozen_receipt_sha256": "2ef73bf042f2f0e43d4e65fa4658f82c242269478cf68de05494456ba3d3106f",
+    "constant_matches_actual": false,
+    "freeze_receipt_path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/arm_readiness.freeze.receipts/freeze-0002.json",
+    "generator_path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/generate_configs.py",
+    "pack": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+    "plan_tree_freeze_reference_sha256": "18855647c38ec8cf521167fcaae62a06914a8ab7087aeded96835cb418f9607e"
+  },
+  {
+    "actual_freeze_receipt_sha256": "f32bd3a8e4dbd04bc5b1635818ba34394984d1d201d16f02efc21f0b01f31c73",
+    "compiled_current_frozen_receipt_sha256": "18855647c38ec8cf521167fcaae62a06914a8ab7087aeded96835cb418f9607e",
+    "constant_matches_actual": false,
+    "freeze_receipt_path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.freeze.receipts/freeze-0003.json",
+    "generator_path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/generate_configs.py",
+    "pack": "d117_contrast_qwen25_1p5b_vs_7b_v3",
+    "plan_tree_freeze_reference_sha256": "f32bd3a8e4dbd04bc5b1635818ba34394984d1d201d16f02efc21f0b01f31c73"
+  },
+  {
+    "actual_freeze_receipt_sha256": "ddbbb40974c1b747516f403b3d319079519269892ee48e052a028d9f16b1e738",
+    "compiled_current_frozen_receipt_sha256": "ddbbb40974c1b747516f403b3d319079519269892ee48e052a028d9f16b1e738",
+    "constant_matches_actual": true,
+    "freeze_receipt_path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.freeze.receipts/freeze-0001.json",
+    "generator_path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py",
+    "pack": "d117_floor_qwen25_1p5b_v1",
+    "plan_tree_freeze_reference_sha256": "ddbbb40974c1b747516f403b3d319079519269892ee48e052a028d9f16b1e738"
+  },
+  {
+    "actual_freeze_receipt_sha256": "1277103b42090f3ce41df0e030a2a5f2a3998598efec12fef812ca5b36b89666",
+    "compiled_current_frozen_receipt_sha256": "ddbbb40974c1b747516f403b3d319079519269892ee48e052a028d9f16b1e738",
+    "constant_matches_actual": false,
+    "freeze_receipt_path": "configs/campaigns/d117_floor_qwen25_1p5b_v2/arm_readiness.freeze.receipts/freeze-0002.json",
+    "generator_path": "configs/campaigns/d117_floor_qwen25_1p5b_v2/generate_configs.py",
+    "pack": "d117_floor_qwen25_1p5b_v2",
+    "plan_tree_freeze_reference_sha256": "1277103b42090f3ce41df0e030a2a5f2a3998598efec12fef812ca5b36b89666"
+  },
+  {
+    "actual_freeze_receipt_sha256": "0abfddb13fe8c5e69df3e6be5e2e7efe28d3690b6947d5ed850fcb9652f6ec64",
+    "compiled_current_frozen_receipt_sha256": "1277103b42090f3ce41df0e030a2a5f2a3998598efec12fef812ca5b36b89666",
+    "constant_matches_actual": false,
+    "freeze_receipt_path": "configs/campaigns/d117_floor_qwen25_1p5b_v3/arm_readiness.freeze.receipts/freeze-0003.json",
+    "generator_path": "configs/campaigns/d117_floor_qwen25_1p5b_v3/generate_configs.py",
+    "pack": "d117_floor_qwen25_1p5b_v3",
+    "plan_tree_freeze_reference_sha256": "0abfddb13fe8c5e69df3e6be5e2e7efe28d3690b6947d5ed850fcb9652f6ec64"
+  },
+  {
+    "actual_freeze_receipt_sha256": "a6dec2c238e5a5cb8a181ac1abd898943238c21edeb4d111ead0cd3b00df7870",
+    "compiled_current_frozen_receipt_sha256": "a6dec2c238e5a5cb8a181ac1abd898943238c21edeb4d111ead0cd3b00df7870",
+    "constant_matches_actual": true,
+    "freeze_receipt_path": "configs/campaigns/d117_floor_qwen25_7b_v1/arm_readiness.freeze.receipts/freeze-0001.json",
+    "generator_path": "configs/campaigns/d117_floor_qwen25_7b_v1/generate_configs.py",
+    "pack": "d117_floor_qwen25_7b_v1",
+    "plan_tree_freeze_reference_sha256": "a6dec2c238e5a5cb8a181ac1abd898943238c21edeb4d111ead0cd3b00df7870"
+  },
+  {
+    "actual_freeze_receipt_sha256": "decd8cdc6a589397e28240b33b97e1b38575be860490a2c6de31be51611842d0",
+    "compiled_current_frozen_receipt_sha256": "a6dec2c238e5a5cb8a181ac1abd898943238c21edeb4d111ead0cd3b00df7870",
+    "constant_matches_actual": false,
+    "freeze_receipt_path": "configs/campaigns/d117_floor_qwen25_7b_v2/arm_readiness.freeze.receipts/freeze-0002.json",
+    "generator_path": "configs/campaigns/d117_floor_qwen25_7b_v2/generate_configs.py",
+    "pack": "d117_floor_qwen25_7b_v2",
+    "plan_tree_freeze_reference_sha256": "decd8cdc6a589397e28240b33b97e1b38575be860490a2c6de31be51611842d0"
+  },
+  {
+    "actual_freeze_receipt_sha256": "f232d076d54408851e5728b3f14e9b04e086d809bca3e1cdac0c3641e072578c",
+    "compiled_current_frozen_receipt_sha256": "decd8cdc6a589397e28240b33b97e1b38575be860490a2c6de31be51611842d0",
+    "constant_matches_actual": false,
+    "freeze_receipt_path": "configs/campaigns/d117_floor_qwen25_7b_v3/arm_readiness.freeze.receipts/freeze-0003.json",
+    "generator_path": "configs/campaigns/d117_floor_qwen25_7b_v3/generate_configs.py",
+    "pack": "d117_floor_qwen25_7b_v3",
+    "plan_tree_freeze_reference_sha256": "f232d076d54408851e5728b3f14e9b04e086d809bca3e1cdac0c3641e072578c"
+  }
+]

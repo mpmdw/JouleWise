@@ -1,0 +1,19 @@
+diff --git a/configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.json b/configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.json
+index f5c5dd3..9d6260e 100644
+--- a/configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.json
++++ b/configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.json
+@@ -995,6 +995,7 @@
+       "arm": null,
+       "block_id": null,
+       "block_index": 1,
++      "characterization_tamper": true,
+       "config_path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json",
+       "config_sha256": "36429815606dbffb193cf77dde12dc48672ab5eaa62af80bd12faa8c5be82b4d",
+       "ordinal": 1,
+diff --git a/configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.sha256 b/configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.sha256
+index 2dccf72..8db94f5 100644
+--- a/configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.sha256
++++ b/configs/campaigns/d117_floor_qwen25_1p5b_v1/plan_tree.sha256
+@@ -1 +1 @@
+-3e725c047c9850d507564e4a5131d1b65a739d2e452aab209652db05433bad6c  plan_tree.json
++a311692e8202a7e4179eeaed5181db6bcd54e82532fc8e5435f0d593a3103eae  plan_tree.json

@@ -1,0 +1,1 @@
+/Users/edr/code/JouleWise/.venv/bin/python -B -m unittest -v tests.test_arm_readiness_evidence_packauth.ProjectedPackAuthenticationTests.test_projected_pack_authenticates_through_the_composed_check

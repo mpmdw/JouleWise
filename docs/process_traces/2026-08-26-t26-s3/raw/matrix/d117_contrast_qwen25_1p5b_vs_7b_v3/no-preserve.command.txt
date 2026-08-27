@@ -1,0 +1,2 @@
+cwd=/tmp/jw-packauth-matrix.tAWIEH
+/Users/edr/code/JouleWise/.venv/bin/python -I -B configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/generate_configs.py --check --no-preserve-current-frozen-bytes

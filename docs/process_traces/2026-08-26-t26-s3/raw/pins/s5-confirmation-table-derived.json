@@ -1,0 +1,23 @@
+{
+  "rows": [
+    {
+      "committed_pack_tree_sha256": "1e3f1fa31027e57053c7d26bacf2f373cf2c9ed840ee2bb3befafd99302d63f6",
+      "freeze_receipt_sha256": "0abfddb13fe8c5e69df3e6be5e2e7efe28d3690b6947d5ed850fcb9652f6ec64",
+      "label": "1p5b freeze-0003 sha + committed tree digest",
+      "line": 83
+    },
+    {
+      "committed_pack_tree_sha256": "6d0b9b758d6a37a69a88827cb47ac58566d957099a3e714143d2e6508a93e45f",
+      "freeze_receipt_sha256": "f232d076d54408851e5728b3f14e9b04e086d809bca3e1cdac0c3641e072578c",
+      "label": "7b freeze-0003 sha + committed tree digest",
+      "line": 84
+    },
+    {
+      "committed_pack_tree_sha256": "0d07194143702b266267f0faa7b051695ffb5e1c56dc7a69d0b2dca8aaa883ef",
+      "freeze_receipt_sha256": "f32bd3a8e4dbd04bc5b1635818ba34394984d1d201d16f02efc21f0b01f31c73",
+      "label": "contrast freeze-0003 sha + committed tree digest",
+      "line": 85
+    }
+  ],
+  "source": "docs/process/ed-s5-mint-decision-2026-08-19.md"
+}
