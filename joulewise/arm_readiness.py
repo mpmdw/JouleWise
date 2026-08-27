@@ -3903,6 +3903,18 @@ def _plan_tree(pack_root: Path) -> tuple[dict[str, Any], bytes]:
     return value, raw
 
 
+def _refuse_pipeline_smoke_generation(tree: Mapping[str, Any]) -> None:
+    generator = tree.get("generator")
+    if (
+        isinstance(generator, Mapping)
+        and generator.get("generation_kind") == "pipeline_smoke"
+    ):
+        raise ArmReadinessError(
+            "readiness_dependency_refused",
+            "pipeline-smoke generations cannot be used by production freeze or arm",
+        )
+
+
 def _repo_for_pack(pack_root: Path) -> Path:
     repository, _prefix, _relative = _repository_and_pack_relative(pack_root)
     return repository
@@ -6968,6 +6980,7 @@ def generate_freeze_receipt(
             "mutated": False,
         }
     tree, _tree_raw = _plan_tree(root)
+    _refuse_pipeline_smoke_generation(tree)
     registry, _registry_raw, registry_reference = _registry_reference(root)
     attachments = tree.get("arm_attachments")
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
@@ -7747,6 +7760,7 @@ def generate_arm_receipt(
     pack = _pack_record(root)
     reviewed = reviewed_main(root)
     tree, _tree_raw = _plan_tree(root)
+    _refuse_pipeline_smoke_generation(tree)
     registry, _registry_raw, registry_reference = _registry_reference(root)
     try:
         freeze_receipt, freeze_reference = _load_freeze_reference(
