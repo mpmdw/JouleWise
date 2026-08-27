@@ -456,6 +456,10 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             make_t0_fixture(
                 now_monotonic_ns=fixture_now,
                 synthetic_clock=False,
+                # This test is the only one that reaches the real `os.execve`,
+                # so its frozen argv must name a program that exists on the CI
+                # runner as well as on Darwin.
+                portable_launch_program=True,
             )
         )
         template_temporary, template_repository, template_pack, _unused, _arm = (

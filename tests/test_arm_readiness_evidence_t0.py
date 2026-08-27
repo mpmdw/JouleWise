@@ -315,6 +315,7 @@ def make_t0_fixture(
     real_identity: bool = False,
     synthetic_boot_session: bool = True,
     synthetic_clock: bool = True,
+    portable_launch_program: bool = False,
 ):
     temporary, repository, pack, custody, _arm_path = make_go_fixture()
     repository = repository.resolve()
@@ -503,8 +504,22 @@ def make_t0_fixture(
         "--window",
         "alpha",
     ]
+    # The frozen argv's program is checked BY NAME only -- `_launch_argv_matches`
+    # (joulewise/arm_readiness.py) and the T-0 launch-manifest validator both
+    # test `Path(argv[0]).name == "caffeinate"` and nothing else.  A test that
+    # actually reaches `os.execve` therefore needs a program that EXISTS on the
+    # running machine, and `/usr/bin/caffeinate` is Darwin-only, so it raises
+    # FileNotFoundError on a Linux CI runner.  `portable_launch_program` swaps in
+    # an executable no-op of the same name inside the fixture tree; every caller
+    # that stops short of the exec keeps the real Darwin path unchanged.
+    launch_program = "/usr/bin/caffeinate"
+    if portable_launch_program:
+        shim = window_root / "caffeinate"
+        shim.write_text("#!/bin/sh\nexit 0\n")
+        shim.chmod(0o755)
+        launch_program = str(shim)
     launch_argv = [
-        "/usr/bin/caffeinate",
+        launch_program,
         "-is",
         "/bin/zsh",
         str(chain_path),
