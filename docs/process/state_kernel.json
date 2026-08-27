@@ -4078,44 +4078,6 @@
       "status_note": "S-0 CLONE PROOF COMPLETE (2026-08-25): estate 10 ran END TO END with zero failures at BASE f125ae70 (runsheet r6 head), CI run 32915894409 green, fifth _v4 mint, clone mint head 9a6f8880. Executed: the scripted band 1.1-3.7 with three real MLX U11 freezes; 3.8 marker build with the S0-O2 deferral disclosed and candidate verify PASS; Ed's step-6 YES over hC adbd116d7dcaa3dd5b0d6f1e5c9127282232b29ea74b03b9c6b8077ec9da36bc; 3.9 all three packs ARMED and verified with the C+hC pair, clean-arm residue empty, eleven-kind census PASS; 3.10 local green in the clone (published half deferred BY DESIGN); 4 probe battery ALL GREEN including the six r6 re-derived probes and the post-fixation shape-preserving re-mint byte pin; 4.10 fixation equal to the mint-time record; magistrate 5 acceptance read ALL BOXES PASS. Record: docs/process_traces/2026-08-22-t20/S0-COMPLETION-RECORD.md. Ten estates were cut; estates 1-9 each terminated on a real instrument defect now cured on main (S0-O2 marker build, S0-O3 successor-digest siting, the confirmation-supply family, D-154 pack_root, the anchor remaps, probe reachability), with estate 6 STRUCK under the D-153 sweep synthesis, estate 7 STRUCK as instrument failure under D-154 R-4 (its positive results retained as executability evidence, never claim custody), and estate 9's probe-block failures dispositioned ordinary-defect - every struck estate's custody preserved READ-ONLY. REMAINING SCOPE IS THE REAL TRANSACTION ONLY: Ed's D-150(1) live permission prompts and the D-150a reboot; a quiet machine window; the real commit-freeze window close; the published-green half that 3.10 deferred, at the real published head; and post-window fixation ordering per D-153. Retained verbatim: BIG per D-144, and the magistrate's own reading of the transaction transcript remains the final verification gate.",
       "stop_card": null
     },
-    "WINDOW-STATUS-FREEZE-GUARD-01": {
-      "acceptance": {
-        "evidence": [
-          "scripts/window_status.sh refuses (or writes without committing) while the commit-freeze span is open, proven by a regression that exercises both the in-span and out-of-span branches",
-          "Out-of-span publishing behaviour is unchanged (WINDOW_STATUS.md still written, committed and pushed)"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/WINDOW-STATUS-FREEZE-GUARD-01/acceptance",
-          "label": "WINDOW-STATUS-FREEZE-GUARD-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The status publisher can no longer break the commit-freeze or add changed-set residue."
-      },
-      "authority": {
-        "label": "D-153 packet-5 magistrate synthesis, work order W4 (terra's verified bonus hazard)",
-        "path": "docs/process_traces/2026-08-24-packet5/04-MAGISTRATE-SYNTHESIS-PACKET5.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-153 packet-5 synthesis, W4",
-            "path": "docs/process_traces/2026-08-24-packet5/04-MAGISTRATE-SYNTHESIS-PACKET5.md"
-          },
-          "rule": "Guard scope is the freeze span: refuse or write-without-commit there; ordinary out-of-span behaviour is unchanged"
-        }
-      ],
-      "flags": [],
-      "goal": "Guard scripts/window_status.sh:92-104 against the commit-freeze span: the publisher writes, commits AND pushes WINDOW_STATUS.md, a path outside the 112 configs-only allowlist, so a status commit inside the freeze span breaks the r4-3 commit-freeze and adds changed-set residue. Make it refuse, or write without committing, during the freeze span.",
-      "id": "WINDOW-STATUS-FREEZE-GUARD-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 91,
-      "status": "queued",
-      "status_note": "D-153 work order W4, registered 2026-08-24. RULED 2026-08-26 by D-155 NR-13 (docs/process_traces/2026-08-22-t20/nr-synthesis-ruling.md): a code guard, not an operational fence, and the binding deadline is EARLIER than the freeze span - the guard's own files are not among the 112 allowlisted paths, so it must land before EVIDENCE_DERIVATION_HEAD, i.e. before Phase C1 of the real transaction. Ruled shape: a sentinel file OUTSIDE the repository (default /Users/edr/JouleWise-window-custody/COMMIT_FREEZE_OPEN, env-overridable for tests); when present the script writes WINDOW_STATUS.md locally and exits 0 BEFORE git add; out-of-span behaviour byte-identical; two-branch regression. D-150a visibility is unaffected (the committed channel is the push notification, not the git push). Landing vehicle: the D-155 W-2 code PR, together with the NR-11 two-parser trailer cure - IN FLIGHT, NOT MERGED, so this row stays queued until that PR lands. Hazard is verified by inspection, not yet executed.",
-      "stop_card": null
-    },
     "WO-CENSUS-SEMANTICS": {
       "acceptance": {
         "evidence": [
