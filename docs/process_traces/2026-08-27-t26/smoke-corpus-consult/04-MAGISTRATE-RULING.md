@@ -111,3 +111,27 @@ through producer → evaluator → finalizer with hashes asserted equal. The
 runbook's H5/H6 gain the "build binding before the whole-window verdict"
 ordering note. This lands BEFORE the night so finalization code is inside
 the reviewed head; it does not touch pack bytes or the mint path.
+
+## Addendum (2026-08-27, #217 merged) — split verdicts ruled
+
+- **F2 (evaluator authority = ledger session; finalizer authority =
+  prospective manifest):** fail-closed overall, a consistency gap, not a
+  hole. RULING: not fixed pre-night; registered as
+  BRACKET-EVALUATOR-PLAN-IDENTITY-01 (post-`_v4`): the evaluator gains an
+  authenticated prospective-manifest/plan-tree identity input so that
+  producer + evaluator success implies finalizer acceptance.
+- **F3 (`AuthenticatedConsumptionSession` identity from the binding):**
+  refuter A's refutation ADOPTED (redundant, not self-authorizing —
+  a mutated identity with a recomputed digest is still refused against the
+  ledger); an explicit identity parameter is a post-`_v4` should-fix row
+  (touches `whole_window.py`).
+- **Scope expansion into `joulewise/analysis_manifest_v3.py`** (16
+  additive lines: byte-equality of the binding at finalization; the
+  verdict-output no-clobber publish) RATIFIED under R-3′'s "finalization
+  code inside the reviewed head".
+- **Runbook H5-seal / H6-write conflict:** RULING — analysis outputs
+  (bracket binding, whole-window verdict output, finalized manifest) are
+  written under a DISTINCT ANALYSIS ROOT, never beneath the sealed
+  transaction custody root; the seal at H5 step 7 stays where it is. The
+  runbook delta (build binding → evaluate with `--bracket-binding` →
+  finalize) lands as a docs PR naming that root.
