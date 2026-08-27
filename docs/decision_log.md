@@ -9890,6 +9890,31 @@ downstream reduce/extract/mint enforcement remains stages 3–4, successor confi
 markers remain a Phase-2 freeze transaction, and physical launch remains
 NO-GO pending those gates and the full C-028 gauntlet.
 
+### D-078 registry amendment — 2026-08-27: `analysis_prospective_input_unreadable` (T26 S11 R-4)
+
+The prospective registry (D-078 amendment 2026-08-15, "analysis-manifest
+consumption-edge refusal registry") additionally admits the exact spelling
+`analysis_prospective_input_unreadable`: the selected prospective manifest
+(or its marker) exists but cannot be read — an `OSError` on the read itself —
+so no source hash was obtained and none was compared.
+
+Why a new code and not a reuse: the collector's resolver in
+`scripts/run_campaign.py` (`_reachable_analysis_manifest_v3` → the read that
+follows it) currently reports that condition as
+`analysis_prospective_source_hash_mismatch`. The T26 S11 delta re-audit was
+asked whether the registered code is untruthful for that branch and answered
+YES on the registry's own wording — a hash-mismatch code asserts a comparison
+that never happened. Evidence:
+`docs/process_traces/2026-08-27-t26/s11-collector-manifest-id/residuals.md`
+§R-4 (raised by the S11 stream, magistrate T26 ruling: a decision-log
+vocabulary amendment made in the registration wave, not in the S11 PR).
+
+Scope: vocabulary only. The producer-side swap at that `OSError` branch is
+owed to the collector stream as an ordinary follow-on (the branch fails
+closed either way, so nothing is blocked); consumers that enumerate the
+prospective vocabulary must admit the new spelling in the same change that
+first emits it. No existing spelling is retired or re-defined.
+
 ### WO-LAUNCH-BINDING fix round 2 — private required-context API and AXI Phase-2 release gate (lead-adopted consult, 2026-08-15)
 
 F3 adopts `ADOPT_PRIVATE_REQUIRED_CONTEXT_API` exactly.  The public-named

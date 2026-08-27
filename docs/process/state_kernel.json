@@ -454,6 +454,45 @@
       "status_note": "Partial page trim landed 2026-07-15 by redirecting the duplicative capsule task-queue mirror while preserving its routes; remaining payload work is open. D-043 supersession closure falls due at landing through the dated D-051 amendment identified by PA-2.",
       "stop_card": null
     },
+    "AUTHENTICATOR-ALLOWLIST-GUARD-01": {
+      "acceptance": {
+        "evidence": [
+          "The allowlist test derives the forbidden set from the registered authenticator roles or classes (the R1 family/type/role registry), so every authenticator path is barred without being named",
+          "A regression introduces an authenticator class under a new name and proves the guard refuses it in the allowlist",
+          "The two currently named substrings remain barred"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/AUTHENTICATOR-ALLOWLIST-GUARD-01/acceptance",
+          "label": "AUTHENTICATOR-ALLOWLIST-GUARD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The allowlist guard derives the authenticator set from the registry of authenticator roles, not from a literal list of names."
+      },
+      "authority": {
+        "label": "S9-09 (the fixed-point allowlist principle is enforced by two literal substrings); standing rule is D-151 clause 7",
+        "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-151 clause 7 (no authenticator path ever enters any allowlist)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Guard strength only: no allowlist entry is added or removed by this row"
+        }
+      ],
+      "flags": [],
+      "goal": "Enforce D-151 clause 7's standing rule structurally: 'no authenticator path ever enters any allowlist, in any transaction; a proposal to add one is a V-1(vi) tripwire event' is enforced today by tests/test_arm_readiness_schemas.py barring exactly two named substrings (d117_step6_confirmation, family_publication), so a new authenticator class under any other name passes both checks and lands in the allowlist unnoticed, which is precisely what the rule was written to prevent.",
+      "id": "AUTHENTICATOR-ALLOWLIST-GUARD-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 110,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-09 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint).",
+      "stop_card": null
+    },
     "AXI-SB-ADAPTER": {
       "acceptance": {
         "evidence": [
@@ -629,6 +668,55 @@
       "priority": "p2_next_slice",
       "rank": 14,
       "status": "queued",
+      "stop_card": null
+    },
+    "BRACKET-BINDING-CLI-01": {
+      "acceptance": {
+        "evidence": [
+          "A fail-closed CLI beside the finalizer serialises build_calibration_bracket_binding's output under custody with schema joulewise.calibration_bracket_binding.v1, refusing machine-readably rather than escaping tracebacks",
+          "A regression drives the produced file through finalize_analysis_manifest end to end and the finalizer accepts it",
+          "A regression proves --runs-root equality (D-160 F-5) is enforced with an exact registered refusal",
+          "Tamper regressions (flipped binding digest, substituted endpoint receipt digest, changed runs_root) and byte-identity with the in-memory producer are pinned"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BRACKET-BINDING-CLI-01/acceptance",
+          "label": "BRACKET-BINDING-CLI-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The real _v4 finalization can run as documented because a reviewed producer writes the bracket-binding file the finalizer requires."
+      },
+      "authority": {
+        "anchor": "rulings",
+        "label": "D-160 ruling R-3 (upgraded from 'no CLI' to 'no producer at all'; pre-CLOSE blocker; assigned to S10)",
+        "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-158 addendum item A-4 (--bracket-binding has no producer; gates FINALIZATION after the night)",
+            "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Pre-CLOSE blocker, not a mint gate: finalization is approximately T+7 d after the night, so this lands before the campaign closes, not before the mint"
+        },
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "D-160 finding F-4 / ruling R-3 (serialises build_calibration_bracket_binding's output)",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "joulewise/calibration_bracketing.py's in-memory builder is the identity source; the CLI re-derives window identity from the whole-window verdict's evaluation_basis rather than hand-typed flags"
+        }
+      ],
+      "flags": [],
+      "goal": "Build the missing producer for the finalizer's --bracket-binding file: a fail-closed CLI that serialises build_calibration_bracket_binding's output under custody (schema joulewise.calibration_bracket_binding.v1), with a regression that scripts/finalize_analysis_manifest.py accepts it and that --runs-root equality (D-160 F-5) holds.",
+      "id": "BRACKET-BINDING-CLI-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 104,
+      "status": "partial",
+      "status_note": "IN FLIGHT at registration (2026-08-27, the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md)): S10 stream, PR #217 open at head 94947441 (scripts/build_bracket_binding.py, 11 regressions). Registered as partial (the kernel's convention for in-flight rows, as V4-TRANSACTION-01 and T0-UNATTENDED-01) rather than skipped, because #217 had not merged when the wave was cut; the merging PR closes this row. MAGISTRATE-FACING FINDING carried by #217: the ledger session stores the exact absolute runs_root and both builder and validator bind it, while consumption requires that path to be a canonical non-symlink descendant of the finalized manifest's custody root, so the custody layout must be ruled and established BEFORE bracket reservation and collection (copying the corpus to a sibling analysis root, or rewriting the binding to a relative path, both fail); this is the same open question H6 already carries.",
       "stop_card": null
     },
     "C3-RECOGNIZER-EXACT-01": {
@@ -868,6 +956,70 @@
       "rank": 21,
       "status": "queued",
       "status_note": "Design warnings: holding file descriptors open does NOT seal bytes because a second descriptor can mutate the same inode; path-based launch-time revalidation alone leaves a revalidate-to-read race. Pending-ratification payload carried by this row: the proposed amendment to docs/process/coldgate_charter_registry.md separating validator observation from runner custody. The registry is Ed-ratified and is NOT edited by this or any session without a cold-gate/Ed ratification.",
+      "stop_card": null
+    },
+    "COLLECTOR-MANIFEST-SHA-IDENTITY-01": {
+      "acceptance": {
+        "evidence": [
+          "A campaign provenance whose id matches but whose recorded SHA differs from the finalized manifest's lineage.prospective_manifest_sha256 produces a registered refusal, not an empty selection",
+          "The matching case still selects, with campaign_cooldown_evidence returning the collected bundles (assertion A2 of docs/process_traces/2026-08-27-t26/s11-collector-manifest-id/estate11-assertions.md)",
+          "Pre-#213 provenance (no SHA key) still selects on id alone, pinned by a test naming that shape; post-#213 provenance with the SHA absent or different REFUSES, pinned separately; the authorship discriminator itself has a test proving it cannot be defeated by deleting the SHA key",
+          "No claim fixture currently passing regresses; if any must be re-fixtured, they land in the same change"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/COLLECTOR-MANIFEST-SHA-IDENTITY-01/acceptance",
+          "label": "COLLECTOR-MANIFEST-SHA-IDENTITY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The campaign-cooldown join is hash-verified in the contract's sense for every post-#213 provenance record, with pre-#213 provenance still readable on id alone."
+      },
+      "authority": {
+        "label": "S11 draft queued row (contract-lens refuter finding F4, a split verdict recorded rather than applied; compatibility fence RULED by the magistrate T26 2026-08-27)",
+        "path": "docs/process_traces/2026-08-27-t26/s11-collector-manifest-id/queued-row-COLLECTOR-MANIFEST-SHA-IDENTITY-01.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the _v4 mint closes before any change to the claim-consumption join lands (sequencing fence, no pre-mint coupling)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V4-TRANSACTION-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "analysis engine trio contract (the hash-verified cooldown join; downstream SHA-256 recording)",
+            "path": "docs/specs/c027/analysis_engine_trio.md"
+          },
+          "rule": "Contract basis: campaign_cooldown_evidence is named the public reuse point for the hash-verified cooldown join, and file-byte SHA-256 is recorded by downstream consumers separately; an id-only join is not hash-verified in the contract's sense"
+        },
+        {
+          "authority": {
+            "label": "S11 draft queued row, section 'Compatibility fence - RULED (magistrate, T26 2026-08-27)'",
+            "path": "docs/process_traces/2026-08-27-t26/s11-collector-manifest-id/queued-row-COLLECTOR-MANIFEST-SHA-IDENTITY-01.md"
+          },
+          "rule": "RULED compatibility fence: provenance authored BEFORE PR #213 (no SHA key) is selected on id alone (every pre-#213 corpus is non-claim-bearing under D-078 / D-146); provenance authored AFTER #213 requires the SHA (present and equal selects; present and different refuses under a registered D-078 reason; absent refuses as tampering or truncation, not age); the authorship discriminator must be bound to something the record already carries (campaign-provenance schema version, attestation row, or an explicit authoring-generation marker), never derived from the absence of the SHA key"
+        },
+        {
+          "authority": {
+            "label": "S11 draft queued row, 'Authority and fences'",
+            "path": "docs/process_traces/2026-08-27-t26/s11-collector-manifest-id/queued-row-COLLECTOR-MANIFEST-SHA-IDENTITY-01.md"
+          },
+          "rule": "Sequence after the _v4 mint closure: this touches the claim-consumption path and must not be coupled into a pre-mint change"
+        }
+      ],
+      "flags": [],
+      "goal": "Make the analysis-manifest SHA-256 that scripts/run_campaign.py records in campaign provenance (PR #213) load-bearing at the claim edge instead of attested-but-inert: extend the campaign-cooldown join in joulewise/analysis_engine/inputs.py so a provenance record is selected only when both analysis_manifest_id equals the finalized lineage collection_manifest_id AND analysis_manifest_sha256 equals lineage.prospective_manifest_sha256, refusing under a registered D-078 reason (never a silent drop) when the id matches but the SHA differs.",
+      "id": "COLLECTOR-MANIFEST-SHA-IDENTITY-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 103,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S11 stream's draft. Origin: S11 contract-lens refuter finding F4, raised by one lens only and not corroborated by the execution-lens audit, so recorded rather than applied. Producer side is already in place (PR #213, S9-01 / D-158 F-2(c)); the cure lives in joulewise/analysis_engine/ (S10's territory, outside the S11 fence). The one remaining implementation question is the authorship discriminator's carrier; the policy is settled. 142 pre-existing manifests on disk carry analysis_manifest_id null.",
       "stop_card": null
     },
     "CUSTODY-HARDEN-01": {
@@ -1577,6 +1729,230 @@
       "rank": 53,
       "status": "queued",
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
+      "stop_card": null
+    },
+    "GAMMA-UNIT-ROSTER-GUARD-01": {
+      "acceptance": {
+        "evidence": [
+          "Validation on the freeze path refuses a gamma pack whose unit roster is not exactly the ruled four in the ruled order with the ruled producer references, with regressions for three units, a reordering, and an extra unit",
+          "The arm-side comparison authenticates the receipt's unit list against the ruled roster, not only against the pack's list",
+          "The current gamma generation still validates, freezes and arms unchanged"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/GAMMA-UNIT-ROSTER-GUARD-01/acceptance",
+          "label": "GAMMA-UNIT-ROSTER-GUARD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The ruled four-unit ordered gamma roster is checked against the ruling, not against the pack itself."
+      },
+      "authority": {
+        "label": "S9-04 (the gamma four-unit roster is a hand-written literal that nothing checks); ruled roster is D-131 clause 2a",
+        "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-157 finding F-3 (families are byte-bound into the semantics digest; post-mint correction is a new family generation)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Post-mint change to a frozen pack's semantics is a new family generation; land the guard so it refuses NEW packs and reports, never rewrites, an existing one"
+        },
+        {
+          "authority": {
+            "label": "D-131 clause 2a (gamma carries exactly four ordered units)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The roster literal is D-131 clause 2a verbatim; this row adds refusals and does not change any pack bytes or the generator's emitted units"
+        }
+      ],
+      "flags": [],
+      "goal": "Enforce D-131 clause 2a's gamma roster mechanically: gamma carries exactly four ordered units (A/decode, A/prefill_p256, B/decode, B/prefill_p256; A references the 1.5B producer and B the 7B producer), but the generator emits them as a hand-written literal tuple and validate_identity_pin_projection (joulewise/identity_pins.py) enforces only exact keys, lifecycle state, null-pins-before-projection and id uniqueness, so a gamma pack with three units, reordered units, or an extra C/decode validates, freezes and arms clean; the arm-side comparison in joulewise/arm_readiness.py checks the receipt's unit list against the pack's own list, self-consistency rather than the ruled roster.",
+      "id": "GAMMA-UNIT-ROSTER-GUARD-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 109,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-04 of the ruled-not-installed sweep (status B, cure CODE, does not gate the mint). Line citations in the SHORTLIST are at the sweep's baseline head 0dd3b6dc, not HEAD.",
+      "stop_card": null
+    },
+    "GIT-FIXTURE-MAINTENANCE-SWEEP-01": {
+      "acceptance": {
+        "evidence": [
+          "An enumeration test fails if a tests/ module creates a git fixture repository without the four-key tuple, so the class cannot regrow",
+          "Every touched module is green three consecutive times at the bench",
+          "One green hosted run across both interpreters"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/GIT-FIXTURE-MAINTENANCE-SWEEP-01/acceptance",
+          "label": "GIT-FIXTURE-MAINTENANCE-SWEEP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The detached-git-maintenance teardown race cannot regrow from any tests/ fixture repository."
+      },
+      "authority": {
+        "label": "T26 S5 CI-reliability record, section 'What this cure does NOT cover, and the row that would' (proposed row text), plus the three prior members of the failure family: EVIDENCE-AUTHOR-GIT-TEARDOWN-01 (closed 2026-08-22), PLANTEST-RGLOB-RACE-01 (a28b55bf), the identity-pins teardown race (PR #203)",
+        "path": "docs/process_traces/2026-08-26-t26-ci-reliability/README.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "T26 S5 CI-reliability record, proposed row fence",
+            "path": "docs/process_traces/2026-08-26-t26-ci-reliability/README.md"
+          },
+          "rule": "Fixture hygiene only: no product code and no change to any test's assertions"
+        },
+        {
+          "authority": {
+            "label": "T26 S5 CI-reliability record, proposed row fence",
+            "path": "docs/process_traces/2026-08-26-t26-ci-reliability/README.md"
+          },
+          "rule": "The calibration-exits fixtures that deliberately force maintenance ON (tests/test_calibration_exits.py, the two sites the S5 record cites at :2125-2130 and :2660-2668) are excluded by name, since provoking maintenance is their whole mechanism"
+        }
+      ],
+      "flags": [],
+      "goal": "Apply the four-key git auto-maintenance hygiene tuple (maintenance.auto=false, gc.auto=0, maintenance.autoDetach=false, gc.autoDetach=false) at every git init call site in tests/ that creates a fixture repository later removed by TemporaryDirectory.cleanup() or shutil.rmtree, routing sites through a shared helper where one already exists rather than copying the tuple.",
+      "id": "GIT-FIXTURE-MAINTENANCE-SWEEP-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 99,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S5 stream's proposal. S5 deliberately did not register it mid-wave because the sweep touches test modules owned by other T26 streams; the S5 record enumerates the still-unhygienic git init sites (test_d117_decode_contrast_plan, test_arm_readiness_pack_digest, test_calibration_bracketing, test_calibration_live_three_window, test_arm_readiness_evidence, test_bridge, test_family_marker, and others). Fourth member of one failure family: a detached git maintenance child still holding the fixture repository when the temporary directory is removed.",
+      "stop_card": null
+    },
+    "HISTPACK-PROMISOR-NOFETCH-01": {
+      "acceptance": {
+        "evidence": [
+          "A promisor or partial clone is rejected outright, or lazy fetch is disabled for the derivation and every missing object maps to a registered histsem refusal; the chosen disposition is recorded in docs/contracts/receipt_histsem_verifier.md",
+          "A regression in the shape of partial_history_probe.py (promisor clone, missing historical blobs) refuses at both public boundaries (arm and freeze) and proves the missing-object count is unchanged afterwards, so nothing was fetched",
+          "The complete-history path is unchanged: the 99 committed receipts still PASS and the three real _v3 generators still regenerate"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/HISTPACK-PROMISOR-NOFETCH-01/acceptance",
+          "label": "HISTPACK-PROMISOR-NOFETCH-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A repository whose history is incomplete is refused by the historical-semantics verifier; it is never completed on the fly."
+      },
+      "authority": {
+        "label": "S3 delta re-audit 2 finding D4 (partial history lazy-fetches and passes; probe docs/process_traces/2026-08-26-t26-s3/delta2/partial_history_probe.py)",
+        "path": "docs/process_traces/2026-08-26-t26-s3/delta2/report.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "receipt histsem verifier contract (no-fetch and incomplete-history refusal)",
+            "path": "docs/contracts/receipt_histsem_verifier.md"
+          },
+          "rule": "No-fetch is the contract: the verifier reads history it already has and never contacts a remote; a derivation that fetches has violated the contract even when the digest it returns is correct"
+        },
+        {
+          "authority": {
+            "label": "D-159 frozen-receipt constant ruling (bounded Git subprocesses)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Subprocess time bounds from the A93 ruling (D-159) stay in force; the cure adds refusals, it does not add an unbounded subprocess"
+        }
+      ],
+      "flags": [],
+      "goal": "Make the historical-pack tree derivation in joulewise/arm_readiness.py (_historical_pack_tree) fail closed on a blobless or promisor clone: the S3 delta re-audit's partial-clone probe began with 223 missing historical blobs, the derivation lazily fetched the four it needed through the promisor remote, returned the expected digest and PASSED, with 219 blobs still missing, contradicting the receipt-histsem contract's no-fetch and incomplete-history-refusal rules.",
+      "id": "HISTPACK-PROMISOR-NOFETCH-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 107,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md); no prior draft, written from the S3 delta re-audit 2 report (finding D4, verification V7: histsem PASS with missing_before 223 and missing_after 219 on a promisor clone). Soundness: the verifier's answer on an incomplete repository is currently a function of what the remote is willing to serve. The measurement checkout is a full clone, which is why this is a should-fix and not a mint gate.",
+      "stop_card": null
+    },
+    "HISTPACK-TEMP-CLEANUP-01": {
+      "acceptance": {
+        "evidence": [
+          "A bounded fallback removal runs when cleanup raises before removal, so both scratch trees are absent afterwards",
+          "A before-deletion failure regression (the d3_cleanup_leak_probe.py shape: exception injected before removal) requires both trees absent and both public boundaries still refusing with histsem_history_unavailable",
+          "The existing cleanup regression is corrected so it no longer removes the tree before raising"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/HISTPACK-TEMP-CLEANUP-01/acceptance",
+          "label": "HISTPACK-TEMP-CLEANUP-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A cleanup failure before removal cannot leave a scratch checkout on disk, and the regression would fail if it could."
+      },
+      "authority": {
+        "label": "S3 delta re-audit 2 finding D3 (cleanup test masks a real checkout leak; probe docs/process_traces/2026-08-26-t26-s3/delta2/d3_cleanup_leak_probe.py)",
+        "path": "docs/process_traces/2026-08-26-t26-s3/delta2/report.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "S3 delta re-audit 2 (D1 fixed: exact digest membership is the only flagless admission path)",
+            "path": "docs/process_traces/2026-08-26-t26-s3/delta2/report.md"
+          },
+          "rule": "Cleanup only: no change to the verifier's admission or refusal semantics, and no widening of the flagless-generator allowlist"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the temp-checkout leak in the historical-semantics verifier: when a cleanup error occurs before removal, both nonempty scratch checkouts (tempfile.TemporaryDirectory prefix joulewise-histsem- in joulewise/arm_readiness.py) are left behind even though arm and freeze both govern-refuse with histsem_history_unavailable, and the committed regression in tests/test_receipt_histsem.py calls the real cleanup and then raises, so it cannot see the defect.",
+      "id": "HISTPACK-TEMP-CLEANUP-01",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 108,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md); no prior draft, written from the S3 delta re-audit 2 report (finding D3, verification V6: leaked_nonempty 2 after an injected pre-removal exception). Small.",
+      "stop_card": null
+    },
+    "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01": {
+      "acceptance": {
+        "evidence": [
+          "The real-transaction runbook (or its post-mint successor) carries a named phase that re-runs the full claim edge at the transaction head on the production pack before any window is spent, with its evidence custodied",
+          "The pre-window worklist carries the entry and the _v4 night is sequenced behind it",
+          "The executed rehearsal record exists before the first spent window, or the magistrate's explicit waiver is recorded in its place"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01/acceptance",
+          "label": "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The same-head full-claim-edge sacrificial replay is a scheduled, recorded pre-window step, not an unscheduled ruling."
+      },
+      "authority": {
+        "label": "S9-12 (the L10 sacrificial rehearsal ruled to precede any spent window has no schedule); the ruling is the WO-CONSUMPTION-EDGE contract adoption, item 4",
+        "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "D-160 ruling R-1",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Same head, production pack: a synthetic or smoke-scoped replay does not discharge this row (D-160 R-1 forbids a synthetic clean leg standing in for the real edge)"
+        },
+        {
+          "authority": {
+            "label": "S9-12 cure column (RUNBOOK + W-LIST)",
+            "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+          },
+          "rule": "Schedule and record only (RUNBOOK + W-LIST): this row does not change the claim edge; defects the rehearsal finds are routed to their owning rows"
+        }
+      ],
+      "flags": [],
+      "goal": "Schedule the ruled L10 sacrificial rehearsal for the _v4 transaction: the WO-CONSUMPTION-EDGE adoption (decision log, 2026-08-15) rules that the L10 sacrificial rehearsal re-runs the full claim edge at the same head before any window is spent, and no runbook phase and no kernel row schedules that re-run for _v4; given S9-01 and S9-07 (a claim edge that has never been executed end to end against a v3 pack), this is the check that would have caught both before a window was spent.",
+      "id": "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 113,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-12 of the ruled-not-installed sweep (status C, cure RUNBOOK + W-LIST; gates windows). The ruling text: 'the L10 sacrificial rehearsal re-runs the full edge at the same head before any window is spent' (decision log, WO-CONSUMPTION-EDGE contract ADOPTED, item 4). Ed-hands portions of a live rehearsal are surfaced as NEEDS-ED.",
       "stop_card": null
     },
     "LINE-AUDIT-GUARD-01": {
@@ -3157,6 +3533,140 @@
       "status_note": "REGISTRATION ANOMALY CURED: the refuter envelope that was nowhere in the repository record at registration was recovered POST-HOC on 2026-08-24 from the T23 session record - PR #182 merged while the refuter (agent task-id afa98fc4eaa4512e1, adjudicated verdict SOUND FOR MERGE) was still running - and is custodied verbatim at docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md. The goal is now restated from the envelope's own wording, satisfying the first acceptance clause; what remains is the fix or recorded waiver.",
       "stop_card": null
     },
+    "PIPELINE-SMOKE-LIVE-01": {
+      "acceptance": {
+        "evidence": [
+          "A runbook for the live variant exists, drafted by S10 after BRACKET-BINDING-CLI-01 lands, naming every operator step from generation through finalize_analysis_manifest and analyze-claims",
+          "The run executes the real chain with zero production seams: real telemetry, its own real floor cells from two calibration brackets, fixed_n = 1, decode-only, one ABBA block, under a smoke pack id with its own runs root outside the measurement checkout, never marker-signed",
+          "The hardware seams are proven in the record: powermetrics binary binding, the FD-198 handoff across execve, the window.env allowlist against the real chain, and boot-session/clock at T-0",
+          "Every D-160 F-5 join and S11's five estate-11 assertions are asserted against the run's artifacts, and the claim edge answers every contrast for a DATA reason"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PIPELINE-SMOKE-LIVE-01/acceptance",
+          "label": "PIPELINE-SMOKE-LIVE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The hardware seams the replay cannot exercise are proven once, end to end, on a quarantined real generation that can never reach a claim."
+      },
+      "authority": {
+        "label": "D-158 ruling R-3 (PIPELINE-SMOKE-LIVE-01, ~20 min, Ed's machine) and D-160 ruling R-2 (the end-to-end clean proof is the LIVE run on a real tiny quarantined generation)",
+        "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the finalizer's --bracket-binding file needs a producer before a live run can reach finalization; S10 drafts this row's runbook after the bracket CLI",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "BRACKET-BINDING-CLI-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "D-160 ruling R-2 (the evening-before item on ED-ITEMS)",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Not a gate on the _v4 night unless Ed schedules it the evening before; it is the evening-before item on ED-ITEMS"
+        },
+        {
+          "authority": {
+            "label": "D-158 ruling R-3 (quarantine terms)",
+            "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Quarantined and claim-ineligible by construction: smoke pack id, own runs root outside the measurement checkout, never marker-signed; nothing from this run enters any claim or floor"
+        },
+        {
+          "authority": {
+            "label": "D-158 ruling R-3 (license and hands)",
+            "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Runs under D-139/D-142's diagnostic license; Ed's hands only for anything D-127/D-149 reserves"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "The live ~20-minute end-to-end clean proof on Ed's machine: a real, tiny, quarantined family generation (decode contrast only, fixed_n = 1, one ABBA block of 2 runs x 2 conditions, two full protocol-v3 calibration brackets, real MLX / powermetrics / prewindow_check.sh / launch_window.py execve), its own runs root outside the measurement checkout, never marker-signed, zero production seams, run through launch, collection, finalization and the claim edge.",
+      "id": "PIPELINE-SMOKE-LIVE-01",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 13,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6. Ed's hands (quiet_mac lane): D-158 R-4 deferred the live variant past the night unless Ed schedules the 20 minutes the evening before ('it is worth it if he does'). Blocked on the bracket-binding producer because the finalization step it must exercise had no producer at all (D-160 F-4); S10 drafts the runbook after that CLI lands.",
+      "stop_card": null
+    },
+    "PIPELINE-SMOKE-TIER2-01": {
+      "acceptance": {
+        "evidence": [
+          "Both new seams are gated on an authenticated plan-tree generation_kind == pipeline_smoke and are unreachable for any other generation kind, proven by regression",
+          "The fixture executable and prefix are hard-pinned, and a substituted executable or prefix is refused",
+          "Every D-160 F-5 join is asserted by the replay leg",
+          "No floor rule changes: the clean leg's floor comes from a real calibration present in the replayed trace, and inputs.py's refusal of calibration_scope == smoke as cell_not_claim_ready is unchanged"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PIPELINE-SMOKE-TIER2-01/acceptance",
+          "label": "PIPELINE-SMOKE-TIER2-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A replayed corpus exercises the real claim edge end to end without any relaxation of the floor rules or the claim-ineligibility of smoke families."
+      },
+      "authority": {
+        "anchor": "rulings",
+        "label": "D-160 ruling R-4 (PIPELINE-SMOKE-TIER2-01 registered post-_v4 with the design constraints recorded there)",
+        "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "registered post-_v4 by D-160 R-4; the replay seams land only after the frozen campaign's transaction closes",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V4-TRANSACTION-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "D-160 ruling R-5",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Evidence-path rulings are made only after a seat has executed the path or proven from code that it cannot; this row's design claims are executed, not assumed"
+        },
+        {
+          "authority": {
+            "anchor": "rulings",
+            "label": "D-160 ruling R-1",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "No synthetic clean leg before the _v4 night and no floor-rule relaxation; the desk smoke before the night is W-11 (#211) plus Unit B, proving contract defects fail loudly, not a clean pass"
+        },
+        {
+          "authority": {
+            "label": "D-158 addendum A-1 / A-2 (the mock-telemetry lock withdrawn; the clean leg's corpus must be produced by the real collector)",
+            "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "The tier-2 replay seam is not CLI-reachable at HEAD and costs two custody surfaces; both are gated on the authenticated smoke generation kind, never on a bundle-level reason (the mock-telemetry lock was withdrawn)"
+        }
+      ],
+      "flags": [],
+      "goal": "Post-_v4 tier-2 replay leg of the pipeline smoke, under the D-160 R-4 design constraints: the two production seams gated on an authenticated plan-tree generation_kind == pipeline_smoke, a hard-pinned fixture executable and prefix, every D-160 F-5 join asserted, no floor-rule change, and the clean leg's floor coming from a real calibration in the replayed trace rather than a smoke-scoped mint.",
+      "id": "PIPELINE-SMOKE-TIER2-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 106,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-160 R-4 with its constraints carried into the acceptance verbatim in substance. Sequenced post-_v4 by ruling. The desk smoke and its mutation legs (PR #211) are W-11 as landed; PIPELINE-SMOKE-01 proper (the real collector producing the clean leg's corpus on the smoke pack via the fake-collector seam) is the next S10 deliverable per the D-158 addendum A-2 and is not this row.",
+      "stop_card": null
+    },
     "PREWINDOW-REGEX-01": {
       "acceptance": {
         "evidence": [
@@ -3261,6 +3771,44 @@
       "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. 2026-08-24: first desk batch LANDED on PR #168 (B-9, B-27, B-43, B-45, B-47, B-33; B-46 verified already cured in ae82a392) — workflow-implemented, per-shard verified, magistrate-reviewed. Residuals carried: window_runbook.md:995,:1161 similar needs_pin_commit phrasings.",
       "stop_card": null
     },
+    "RECORDER-SINGLE-OPERATOR-PREAMBLE-01": {
+      "acceptance": {
+        "evidence": [
+          "docs/phase_2/window_runbook.md section 11 opens with a close-out preamble stating the single-operator, no-concurrent-repo-writer rule in plain language with its physical reason",
+          "The decision-log ruling's pointer and the runbook section agree, and a docs-freshness or text regression pins the preamble's presence"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RECORDER-SINGLE-OPERATOR-PREAMBLE-01/acceptance",
+          "label": "RECORDER-SINGLE-OPERATOR-PREAMBLE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The runbook section the ruling cites actually contains the rule it cites."
+      },
+      "authority": {
+        "label": "S9-13 (the recorder's single-operator bounding rule was ruled into a runbook section that does not contain it); the ruling is RECORDER CHECK-TO-GRANT RACE (decision log, 2026-08-15)",
+        "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "RECORDER CHECK-TO-GRANT RACE ruling (registered limitation + WO-RECORDER-GRANT-IDENTITY queued)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Runbook only: the rule's wording is the ruling's; this row does not alter the recorder or the registered limitation"
+        }
+      ],
+      "flags": [],
+      "goal": "Propagate the recorder's single-operator bounding rule into the runbook section the ruling says already carries it: the RECORDER CHECK-TO-GRANT RACE ruling (decision log, 2026-08-15) states the recorder runs single-operator with no concurrent repo-writing process during a close-out and that this is documented in the runbook section 11 close-out preamble (propagation owed with the WO); the propagation was never done, and docs/phase_2/window_runbook.md section 11 has no close-out preamble carrying the rule.",
+      "id": "RECORDER-SINGLE-OPERATOR-PREAMBLE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 114,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-13 of the ruled-not-installed sweep (status C, cure RUNBOOK). Compounds with TRANSACTION-RULED-ARTIFACTS-01: two separate rulings point at the same absent section 11 step.",
+      "stop_card": null
+    },
     "REGISTRY-ID-NAMING-01": {
       "acceptance": {
         "evidence": [
@@ -3298,6 +3846,45 @@
       "rank": 87,
       "status": "queued",
       "status_note": "Registered from the S-0 packet-1 cold-gate round (both seats: archival retention, not a defect). Defer landing until after the _v4 transaction closes.",
+      "stop_card": null
+    },
+    "REISSUE-V3-GENERATION-GUARD-01": {
+      "acceptance": {
+        "evidence": [
+          "The tool detects an anchor-v3 (r3 or later) predecessor and refuses before any write, with a registered refusal naming the generation it cannot check",
+          "A regression with an r3-shaped predecessor proves the refusal and proves no bytes were written",
+          "The v2 path is unchanged and its existing regressions still pass"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/REISSUE-V3-GENERATION-GUARD-01/acceptance",
+          "label": "REISSUE-V3-GENERATION-GUARD-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The reissue tool refuses any predecessor generation it cannot verify instead of silently rewriting it with v2 values."
+      },
+      "authority": {
+        "label": "S9-11 (the reissue tool can silently overwrite anchor-v3 pins with superseded v2 values); the stated incapacity is D-145 clause 3",
+        "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-145 clause 3 (the reissue TOOL cannot check v3 generations)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Refuse, do not extend: the tool does not learn to derive v3 generations; bespoke derive/build scripts remain the r3/r4 route"
+        }
+      ],
+      "flags": [],
+      "goal": "Make scripts/reissue_calibration_acceptance.py refuse a predecessor whose generation it cannot check: D-145 clause 3 states the reissue TOOL compares stored scalars and cannot check v3 generations (bespoke derive/build scripts are the r3/r4 route), but that incapacity is nowhere a guard (no v3, anchor_v3 or n17 reference in the 606-line script), so run against an r3-plus predecessor it would overwrite anchor-v3 member values with superseded v2 stored lexemes and still pass _valid_acceptance_bound, writing the estimator pin that every _v3 and _v4 pack binds at birth.",
+      "id": "REISSUE-V3-GENERATION-GUARD-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 112,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-11 of the ruled-not-installed sweep (status C, cure CODE; does not gate the mint but writes the mint's estimator pin).",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -3383,6 +3970,100 @@
       "status_note": "H-1 already resolved by the ruled convening rule; H-6 adoption ruled by the cold pass (charter home; decision-log entry owed; Ed visibility line in the packet).",
       "stop_card": null
     },
+    "SUPERSESSION-CHAINED-RECOVERY-01": {
+      "acceptance": {
+        "evidence": [
+          "A ruling defines a predecessor-bound successor record that hash-binds the exact prior supersession row and gives both consumers one deterministic chain truth table",
+          "Real-recorder regressions cover an already-selected occurrence failing again in one window, a valid successor chain, a fork, a missing predecessor, and a corrupted predecessor",
+          "Both whole-window membership and the cooldown join select or refuse identically for every ruled chain shape",
+          "The design records strict-subset latest-wins as rejected because whole_window_verdict_conflict forbids choosing a later disposition over a preserved conflict"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SUPERSESSION-CHAINED-RECOVERY-01/acceptance",
+          "label": "SUPERSESSION-CHAINED-RECOVERY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A separately ruled predecessor-bound successor record permits sound same-root recovery after an already-selected occurrence later fails."
+      },
+      "authority": {
+        "label": "D-156 residual Q1 (chained-supersession schema minted as a QUEUED row; latest-wins rejected on ruled grounds)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "whole_window_verdict_conflict operator rule",
+            "path": "docs/phase_2/window_runbook.md"
+          },
+          "rule": "Do not widen the cooldown join to ignore strict-subset rows because that is rejected latest-wins conflict laundering"
+        },
+        {
+          "authority": {
+            "label": "D-156 residual Q1 current disposition (A: fresh root or non-claim disposition now)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Until a successor schema is separately ruled and landed, use a fresh runs root or retain the member as non-claim evidence"
+        }
+      ],
+      "flags": [],
+      "goal": "Rule and implement a predecessor-bound chained-supersession schema for the operational forcing case where an already-selected occurrence later fails: the runbook prescribes rerun-and-record-supersession for anchor_fallback_member_unusable and incomplete_existing, so a member failing twice in one window is not exotic; preserve the rejected cheap alternative on record because widening the cooldown join to ignore strict-subset rows is latest-wins, forbidden by whole_window_verdict_conflict.",
+      "id": "SUPERSESSION-CHAINED-RECOVERY-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 100,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q1-B; the draft's proposed rank 20 replaced by the next A-number per wave convention). Ruling-first because the record schema and two-consumer chain semantics are not yet owned by a contract. Packet: docs/process_traces/2026-08-27-t26/supersession-dup-ruling-packet.md.",
+      "stop_card": null
+    },
+    "SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01": {
+      "acceptance": {
+        "evidence": [
+          "Before any cure, a regression constructs a legacy or hand-edited log with an older still-valid supersession and a later third-occurrence supersession and exhibits whole-window selection versus cooldown refusal on identical bytes",
+          "That pre-cure regression also proves the D-093 totals audit reports clean for two valid same-bundle rows, preserving the per-bundle blindness as an explicit should-fix",
+          "A ruling chooses the shared fail-closed disposition and defines how both consumers handle every multiple-row same-bundle shape",
+          "After the cure, all three consumer call sites (whole-window membership, the cooldown join, and the membership-binding path through joulewise/whole_window.py _supersession_is_logged) return the same ruled disposition on the unchanged divergence fixture"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01/acceptance",
+          "label": "SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Legacy or hand-edited supersession logs cannot make whole-window membership select while the cooldown join refuses on the same bytes."
+      },
+      "authority": {
+        "label": "D-156 residual Q4 (the cross-consumer divergence is its own queued row; a fail-closed consumer change does not ride a write-time-guard PR)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-156 no-consumer-change ruling for the write-time guard",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Do not fold this consumer-contract cure into the supersession write-time-refusal change"
+        },
+        {
+          "authority": {
+            "label": "D-156 residual Q2 historical-byte disposition (preserve and refuse; rewrite rejected)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Preserve legacy and hand-edited log bytes; the cure may not rewrite or delete historical supersession rows"
+        }
+      ],
+      "flags": [],
+      "goal": "Rule and cure the legacy cross-consumer divergence: for a log not written by the guarded recorder, a later third occurrence leaves the older supersession valid, so the cooldown join in joulewise/analysis_engine/inputs.py refuses while whole-window membership through scripts/run_campaign.py selects on identical bytes; a THIRD consumer on the membership-binding path, joulewise/whole_window.py _supersession_is_logged and its exactly-one-match caller, carries the same shape and must be included in the ruled truth table.",
+      "id": "SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 101,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the lieutenant's draft (docs/process_traces/2026-08-27-t26/supersession-queued-rows-draft.md, Q4-B; the draft's proposed rank 17 replaced by the next A-number; the draft's line citations inputs.py:2337-2368, run_campaign.py:4766-4782, whole_window.py:4609 and :4700-4714 are at the draft's head and are replaced here by symbol names). Acceptance requires the divergence to be exhibited before any cure so agreement cannot be asserted tautologically. Soundness boundary that should precede future claim consumption; needs no hardware.",
+      "stop_card": null
+    },
     "T0-CLOCK-ROW-RENAME-01": {
       "acceptance": {
         "evidence": [
@@ -3430,6 +4111,138 @@
       "rank": 82,
       "status": "blocked",
       "status_note": "Registered 2026-08-23 by the T0 synthesis ruling (Sol's concern adopted, cure deferred; coupling to the horizon decision is ruled).",
+      "stop_card": null
+    },
+    "T0-ENV-PARSER-UNIFY-01": {
+      "acceptance": {
+        "evidence": [
+          "One shared exact parser and key contract is consumed by both scripts/capture_t0_step.py and joulewise/arm_readiness_evidence_t0.py; neither retains a private key set",
+          "Unknown-key and missing-key regressions exist at both boundaries and refuse under the registered evidence_author_t0_capture_environment_invalid reason",
+          "tests/test_window_env_allowlist.py test_additionally_bound_runbook_keys_pending_ruling no longer skips on the OPEN DEFECT branch: the runbook's 'additionally bind' instruction for ARM_RECEIPT and LAUNCH_MANIFEST is removed and those paths are derived and exported after ARM and before E-10 (mirroring docs/process/rehearsal-operator-card.md), without widening window.env",
+          "The T-0 capture chain in docs/phase_2/window_runbook.md no longer dereferences a variable the allowlist refuses under set -euo pipefail"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T0-ENV-PARSER-UNIFY-01/acceptance",
+          "label": "T0-ENV-PARSER-UNIFY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Both T-0 producers read window.env under one exact contract, and the runbook's bound keys agree with it."
+      },
+      "authority": {
+        "label": "D-158 addendum item A-5 (window.env truth recorded: ARM_RECEIPT and LAUNCH_MANIFEST are bound by the runbook and refused by the allowlist; cure is the T-0 parser unification row, gating later windows)",
+        "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "S9-08 (a) cure (delete the 'additionally bind' instruction; derive and export ARM_RECEIPT and LAUNCH_MANIFEST after ARM and before E-10; do not widen window.env)",
+            "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+          },
+          "rule": "Do not widen window.env: the cure removes the runbook instruction and derives the two paths at the operator step; the 25-key allowlist is not extended"
+        },
+        {
+          "authority": {
+            "label": "S9-08 reachability (the refuter's finding that the contradiction gates later windows, not the transaction night)",
+            "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+          },
+          "rule": "Not a transaction-night gate: D-155 makes real-transaction-runbook.md the governing document for the freeze transaction, whose Phase G is dry-run-only; the contradiction blocks the LATER measurement windows where the handoff to window_runbook.md occurs"
+        },
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-T0-UNATTENDED (T-0 evidence modules are the most safety-critical in the repository)",
+            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+          },
+          "rule": "Touches the T-0 author and the capture ceremony, so the full C-028 gauntlet applies and no existing T-0 refusal is weakened"
+        }
+      ],
+      "flags": [],
+      "goal": "Unify the two window.env parsers: scripts/capture_t0_step.py enforces exact equality against its exhaustive 25-key _ENV_KEYS allowlist and refuses unknown keys, while joulewise/arm_readiness_evidence_t0.py accepts arbitrary syntactically valid assignments and checks only eleven expected bindings; share one exact parser and key contract between both callers, with unknown-key and missing-key regressions at both boundaries, and dispose of the runbook contradiction that binds ARM_RECEIPT and LAUNCH_MANIFEST into a file the allowlist refuses.",
+      "id": "T0-ENV-PARSER-UNIFY-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 105,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md); no prior draft, written from the skipTest text in tests/test_window_env_allowlist.py ('OPEN DEFECT: the runbook requires ARM_RECEIPT and LAUNCH_MANIFEST but _ENV_KEYS refuses both; PR #205 records the pending magistrate ruling') and S9-08 of the ruled-not-installed sweep. S9-08 (b), the twin parsers, was found by the refuter, not the enumeration: two producers reading the same file under two different contracts is the shape D-155 NR-11 was ruled to close for the terminal-review parser, and it is still live here. Known and recorded rather than fixed since 2026-08-19 (docs/process/rehearsal-operator-card.md documents the divergence and works around it). S2 reported the cure outside its footprint.",
+      "stop_card": null
+    },
+    "T0-REHEARSAL-PRODUCERS-01": {
+      "acceptance": {
+        "evidence": [
+          "Every gate the evaluator marks UNRULED for missing evidence has a named producer writing that evidence, and a live-shaped fixture built only from what the producers actually emit evaluates to PASS or FAIL, never INCOMPLETE for absence; every entry of REHEARSAL_PRODUCER_WORK_ORDER in joulewise/t0_rehearsal.py is either discharged by a producer change or struck with a recorded reason",
+          "The six gates that today accept self-declared evidence instead authenticate it, each defect-shaped: G2's census is exhaustive over the on-disk T-0 namespace rather than a declared manifest; G3's HIDIdleTime witness carries argv, raw stdout, boot session and an in-sequence monotonic stamp, all checked; G5 evaluates D-149 C1-C5 from underlying evidence rather than declared statuses; G6 grounds the production-root set in the repository and proves ledger/roots/backup dedication as real paths; G8's agent-process matching catches hyphenated, suffixed and path-qualified spellings (codex-helper, claude-code, /usr/local/bin/codex-run); G10's positive control carries raw command output, timestamp, boot session and a hash binding",
+          "The honesty rule survives untouched: anything unevaluable is UNRULED or FAIL, never PASS; overall PASS requires every gate PASS; INCOMPLETE never counts as success; a regression proves a fully passing bundle with one gate unevaluable does not return PASS",
+          "No producer change weakens a T-0 refusal or alters the published clock.correct_and_prior_state.v1 PROBE value's key set; the live REASON_CODE_COVERAGE gate stays at registered 55 / produced 45 / dynamic 10 with the dynamic set unchanged, and no new reason code is added in either vocabulary without the exhaustive registration path in the T0 delta document's section 4.5"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/T0-REHEARSAL-PRODUCERS-01/acceptance",
+          "label": "T0-REHEARSAL-PRODUCERS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every rehearsal gate has a producer writing the evidence its evaluator needs, self-declared evidence is authenticated, and the evaluator's honesty rule survives untouched."
+      },
+      "authority": {
+        "label": "MAGISTRATE-RULING-T0-UNATTENDED (the ruled ten-gate rehearsal); the ruled table is debate-sol-critique.md section 2(c); RF-26..RF-35 and the section 5 rule in impl/reason-code-coverage-delta.md",
+        "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the rehearsal evaluator in joulewise/t0_rehearsal.py is the consumer these producers must satisfy; this row closes only against that evaluator and its REHEARSAL_PRODUCER_WORK_ORDER table",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "T0-UNATTENDED-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-T0-UNATTENDED scope (the T-0 evidence change is T0-UNATTENDED-01's; this row is rehearsal instrumentation)",
+            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+          },
+          "rule": "Additive only: new records are added; no existing T-0 record's schema, key set, or refusal is changed; a producer change that alters what the arm-side predicate consumes is out of scope and returns to the magistrate"
+        },
+        {
+          "authority": {
+            "label": "MAGISTRATE-RULING-T0-UNATTENDED (Ed-reserved items)",
+            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
+          },
+          "rule": "Ed-hands items stay Ed's: the live rehearsal sitting, the privileged anchor positive control, and the sudoers install/exercise are surfaced as NEEDS-ED, never assumed"
+        },
+        {
+          "authority": {
+            "label": "UNATTENDED-LAUNCH-01 status_note (RULED ADDITION 2026-08-26: the GO-receipt production consumer)",
+            "path": "docs/process/state_kernel.json"
+          },
+          "rule": "G7 is not this row's: the production consumer of the D-149 GO receipt is ruled to UNATTENDED-LAUNCH-01 (2026-08-26); this row must not build it and must not let G7 stop reporting UNRULED"
+        },
+        {
+          "authority": {
+            "label": "reason-code-coverage delta section 5 (a green happy-path gate is not evidence a refusal fires)",
+            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/impl/reason-code-coverage-delta.md"
+          },
+          "rule": "Re-opens the T-0 author and the capture ceremony (joulewise/arm_readiness_evidence_t0.py, scripts/capture_t0_step.py) and therefore runs the full C-028 gauntlet: enforced WRITE_SCOPE, independent audit that never self-grades, severity-tiered refuters with distinct lenses, delta re-audit of every fix round; mutation-shaped auditing is mandatory (the T0 core round's five blockers were ALL found by deleting a gate and observing that its named test still passed)"
+        },
+        {
+          "authority": {
+            "label": "cold-gate packet: ruling-status semantics (addendum: the 5 s T-0 bound)",
+            "path": "docs/process_traces/2026-08-27-t26/process-proposals/ruling-status-semantics.md"
+          },
+          "rule": "The 5 s issuance bound is COLD-GATE-PENDING and must not be reinterpreted, relaxed, or implemented here, including as 'predicate recency'"
+        }
+      ],
+      "flags": [],
+      "goal": "Make the ruled ten-gate supervised rehearsal actually evaluable against real window evidence by having the T-0 producers (scripts/capture_t0_step.py, joulewise/arm_readiness_evidence_t0.py, scripts/collect_clock_reference.py, and whatever mechanically issues the D-149 receipt) record the gate-bearing facts they do not record today, so a live rehearsal returns PASS or FAIL on mechanism rather than INCOMPLETE on absence.",
+      "id": "T0-REHEARSAL-PRODUCERS-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 102,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S2 stream's draft (docs/process_traces/2026-08-23-t22/t0-unattended/impl/t0-rehearsal-producer-row-draft.md, written 2026-08-26 at the magistrate's instruction from T0-UNATTENDED-01's first rehearsal-evaluator audit). Forcing problem: the evaluator's first independent audit returned REFUTE because no producer writes the records seven of its ten gates need, so against real evidence those gates can only return UNRULED. STARTING MATERIAL, not a patch to apply: the killed fix round for the six self-declaration blockers is preserved at docs/process_traces/2026-08-27-t26/t0-unattended/p14-rehearsal-fix-round-PARTIAL-KILLED.diff (it left 21/31 tests failing and was reverted). Design round required before implementation.",
       "stop_card": null
     },
     "T0-UNATTENDED-01": {
@@ -3641,6 +4454,119 @@
       "rank": 41,
       "status": "queued",
       "status_note": "lead personal tooling, non-repo",
+      "stop_card": null
+    },
+    "TRANSACTION-RULED-ARTIFACTS-01": {
+      "acceptance": {
+        "evidence": [
+          "campaign-close.json has a schema, a writer invoked by a named runbook step, and a validator, and the STRICT record order (declaration, freeze-off, notification, THE FIXATION COMMIT FIRST, only then bookkeeping) is asserted by regression",
+          "The fixation commit's successor-pinset SHA literal and its loud-fail guard exist, and a first-post-freeze commit that is not the fixation commit is refused by the guard, proven by regression",
+          "The changed-set window's open (evidence-derivation head) and close (last consuming arm) endpoints are computed and asserted, and the arm-readiness gate refuses an arm after the window closed, proven by regression",
+          "The real-transaction runbook and window_runbook.md section 11 carry the operator steps for all three"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TRANSACTION-RULED-ARTIFACTS-01/acceptance",
+          "label": "TRANSACTION-RULED-ARTIFACTS-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Each ruled transaction artifact has a schema, a writer, a validator and a runbook step, and the record order is mechanically enforced."
+      },
+      "authority": {
+        "label": "S9-10 (ruled artifacts of the transaction that do not exist); rulings D-155 NR-8, D-153 A1, D-153 A6",
+        "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-155 NR-8 and D-153 A1 / A6 (the ruled artifact shapes)",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Ruled shapes are installed verbatim: the record order of NR-8, the EXACTLY-the-SHA-literal form of A1, and the A6 endpoints; any reinterpretation returns to the magistrate as NEEDS-RULING"
+        },
+        {
+          "authority": {
+            "label": "real-transaction runbook (record-order procedure installed; campaign-close artifact conceded absent)",
+            "path": "docs/process_traces/2026-08-22-t20/real-transaction-runbook.md"
+          },
+          "rule": "Runbook edits are docs PRs through the runbook stream, code and runbook landing together per artifact"
+        }
+      ],
+      "flags": [],
+      "goal": "Build the three ruled artifacts of the _v4 transaction that do not exist at HEAD: (1) D-155 NR-8's canonical campaign-close.json in transaction custody (no schema, no writer, no validator; the real-transaction runbook concedes 'one ruled artifact does not exist yet' while its record-order procedure IS installed); (2) D-153 A1's fixation commit carrying EXACTLY the successor pinset SHA literal plus its loud-fail guard (no literal and no guard exist; nothing refuses a first-post-freeze commit that is not the fixation commit); (3) D-153 A6's changed-set window endpoints (opens at the evidence-derivation head, CLOSES AT THE LAST CONSUMING ARM), which no code computes or asserts and the arm_readiness.py gate never learns.",
+      "id": "TRANSACTION-RULED-ARTIFACTS-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 111,
+      "status": "queued",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-10 of the ruled-not-installed sweep (status C, cure CODE + RUNBOOK, partly gates the mint). Compounds with RECORDER-SINGLE-OPERATOR-PREAMBLE-01: D-156's Q3 item and the recorder ruling both point at a window_runbook.md section 11 step that does not exist.",
+      "stop_card": null
+    },
+    "TRANSFER-FIDUCIAL-01": {
+      "acceptance": {
+        "evidence": [
+          "A diagnostic capture exists in which a commanded gap of approximately 500 ms separates prefill end from decode start on approximately 10 real-workload runs",
+          "Both gap edges are fitted with the EXISTING pulse estimator, unmodified, and the estimator revision in force is named in the capture record",
+          "The fitted-edge residual is compared against the pulse-derived timing bound in force for that session, and the comparison is recorded with both magnitudes",
+          "The capture is labelled diagnostic and non-claim-bearing: it tests the transfer assumption and mints no floor and no claim"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TRANSFER-FIDUCIAL-01/acceptance",
+          "label": "TRANSFER-FIDUCIAL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "An inserted-gap fiducial arm measures phase-edge displacement inside a real inference workload and compares it with the pulse-derived bound."
+      },
+      "authority": {
+        "label": "T26 paper-goal magistrate ruling, item 16 (with item 5, which item 16 supersedes on the SHAPE of the measurement)",
+        "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the frozen _v4 campaign completes; this row runs in the FIRST POST-CAMPAIGN diagnostic window and must not enter or perturb _v4",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V4-TRANSACTION-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "T26 paper-goal ruling item 16 (transfer is left untested by _v4; this arm tests it diagnostically)",
+            "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
+          },
+          "rule": "Diagnostic and non-claim-bearing. Mints no floor, licenses no claim, and does not re-scope any issued floor or any published label."
+        },
+        {
+          "authority": {
+            "label": "T26 paper-goal ruling item 16 (does not enter _v4; the pack is frozen)",
+            "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
+          },
+          "rule": "Must not enter or perturb the _v4 pack. The pack is frozen and any non-config change is a new family generation; this row runs only in a post-campaign diagnostic window."
+        },
+        {
+          "authority": {
+            "label": "T26 paper-goal ruling item 16 (edges fitted with the existing pulse estimator)",
+            "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
+          },
+          "rule": "Uses the EXISTING pulse estimator unmodified, and the estimator revision in force is recorded with the capture. A changed estimator makes this a different measurement and voids the comparison."
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Close the pulse-to-inference load-regime transfer assumption (paper limitation #1) by fitting a commanded ~500 ms inter-phase gap on ~10 real-workload runs with the existing pulse estimator and comparing the residual with the pulse-derived bound.",
+      "id": "TRANSFER-FIDUCIAL-01",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 12,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the paper director's draft (docs/paper/TRANSFER-FIDUCIAL-01-kernel-row-draft.md). Ruled Future Work #1 by the T26 paper-goal ruling item 16; queued for the first post-campaign diagnostic window. Ed-hands (hardware window), hence the quiet_mac lane. Priority p2_next_slice per the draft's enumeration (p3_research_expansion is the defensible alternative). The draft's fence anchors were dropped at registration because the ruling file has no 'rulings' heading; the labels name item 16 directly.",
       "stop_card": null
     },
     "UNATTENDED-LAUNCH-01": {
