@@ -8,8 +8,11 @@
 - **Census date:** 2026-08-26.
 - **Purpose:** this pre-implementation contract enumerates the refusal-code
   consequences of the ruled design. `NEEDS-RULING` means an exact authority
-  question that implementation cannot answer; §§6.2–6.3 enumerate the open
-  questions.
+  question that implementation cannot answer. Both questions this document
+  raised were answered on 2026-08-26: §6.2 is RULED (the production consumer is
+  `UNATTENDED-LAUNCH-01`'s, not this row's) and §6.3 is COLD-GATE-PENDING (the
+  conflict is a defect in the magistrate's own prior ruling, so a cold instance
+  rules, and the implementation is frozen exactly as landed meanwhile).
 
 A **refusal code** is the exact string carried by a failed producer or receipt.
 A code is **registered** when it belongs to the code-owned set that authorizes
@@ -546,7 +549,7 @@ do not require a new readiness code.
 | code | disposition | RF IDs served | family frozenset + registry entry | exact implementation/coverage places | exercise |
 |---|---|---|---|---|---|
 | `readiness_clock_preflight_refused` | RE-TARGETED | RF-09, RF-10, RF-16–RF-18, RF-23–RF-25, RF-37 | Existing `POLICY_REASON_CODES` at `joulewise/arm_readiness.py:168-181`; type supplied by `REASON_TYPE_BY_CODE` at `:235`; no R1 `refusal_vocabulary` entry is needed because this is not an R1 lifecycle-role error. | Extend `_predicate_passes` at `joulewise/arm_readiness.py:5902-5975`; keep the literal mapping at `:5978-5986`; keep the family, union, type map, deriver `dynamic` set (`arm_readiness_evidence.py:2038-2049`), and mirror test (`test_arm_readiness_integration.py:583-639`) unchanged. Add numeric-type/order, operator-branch, PROBE-minimal-content, and arm-anchor boundary tests. | G10 must use the real arm evaluator and record this code for its arm-side >5 ms case; G4's successful arithmetic is not a code observation. |
-| **UNSET — production rejection code for RF-32** | **NEEDS-RULING; not counted as an addition** | RF-32 | Recommendation: reuse existing `readiness_usage_invalid` in `STRUCTURE_REASON_CODES` (`arm_readiness.py:123-134`) if the production consumer is an ARM entry point. If the magistrate instead orders a new spelling, it must use the ruled R1 family/role/registry procedure in §4.5. | The ruling gives fields but HEAD has no `T0_UNATTENDED_SUPERVISED_REHEARSAL` parser or production-rejection call site; `docs/process/d149-go-receipt-template.md:1-66` is a prose template and explicitly says a mechanical evaluator merely “MAY” be built. No code or test location can be named honestly until the consumer is ruled. | G7, after the consumer and code are ruled. |
+| **NOT THIS ROW'S — production rejection code for RF-32** | **RULED to `UNATTENDED-LAUNCH-01` (§6.2); not an addition here** | RF-32 | Recommendation: reuse existing `readiness_usage_invalid` in `STRUCTURE_REASON_CODES` (`arm_readiness.py:123-134`) if the production consumer is an ARM entry point. If the magistrate instead orders a new spelling, it must use the ruled R1 family/role/registry procedure in §4.5. | The ruling gives fields but HEAD has no `T0_UNATTENDED_SUPERVISED_REHEARSAL` parser or production-rejection call site; `docs/process/d149-go-receipt-template.md:1-66` is a prose template and explicitly says a mechanical evaluator merely “MAY” be built. No code or test location can be named honestly until the consumer is ruled. | G7, after the consumer and code are ruled. |
 
 Known Vocabulary-A count: **0 ADDED, 0 RETIRED, 0 REUSED-UNCHANGED, 1
 RE-TARGETED**. RF-32 is unresolved and excluded from the count.
@@ -907,7 +910,7 @@ gates and not changes to the ruled ten-row count.
 | code | disposition | supervised-rehearsal evidence |
 |---|---|---|
 | `readiness_clock_preflight_refused` | RE-TARGETED | **G10 addition 2** records the real ARM evaluator's code above 5 ms and a pass at 5 ms - 1 ns. G4's successful arithmetic is not refusal evidence. |
-| RF-32 production-rejection code | NEEDS-RULING | **G7 remains contingent.** It must feed an otherwise valid rehearsal receipt to the ruled production consumer and record the ruled code. The ruling requires production-side rejection (`MAGISTRATE-RULING-T0-UNATTENDED.md:97-100`), while HEAD only permits a future evaluator (`docs/process/d149-go-receipt-template.md:58-66`); §6.2 therefore must be answered before G7 can be recorded. |
+| RF-32 production-rejection code | RULED ELSEWHERE (§6.2) | **G7 ships UNRULED in this row.** It must feed an otherwise valid rehearsal receipt to the ruled production consumer and record the ruled code. The ruling requires production-side rejection (`MAGISTRATE-RULING-T0-UNATTENDED.md:97-100`), while HEAD only permits a future evaluator (`docs/process/d149-go-receipt-template.md:58-66`); §6.2 therefore must be answered before G7 can be recorded. |
 | `evidence_author_t0_clock_attestation_missing` | RE-TARGETED | **Unit-level only:** the ruled ten rows have no missing-artifact injection, and removing `clock-reference.json` prevents the full lifecycle. |
 | `evidence_author_t0_clock_prior_state_missing` | RETIRED | **Unit-level/source-absence only, not rehearsal-observable**: the retired step cannot be invoked in the new rehearsal; preserve old REFUSE transcripts without replay. |
 | `evidence_author_t0_clock_attestation_underivable` | RE-TARGETED | **G10 addition 1** records the real author's >5 ms code and absence of a published namespace. Other RF-01–RF-14, RF-16–RF-18, RF-36 and RF-37 limbs remain unit-level because G4 injects none of them. |
@@ -927,7 +930,7 @@ the successor-replay obligation at `alpha_arm_readiness.md:72,111`. That
 re-derivation proves the readiness exact-set relations; it does not extend
 the exact-set check to Vocabulary B.
 
-## 6. Decision record and remaining NEEDS-RULING
+## 6. Decision record: both authority questions answered 2026-08-26
 
 ### 6.1 Resolved reuse choice for the missing reference capture
 
@@ -941,7 +944,7 @@ the retained name says “attestation” although the missing input is now the
 clock-reference capture. The ruled row and evidence kind are unchanged, so
 that naming debt is accepted here.
 
-### 6.2 NEEDS-RULING — production rehearsal rejection has no ruled consumer or code
+### 6.2 RULED — the production rehearsal-rejection consumer is UNATTENDED-LAUNCH-01's
 
 **Question:** Which production entry point consumes the rehearsal receipt for
 G7, and which refusal code must it emit?
@@ -959,10 +962,32 @@ G7, and which refusal code must it emit?
 the code's existing meaning is invalid use, and reuse avoids vocabulary
 proliferation. The consumer choice remains an authority decision.
 
-**Blocked work:** RF-32 and G7 cannot be implemented, and any resulting
-Vocabulary-A disposition cannot be counted, until this is ruled.
+**MAGISTRATE RULING (2026-08-26).** The consumer is named, and it is not an
+ARM entry point: a window launches only against a valid, non-rehearsal D-149 GO
+receipt, and `scripts/launch_window.py`'s launch-capability consumption is the
+production entry point that must refuse a receipt **by class**. That refusal
+therefore belongs to `UNATTENDED-LAUNCH-01` by this row's own scope fence
+(`MAGISTRATE-RULING-T0-UNATTENDED.md:114-118`: this row removes the T-0
+*evidence* blocker only, and the *launch* blocker is a separate row). Option 1
+above — reusing `readiness_usage_invalid` at an ARM entry point — is therefore
+NOT adopted; the recommendation is superseded by the ruling and is retained
+only as the record of what was considered.
 
-### 6.3 NEEDS-RULING — R1 ordering conflicts with the five-second validity-origin bound
+The same ruling closes the separately-raised question of a window launching
+with no T-0 GO receipt at all: it is the *same missing mechanism* seen from the
+other end. Nothing in `scripts/` or `joulewise/` consumes a D-149 GO receipt at
+HEAD, so there is no launch precondition to weaken — the mechanism was never
+built.
+
+**Disposition for THIS row:** G7 ships as a first-class `UNRULED` gate that can
+never count as a pass, and RF-32 adds no code to either vocabulary here. The
+consumer requirement is written into `UNATTENDED-LAUNCH-01`'s kernel row and is
+deliberately NOT implemented in this row.
+
+**Blocked work:** none remaining in this row. RF-32's production-side refusal
+code is selected by `UNATTENDED-LAUNCH-01` when it builds the consumer.
+
+### 6.3 COLD-GATE-PENDING — R1 ordering conflicts with the five-second validity-origin bound
 
 **Question:** Which reconciliation must govern the ruled
 R1-completion-to-validity-origin upper relation: move the stamp, reorder
@@ -1104,8 +1129,23 @@ clock as `valid_until_monotonic_ns`. This enforces the six-hour lower relation
 now and makes the upper bound a one-constant change once ruled. No inert or
 always-true gate is added in its place.
 
-**Blocked work:** the five-second upper half of RF-17 cannot be finalized until
-the magistrate chooses an option. The ordered interim work is not blocked.
+**MAGISTRATE DISPOSITION (2026-08-26): COLD-GATE-PENDING.** The magistrate
+accepts the finding as a defect in its own prior ruling rather than an
+implementation problem, and declines to patch it from the seat that wrote it:
+reinterpreting a prior verdict is a cold-gate trigger, not a magistrate's own
+call. The stop recorded here is therefore CORRECT and stands. The four options
+above go to a cold instance; the recommendation is not a decision and remains
+one.
+
+Until that cold gate rules, this row's disposition is frozen exactly as
+implemented: `r1_batch_finished_monotonic_ns` published on the ordinary-
+monotonic clock so the endpoints are of one type, the six-hour lower relation
+enforced and non-tautological, **no upper bound, and no inert or always-true
+substitute**. Nothing about this may be reinterpreted as "predicate recency" or
+quietly relaxed in a later round.
+
+**Blocked work:** the five-second upper half of RF-17 is COLD-GATE-PENDING. The
+implemented interim work is not blocked and is not provisional.
 
 ### 6.4 D-078 capture-code disposition
 
@@ -1130,11 +1170,14 @@ Only the four ruled Ed-hands items bear on this vocabulary:
 The code round satisfies this document only when all of the following are
 true:
 
-- [ ] Before either final outcome is claimed, the two surviving authority
-  questions in §§6.2–6.3 have recorded answers; the implementer does not select
-  the RF-32 consumer/code or adjudicate the R1-to-validity-origin conflict.
-  Until §6.3 is answered, the implementation follows its ordered interim
-  disposition; RF-32 and G7 remain blocked until §6.2 is answered.
+- [x] Both authority questions have recorded answers (2026-08-26) and the
+  implementer selected neither. §6.2 is RULED: the production consumer is
+  `scripts/launch_window.py`'s launch-capability consumption, which belongs to
+  `UNATTENDED-LAUNCH-01` by this row's scope fence, so RF-32 adds no code here
+  and G7 ships as a first-class `UNRULED` gate. §6.3 is COLD-GATE-PENDING: a
+  cold instance rules on the conflict, and until it does this row's disposition
+  is frozen exactly as landed — six-hour lower relation enforced, no upper
+  bound, no inert substitute.
 - [ ] Vocabulary A has 0 ADDED, 0 RETIRED, 0 REUSED-UNCHANGED, and 1
   RE-TARGETED spelling before any later RF-32 ruling. Numeric and ARM-anchor
   failures emit `readiness_clock_preflight_refused` through
@@ -1164,9 +1207,9 @@ true:
   `prior_systemsetup_state_captured: true` for `OPERATOR_ATTESTATION`, requires
   every PROBE input, rejects non-integer/boolean/reversed endpoints, and
   recomputes the ruled §2 relations numerically rather than trusting booleans.
-  While §6.3 is open, it implements the active six-hour lower relation with
-  published ordinary-monotonic `r1_batch_finished_monotonic_ns`; it does not
-  substitute an inert or always-true gate for the unresolved five-second upper
+  While §6.3 is COLD-GATE-PENDING, it implements the active six-hour lower
+  relation with published ordinary-monotonic `r1_batch_finished_monotonic_ns`;
+  it does not substitute an inert or always-true gate for the frozen upper
   bound.
 - [ ] ARM evaluation takes one RAW→REALTIME→RAW sample, rejects read skew above
   1 ms, injects the sample into the predicate only for the PROBE clock branch,
@@ -1189,8 +1232,9 @@ true:
   detail, `kind == "CLOCK_ATTESTATION"`, the shared underivable code where
   applicable, and proof that no partial PASS evidence namespace was published.
 - [ ] G10 records separate real-author and real-ARM >5 ms cases with their
-  exact codes; these are observation additions to G10, not new gates. G7
-  records the §6.2 code after the consumer/code ruling. No successful-only
+  exact codes; these are observation additions to G10, not new gates. G7 stays
+  `UNRULED` in this row and is recorded by `UNATTENDED-LAUNCH-01` when that row
+  builds the consumer §6.2 names. No successful-only
   G-row is reported as refusal-code evidence.
 - [ ] Historical/attended receipts remain consumable through the unchanged
   ARM `OPERATOR_ATTESTATION` branch. New-author re-authentication of an old
