@@ -1,0 +1,374 @@
+﻿2026-08-24T14:38:36.7085832Z ##[group]Run python -m unittest -v tests.test_calibration_exits
+2026-08-24T14:38:36.7086238Z [36;1mpython -m unittest -v tests.test_calibration_exits[0m
+2026-08-24T14:38:36.7104012Z shell: /usr/bin/bash -e {0}
+2026-08-24T14:38:36.7104342Z env:
+2026-08-24T14:38:36.7104596Z   pythonLocation: /opt/hostedtoolcache/Python/3.14.7/x64
+2026-08-24T14:38:36.7104962Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.14.7/x64/lib/pkgconfig
+2026-08-24T14:38:36.7105461Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.14.7/x64
+2026-08-24T14:38:36.7105787Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.14.7/x64
+2026-08-24T14:38:36.7106124Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.14.7/x64
+2026-08-24T14:38:36.7106446Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.14.7/x64/lib
+2026-08-24T14:38:36.7106905Z ##[endgroup]
+2026-08-24T14:38:40.4177644Z P1_RETRY_ATTEMPTS=5 BACKOFF_REQUESTS=(0.01, 0.05, 0.25, 1.0) ELAPSED_S=0.001793 DIAGNOSTIC_FATAL=1
+2026-08-24T14:38:40.4227107Z test_cleanup_retry_is_diagnostic_fatal_after_best_effort_removal (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_cleanup_retry_is_diagnostic_fatal_after_best_effort_removal) ... ok
+2026-08-24T14:38:40.4228412Z test_complete_unparseable_event_line_fails_the_fixture_loudly (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_complete_unparseable_event_line_fails_the_fixture_loudly)
+2026-08-24T14:38:40.8104151Z P4_UNPARSEABLE_EVENT_LINE=FAILS_LOUDLY
+2026-08-24T14:38:40.8105660Z A whole line that will not parse is a defect, not a dropped byte. ... ok
+2026-08-24T14:38:40.8160141Z test_delayed_object_writers_never_escape_bounded_cleanup (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_delayed_object_writers_never_escape_bounded_cleanup) ... ok
+2026-08-24T14:38:40.8161052Z P1_DELAYED_WRITERS=1 EVENT_GATED_FINAL_WRITES=1 BOUNDED_RETRIES=0 THREAD_REGISTRY_EMPTY=1 ESCAPED=0
+2026-08-24T14:38:40.8166245Z test_deterministic_writer_remover_harness_covers_both_interleavings (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_deterministic_writer_remover_harness_covers_both_interleavings) ... ok
+2026-08-24T14:38:43.2333981Z P3_SIGSTOP_RUNS=3 IDENTITY=PASS WALL_MUTATION=FAILS_IDENTITY
+2026-08-24T14:38:43.2335171Z test_event_fixture_is_sigstop_invariant_and_wall_mutation_fails (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_event_fixture_is_sigstop_invariant_and_wall_mutation_fails) ... ok
+2026-08-24T14:38:43.5421907Z RAW_CLEANUP_ERRNO=0 FATAL_RETRY_DIAGNOSTIC=0 CONTROLS_MUTATION=RACE_EXERCISED
+2026-08-24T14:38:43.5423134Z test_forced_auto_maintenance_mutation_reproduces_cleanup_race (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_forced_auto_maintenance_mutation_reproduces_cleanup_race) ... ok
+2026-08-24T14:38:43.5423774Z RACE_EXERCISED=1 NO_RACE_PRE_WRITE=0 TRACE_INCOMPLETE=0
+2026-08-24T14:38:43.6740798Z test_minimal_git_create_commit_cleanup_cycles_are_bounded (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_minimal_git_create_commit_cleanup_cycles_are_bounded) ... ok
+2026-08-24T14:38:43.6741516Z P1_CYCLES=4 RAW_ENOTEMPTY=0 RETRY_EXHAUSTION=0 MAX_CLEANUP_S=0.017779
+2026-08-24T14:38:43.6742420Z test_pack_child_killed_during_prepare_discriminates_terminal_shapes (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_pack_child_killed_during_prepare_discriminates_terminal_shapes) ... ok
+2026-08-24T14:38:43.6743601Z test_pack_classifier_clean_without_write_or_prepare_kill_is_trace_incomplete (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_pack_classifier_clean_without_write_or_prepare_kill_is_trace_incomplete) ... ok
+2026-08-24T14:38:43.6744724Z test_pack_classifier_shape_a_cleanup_errno_is_race_exercised (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_pack_classifier_shape_a_cleanup_errno_is_race_exercised) ... ok
+2026-08-24T14:38:43.6745671Z test_pack_classifier_shape_b_complete_write_is_no_race_pre_write (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_pack_classifier_shape_b_complete_write_is_no_race_pre_write) ... ok
+2026-08-24T14:38:43.6746899Z test_pack_classifier_shape_c_prepare_kill_is_race_exercised (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_pack_classifier_shape_c_prepare_kill_is_race_exercised) ... ok
+2026-08-24T14:38:45.4621103Z test_process_ownership_cycles_reach_esrch_and_empty_registry (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_process_ownership_cycles_reach_esrch_and_empty_registry) ... ok
+2026-08-24T14:38:45.4622418Z test_torn_event_line_keeps_its_acknowledgement (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_torn_event_line_keeps_its_acknowledgement)
+2026-08-24T14:38:46.0418834Z P2_OWNERSHIP_CYCLES=4 TIMEOUTS=2 EXCEPTIONS=2 DIRECT_REAPED=4 REGISTRY_EMPTY=1
+2026-08-24T14:38:46.0419307Z P4_TORN_EVENT_LINE=ACKNOWLEDGED
+2026-08-24T14:38:46.0420127Z A line appended in two halves must still be seen exactly once. ... ok
+2026-08-24T14:38:46.0422862Z test_trace_reader_retries_incomplete_final_record (tests.test_calibration_exits.CalibrationExitReliabilityTests.test_trace_reader_retries_incomplete_final_record) ... ok
+2026-08-24T14:39:27.5292831Z test_abort_witness_payload_survives_nonowned_sampler_census_decoy (tests.test_calibration_exits.PublicGovernedExitWitnessTests.test_abort_witness_payload_survives_nonowned_sampler_census_decoy) ... ok
+2026-08-24T14:39:28.1952912Z test_diagnostic_routes_never_emit_ready_to_arm_under_live_lease (tests.test_calibration_exits.PublicGovernedExitWitnessTests.test_diagnostic_routes_never_emit_ready_to_arm_under_live_lease) ... ok
+2026-08-24T14:39:28.5009483Z test_live_writer_state_uses_bounded_exact_lease_marker (tests.test_calibration_exits.PublicGovernedExitWitnessTests.test_live_writer_state_uses_bounded_exact_lease_marker) ... ok
+2026-08-24T14:39:28.9899375Z CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+2026-08-24T14:39:29.1912577Z CASE STAGE calibration_quiet_mac_auth_required 101 event-sampling_started-1
+2026-08-24T14:39:29.2916152Z CASE STAGE calibration_quiet_mac_auth_required 122 event-pulse_command_on-22
+2026-08-24T14:39:29.3922196Z CASE STAGE calibration_quiet_mac_auth_required 147 event-pulse_command_off-47
+2026-08-24T14:39:29.4929648Z CASE STAGE calibration_quiet_mac_auth_required 174 event-pulse_command_on-74
+2026-08-24T14:39:29.5936340Z CASE STAGE calibration_quiet_mac_auth_required 204 event-pulse_command_on-104
+2026-08-24T14:39:29.6944245Z CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+2026-08-24T14:39:53.8578284Z CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+2026-08-24T14:39:54.0588066Z CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+2026-08-24T14:39:54.1591521Z CASE STAGE calibration_quiet_mac_auth_required 108 event-pulse_command_on-8
+2026-08-24T14:39:54.2594477Z CASE STAGE calibration_quiet_mac_auth_required 126 event-pulse_command_on-26
+2026-08-24T14:39:54.3600399Z CASE STAGE calibration_quiet_mac_auth_required 159 event-pulse_command_off-59
+2026-08-24T14:39:54.4607563Z CASE STAGE calibration_quiet_mac_auth_required 196 event-pulse_command_on-96
+2026-08-24T14:39:54.5614267Z CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+2026-08-24T14:40:18.6647991Z CASE STAGE calibration_quiet_mac_auth_required 1001 manifest-written
+2026-08-24T14:40:18.8156041Z test_logical_producer_delay_preserves_exact_evidence_bytes (tests.test_calibration_exits.PublicGovernedExitWitnessTests.test_logical_producer_delay_preserves_exact_evidence_bytes) ... ok
+2026-08-24T14:40:18.9691613Z CASE START calibration_ledger_missing
+2026-08-24T14:40:19.3093725Z CASE PASS calibration_ledger_missing
+2026-08-24T14:40:19.3094198Z CASE START calibration_ledger_malformed
+2026-08-24T14:40:19.6401381Z CASE PASS calibration_ledger_malformed
+2026-08-24T14:40:19.6401862Z CASE START calibration_ledger_chain_conflict
+2026-08-24T14:40:20.2339316Z CASE PASS calibration_ledger_chain_conflict
+2026-08-24T14:40:20.2339810Z CASE START calibration_ledger_attempt_conflict
+2026-08-24T14:40:20.5647069Z CASE PASS calibration_ledger_attempt_conflict
+2026-08-24T14:40:20.5647815Z CASE START calibration_ledger_bracket_session_conflict
+2026-08-24T14:40:20.8431561Z CASE PASS calibration_ledger_bracket_session_conflict
+2026-08-24T14:40:20.8432039Z CASE START calibration_ledger_content_conflict
+2026-08-24T14:40:21.3187418Z CASE PASS calibration_ledger_content_conflict
+2026-08-24T14:40:21.3188028Z CASE START calibration_ledger_rollback
+2026-08-24T14:40:21.6205612Z CASE PASS calibration_ledger_rollback
+2026-08-24T14:40:21.6206200Z CASE START calibration_ledger_operation_conflict
+2026-08-24T14:40:21.8973058Z CASE PASS calibration_ledger_operation_conflict
+2026-08-24T14:40:21.8973531Z CASE START calibration_ledger_ungoverned_business
+2026-08-24T14:40:22.4081445Z CASE PASS calibration_ledger_ungoverned_business
+2026-08-24T14:40:22.4081869Z CASE START calibration_ledger_custody_invalid
+2026-08-24T14:40:22.8811937Z CASE PASS calibration_ledger_custody_invalid
+2026-08-24T14:40:22.8812397Z CASE START calibration_unsafe_lock_inode
+2026-08-24T14:40:23.3879506Z CASE PASS calibration_unsafe_lock_inode
+2026-08-24T14:40:23.3879975Z CASE START calibration_physical_ledger_unreadable
+2026-08-24T14:40:23.6429562Z CASE PASS calibration_physical_ledger_unreadable
+2026-08-24T14:40:23.6430038Z CASE START calibration_legacy_journal_unreadable
+2026-08-24T14:40:23.8958284Z CASE PASS calibration_legacy_journal_unreadable
+2026-08-24T14:40:23.8958762Z CASE START calibration_legacy_journal_archive_conflict
+2026-08-24T14:40:24.2483657Z CASE PASS calibration_legacy_journal_archive_conflict
+2026-08-24T14:40:24.2484116Z CASE START calibration_legacy_journal_archive_failed
+2026-08-24T14:40:24.6591414Z CASE PASS calibration_legacy_journal_archive_failed
+2026-08-24T14:40:24.6591931Z CASE START calibration_intent_target_malformed
+2026-08-24T14:40:25.1487522Z CASE PASS calibration_intent_target_malformed
+2026-08-24T14:40:25.1487956Z CASE START calibration_recovery_nonconvergent
+2026-08-24T14:40:25.3975044Z CASE PASS calibration_recovery_nonconvergent
+2026-08-24T14:40:25.3975477Z CASE START calibration_abandon_not_clean
+2026-08-24T14:40:25.6464718Z CASE PASS calibration_abandon_not_clean
+2026-08-24T14:40:25.6465331Z CASE START calibration_abandon_pin_mismatch
+2026-08-24T14:40:25.9082362Z CASE PASS calibration_abandon_pin_mismatch
+2026-08-24T14:40:25.9082798Z CASE START calibration_head_pin_unreadable
+2026-08-24T14:40:26.1584205Z CASE PASS calibration_head_pin_unreadable
+2026-08-24T14:40:26.1584738Z CASE START calibration_head_pin_malformed
+2026-08-24T14:40:26.4434957Z CASE PASS calibration_head_pin_malformed
+2026-08-24T14:40:26.4435544Z CASE START calibration_custody_unreadable
+2026-08-24T14:40:26.7936108Z CASE PASS calibration_custody_unreadable
+2026-08-24T14:40:26.7936793Z CASE START calibration_tail_requires_abandon
+2026-08-24T14:40:27.3135714Z CASE PASS calibration_tail_requires_abandon
+2026-08-24T14:40:27.3136203Z CASE START calibration_custody_complete_use_resume
+2026-08-24T14:40:27.8757110Z CASE PASS calibration_custody_complete_use_resume
+2026-08-24T14:40:27.8757591Z CASE START calibration_custody_partial
+2026-08-24T14:40:28.2394447Z CASE PASS calibration_custody_partial
+2026-08-24T14:40:28.2394941Z CASE START calibration_live_writer_contention
+2026-08-24T14:40:28.9314702Z CASE PASS calibration_live_writer_contention
+2026-08-24T14:40:28.9315159Z CASE START calibration_ledger_bracket_session_open
+2026-08-24T14:40:29.3688054Z CASE PASS calibration_ledger_bracket_session_open
+2026-08-24T14:40:29.3688670Z CASE START calibration_ledger_pending
+2026-08-24T14:40:29.6823328Z CASE PASS calibration_ledger_pending
+2026-08-24T14:40:29.6823856Z CASE START calibration_ledger_head_uncommitted
+2026-08-24T14:40:30.0320582Z CASE PASS calibration_ledger_head_uncommitted
+2026-08-24T14:40:30.0321093Z CASE START calibration_ledger_head_mismatch
+2026-08-24T14:40:30.4925463Z CASE PASS calibration_ledger_head_mismatch
+2026-08-24T14:40:30.4926036Z CASE START calibration_ledger_recovery_required
+2026-08-24T14:40:31.2727686Z CASE PASS calibration_ledger_recovery_required
+2026-08-24T14:40:31.2728178Z CASE START calibration_ledger_baseline_missing
+2026-08-24T14:40:31.7039276Z CASE PASS calibration_ledger_baseline_missing
+2026-08-24T14:40:31.7040195Z CASE START calibration_observation_unclassifiable
+2026-08-24T14:40:32.1862574Z CASE PASS calibration_observation_unclassifiable
+2026-08-24T14:40:32.1863267Z CASE START calibration_recovery_credentials_invalid
+2026-08-24T14:40:32.4360960Z CASE PASS calibration_recovery_credentials_invalid
+2026-08-24T14:40:32.4361363Z CASE START calibration_abandon_credentials_invalid
+2026-08-24T14:40:32.7975999Z CASE PASS calibration_abandon_credentials_invalid
+2026-08-24T14:40:32.7976759Z CASE START calibration_abandon_active_intent
+2026-08-24T14:40:33.4187986Z CASE PASS calibration_abandon_active_intent
+2026-08-24T14:40:33.4188623Z CASE START calibration_head_pin_not_committed
+2026-08-24T14:40:33.6760362Z CASE PASS calibration_head_pin_not_committed
+2026-08-24T14:40:33.6760953Z CASE START calibration_reservation_input_invalid
+2026-08-24T14:40:34.2670979Z CASE PASS calibration_reservation_input_invalid
+2026-08-24T14:40:34.2671721Z CASE START calibration_reservation_head_mismatch
+2026-08-24T14:40:34.6083270Z CASE PASS calibration_reservation_head_mismatch
+2026-08-24T14:40:34.6083859Z CASE START calibration_reservation_identity_conflict
+2026-08-24T14:40:35.2968968Z CASE PASS calibration_reservation_identity_conflict
+2026-08-24T14:40:35.2969492Z CASE START calibration_session_not_found
+2026-08-24T14:40:35.6011815Z CASE PASS calibration_session_not_found
+2026-08-24T14:40:35.6012448Z CASE START calibration_session_not_open
+2026-08-24T14:40:36.0278302Z CASE PASS calibration_session_not_open
+2026-08-24T14:40:36.0278862Z CASE START calibration_slot_order_conflict
+2026-08-24T14:40:36.7325308Z CASE PASS calibration_slot_order_conflict
+2026-08-24T14:40:36.7325906Z CASE START calibration_claim_id_invalid
+2026-08-24T14:40:37.0600051Z CASE PASS calibration_claim_id_invalid
+2026-08-24T14:40:37.0600459Z CASE START calibration_finalization_binding_conflict
+2026-08-24T14:41:04.6250083Z CASE PASS calibration_finalization_binding_conflict
+2026-08-24T14:41:04.6250621Z CASE START calibration_session_not_terminal
+2026-08-24T14:41:05.1444362Z CASE PASS calibration_session_not_terminal
+2026-08-24T14:41:05.1444859Z CASE START calibration_session_terminal_not_head
+2026-08-24T14:41:05.7989751Z CASE PASS calibration_session_terminal_not_head
+2026-08-24T14:41:05.7990319Z CASE START calibration_plan_unreadable
+2026-08-24T14:41:06.3780200Z CASE PASS calibration_plan_unreadable
+2026-08-24T14:41:06.3780725Z CASE START calibration_plan_hash_mismatch
+2026-08-24T14:41:07.0853707Z CASE PASS calibration_plan_hash_mismatch
+2026-08-24T14:41:07.0854274Z CASE START calibration_pre_reserve_not_ready
+2026-08-24T14:41:08.0097264Z CASE PASS calibration_pre_reserve_not_ready
+2026-08-24T14:41:08.0097834Z CASE START calibration_pre_slot_not_ready
+2026-08-24T14:41:08.4235629Z CASE STAGE calibration_pre_slot_not_ready 0 writer-launched
+2026-08-24T14:41:08.7244994Z CASE STAGE calibration_pre_slot_not_ready 2 sampler-ready
+2026-08-24T14:41:08.8247692Z CASE STAGE calibration_pre_slot_not_ready 101 event-sampling_started-1
+2026-08-24T14:41:08.9409172Z CASE STAGE calibration_pre_slot_not_ready 102 event-warmup_command_on-2
+2026-08-24T14:41:09.0409350Z CASE STAGE calibration_pre_slot_not_ready 106 event-warmup_command_on-6
+2026-08-24T14:41:09.1412673Z CASE STAGE calibration_pre_slot_not_ready 108 event-pulse_command_on-8
+2026-08-24T14:41:09.2417121Z CASE STAGE calibration_pre_slot_not_ready 109 event-pulse_command_off-9
+2026-08-24T14:41:09.3420568Z CASE STAGE calibration_pre_slot_not_ready 114 event-pulse_command_on-14
+2026-08-24T14:41:09.5428513Z CASE STAGE calibration_pre_slot_not_ready 115 event-pulse_command_off-15
+2026-08-24T14:41:09.6433358Z CASE STAGE calibration_pre_slot_not_ready 116 event-pulse_command_on-16
+2026-08-24T14:41:09.7435435Z CASE STAGE calibration_pre_slot_not_ready 136 event-pulse_command_on-36
+2026-08-24T14:41:09.9444610Z CASE STAGE calibration_pre_slot_not_ready 151 event-pulse_command_off-51
+2026-08-24T14:41:10.0450099Z CASE STAGE calibration_pre_slot_not_ready 152 event-pulse_command_on-52
+2026-08-24T14:41:10.1456318Z CASE STAGE calibration_pre_slot_not_ready 188 event-pulse_command_on-88
+2026-08-24T14:41:10.2462884Z CASE STAGE calibration_pre_slot_not_ready 195 event-pulse_command_off-95
+2026-08-24T14:41:10.4478051Z CASE STAGE calibration_pre_slot_not_ready 218 event-pulse_command_on-118
+2026-08-24T14:41:10.5486154Z CASE STAGE calibration_pre_slot_not_ready 226 event-sampling_stopped-126
+2026-08-24T14:41:35.0581404Z CASE STAGE calibration_pre_slot_not_ready 1001 manifest-written
+2026-08-24T14:41:35.1714247Z CASE PASS calibration_pre_slot_not_ready
+2026-08-24T14:41:35.1714642Z CASE START calibration_terminal_not_ready
+2026-08-24T14:41:35.7948205Z CASE PASS calibration_terminal_not_ready
+2026-08-24T14:41:35.7948691Z CASE START calibration_pin_advancement_not_needed
+2026-08-24T14:41:36.0475404Z CASE PASS calibration_pin_advancement_not_needed
+2026-08-24T14:41:36.0475964Z CASE START calibration_pin_advancement_unsafe
+2026-08-24T14:41:36.3559168Z CASE PASS calibration_pin_advancement_unsafe
+2026-08-24T14:41:36.3559648Z CASE START calibration_pin_candidate_mismatch
+2026-08-24T14:41:36.6165629Z CASE PASS calibration_pin_candidate_mismatch
+2026-08-24T14:41:36.6166067Z CASE START calibration_reservation_json_invalid
+2026-08-24T14:41:37.2879195Z CASE PASS calibration_reservation_json_invalid
+2026-08-24T14:41:37.2879691Z CASE START calibration_writer_bracket_arguments
+2026-08-24T14:41:37.8951550Z CASE STAGE calibration_writer_bracket_arguments 0 writer-launched
+2026-08-24T14:41:38.1960511Z CASE STAGE calibration_writer_bracket_arguments 1 custody-created
+2026-08-24T14:41:38.2963261Z CASE STAGE calibration_writer_bracket_arguments 102 event-warmup_command_on-2
+2026-08-24T14:41:38.4969851Z CASE STAGE calibration_writer_bracket_arguments 112 event-pulse_command_on-12
+2026-08-24T14:41:38.6977341Z CASE STAGE calibration_writer_bracket_arguments 119 event-pulse_command_off-19
+2026-08-24T14:41:39.0042694Z CASE STAGE calibration_writer_bracket_arguments 133 event-pulse_command_off-33
+2026-08-24T14:41:39.2050610Z CASE STAGE calibration_writer_bracket_arguments 134 event-pulse_command_on-34
+2026-08-24T14:41:39.3054459Z CASE STAGE calibration_writer_bracket_arguments 135 event-pulse_command_off-35
+2026-08-24T14:41:39.4058845Z CASE STAGE calibration_writer_bracket_arguments 144 event-pulse_command_on-44
+2026-08-24T14:41:39.5064435Z CASE STAGE calibration_writer_bracket_arguments 153 event-pulse_command_off-53
+2026-08-24T14:41:39.6773855Z CASE STAGE calibration_writer_bracket_arguments 158 event-pulse_command_on-58
+2026-08-24T14:41:39.7779055Z CASE STAGE calibration_writer_bracket_arguments 168 event-pulse_command_on-68
+2026-08-24T14:41:39.8784606Z CASE STAGE calibration_writer_bracket_arguments 170 event-pulse_command_on-70
+2026-08-24T14:41:39.9791673Z CASE STAGE calibration_writer_bracket_arguments 179 event-pulse_command_off-79
+2026-08-24T14:41:40.0798707Z CASE STAGE calibration_writer_bracket_arguments 180 event-pulse_command_on-80
+2026-08-24T14:41:40.1803929Z CASE STAGE calibration_writer_bracket_arguments 191 event-pulse_command_off-91
+2026-08-24T14:41:40.2811149Z CASE STAGE calibration_writer_bracket_arguments 201 event-pulse_command_off-101
+2026-08-24T14:41:40.3820969Z CASE STAGE calibration_writer_bracket_arguments 217 event-pulse_command_off-117
+2026-08-24T14:41:40.4827197Z CASE STAGE calibration_writer_bracket_arguments 226 event-sampling_stopped-126
+2026-08-24T14:42:04.8862665Z CASE STAGE calibration_writer_bracket_arguments 1001 manifest-written
+2026-08-24T14:42:05.0171772Z CASE PASS calibration_writer_bracket_arguments
+2026-08-24T14:42:05.0172435Z CASE START calibration_writer_bracket_rederive_conflict
+2026-08-24T14:42:18.8765109Z CASE STAGE calibration_writer_bracket_rederive_conflict 0 writer-launched
+2026-08-24T14:42:19.2778487Z CASE STAGE calibration_writer_bracket_rederive_conflict 1 custody-created
+2026-08-24T14:42:19.3782319Z CASE STAGE calibration_writer_bracket_rederive_conflict 102 event-warmup_command_on-2
+2026-08-24T14:42:19.4785536Z CASE STAGE calibration_writer_bracket_rederive_conflict 105 event-warmup_command_off-5
+2026-08-24T14:42:19.5790153Z CASE STAGE calibration_writer_bracket_rederive_conflict 121 event-pulse_command_off-21
+2026-08-24T14:42:19.6794909Z CASE STAGE calibration_writer_bracket_rederive_conflict 151 event-pulse_command_off-51
+2026-08-24T14:42:19.7800685Z CASE STAGE calibration_writer_bracket_rederive_conflict 155 event-pulse_command_off-55
+2026-08-24T14:42:19.9811525Z CASE STAGE calibration_writer_bracket_rederive_conflict 156 event-pulse_command_on-56
+2026-08-24T14:42:20.0817230Z CASE STAGE calibration_writer_bracket_rederive_conflict 158 event-pulse_command_on-58
+2026-08-24T14:42:20.3837988Z CASE STAGE calibration_writer_bracket_rederive_conflict 159 event-pulse_command_off-59
+2026-08-24T14:42:20.4840936Z CASE STAGE calibration_writer_bracket_rederive_conflict 170 event-pulse_command_on-70
+2026-08-24T14:42:20.5847613Z CASE STAGE calibration_writer_bracket_rederive_conflict 179 event-pulse_command_off-79
+2026-08-24T14:42:20.6855917Z CASE STAGE calibration_writer_bracket_rederive_conflict 196 event-pulse_command_on-96
+2026-08-24T14:42:20.7862901Z CASE STAGE calibration_writer_bracket_rederive_conflict 197 event-pulse_command_off-97
+2026-08-24T14:42:20.8870990Z CASE STAGE calibration_writer_bracket_rederive_conflict 198 event-pulse_command_on-98
+2026-08-24T14:42:20.9878869Z CASE STAGE calibration_writer_bracket_rederive_conflict 199 event-pulse_command_off-99
+2026-08-24T14:42:21.0887402Z CASE STAGE calibration_writer_bracket_rederive_conflict 203 event-pulse_command_off-103
+2026-08-24T14:42:21.2903065Z CASE STAGE calibration_writer_bracket_rederive_conflict 204 event-pulse_command_on-104
+2026-08-24T14:42:21.4739321Z CASE STAGE calibration_writer_bracket_rederive_conflict 205 event-pulse_command_off-105
+2026-08-24T14:42:21.5747461Z CASE STAGE calibration_writer_bracket_rederive_conflict 226 event-sampling_stopped-126
+2026-08-24T14:42:45.3765054Z CASE STAGE calibration_writer_bracket_rederive_conflict 1000 instrument-evidence-written
+2026-08-24T14:42:45.4774729Z CASE STAGE calibration_writer_bracket_rederive_conflict 1001 manifest-written
+2026-08-24T14:42:45.6943526Z CASE PASS calibration_writer_bracket_rederive_conflict
+2026-08-24T14:42:45.6943943Z CASE START calibration_frozen_protocol_invalid
+2026-08-24T14:42:51.7998819Z CASE STAGE calibration_frozen_protocol_invalid 0 writer-launched
+2026-08-24T14:42:52.0011015Z CASE STAGE calibration_frozen_protocol_invalid 1 custody-created
+2026-08-24T14:42:52.1013205Z CASE STAGE calibration_frozen_protocol_invalid 2 sampler-ready
+2026-08-24T14:42:52.2017586Z CASE STAGE calibration_frozen_protocol_invalid 101 event-sampling_started-1
+2026-08-24T14:42:52.4023017Z CASE STAGE calibration_frozen_protocol_invalid 106 event-warmup_command_on-6
+2026-08-24T14:42:52.6230336Z CASE STAGE calibration_frozen_protocol_invalid 123 event-pulse_command_off-23
+2026-08-24T14:42:52.7235532Z CASE STAGE calibration_frozen_protocol_invalid 131 event-pulse_command_off-31
+2026-08-24T14:42:52.8478872Z CASE STAGE calibration_frozen_protocol_invalid 132 event-pulse_command_on-32
+2026-08-24T14:42:52.9483175Z CASE STAGE calibration_frozen_protocol_invalid 133 event-pulse_command_off-33
+2026-08-24T14:42:53.0487873Z CASE STAGE calibration_frozen_protocol_invalid 138 event-pulse_command_on-38
+2026-08-24T14:42:53.1493151Z CASE STAGE calibration_frozen_protocol_invalid 140 event-pulse_command_on-40
+2026-08-24T14:42:53.3042839Z CASE STAGE calibration_frozen_protocol_invalid 147 event-pulse_command_off-47
+2026-08-24T14:42:53.4044666Z CASE STAGE calibration_frozen_protocol_invalid 150 event-pulse_command_on-50
+2026-08-24T14:42:53.7105209Z CASE STAGE calibration_frozen_protocol_invalid 157 event-pulse_command_off-57
+2026-08-24T14:42:53.8111604Z CASE STAGE calibration_frozen_protocol_invalid 179 event-pulse_command_off-79
+2026-08-24T14:42:53.9118774Z CASE STAGE calibration_frozen_protocol_invalid 187 event-pulse_command_off-87
+2026-08-24T14:42:54.0125467Z CASE STAGE calibration_frozen_protocol_invalid 191 event-pulse_command_off-91
+2026-08-24T14:42:54.1132606Z CASE STAGE calibration_frozen_protocol_invalid 192 event-pulse_command_on-92
+2026-08-24T14:42:54.2139386Z CASE STAGE calibration_frozen_protocol_invalid 195 event-pulse_command_off-95
+2026-08-24T14:42:54.3145924Z CASE STAGE calibration_frozen_protocol_invalid 196 event-pulse_command_on-96
+2026-08-24T14:42:54.4152948Z CASE STAGE calibration_frozen_protocol_invalid 201 event-pulse_command_off-101
+2026-08-24T14:42:54.5448556Z CASE STAGE calibration_frozen_protocol_invalid 210 event-pulse_command_on-110
+2026-08-24T14:42:54.6456445Z CASE STAGE calibration_frozen_protocol_invalid 226 event-sampling_stopped-126
+2026-08-24T14:43:18.4516747Z CASE STAGE calibration_frozen_protocol_invalid 1000 instrument-evidence-written
+2026-08-24T14:43:18.6533616Z CASE STAGE calibration_frozen_protocol_invalid 1001 manifest-written
+2026-08-24T14:43:18.7975723Z CASE PASS calibration_frozen_protocol_invalid
+2026-08-24T14:43:18.7976234Z CASE START calibration_rederive_output_required
+2026-08-24T14:43:24.9356385Z CASE STAGE calibration_rederive_output_required 0 writer-launched
+2026-08-24T14:43:25.1365854Z CASE STAGE calibration_rederive_output_required 2 sampler-ready
+2026-08-24T14:43:25.2370030Z CASE STAGE calibration_rederive_output_required 125 event-pulse_command_off-25
+2026-08-24T14:43:25.3375574Z CASE STAGE calibration_rederive_output_required 137 event-pulse_command_off-37
+2026-08-24T14:43:25.4381638Z CASE STAGE calibration_rederive_output_required 174 event-pulse_command_on-74
+2026-08-24T14:43:25.5443349Z CASE STAGE calibration_rederive_output_required 191 event-pulse_command_off-91
+2026-08-24T14:43:25.6453237Z CASE STAGE calibration_rederive_output_required 224 event-pulse_command_on-124
+2026-08-24T14:43:25.7461136Z CASE STAGE calibration_rederive_output_required 226 event-sampling_stopped-126
+2026-08-24T14:43:49.4210941Z CASE PASS calibration_rederive_output_required
+2026-08-24T14:43:49.4212242Z CASE START calibration_rederive_failed
+2026-08-24T14:43:55.5069324Z CASE STAGE calibration_rederive_failed 0 writer-launched
+2026-08-24T14:43:55.7075342Z CASE STAGE calibration_rederive_failed 2 sampler-ready
+2026-08-24T14:43:55.8080441Z CASE STAGE calibration_rederive_failed 137 event-pulse_command_off-37
+2026-08-24T14:43:55.9085705Z CASE STAGE calibration_rederive_failed 170 event-pulse_command_on-70
+2026-08-24T14:43:56.0093764Z CASE STAGE calibration_rederive_failed 199 event-pulse_command_off-99
+2026-08-24T14:43:56.1107383Z CASE STAGE calibration_rederive_failed 226 event-sampling_stopped-126
+2026-08-24T14:44:20.1370007Z CASE PASS calibration_rederive_failed
+2026-08-24T14:44:20.1370557Z CASE START calibration_output_requires_rederive
+2026-08-24T14:44:26.9653999Z CASE STAGE calibration_output_requires_rederive 0 writer-launched
+2026-08-24T14:44:27.1662695Z CASE STAGE calibration_output_requires_rederive 1 custody-created
+2026-08-24T14:44:27.2666400Z CASE STAGE calibration_output_requires_rederive 122 event-pulse_command_on-22
+2026-08-24T14:44:27.3671744Z CASE STAGE calibration_output_requires_rederive 158 event-pulse_command_on-58
+2026-08-24T14:44:27.4679069Z CASE STAGE calibration_output_requires_rederive 194 event-pulse_command_on-94
+2026-08-24T14:44:27.5687396Z CASE STAGE calibration_output_requires_rederive 226 event-sampling_stopped-126
+2026-08-24T14:44:51.4883032Z CASE STAGE calibration_output_requires_rederive 1001 manifest-written
+2026-08-24T14:44:51.6393337Z CASE PASS calibration_output_requires_rederive
+2026-08-24T14:44:51.6393913Z CASE START calibration_quiet_mac_auth_required
+2026-08-24T14:44:51.9554323Z CASE STAGE calibration_quiet_mac_auth_required 0 writer-launched
+2026-08-24T14:44:52.1569465Z CASE STAGE calibration_quiet_mac_auth_required 1 custody-created
+2026-08-24T14:44:52.2573586Z CASE STAGE calibration_quiet_mac_auth_required 114 event-pulse_command_on-14
+2026-08-24T14:44:52.3578616Z CASE STAGE calibration_quiet_mac_auth_required 117 event-pulse_command_off-17
+2026-08-24T14:44:52.4584811Z CASE STAGE calibration_quiet_mac_auth_required 135 event-pulse_command_off-35
+2026-08-24T14:44:52.5590650Z CASE STAGE calibration_quiet_mac_auth_required 149 event-pulse_command_off-49
+2026-08-24T14:44:52.7602313Z CASE STAGE calibration_quiet_mac_auth_required 161 event-pulse_command_off-61
+2026-08-24T14:44:52.8607800Z CASE STAGE calibration_quiet_mac_auth_required 162 event-pulse_command_on-62
+2026-08-24T14:44:52.9613849Z CASE STAGE calibration_quiet_mac_auth_required 177 event-pulse_command_off-77
+2026-08-24T14:44:53.0620471Z CASE STAGE calibration_quiet_mac_auth_required 179 event-pulse_command_off-79
+2026-08-24T14:44:53.1627347Z CASE STAGE calibration_quiet_mac_auth_required 196 event-pulse_command_on-96
+2026-08-24T14:44:53.2635119Z CASE STAGE calibration_quiet_mac_auth_required 208 event-pulse_command_on-108
+2026-08-24T14:44:53.3642885Z CASE STAGE calibration_quiet_mac_auth_required 214 event-pulse_command_on-114
+2026-08-24T14:44:53.4651723Z CASE STAGE calibration_quiet_mac_auth_required 226 event-sampling_stopped-126
+2026-08-24T14:45:17.7919807Z CASE STAGE calibration_quiet_mac_auth_required 1000 instrument-evidence-written
+2026-08-24T14:45:17.8928970Z CASE STAGE calibration_quiet_mac_auth_required 1001 manifest-written
+2026-08-24T14:45:18.0523254Z CASE PASS calibration_quiet_mac_auth_required
+2026-08-24T14:45:18.0524784Z CASE START calibration_power_policy_required
+2026-08-24T14:45:18.4474129Z CASE STAGE calibration_power_policy_required 0 writer-launched
+2026-08-24T14:45:18.7930016Z CASE STAGE calibration_power_policy_required 104 event-warmup_command_on-4
+2026-08-24T14:45:18.8933538Z CASE STAGE calibration_power_policy_required 105 event-warmup_command_off-5
+2026-08-24T14:45:18.9938072Z CASE STAGE calibration_power_policy_required 107 event-warmup_command_off-7
+2026-08-24T14:45:19.0942006Z CASE STAGE calibration_power_policy_required 110 event-pulse_command_on-10
+2026-08-24T14:45:19.2952448Z CASE STAGE calibration_power_policy_required 115 event-pulse_command_off-15
+2026-08-24T14:45:19.3954255Z CASE STAGE calibration_power_policy_required 118 event-pulse_command_on-18
+2026-08-24T14:45:19.4958600Z CASE STAGE calibration_power_policy_required 119 event-pulse_command_off-19
+2026-08-24T14:45:19.5963862Z CASE STAGE calibration_power_policy_required 122 event-pulse_command_on-22
+2026-08-24T14:45:19.6967948Z CASE STAGE calibration_power_policy_required 124 event-pulse_command_on-24
+2026-08-24T14:45:19.7971800Z CASE STAGE calibration_power_policy_required 140 event-pulse_command_on-40
+2026-08-24T14:45:19.8976175Z CASE STAGE calibration_power_policy_required 141 event-pulse_command_off-41
+2026-08-24T14:45:19.9981048Z CASE STAGE calibration_power_policy_required 143 event-pulse_command_off-43
+2026-08-24T14:45:20.0987317Z CASE STAGE calibration_power_policy_required 147 event-pulse_command_off-47
+2026-08-24T14:45:20.1992452Z CASE STAGE calibration_power_policy_required 153 event-pulse_command_off-53
+2026-08-24T14:45:20.2998132Z CASE STAGE calibration_power_policy_required 162 event-pulse_command_on-62
+2026-08-24T14:45:20.4004556Z CASE STAGE calibration_power_policy_required 164 event-pulse_command_on-64
+2026-08-24T14:45:20.5012166Z CASE STAGE calibration_power_policy_required 165 event-pulse_command_off-65
+2026-08-24T14:45:20.6017918Z CASE STAGE calibration_power_policy_required 167 event-pulse_command_off-67
+2026-08-24T14:45:20.8031821Z CASE STAGE calibration_power_policy_required 168 event-pulse_command_on-68
+2026-08-24T14:45:20.9037353Z CASE STAGE calibration_power_policy_required 174 event-pulse_command_on-74
+2026-08-24T14:45:21.0547926Z CASE STAGE calibration_power_policy_required 177 event-pulse_command_off-77
+2026-08-24T14:45:21.1721356Z CASE STAGE calibration_power_policy_required 185 event-pulse_command_off-85
+2026-08-24T14:45:21.2728719Z CASE STAGE calibration_power_policy_required 186 event-pulse_command_on-86
+2026-08-24T14:45:21.3737226Z CASE STAGE calibration_power_policy_required 199 event-pulse_command_off-99
+2026-08-24T14:45:21.4974477Z CASE STAGE calibration_power_policy_required 200 event-pulse_command_on-100
+2026-08-24T14:45:21.5982182Z CASE STAGE calibration_power_policy_required 205 event-pulse_command_off-105
+2026-08-24T14:45:21.6991061Z CASE STAGE calibration_power_policy_required 206 event-pulse_command_on-106
+2026-08-24T14:45:21.9007824Z CASE STAGE calibration_power_policy_required 207 event-pulse_command_off-107
+2026-08-24T14:45:22.0016494Z CASE STAGE calibration_power_policy_required 216 event-pulse_command_on-116
+2026-08-24T14:45:22.1025269Z CASE STAGE calibration_power_policy_required 226 event-sampling_stopped-126
+2026-08-24T14:45:46.6269128Z CASE STAGE calibration_power_policy_required 1001 manifest-written
+2026-08-24T14:45:46.8904731Z CASE PASS calibration_power_policy_required
+2026-08-24T14:45:46.8905211Z CASE START calibration_reserved_slot_mismatch
+2026-08-24T14:45:47.3789395Z CASE PASS calibration_reserved_slot_mismatch
+2026-08-24T14:45:47.3789796Z CASE START calibration_display_arm_failed
+2026-08-24T14:45:48.1057668Z CASE PASS calibration_display_arm_failed
+2026-08-24T14:45:48.1058235Z CASE START calibration_sampler_never_ready
+2026-08-24T14:46:28.7115285Z CASE PASS calibration_sampler_never_ready
+2026-08-24T14:46:28.7117149Z CASE START pulse_calibration_rollover_gate_timeout
+2026-08-24T14:46:40.9793840Z CASE PASS pulse_calibration_rollover_gate_timeout
+2026-08-24T14:46:40.9858357Z test_parameterized_durable_public_cli_witnesses (tests.test_calibration_exits.PublicGovernedExitWitnessTests.test_parameterized_durable_public_cli_witnesses) ... ok
+2026-08-24T14:46:41.3643293Z test_calibration_tests_pass_receipt_provenance_gate (tests.test_calibration_exits.RefusalInventoryTests.test_calibration_tests_pass_receipt_provenance_gate) ... ok
+2026-08-24T14:46:41.3650744Z test_correct_preflight_registry_executes_every_correction_surface (tests.test_calibration_exits.RefusalInventoryTests.test_correct_preflight_registry_executes_every_correction_surface) ... ok
+2026-08-24T14:46:41.3651998Z test_enum_inventory_and_discovered_executed_witnesses_are_exact_sets_per_class (tests.test_calibration_exits.RefusalInventoryTests.test_enum_inventory_and_discovered_executed_witnesses_are_exact_sets_per_class) ... ok
+2026-08-24T14:46:41.3653226Z test_every_hard_stop_has_pre_handler_preservation_evidence (tests.test_calibration_exits.RefusalInventoryTests.test_every_hard_stop_has_pre_handler_preservation_evidence) ... ok
+2026-08-24T14:46:41.3662302Z test_generated_contract_projection_and_runbook_anchors_are_fresh (tests.test_calibration_exits.RefusalInventoryTests.test_generated_contract_projection_and_runbook_anchors_are_fresh) ... ok
+2026-08-24T14:46:41.7146307Z test_internal_duplicate_claim_guard_raise_path (tests.test_calibration_exits.RefusalInventoryTests.test_internal_duplicate_claim_guard_raise_path) ... ok
+2026-08-24T14:46:41.7210626Z test_internal_off_ledger_candidate_guard_raise_path (tests.test_calibration_exits.RefusalInventoryTests.test_internal_off_ledger_candidate_guard_raise_path) ... ok
+2026-08-24T14:46:41.7228573Z test_internal_snapshot_argument_guard_raise_path (tests.test_calibration_exits.RefusalInventoryTests.test_internal_snapshot_argument_guard_raise_path) ... ok
+2026-08-24T14:46:41.8864253Z test_low_level_claim_id_argument_guard_supplements_public_witness (tests.test_calibration_exits.RefusalInventoryTests.test_low_level_claim_id_argument_guard_supplements_public_witness) ... ok
+2026-08-24T14:46:42.1079737Z test_low_level_finalization_binding_guard_supplements_writer_witness (tests.test_calibration_exits.RefusalInventoryTests.test_low_level_finalization_binding_guard_supplements_writer_witness) ... ok
+2026-08-24T14:46:42.2118103Z test_operational_ast_has_no_free_form_ledger_refusals_or_substring_policy (tests.test_calibration_exits.RefusalInventoryTests.test_operational_ast_has_no_free_form_ledger_refusals_or_substring_policy) ... ok
+2026-08-24T14:46:48.2930262Z test_public_explain_cli_projects_every_operator_facing_record (tests.test_calibration_exits.RefusalInventoryTests.test_public_explain_cli_projects_every_operator_facing_record) ... ok
+2026-08-24T14:46:49.6571616Z test_public_witness_ast_requires_owned_registered_executions (tests.test_calibration_exits.RefusalInventoryTests.test_public_witness_ast_requires_owned_registered_executions) ... ok
+2026-08-24T14:46:49.6574586Z test_registry_policy_is_complete_and_prior_crash_never_generic_stops (tests.test_calibration_exits.RefusalInventoryTests.test_registry_policy_is_complete_and_prior_crash_never_generic_stops) ... ok
+2026-08-24T14:46:49.6575995Z test_witness_corpus_owner_executes_once_across_reordered_consumers (tests.test_calibration_exits.RefusalInventoryTests.test_witness_corpus_owner_executes_once_across_reordered_consumers) ... ok
+2026-08-24T14:46:49.6618901Z test_resume_finalize_refuses_when_comparator_underivable (tests.test_calibration_exits.ResumeFinalizeAcceptanceUnderivableTests.test_resume_finalize_refuses_when_comparator_underivable) ... ok
+2026-08-24T14:46:49.7499914Z test_detached_grandchild_is_reported_by_post_teardown_census (tests.test_calibration_exits.SamplerLifecycleHardeningTests.test_detached_grandchild_is_reported_by_post_teardown_census) ... ok
+2026-08-24T14:46:49.7500777Z F3_DETACHED_TOPOLOGY DIRECT_CHILD_REAPED=1 DETACHED_GRANDCHILD_CENSUS_REPORTED=1 IDENTITY_GONE=1
+2026-08-24T14:46:49.9714361Z test_stubborn_direct_child_is_killed_and_reaped_on_every_exit_path (tests.test_calibration_exits.SamplerLifecycleHardeningTests.test_stubborn_direct_child_is_killed_and_reaped_on_every_exit_path) ... ok
+2026-08-24T14:46:49.9715152Z F4_STUBBORN_EXIT_PATHS=3 DIRECT_SIGKILL=3 DIRECT_REAPED=3
+2026-08-24T14:46:50.1148076Z test_success_capture_is_byte_identical_to_legacy_termination (tests.test_calibration_exits.SamplerLifecycleHardeningTests.test_success_capture_is_byte_identical_to_legacy_termination) ... ok
+2026-08-24T14:46:50.1150074Z F4_SUCCESS_CAPTURE_BYTES=214524 SHA256=6aa3b1ea3b07ac9230d7c920eccf5d467edc194efceb7d1d1ae3e97041ec315f BYTE_IDENTICAL=1
+2026-08-24T14:46:50.1150935Z 
+2026-08-24T14:46:50.1151229Z ----------------------------------------------------------------------
+2026-08-24T14:46:50.1151902Z Ran 39 tests in 489.704s
+2026-08-24T14:46:50.1152153Z 
+2026-08-24T14:46:50.1152325Z OK

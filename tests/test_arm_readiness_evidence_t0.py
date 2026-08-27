@@ -14,12 +14,13 @@ import sys
 import time
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
 import joulewise.arm_readiness_evidence as generic_evidence
 import joulewise.arm_readiness_evidence_t0 as t0
+import joulewise.adapters.mlx_runtime as mlx_runtime
 import joulewise.calibration_ledger as ledger
 import joulewise.identity_pins as identity_pins
 from joulewise.arm_readiness_evidence_t0 import (
@@ -222,6 +223,20 @@ def _load_synthetic_mlx(repository: Path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@contextlib.contextmanager
+def _patched_sys_module(name: str, module: object):
+    missing = object()
+    previous = sys.modules.get(name, missing)
+    sys.modules[name] = module
+    try:
+        yield
+    finally:
+        if previous is missing:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
 
 
 def make_t0_fixture(
@@ -644,9 +659,7 @@ def author_environment(
                 )
             )
             stack.enter_context(
-                mock.patch.dict(
-                    sys.modules, {"mlx_lm": _load_synthetic_mlx(repository)}
-                )
+                _patched_sys_module("mlx_lm", _load_synthetic_mlx(repository))
             )
         else:
             offline = offline or (
@@ -685,6 +698,102 @@ def _cli_stdout(buffer: io.BytesIO) -> mock.Mock:
 
 class ArmReadinessEvidenceT0Tests(unittest.TestCase):
     maxDiff = None
+
+    def test_mlx_metal_memory_reuses_cached_core_after_module_eviction(self) -> None:
+        fake_mlx = ModuleType("mlx")
+        fake_mlx.__path__ = []
+        fake_core = ModuleType("mlx.core")
+        fake_core.get_active_memory = lambda: 101
+        fake_core.get_cache_memory = lambda: 202
+        fake_core.get_peak_memory = lambda: 303
+        missing = object()
+        previous = {
+            name: sys.modules.get(name, missing) for name in ("mlx", "mlx.core")
+        }
+        init_count = 0
+
+        def initialize_fake_core(name: str):
+            nonlocal init_count
+            self.assertEqual(name, "mlx.core")
+            init_count += 1
+            sys.modules["mlx"] = fake_mlx
+            sys.modules["mlx.core"] = fake_core
+            return fake_core
+
+        try:
+            sys.modules["mlx"] = fake_mlx
+            sys.modules.pop("mlx.core", None)
+            with (
+                mock.patch.object(
+                    mlx_runtime.importlib,
+                    "import_module",
+                    side_effect=initialize_fake_core,
+                ),
+                mock.patch.object(
+                    mlx_runtime, "_MLX_CORE_MODULE", None, create=True
+                ),
+            ):
+                first = mlx_runtime._mlx_metal_memory({})
+                sys.modules.pop("mlx.core", None)
+                sys.modules.pop("mlx", None)
+                second = mlx_runtime._mlx_metal_memory({})
+        finally:
+            for name, module in previous.items():
+                if module is missing:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
+
+        self.assertEqual(init_count, 1)
+        self.assertEqual(
+            first,
+            {
+                "api_available": True,
+                "active_memory_bytes": 101,
+                "cache_memory_bytes": 202,
+                "peak_memory_bytes": 303,
+            },
+        )
+        self.assertEqual(second, first)
+
+    def test_author_environment_preserves_modules_imported_inside_context(self) -> None:
+        temporary, repository, _pack, _custody, _context, _inputs = make_t0_fixture(
+            real_identity=True
+        )
+        self.addCleanup(temporary.cleanup)
+        sentinel_name = f"_joulewise_author_environment_sentinel_{id(self)}"
+        sentinel_module = SimpleNamespace()
+        previous_mlx_lm = SimpleNamespace()
+        missing = object()
+        original = {
+            name: sys.modules.get(name, missing)
+            for name in ("mlx_lm", sentinel_name)
+        }
+
+        try:
+            for prior in (missing, previous_mlx_lm):
+                with self.subTest(mlx_lm_preexisting=prior is not missing):
+                    sys.modules.pop(sentinel_name, None)
+                    if prior is missing:
+                        sys.modules.pop("mlx_lm", None)
+                    else:
+                        sys.modules["mlx_lm"] = prior
+
+                    with author_environment(repository, real_offline=True):
+                        self.assertIsNot(sys.modules["mlx_lm"], prior)
+                        sys.modules[sentinel_name] = sentinel_module
+
+                    self.assertIs(sys.modules[sentinel_name], sentinel_module)
+                    if prior is missing:
+                        self.assertNotIn("mlx_lm", sys.modules)
+                    else:
+                        self.assertIs(sys.modules["mlx_lm"], prior)
+        finally:
+            for name, module in original.items():
+                if module is missing:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
 
     @staticmethod
     def _terminal_review_message(tree_oid: str, packs: tuple[str, ...]) -> str:
@@ -1746,10 +1855,10 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     @unittest.skip(
-        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 (A85); ALSO structurally blocked on fixture R1 schemas (A84) — curing the abort alone turns this red, not green"
+        "STRUCTURE-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
     )
     def test_acid_authored_fifteen_then_real_arm_generator_reaches_go(self) -> None:
-        """Blocked by pytest SIGABRT in `joulewise/adapters/mlx_runtime.py:1159`."""
+        """Blocked on fixture R1 schema modernization (A84)."""
 
         self._assert_acid_authored_fifteen_then_arm_generator_reaches_go(
             boot_session_id=TEST_BOOT_SESSION_ID,
@@ -1758,10 +1867,10 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     @unittest.skip(
-        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 (A85); ALSO structurally blocked on fixture R1 schemas (A84) — curing the abort alone turns this red, not green"
+        "STRUCTURE-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
     )
     def test_synthetic_acid_is_hermetic_to_system_timezone(self) -> None:
-        """Blocked by pytest SIGABRT in `joulewise/adapters/mlx_runtime.py:1159`."""
+        """Blocked on fixture R1 schema modernization (A84)."""
 
         previous = os.environ.get("TZ")
         try:
@@ -1782,10 +1891,10 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 time.tzset()
 
     @unittest.skip(
-        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 (A85); ALSO structurally blocked on fixture R1 schemas (A84) — curing the abort alone turns this red, not green"
+        "STRUCTURE-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
     )
     def test_synthetic_acid_ignores_wall_clock_48_hours_in_future(self) -> None:
-        """Blocked by pytest SIGABRT in `joulewise/adapters/mlx_runtime.py:1159`."""
+        """Blocked on fixture R1 schema modernization (A84)."""
 
         with mock.patch.object(
             t0._readiness,
@@ -1802,10 +1911,10 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         sys.platform == "darwin", "requires Darwin's real boot-session sysctl command"
     )
     @unittest.skip(
-        "CRASH-BLOCKED: pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 (A85); ALSO structurally blocked on fixture R1 schemas (A84) — curing the abort alone turns this red, not green"
+        "STRUCTURE-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
     )
     def test_acid_real_boot_session_then_real_arm_generator_reaches_go(self) -> None:
-        """Blocked by pytest SIGABRT in `joulewise/adapters/mlx_runtime.py:1159`."""
+        """Blocked on fixture R1 schema modernization (A84)."""
 
         try:
             boot_session_id = readiness._current_boot_session_id()

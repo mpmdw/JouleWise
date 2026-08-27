@@ -13,6 +13,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
+import joulewise.adapters.mlx_runtime as mlx_runtime
 from joulewise.adapters.mlx_runtime import (
     MlxRuntimeAdapter,
     _mlx_metal_memory,
@@ -1203,6 +1204,66 @@ class MemoryProbeHelperTests(unittest.TestCase):
         self.assertEqual(errors["mlx_metal.get_active_memory"], "non_numeric")
         self.assertEqual(errors["mlx_metal.get_cache_memory"], "non_numeric")
         self.assertIn("RuntimeError: boom", errors["mlx_metal.get_peak_memory"])
+
+    def test_sys_modules_standin_never_enters_the_extension_cache(self) -> None:
+        """A test stand-in must not outlive its own patch.
+
+        MLX-ACID-SIGABRT-01 gave ``_mlx_metal_memory`` a module-scope cache so
+        the nanobind extension is never initialised twice. The cache may hold
+        ONLY a module this function imported itself. If it also absorbed
+        whatever sits in ``sys.modules`` at call time, the fakes installed by
+        the tests above would survive their own ``finally`` blocks and then be
+        served -- silently -- to real evidence-bearing memory probes the next
+        time ``mlx.core`` is evicted from ``sys.modules``.
+        """
+
+        fake_core = ModuleType("mlx.core")
+        fake_core.metal = SimpleNamespace(
+            get_active_memory=lambda: 10,
+            get_cache_memory=lambda: 20,
+            get_peak_memory=lambda: 30,
+        )
+        missing = object()
+        previous_module = sys.modules.get("mlx.core", missing)
+        previous_cache = mlx_runtime._MLX_CORE_MODULE
+        try:
+            mlx_runtime._MLX_CORE_MODULE = None
+            sys.modules["mlx.core"] = fake_core
+            errors: dict[str, str] = {}
+            self.assertEqual(_mlx_metal_memory(errors)["active_memory_bytes"], 10)
+            # The stand-in answered, and left no trace in the cache.
+            self.assertIsNone(mlx_runtime._MLX_CORE_MODULE)
+
+            # Now prove the consequence directly: with the stand-in gone and a
+            # genuinely imported module remembered, an eviction is served the
+            # remembered module, never the departed stand-in.
+            sys.modules.pop("mlx.core", None)
+            real_like = ModuleType("mlx.core")
+            real_like.get_active_memory = lambda: 99
+            real_like.get_cache_memory = lambda: 99
+            real_like.get_peak_memory = lambda: 99
+            with patch.object(
+                mlx_runtime.importlib,
+                "import_module",
+                side_effect=lambda name: real_like,
+            ) as imported:
+                self.assertEqual(
+                    _mlx_metal_memory({})["active_memory_bytes"], 99
+                )
+                self.assertEqual(imported.call_count, 1)
+                self.assertIs(mlx_runtime._MLX_CORE_MODULE, real_like)
+                # Second call after another eviction: served from the cache,
+                # with no second initialisation of the extension.
+                self.assertEqual(
+                    _mlx_metal_memory({})["active_memory_bytes"], 99
+                )
+                self.assertEqual(imported.call_count, 1)
+        finally:
+            mlx_runtime._MLX_CORE_MODULE = previous_cache
+            if previous_module is missing:
+                sys.modules.pop("mlx.core", None)
+            else:
+                sys.modules["mlx.core"] = previous_module
 
 
 if __name__ == "__main__":

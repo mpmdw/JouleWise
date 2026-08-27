@@ -13,6 +13,7 @@ import json
 import operator
 import os
 import subprocess
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
@@ -52,6 +53,12 @@ from joulewise.suite import (
 DEFAULT_OUTPUT_TOKENS = 8
 WARMUP_TOKENS = 4
 SYNTHETIC_PROMPT_SEED = "JouleWise synthetic prompt token sequence."
+
+# ``mlx.core`` is a nanobind extension whose native initializer aborts the
+# process if it runs twice and tries to register the same types/enums again.
+# Keep a successful import alive even if another context evicts it from
+# ``sys.modules`` so memory probes never re-execute that initializer.
+_MLX_CORE_MODULE: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -1149,6 +1156,8 @@ def _process_rss_bytes(errors: dict[str, str]) -> int | None:
 
 
 def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
+    global _MLX_CORE_MODULE
+
     unavailable = {
         "api_available": False,
         "active_memory_bytes": None,
@@ -1156,7 +1165,19 @@ def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
         "peak_memory_bytes": None,
     }
     try:
-        mx = importlib.import_module("mlx.core")
+        # ``sys.modules`` stays authoritative so a test that installs a stand-in
+        # under "mlx.core" still gets its stand-in. The fallback below is only
+        # for the case a stand-in cannot create: the real extension already
+        # loaded into this process but evicted from ``sys.modules``.
+        mx = sys.modules.get("mlx.core")
+        if mx is None:
+            mx = _MLX_CORE_MODULE
+        if mx is None:
+            # Only a module WE imported is remembered; caching whatever happens
+            # to sit in ``sys.modules`` would let a test stand-in outlive its
+            # own patch and silently supply memory numbers to real evidence.
+            mx = importlib.import_module("mlx.core")
+            _MLX_CORE_MODULE = mx
     except ImportError:
         errors["mlx_metal"] = "mlx_core_not_found"
         return unavailable
