@@ -718,19 +718,19 @@ and a relative path refuses. It is the literal confirmed at A6.
 Per pack, assert `status: PASS`, `mutated: true`, empty `reason_codes`, and a
 `receipt_path` ending `freeze-0004.json`. Then one freeze commit for all three.
 
-**Assume a REFUSE here cannot be retried.** The receipt is plan-pinned; the slot
-is spent. See §5. A few refusals do fire before any receipt byte is written and
-so spend nothing — the measurement-checkout declaration is one — but do not try
-to classify them at the bench from the refusal text. §5.2 lists the ones that
-are known to precede the first write; anything not on that list is terminal for
-the attempt.
+**On a REFUSE here, do not reason about it — look at the directory.** Many
+checks run before the receipt is written, so a refusal often costs nothing, but
+the refusal text does not tell you which kind you have. The question is only
+whether `freeze-0004.json` now exists in the pack's
+`arm_readiness.freeze.receipts/`: absent means the slot is untouched and the
+command may be corrected and re-issued; present means the slot is spent and the
+attempt is over. §5.2 gives the exact check and the recovery for each case.
 
-**A missing flag is not a refusal at all.** `--measurement-checkout` is required
-by the argument parser, which runs before any repository code. Omit it and the
-command prints argparse usage text and exits 2 — no JSON, no `status`, no reason
-code. That is safe and costs nothing: nothing ran. It is a different event from
-a declaration that was supplied but wrong, which does reach the gate and does
-emit a JSON refusal.
+**A missing required flag never reaches any of this.** `--pack-root` and
+`--measurement-checkout` are both required by the argument parser, which runs
+before any repository code. Omit one and the command prints argparse usage text
+and exits 2 — no JSON, no `status`, no reason code, nothing run. Re-issue with
+the flag.
 
 ### C9 — Authenticate the executing custody tools (SCRIPTED, runsheet §3.6.1)
 
@@ -1535,37 +1535,43 @@ measurement checkout while nothing has been pushed. C7's sacrificial screen
 exists precisely to make this outcome nearly impossible; if it happens anyway,
 the screen itself is suspect and the failure is a mechanism failure.
 
-**Which C8 refusals spend the slot, and which spend nothing.** "Spending the
-slot" means the code wrote `freeze-0004.json` and the plan tree recorded its
-digest, after which no second attempt can ever occupy that filename. Some checks
-run *before* that first write, so their refusals create no file and cost
-nothing but the time to correct the command.
+**Whether the slot is spent is a question about the FILESYSTEM, not about the
+refusal text.** "Spending the slot" means one specific thing: the file
+`PACK_ROOT/arm_readiness.freeze.receipts/freeze-0004.json` now exists. That file
+is created exclusively — the code will not overwrite one — and the plan tree
+records its digest, so once it exists no second attempt can ever occupy that
+name for this pack.
 
-Verified against the implementation, three refusals precede the first write:
+So do not try to work out from a refusal message whether the attempt is
+recoverable. Look:
 
-- **A supplied-but-wrong `--measurement-checkout`** — relative, non-existent,
-  unreadable, or naming a different directory than the repository that owns the
-  pack. Reason code `readiness_r1_measurement_checkout`.
-- **A predecessor that fails historical-semantics gating** — the `_v3` pack
-  handed to `--predecessor-pack-root` is checked first of all, and refuses with
-  `mutated: false` and no receipt path.
-- **A predecessor that fails authentication or ancestry** — reason code
-  `readiness_successor_chain_invalid`. The implementation states outright that
-  invalid ancestry never mints a REFUSE receipt.
+```sh
+ls -l "$PACK_ROOT/arm_readiness.freeze.receipts/"
+```
 
-**Treat every other REFUSE at C8 as terminal**, and do not extend this list by
-reasoning from a refusal message at the bench: the property that matters is
-where in the code the check sits, which is not visible in the output. If a
-refusal you did not expect appears, stop and escalate rather than re-running.
+- **`freeze-0004.json` is absent** — the slot is untouched. Whatever refused,
+  refused before the write. Record the refusal in custody, correct the cause,
+  and re-issue the command.
+- **`freeze-0004.json` is present** — the slot is spent, whatever the verdict
+  inside it says. This is terminal for the attempt: abandon the transaction
+  commits and restart from the evidence commit, as above.
 
-**A missing required flag is not in this taxonomy at all.** Both
-`--pack-root` and `--measurement-checkout` are required by the argument parser,
-which runs before any repository code. Omitting one prints argparse usage text
-and exits 2, with no JSON, no `status` field and no reason code. Nothing ran and
-nothing mutated, so it is always safe — but it also means the reason code above
-cannot be used to recognise this case. Recognise it by the absence of JSON.
+This is the whole rule, and it is deliberately the only rule. Many checks do run
+before that write — the measurement-checkout declaration, predecessor gating and
+authentication, registry and plan-tree validation, family-publication gating,
+the committed-pack proof, and others — so a refusal at C8 often costs nothing.
+But an earlier draft of this section tried to LIST them, and a review found the
+list still missing at least seven more reachable cases. An incomplete list is
+worse than no list, because it makes an operator abandon a live attempt over a
+mistyped path that spent nothing. The directory listing answers the question
+completely and cannot go stale as the code changes.
 
-Recovery for all of the above is the same: correct the command and re-issue it.
+**A missing required flag never reaches any of this.** Both `--pack-root` and
+`--measurement-checkout` are required by the argument parser, which runs before
+any repository code. Omit one and the command prints argparse usage text and
+exits 2 — no JSON, no `status` field, no reason code, nothing run and nothing
+mutated. Recognise it by the absence of JSON output, re-issue with the flag, and
+carry on.
 
 **Mechanism failures** — a path outside the 112 crossing the gate; an unexpected
 evidence output accepted; the successor subtracted without the authenticated
