@@ -162,59 +162,71 @@ source value.
 | `[F_7B_decode_cmp_J]` | Same cell, `floor_cmp_j` | beta / decode comparative component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
 | `[F_7B_decode_operative_J]` | `max(F_7B_decode_abs_J, F_7B_decode_cmp_J)`; verify against `floor_gate_j` | beta / decode aggregate cell | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, MINT |
 
-### Attribution-dominance test terms (T26 ruling item 26)
+### Attribution-dominance test terms (T26 ruling item 34)
 
-The primary research question compares, per claim-bearing cell, a point-only
-repeatability term (TERM A) against a timing-widened term (TERM B). TERM B as the
-published GATE is already registered above as the operative floor. TERM A is NOT
-emitted unconditionally: `joulewise/detection_floor.py` attaches the
-`point_floor_diagnostic` container only when the dominance predicate is already true,
-and the validator FORBIDS it when the predicate is false. A cell where the claim FAILS
-therefore carries no emitted TERM A, so the falsifier cannot be read off an artifact
-and TERM A is derived at the desk.
+The primary research question replays the code's dominance predicate separately for
+each claim-bearing cell's absolute and comparative components. There is no
+component-to-cell aggregation for TERM A or TERM B. For component \(j\), TERM A is
+the guarded point-only repeatability value:
 
-**The derivation, per component record** (`cells[].absolute` or `cells[].comparative`):
+```text
+A_unguarded_abs = max(max_abs_residual_j, prediction_component_j)
+A_guarded_abs   = guard_factor * A_unguarded_abs
 
-    A_unguarded = max( max_abs_residual_j (absolute) | max_abs_delta_j (comparative),
-                       prediction_component_j )
-    A_guarded   = guard_factor * A_unguarded
+A_unguarded_cmp = max(max_abs_delta_j, prediction_component_j)
+A_guarded_cmp   = guard_factor * A_unguarded_cmp
+```
 
-**Self-consistency proof (executed, two blind seats).** A Sol xhigh seat and a blind
-Fable seat independently derived the identity and independently reproduced every
-emitted `point_floor_diagnostic` available in the repository byte-for-value, and both
-confirmed that container presence matches the recomputed predicate. Custody:
-`docs/process_traces/2026-08-27-t26/term-a-derivation/`. The two seats agree on the
-identity and on both open questions below.
+TERM B is the exact linear corner maximum used by that same component's code
+predicate. Preserve the emitted array order and use `math.fsum` for \(W\):
 
-**Two questions remain NEEDS-RULING and gate every row in this table:**
+```text
+absolute:    n = cells[].absolute.n
+             r_i = cells[].absolute.residuals_j[i]
+             w_i = cells[].absolute.admissible_half_widths_j[i]
+             W = math.fsum(w_i)
+             B_abs = max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)
 
-1. **Aggregation.** Nothing in code or contract combines the absolute and comparative
-   point terms into one per-cell TERM A. Candidates: the component maximum, by analogy
-   to `floor_gate_j = max(floor_abs_j, floor_cmp_j)`; per-component comparison with no
-   aggregation, which is what the code's own predicate does; or selection of the
-   component matching the claim's use. A sum has contrary evidence and is not a candidate.
-2. **Which quantity is TERM B for the comparison.** The code's predicate compares an
-   exact linear corner maximum that is never emitted; the emitted
-   `corner_widened_guarded_floor_j` is greater than or equal to it. The drift-widened
-   `floor_gate_j` adds a whole-window drift allowance, which is not a timing term, so
-   comparing it against TERM A would test a different proposition and it is reported
-   only as the gate.
+comparative: d_i = cells[].comparative.block_deltas_j[i]
+             w_i = cells[].comparative.admissible_half_widths_j[i]
+             B_cmp = max_i(abs(d_i) + w_i)
+```
 
-Until both are ruled, every row below is `STOP_FILL`.
+The falsifier is verbatim code behavior: each component passes only when
+`B_component > A_guarded_component`; equality fails. The emitted
+`corner_widened_guarded_floor_j` is a different quantity: it is the published
+component floor, includes the complete corner-maximized point formula, and is at
+least TERM B. The cell's `floor_gate_j` is different again: it is the maximum of
+the two component floors after each has received its whole-window drift allowance.
+That drift allowance is not a timing term, so neither the published floor nor the
+gate may replace TERM B in the dominance predicate.
+
+TERM A remains a desk derivation because `point_floor_diagnostic` is conditional on
+the predicate already being true. The Sol custody seat and blind Fable custody seat under
+`docs/process_traces/2026-08-27-t26/term-a-derivation/` reproduced every emitted
+diagnostic byte-for-value from the unconditional parents. The item-34 replay fence
+must repeat that self-consistency check and independently derive TERM B for every
+issued component. Until the authenticated four-cell artifact, its final pinset, and
+the fence all pass, the rows remain `VALUE_UNISSUED` and rendering stops.
 
 | Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
 |---|---|---|---|---|---|
-| `[TERM_A_1p5B_prompt_J]` | Desk derivation over the alpha prompt cell's unconditional component fields `max_abs_residual_j`, `max_abs_delta_j`, `prediction_component_j`, `guard_factor` | alpha / prompt dominance TERM A | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; aggregation NEEDS-RULING | TPL, DF, MINT, PLAN |
-| `[TERM_B_1p5B_prompt_J]` | Same cell; NEEDS-RULING between `corner_widened_guarded_floor_j` and the exact derived predicate comparand | alpha / prompt dominance TERM B | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; TERM B semantics NEEDS-RULING | TPL, DF, MINT, PLAN |
-| `[TERM_A_1p5B_decode_J]` | Same derivation over the alpha decode cell | alpha / decode dominance TERM A | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; aggregation NEEDS-RULING | TPL, DF, MINT, PLAN |
-| `[TERM_B_1p5B_decode_J]` | Same cell; same TERM B alternatives | alpha / decode dominance TERM B | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; TERM B semantics NEEDS-RULING | TPL, DF, MINT, PLAN |
-| `[TERM_A_7B_prompt_J]` | Same derivation over the beta prompt cell | beta / prompt dominance TERM A | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; aggregation NEEDS-RULING | TPL, DF, MINT, PLAN |
-| `[TERM_B_7B_prompt_J]` | Same cell; same TERM B alternatives | beta / prompt dominance TERM B | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; TERM B semantics NEEDS-RULING | TPL, DF, MINT, PLAN |
-| `[TERM_A_7B_decode_J]` | Same derivation over the beta decode cell | beta / decode dominance TERM A | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; aggregation NEEDS-RULING | TPL, DF, MINT, PLAN |
-| `[TERM_B_7B_decode_J]` | Same cell; same TERM B alternatives | beta / decode dominance TERM B | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; TERM B semantics NEEDS-RULING | TPL, DF, MINT, PLAN |
-
-`PROPOSED_KEY` marks a token whose name is not yet frozen because the quantity it
-names is still under ruling. It is not a licence to render.
+| `[TERM_A_1p5B_prompt_abs_J]` | Desk derivation over the alpha prompt cell's `cells[].absolute`: `guard_factor * max(max_abs_residual_j, prediction_component_j)` | alpha / prompt absolute dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
+| `[TERM_B_1p5B_prompt_abs_J]` | Same component; with `n = n`, `r_i = residuals_j[i]`, `w_i = admissible_half_widths_j[i]`, and `W = math.fsum(w_i)`, derive `max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)` | alpha / prompt absolute dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
+| `[TERM_A_1p5B_prompt_cmp_J]` | Desk derivation over the alpha prompt cell's `cells[].comparative`: `guard_factor * max(max_abs_delta_j, prediction_component_j)` | alpha / prompt comparative dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
+| `[TERM_B_1p5B_prompt_cmp_J]` | Same component; derive `max_i(abs(block_deltas_j[i]) + admissible_half_widths_j[i])` with the two emitted arrays paired in their stored order | alpha / prompt comparative dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
+| `[TERM_A_1p5B_decode_abs_J]` | Desk derivation over the alpha decode cell's `cells[].absolute`: `guard_factor * max(max_abs_residual_j, prediction_component_j)` | alpha / decode absolute dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
+| `[TERM_B_1p5B_decode_abs_J]` | Same component; with `n = n`, `r_i = residuals_j[i]`, `w_i = admissible_half_widths_j[i]`, and `W = math.fsum(w_i)`, derive `max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)` | alpha / decode absolute dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
+| `[TERM_A_1p5B_decode_cmp_J]` | Desk derivation over the alpha decode cell's `cells[].comparative`: `guard_factor * max(max_abs_delta_j, prediction_component_j)` | alpha / decode comparative dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
+| `[TERM_B_1p5B_decode_cmp_J]` | Same component; derive `max_i(abs(block_deltas_j[i]) + admissible_half_widths_j[i])` with the two emitted arrays paired in their stored order | alpha / decode comparative dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
+| `[TERM_A_7B_prompt_abs_J]` | Desk derivation over the beta prompt cell's `cells[].absolute`: `guard_factor * max(max_abs_residual_j, prediction_component_j)` | beta / prompt absolute dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
+| `[TERM_B_7B_prompt_abs_J]` | Same component; with `n = n`, `r_i = residuals_j[i]`, `w_i = admissible_half_widths_j[i]`, and `W = math.fsum(w_i)`, derive `max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)` | beta / prompt absolute dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
+| `[TERM_A_7B_prompt_cmp_J]` | Desk derivation over the beta prompt cell's `cells[].comparative`: `guard_factor * max(max_abs_delta_j, prediction_component_j)` | beta / prompt comparative dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
+| `[TERM_B_7B_prompt_cmp_J]` | Same component; derive `max_i(abs(block_deltas_j[i]) + admissible_half_widths_j[i])` with the two emitted arrays paired in their stored order | beta / prompt comparative dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
+| `[TERM_A_7B_decode_abs_J]` | Desk derivation over the beta decode cell's `cells[].absolute`: `guard_factor * max(max_abs_residual_j, prediction_component_j)` | beta / decode absolute dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
+| `[TERM_B_7B_decode_abs_J]` | Same component; with `n = n`, `r_i = residuals_j[i]`, `w_i = admissible_half_widths_j[i]`, and `W = math.fsum(w_i)`, derive `max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)` | beta / decode absolute dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
+| `[TERM_A_7B_decode_cmp_J]` | Desk derivation over the beta decode cell's `cells[].comparative`: `guard_factor * max(max_abs_delta_j, prediction_component_j)` | beta / decode comparative dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
+| `[TERM_B_7B_decode_cmp_J]` | Same component; derive `max_i(abs(block_deltas_j[i]) + admissible_half_widths_j[i])` with the two emitted arrays paired in their stored order | beta / decode comparative dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
 
 ### Held title pair (T26 ruling item 28)
 
@@ -320,7 +332,7 @@ invented here.
 | `[E_decode_contrast_upper_J]` | `contrasts[decode].deterministic_bounds.decision_interval.upper` | gamma / decode contrast | MEASURED | KEY_FROZEN / VALUE_UNISSUED | TPL, CV |
 | `[M_decode_contrast_abs_J_per_request]` | `abs(E_decode_contrast_signed_J_per_request)` | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
 | `[F_claim_decode_armwise_max_J]` | `max(F_1p5B_decode_operative_J, F_7B_decode_operative_J)`; verify against the claim artifact's armwise floor gate | gamma consumer of alpha and beta decode floors | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, CV, MINT |
-| `[B_decode_claim_J]` | Semantics RULED, binding NOT YET FLIPPED. T26 ruling Addendum 2 item 25 rules that the column means the contrast's WHOLE deterministic bound, `contrasts[decode].deterministic_bounds.total` — the quantity that expands the decision interval (`joulewise/analysis_engine/artifact.py:667`); `E_clock_anchor_shift_bound_j` is one named term inside `deterministic_bounds.terms[]` and is NOT this column. The row STAYS `STOP_FILL`, and the reason is a genuine conflict the magistrate must resolve, not a bookkeeping lag. `scripts/render_results_fills.py:977` contains a DELIBERATE guard — `_supplier_unknown("[B_decode_claim_J]")` — whose own comment reads: "Every A/B predicate requires the claim-side bound. The registry explicitly forbids binding the tempting deterministic total." That guard was built to forbid precisely the binding item 25 now rules correct. (`SUPPLIER_UNKNOWN_ROWS` is parsed from this registry's own Fill-rule column, so flipping the row here alone makes the guard's membership assertion fail and two renderer tests error.) Reconciling the ruling with that guard is a code change the paper director does not own. | gamma / decode claim interval | STOP_FILL | SUPPLIER_UNKNOWN pending the coupled renderer change; semantics resolved 2026-08-27 | TPL, CV, DF |
+| `[B_decode_claim_J]` | NO SUPPLIER EXISTS. The registry's own rule governs and is unchanged: "Do not assume that the complete deterministic-bound total is identical to the template's clock-anchor claim-side term." T26 ruling Addendum 2 item 25 briefly ruled otherwise and was WITHDRAWN on verification by Addendum 3 item 33: `scripts/render_results_fills.py:977` carries a deliberate guard, `_supplier_unknown("[B_decode_claim_J]")`, whose comment states that the registry explicitly forbids binding the tempting deterministic total, and that code was right. The column is the CLAIM-SIDE bound as this registry defines it; the supplier is built post-`_v4`, and the sizing sum renders only then. | gamma / decode claim interval | STOP_FILL | SUPPLIER_UNKNOWN; supplier to be built post-`_v4` | TPL, CV, DF |
 | `[C_decode_floor_clearance_J]` | `M_decode_contrast_abs_J_per_request - F_claim_decode_armwise_max_J`, only after floor-gate passage | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
 | `[S_decode_floor_shortfall_J]` | `F_claim_decode_armwise_max_J - M_decode_contrast_abs_J_per_request`, only on floor-gate refusal | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
 | `[R_decode_effect_x_floor]` | `M_decode_contrast_abs_J_per_request / F_claim_decode_armwise_max_J` | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; denominator must be exact and nonzero | TPL |
@@ -476,6 +488,142 @@ The specification publishes the band either way. The alternative on offer —
 recording Variant B as slope-only by design — was rejected because it prints a
 number the reader has no way to judge.
 
+### Diagnostic-era value custody (Addendum 3 item 38)
+
+Addendum 3 item 38 ruled that every diagnostic-era value in the draft is traced to an
+actual artifact path or becomes a registered `[PENDING]` with the diagnostic-era label:
+no number stands on seat prose. A sweep of all 101 diagnostic numeric value-sites in the
+draft traced 99 and converted 2. The two conversions are the Section 6 resolvability
+example's realized record spacing: the draft asserted about 112 ms, and no issued artifact
+supplies it — the measured all-trace median spacing for that bundle is about 120.9 ms.
+Both sites are now `[PENDING]` markers (rows DG-071 and DG-075) and the marker census rose
+from 35 to 37 accordingly.
+
+Path abbreviations below are exact:
+
+- C = /Users/edr/code/JouleWise/runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/instrument_evidence.json
+- E = /Users/edr/code/JouleWise/runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/events.jsonl
+- P = /Users/edr/code/JouleWise/runs_window_a_20260722/instrument_validation/20260722T145535-e941c821/raw/powermetrics.plist
+- R4 = docs/process_traces/2026-08-19-refreeze-execution/r6-issuance/r4-derivation.json, array member member_id=20260722T145535-e941c821
+- XS = configs/floor_mint/a10_extraction_spec.json
+- A10 = /Users/edr/code/JouleWise/runs_window_a10_20260725/{member}/summary_metrics.json, where {member} is each exact XS cells[0..2].members[*].bundle_id
+- S17 = configs/calibration/calibration_acceptance_d079_v2_n17_r3.json
+- S19 = configs/calibration/calibration_acceptance_d079_v2_r2.json
+- NR = docs/process_traces/2026-08-09-prefill-phase-proof/results.json
+- R03E = /Users/edr/code/JouleWise/runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/events.jsonl
+- R03P = /Users/edr/code/JouleWise/runs_window_a10_20260725/p2015-df-ph-decode-abs-r03/power_trace.csv
+- AB = /Users/edr/code/JouleWise/runs_window_contrast_20260730/swdec-contrast-b{01..10}-{a1,a2,b1,b2}/summary_metrics.json
+- ABC = /Users/edr/code/JouleWise/runs_window_contrast_20260730/swdec-contrast-b{01..10}-{a1,a2,b1,b2}/config.json
+- DL = docs/decision_log.md, D-122 and its retained sizing record
+- DF = joulewise/detection_floor.py, guarded point diagnostic and absolute_false_effect_floor/corner computation
+- RF = scripts/check_paper_replay_fence.py
+
+#### Rows
+
+| Draft site | Exact marker or anchor | Intended supplier / binding token | Campaign / cell | Fill rule | Freeze status | Sources |
+|---|---|---|---|---|---|---|
+| DG-001 — Abstract diagnostic scale, line 11 | about 1 J | A10/p2015-df-ph-prefill-abs-r01#energy_anchor_shift_envelopes[/phase_energy_j/prefill].max_abs_delta_j; descriptive about-one rendering | historical a10 / prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-002 — Section 2 pre_spawn wall, line 91 | 1784757335.502742 | C#clock_anchor.clock_stamps.pre_spawn.epoch_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-003 — Section 2 pre_spawn mono-before, line 91 | 458736.4081875 | C#clock_anchor.clock_stamps.pre_spawn.monotonic_before_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-004 — Section 2 pre_spawn mono-after, line 91 | 458736.408188666 | C#clock_anchor.clock_stamps.pre_spawn.monotonic_after_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-005 — Section 2 pre_spawn R, line 91 | 0.0000010000000000000002 | max(C#...pre_spawn.wall_resolution_s, C#...pre_spawn.monotonic_resolution_s) | retained 20260722 capture / clock | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-006 — Section 2 first_parse wall, line 92 | 1784757336.604396 | C#clock_anchor.clock_stamps.first_parse.epoch_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-007 — Section 2 first_parse mono-before, line 92 | 458737.509839458 | C#clock_anchor.clock_stamps.first_parse.monotonic_before_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-008 — Section 2 first_parse mono-after, line 92 | 458737.509840291 | C#clock_anchor.clock_stamps.first_parse.monotonic_after_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-009 — Section 2 first_parse R, line 92 | 0.0000010000000000000002 | max(C#...first_parse.wall_resolution_s, C#...first_parse.monotonic_resolution_s) | retained 20260722 capture / clock | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-010 — Section 2 sampling_started wall, line 93 | 1784757337.0900722 | C#clock_anchor.clock_stamps.sampling_started.epoch_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-011 — Section 2 sampling_started mono-before, line 93 | 458737.995513416 | C#clock_anchor.clock_stamps.sampling_started.monotonic_before_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-012 — Section 2 sampling_started mono-after, line 93 | 458737.995514666 | C#clock_anchor.clock_stamps.sampling_started.monotonic_after_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-013 — Section 2 sampling_started R, line 93 | 0.0000010000000000000002 | max(C#...sampling_started.wall_resolution_s, C#...sampling_started.monotonic_resolution_s) | retained 20260722 capture / clock | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-014 — Section 2 sampling_stopped wall, line 94 | 1784757533.877846 | C#clock_anchor.clock_stamps.sampling_stopped.epoch_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-015 — Section 2 sampling_stopped mono-before, line 94 | 458934.782846541 | C#clock_anchor.clock_stamps.sampling_stopped.monotonic_before_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-016 — Section 2 sampling_stopped mono-after, line 94 | 458934.782848041 | C#clock_anchor.clock_stamps.sampling_stopped.monotonic_after_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-017 — Section 2 sampling_stopped R, line 94 | 0.0000010000000000000002 | max(C#...sampling_stopped.wall_resolution_s, C#...sampling_stopped.monotonic_resolution_s) | retained 20260722 capture / clock | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-018 — Section 2 post_parse wall, line 95 | 1784757533.8891652 | C#clock_anchor.clock_stamps.post_parse.epoch_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-019 — Section 2 post_parse mono-before, line 95 | 458934.794166 | C#clock_anchor.clock_stamps.post_parse.monotonic_before_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-020 — Section 2 post_parse mono-after, line 95 | 458934.7941665 | C#clock_anchor.clock_stamps.post_parse.monotonic_after_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-021 — Section 2 post_parse R, line 95 | 0.0000010000000000000002 | max(C#...post_parse.wall_resolution_s, C#...post_parse.monotonic_resolution_s) | retained 20260722 capture / clock | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-022 — Section 2 wall resolution, line 97 | 1.0000000000000002×10^-6 s | C#clock_anchor.clock_stamps.*.wall_resolution_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-023 — Section 2 monotonic resolution, line 97 | 4.166666666666666×10^-8 s | C#clock_anchor.clock_stamps.*.monotonic_resolution_s | retained 20260722 capture / clock | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-024 — Section 2 detected-pulse count, line 101 | 59 | R4#pulse_count with all_pulses_detected=true; RF replays P+E | retained 20260722 capture / pulse fit | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-025 — Section 2 rectangle count, line 101 | 122,859 | R4#projection_evaluated_cell_count; RF replays P+E | retained 20260722 capture / pulse fit | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-026 — Section 2 local anchor, line 101 | 0.0011349971959968978 s | R4#anchor_v3.effective_clock_anchor_bound_s; RF replays C+P | retained 20260722 capture / anchor | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-027 — Section 2 final capture bound, line 101 | 0.030067931757111657 s | R4#b_fiducial_v3_s; RF replays P+E+C | retained 20260722 capture / pulse fit | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-028 — Section 2 capture-bound arithmetic operand, line 101 | 0.030067931757111657 | same R4#b_fiducial_v3_s | retained 20260722 capture / pulse fit | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-029 — Section 2 anchor arithmetic operand, line 101 | 0.0011349971959968978 | same R4#anchor_v3.effective_clock_anchor_bound_s | retained 20260722 capture / anchor | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-030 — Section 2 residual subtraction, line 101 | 0.0289329345611147592 s | R4#b_fiducial_v3_s - R4#anchor_v3.effective_clock_anchor_bound_s, decimal rendering fixed by RF | retained 20260722 capture / pulse fit | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-031 — Section 2 maximal-pulse ordinal, line 101 | tenth | argmax over RF-replayed retained pulse endpoints from P+E+C; render index 9 as tenth | retained 20260722 capture / pulse 10 | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-032 — Section 2 pulse-on plan offset, line 101 | 26.625 s | E#pulse_command_on occurrence 10.metadata.planned_on_offset_s | retained 20260722 capture / pulse 10 | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-033 — Section 2 pulse-off plan offset, line 101 | 27.625 s | E#pulse_command_off occurrence 10.metadata.planned_off_offset_s | retained 20260722 capture / pulse 10 | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-034 — Section 2 pulse-on epoch, line 101 | 1784757381.2856488 s | E#pulse_command_on occurrence 10.metadata.clock_stamp.epoch_s | retained 20260722 capture / pulse 10 | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-035 — Section 2 pulse-off epoch, line 101 | 1784757382.293089 s | E#pulse_command_off occurrence 10.metadata.clock_stamp.epoch_s | retained 20260722 capture / pulse 10 | MEASURED | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH |
+| DG-036 — Section 2 onset lower, line 101 | 0.02544938965763524 s | RF replay P+E+C, pulse 10 retained onset residual lower endpoint | retained 20260722 capture / pulse 10 | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-037 — Section 2 onset upper, line 101 | 0.02893293456111476 s | RF replay P+E+C, pulse 10 retained onset residual upper endpoint | retained 20260722 capture / pulse 10 | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-038 — Section 2 offset lower, line 101 | -0.008607394549133255 s | RF replay P+E+C, pulse 10 retained offset residual lower endpoint | retained 20260722 capture / pulse 10 | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-039 — Section 2 offset upper, line 101 | -0.005308621075866744 s | RF replay P+E+C, pulse 10 retained offset residual upper endpoint | retained 20260722 capture / pulse 10 | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-040 — Section 2 best-fit onset, line 101 | +0.027 s | RF replay P+E+C pulse 10 best delta_on; round 3 decimals | retained 20260722 capture / pulse 10 | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-041 — Section 2 best-fit offset, line 101 | -0.007 s | RF replay P+E+C pulse 10 best delta_off; round 3 decimals | retained 20260722 capture / pulse 10 | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-042 — Section 2 pulse residual bound, line 101 | 0.02893293456111476 s | max absolute value of DG-036 through DG-039 | retained 20260722 capture / pulse 10 | DERIVE | DIAGNOSTIC_ERA / REPLAY_FENCED | DRAFT, AUTH, DF |
+| DG-043 — Section 3 retained-cell count, line 123 | three | len(XS#cells[0..2]) | historical a10 / three absolute cells | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-044 — Section 3 prefill point floor, line 123 | 0.2888 | A10 prefill members + DF guarded point-only computation; round 4 decimals | historical a10 / prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-045 — Section 3 decode point floor, line 123 | 0.4934 | A10 decode members + DF guarded point-only computation; round 4 decimals | historical a10 / decode absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-046 — Section 3 short-prefill point floor, line 123 | 0.3113 J | A10 short-prefill members + DF guarded point-only computation; round 4 decimals | historical a10 / short-prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-047 — Section 3 prefill corner floor, line 123 | 3.153 | A10 prefill members + DF corner_widened_guarded_floor_j; round 3 decimals | historical a10 / prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-048 — Section 3 decode corner floor, line 123 | 2.922 | A10 decode members + DF corner_widened_guarded_floor_j; round 3 decimals | historical a10 / decode absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-049 — Section 3 short-prefill corner floor, line 123 | 2.184 J | A10 short-prefill members + DF corner_widened_guarded_floor_j; round 3 decimals | historical a10 / short-prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-050 — Section 3 prefill ratio, line 123 | 10.92 | unrounded DG-047 / unrounded DG-044; round 2 decimals | historical a10 / prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-051 — Section 3 decode ratio, line 123 | 5.92 | unrounded DG-048 / unrounded DG-045; round 2 decimals | historical a10 / decode absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-052 — Section 3 short-prefill ratio, line 123 | 7.02 | unrounded DG-049 / unrounded DG-046; round 2 decimals | historical a10 / short-prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-053 — Section 3 timing minimum, line 125 | 25.6 ms | min A10 members#energy_anchor_shift_envelopes[*].anchor_bound_s = 0.025619527535021 at decode r03; ×1000, round 1 decimal | historical a10 / all three cells | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-054 — Section 3 timing maximum, line 125 | 31.1 ms | max same 30 fields = 0.031073829369128 at prefill r01; ×1000, round 1 decimal | historical a10 / all three cells | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-055 — Section 3 timing-member count, line 125 | n=30 | sum len(XS#cells[0..2].members) | historical a10 / all three cells | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-056 — Section 3 repeated timing-member count, line 125 | not 30 independent timing draws | same XS member-count derivation as DG-055 | historical a10 / all three cells | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-057 — Section 2 drift refusal screen, line 75 | 10.164835 ms | S17#decimal_derivation.ratified_operatives.maximum_budgetable_drift_s ×1000; round 6 decimals | diagnostic calibration / n17 | DERIVE | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
+| DG-058 — Section 2 bracket formula screen, line 78 | 9.724 ms | S17#decimal_derivation.ratified_operatives.bracket_screen_s ×1000 | diagnostic calibration / n17 | DERIVE | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
+| DG-059 — Section 2 named current screen, line 81 | 9.724 ms | same S17 bracket_screen_s | diagnostic calibration / n17 | DERIVE | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
+| DG-060 — Section 4 screen in seconds, line 181 | 0.009724 s | S17#decimal_derivation.ratified_operatives.bracket_screen_s | diagnostic calibration / n17 | MEASURED | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
+| DG-061 — Section 4 screen reference, line 184 | 9.724-ms | S17#decimal_derivation.ratified_operatives.bracket_screen_s ×1000 | diagnostic calibration / n17 | DERIVE | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
+| DG-062 — Section 4 repeated screen, line 184 | 9.724 ms | same S17 bracket_screen_s ×1000 | diagnostic calibration / n17 | DERIVE | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
+| DG-063 — Section 4 superseded screen, line 184 | 10.818 ms | S19#decimal_derivation.ratified_operatives.bracket_screen_s ×1000 | diagnostic calibration / n19 superseded | DERIVE | DIAGNOSTIC_ERA / SUPERSEDED_ISSUED_CONFIG; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-064 — Section 4 superseded corpus count, line 184 | nineteen | S19#derivation_corpus.n | diagnostic calibration / n19 superseded | MEASURED | DIAGNOSTIC_ERA / SUPERSEDED_ISSUED_CONFIG; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-065 — Section 4 current corpus count, line 184 | seventeen | S17#derivation_corpus.n | diagnostic calibration / n17 | MEASURED | DIAGNOSTIC_ERA / ISSUED_CONFIG | DRAFT, AUTH |
+| DG-066 — Section 6 diagnostic population, line 259 | 50 | NR#stack_summaries[stack=1.5B].bundle_count | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-067 — Section 6 diagnostic failures, line 259 | 37 | NR#stack_summaries[stack=1.5B].resolvability.not_resolvable_sample_count | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-068 — Section 6 repeated population denominator, line 259 | 50 | same NR#bundle_count | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-069 — Section 6 diagnostic passes, line 259 | 13 | NR#stack_summaries[stack=1.5B].resolvability.identifiable | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-070 — Section 6 concrete prefill duration, line 268 | 0.121034145 s | NR#bundles[bundle=p2015-df-ph-decode-abs-r03].boundary.prefill_duration_s; verify R03E phase_end - phase_start; round 9 decimals | historical a10 / decode-abs-r03 prefill | DERIVE | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-071 — Section 6 unsupported cadence, line 268 | [PENDING] (DIAGNOSTIC-ERA VALUE: realized record spacing for p2015-df-ph-decode-abs-r03) | UNKNOWN; no primary artifact field or declared statistic produces 112 ms; do not infer from R03P | historical a10 / decode-abs-r03 prefill cadence | STOP_FILL | SUPPLIER_UNKNOWN; DIAGNOSTIC_ERA marker | DRAFT, AUTH |
+| DG-072 — Section 6 two-overlap count, line 268 | two; 2 | NR#bundles[...r03].power.prefill_overlap_sample_count and NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[2] | historical a10 / r03 and population | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-073 — Section 6 three-sample threshold/count, line 268 | three; 3 | NR#bundles[...r03].resolvability.minimum_samples and NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[3] | historical a10 / r03 and population | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-074 — Section 6 rounded duration operand, line 268 | 0.121 | round NR r03 boundary.prefill_duration_s to 3 decimals | historical a10 / decode-abs-r03 prefill | DERIVE | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-075 — Section 6 unsupported cadence operand, line 268 | [PENDING] (DIAGNOSTIC-ERA VALUE: realized record spacing in seconds for p2015-df-ph-decode-abs-r03) | UNKNOWN; no primary artifact field or declared statistic produces 0.112 s; do not infer from R03P | historical a10 / decode-abs-r03 prefill cadence | STOP_FILL | SUPPLIER_UNKNOWN; DIAGNOSTIC_ERA marker | DRAFT, AUTH |
+| DG-076 — Section 6 population with two overlaps, line 268 | 37 | NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[2] | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-077 — Section 6 population with three overlaps, line 268 | 13 | NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[3] | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-078 — Section 6 historical ABBA block count, line 280 | Ten | count AB block indices b01 through b10, each with a1,a2,b1,b2 | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-079 — Section 6 historical prompt size, line 280 | 128-token | ABC#workload_profile.prompt_tokens for all 40 members | historical contrast / prefill | MEASURED | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-080 — Section 6 historical ABBA mean, line 280 | 5.809930 J | mean b01..b10 of (AB b1.prefill + b2.prefill - a1.prefill - a2.prefill)/2 | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-081 — Section 6 projected prompt target, line 282 | 256 | DL#D-122 prospective prompt-processing target | prospective gamma / prefill sizing | MEASURED | DESIGN_FROZEN; PROJECTION_ONLY | DRAFT, AUTH |
+| DG-082 — Section 6 historical denominator prompt, line 282 | 128 | ABC#workload_profile.prompt_tokens | historical contrast / prefill | MEASURED | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-083 — Section 6 repeated historical mean, line 282 | 5.809930 | same AB mean derivation as DG-080 | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-084 — Section 6 projected effect, line 282 | 11.619860 J | (256/128) × unrounded DG-080 | prospective gamma / prefill sizing | DERIVE | DIAGNOSTIC_ERA INPUT / PROJECTION_ONLY; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-085 — Section 6 approximate planning bar, line 284 | approximately 5 J | DL D-122 retained practical bar; copy only as approximate; exact components remain pending | prospective gamma / prefill sizing | MEASURED | ISSUED_APPROXIMATION; SIZING_ONLY | DRAFT, AUTH |
+| DG-086 — Section 6 128-token clearance label, line 284 | 128-token | ABC#workload_profile.prompt_tokens | historical contrast / prefill | MEASURED | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-087 — Section 6 128-clearance estimate operand, line 284 | 5.809930 | same AB mean derivation as DG-080 | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-088 — Section 6 128-clearance bar operand, line 284 | 5 | same DL approximate bar as DG-085 | prospective gamma / prefill sizing | MEASURED | ISSUED_APPROXIMATION; SIZING_ONLY | DRAFT, AUTH |
+| DG-089 — Section 6 128-clearance result, line 284 | 0.809930 J | DG-087 - DG-088 | prospective gamma / prefill sizing | DERIVE | PROJECTION_ARITHMETIC; SIZING_ONLY | DRAFT, AUTH |
+| DG-090 — Section 6 128 ratio, line 284 | 1.16 | unrounded DG-080 / 5; round 2 decimals | prospective gamma / prefill sizing | DERIVE | PROJECTION_ARITHMETIC; SIZING_ONLY | DRAFT, AUTH |
+| DG-091 — Section 6 256-token clearance label, line 284 | 256-token | same DL D-122 target as DG-081 | prospective gamma / prefill sizing | MEASURED | DESIGN_FROZEN; PROJECTION_ONLY | DRAFT, AUTH |
+| DG-092 — Section 6 256-clearance estimate operand, line 284 | 11.619860 | DG-084 | prospective gamma / prefill sizing | DERIVE | PROJECTION_ARITHMETIC; SIZING_ONLY | DRAFT, AUTH |
+| DG-093 — Section 6 256-clearance bar operand, line 284 | 5 | same DL approximate bar as DG-085 | prospective gamma / prefill sizing | MEASURED | ISSUED_APPROXIMATION; SIZING_ONLY | DRAFT, AUTH |
+| DG-094 — Section 6 256-clearance result, line 284 | 6.619860 J | DG-092 - DG-093 | prospective gamma / prefill sizing | DERIVE | PROJECTION_ARITHMETIC; SIZING_ONLY | DRAFT, AUTH |
+| DG-095 — Section 6 256 ratio, line 284 | 2.32 | unrounded DG-084 / 5; round 2 decimals | prospective gamma / prefill sizing | DERIVE | PROJECTION_ARITHMETIC; SIZING_ONLY | DRAFT, AUTH |
+| DG-096 — Section 6 selected prompt size, line 284 | 256 | same DL D-122 target as DG-081 | prospective gamma / prefill sizing | MEASURED | DESIGN_FROZEN; PROJECTION_ONLY | DRAFT, AUTH |
+| DG-097 — Section 6 historical prompt ceiling, line 284 | 128 | max ABC#workload_profile.prompt_tokens; search found no historical 7B corpus above it | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-098 — Section 7 repeated retained-cell count, line 310 | three | len(XS#cells[0..2]) | historical a10 / three absolute cells | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH |
+| DG-099 — Section 7 repeated prefill ratio, line 310 | 10.92 | same derivation as DG-050 | historical a10 / prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-100 — Section 7 repeated decode ratio, line 310 | 5.92 | same derivation as DG-051 | historical a10 / decode absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+| DG-101 — Section 7 repeated short-prefill ratio, line 310 | 7.02 | same derivation as DG-052 | historical a10 / short-prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
+
 ### Renderer-only metatokens
 
 These are present in the template's bracket census but are not independently
@@ -515,7 +663,23 @@ anchor text.
 | DS-05 — Section 5 characterization specification row, line 351 | `\| Phase accounting \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_phase` plus licensed additivity/invariance diagnostics, only after an authenticated characterization report is issued | characterization / phase attribution | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
 | DS-06 — Section 5 characterization specification row, line 352 | `\| Drift and recovery \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_drift` plus licensed excursion/recovery diagnostics, only after an authenticated characterization report is issued | characterization / drift and settling | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
 | DS-07 — Section 5 characterization specification row, line 353 | `\| Between-session stability \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_between_sessions` and `N_C_eligible_sessions`, only after an authenticated characterization report is issued | characterization / between sessions | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
-| DS-08 — Section 6 results branch hold, line 405 | `[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3, 5, and 7.]` | Exactly one guarded template result variant; template-internal section labels are not draft section locators | alpha, beta, gamma | DERIVE | DRAFT_GENERIC; no historical or diagnostic result is a supplier | DRAFT, TPL, LINT |
+| DS-08a — Section 6 results branch hold, line 405 | `[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3, 6, and 7.]` | Exactly one guarded template result variant; template-internal section labels are not draft section locators | alpha, beta, gamma | DERIVE | DRAFT_GENERIC; no historical or diagnostic result is a supplier | DRAFT, TPL, LINT |
+
+**DS-08 superseded by DS-08a (Addendum 3 item 35).** The round-2 restructure renumbered the
+paper: instrument characterization moved from Section 5 to Section 3, and the resolution bound
+from Section 3 to Section 4. The DS-08 marker's byte-frozen sentence named "Sections 3, 5, and 7",
+which after renumbering pointed at collection — a section carrying no instrument diagnostic — and
+omitted the sections that do. Addendum 3 item 35 authorises the successor marker DS-08a naming
+**Sections 3, 6, and 7**: Section 3 carries the retained point-floor and corner-widened-floor
+energies and the composed timing-bound range, Section 6 carries the prompt-sizing diagnostic, and
+Section 7 carries the corner-to-point ratio. DS-08's original bytes are retained immediately below
+for provenance; they are superseded and must not be rendered.
+
+Retained superseded DS-08 bytes: `[RESULT PENDING ISSUED ARTIFACTS — tables below are structural
+placeholders; no energy value from superseded artifacts is carried into these tables, and none
+appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3,
+5, and 7.]`
+
 | DS-09 — Table 2 prompt/1.5B gross cell, line 411, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_request` with lower and upper interval endpoints | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
 | DS-10 — Table 2 prompt/1.5B per-token cell, line 411, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_token` | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
 | DS-11 — Table 2 prompt/1.5B floor cell, line 411, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `F_1p5B_prompt_operative_J` plus cell label branch | alpha / prompt floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
@@ -536,7 +700,7 @@ anchor text.
 | DS-26 — Table 3 decode interval, line 420, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `E_decode_contrast_lower_J`, `E_decode_contrast_upper_J` | gamma / decode contrast | MEASURED | VALUE_UNISSUED; one bracket marker contains two semantic fills | DRAFT, TPL, CV |
 | DS-27 — Table 3 decode floor, line 420, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `F_claim_decode_armwise_max_J` | gamma consuming alpha/beta decode floors | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
 | DS-28 — Table 3 decode clearance, line 420, col 5 under `Clearance (point − floor)` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `C_decode_floor_clearance_J` on passage or negative of `S_decode_floor_shortfall_J` on refusal; branch must be explicit | gamma / decode contrast | DERIVE | DRAFT/TEMPLATE SHAPE MISMATCH; draft has one unconditional cell | DRAFT, TPL |
-| DS-29 — Table 3 decode contrast deterministic bound, col 6 under `Comparison's own deterministic bound (deterministic_bounds.total)` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `B_decode_claim_J` | gamma / decode contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, DF, CV |
+| DS-29 — Table 3 decode contrast claim-side bound, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `B_decode_claim_J` | gamma / decode contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, DF, CV |
 | DS-30 — Table 3 decode floor-gate outcome, line 420, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from authenticated magnitude and claim floor, consistent with claim verdict | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; renderer contract must add a binding without renaming existing tokens | DRAFT, TPL, CV |
 | DS-31 — Table 3 decode direction-gate outcome, line 420, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from the fully composed interval and registered direction | gamma / decode contrast | STOP_FILL | TOKEN_MISSING | DRAFT, TPL, CV |
 | DS-32 — Table 3 decode verdict, line 420, col 9 under `Verdict` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; candidate source `contrasts[decode].claim_evaluation.outcome` | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; bind a professor-facing conservative rendering | DRAFT, TPL, CV, AUTH |
@@ -546,7 +710,7 @@ anchor text.
 | PG-02 — Table 3 prompt interval lower endpoint, line 421, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed lower endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
 | PG-03 — Table 3 prompt interval upper endpoint, line 421, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed upper endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
 | PG-04 — Table 3 prompt clearance, line 421, col 5 under `Clearance (point − floor)` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future branch-explicit clearance or shortfall derivation | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING; shape contract required | DRAFT, TPL, CV |
-| PG-05 — Table 3 prompt contrast deterministic bound, col 6 under `Comparison's own deterministic bound (deterministic_bounds.total)` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token and no named claim-side-bound output field | gamma / prompt contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, CV, AUTH |
+| PG-05 — Table 3 prompt contrast claim-side bound, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token and no named claim-side-bound output field | gamma / prompt contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, CV, AUTH |
 | PG-06 — Table 3 prompt floor-gate outcome, line 421, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering consistent with authenticated magnitude, floor, and verdict | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV |
 | PG-07 — Table 3 prompt direction-gate outcome, line 421, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering from the fully composed interval and registered direction | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
 | PG-08 — Table 3 prompt verdict, line 421, col 9 under `Verdict` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt rendering token; future authenticated claim-evaluation outcome | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
@@ -575,9 +739,14 @@ template with `\[([A-Z][A-Za-z0-9_*.-]*)\]`; sort for the distinct vocabulary
 while retaining the unsorted stream for occurrence counts. Markdown citations
 such as `[1]` are excluded by construction.
 
-- Draft: 35 bracket-marker sites, representing 37 semantic fill slots because
+- Draft: 37 bracket-marker sites, representing 39 semantic fill slots because
   the two interval markers `[PENDING, PENDING]` each contain two endpoints.
-  Re-counted 2026-08-24 after the Section 5 rewrite: unchanged. The rewritten
+  Re-counted 2026-08-24 after the Section 5 rewrite: unchanged at 35. Raised to 37
+  on 2026-08-27 by Addendum 3 item 38: the Section 6 resolvability example's realized
+  record spacing could not be traced to any issued artifact — the measured all-trace
+  median spacing is about 120.9 ms, not the 112 ms the draft asserted — so both of its
+  sites became registered `PENDING` markers with the diagnostic-era label (rows DG-071
+  and DG-075). The rewritten
   Section 5 carries square brackets only inside LaTeX math, which the census
   command's marker prefixes exclude.
 - Template: 437 token occurrences and 91 distinct exact tokens. The count
