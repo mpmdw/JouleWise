@@ -28,3 +28,12 @@ routes the magistrate's own proposals to a cold Fable instance paired
 with an Opus contract-lens refuter). The S9 ruled-not-installed sweep
 supplies the packet's evidence; the cold gate convenes when the sweep
 lands.
+
+## Addendum (S9 sweep, 2026-08-27) — second proposal for the same cold gate
+
+**The D-118/D-121 merge-gate ledger has no mechanical existence**: no PR
+template, no CI job, no mention in `orchestration.md`, `agent_playbook.md`,
+or any loaded skill. Every merge since D-118 has been gated by memory.
+PROPOSED: a PR-template checklist that names the D-118 gate items and a
+CI check that refuses a merge whose body lacks the ledger block. Same
+cold gate as the ruling-status rule; the S9 sweep is the packet.
