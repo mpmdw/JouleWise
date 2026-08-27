@@ -549,9 +549,11 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
             arm_readiness_custody_root=custody,
             launch_manifest=manifest_path,
             lifecycle_event=None,
-            # Mirrors the CLI parser, whose ``--expected-confirmation-digest``
-            # has no explicit default and so supplies ``None``: Ed's confirmed
-            # table digest is threaded, never derived by the launcher.
+            # Mirrors the CLI parser, whose ``--step6-confirmation-table`` and
+            # ``--expected-confirmation-digest`` have no explicit defaults and
+            # so supply ``None``: Ed's confirmed table and its out-of-band
+            # digest are threaded, never derived by the launcher.
+            step6_confirmation_table=None,
             expected_confirmation_digest=None,
         )
         return args, exec_argv

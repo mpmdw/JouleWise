@@ -52,6 +52,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
             arm_readiness_custody_root=root / "custody",
             launch_manifest=root / "launch-manifest.json",
             lifecycle_event=None,
+            step6_confirmation_table=None,
             expected_confirmation_digest=None,
         )
 
@@ -144,6 +145,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             args = self._args(Path(temporary))
             args.lifecycle_event = "start"
+            args.step6_confirmation_table = Path("/tmp/operator-confirmation.json")
             args.expected_confirmation_digest = "e" * 64
             try:
                 os.close(launch_window.HANDOFF_FD)
@@ -157,6 +159,10 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 with self.assertRaises(arm_readiness.LaunchLineageError) as caught:
                     launch_window.lifecycle(args)
             self.assertEqual(caught.exception.reason_code, "launch_handoff_invalid")
+            self.assertEqual(
+                verify.call_args.kwargs["step6_confirmation_table"],
+                args.step6_confirmation_table,
+            )
             self.assertEqual(
                 verify.call_args.kwargs["expected_confirmation_digest"],
                 args.expected_confirmation_digest,
@@ -241,6 +247,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                     "window_chain_sha256",
                     "exec_argv",
                     "handoff_token_sha256",
+                    "step6_confirmation_table",
                     "expected_confirmation_digest",
                 },
             )
@@ -257,6 +264,8 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 arm_readiness_custody_root=fixture.custody,
                 launch_manifest=fixture.manifest_path,
                 lifecycle_event=None,
+                step6_confirmation_table=fixture.custody
+                / "operator-confirmation.json",
                 expected_confirmation_digest="e" * 64,
             )
             arm_raw = fixture.arm_path.read_bytes()
@@ -303,6 +312,10 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 arm_readiness.sha256_bytes(fixture.chain_path.read_bytes()),
             )
             self.assertEqual(
+                verify_arm.call_args.kwargs["step6_confirmation_table"],
+                args.step6_confirmation_table,
+            )
+            self.assertEqual(
                 verify_arm.call_args.kwargs["expected_confirmation_digest"],
                 args.expected_confirmation_digest,
             )
@@ -321,6 +334,7 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
                 arm_readiness_custody_root=fixture.custody,
                 launch_manifest=fixture.manifest_path,
                 lifecycle_event=None,
+                step6_confirmation_table=None,
                 expected_confirmation_digest=None,
             )
             arm_digest = hashlib.sha256(
@@ -521,209 +535,371 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         self.assertEqual(consumer.call_args.args, (ROOT / "tests",))
         self.assertEqual(consumer.call_args.kwargs, {})
 
+    def _confirmation_supply_fixture(
+        self, *, table_at_default: bool
+    ) -> argparse.Namespace:
+        from tests.test_family_marker import confirmation
+
+        launch_fixture = arm_readiness_tests.LaunchConsumptionV2Tests(
+            methodName="test_v2_claim_is_fsynced_and_replays_from_consumption"
+        )
+        launch_fixture.setUp()
+        self.addCleanup(launch_fixture.doCleanups)
+        root = Path(launch_fixture.temporary.name)
+        repository = root / "repository"
+        repository.mkdir()
+        subprocess.run(("git", "-C", str(repository), "init", "-q"), check=True)
+        subprocess.run(
+            (
+                "git",
+                "-C",
+                str(repository),
+                "config",
+                "user.email",
+                "test@example.invalid",
+            ),
+            check=True,
+        )
+        subprocess.run(
+            (
+                "git",
+                "-C",
+                str(repository),
+                "config",
+                "user.name",
+                "Launch CLI Digest Test",
+            ),
+            check=True,
+        )
+        self.assertEqual(
+            len(arm_readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS), 1
+        )
+        successor_relative = next(
+            iter(arm_readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
+        )
+        successor_path = repository / successor_relative
+        successor_path.parent.mkdir(parents=True)
+        successor_raw = b'{"schema_version":"test-successor-pinset"}\n'
+        successor_path.write_bytes(successor_raw)
+        subprocess.run(("git", "-C", str(repository), "add", "."), check=True)
+        subprocess.run(
+            ("git", "-C", str(repository), "commit", "-qm", "pinset"),
+            check=True,
+        )
+        head = subprocess.run(
+            ("git", "-C", str(repository), "rev-parse", "HEAD"),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        default_table_path = (
+            launch_fixture.custody
+            / "family_publication"
+            / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
+        )
+        table_path = (
+            default_table_path
+            if table_at_default
+            else root
+            / "operator-confirmations"
+            / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
+        )
+        table_path.parent.mkdir(parents=True)
+        table = confirmation()
+        table["successor_pinset"]["sha256"] = hashlib.sha256(
+            successor_raw
+        ).hexdigest()
+        table_raw = arm_readiness.render_json(table)
+        table_path.write_bytes(table_raw)
+        table_path.with_name(f"{table_path.name}.sha256").write_bytes(
+            arm_readiness.gnu_sidecar(
+                hashlib.sha256(table_raw).hexdigest(), table_path.name
+            )
+        )
+        self.assertEqual(table["confirmation"]["authority"], "ED")
+        self.assertEqual(table["confirmation"]["decision"], "YES")
+
+        lifecycle_registry = json.loads(
+            (ROOT / arm_readiness.ROW_REGISTRY_RELATIVE_PATH).read_text()
+        )["freeze_evidence_lifecycle"]
+        changed_set_code = next(
+            item["code"]
+            for item in lifecycle_registry["refusal_vocabulary"]
+            if item["role"] == "DEPENDENCY_CHANGED_SET"
+        )
+        arm_raw = launch_fixture.arm_path.read_bytes()
+        return argparse.Namespace(
+            repository=repository,
+            head=head,
+            successor_relative=successor_relative,
+            lifecycle_registry=lifecycle_registry,
+            changed_set_code=changed_set_code,
+            table_path=table_path,
+            default_table_path=default_table_path,
+            table_digest=hashlib.sha256(table_raw).hexdigest(),
+            launch_fixture=launch_fixture,
+            verified_arm={
+                "status": "PASS",
+                "arm_disposition": "GO",
+                "receipt_path": str(launch_fixture.arm_path.resolve()),
+                "receipt_sha256": hashlib.sha256(arm_raw).hexdigest(),
+                "pack_sha256": launch_fixture.arm["pack"]["pack_sha256"],
+            },
+            argv=[
+                "--pack-root",
+                str(launch_fixture.pack),
+                "--arm-receipt",
+                str(launch_fixture.arm_path),
+                "--arm-readiness-custody-root",
+                str(launch_fixture.custody),
+                "--launch-manifest",
+                str(launch_fixture.manifest_path),
+            ],
+            gate_discharged=False,
+        )
+
+    @staticmethod
+    def _confirmation_verifier(supply: argparse.Namespace) -> object:
+        def verify_arm(
+            _pack_root: Path,
+            _arm_receipt: Path,
+            *,
+            require_unconsumed: bool,
+            step6_confirmation_table: Path | None = None,
+            expected_confirmation_digest: str | None = None,
+        ) -> dict[str, object]:
+            if require_unconsumed:
+                raise AssertionError("launcher must replay the arm as consumed")
+            confirmation_path = (
+                step6_confirmation_table
+                if step6_confirmation_table is not None
+                else supply.default_table_path
+            )
+            try:
+                arm_readiness._require_confirmed_conditional_path(
+                    supply.repository,
+                    supply.head,
+                    supply.successor_relative,
+                    supply.lifecycle_registry,
+                    confirmation_path,
+                    expected_confirmation_digest=expected_confirmation_digest,
+                    evidence_id="freeze-doctrine-pin-v1",
+                )
+            except arm_readiness.EvidenceLifecycleError as exc:
+                raise arm_readiness.ArmReadinessError(
+                    exc.reason_code, str(exc)
+                ) from exc
+            supply.gate_discharged = True
+            return supply.verified_arm
+
+        return verify_arm
+
+    def _run_confirmation_refusal(
+        self, supply: argparse.Namespace, extra_argv: list[str]
+    ) -> tuple[dict[str, object], mock.Mock]:
+        sink, stdout_patch = self._captured_stdout(launch_window)
+        supply.gate_discharged = False
+        with stdout_patch, mock.patch.object(
+            launch_window,
+            "_verify_arm_receipt",
+            side_effect=self._confirmation_verifier(supply),
+        ) as verify_arm, mock.patch.object(
+            launch_window, "_consume_launch_capability"
+        ) as consume, mock.patch.object(
+            launch_window, "verify_consumed_launch"
+        ) as verify_consumed, mock.patch.object(
+            launch_window.os, "execve"
+        ) as execve:
+            code = launch_window.main(supply.argv + extra_argv)
+        refusal = json.loads(sink.getvalue())
+        self.assertEqual(code, 2)
+        self.assertEqual(refusal["status"], "REFUSE")
+        self.assertEqual(refusal["reason_codes"], [supply.changed_set_code])
+        self.assertFalse(supply.gate_discharged)
+        consume.assert_not_called()
+        verify_consumed.assert_not_called()
+        execve.assert_not_called()
+        return refusal, verify_arm
+
     def test_launch_cli_refuses_unconfirmed_table_and_accepts_operator_digest(
         self,
     ) -> None:
-        from tests.test_family_marker import confirmation
+        supply = self._confirmation_supply_fixture(table_at_default=True)
+        for label, extra_argv in (
+            ("digest absent", []),
+            (
+                "digest wrong",
+                ["--expected-confirmation-digest", "0" * 64],
+            ),
+        ):
+            with self.subTest(case=label):
+                self._run_confirmation_refusal(supply, extra_argv)
 
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            repository = root / "repository"
-            repository.mkdir()
-            subprocess.run(
-                ("git", "-C", str(repository), "init", "-q"), check=True
-            )
-            subprocess.run(
-                (
-                    "git",
-                    "-C",
-                    str(repository),
-                    "config",
-                    "user.email",
-                    "test@example.invalid",
-                ),
-                check=True,
-            )
-            subprocess.run(
-                (
-                    "git",
-                    "-C",
-                    str(repository),
-                    "config",
-                    "user.name",
-                    "Launch CLI Digest Test",
-                ),
-                check=True,
-            )
-            self.assertEqual(
-                len(arm_readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS), 1
-            )
-            successor_relative = next(
-                iter(arm_readiness.R1_DIGEST_CONDITIONAL_ALLOWLIST_PATHS)
-            )
-            successor_path = repository / successor_relative
-            successor_path.parent.mkdir(parents=True)
-            successor_raw = b'{"schema_version":"test-successor-pinset"}\n'
-            successor_path.write_bytes(successor_raw)
-            subprocess.run(
-                ("git", "-C", str(repository), "add", "."), check=True
-            )
-            subprocess.run(
-                ("git", "-C", str(repository), "commit", "-qm", "pinset"),
-                check=True,
-            )
-            head = subprocess.run(
-                ("git", "-C", str(repository), "rev-parse", "HEAD"),
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-
-            custody = root / "custody"
-            publication = custody / "family_publication"
-            publication.mkdir(parents=True)
-            table_path = publication / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
-            table = confirmation()
-            table["successor_pinset"]["sha256"] = hashlib.sha256(
-                successor_raw
-            ).hexdigest()
-            table_raw = arm_readiness.render_json(table)
-            table_path.write_bytes(table_raw)
-            table_path.with_name(f"{table_path.name}.sha256").write_bytes(
-                arm_readiness.gnu_sidecar(
-                    hashlib.sha256(table_raw).hexdigest(), table_path.name
-                )
-            )
-            self.assertEqual(table["confirmation"]["authority"], "ED")
-            self.assertEqual(table["confirmation"]["decision"], "YES")
-
-            lifecycle_registry = json.loads(
-                (ROOT / arm_readiness.ROW_REGISTRY_RELATIVE_PATH).read_text()
-            )["freeze_evidence_lifecycle"]
-            changed_set_code = next(
-                item["code"]
-                for item in lifecycle_registry["refusal_vocabulary"]
-                if item["role"] == "DEPENDENCY_CHANGED_SET"
-            )
-            table_digest = hashlib.sha256(table_raw).hexdigest()
-            args = self._launch_argv(root, custody)
-            launch_args = launch_window._parser().parse_args(args)
-            exec_argv = [
-                "/usr/bin/caffeinate",
-                "-is",
-                "/bin/zsh",
-                "/tmp/window-chain.zsh",
-                "/tmp/window-plan",
-            ]
-            launch_inputs = LaunchWindowEntrypointTests()._launch_inputs(
-                launch_args, exec_argv
-            )
-            subtracted = False
-
-            def assemble(parsed: argparse.Namespace) -> dict[str, object]:
-                nonlocal subtracted
-                try:
-                    arm_readiness._require_confirmed_conditional_path(
-                        repository,
-                        head,
-                        successor_relative,
-                        lifecycle_registry,
-                        Path(parsed.arm_readiness_custody_root)
-                        / "family_publication"
-                        / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME,
-                        expected_confirmation_digest=(
-                            parsed.expected_confirmation_digest
-                        ),
-                        evidence_id="freeze-doctrine-pin-v1",
-                    )
-                except arm_readiness.EvidenceLifecycleError as exc:
-                    raise arm_readiness.ArmReadinessError(
-                        exc.reason_code, str(exc)
-                    ) from exc
-                subtracted = True
-                return launch_inputs
-
-            for label, supplied in (
-                ("digest absent", None),
-                ("digest wrong", "0" * 64),
-            ):
-                with self.subTest(case=label):
-                    subtracted = False
-                    argv = list(args)
-                    if supplied is not None:
-                        argv.extend(
-                            ["--expected-confirmation-digest", supplied]
-                        )
-                    sink, stdout_patch = self._captured_stdout(launch_window)
-                    with stdout_patch, mock.patch.object(
-                        launch_window,
-                        "_assemble_launch_inputs",
-                        side_effect=assemble,
-                    ), mock.patch.object(
-                        launch_window, "_consume_launch_capability"
-                    ) as consume, mock.patch.object(
-                        launch_window.os, "execve"
-                    ) as execve:
-                        code = launch_window.main(argv)
-                    self.assertEqual(code, 2)
-                    self.assertEqual(
-                        json.loads(sink.getvalue())["reason_codes"],
-                        [changed_set_code],
-                    )
-                    self.assertFalse(subtracted)
-                    consume.assert_not_called()
-                    execve.assert_not_called()
-
-            subtracted = False
-            correct_argv = args + [
-                "--expected-confirmation-digest",
-                table_digest,
-            ]
-            with mock.patch.object(
-                launch_window,
-                "_assemble_launch_inputs",
-                side_effect=assemble,
-            ), mock.patch.object(
-                launch_window, "_install_handoff"
-            ), mock.patch.object(
-                launch_window,
-                "_consume_launch_capability",
-                return_value={"consumption_path": "/tmp/consumed.json"},
-            ) as consume, mock.patch.object(
-                launch_window,
-                "verify_consumed_launch",
-                return_value={"exec_argv": exec_argv},
-            ) as verify, mock.patch.object(
-                launch_window.os, "execve", side_effect=SystemExit(0)
-            ) as execve:
-                with self.assertRaises(SystemExit) as exited:
-                    launch_window.main(correct_argv)
-            self.assertEqual(exited.exception.code, 0)
-            self.assertTrue(subtracted)
-            consume.assert_called_once()
-            verify.assert_called_once()
-            execve.assert_called_once()
-            self.assertEqual(
-                consume.call_args.kwargs["expected_confirmation_digest"],
-                table_digest,
-            )
-            self.assertEqual(
-                verify.call_args.kwargs["expected_confirmation_digest"],
-                table_digest,
-            )
-
-    @staticmethod
-    def _launch_argv(root: Path, custody: Path) -> list[str]:
-        return [
-            "--pack-root",
-            str(root / "pack"),
-            "--arm-receipt",
-            str(root / "arm.json"),
-            "--arm-readiness-custody-root",
-            str(custody),
-            "--launch-manifest",
-            str(root / "launch-manifest.json"),
+        correct_argv = supply.argv + [
+            "--expected-confirmation-digest",
+            supply.table_digest,
         ]
+        supply.gate_discharged = False
+        with mock.patch.object(
+            launch_window,
+            "_verify_arm_receipt",
+            side_effect=self._confirmation_verifier(supply),
+        ), mock.patch.object(
+            launch_window, "_install_handoff"
+        ), mock.patch.object(
+            launch_window,
+            "_consume_launch_capability",
+            return_value={"consumption_path": "/tmp/consumed.json"},
+        ) as consume, mock.patch.object(
+            launch_window,
+            "verify_consumed_launch",
+            return_value={"exec_argv": supply.launch_fixture.exec_argv},
+        ) as verify, mock.patch.object(
+            launch_window.os, "execve", side_effect=SystemExit(0)
+        ) as execve:
+            with self.assertRaises(SystemExit) as exited:
+                launch_window.main(correct_argv)
+        self.assertEqual(exited.exception.code, 0)
+        self.assertTrue(supply.gate_discharged)
+        consume.assert_called_once()
+        verify.assert_called_once()
+        execve.assert_called_once()
+        self.assertEqual(
+            consume.call_args.kwargs["expected_confirmation_digest"],
+            supply.table_digest,
+        )
+        self.assertEqual(
+            verify.call_args.kwargs["expected_confirmation_digest"],
+            supply.table_digest,
+        )
+
+    def test_launch_cli_leg_a_accepts_valid_pair_at_nondefault_table_path(
+        self,
+    ) -> None:
+        supply = self._confirmation_supply_fixture(table_at_default=False)
+        self.assertNotEqual(supply.table_path, supply.default_table_path)
+        self.assertFalse(supply.default_table_path.exists())
+        argv = supply.argv + [
+            "--step6-confirmation-table",
+            str(supply.table_path),
+            "--expected-confirmation-digest",
+            supply.table_digest,
+        ]
+        with mock.patch.object(
+            launch_window,
+            "_verify_arm_receipt",
+            side_effect=self._confirmation_verifier(supply),
+        ) as verify_arm, mock.patch.object(
+            launch_window, "_install_handoff"
+        ), mock.patch.object(
+            launch_window,
+            "_consume_launch_capability",
+            return_value={"consumption_path": "/tmp/consumed.json"},
+        ) as consume, mock.patch.object(
+            launch_window,
+            "verify_consumed_launch",
+            return_value={"exec_argv": supply.launch_fixture.exec_argv},
+        ) as verify_consumed, mock.patch.object(
+            launch_window.os, "execve", side_effect=SystemExit(0)
+        ) as execve:
+            with self.assertRaises(SystemExit) as exited:
+                launch_window.main(argv)
+        self.assertEqual(exited.exception.code, 0)
+        self.assertTrue(supply.gate_discharged)
+        execve.assert_called_once()
+        for consumer in (verify_arm, consume, verify_consumed):
+            self.assertEqual(
+                consumer.call_args.kwargs["step6_confirmation_table"],
+                supply.table_path,
+            )
+            self.assertEqual(
+                consumer.call_args.kwargs["expected_confirmation_digest"],
+                supply.table_digest,
+            )
+
+    def test_launch_cli_leg_b_refuses_correct_digest_without_table_path(
+        self,
+    ) -> None:
+        supply = self._confirmation_supply_fixture(table_at_default=False)
+        refusal, verify_arm = self._run_confirmation_refusal(
+            supply,
+            ["--expected-confirmation-digest", supply.table_digest],
+        )
+        self.assertIn("custody artifact is absent", refusal["detail"])
+        self.assertIn(str(supply.default_table_path), refusal["detail"])
+        self.assertNotIn(
+            "table bytes differ from the expected confirmation digest",
+            refusal["detail"],
+        )
+        self.assertIsNone(
+            verify_arm.call_args.kwargs["step6_confirmation_table"]
+        )
+
+    def test_launch_cli_leg_c_refuses_table_path_without_digest(self) -> None:
+        supply = self._confirmation_supply_fixture(table_at_default=False)
+        refusal, verify_arm = self._run_confirmation_refusal(
+            supply,
+            ["--step6-confirmation-table", str(supply.table_path)],
+        )
+        self.assertIn(
+            "no expected confirmation digest supplied", refusal["detail"]
+        )
+        self.assertEqual(
+            verify_arm.call_args.kwargs["step6_confirmation_table"],
+            supply.table_path,
+        )
+
+    def test_launch_cli_leg_d_refuses_malformed_digest(self) -> None:
+        supply = self._confirmation_supply_fixture(table_at_default=False)
+        refusal, _verify_arm = self._run_confirmation_refusal(
+            supply,
+            [
+                "--step6-confirmation-table",
+                str(supply.table_path),
+                "--expected-confirmation-digest",
+                "A" * 64,
+            ],
+        )
+        self.assertIn(
+            "supplied expected confirmation digest is malformed",
+            refusal["detail"],
+        )
+
+    def test_launch_cli_leg_e_refuses_mismatched_table_bytes(self) -> None:
+        supply = self._confirmation_supply_fixture(table_at_default=False)
+        refusal, _verify_arm = self._run_confirmation_refusal(
+            supply,
+            [
+                "--step6-confirmation-table",
+                str(supply.table_path),
+                "--expected-confirmation-digest",
+                "0" * 64,
+            ],
+        )
+        self.assertIn(
+            "table bytes differ from the expected confirmation digest",
+            refusal["detail"],
+        )
+        self.assertNotIn(
+            "no expected confirmation digest supplied", refusal["detail"]
+        )
+        self.assertNotIn(
+            "no step-6 confirmation table supplied", refusal["detail"]
+        )
+
+    def test_launch_cli_leg_f_refuses_when_nothing_is_supplied(self) -> None:
+        supply = self._confirmation_supply_fixture(table_at_default=False)
+        refusal, verify_arm = self._run_confirmation_refusal(supply, [])
+        self.assertIn(
+            "no expected confirmation digest supplied", refusal["detail"]
+        )
+        self.assertIsNone(
+            verify_arm.call_args.kwargs["step6_confirmation_table"]
+        )
+        self.assertIsNone(
+            verify_arm.call_args.kwargs["expected_confirmation_digest"]
+        )
 
 
 class CeremonySkipConsumerTests(unittest.TestCase):
