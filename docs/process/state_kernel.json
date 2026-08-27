@@ -3526,44 +3526,6 @@
       "status_note": "H-1 already resolved by the ruled convening rule; H-6 adoption ruled by the cold pass (charter home; decision-log entry owed; Ed visibility line in the packet).",
       "stop_card": null
     },
-    "SUPERSESSION-DUP-REFUSAL-01": {
-      "acceptance": {
-        "evidence": [
-          "The write-time refusal ruling is recorded in the decision log before any implementation",
-          "A regression asserts that a second recorder invocation for the same member refuses"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/SUPERSESSION-DUP-REFUSAL-01/acceptance",
-          "label": "SUPERSESSION-DUP-REFUSAL-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A repeat recorder invocation for the same member refuses instead of appending a duplicate record."
-      },
-      "authority": {
-        "label": "D-086 supersession-aware cooldown-evidence join (recorder duplicate-append defect)",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-086 operator mitigation",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Until the refusal lands, run the supersession recorder exactly once per member"
-        }
-      ],
-      "flags": [],
-      "goal": "Rule on and then implement write-time refusal in the supersession recorder, which today appends silent duplicate records when run more than once for a member and voids campaign membership downstream; the ruling is the first half of the deliverable.",
-      "id": "SUPERSESSION-DUP-REFUSAL-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 17,
-      "status": "queued",
-      "status_note": "Minted 2026-07-30 from the D-086 arc; ruling-first, no implementation before it.",
-      "stop_card": null
-    },
     "T0-CLOCK-ROW-RENAME-01": {
       "acceptance": {
         "evidence": [

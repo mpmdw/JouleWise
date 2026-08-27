@@ -90,7 +90,6 @@ EXPECTED_IDS = {
     # MANIFEST-CONTRAST-01 closed 2026-08-02 (PR #95, v3 at audited head
     # e94d4a7) and retired to the completed table.
     "MINT-GENERALIZE-01",
-    "SUPERSESSION-DUP-REFUSAL-01",
     # 2026-08-02 successor session: TEST-SPEED-01 minted per the
     # checkpoint resume script (Ed-ratified three levers 2026-08-03).
     "TEST-SPEED-01",
@@ -435,9 +434,15 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # prunes the git object store before descending, with three
         # deterministic vanishing-directory regressions) -- the latter two rows
         # predated their cures:
-        # 98 - 3 = 95 exact live records.
+        # 98 - 3 = 95; the 2026-08-27 T26 S6 wave closes
+        # SUPERSESSION-DUP-REFUSAL-01 (PR #PRNUM, SHAPLACEHOLDER: D-156's
+        # write-time refusal in the supersession recorder -- a recognizable
+        # same-bundle_id row in the target log, valid or not, refuses before
+        # the candidate row is constructed, and a log the consumer reader
+        # cannot reason about refuses under its own sibling code):
+        # 95 - 1 = 94 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 95)
+        self.assertEqual(len(self.tasks), 94)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
