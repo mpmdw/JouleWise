@@ -1620,36 +1620,6 @@
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
     },
-    "FROZEN-RECEIPT-CONSTANT-STALE-01": {
-      "acceptance": {
-        "evidence": [
-          "The stale-constant behaviour is characterized per generation with executed evidence: the bare --check outcome for the ordinal-1 pack and for each successor",
-          "A ruling records whether the constant is refreshed per generation or the authentication path stops depending on it, with the regression that pins the chosen shape"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FROZEN-RECEIPT-CONSTANT-STALE-01/acceptance",
-          "label": "FROZEN-RECEIPT-CONSTANT-STALE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Successor-family authentication no longer rests on a constant that names the predecessor's freeze receipt."
-      },
-      "authority": {
-        "label": "RUN_STATE 2026-08-24 T23 morning entry — two independent soundness rows surfaced for the next kernel wave",
-        "path": "RUN_STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Close the first soundness row from the S-0 §3.4 PACK_AUTHENTICATION round: every successor family inherits a STALE CURRENT_FROZEN_RECEIPT_SHA256 — the generator constant names the PREDECESSOR's freeze receipt, so PRESERVE_CURRENT_FROZEN_BYTES is false and only the ordinal-1 pack can authenticate by a bare generator --check; every later generation exits 1 with 'the current frozen identity requires preserve mode'. Decide whether the constant is refreshed per generation or the authentication path stops depending on it.",
-      "id": "FROZEN-RECEIPT-CONSTANT-STALE-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 93,
-      "status": "queued",
-      "status_note": "Surfaced by the §3.4 round on S-0 estate 2; independent of the projected-pack cure that landed in PR #178. Executed corroboration (all six _v2/_v3 successor generators exit 1) is recorded in docs/process_traces/2026-08-19-prep-sprint/ready-packet/rows/ROW-L5.md.",
-      "stop_card": null
-    },
     "LINE-AUDIT-GUARD-01": {
       "acceptance": {
         "evidence": [
@@ -3236,7 +3206,7 @@
       "priority": "p2_next_slice",
       "rank": 94,
       "status": "queued",
-      "status_note": "Second of the two independent soundness rows from the §3.4 round; distinct from the projected-pack cure (PR #178) and from the stale-constant row. 'Echo path' is the ready-packet ROW-L5 term for the preserve-mode branch.",
+      "status_note": "Second of the two independent soundness rows from the §3.4 round. OPEN AFTER PR #214's first gauntlet pass: the authoring-boundary and histsem-verifier cures landed on that branch (an echo can no longer set pack_generator_check_status, and an authenticated PACK_AUTHENTICATION item is re-derived at the coordinate its own source and receipt record), but the delta re-audit found a residual blocker — flagless-generator preserve detection is a NAME scan for the identifier preserve_current_frozen_bytes, so a generator that echoes committed bytes under any other identifier is invoked bare and its echo is recorded as regenerated, which reopens the tautology for that shape. Cure named by the delta seat: default-deny flagless generators except a closed reviewed-digest allowlist, or regenerate into an empty output tree, pinned at both the author and histsem boundaries. No generator committed in this repository takes that path today — all nine expose the explicit --preserve-current-frozen-bytes BooleanOptionalAction — so the _v4 transaction is unaffected. Custody: docs/process_traces/2026-08-26-t26-s3/ (delta/report.md finding D1).",
       "stop_card": null
     },
     "PHASE-SHARE-ESTIMAND-01": {
