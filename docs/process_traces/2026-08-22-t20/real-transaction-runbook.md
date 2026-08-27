@@ -69,7 +69,7 @@ the same family.
   the one step that needs the measurement environment and the one step whose
   wall clock is measured in minutes rather than seconds.
 - **The readiness freeze ("freeze-0004").**
-  `scripts/generate_arm_readiness.py freeze --pack-root … --predecessor-pack-root …`
+  `scripts/generate_arm_readiness.py freeze --pack-root … --measurement-checkout … --predecessor-pack-root …`
   writes `arm_readiness.freeze.receipts/freeze-0004.json`, the receipt that says
   this pack's plan and evidence are sealed. `0004` is the ordinal: `_v3` carried
   `freeze-0003`. The receipt path is **create-only** — the code will not
@@ -77,7 +77,7 @@ the same family.
   records the receipt's digest, so a receipt that was written cannot be quietly
   replaced by a better one later.
 
-**Evidence stamping.** `scripts/author_arm_readiness_evidence.py --pack-root <pack>`
+**Evidence stamping.** `scripts/author_arm_readiness_evidence.py --pack-root <pack> --measurement-checkout <checkout>`
 writes eleven *generic receipts* per pack — one per readiness question the
 registry declares applicable (`ACCEPTANCE_OWNER`, `DOCTRINE_PIN`,
 `ESTIMATOR_IDENTITY`, `MINT_TRUST`, `MULTICELL_MINT`, `PACK_AUTHENTICATION`,
@@ -470,6 +470,33 @@ notification cadence; see §7 NR-9.)
 | A3 | §1.3 manifest generation | Unchanged in mechanism; the output lives in transaction custody rather than an estate `$INPUT`. |
 | A4 | §1.3 registry-v1 sweep | Unchanged. |
 | A5 | §2.1 / §2.2 tool materialisation | Unchanged. |
+| A6 | **NEW** — measurement-checkout declaration | Confirm the literal that Phases C6 and C8 will pass to `--measurement-checkout`. See the box below. |
+
+**A6 — the measurement-checkout declaration, confirmed once at the desk.**
+Two commands in Phase C now take a flag that did not exist during the
+rehearsal: `--measurement-checkout`. It names, as an absolute path, the working
+copy that this mint is authorised to take its pack bytes from. The tool never
+works this value out for itself — it is a statement the operator makes, and the
+mint fails closed if it is absent. That is the point: on 2026-08-18 a freeze
+wave was minted from a scratch worktree
+(`/private/tmp/.../wtTXN/...`) instead of the designated checkout, stayed valid
+against its own recorded path forever, and was caught only because an unrelated
+rehearsal happened to clone the repository. A value the tool derives from where
+it happens to be running would have derived the wrong one.
+
+Before Ed arrives, confirm all three of the following about the literal
+`/Users/edr/JouleWise-measurement-20260813` (ruled in NR-1):
+
+- [ ] It is **absolute** — it begins with `/`. A relative path refuses.
+- [ ] It **exists** on this machine right now. A path that does not resolve
+      refuses rather than passing vacuously.
+- [ ] It resolves to the **same physical directory** as the repository that owns
+      the pack roots. The check compares the resolved repository owning the pack
+      against the resolved declaration, and refuses unless they are the same
+      directory. Symlinks and trailing separators are resolved away first, so
+      `/x/repo` and `/x/repo-2` can never be confused for each other.
+
+A refusal here carries the reason code `readiness_r1_measurement_checkout`.
 
 **Removed as S-0 scaffolding:** the proof estate, the `git clone --no-local`, the
 stdlib-only estate virtual environment, and every
@@ -613,6 +640,13 @@ runbook agree on which step is which.
 Three author commands at the common head, no commit between them, then one
 evidence commit. The census check asserts exactly the eleven kinds per pack.
 
+**Each author command now also passes `--measurement-checkout
+/Users/edr/JouleWise-measurement-20260813`** (the literal confirmed at A6).
+This CLI does not mint anything itself, but it *prints the freeze command
+for the operator to run next*, and that command must carry the declaration
+or it dies at argument parsing before reaching a pack. Passing the flag here
+is what makes the emitted C8 command runnable.
+
 **This is the boot-binding boundary.** From here on, a reboot voids all 33
 receipts and the only cure is a full re-author.
 
@@ -642,28 +676,54 @@ made in transaction custody, and is deleted afterwards. It is the one clone that
 survives the removal of S-0 scaffolding, because its purpose is not rehearsal —
 it is a screen that protects a create-only slot.
 
+**The declaration for this step is the clone's own path — RULED, and not an
+exception to A6.** The `--measurement-checkout` value binds *the checkout
+performing the freeze*, and for the sacrificial screen the performing checkout
+is the clone. Passing the real measurement checkout here would refuse
+`readiness_r1_measurement_checkout`, because the clone is a different
+directory — and that refusal would destroy the screen's whole purpose, which
+is to obtain a clean PASS from the same code the real mint will run. So this
+one step declares the throwaway's absolute path, and C8 declares
+`/Users/edr/JouleWise-measurement-20260813`. The rule is the same in both
+places; only the checkout performing the freeze differs.
+
 ### C8 — Primary freeze ×3 (SCRIPTED + **ED PROMPTS 4–6**, runsheet §3.6)
 
 **PROMPT 4** — Ed will be asked to approve, verbatim:
 
 ```
-.venv/bin/python3 scripts/generate_arm_readiness.py freeze --pack-root configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4 --predecessor-pack-root configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3
+.venv/bin/python3 scripts/generate_arm_readiness.py freeze --pack-root configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4 --measurement-checkout /Users/edr/JouleWise-measurement-20260813 --predecessor-pack-root configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3
 ```
 
 Same invocation discipline as C3: working directory already at the
-measurement checkout, bare relative form, `python3` spelling.
+measurement checkout, bare relative form, `python3` spelling. The
+`--measurement-checkout` value is the one exception to the bare relative form:
+it is written out in full, because it is a declaration about *which* checkout,
+and a relative path refuses. It is the literal confirmed at A6.
 
 **PROMPT 5** — the same, ALPHA: `…_floor_qwen25_1p5b_v4` against
-`…_floor_qwen25_1p5b_v3`.
+`…_floor_qwen25_1p5b_v3`, with the same `--measurement-checkout` literal:
+
+```
+.venv/bin/python3 scripts/generate_arm_readiness.py freeze --pack-root configs/campaigns/d117_floor_qwen25_1p5b_v4 --measurement-checkout /Users/edr/JouleWise-measurement-20260813 --predecessor-pack-root configs/campaigns/d117_floor_qwen25_1p5b_v3
+```
 
 **PROMPT 6** — the same, BETA: `…_floor_qwen25_7b_v4` against
-`…_floor_qwen25_7b_v3`.
+`…_floor_qwen25_7b_v3`, with the same `--measurement-checkout` literal:
+
+```
+.venv/bin/python3 scripts/generate_arm_readiness.py freeze --pack-root configs/campaigns/d117_floor_qwen25_7b_v4 --measurement-checkout /Users/edr/JouleWise-measurement-20260813 --predecessor-pack-root configs/campaigns/d117_floor_qwen25_7b_v3
+```
 
 Per pack, assert `status: PASS`, `mutated: true`, empty `reason_codes`, and a
 `receipt_path` ending `freeze-0004.json`. Then one freeze commit for all three.
 
-**A REFUSE here cannot be retried.** The receipt is plan-pinned; the slot is
-spent. See §5.
+**A REFUSE here cannot be retried — with one narrow exception.** The receipt is
+plan-pinned; the slot is spent. See §5. The exception is the
+measurement-checkout declaration itself: an absent, relative, non-existent, or
+wrong-directory declaration refuses *before any receipt byte is written*, so it
+spends no slot and the operator may correct the command and re-run it. Every
+other refusal at C8 is terminal for the attempt.
 
 ### C9 — Authenticate the executing custody tools (SCRIPTED, runsheet §3.6.1)
 
@@ -1467,6 +1527,17 @@ which, in the real lane, is `git reset --hard <evidence commit>` in the
 measurement checkout while nothing has been pushed. C7's sacrificial screen
 exists precisely to make this outcome nearly impossible; if it happens anyway,
 the screen itself is suspect and the failure is a mechanism failure.
+
+**The one refusal at C8 that spends nothing: the measurement-checkout
+declaration.** "Spending the slot" means the code wrote
+`freeze-0004.json` and the plan tree recorded its digest, after which no second
+attempt can occupy that filename. The declaration check is evaluated *before*
+any receipt byte is written — it refuses an absent, relative, non-existent, or
+wrong-directory `--measurement-checkout` with the reason code
+`readiness_r1_measurement_checkout`, and no file is created. So this refusal is
+recoverable at the bench: correct the command and re-run it. Distinguish it by
+that reason code alone; do not generalise it. Every other refusal at C8 still
+spends the slot, and the blanket rule above governs them all.
 
 **Mechanism failures** — a path outside the 112 crossing the gate; an unexpected
 evidence output accepted; the successor subtracted without the authenticated
