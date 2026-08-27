@@ -4,7 +4,7 @@ Updated 2026-08-27. Nothing here blocks agent work; each blocks a specific
 gate named beside it.
 
 ## Transaction gates (from the T25 checkpoint, unchanged)
-1. Venv relock at `-20260813` (runbook §1.1; ~10 min).
+1. ~~Venv relock~~ DONE 2026-08-27 by the magistrate under custody: empty-diff gate 37/37 (custody: `venv-relock/`; one recorded deviation — three unrequired lock packages installed at their pinned versions).
 2. Permission hygiene per `w6-prompt-inventory.md` NEEDS-ED — **remote-doable
    via SSH; the agent is hard-blocked from this file.** Edit
    `/Users/edr/code/JouleWise/.claude/settings.local.json` (untracked):
