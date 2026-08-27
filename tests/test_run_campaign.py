@@ -936,6 +936,17 @@ def write_config(config_dir: Path, filename: str, run_id: str, repetitions: int 
     return path
 
 
+def write_finalized_v3_collection_marker(pack_root: Path) -> Path:
+    """Install the finalized marker that keeps production fixtures in-lane."""
+
+    path = pack_root / "analysis_manifest_v3.json"
+    path.write_text(
+        json.dumps({"schema_version": "joulewise.analysis_manifest.v3"}) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def write_suite_config(
     config_dir: Path,
     filename: str,
@@ -1513,6 +1524,42 @@ def write_prior_campaign_provenance(
     )
 
 
+def write_invoked_campaign_ownership_without_cooldown(
+    runs_dir: Path,
+    manifest: dict,
+) -> None:
+    """Own pre-existing bundles without supplying cooldown evidence."""
+
+    manifest_dir = runs_dir / "campaign_manifests"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    run_ids = [entry["run_id"] for entry in manifest["entries"]]
+    (manifest_dir / "ownership-without-cooldown.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "session_id": "ownership-without-cooldown",
+                "created_at": "2026-07-10T00:00:00Z",
+                "config_dir": "fixture",
+                "analysis_manifest_id": manifest["manifest_id"],
+                "first_physical_run_id": run_ids[0],
+                "members": [
+                    {
+                        "config": entry["config"],
+                        "run_id": entry["run_id"],
+                        "bundle_ids": [entry["run_id"]],
+                        "execution": "invoked",
+                        "preceding_campaign_cooldown": None,
+                    }
+                    for entry in manifest["entries"]
+                ],
+                "cooldown_gates": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def write_malformed_first_exemption_provenance(
     runs_dir: Path,
     manifest: dict,
@@ -1812,10 +1859,12 @@ class RunCampaignTests(unittest.TestCase):
     def test_rejected_environment_preflight_appends_terminal_verdict(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            config_dir = root / "configs"
+            pack_root = root / "pack"
+            config_dir = pack_root / "configs"
             runs_dir = root / "runs"
-            config_dir.mkdir()
+            config_dir.mkdir(parents=True)
             write_config(config_dir, "one.json", "one")
+            write_finalized_v3_collection_marker(pack_root)
             args = run_campaign_module.parse_args(
                 [
                     str(config_dir),
@@ -1857,10 +1906,12 @@ class RunCampaignTests(unittest.TestCase):
     def test_malformed_environment_override_appends_terminal_verdict(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            config_dir = root / "configs"
+            pack_root = root / "pack"
+            config_dir = pack_root / "configs"
             runs_dir = root / "runs"
-            config_dir.mkdir()
+            config_dir.mkdir(parents=True)
             write_config(config_dir, "one.json", "one")
+            write_finalized_v3_collection_marker(pack_root)
             override = root / "override.json"
             override.write_text("{not-json\n", encoding="utf-8")
             args = run_campaign_module.parse_args(
@@ -3212,7 +3263,10 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_strict_analysis_campaign(config_dir, runs_dir)
+            manifest = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_invoked_campaign_ownership_without_cooldown(
+                runs_dir, manifest
+            )
 
             result = run_campaign(config_dir, runs_dir)
 

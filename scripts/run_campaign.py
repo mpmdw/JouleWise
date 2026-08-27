@@ -36,7 +36,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
@@ -63,8 +63,10 @@ from joulewise.bundle_read import (  # noqa: E402
 )
 from joulewise.analysis_manifest import validate_analysis_manifest  # noqa: E402
 from joulewise.analysis_manifest_v3 import (  # noqa: E402
-    MANIFEST_ID_RE as PROSPECTIVE_MANIFEST_ID_RE,
     PROSPECTIVE_SCHEMA_VERSION,
+    SCHEMA_VERSION as FINALIZED_V3_SCHEMA_VERSION,
+    calculate_manifest_id as calculate_prospective_manifest_id,
+    validate_prospective_analysis_manifest_v3,
 )
 from joulewise.analysis_engine.registry import (  # noqa: E402
     ATTEMPT_LEDGER_SCHEMA_VERSION,
@@ -541,13 +543,46 @@ class ProspectiveManifestIdentity:
     manifest_id: str
     file_sha256: str
 
+    def to_log(self) -> dict[str, Any]:
+        return {
+            "manifest_id": self.manifest_id,
+            "file_sha256": self.file_sha256,
+            "validation": "valid",
+        }
+
 
 class ProspectiveManifestResolutionError(ValueError):
     """A v3 pack marker exists, but its stage identity cannot be authenticated."""
 
-    def __init__(self, reason_code: str, detail: str, *, path: Path) -> None:
-        super().__init__(f"{reason_code}: {detail}")
+    def __init__(
+        self,
+        reason_code: str,
+        detail: str,
+        *,
+        path: Path,
+        refusals: Sequence[tuple[str, str]] | None = None,
+    ) -> None:
+        normalized = tuple(refusals or ((reason_code, detail),))
+        super().__init__(
+            "; ".join(f"{code}: {message}" for code, message in normalized)
+        )
         self.reason_code = reason_code
+        self.detail = detail
+        self.path = path
+        self.refusals = normalized
+
+    @property
+    def reason_codes(self) -> tuple[str, ...]:
+        return tuple(reason_code for reason_code, _detail in self.refusals)
+
+
+class CampaignAnalysisIdentityError(ValueError):
+    """Existing log or bundle provenance conflicts with this collection."""
+
+    reason_code = "analysis_manifest_collection_identity_mismatch"
+
+    def __init__(self, detail: str, *, path: Path) -> None:
+        super().__init__(f"{self.reason_code}: {detail}")
         self.detail = detail
         self.path = path
 
@@ -1277,37 +1312,22 @@ def _prospective_manifest_resolution_error(
     return ProspectiveManifestResolutionError(reason_code, detail, path=path)
 
 
-def _safe_pack_relative_path(
-    pack_root: Path,
-    value: object,
-    *,
-    manifest_path: Path,
-) -> Path:
-    if not isinstance(value, str) or not value:
-        raise _prospective_manifest_resolution_error(
-            manifest_path,
-            "analysis_prospective_unsafe_path",
-            "plan.path is absent or is not a non-empty POSIX path",
-        )
-    posix_path = PurePosixPath(value)
-    if posix_path.is_absolute() or not posix_path.parts or ".." in posix_path.parts:
-        raise _prospective_manifest_resolution_error(
-            manifest_path,
-            "analysis_prospective_unsafe_path",
-            f"plan.path is not safely relative to the pack root: {value!r}",
-        )
-    path = pack_root.joinpath(*posix_path.parts)
-    try:
-        resolved_root = pack_root.resolve()
-        resolved_path = path.resolve()
-        resolved_path.relative_to(resolved_root)
-    except (OSError, RuntimeError, ValueError) as exc:
-        raise _prospective_manifest_resolution_error(
-            manifest_path,
-            "analysis_prospective_unsafe_path",
-            f"plan.path escapes or cannot be resolved beneath the pack root: {value!r}",
-        ) from exc
-    return path
+def _reachable_analysis_manifest_v3(
+    config_dir: Path,
+) -> tuple[Path, Path | None]:
+    """Resolve a stage physically, then find its nearest real pack marker.
+
+    The walk is bounded by the filesystem root rather than an arbitrary pack
+    depth.  That admits nested stage groupings while ensuring a symlinked stage
+    cannot hide a marker located beside its physical ancestors.
+    """
+
+    resolved_config_dir = Path(config_dir).resolve()
+    for ancestor in (resolved_config_dir, *resolved_config_dir.parents):
+        candidate = ancestor / PROSPECTIVE_ANALYSIS_MANIFEST_V3_NAME
+        if candidate.is_file():
+            return resolved_config_dir, candidate.resolve()
+    return resolved_config_dir, None
 
 
 def resolve_prospective_analysis_manifest_v3(
@@ -1320,18 +1340,17 @@ def resolve_prospective_analysis_manifest_v3(
     a registered D-078 refusal instead of guessing a pack or stage identity.
     """
 
-    config_dir = Path(config_dir)
-    pack_root = config_dir.parent
-    candidate = pack_root / PROSPECTIVE_ANALYSIS_MANIFEST_V3_NAME
-    if not candidate.is_file():
+    resolved_config_dir, candidate = _reachable_analysis_manifest_v3(config_dir)
+    if candidate is None:
         return None
+    pack_root = candidate.parent
     try:
         manifest_bytes = candidate.read_bytes()
         parsed = json.loads(manifest_bytes)
     except OSError as exc:
         raise _prospective_manifest_resolution_error(
             candidate,
-            "analysis_prospective_schema_invalid",
+            "analysis_prospective_source_hash_mismatch",
             f"prospective manifest cannot be read: {exc}",
         ) from exc
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -1347,112 +1366,65 @@ def resolve_prospective_analysis_manifest_v3(
             "prospective manifest top level is not an object",
         )
     manifest = parsed
-    if manifest.get("schema_version") != PROSPECTIVE_SCHEMA_VERSION:
+    schema_version = manifest.get("schema_version")
+    if schema_version == FINALIZED_V3_SCHEMA_VERSION:
+        # The committed splitwise_decode_v1 artifact predates the prospective
+        # lifecycle.  It remains a finalized analysis sidecar, not a collection
+        # marker, so collection preserves its historical null provenance.
+        return None
+    if schema_version != PROSPECTIVE_SCHEMA_VERSION:
         raise _prospective_manifest_resolution_error(
             candidate,
             "analysis_prospective_schema_invalid",
             "prospective manifest schema_version does not identify v3 prospective",
         )
 
-    stages = manifest.get("stage_manifests")
-    if not isinstance(stages, list):
-        raise _prospective_manifest_resolution_error(
-            candidate,
-            "analysis_prospective_schema_invalid",
-            "stage_manifests is not an array",
+    plan_tree_path = (pack_root / "plan_tree.json").resolve()
+    refusals = validate_prospective_analysis_manifest_v3(
+        manifest,
+        manifest_dir=pack_root,
+        plan_tree_path=plan_tree_path,
+    )
+    if refusals:
+        first = refusals[0]
+        raise ProspectiveManifestResolutionError(
+            first.reason_code,
+            first.detail,
+            path=candidate,
+            refusals=tuple(
+                (refusal.reason_code, refusal.detail) for refusal in refusals
+            ),
         )
 
-    def matches_stage(entry: object) -> bool:
-        if not isinstance(entry, dict):
-            return False
-        manifest_path = entry.get("manifest_path")
-        if not isinstance(manifest_path, str):
-            return False
-        posix_path = PurePosixPath(manifest_path)
-        return bool(
-            entry.get("subcampaign_id") == config_dir.name
-            and posix_path.parent == PurePosixPath(config_dir.name)
-            and posix_path.name == ORDER_MANIFEST_NAME
-        )
-
-    matches = [entry for entry in stages if matches_stage(entry)]
+    relative_stage = resolved_config_dir.relative_to(pack_root)
+    expected_manifest_path = (
+        relative_stage / ORDER_MANIFEST_NAME
+    ).as_posix()
+    stages = manifest["stage_manifests"]
+    matches = [
+        entry
+        for entry in stages
+        if isinstance(entry, dict)
+        and entry.get("manifest_path") == expected_manifest_path
+    ]
     if len(matches) != 1:
         qualifier = "ambiguous" if len(matches) > 1 else "unmatched"
         raise _prospective_manifest_resolution_error(
             candidate,
-            "analysis_prospective_member_cover_mismatch",
-            f"stage binding for {config_dir.name!r} is {qualifier}: {len(matches)} matches",
-        )
-    stage = matches[0]
-
-    order_path = config_dir / ORDER_MANIFEST_NAME
-    try:
-        order_bytes = order_path.read_bytes()
-    except OSError as exc:
-        raise _prospective_manifest_resolution_error(
-            candidate,
             "analysis_prospective_source_hash_mismatch",
-            f"stage order manifest cannot be read: {order_path}: {exc}",
-        ) from exc
-    order_sha256 = _sha256_bytes(order_bytes)
-    if order_sha256 != stage.get("manifest_sha256"):
-        raise _prospective_manifest_resolution_error(
-            candidate,
-            "analysis_prospective_source_hash_mismatch",
-            f"stage order manifest sha256 does not match for {config_dir.name!r}",
-        )
-    try:
-        order_manifest = json.loads(order_bytes)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        order_manifest = None
-    if (
-        isinstance(order_manifest, dict)
-        and "manifest_id" in order_manifest
-        and order_manifest.get("manifest_id") != stage.get("manifest_id")
-    ):
-        raise _prospective_manifest_resolution_error(
-            candidate,
-            "analysis_prospective_source_hash_mismatch",
-            f"stage order manifest_id does not match for {config_dir.name!r}",
-        )
-
-    plan = manifest.get("plan")
-    if not isinstance(plan, dict):
-        raise _prospective_manifest_resolution_error(
-            candidate,
-            "analysis_prospective_schema_invalid",
-            "plan binding is not an object",
-        )
-    plan_path = _safe_pack_relative_path(
-        pack_root,
-        plan.get("path"),
-        manifest_path=candidate,
-    )
-    try:
-        plan_bytes = plan_path.read_bytes()
-    except OSError as exc:
-        raise _prospective_manifest_resolution_error(
-            candidate,
-            "analysis_prospective_plan_tree_mismatch",
-            f"bound plan cannot be read: {plan_path}: {exc}",
-        ) from exc
-    if _sha256_bytes(plan_bytes) != plan.get("sha256"):
-        raise _prospective_manifest_resolution_error(
-            candidate,
-            "analysis_prospective_plan_tree_mismatch",
-            f"bound plan sha256 does not match: {plan_path}",
+            "stage source binding for "
+            f"{expected_manifest_path!r} is {qualifier}: {len(matches)} matches",
         )
 
     manifest_id = manifest.get("manifest_id")
-    if (
-        not isinstance(manifest_id, str)
-        or PROSPECTIVE_MANIFEST_ID_RE.fullmatch(manifest_id) is None
-    ):
+    canonical_manifest_id = calculate_prospective_manifest_id(manifest)
+    if manifest_id != canonical_manifest_id:
         raise _prospective_manifest_resolution_error(
             candidate,
             "analysis_prospective_identity_mismatch",
-            "prospective manifest_id is absent or does not match am-<64 lowercase hex>",
+            "prospective manifest_id does not equal the canonical content identity",
         )
+    assert isinstance(manifest_id, str)
     return ProspectiveManifestIdentity(
         path=candidate,
         manifest_id=manifest_id,
@@ -1632,6 +1604,137 @@ def append_log(
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+def _authenticated_collection_catalog(
+    runs_dir: Path,
+    log_path: Path | None = None,
+) -> list[Any] | None:
+    """Single authenticated catalog seam shared by collection preflights."""
+
+    return load_authenticated_campaign_catalog(runs_dir, log_path)
+
+
+def _campaign_log_analysis_identity_problem(
+    log_path: Path,
+    runs_dir: Path,
+    analysis_manifest_id: str | None,
+) -> CampaignAnalysisIdentityError | None:
+    """Validate that an existing log is not bound to another design."""
+
+    if analysis_manifest_id is None:
+        return None
+    rows = load_campaign_log_rows(log_path)
+    if rows is None:
+        return CampaignAnalysisIdentityError(
+            "campaign log or its provenance attestations cannot be authenticated",
+            path=log_path,
+        )
+
+    bound_ids: set[str] = set()
+    referenced_manifest_names: set[str] = set()
+    for row in rows:
+        analysis = row.get("analysis_manifest")
+        if isinstance(analysis, Mapping) and isinstance(
+            analysis.get("manifest_id"), str
+        ):
+            bound_ids.add(analysis["manifest_id"])
+        provenance_path = row.get("campaign_provenance_manifest")
+        if isinstance(provenance_path, str):
+            referenced_manifest_names.add(Path(provenance_path).name)
+        provenance = row.get("campaign_provenance")
+        if isinstance(provenance, Mapping) and isinstance(
+            provenance.get("manifest_path"), str
+        ):
+            referenced_manifest_names.add(Path(provenance["manifest_path"]).name)
+
+    catalog = _authenticated_collection_catalog(runs_dir, log_path)
+    if catalog is None:
+        return CampaignAnalysisIdentityError(
+            "authenticated campaign provenance catalog is unavailable for this log",
+            path=log_path,
+        )
+    for record in catalog:
+        raw = record.value
+        identity = raw.get("analysis_manifest_id")
+        if not isinstance(identity, str):
+            continue
+        if (
+            raw.get("schema_version") == CAMPAIGN_PROVENANCE_SCHEMA_V2
+            or record.path.name in referenced_manifest_names
+        ):
+            bound_ids.add(identity)
+
+    conflicting = sorted(bound_ids - {analysis_manifest_id})
+    if conflicting:
+        return CampaignAnalysisIdentityError(
+            "campaign log is already bound to different analysis identity(s): "
+            + ", ".join(conflicting),
+            path=log_path,
+        )
+    return None
+
+
+def _existing_bundle_analysis_identity_problem(
+    items: Sequence[ConfigInfo],
+    runs_dir: Path,
+    log_path: Path,
+    analysis_manifest_id: str | None,
+) -> CampaignAnalysisIdentityError | None:
+    """Authenticate the originating invoked provenance of existing bundles."""
+
+    if analysis_manifest_id is None:
+        return None
+    existing_bundle_dirs = sorted(
+        {
+            bundle_dir
+            for info in items
+            for bundle_dir in expected_member_dirs(info, runs_dir)
+            if bundle_dir.exists()
+        },
+        key=lambda path: path.name,
+    )
+    if not existing_bundle_dirs:
+        return None
+    catalog = _authenticated_collection_catalog(runs_dir, log_path)
+    if catalog is None:
+        return CampaignAnalysisIdentityError(
+            "authenticated campaign provenance catalog is unavailable for "
+            "pre-existing bundles",
+            path=existing_bundle_dirs[0],
+        )
+
+    invoked_owners: dict[str, list[tuple[Path, object]]] = {}
+    for record in catalog:
+        for member in record.value.get("members", []):
+            if not isinstance(member, Mapping) or member.get("execution") != "invoked":
+                continue
+            bundle_ids = member.get("bundle_ids")
+            if not isinstance(bundle_ids, list):
+                continue
+            for bundle_id in bundle_ids:
+                if isinstance(bundle_id, str):
+                    invoked_owners.setdefault(bundle_id, []).append(
+                        (record.path, record.value.get("analysis_manifest_id"))
+                    )
+
+    for bundle_dir in existing_bundle_dirs:
+        owners = invoked_owners.get(bundle_dir.name, [])
+        if len(owners) != 1:
+            return CampaignAnalysisIdentityError(
+                f"pre-existing bundle {bundle_dir.name!r} has {len(owners)} "
+                "authenticated invoked provenance owners; exactly one is required",
+                path=bundle_dir,
+            )
+        owner_path, owner_identity = owners[0]
+        if owner_identity != analysis_manifest_id:
+            return CampaignAnalysisIdentityError(
+                f"pre-existing bundle {bundle_dir.name!r} is owned by "
+                f"{owner_path.name} with analysis_manifest_id={owner_identity!r}, "
+                f"not {analysis_manifest_id!r}",
+                path=bundle_dir,
+            )
+    return None
 
 
 def log_row(
@@ -3449,7 +3552,7 @@ def prior_campaign_cooldown_evidence(
 ) -> dict[str, dict[str, Any]]:
     """Recover persistent per-member gate evidence from earlier invocations."""
     evidence: dict[str, dict[str, Any]] = {}
-    catalog = load_authenticated_campaign_catalog(runs_dir, log_path)
+    catalog = _authenticated_collection_catalog(runs_dir, log_path)
     if catalog is None:
         return evidence
     for record in catalog:
@@ -6427,6 +6530,7 @@ def append_verdict(
     warning: str | None,
     preflight: dict[str, Any],
     idle_admission_core: dict[str, Any] | None = None,
+    prospective_analysis_manifest: ProspectiveManifestIdentity | None = None,
 ) -> None:
     row: dict[str, Any] = {
         "schema_version": CAMPAIGN_VERDICT_SCHEMA,
@@ -6434,7 +6538,11 @@ def append_verdict(
         "record_type": "campaign_verdict",
         "status": "verdict",
         "analysis_manifest": (
-            analysis_manifest.to_log() if analysis_manifest is not None else None
+            prospective_analysis_manifest.to_log()
+            if prospective_analysis_manifest is not None
+            else analysis_manifest.to_log()
+            if analysis_manifest is not None
+            else None
         ),
         "collection": {
             "verdict": collection_verdict,
@@ -6467,6 +6575,7 @@ def append_environment_preflight_verdict(
     preflight: dict[str, Any],
     environment_guard: dict[str, Any],
     reason: str,
+    prospective_analysis_manifest: ProspectiveManifestIdentity | None = None,
 ) -> None:
     """Always terminate a rejected environment preflight with a v2 verdict."""
 
@@ -6486,6 +6595,7 @@ def append_environment_preflight_verdict(
         campaign_provenance_path=campaign_provenance_path,
         warning=None,
         preflight=recorded_preflight,
+        prospective_analysis_manifest=prospective_analysis_manifest,
     )
 
 
@@ -6501,7 +6611,7 @@ def refuse_unresolvable_prospective_analysis_manifest_v3(
     """Record the standard pre-execution invalid verdict for a v3 stage."""
 
     categories = {"usable": [], "waived": [], "failed": [], "missing": []}
-    collection_reasons = [error.reason_code]
+    collection_reasons = list(error.reason_codes)
     readiness = claim_readiness_for(analysis_manifest, "invalid", [])
     preflight = {
         "schema_version": DOCTOR_SCHEMA_VERSION,
@@ -6514,6 +6624,10 @@ def refuse_unresolvable_prospective_analysis_manifest_v3(
             "resolution": "unresolvable",
             "reason_code": error.reason_code,
             "detail": error.detail,
+            "refusals": [
+                {"reason_code": reason_code, "detail": detail}
+                for reason_code, detail in error.refusals
+            ],
         },
     }
     print(f"error: {error}", file=sys.stderr)
@@ -6542,6 +6656,21 @@ def refuse_unresolvable_prospective_analysis_manifest_v3(
         raise
     finally:
         release_campaign_lock(verdict_lock, in_flight=in_flight)
+    return 1
+
+
+def refuse_campaign_analysis_identity_mismatch(
+    error: CampaignAnalysisIdentityError,
+    *,
+    analysis_manifest: AnalysisManifestState | None,
+) -> int:
+    """Refuse without mutating the incompatible log or provenance catalog."""
+
+    categories = {"usable": [], "waived": [], "failed": [], "missing": []}
+    collection_reasons = [error.reason_code]
+    readiness = claim_readiness_for(analysis_manifest, "invalid", [])
+    print(f"error: {error}", file=sys.stderr)
+    print_verdict("invalid", collection_reasons, categories, readiness)
     return 1
 
 
@@ -7568,6 +7697,28 @@ def run_campaign(args: argparse.Namespace) -> int:
             analysis_manifest=analysis_manifest,
             dry_run=args.dry_run,
         )
+    if (
+        policy_binding.policy.profile.value == "production"
+        and analysis_manifest is None
+        and prospective_analysis_manifest is None
+    ):
+        resolved_config_dir, reachable_v3 = _reachable_analysis_manifest_v3(
+            config_dir
+        )
+        if reachable_v3 is None:
+            return refuse_unresolvable_prospective_analysis_manifest_v3(
+                ProspectiveManifestResolutionError(
+                    "analysis_manifest_prospective_not_consumable",
+                    "production collection requires a v1/v2 analysis manifest "
+                    "or a reachable analysis_manifest_v3.json pack marker",
+                    path=resolved_config_dir,
+                ),
+                runs_dir=runs_dir,
+                log_path=log_path,
+                policy_binding=policy_binding,
+                analysis_manifest=analysis_manifest,
+                dry_run=args.dry_run,
+            )
     collection_analysis_manifest_id = (
         prospective_analysis_manifest.manifest_id
         if prospective_analysis_manifest is not None
@@ -7642,6 +7793,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     campaign_provenance_path=None,
                     warning=order_warning,
                     preflight=preflight,
+                    prospective_analysis_manifest=prospective_analysis_manifest,
                 )
             except BaseException as exc:
                 in_flight = exc
@@ -7702,6 +7854,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 campaign_provenance_path=None,
                 warning=order_warning,
                 preflight=preflight,
+                prospective_analysis_manifest=prospective_analysis_manifest,
             )
         except BaseException as exc:
             in_flight = exc
@@ -7753,6 +7906,26 @@ def run_campaign(args: argparse.Namespace) -> int:
 
     try:
         if not args.dry_run:
+            config_infos = [
+                item for item in items if isinstance(item, ConfigInfo)
+            ]
+            identity_error = _campaign_log_analysis_identity_problem(
+                log_path,
+                runs_dir,
+                collection_analysis_manifest_id,
+            )
+            if identity_error is None:
+                identity_error = _existing_bundle_analysis_identity_problem(
+                    config_infos,
+                    runs_dir,
+                    log_path,
+                    collection_analysis_manifest_id,
+                )
+            if identity_error is not None:
+                return refuse_campaign_analysis_identity_mismatch(
+                    identity_error,
+                    analysis_manifest=analysis_manifest,
+                )
             campaign_provenance_path, campaign_provenance = new_campaign_provenance(
                 config_dir,
                 runs_dir,
@@ -7794,6 +7967,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     preflight=preflight,
                     environment_guard=environment_error,
                     reason="environment preflight failed before member 1",
+                    prospective_analysis_manifest=prospective_analysis_manifest,
                 )
                 print(
                     f"error: environment preflight failed: {exc}",
@@ -7834,6 +8008,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     preflight=preflight,
                     environment_guard=environment_preflight,
                     reason="environment preflight rejected before member 1",
+                    prospective_analysis_manifest=prospective_analysis_manifest,
                 )
                 return 1
 
@@ -8396,6 +8571,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             warning=order_warning,
             preflight=preflight,
             idle_admission_core=idle_admission_core,
+            prospective_analysis_manifest=prospective_analysis_manifest,
         )
         core_blocks_claim = bool(
             claim_bearing
