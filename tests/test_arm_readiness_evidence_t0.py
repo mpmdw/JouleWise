@@ -308,6 +308,14 @@ def _patched_sys_module(name: str, module: object):
             sys.modules[name] = previous
 
 
+def _representable_t0_fixture_now(now_monotonic_ns: int) -> int:
+    # A boot younger than the mandatory idle interval cannot literally contain
+    # a positive ten-minute capture.  Keep the fixture's authoring timeline at
+    # the caller's origin once it is representable; synthetic_clock=False still
+    # leaves copied production code on the live process clock.
+    return max(now_monotonic_ns, t0._MIN_IDLE_NS + 1_000)
+
+
 def make_t0_fixture(
     *,
     boot_session_id: str = TEST_BOOT_SESSION_ID,
@@ -317,6 +325,7 @@ def make_t0_fixture(
     synthetic_clock: bool = True,
     portable_launch_program: bool = False,
 ):
+    fixture_now_monotonic_ns = _representable_t0_fixture_now(now_monotonic_ns)
     temporary, repository, pack, custody, _arm_path = make_go_fixture()
     repository = repository.resolve()
     pack = pack.resolve()
@@ -371,7 +380,7 @@ def make_t0_fixture(
                 boot_session_id if synthetic_boot_session else None
             ),
             clock_override=(
-                (now_monotonic_ns, SYNTHETIC_UTC_NOW)
+                (fixture_now_monotonic_ns, SYNTHETIC_UTC_NOW)
                 if synthetic_clock
                 else None
             ),
@@ -535,7 +544,7 @@ def make_t0_fixture(
             "launch_command": launch_argv,
         },
     )
-    time_origin = now_monotonic_ns - t0._MIN_IDLE_NS - 1_000
+    time_origin = fixture_now_monotonic_ns - t0._MIN_IDLE_NS - 1_000
     reservation_argv = [
         str(repository / ".venv/bin/python"),
         str(repository / "scripts/reserve_calibration_window_bracket.py"),
@@ -764,8 +773,11 @@ def author_environment(
             mock.patch.object(t0._shutil, "disk_usage", return_value=mock.Mock(free=free))
         )
         if synthetic_clock:
+            fixture_now_monotonic_ns = _representable_t0_fixture_now(
+                now_monotonic_ns
+            )
             clock = t0._DerivationClock(
-                monotonic_ns=lambda: now_monotonic_ns,
+                monotonic_ns=lambda: fixture_now_monotonic_ns,
                 utc_now=lambda: SYNTHETIC_UTC_NOW,
                 sample_anchor=(
                     sample_anchor
@@ -1739,6 +1751,30 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
             mutate=mutate,
             detail="R0 clock reference numeric endpoint is not an integer",
         )
+
+    def test_real_clock_fixture_is_representable_before_idle_window(self) -> None:
+        live_now = 30 * 1_000_000_000
+        fixture_now = _representable_t0_fixture_now(live_now)
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture(
+            now_monotonic_ns=live_now,
+            synthetic_clock=False,
+        )
+        self.addCleanup(temporary.cleanup)
+
+        # A boot younger than the mandatory idle interval cannot literally
+        # contain a positive ten-minute capture, so the fixture's authoring
+        # origin is floored; every timestamp it derives stays positive and
+        # keeps its offsets.  The attestation itself is no longer a fixture
+        # file -- it is derived from the clock-reference capture -- so the
+        # property is asserted at the origin and end to end, not by reading
+        # a JSON artifact.
+        self.assertEqual(fixture_now, t0._MIN_IDLE_NS + 1_000)
+        self.assertGreater(fixture_now - t0._MIN_IDLE_NS - 1_000, -1)
+        self.assertFalse((inputs / "clock-attestation.json").exists())
+        with author_environment(repository, now_monotonic_ns=live_now):
+            result = author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(len(result["authored_rows"]), 15)
 
     def test_public_namespace_and_signature_are_closed(self) -> None:
         self.assertEqual(

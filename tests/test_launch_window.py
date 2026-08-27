@@ -431,6 +431,7 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         from tests.test_arm_readiness_evidence_author import make_author_fixture
         from tests.test_arm_readiness_evidence_t0 import (
             _install_synthetic_identity_inputs,
+            _representable_t0_fixture_now,
             _valid_session_receipt,
             author_arm_readiness_evidence_t0,
             author_environment,
@@ -451,10 +452,11 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
             "BETA": "d117_floor_qwen25_7b_v4",
             "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
         }
-        fixture_now = time.monotonic_ns()
+        live_fixture_now = time.monotonic_ns()
+        fixture_now = _representable_t0_fixture_now(live_fixture_now)
         temporary, repository, pack, custody, context, input_root = (
             make_t0_fixture(
-                now_monotonic_ns=fixture_now,
+                now_monotonic_ns=live_fixture_now,
                 synthetic_clock=False,
                 # This test is the only one that reaches the real `os.execve`,
                 # so its frozen argv must name a program that exists on the CI
