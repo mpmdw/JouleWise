@@ -76,7 +76,8 @@ The falsifier in §2 presumes that both floor terms — the point-only repeatabi
 floor and the timing-widened floor — are ISSUED per claim-bearing cell by the frozen
 `_v4` pack's existing outputs. Ruling item 11 orders the paper director to verify that
 and to report NEEDS-RULING if either term is not derivable at the desk. That
-verification is reported separately. **If either term is not issued per cell, this
+verification was carried out and is reported in the round-1 paper-director report that
+accompanies this draft; its verdict is NEEDS-RULING (see below). **If either term is not issued per cell, this
 row's falsifier is not executable as written**, and the row should not be promoted
 until the magistrate rules on the substitute.
 

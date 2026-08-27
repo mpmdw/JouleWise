@@ -61,16 +61,37 @@ first post-campaign diagnostic window.
   ],
   "fallback": null,
   "fences": [
-    "Does not enter the _v4 pack. The pack is frozen; any non-config change is a new family generation.",
-    "Diagnostic and non-claim-bearing. Mints no floor, licenses no claim, and does not re-scope any issued floor.",
-    "Uses the EXISTING pulse estimator unmodified. A new estimator makes this a different measurement."
+    {
+      "authority": {
+        "anchor": "rulings",
+        "label": "T26 paper-goal ruling item 16 (does not enter _v4; the pack is frozen)",
+        "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
+      },
+      "rule": "Must not enter or perturb the _v4 pack. The pack is frozen and any non-config change is a new family generation; this row runs only in a post-campaign diagnostic window."
+    },
+    {
+      "authority": {
+        "anchor": "rulings",
+        "label": "T26 paper-goal ruling item 16 (transfer is left untested by _v4; this arm tests it diagnostically)",
+        "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
+      },
+      "rule": "Diagnostic and non-claim-bearing. Mints no floor, licenses no claim, and does not re-scope any issued floor or any published label."
+    },
+    {
+      "authority": {
+        "anchor": "rulings",
+        "label": "T26 paper-goal ruling item 16 (edges fitted with the existing pulse estimator)",
+        "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
+      },
+      "rule": "Uses the EXISTING pulse estimator unmodified, and the estimator revision in force is recorded with the capture. A changed estimator makes this a different measurement and voids the comparison."
+    }
   ],
   "flags": [],
   "goal": "Close the pulse-to-inference load-regime transfer assumption (paper limitation #1) by fitting a commanded ~500 ms inter-phase gap on ~10 real-workload runs with the existing pulse estimator and comparing the residual with the pulse-derived bound.",
   "id": "TRANSFER-FIDUCIAL-01",
   "lane": "quiet_mac",
   "priority": "p2_next_slice",
-  "rank": null,
+  "rank": 0,
   "status": "queued",
   "status_note": "Ruled Future Work #1 by the T26 paper-goal ruling item 16; queued for the first post-campaign diagnostic window. Ed-hands (hardware window).",
   "stop_card": null
@@ -79,8 +100,10 @@ first post-campaign diagnostic window.
 
 ## Fields the magistrate must set, which the director deliberately did not
 
-- **`rank`** — left `null`. Ranking against the other 99 live rows is a queue-ordering
-  judgment the director does not own.
+- **`rank`** — set to `0` ONLY as a schema-valid placeholder: `docs/process/state_kernel.schema.json`
+  requires `rank` to be an integer, so `null` would not validate. Ranking against the other
+  live rows is a queue-ordering judgment the director does not own — **replace `0` before
+  registering.**
 - **`priority`** — set to `"p2_next_slice"`. The director enumerated the kernel's live
   priority values (`p1_phase_gate`, `p2_next_slice`, `p3_hardening_candidates`,
   `p3_research_expansion`, `p3_tooling`, `p4_polish`) and picked the only one that fits a
@@ -95,7 +118,7 @@ first post-campaign diagnostic window.
 
 ## What the paper says about this row
 
-Per item 16, the paper says plainly that `_v4` leaves transfer untested, and names this
+Per item 16, the paper WILL say plainly that `_v4` leaves transfer untested, and WILL name this
 arm — in concrete form, not as a generic "future calibration work" — as Future Work #1.
 That sentence is a round-2 edit under order (2) of the ruling's director orders, which
 opens §7 with the load-regime transfer limitation.
