@@ -66,47 +66,6 @@
       "status_note": "Sequenced inside the _v4 program: after V4-TRANSACTION-01's evidence/attestation stages define the reviewed head.",
       "stop_card": null
     },
-    "ARM-PACKROOT-COMPARISON-01": {
-      "acceptance": {
-        "evidence": [
-          "Both whole-dict pack comparisons compare field-wise, with pack_root handled under the same successor-scoped repository-relative rule D-154 R-1 installed for freeze replay",
-          "A location-only difference refuses with a detail that names the location difference; a content difference still refuses with the bytes-differ detail",
-          "A dry-run whose only difference from the current pack record is the recorded pack_root is not reported readiness_dry_run_stale, while every other staleness limb still refuses",
-          "The mutant that restores the whole-dict equality at either site goes red"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/ARM-PACKROOT-COMPARISON-01/acceptance",
-          "label": "ARM-PACKROOT-COMPARISON-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The arm-side pack comparisons stop reporting a content difference when only the recorded pack location differs."
-      },
-      "authority": {
-        "label": "PR #192 refuter finding D7 (arm-side pack_root comparison shares the D-154 defect) - review record in the mpmdw/JouleWise PR #192 conversation",
-        "path": "joulewise/arm_readiness.py"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "anchor": "rulings",
-            "label": "D-154 rulings R-1/R-2 (the successor-scoped projection and truthful details this row extends arm-side)",
-            "path": "docs/process_traces/2026-08-25-packroot-consult/03-MAGISTRATE-RULING.md"
-          },
-          "rule": "Registered for post-transaction cure per the PR #192 review record - it must not land inside the _v4 transaction window, and it changes only the two arm-side comparisons, never the freeze-replay cure R-1 already landed"
-        }
-      ],
-      "flags": [],
-      "goal": "Extend the D-154 R-1/R-2 truthfulness cure to the arm side. _pack_record records pack_root as the absolute resolved minting path, and two whole-dict equalities consume it: arm-receipt authentication in the launch-lineage check (joulewise/arm_readiness.py near line 8655, detail 'consumed arm pack record differs from authenticated pack bytes') and the dry-run staleness comparison (near line 7351, refusing readiness_dry_run_stale). A byte-identical pack at a different location therefore refuses with a bytes-differ or stale claim that is not true - the same untruthful-detail defect D-154 R-2 corrected for freeze replay.",
-      "id": "ARM-PACKROOT-COMPARISON-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 100,
-      "status": "queued",
-      "status_note": "Found by the fresh cross-model refuter on PR #192 (finding D7) while verifying the R-1 freeze-replay cure: the refuter looked for the other consumers of the same recorded absolute pack_root and found two. Deliberately NOT folded into PR #192 - that PR's WRITE_SCOPE and the R-5 regression list were both bounded to the freeze-replay branch - so the finding was registered rather than widening an already gauntleted diff.",
-      "stop_card": null
-    },
     "AUD-FOLLOWUPS": {
       "acceptance": {
         "evidence": [
@@ -1793,48 +1752,6 @@
       "rank": 92,
       "status": "queued",
       "status_note": "D-153 work order W5. The limitation is already REGISTERED by the ruling; this row tracks its carriage into the transaction record and the paper. Documentation only, no code change.",
-      "stop_card": null
-    },
-    "MINT-CHECKOUT-DECLARATION-01": {
-      "acceptance": {
-        "evidence": [
-          "generate_freeze_receipt refuses a mint whose pack root lies outside the operator-declared measurement checkout and proceeds when it lies inside",
-          "The refusal carries a new readiness reason code registered in READINESS_REASON_CODES with its matching ruled-registry refusal_vocabulary entry, so the registry load-closure check refuses if either side is missing",
-          "A regression reproduces the T10 wtTXN event class - a mint taken from a checkout that is not the declared measurement checkout - and shows it refusing AT MINT rather than at a later replay",
-          "The declaration is supplied, never inferred: with no declaration present the mint fails closed rather than defaulting to the current working tree"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/MINT-CHECKOUT-DECLARATION-01/acceptance",
-          "label": "MINT-CHECKOUT-DECLARATION-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The one real event the absolute pack_root comparison ever caught is caught once, at mint, against a declared measurement checkout."
-      },
-      "authority": {
-        "anchor": "rulings",
-        "label": "D-154 ruling R-3 (the locality lens is re-sited, not retired)",
-        "path": "docs/process_traces/2026-08-25-packroot-consult/03-MAGISTRATE-RULING.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "anchor": "rulings",
-            "label": "D-154 R-3 fencing clause (register now, land outside the S-0 window)",
-            "path": "docs/process_traces/2026-08-25-packroot-consult/03-MAGISTRATE-RULING.md"
-          },
-          "rule": "Fenced outside the S-0 and _v4 transaction window - this row must not land while the transaction is open; until it lands the recorded absolute pack_root stays in every receipt as provenance and the T10 class stays detectable by inspection of that value"
-        }
-      ],
-      "flags": [],
-      "goal": "Build the mint-time measurement-checkout declaration check that D-154 R-3 re-sites the locality lens onto. R-1 made freeze replay compare pack_root as a repository-relative projection, which is right for replay but drops the absolute comparison's one real catch (the T10 wtTXN mint taken from the wrong checkout). Re-site that catch at the mint: generate_freeze_receipt refuses when the minting pack root is outside an operator-declared measurement checkout, under a new reason code plus its registry entry so the load-closure check keeps the vocabulary closed.",
-      "id": "MINT-CHECKOUT-DECLARATION-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 99,
-      "status": "queued",
-      "status_note": "Registered by D-154 ruling R-3 on the two-seat pack_root consult (the Opus seat proposed the mint-time re-siting; the magistrate adopted it as the condition on retiring the absolute replay comparison). Not a defect in the merged R-1 cure and not S-0-blocking: R-3 states plainly that until this lands, the recorded absolute path remains the provenance by which the T10 class is detectable.",
       "stop_card": null
     },
     "MINT-GENERALIZE-01": {

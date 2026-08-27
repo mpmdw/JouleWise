@@ -140,8 +140,6 @@ EXPECTED_IDS = {
     # completed table.)
     "T3-PROV-SCHEMA-01",
     "COLDGATE-HANDOFF-01", "CGV-HARDEN-01",
-    # 2026-08-25 T24 closure wave: the two rows the S-0 close-out reserved.
-    "MINT-CHECKOUT-DECLARATION-01", "ARM-PACKROOT-COMPARISON-01",
     # [QUIET-MAC]
     "D117-W-ALPHA", "D117-W-BETA", "D117-W-GAMMA",
     "MET-WINDOW-C-01",
@@ -458,9 +456,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # admitted only by exact SHA-256 membership in a closed allowlist of
         # reviewed historical generators, and the second fresh delta re-audit
         # returned no blocker findings with A94 MET:
-        # 94 - 2 = 92 exact live records.
+        # 94 - 2 = 92;
+        # 92 - 2 = 90; the 2026-08-27 T26 s4-d154-followons wave closes
+        # MINT-CHECKOUT-DECLARATION-01 and ARM-PACKROOT-COMPARISON-01
+        # (PR #208: the mint-time measurement-checkout declaration gate
+        # with its ninth ruled registry vocabulary entry, and the
+        # successor-scoped field-wise arm pack comparisons with truthful
+        # per-branch details):
+        # 92 - 2 = 90 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 92)
+        self.assertEqual(len(self.tasks), 90)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

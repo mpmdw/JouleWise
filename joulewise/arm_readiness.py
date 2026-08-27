@@ -204,7 +204,12 @@ R1_LIFECYCLE_REASON_CODES = frozenset(
         "readiness_r1_v1_grandfathering",
     }
 )
-R1_CUSTODY_REASON_CODES = frozenset({"readiness_r1_family_publication"})
+R1_CUSTODY_REASON_CODES = frozenset(
+    {
+        "readiness_r1_family_publication",
+        "readiness_r1_measurement_checkout",
+    }
+)
 R1_GIT_REASON_CODES = frozenset({"readiness_r1_successor_chain"})
 LAUNCH_LINEAGE_REASON_CODES = frozenset(
     {
@@ -527,6 +532,7 @@ R1_REFUSAL_ROLES = frozenset(
         "DEPENDENCY_CHANGED_SET",
         "DEPENDENCY_MANIFEST",
         "FAMILY_PUBLICATION",
+        "MEASUREMENT_CHECKOUT",
         "SUCCESSOR_CHAIN",
         "TEMPORAL_BUDGET",
         "UNKNOWN_POLICY",
@@ -4151,6 +4157,38 @@ def _registry_reference(pack_root: Path) -> tuple[Mapping[str, Any], bytes, dict
     return registry, raw, reference
 
 
+def _gate_measurement_checkout(
+    pack_root: Path,
+    registry: Mapping[str, Any],
+    measurement_checkout: Path | str,
+) -> None:
+    """Require this mint's repository to equal the declared checkout."""
+
+    refusal = _r1_refusal_entry(
+        registry["freeze_evidence_lifecycle"], "MEASUREMENT_CHECKOUT"
+    )
+    declared_path = Path(measurement_checkout)
+    if not declared_path.is_absolute():
+        raise ArmReadinessError(
+            refusal["code"],
+            "measurement checkout declaration must be an absolute path",
+        )
+    try:
+        declared = declared_path.resolve(strict=True)
+    except OSError as exc:
+        raise ArmReadinessError(
+            refusal["code"],
+            f"declared measurement checkout is unreadable: {exc}",
+        ) from exc
+    minting_repository = _repo_for_pack(pack_root).resolve(strict=True)
+    if minting_repository != declared:
+        raise ArmReadinessError(
+            refusal["code"],
+            "minting repository differs from the declared measurement checkout: "
+            f"{minting_repository} != {declared}",
+        )
+
+
 def _valid_plan_attachment(value: object, expected: Mapping[str, Any]) -> None:
     keys = {
         "contract_id",
@@ -6811,13 +6849,13 @@ def _derive_freeze_predecessor(
     }
 
 
-def _freeze_pack_identity_mismatch_detail(
+def _pack_mapping_mismatch_kind(
     recorded: Mapping[str, Any],
     current: Mapping[str, Any],
     pack_root: Path,
-    registry: Mapping[str, Any],
+    registry: Mapping[str, Any] | None = None,
 ) -> str | None:
-    """Return the truthful freeze-identity refusal detail, if any."""
+    """Compare pack terms under D-154's successor-scoped location rule."""
 
     recorded_keys = set(recorded)
     current_keys = set(current)
@@ -6826,7 +6864,16 @@ def _freeze_pack_identity_mismatch_detail(
         for key in recorded_keys
         if key != "pack_root"
     ):
-        return "freeze receipt pack identity differs from committed pack bytes"
+        return "content"
+
+    locations_equal = recorded["pack_root"] == current["pack_root"]
+    if locations_equal and registry is None:
+        return None
+
+    if registry is None:
+        registry, _registry_raw, _registry_reference_value = _registry_reference(
+            pack_root
+        )
 
     generation = _pack_generation(pack_root.name)
     successor_relative = (
@@ -6834,9 +6881,7 @@ def _freeze_pack_identity_mismatch_detail(
         and generation >= _family_first_generation(registry)
     )
     if not successor_relative:
-        if recorded["pack_root"] != current["pack_root"]:
-            return "freeze receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)"
-        return None
+        return None if locations_equal else "archival_location"
 
     _repository, _pack_prefix, pack_relative = _repository_and_pack_relative(
         pack_root
@@ -6872,6 +6917,26 @@ def _freeze_pack_identity_mismatch_detail(
         or current_projection is None
         or recorded_projection != current_projection
     ):
+        return "repository_relative_location"
+    return None
+
+
+def _freeze_pack_identity_mismatch_detail(
+    recorded: Mapping[str, Any],
+    current: Mapping[str, Any],
+    pack_root: Path,
+    registry: Mapping[str, Any],
+) -> str | None:
+    """Return the truthful freeze-identity refusal detail, if any."""
+
+    mismatch = _pack_mapping_mismatch_kind(
+        recorded, current, pack_root, registry
+    )
+    if mismatch == "content":
+        return "freeze receipt pack identity differs from committed pack bytes"
+    if mismatch == "archival_location":
+        return "freeze receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)"
+    if mismatch == "repository_relative_location":
         return "freeze receipt repository-relative pack location differs"
     return None
 
@@ -7156,12 +7221,20 @@ def _freeze_evidence_for_arm(
 def generate_freeze_receipt(
     pack_root: Path | str,
     *,
+    measurement_checkout: Path | str,
     predecessor_pack_root: Path | str | None = None,
     family_publication_marker: Path | str | None = None,
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Write or idempotently authenticate the pack's non-authorizing receipt.
+
+    ``measurement_checkout`` is the operator's required absolute declaration,
+    not a receipt field.  When a new receipt is minted, the repository that
+    owns ``pack_root`` must resolve exactly to it before any receipt is written.
+    An idempotent replay does not re-apply this mint-only gate.  No environment
+    variable, current-working-directory default, or pack-derived fallback is
+    consulted.
 
     A successor pack (family generation two or later) must present the path of
     its predecessor pack.  Every ID, digest, ordinal, and conclusion in the
@@ -7189,8 +7262,8 @@ def generate_freeze_receipt(
             "detail": str(exc),
             "mutated": False,
         }
-    tree, _tree_raw = _plan_tree(root)
     registry, _registry_raw, registry_reference = _registry_reference(root)
+    tree, _tree_raw = _plan_tree(root)
     attachments = tree.get("arm_attachments")
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
     _valid_plan_attachment(readiness, registry_reference)
@@ -7320,6 +7393,7 @@ def generate_freeze_receipt(
         raise ArmReadinessError(
             "readiness_freeze_receipt_mismatch", "unreferenced freeze receipt exists"
         )
+    _gate_measurement_checkout(root, registry, measurement_checkout)
     # Chain authentication precedes every write and every derived conclusion.
     predecessor: dict[str, Any] | None = None
     number = 1
@@ -7757,8 +7831,11 @@ def _latest_dry_run_binding(
         for check in receipt["checks"]
         if check["check_id"] == "same_head_pack_binding"
     ]
+    pack_mismatch = _pack_mapping_mismatch_kind(
+        receipt["pack"], pack, Path(str(pack["pack_root"]))
+    )
     if (
-        receipt["pack"] != pack
+        pack_mismatch is not None
         or reviewed["head_commit"] == "unavailable"
         or not reviewed["clean"]
         or not reviewed["exact_match"]
@@ -8195,10 +8272,17 @@ def _derive_arm_semantics_for_verification(
     expected_confirmation_digest: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     pack = _pack_record(root)
-    if receipt["pack"] != pack:
+    pack_mismatch = _pack_mapping_mismatch_kind(receipt["pack"], pack, root)
+    if pack_mismatch is not None:
+        if pack_mismatch == "content":
+            detail = "arm receipt pack binding differs from committed pack bytes"
+        elif pack_mismatch == "archival_location":
+            detail = "arm receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)"
+        else:
+            detail = "arm receipt repository-relative pack location differs"
         raise ArmReadinessError(
             "readiness_pack_digest_mismatch",
-            "arm receipt pack binding differs from committed pack bytes",
+            detail,
         )
     reviewed = reviewed_main(root)
     if receipt["reviewed_main"] != reviewed:
@@ -9074,10 +9158,19 @@ def _replay_consumed_arm(
             "launch_binding_mismatch",
             f"consumed arm pack root cannot be authenticated: {exc}",
         ) from exc
-    if dict(authenticated_pack) != dict(arm["pack"]):
+    pack_mismatch = _pack_mapping_mismatch_kind(
+        arm["pack"], authenticated_pack, recorded_pack_root
+    )
+    if pack_mismatch is not None:
+        if pack_mismatch == "content":
+            detail = "consumed arm pack record differs from authenticated pack bytes"
+        elif pack_mismatch == "archival_location":
+            detail = "consumed arm pack archival location differs from the authenticated pack location"
+        else:
+            detail = "consumed arm pack repository-relative location differs from the authenticated pack location"
         raise LaunchLineageError(
             "launch_binding_mismatch",
-            "consumed arm pack record differs from authenticated pack bytes",
+            detail,
         )
     if consumption_path.parent.parent.name != recorded_pack_root.name:
         raise LaunchLineageError(

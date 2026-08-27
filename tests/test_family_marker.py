@@ -550,12 +550,14 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
                 # bootstrap case. Execution stops at the patched _plan_tree.
                 with self.assertRaises(readiness.ArmReadinessError):
                     readiness.generate_freeze_receipt(
-                        root / "d117_floor_qwen25_1p5b_v4"
+                        root / "d117_floor_qwen25_1p5b_v4",
+                        measurement_checkout=ROOT,
                     )
                 self.assertEqual(calls, [])
 
                 refusal = readiness.generate_freeze_receipt(
                     root / "d117_floor_qwen25_1p5b_v5",
+                    measurement_checkout=ROOT,
                     predecessor_pack_root=root / "d117_floor_qwen25_1p5b_v4",
                 )
                 self.assertEqual(

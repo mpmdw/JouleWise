@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -1440,6 +1441,231 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
                 readiness.verify_consumed_launch(self.pack, consumption_path)
         self.assertEqual(
             launch_entry.exception.reason_code, "launch_binding_mismatch"
+        )
+
+
+class ArmPackReplayComparisonTests(unittest.TestCase):
+    def _assert_verify_side_pack_refusal(
+        self,
+        pack: Path,
+        custody_pack_root: Path,
+        receipt: dict,
+        expected_detail: str,
+    ) -> None:
+        with self.assertRaises(readiness.ArmReadinessError) as caught:
+            readiness._derive_arm_semantics_for_verification(
+                pack,
+                custody_pack_root,
+                receipt,
+            )
+        self.assertEqual(
+            caught.exception.reason_code,
+            "readiness_pack_digest_mismatch",
+        )
+        self.assertEqual(str(caught.exception), expected_detail)
+
+    def _consumption_for_arm(self, arm_path: Path) -> tuple[dict, Path]:
+        raw = arm_path.read_bytes()
+        return (
+            {
+                "arm_receipt": {
+                    "receipt_id": arm_path.stem,
+                    "path": f"arm_readiness.receipts/{arm_path.name}",
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                }
+            },
+            arm_path.parent.parent
+            / "arm_readiness.consumptions"
+            / f"{arm_path.stem}.consumed.json",
+        )
+
+    def _relocated_fixture(
+        self, *, different_repository_relative_path: bool
+    ) -> tuple[Path, Path, dict, Path]:
+        from tests.test_arm_readiness_lifecycle import git, make_go_fixture
+
+        temporary, repository, pack, _custody, arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        relocated_repository = Path(temporary.name) / "relocated-repository"
+        git(
+            Path(temporary.name),
+            "clone",
+            "-q",
+            "--no-local",
+            str(repository),
+            str(relocated_repository),
+        )
+        git(relocated_repository, "config", "user.email", "tests@joulewise.invalid")
+        git(relocated_repository, "config", "user.name", "JouleWise tests")
+        git(relocated_repository, "config", "gc.auto", "0")
+        git(relocated_repository, "config", "maintenance.auto", "false")
+        relocated_pack = relocated_repository / pack.relative_to(repository)
+        if different_repository_relative_path:
+            destination = relocated_repository / "relocated" / pack.name
+            destination.parent.mkdir()
+            git(
+                relocated_repository,
+                "mv",
+                relocated_pack.relative_to(relocated_repository).as_posix(),
+                destination.relative_to(relocated_repository).as_posix(),
+            )
+            git(relocated_repository, "commit", "-qm", "relocate pack within repo")
+            relocated_pack = destination
+
+        # The arm carries the original canonical spelling. Replacing that pack
+        # directory with a symlink makes strict=True resolve to the relocated
+        # bytes, which is the one reachable location-only route to the fieldwise
+        # comparison after the caller-expected-root check.
+        shutil.rmtree(pack)
+        pack.symlink_to(relocated_pack, target_is_directory=True)
+        consumption, consumption_path = self._consumption_for_arm(arm_path)
+        return pack, relocated_pack, consumption, consumption_path
+
+    def test_successor_replay_accepts_same_repository_relative_relocation(
+        self,
+    ) -> None:
+        recorded_path, relocated_pack, consumption, consumption_path = (
+            self._relocated_fixture(different_repository_relative_path=False)
+        )
+
+        try:
+            _arm, _arm_path, resolved_root, authenticated_pack = (
+                readiness._replay_consumed_arm(
+                    relocated_pack,
+                    consumption,
+                    consumption_path,
+                    require_current_boot=False,
+                    require_unexpired=False,
+                    replay_arm_semantics=False,
+                )
+            )
+        except readiness.LaunchLineageError as exc:
+            self.fail(
+                "same repository-relative relocation refused: "
+                f"{exc.reason_code}: {exc}"
+            )
+
+        self.assertNotEqual(str(recorded_path), str(resolved_root))
+        self.assertEqual(resolved_root, relocated_pack.resolve())
+        self.assertEqual(
+            authenticated_pack["pack_root"], str(relocated_pack.resolve())
+        )
+
+    def test_successor_replay_names_repository_relative_location_difference(
+        self,
+    ) -> None:
+        _recorded_path, relocated_pack, consumption, consumption_path = (
+            self._relocated_fixture(different_repository_relative_path=True)
+        )
+
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            readiness._replay_consumed_arm(
+                relocated_pack,
+                consumption,
+                consumption_path,
+                require_current_boot=False,
+                require_unexpired=False,
+                replay_arm_semantics=False,
+            )
+
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+        self.assertEqual(
+            str(caught.exception),
+            "consumed arm pack repository-relative location differs from the authenticated pack location",
+        )
+
+    def test_replay_content_difference_keeps_authenticated_bytes_detail(self) -> None:
+        from tests.test_arm_readiness_lifecycle import make_go_fixture
+
+        temporary, _repository, pack, _custody, arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        arm = json.loads(arm_path.read_text())
+        arm["pack"]["plan_id"] = "different-plan"
+        raw = readiness.render_json(arm)
+        arm_path.write_bytes(raw)
+        arm_path.with_name(f"{arm_path.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(hashlib.sha256(raw).hexdigest(), arm_path.name)
+        )
+        consumption, consumption_path = self._consumption_for_arm(arm_path)
+
+        with self.assertRaises(readiness.LaunchLineageError) as caught:
+            readiness._replay_consumed_arm(
+                pack,
+                consumption,
+                consumption_path,
+                require_current_boot=False,
+                require_unexpired=False,
+                replay_arm_semantics=False,
+            )
+
+        self.assertEqual(caught.exception.reason_code, "launch_binding_mismatch")
+        self.assertEqual(
+            str(caught.exception),
+            "consumed arm pack record differs from authenticated pack bytes",
+        )
+
+    def test_verify_side_pack_comparison_names_content_or_keyset_difference(
+        self,
+    ) -> None:
+        from tests.test_arm_readiness_lifecycle import make_go_fixture
+
+        temporary, _repository, pack, custody, arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        expected_detail = (
+            "arm receipt pack binding differs from committed pack bytes"
+        )
+        for mutation in ("content", "keyset"):
+            with self.subTest(mutation=mutation):
+                receipt = json.loads(arm_path.read_text())
+                if mutation == "content":
+                    receipt["pack"]["plan_id"] = "different-plan"
+                else:
+                    receipt["pack"].pop("plan_id")
+                self._assert_verify_side_pack_refusal(
+                    pack,
+                    custody / pack.name,
+                    receipt,
+                    expected_detail,
+                )
+
+    def test_verify_side_pack_comparison_names_successor_relative_location_difference(
+        self,
+    ) -> None:
+        from tests.test_arm_readiness_lifecycle import make_go_fixture
+
+        temporary, _repository, pack, custody, arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        receipt = json.loads(arm_path.read_text())
+        receipt["pack"]["pack_root"] = (
+            f"/historical/checkout/relocated/{pack.name}"
+        )
+
+        self._assert_verify_side_pack_refusal(
+            pack,
+            custody / pack.name,
+            receipt,
+            "arm receipt repository-relative pack location differs",
+        )
+
+    def test_verify_side_pack_comparison_names_legacy_location_binding(
+        self,
+    ) -> None:
+        from tests.test_arm_readiness_lifecycle import make_go_fixture
+
+        temporary, _repository, pack, custody, arm_path = make_go_fixture(
+            "d117_floor_qwen25_1p5b_v3"
+        )
+        self.addCleanup(temporary.cleanup)
+        receipt = json.loads(arm_path.read_text())
+        receipt["pack"]["pack_root"] = (
+            f"/historical/checkout/configs/campaigns/{pack.name}"
+        )
+
+        self._assert_verify_side_pack_refusal(
+            pack,
+            custody / pack.name,
+            receipt,
+            "arm receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)",
         )
 
 

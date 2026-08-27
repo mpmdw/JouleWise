@@ -273,15 +273,30 @@ other. Record the live registry's path, SHA-256, registry ID, and plan
 profile in the plan tree; the Markdown readiness pages are checked human
 views, not row authority.
 
-Freeze readiness only with the implemented command:
+Freeze readiness only with the implemented command. The
+`--measurement-checkout` flag declares the absolute repository checkout from
+which this mint is authorized to take its pack bytes. The operator makes that
+declaration explicitly by supplying `MEASUREMENT_REPO`; the tool never derives
+it. The mint refuses when the declaration is absent or does not name the
+repository containing `PACK_ROOT`, before any receipt byte is written. A
+freeze receipt is written once into a numbered, no-clobber file
+(`freeze-0001.json`, `freeze-0002.json`, and so on); that number is the
+freeze ordinal, and the file for it can never be rewritten, so a mint that
+gets far enough to write one consumes that ordinal permanently. Because
+this refusal happens before any byte is written, it consumes nothing and
+the operator can correct the declaration and rerun.
 
 ```sh
+PREDECESSOR_PACK_ROOT=/Users/edr/JouleWise-measurement-20260813/configs/campaigns/d117_floor_qwen25_1p5b_v3
 python3 scripts/generate_arm_readiness.py freeze \
   --pack-root "$PACK_ROOT" \
+  --measurement-checkout "$MEASUREMENT_REPO" \
   --predecessor-pack-root "$PREDECESSOR_PACK_ROOT"
 ```
 
-`PREDECESSOR_PACK_ROOT` is the previous-generation sibling pack — for a pack
+`PREDECESSOR_PACK_ROOT` is assigned in the block above rather than in
+`window.env`, which is a frozen literal input with its own fixed key set.
+It is the previous-generation sibling pack — for a pack
 ID ending `_v<N>`, the `_v<N-1>` directory beside it under the same campaigns
 root — and every successor pack refuses to freeze without it; a
 first-generation (`_v1`) pack opens its own chain, so it omits the flag

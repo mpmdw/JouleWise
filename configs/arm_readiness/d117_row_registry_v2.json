@@ -345,6 +345,11 @@
         "type": "CUSTODY"
       },
       {
+        "code": "readiness_r1_measurement_checkout",
+        "role": "MEASUREMENT_CHECKOUT",
+        "type": "CUSTODY"
+      },
+      {
         "code": "readiness_r1_successor_chain",
         "role": "SUCCESSOR_CHAIN",
         "type": "GIT"

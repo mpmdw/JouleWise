@@ -608,7 +608,14 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         stdout = _cli_stdout(output)
 
         with mock.patch.object(evidence_author_cli.sys, "stdout", stdout):
-            return_code = evidence_author_cli.main(["--pack-root", str(pack)])
+            return_code = evidence_author_cli.main(
+                [
+                    "--pack-root",
+                    str(pack),
+                    "--measurement-checkout",
+                    str(repository),
+                ]
+            )
 
         self.assertEqual(return_code, 2)
         refused = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
@@ -1249,7 +1256,14 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
             mock.patch.object(evidence_author_cli, "REPO_ROOT", repository),
             mock.patch.object(evidence_author_cli.sys, "stdout", author_stdout),
         ):
-            author_return_code = evidence_author_cli.main(["--pack-root", str(pack)])
+            author_return_code = evidence_author_cli.main(
+                [
+                    "--pack-root",
+                    str(pack),
+                    "--measurement-checkout",
+                    str(repository),
+                ]
+            )
         self.assertEqual(author_return_code, 0)
         authored = readiness.parse_json_bytes(
             author_output.getvalue(), require_canonical=True
@@ -1273,6 +1287,7 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                     (
                         "python3 scripts/generate_arm_readiness.py freeze "
                         f"--pack-root {pack_relative} "
+                        f"--measurement-checkout {repository} "
                         f"--predecessor-pack-root {predecessor_relative}"
                     ),
                 ],
@@ -1336,7 +1351,9 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
         # mutated: false; restoring the bytes must replay PASS again.
         receipt_path = Path(result["receipt_path"])
         replay = readiness.generate_freeze_receipt(
-            pack, predecessor_pack_root=predecessor
+            pack,
+            measurement_checkout=repository,
+            predecessor_pack_root=predecessor,
         )
         self.assertEqual(
             (replay["status"], replay["mutated"], replay["receipt_sha256"]),
@@ -1359,12 +1376,16 @@ class ArmReadinessEvidenceAuthorTests(unittest.TestCase):
                 try:
                     with self.assertRaises(readiness.ArmReadinessError):
                         readiness.generate_freeze_receipt(
-                            pack, predecessor_pack_root=predecessor
+                            pack,
+                            measurement_checkout=repository,
+                            predecessor_pack_root=predecessor,
                         )
                 finally:
                     target.write_bytes(original)
                 restored = readiness.generate_freeze_receipt(
-                    pack, predecessor_pack_root=predecessor
+                    pack,
+                    measurement_checkout=repository,
+                    predecessor_pack_root=predecessor,
                 )
                 self.assertEqual(
                     (
