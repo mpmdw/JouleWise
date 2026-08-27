@@ -10,6 +10,12 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T26 (2026-08-27) — CHECKPOINTED at the usage-window reset. Sprint
+(paper + pre-window worklist) resumes from
+`docs/process_traces/2026-08-27-t26/CHECKPOINT-2026-08-27.md`. Two new
+pre-window items gate the night: W-10 (D-157) and W-11 (D-158); plus
+S11 (collector manifest id). Earliest credible night ~2026-08-29/30.**
+
 **T25 (2026-08-26) — PAUSED at an Ed checkpoint. D-155 ruled the 13
 real-transaction gaps and the pre-window worklist is DONE through W-7;
 the ONLY remaining gates are Ed's four items. RESUME FROM:
