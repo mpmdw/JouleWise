@@ -10225,6 +10225,14 @@ anchor. Trace: `docs/process_traces/2026-08-24-p06-codesign/`.
 Index row carries the operative detail; this section is the tail-body
 anchor. Trace: `docs/process_traces/2026-08-24-packet5/`.
 
+## D-154: `pack_root` locality ruling (magistrate synthesis, 2026-08-25; index backfilled 2026-08-27)
+
+Index row carries the operative detail. Trace:
+`docs/process_traces/2026-08-25-packroot-consult/` — `03-MAGISTRATE-RULING.md`
+(the ruling), `01-opus-seat.md` and `02-sol-seat.md` (the seats, verbatim).
+Cure landed as PR #192; follow-on rows MINT-CHECKOUT-DECLARATION-01 and
+ARM-PACKROOT-COMPARISON-01 carry R-3 and the arm-side extension.
+
 ## D-155: NR adjudication package (magistrate synthesis, 2026-08-26)
 
 Index row carries the operative detail; this section is the tail-body
@@ -10234,14 +10242,6 @@ anchor. Trace: `docs/process_traces/2026-08-22-t20/` —
 `nr-adjudication-packet.md` (the mechanically-assembled packet the seats
 read).
 
-
-## D-154: `pack_root` locality ruling (magistrate synthesis, 2026-08-25; index backfilled 2026-08-27)
-
-Index row carries the operative detail. Trace:
-`docs/process_traces/2026-08-25-packroot-consult/` — `03-MAGISTRATE-RULING.md`
-(the ruling), `01-opus-seat.md` and `02-sol-seat.md` (the seats, verbatim).
-Cure landed as PR #192; follow-on rows MINT-CHECKOUT-DECLARATION-01 and
-ARM-PACKROOT-COMPARISON-01 carry R-3 and the arm-side extension.
 
 ## D-156: supersession write-time refusal (magistrate, 2026-08-27)
 

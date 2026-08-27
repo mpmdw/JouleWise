@@ -37,7 +37,6 @@ EXPECTED_IDS = {
     "PLANTEST-RGLOB-RACE-01",
     "PREWINDOW-REGEX-01",
     "REGISTRY-ID-NAMING-01",
-    "WINDOW-STATUS-FREEZE-GUARD-01",
     "READY-WO-BATCH-01",
     "SITTING2-PRECONDITIONS-01",
     "UNVERIFIED-REAUDIT-01",
@@ -405,9 +404,13 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # window) and ARM-PACKROOT-COMPARISON-01 (the PR #192 refuter's D7
         # finding: the two arm-side whole-dict pack comparisons repeat the
         # untruthful bytes-differ detail on a location-only difference):
-        # 99 - 1 + 2 = 100 exact live records.
+        # 99 - 1 + 2 = 100; the 2026-08-26 T26 reconciliation closes
+        # WINDOW-STATUS-FREEZE-GUARD-01 (already landed by D-155 W-2, PR #199
+        # at 3c96b18f: freeze-span sentinel + tests/test_window_status_guard.py;
+        # the row predated its cure):
+        # 100 - 1 = 99 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 100)
+        self.assertEqual(len(self.tasks), 99)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
