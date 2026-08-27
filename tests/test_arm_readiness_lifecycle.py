@@ -603,7 +603,11 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         temporary, repo, pack, _custody, _arm_path = make_go_fixture()
         self.addCleanup(temporary.cleanup)
         predecessor = predecessor_pack_root(repo, PACK_NAME)
-        first = generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+        first = generate_freeze_receipt(
+            pack,
+            measurement_checkout=repo,
+            predecessor_pack_root=predecessor,
+        )
         path = Path(first["receipt_path"])
         raw_before = path.read_bytes()
         sidecar_before = path.with_name(f"{path.name}.sha256").read_bytes()
@@ -614,7 +618,11 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
                 "joulewise.arm_readiness", fromlist=["_render_plan_tree"]
             )._render_plan_tree(json.loads(tree_raw)),
         )
-        second = generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+        second = generate_freeze_receipt(
+            pack,
+            measurement_checkout=repo,
+            predecessor_pack_root=predecessor,
+        )
         self.assertFalse(second["mutated"])
         self.assertEqual(path.read_bytes(), raw_before)
         self.assertEqual(
@@ -1001,7 +1009,17 @@ class ArmReadinessLifecycleTests(unittest.TestCase):
         )
         for option in forbidden:
             completed = subprocess.run(
-                [sys.executable, str(script), "freeze", "--pack-root", "/tmp/pack", option, "operator-value"],
+                [
+                    sys.executable,
+                    str(script),
+                    "freeze",
+                    "--pack-root",
+                    "/tmp/pack",
+                    "--measurement-checkout",
+                    "/tmp",
+                    option,
+                    "operator-value",
+                ],
                 text=True,
                 capture_output=True,
             )
@@ -1083,7 +1101,11 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         self.assertEqual((pack / "plan_tree.json").read_bytes(), tree_before)
 
     def mint(self, pack: Path, predecessor: Path | None) -> dict:
-        return generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+        return generate_freeze_receipt(
+            pack,
+            measurement_checkout=readiness._repo_for_pack(pack),
+            predecessor_pack_root=predecessor,
+        )
 
     def read_receipt(self, path: Path) -> dict:
         return json.loads(Path(path).read_text(encoding="utf-8"))
@@ -1100,6 +1122,172 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         if expected_code is not None:
             self.assertEqual(code, expected_code)
         return json.loads(buffer.getvalue().decode("utf-8"))
+
+    # MINT-CHECKOUT-DECLARATION-01 -----------------------------------------
+    def test_generate_freeze_receipt_refuses_outside_and_mints_inside_declared_checkout(
+        self,
+    ) -> None:
+        repo, pack, predecessor = self.successor_fixture()
+        tree_before = (pack / "plan_tree.json").read_bytes()
+        declared_checkout = repo.parent / "declared-measurement-checkout"
+        declared_checkout.mkdir()
+
+        with self.assertRaises(ArmReadinessError) as caught:
+            generate_freeze_receipt(
+                pack,
+                measurement_checkout=declared_checkout,
+                predecessor_pack_root=predecessor,
+            )
+
+        self.assertEqual(
+            caught.exception.reason_code,
+            "readiness_r1_measurement_checkout",
+        )
+        self.assertIn(
+            "minting repository differs from the declared measurement checkout",
+            str(caught.exception),
+        )
+        self.assert_no_successor_bytes(pack, tree_before)
+
+        result = generate_freeze_receipt(
+            pack,
+            measurement_checkout=repo,
+            predecessor_pack_root=predecessor,
+        )
+        self.assertTrue(result["mutated"])
+        self.assertIsNotNone(result["receipt_path"])
+        self.assertNotIn(
+            "readiness_r1_measurement_checkout", result["reason_codes"]
+        )
+
+    def test_measurement_checkout_declaration_must_be_absolute_and_exist(
+        self,
+    ) -> None:
+        declaration_parameter = inspect.signature(generate_freeze_receipt).parameters[
+            "measurement_checkout"
+        ]
+        self.assertEqual(
+            declaration_parameter.kind, inspect.Parameter.KEYWORD_ONLY
+        )
+        self.assertIs(declaration_parameter.default, inspect.Parameter.empty)
+
+        repo, pack, predecessor = self.successor_fixture()
+        tree_before = (pack / "plan_tree.json").read_bytes()
+        cases = (
+            (Path(repo.name), "must be an absolute path"),
+            (repo.parent / "absent-checkout", "is unreadable"),
+        )
+        for declaration, detail in cases:
+            with self.subTest(declaration=declaration):
+                with self.assertRaises(ArmReadinessError) as caught:
+                    generate_freeze_receipt(
+                        pack,
+                        measurement_checkout=declaration,
+                        predecessor_pack_root=predecessor,
+                    )
+                self.assertEqual(
+                    caught.exception.reason_code,
+                    "readiness_r1_measurement_checkout",
+                )
+                self.assertIn(detail, str(caught.exception))
+                self.assert_no_successor_bytes(pack, tree_before)
+
+    def test_production_freeze_cli_requires_declaration_and_refuses_t10_wttxn_class(
+        self,
+    ) -> None:
+        temporary, wt_txn, pack, _custody, _arm = make_go_fixture(
+            SUCCESSOR_PACKS["ALPHA"], "ALPHA"
+        )
+        self.addCleanup(temporary.cleanup)
+        predecessor = predecessor_pack_root(wt_txn, pack.name)
+        declared_checkout = wt_txn.parent / "declared-measurement-checkout"
+        declared_checkout.mkdir()
+        git(declared_checkout, "init", "-q")
+        script = ROOT / "scripts/generate_arm_readiness.py"
+        command = [
+            sys.executable,
+            str(script),
+            "freeze",
+            "--pack-root",
+            pack.relative_to(wt_txn).as_posix(),
+            "--predecessor-pack-root",
+            predecessor.relative_to(wt_txn).as_posix(),
+        ]
+
+        missing = subprocess.run(
+            command,
+            cwd=wt_txn,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn(
+            "the following arguments are required: --measurement-checkout",
+            missing.stderr,
+        )
+        self.assertEqual(missing.stdout, "")
+        self.assertFalse(self.freeze_namespace(pack).exists())
+
+        wrong_checkout = subprocess.run(
+            command + ["--measurement-checkout", str(declared_checkout)],
+            cwd=wt_txn,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(wrong_checkout.returncode, 2)
+        refusal = json.loads(wrong_checkout.stdout)
+        self.assertEqual(
+            refusal["reason_codes"],
+            ["readiness_r1_measurement_checkout"],
+        )
+        self.assertIn(
+            "minting repository differs from the declared measurement checkout",
+            refusal["detail"],
+        )
+        self.assertFalse(self.freeze_namespace(pack).exists())
+
+        patched_entrypoint = """\
+import runpy
+import sys
+from pathlib import Path
+from unittest import mock
+
+script = Path(sys.argv.pop(1))
+sys.path.insert(0, str(script.parents[1]))
+import joulewise.arm_readiness as readiness
+
+with mock.patch.object(
+    readiness,
+    "_current_boot_session_id",
+    return_value="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+):
+    runpy.run_path(str(script), run_name="__main__")
+"""
+        inside_checkout = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                patched_entrypoint,
+                str(script),
+                *command[2:],
+                "--measurement-checkout",
+                str(wt_txn),
+            ],
+            cwd=wt_txn,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            inside_checkout.returncode,
+            1,
+            inside_checkout.stdout + inside_checkout.stderr,
+        )
+        minted = json.loads(inside_checkout.stdout)
+        self.assertTrue(minted["mutated"])
+        self.assertIsNotNone(minted["receipt_path"])
+        self.assertNotIn(
+            "readiness_r1_measurement_checkout", minted["reason_codes"]
+        )
 
     def post_mint_replay_fixture(self) -> tuple[Path, Path, Path, str]:
         """Build the synthetic C-to-S edge on a real freeze replay path."""
@@ -1194,7 +1382,9 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         predecessor = predecessor_pack_root(repository, pack_name)
         minted = generate_freeze_receipt(
-            pack, predecessor_pack_root=predecessor
+            pack,
+            measurement_checkout=repository,
+            predecessor_pack_root=predecessor,
         )
         self.assertTrue(minted["mutated"])
         git(repository, "add", ".")
@@ -1225,7 +1415,9 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         shutil.rmtree(repository)
 
         replayed = generate_freeze_receipt(
-            pack, predecessor_pack_root=predecessor
+            pack,
+            measurement_checkout=pack.parents[2],
+            predecessor_pack_root=predecessor,
         )
 
         self.assertFalse(replayed["mutated"])
@@ -1251,7 +1443,11 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         )
 
         with self.assertRaises(ArmReadinessError) as caught:
-            generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+            generate_freeze_receipt(
+                pack,
+                measurement_checkout=clone,
+                predecessor_pack_root=predecessor,
+            )
 
         self.assertEqual(
             caught.exception.reason_code, "readiness_freeze_receipt_mismatch"
@@ -1275,7 +1471,11 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         git(clone, "update-ref", "refs/remotes/origin/main", "HEAD")
 
         with self.assertRaises(ArmReadinessError) as caught:
-            generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+            generate_freeze_receipt(
+                pack,
+                measurement_checkout=clone,
+                predecessor_pack_root=predecessor,
+            )
 
         self.assertEqual(
             caught.exception.reason_code, "readiness_freeze_receipt_mismatch"
@@ -1287,13 +1487,17 @@ class FreezeSuccessorChainTests(unittest.TestCase):
 
     def test_v3_freeze_replay_remains_bound_to_its_archival_location(self) -> None:
         pack_name = "d117_floor_qwen25_1p5b_v3"
-        repository, _clone, pack, predecessor = self.frozen_clone_fixture(
+        repository, clone, pack, predecessor = self.frozen_clone_fixture(
             pack_name
         )
         shutil.rmtree(repository)
 
         with self.assertRaises(ArmReadinessError) as caught:
-            generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+            generate_freeze_receipt(
+                pack,
+                measurement_checkout=clone,
+                predecessor_pack_root=predecessor,
+            )
 
         self.assertEqual(
             caught.exception.reason_code, "readiness_freeze_receipt_mismatch"
@@ -1808,7 +2012,7 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         self.assertEqual((pack / "plan_tree.json").read_bytes(), tree_before)
         # Even the idempotent replay must name the ancestry it re-authenticates.
         with self.assertRaises(ArmReadinessError) as caught:
-            generate_freeze_receipt(pack)
+            generate_freeze_receipt(pack, measurement_checkout=repo)
         self.assertEqual(
             caught.exception.reason_code, "readiness_successor_chain_invalid"
         )
@@ -2185,6 +2389,8 @@ class FreezeSuccessorChainTests(unittest.TestCase):
                 "freeze",
                 "--pack-root",
                 str(pack),
+                "--measurement-checkout",
+                str(pack.parents[2]),
                 "--step6-confirmation-table",
                 str(table),
                 "--expected-confirmation-digest",
@@ -2214,6 +2420,8 @@ class FreezeSuccessorChainTests(unittest.TestCase):
                 "freeze",
                 "--pack-root",
                 str(pack),
+                "--measurement-checkout",
+                str(pack.parents[2]),
                 "--expected-confirmation-digest",
                 digest,
                 "--predecessor-pack-root",
@@ -2233,6 +2441,8 @@ class FreezeSuccessorChainTests(unittest.TestCase):
                 "freeze",
                 "--pack-root",
                 str(pack),
+                "--measurement-checkout",
+                str(pack.parents[2]),
                 "--step6-confirmation-table",
                 str(table),
                 "--predecessor-pack-root",
@@ -2252,6 +2462,8 @@ class FreezeSuccessorChainTests(unittest.TestCase):
                 "freeze",
                 "--pack-root",
                 str(pack),
+                "--measurement-checkout",
+                str(pack.parents[2]),
                 "--step6-confirmation-table",
                 str(table),
                 "--expected-confirmation-digest",
@@ -2275,6 +2487,8 @@ class FreezeSuccessorChainTests(unittest.TestCase):
                 "freeze",
                 "--pack-root",
                 str(pack),
+                "--measurement-checkout",
+                str(pack.parents[2]),
                 "--step6-confirmation-table",
                 str(table),
                 "--expected-confirmation-digest",
@@ -2296,7 +2510,16 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         repo, pack, predecessor = self.successor_fixture()
         # In-process: the successor pack lives in this test's patched profile
         # map, which a subprocess would not inherit until D-138 flips it.
-        refusal = self.run_freeze_cli(["freeze", "--pack-root", str(pack)], 2)
+        refusal = self.run_freeze_cli(
+            [
+                "freeze",
+                "--pack-root",
+                str(pack),
+                "--measurement-checkout",
+                str(repo),
+            ],
+            2,
+        )
         self.assertEqual(
             refusal["reason_codes"], ["readiness_successor_chain_invalid"]
         )
@@ -2307,6 +2530,8 @@ class FreezeSuccessorChainTests(unittest.TestCase):
                 "freeze",
                 "--pack-root",
                 str(pack),
+                "--measurement-checkout",
+                str(repo),
                 "--predecessor-pack-root",
                 str(predecessor),
             ],
@@ -2325,7 +2550,11 @@ class FreezeSuccessorChainTests(unittest.TestCase):
         )
         self.addCleanup(temporary.cleanup)
         with self.assertRaises(ArmReadinessError) as caught:
-            generate_freeze_receipt(pack, predecessor_pack_root=pack)
+            generate_freeze_receipt(
+                pack,
+                measurement_checkout=repo,
+                predecessor_pack_root=pack,
+            )
         self.assertEqual(caught.exception.reason_code, "readiness_usage_invalid")
         self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
 
@@ -2663,7 +2892,11 @@ class PostSupersessionLayeringTests(unittest.TestCase):
         predecessor = predecessor_pack_root(repo, PACK_NAME)
         self.assertIn(predecessor.name, readiness._PROFILE_BY_PACK)
         self.assertEqual(readiness._plan_profile(predecessor), "ALPHA")
-        result = generate_freeze_receipt(pack, predecessor_pack_root=predecessor)
+        result = generate_freeze_receipt(
+            pack,
+            measurement_checkout=repo,
+            predecessor_pack_root=predecessor,
+        )
         receipt = json.loads(
             Path(result["receipt_path"]).read_text(encoding="utf-8")
         )

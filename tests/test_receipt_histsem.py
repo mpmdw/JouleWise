@@ -671,7 +671,9 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             ):
                 arm = generate_arm_receipt(pack, {}, root / "custody")
                 freeze = generate_freeze_receipt(
-                    pack, predecessor_pack_root=predecessor
+                    pack,
+                    measurement_checkout=root,
+                    predecessor_pack_root=predecessor,
                 )
             self.assertEqual(arm["reason_codes"], ["histsem_history_unavailable"])
             self.assertEqual(freeze["reason_codes"], ["histsem_history_unavailable"])

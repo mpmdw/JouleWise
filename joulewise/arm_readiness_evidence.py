@@ -2355,6 +2355,7 @@ def _derive_reason_code_coverage(context: _DerivationContext) -> _DerivedKind:
         "readiness_r1_class_mismatch",
         "readiness_r1_dependency_changed_set",
         "readiness_r1_dependency_manifest",
+        "readiness_r1_measurement_checkout",
         "readiness_r1_successor_chain",
         "readiness_r1_temporal_budget",
         "readiness_r1_unknown_policy",

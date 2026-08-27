@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 from pathlib import Path
 
@@ -27,8 +28,11 @@ def _parser() -> argparse.ArgumentParser:
     # step-6 confirmation digest is a CONSUMPTION-side attestation
     # (arm/verify/scheduler), and a digest flag with no table path here
     # was inert by construction (delta re-audit S1D-1).
+    # The measurement-checkout flag is distinct: it is an operative custody
+    # gate, and omitting it makes the emitted freeze command refuse at argparse.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pack-root", required=True, type=Path)
+    parser.add_argument("--measurement-checkout", required=True, type=Path)
     return parser
 
 
@@ -36,7 +40,12 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         root = args.pack_root.resolve(strict=True)
+        measurement_checkout_literal = str(args.measurement_checkout)
         pack_repository = readiness._repo_for_pack(root).resolve(strict=True)
+        registry, _registry_raw = readiness.load_registry(pack_repository)
+        readiness._gate_measurement_checkout(
+            root, registry, args.measurement_checkout
+        )
         cli_repository = REPO_ROOT.resolve(strict=True)
         if pack_repository != cli_repository:
             raise EvidenceAuthoringError(
@@ -50,7 +59,9 @@ def main(argv: list[str] | None = None) -> int:
         evidence_path = f"{pack_relative}/{_EVIDENCE_DIRECTORY}"
         freeze_command = (
             "python3 scripts/generate_arm_readiness.py freeze "
-            f"--pack-root {pack_relative}"
+            f"--pack-root {pack_relative} "
+            "--measurement-checkout "
+            f"{shlex.quote(measurement_checkout_literal)}"
         )
         # D-139: a successor pack refuses to freeze without an authenticated
         # predecessor, so the emitted sequence must carry the flag or it

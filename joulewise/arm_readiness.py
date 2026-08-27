@@ -204,7 +204,12 @@ R1_LIFECYCLE_REASON_CODES = frozenset(
         "readiness_r1_v1_grandfathering",
     }
 )
-R1_CUSTODY_REASON_CODES = frozenset({"readiness_r1_family_publication"})
+R1_CUSTODY_REASON_CODES = frozenset(
+    {
+        "readiness_r1_family_publication",
+        "readiness_r1_measurement_checkout",
+    }
+)
 R1_GIT_REASON_CODES = frozenset({"readiness_r1_successor_chain"})
 LAUNCH_LINEAGE_REASON_CODES = frozenset(
     {
@@ -527,6 +532,7 @@ R1_REFUSAL_ROLES = frozenset(
         "DEPENDENCY_CHANGED_SET",
         "DEPENDENCY_MANIFEST",
         "FAMILY_PUBLICATION",
+        "MEASUREMENT_CHECKOUT",
         "SUCCESSOR_CHAIN",
         "TEMPORAL_BUDGET",
         "UNKNOWN_POLICY",
@@ -4151,6 +4157,38 @@ def _registry_reference(pack_root: Path) -> tuple[Mapping[str, Any], bytes, dict
     return registry, raw, reference
 
 
+def _gate_measurement_checkout(
+    pack_root: Path,
+    registry: Mapping[str, Any],
+    measurement_checkout: Path | str,
+) -> None:
+    """Require this mint's repository to equal the declared checkout."""
+
+    refusal = _r1_refusal_entry(
+        registry["freeze_evidence_lifecycle"], "MEASUREMENT_CHECKOUT"
+    )
+    declared_path = Path(measurement_checkout)
+    if not declared_path.is_absolute():
+        raise ArmReadinessError(
+            refusal["code"],
+            "measurement checkout declaration must be an absolute path",
+        )
+    try:
+        declared = declared_path.resolve(strict=True)
+    except OSError as exc:
+        raise ArmReadinessError(
+            refusal["code"],
+            f"declared measurement checkout is unreadable: {exc}",
+        ) from exc
+    minting_repository = _repo_for_pack(pack_root).resolve(strict=True)
+    if minting_repository != declared:
+        raise ArmReadinessError(
+            refusal["code"],
+            "minting repository differs from the declared measurement checkout: "
+            f"{minting_repository} != {declared}",
+        )
+
+
 def _valid_plan_attachment(value: object, expected: Mapping[str, Any]) -> None:
     keys = {
         "contract_id",
@@ -7183,12 +7221,20 @@ def _freeze_evidence_for_arm(
 def generate_freeze_receipt(
     pack_root: Path | str,
     *,
+    measurement_checkout: Path | str,
     predecessor_pack_root: Path | str | None = None,
     family_publication_marker: Path | str | None = None,
     step6_confirmation_table: Path | str | None = None,
     expected_confirmation_digest: str | None = None,
 ) -> dict[str, Any]:
     """Write or idempotently authenticate the pack's non-authorizing receipt.
+
+    ``measurement_checkout`` is the operator's required absolute declaration,
+    not a receipt field.  When a new receipt is minted, the repository that
+    owns ``pack_root`` must resolve exactly to it before any receipt is written.
+    An idempotent replay does not re-apply this mint-only gate.  No environment
+    variable, current-working-directory default, or pack-derived fallback is
+    consulted.
 
     A successor pack (family generation two or later) must present the path of
     its predecessor pack.  Every ID, digest, ordinal, and conclusion in the
@@ -7216,8 +7262,8 @@ def generate_freeze_receipt(
             "detail": str(exc),
             "mutated": False,
         }
-    tree, _tree_raw = _plan_tree(root)
     registry, _registry_raw, registry_reference = _registry_reference(root)
+    tree, _tree_raw = _plan_tree(root)
     attachments = tree.get("arm_attachments")
     readiness = attachments.get("arm_readiness") if isinstance(attachments, Mapping) else None
     _valid_plan_attachment(readiness, registry_reference)
@@ -7347,6 +7393,7 @@ def generate_freeze_receipt(
         raise ArmReadinessError(
             "readiness_freeze_receipt_mismatch", "unreferenced freeze receipt exists"
         )
+    _gate_measurement_checkout(root, registry, measurement_checkout)
     # Chain authentication precedes every write and every derived conclusion.
     predecessor: dict[str, Any] | None = None
     number = 1

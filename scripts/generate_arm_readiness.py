@@ -36,6 +36,12 @@ def _parser() -> argparse.ArgumentParser:
     freeze = subparsers.add_parser("freeze")
     freeze.add_argument("--pack-root", type=Path, required=True)
     freeze.add_argument(
+        "--measurement-checkout",
+        type=Path,
+        required=True,
+        help="absolute operator-declared measurement checkout",
+    )
+    freeze.add_argument(
         "--step6-confirmation-table",
         type=Path,
         help="path to the D-117 step-6 confirmation table",
@@ -120,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "freeze":
             result = generate_freeze_receipt(
                 args.pack_root,
+                measurement_checkout=args.measurement_checkout,
                 predecessor_pack_root=args.predecessor_pack_root,
                 step6_confirmation_table=args.step6_confirmation_table,
                 expected_confirmation_digest=args.expected_confirmation_digest,

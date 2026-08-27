@@ -510,6 +510,14 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         self.assertEqual(vocabulary["FAMILY_PUBLICATION"], {
             "role": "FAMILY_PUBLICATION", "code": "readiness_r1_family_publication", "type": "CUSTODY"
         })
+        self.assertEqual(
+            vocabulary["MEASUREMENT_CHECKOUT"],
+            {
+                "role": "MEASUREMENT_CHECKOUT",
+                "code": "readiness_r1_measurement_checkout",
+                "type": "CUSTODY",
+            },
+        )
         self.assertLessEqual(
             {item["code"] for item in vocabulary.values()},
             readiness.READINESS_REASON_CODES,
@@ -546,6 +554,54 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         entry["type"] = "POLICY"
         with self.assertRaisesRegex(ArmReadinessError, "closed by code/type"):
             validate_registry(mistyped)
+
+    def test_registry_load_closure_requires_measurement_checkout_role_and_code(
+        self,
+    ) -> None:
+        registry, _raw = load_registry(ROOT)
+        cases: list[tuple[str, dict[str, Any], str]] = []
+
+        unregistered = copy.deepcopy(registry)
+        entry = next(
+            item
+            for item in unregistered["freeze_evidence_lifecycle"][
+                "refusal_vocabulary"
+            ]
+            if item["role"] == "MEASUREMENT_CHECKOUT"
+        )
+        entry["code"] = "readiness_r1_not_registered"
+        cases.append(
+            (
+                "code absent from READINESS_REASON_CODES",
+                unregistered,
+                "closed by code/type",
+            )
+        )
+
+        missing_role = copy.deepcopy(registry)
+        vocabulary = missing_role["freeze_evidence_lifecycle"][
+            "refusal_vocabulary"
+        ]
+        vocabulary[:] = [
+            item for item in vocabulary if item["role"] != "MEASUREMENT_CHECKOUT"
+        ]
+        cases.append(
+            (
+                "vocabulary role absent",
+                missing_role,
+                "register every role exactly once",
+            )
+        )
+
+        for label, mutated, detail in cases:
+            with self.subTest(direction=label):
+                with tempfile.TemporaryDirectory() as temporary:
+                    repository = Path(temporary)
+                    target = repository / readiness.ROW_REGISTRY_RELATIVE_PATH
+                    target.parent.mkdir(parents=True)
+                    target.write_bytes(render_json(mutated))
+                    with self.assertRaisesRegex(ArmReadinessError, detail):
+                        load_registry(repository)
 
     def test_r4_evidence_lifecycle_escape_sites_are_caught(self) -> None:
         registry, _raw = load_registry(ROOT)
@@ -1593,7 +1649,7 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                 "independent_attestation": False,
             },
         )
-        self.assertEqual(len(READINESS_REASON_CODES), 55)
+        self.assertEqual(len(READINESS_REASON_CODES), 56)
         self.assertNotIn("GO", READINESS_REASON_CODES)
         self.assertNotIn("UNKNOWN", READINESS_REASON_CODES)
         upstream_refusal = sample_evidence()

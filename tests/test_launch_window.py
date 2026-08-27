@@ -447,6 +447,8 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                         "freeze",
                         "--pack-root",
                         str(pack),
+                        "--measurement-checkout",
+                        str(root),
                         "--expected-confirmation-digest",
                         self.DIGEST,
                     ],
@@ -496,19 +498,27 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
                         consumer.call_args.kwargs["expected_confirmation_digest"],
                         self.DIGEST,
                     )
+                    if argv[0] == "freeze":
+                        self.assertEqual(
+                            consumer.call_args.kwargs["measurement_checkout"],
+                            root,
+                        )
 
-    def test_evidence_author_cli_keeps_the_ruled_pack_root_only_surface(self) -> None:
+    def test_evidence_author_cli_keeps_digest_out_but_emits_checkout(self) -> None:
         # Delta re-audit S1D-1: the digest is a CONSUMPTION-side attestation;
         # the authoring CLI carried an inert digest flag (no table path, no
         # effect) and it was removed to restore the ruled --pack-root-only
-        # surface. This test pins the removal: the flag refuses, and a plain
-        # authoring invocation passes no confirmation kwargs at all.
+        # surface. The checkout declaration is instead an operative mint gate.
+        # This test pins both facts: the digest still refuses, while the
+        # explicitly supplied checkout appears literally in the freeze command.
         pack = ROOT / "tests"
         with self.assertRaises(SystemExit) as caught:
             author_arm_readiness_evidence.main(
                 [
                     "--pack-root",
                     str(pack),
+                    "--measurement-checkout",
+                    str(ROOT),
                     "--expected-confirmation-digest",
                     self.DIGEST,
                 ]
@@ -528,10 +538,22 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             )
             with stdout_patch:
                 code = author_arm_readiness_evidence.main(
-                    ["--pack-root", str(pack)]
+                    [
+                        "--pack-root",
+                        str(pack),
+                        "--measurement-checkout",
+                        str(ROOT),
+                    ]
                 )
         self.assertEqual(code, 0)
-        self.assertEqual(json.loads(sink.getvalue())["status"], "PASS")
+        result = json.loads(sink.getvalue())
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(
+            result["post_authoring"]["sequence"][3],
+            "python3 scripts/generate_arm_readiness.py freeze "
+            "--pack-root tests "
+            f"--measurement-checkout {ROOT}",
+        )
         self.assertEqual(consumer.call_args.args, (ROOT / "tests",))
         self.assertEqual(consumer.call_args.kwargs, {})
 
@@ -996,6 +1018,37 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
         verify_consumed.assert_not_called()
         execve.assert_not_called()
         return refusal, verify_arm
+
+    def test_evidence_author_cli_requires_absolute_existing_checkout(self) -> None:
+        pack = ROOT / "tests"
+        with self.assertRaises(SystemExit) as caught:
+            author_arm_readiness_evidence.main(["--pack-root", str(pack)])
+        self.assertEqual(caught.exception.code, 2)
+
+        declarations = (
+            "relative-measurement-checkout",
+            str(ROOT / ".definitely-absent-measurement-checkout"),
+        )
+        for declaration in declarations:
+            with self.subTest(declaration=declaration):
+                sink, stdout_patch = self._captured_stdout(
+                    author_arm_readiness_evidence
+                )
+                with stdout_patch:
+                    code = author_arm_readiness_evidence.main(
+                        [
+                            "--pack-root",
+                            str(pack),
+                            "--measurement-checkout",
+                            declaration,
+                        ]
+                    )
+                self.assertEqual(code, 2)
+                refusal = json.loads(sink.getvalue())
+                self.assertEqual(
+                    refusal["reason_codes"],
+                    ["readiness_r1_measurement_checkout"],
+                )
 
     def test_launch_cli_refuses_unconfirmed_table_and_accepts_operator_digest(
         self,
