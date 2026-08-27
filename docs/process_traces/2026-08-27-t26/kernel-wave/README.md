@@ -1,0 +1,4 @@
+# T26 end-of-sprint kernel wave — custody (PR #220, merged 2026-08-27)
+
+`01-sol-seat.md` is the fresh Sol xhigh read-only seat's verdict on the wave (18 rows, A99–A114 + Q12–Q13; 90 + 18 = 108). Its four blockers were fixed before merge: B1 CALEXITS-EVIDENCE-BYTES-01 dropped the disproved temp-path hypothesis; B2 BRACKET-BINDING-CLI-01 re-cut to the D-160 R-3′ producer-before-verdict lifecycle; B3 the invented waiver path removed from L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01; B4 T0-ENV-PARSER-UNIFY-01 keeps each parser boundary's own registered refusal mapping.
+Should-fixes S1 (D-078 addendum scoped to the selected-marker branch) and S2 (RQ-ATTRIBUTION-DOMINANCE note = Variant A) were also applied; the seat could not run pytest in its read-only sandbox, so the director ran it (46 passed / 205 subtests) and CI was 18/18 green at head 25e14318.
