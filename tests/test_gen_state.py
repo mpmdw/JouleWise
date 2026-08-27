@@ -167,7 +167,10 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "MEMBERSHIP-READER-FAILOPEN-01", "NVIDIA-RETENTION-FLAKE-01",
                 "CAL-BRACKET-D079-01", "T3-AMEND-01",
                 "COLDGATE-VALIDATOR-01", "WINB-R06-DISPOSITION-01",
-                "CODEX-BRIDGE-SANDBOX-01"}
+                "CODEX-BRIDGE-SANDBOX-01",
+                # 2026-08-27 T26 S5 test-reliability wave (PR #203).
+                "MLX-ACID-SIGABRT-01", "CALEXITS-FOURTH-SHAPE-01",
+                "PLANTEST-RGLOB-RACE-01"}
 
 
 def load_kernel():

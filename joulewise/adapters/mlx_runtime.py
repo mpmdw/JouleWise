@@ -97,6 +97,12 @@ def _resolve_mlx_core() -> Any:
 
     global _MLX_CORE_MODULE
 
+    # Never trust the remembered module without re-checking what it is. Only
+    # an extension can protect anyone, and only an extension is safe to put
+    # back into ``sys.modules`` below.
+    if _MLX_CORE_MODULE is not None and not _is_loaded_extension(_MLX_CORE_MODULE):
+        _MLX_CORE_MODULE = None
+
     module = sys.modules.get("mlx.core", _MODULE_KEY_ABSENT)
     if module is None:
         raise ImportError("import of mlx.core is blocked by sys.modules")
@@ -105,7 +111,14 @@ def _resolve_mlx_core() -> Any:
         # re-running the native initializer; otherwise this is a first import.
         module = _MLX_CORE_MODULE
         if module is None:
+            # A real import registers itself in ``sys.modules``.
             module = importlib.import_module("mlx.core")
+        else:
+            # Repair the eviction rather than merely stepping around it. While
+            # the key is missing, ANY importer in the process -- not just this
+            # adapter -- would re-run the native initializer and abort. Putting
+            # the loaded extension back closes the window for all of them.
+            sys.modules["mlx.core"] = module
     if _is_loaded_extension(module):
         _MLX_CORE_MODULE = module
     return module

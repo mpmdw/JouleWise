@@ -323,18 +323,32 @@ class SharedDerivationTests(unittest.TestCase):
     def test_fixture_commits_start_no_detached_maintenance_process(self) -> None:
         """A fixture commit must leave nothing running behind it.
 
-        Without the controls in ``init_git``, `git commit` spawns
-        `git maintenance run --auto --quiet --detach`, and a DETACHED child
-        outlives the test body. Whatever that child then writes into the
-        repository races `TemporaryDirectory.cleanup()`, which is how run
-        32974766555 attempt 1 (job 98196695324) died in teardown with
-        `[Errno 39] Directory not empty: '/tmp/tmpxbynrw01/.git/info'`.
+        Without ``maintenance.auto=false`` in ``init_git``, a commit in this
+        fixture spawns `git maintenance run --auto --quiet --detach`. A
+        DETACHED child can still be running after the test body returns, and
+        whatever it writes into the repository then races
+        `TemporaryDirectory.cleanup()` -- which is how run 32974766555
+        attempt 1 (job 98196695324) died in teardown with
+        `[Errno 39] Directory not empty: '/tmp/tmpxbynrw01/.git/info'`, and
+        run 32813091203 (job 97696108102) before it.
 
-        Reading the four config keys back is not enough on its own: it proves
-        the settings are stored, not that no process starts. Git's own Trace2
-        event stream names every child the commit spawns, so this asserts the
-        absence directly. Delete any one control from ``init_git`` and the
-        `maintenance` child reappears in the trace.
+        Reading the config keys back is not enough on its own: it proves the
+        settings are stored, not that no process starts. Git's own Trace2
+        event stream names every child a commit spawns, so the absence is
+        asserted directly.
+
+        What each half pins, measured by deleting one control at a time from
+        ``GIT_MAINTENANCE_CONTROLS`` (git 2.50.1, one-commit fixture):
+
+        * ``maintenance.auto`` is the load-bearing one. Remove it and this
+          test fails with the child's argv in the message.
+        * ``gc.auto``, ``maintenance.autoDetach`` and ``gc.autoDetach`` are
+          each survivable at this fixture size -- one commit never crosses
+          gc's loose-object threshold, and the autoDetach keys only matter
+          once maintenance runs at all. They are kept because they are the
+          repo's established tuple for git-backed fixtures and because
+          fixtures grow, and they are pinned as CONFIGURATION by the subtests
+          below, not as demonstrated necessity.
         """
 
         with tempfile.TemporaryDirectory() as temporary:

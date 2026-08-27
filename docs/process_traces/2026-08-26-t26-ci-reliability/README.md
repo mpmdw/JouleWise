@@ -84,21 +84,34 @@ abort with a skip marker.
     to real evidence — and, symmetrically, a real extension imported by
     *another* component (`mlx_lm.load()` runs before the memory snapshot) is
     remembered too, which a "only what I imported myself" rule would have
-    missed;
+    missed. The same check runs on READ, so a reference that reached the cache
+    some other way is discarded rather than served;
   - a `None` value under `"mlx.core"` is Python's blocked-import sentinel and
     still raises, so a caller forcing the unavailable path still gets
-    `mlx_core_not_found`.
+    `mlx_core_not_found`;
+  - the evicted key is **put back**. Returning the remembered module protects
+    this adapter and nobody else: while `"mlx.core"` is missing, any importer
+    in the process re-runs the native initializer, and `mlx_lm` imports it on
+    the next `prepare`. Restoring the entry closes the window for all of them.
+
 - **Test helper** (`tests/test_arm_readiness_evidence_t0.py`):
   `author_environment` patches and restores the single `mlx_lm` key instead of
   snapshotting and rebuilding all of `sys.modules`.
+
+Three of those four rules replaced a shape an audit round refuted, and the
+sequence is itself part of the record: cache whatever sits in `sys.modules`
+(test stand-ins then escape their own cleanup) → cache only self-imports
+(misses the extension `mlx_lm` imports first, so the abort stays reachable by
+another route) → cache by what the module IS, re-check it on read, and repair
+the eviction instead of stepping around it.
 
 ### Acceptance
 
 | acceptance evidence | status |
 | --- | --- |
-| the abort no longer kills the interpreter under pytest at the four ACID tests | with the skips temporarily removed the run reaches a normal summary: exit 1, `3 failed, 1 skipped, 32 deselected` (the skip is the Darwin boot-session `skipTest` when the sysctl is unavailable in the sandbox), no abort. Pre-fix the same command was exit 134. Pinned deterministically by the five regressions below |
+| the abort no longer kills the interpreter under pytest at the four ACID tests | with the skips temporarily removed the run reaches a normal summary: exit 1, `3 failed, 1 skipped, 32 deselected` (the skip is the Darwin boot-session `skipTest` when the sysctl is unavailable in the sandbox), no abort. Pre-fix the same command was exit 134. Pinned deterministically by the seven regressions below |
 | the four CRASH-BLOCKED skips narrowed to their remaining structural cause (A84) with reason strings updated | all four now read `STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)` and stay skipped. `STRUCTURAL-BLOCKED:` is the canonical prefix in `tests/test_s0_blocked_enumeration.py`'s census, whose counts move 17/4 → 21/0 |
-| full-suite pytest collection completes with zero deselection | `pytest --collect-only -q` → `4006 tests collected`, no collection error |
+| full-suite pytest collection completes with zero deselection | `pytest --collect-only -q` → `4008 tests collected`, no collection error |
 
 This row was never sufficient for the four ACID tests; A84 is what they still
 need. No A84 fixture work was undertaken here.
@@ -112,15 +125,21 @@ need. No A84 fixture work was undertaken here.
 | `test_mlx_runtime.py::MlxCoreResolutionTests::test_sys_modules_standin_never_enters_the_extension_cache` | `AssertionError: <module 'mlx.core'> is not None` |
 | `test_mlx_runtime.py::MlxCoreResolutionTests::test_blocked_import_sentinel_is_honoured_over_the_cache` | `AssertionError: None is not <module 'mlx.core' (ExtensionFileLoader …)>` |
 | `test_mlx_runtime.py::MlxCoreResolutionTests::test_extension_imported_by_another_component_is_remembered` | `AssertionError: None is not <module 'mlx.core' (ExtensionFileLoader …)>` |
+| `test_mlx_runtime.py::MlxCoreResolutionTests::test_resolving_after_an_eviction_repairs_sys_modules` | `AssertionError: None is not <module 'mlx.core' (ExtensionFileLoader …)>` — the evicted key stayed absent, so a plain `import mlx.core` still reached the loader |
+| `test_mlx_runtime.py::MlxCoreResolutionTests::test_a_standin_left_in_the_cache_is_discarded_not_served` | `AssertionError: 404 != 11` — the stand-in in the cache was served instead of discarded |
 
 ### Residual risk, recorded not fixed
 
-The remembered reference lives in the adapter module's own global. A
-hypothetical `importlib.reload(joulewise.adapters.mlx_runtime)` would reset it
-and re-arm the fatal re-import. Nothing in `joulewise/`, `scripts/` or `tests/`
-reloads any module (`grep -rn "importlib.reload"` → no matches), so no
-reachable path was found; a process-stable holder module would close it if one
-ever appears.
+The remembered reference lives in the adapter module's own global, so
+`importlib.reload(joulewise.adapters.mlx_runtime)` would reset it. Two things
+bound the exposure rather than close it: nothing in `joulewise/`, `scripts/` or
+`tests/` reloads any module (`grep -rn "importlib.reload"` → no matches), and
+because the resolver now restores the evicted `sys.modules` entry, a reload
+after any probe finds the key present and never reaches the cache at all. The
+window that survives is narrow — evict, reload the adapter, and probe, with no
+probe in between. A dedicated holder module that a reload does not re-execute
+would close it; that was judged not worth new product surface for a path with
+no caller, and is recorded here rather than silently dropped.
 
 ---
 
@@ -311,11 +330,27 @@ controls absent   children=[['git', 'maintenance', 'run', '--auto', '--quiet', '
 controls present  children=[]
 ```
 
-A detached child outlives the test body by construction, so it can still be
-running when `TemporaryDirectory.cleanup()` starts unlinking the repository.
-That is the whole hazard, and it is now asserted directly by
-`test_fixture_commits_start_no_detached_maintenance_process`, which fails with
-the child's argv in the message if any control is removed.
+A detached child is not waited for, so it can still be running when
+`TemporaryDirectory.cleanup()` starts unlinking the repository. That is the
+hazard, and it is now asserted directly by
+`test_fixture_commits_start_no_detached_maintenance_process`.
+
+Which control does the work, measured by deleting one at a time (git 2.50.1,
+one-commit fixture):
+
+| control removed | test result |
+| --- | --- |
+| `maintenance.auto` | **fails** — `[['git','maintenance','run','--auto','--quiet','--no-detach']] != []` |
+| `gc.auto` | passes |
+| `maintenance.autoDetach` | passes |
+| `gc.autoDetach` | passes |
+
+Only `maintenance.auto` is load-bearing at this fixture size: one commit never
+crosses gc's loose-object threshold, and the autoDetach keys only matter once
+maintenance runs at all. All four are kept — they are the repo's established
+tuple and fixtures grow — but three of them are pinned by this test as
+CONFIGURATION (the four config subtests) rather than as demonstrated necessity,
+and the docstring says so.
 
 **Inferred, not observed.** That the specific writer inside that child is
 `git gc`'s `update-server-info` writing `.git/info/refs` is the natural reading
@@ -335,14 +370,41 @@ Same family as A89 and as the calibration-exits mutation race: a background git
 process mutating a fixture tree that another thread is walking or removing.
 `EVIDENCE-AUTHOR-GIT-TEARDOWN-01` (closed 2026-08-22) is the same class again.
 
-### Scope note
+### What this cure does NOT cover, and the row that would
 
-This hygiene is **not** yet repo-wide. There are 27 `git init` call sites in 21 test modules across
-`tests/`, and the controls appear in four files:
+This hygiene is **not** repo-wide. There are 27 `git init` call sites in 21
+test modules under `tests/`; the controls appear in four files —
 `tests/test_arm_readiness_lifecycle.py`, `tests/test_calibration_exits.py`,
 `tests/test_receipt_histsem.py`, and now `tests/test_identity_pins.py`. The
-remaining sites (`tests/test_bundle.py:203`, `tests/test_calibration_ledger.py:144`,
-`tests/test_d117_decode_contrast_plan.py:305`, and others) still initialise Git
-without them. Sweeping them was deliberately left out of this PR — it would
-collide with the other T26 streams' files — and is proposed as a kernel row in
-the stream report rather than registered here.
+rest (`tests/test_bundle.py:203`, `tests/test_calibration_ledger.py:144`,
+`tests/test_d117_decode_contrast_plan.py:305`,
+`tests/test_arm_readiness_pack_digest.py:32`,
+`tests/test_calibration_bracketing.py:949`,
+`tests/test_calibration_live_three_window.py:176,1357`,
+`tests/test_arm_readiness_evidence.py:269,593`, `tests/test_bridge.py:121`,
+`tests/test_family_marker.py:822,1296`, and others) still initialise Git
+without them, and any of them can reproduce this failure family.
+
+The sweep is **deliberately not registered here** — it touches files owned by
+other T26 streams and would collide with them mid-wave. The stream report asks
+the magistrate to register it. Proposed row text, so the proposal exists
+somewhere concrete rather than only as a promise:
+
+> **GIT-FIXTURE-MAINTENANCE-SWEEP-01** — *goal*: apply the four-key git
+> auto-maintenance hygiene tuple (`maintenance.auto=false`, `gc.auto=0`,
+> `maintenance.autoDetach=false`, `gc.autoDetach=false`) at every `git init`
+> call site in `tests/` that creates a fixture repository later removed by
+> `TemporaryDirectory.cleanup()` or `shutil.rmtree`, routing sites through a
+> shared helper where one already exists rather than copying the tuple.
+> *Authority*: this record, plus the three prior members of the same failure
+> family — `EVIDENCE-AUTHOR-GIT-TEARDOWN-01` (closed 2026-08-22),
+> `PLANTEST-RGLOB-RACE-01` (`a28b55bf`), and the identity-pins teardown race
+> (PR #203, two hosted occurrences).
+> *Acceptance*: (1) an enumeration test that fails if a `tests/` module creates
+> a git fixture repository without the tuple, so the class cannot regrow;
+> (2) every touched module green three consecutive times at the bench;
+> (3) one green hosted run across both interpreters.
+> *Fence*: fixture hygiene only — no product code, no change to any test's
+> assertions, and the calibration-exits fixtures that deliberately force
+> maintenance ON (`tests/test_calibration_exits.py:2125-2130, 2660-2668`) are
+> excluded by name, since provoking maintenance is their whole mechanism.

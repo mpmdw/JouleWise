@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.machinery
 import json
 import subprocess
@@ -1332,6 +1333,55 @@ class MlxCoreResolutionTests(unittest.TestCase):
         ) as imported:
             self.assertEqual(_mlx_metal_memory({})["active_memory_bytes"], 5)
             imported.assert_not_called()
+
+    def test_resolving_after_an_eviction_repairs_sys_modules(self) -> None:
+        """Stepping around the eviction is not enough; it has to be undone.
+
+        Returning the remembered extension protects THIS adapter and nobody
+        else. While "mlx.core" is missing from `sys.modules`, any other
+        importer in the process still re-runs the native initializer and
+        aborts -- and `mlx_lm` imports it on the next `prepare`. So the
+        resolver puts the loaded extension back where it belongs.
+        """
+
+        extension = self._extension_like(3)
+        sys.modules["mlx.core"] = extension
+        self.assertEqual(_mlx_metal_memory({})["active_memory_bytes"], 3)
+
+        sys.modules.pop("mlx.core", None)
+        self.assertEqual(_mlx_metal_memory({})["active_memory_bytes"], 3)
+        self.assertIs(sys.modules.get("mlx.core"), extension)
+
+        # A plain `import mlx.core` now resolves from sys.modules and never
+        # reaches a loader, which is the property that keeps the process alive.
+        self.assertIs(importlib.import_module("mlx.core"), extension)
+
+    def test_a_standin_left_in_the_cache_is_discarded_not_served(self) -> None:
+        """The cache is re-checked on read, not only on write.
+
+        Only `_is_loaded_extension` modules are supposed to be written to the
+        cache, so a stand-in can only get there by accident -- a direct
+        assignment, or a future edit that relaxes the write rule. Whatever put
+        it there, serving it after an eviction would hand a test double to a
+        real memory probe, so the read path refuses it and re-imports instead.
+        """
+
+        double = ModuleType("mlx.core")
+        double.get_active_memory = lambda: 404
+        double.get_cache_memory = lambda: 404
+        double.get_peak_memory = lambda: 404
+        mlx_runtime._MLX_CORE_MODULE = double
+        sys.modules.pop("mlx.core", None)
+
+        extension = self._extension_like(11)
+        with patch.object(
+            mlx_runtime.importlib,
+            "import_module",
+            side_effect=lambda name: extension,
+        ) as imported:
+            self.assertEqual(_mlx_metal_memory({})["active_memory_bytes"], 11)
+            self.assertEqual(imported.call_count, 1)
+        self.assertIs(mlx_runtime._MLX_CORE_MODULE, extension)
 
 
 if __name__ == "__main__":
