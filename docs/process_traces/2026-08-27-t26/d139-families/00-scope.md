@@ -264,3 +264,39 @@ ten strata each mapping BOTH contrast ids. If that derivation cannot produce
 cross-arm strata, the stream returns NEEDS-RULING rather than inventing a stratum
 design — a stratum design would be a new scientific commitment, and none is
 ratified.
+
+## The pinset cure, ready to apply — and why this stream did not apply it
+
+At the S8 head after fix round 2, the gamma `_v3` pack root's committed tree
+digest is
+
+    6986bb496aed2b2b0329f79e1c2877ff4cb0ab537ca1be26ff7b7d65bb121d0a
+
+(the earlier value in the addendum above was measured before fix round 2 changed
+the generator again; this is the one that matches the current bytes, and it must
+be recomputed if any further commit touches that file).
+
+The cure is two literals:
+
+1. `configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json`, the row whose
+   `pack_id` is `d117_contrast_qwen25_1p5b_vs_7b_v3`: replace
+   `current_pack_sha256` `0d07194143702b266267f0faa7b051695ffb5e1c56dc7a69d0b2dca8aaa883ef`
+   with the digest above. It occurs exactly once in the file.
+2. `tests/test_receipt_histsem.py:33`: `PINSET_SHA256` must become the SHA-256 of
+   the edited pinset file — recompute it after step 1, do not guess it.
+
+The stream did not make this edit, for three converging reasons, and the
+magistrate should treat that as a finding rather than an omission:
+
+- D-157 R-5 ruled that a pinset collision "returns here as NEEDS-RULING before
+  the PR merges";
+- the pinset is guarded by TWO deliberate byte tripwires — the row digest itself
+  and `PINSET_SHA256` in the test — and `tests/test_receipt_histsem.py`'s
+  `test_pinset_is_byte_pinned_and_has_no_update_lane` asserts that
+  `scripts/verify_receipt_histsem.py` contains no `--update` flag at all. The
+  absence of an update lane is the design, not a gap;
+- the harness permission classifier independently refused the write.
+
+Three mechanisms agreeing that this file is not edited by an agent acting on its
+own judgement is the answer to whether it should be. The values above make the
+ruled edit a mechanical one-minute action for whoever holds the authority.
