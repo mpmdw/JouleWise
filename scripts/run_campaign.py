@@ -141,6 +141,7 @@ from joulewise.whole_window import (  # noqa: E402
     MINTED_CONSUMPTION_SEMANTICS_ID,
     OCCURRENCE_SUPERSESSION_SCHEMA,
     PROSPECTIVE_MEMBER_FAILURE_REASON_CODES,
+    SupersessionRecorderError,
     SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID,
     build_neg8_freshness_observation,
     build_evaluation_basis,
@@ -151,6 +152,7 @@ from joulewise.whole_window import (  # noqa: E402
     load_neg8_drift_bound_artifact,
     mint_neg8_drift_bound_artifact,
     ordinary_present_bundle_paths,
+    require_occurrence_supersession_recordable,
     source_manifest_descriptors,
     supersession_entry_sha256,
     supersession_entry_validation_results,
@@ -724,7 +726,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--record-supersession",
         metavar="BUNDLE_ID",
-        help="Append an explicit ordinary-run occurrence supersession artifact",
+        help=(
+            "Append at most one explicit ordinary-run occurrence supersession "
+            "artifact per bundle in the target log"
+        ),
     )
     parser.add_argument(
         "--quarantine-path",
@@ -5356,6 +5361,9 @@ def _run_record_supersession_locked(
     log_rows = load_campaign_log_rows(log_path)
     if log_rows is None:
         raise ValueError("campaign log is not object-only JSONL")
+    require_occurrence_supersession_recordable(
+        log_rows, bundle_id, log_path, runs_dir
+    )
     grouped_events: dict[
         str, dict[str, list[tuple[str, dict[str, Any]]]]
     ] = {}
@@ -8136,7 +8144,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.whole_window_verdict:
             return run_whole_window_verdict(args)
         return run_campaign(args)
-    except LaunchLineageError as exc:
+    except (LaunchLineageError, SupersessionRecorderError) as exc:
         print(f"error: {exc.reason_code}: {exc}", file=sys.stderr)
         return 2
     except Exception as exc:

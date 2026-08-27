@@ -1895,6 +1895,8 @@ Fresh-process recovery examples:
 | `mock_telemetry_claim_ineligible` | A custody-bound config identifies mock telemetry. | Terminally refuse the member for claims. Mock data is development evidence and has no claim waiver. |
 | `whole_window_drift_allowance_unrecorded` | A passing basis lacks an authenticated family allowance, or a claim omitted its named allowance term. | Refuse the affected floor/claim. Never substitute zero; rerun the governed verdict/extraction path or recollect if provenance cannot be restored. |
 | `whole_window_campaign_membership_unresolved` | Campaign-log provenance is missing, ambiguous, duplicated, or unbound. | Repair custody or recollect. Do not replace manifest evidence with a directory scan. |
+| `campaign_occurrence_supersession_already_recorded` | The target campaign log already contains a recognizable supersession row for this bundle, or contains a recognizable supersession row whose bundle cannot be identified. A supersession disposition is already on the record — for this bundle, or, when the bundle cannot be identified, for a bundle that cannot be determined. | Preserve the log and stop; no row was appended. Do not retry against this log. If the selected occurrence later failed, use a fresh runs root or keep the member non-claim-bearing; same-root chained recovery is not supported. |
+| `campaign_occurrence_supersession_log_unreadable` | No supersession row for this bundle was recorded, but the target campaign log cannot be read by the supersession consumer — for example a torn final line that is itself a partial supersession row, which the provenance loader tolerates and the consumer reader does not. Appending here would silently quarantine and truncate that tail as a side effect of the write. | Preserve the log and stop; no row was appended. Repair custody deliberately and on the record, or collect into a fresh runs root. Do not retry the recorder against this log: the append itself would perform the custody repair, making an operator decision a side effect of a supersession write. |
 | `whole_window_verdict_conflict` | Different stored verdict rows purport to govern one basis, or verdict history is malformed. | Stop. Latest-wins is forbidden; preserve the conflict and mint a genuinely new basis if needed. |
 | `launch_consumption_missing` | A marker-bearing claim input lacks its required v2 consumption reference, primary, or sidecar. | Refuse the stage. Preserve any bytes only as diagnostic evidence; issue a newly frozen bracket session and ARM receipt. Never reconstruct or attach a receipt after collection. |
 | `launch_consumption_invalid` | Consumption or lifecycle custody is noncanonical, schema-invalid, has a bad sidecar/digest, or has an invalid predecessor chain. | Stop and preserve the entire namespace. The attempt is burned; no repair-in-place or retry exists. |
@@ -1930,6 +1932,40 @@ external arm receipt that semantically supersedes its predecessor, and only
 when the frozen attempt policy permits that successor. Preserve every prior
 receipt as evidence.
 
+An ordinary-run bundle may be recorded as superseded at most once in one
+target campaign log. The recorder recognizes a supersession row when either
+its `record_type` is exactly `campaign_occurrence_supersession` or its
+`schema_version` is exactly
+`joulewise.campaign_occurrence_supersession.v1`. Recognition, not validation,
+occupies the bundle's one recording: an invalid recognizable row still blocks
+a second write. A recognizable row with a missing, empty, or non-string
+`bundle_id` makes the whole target log unidentifiable and blocks every further
+supersession write to that log.
+
+The recorder also refuses when the target log cannot be read by the same
+reader the downstream consumers use. Two readers see this log: the provenance
+loader, which tolerates exactly one recognized torn final line, and the
+supersession consumer reader, which refuses the whole log outright when any
+line is not a JSON object. A torn final line that is itself a partial
+supersession row therefore falls in the gap: the loader drops it, but the
+consumer will refuse the log. The recorder refuses under its own reason code,
+`campaign_occurrence_supersession_log_unreadable`, rather than appending into
+that gap. The append would not fail: `append_log` quarantines a recognized
+torn tail, truncates the log to the last complete line, and then appends. That
+is precisely the objection — quarantining an operator's torn evidence is a
+custody decision, and it must be made deliberately and recorded, not performed
+as a side effect of writing a supersession. That name is deliberately
+distinct from `campaign_occurrence_supersession_already_recorded`: in this
+case nothing was already recorded for the bundle, and a refusal name must
+report the condition that actually held. Preserve the log and repair custody;
+do not retry the recorder against it.
+
+If an occurrence that was already selected by a supersession later fails, do
+not append a second supersession in the same log. Start a fresh runs root (a
+new directory holding a new campaign log and its run bundles), or retain the
+member only as non-claim evidence. Same-root chained recovery is not supported;
+a predecessor-bound chained-supersession schema is queued as separate work.
+
 Inspect the occupied bundle:
 
 ```sh
@@ -1944,8 +1980,70 @@ mv "$RUNS_ROOT/$BUNDLE_ID" \
   "$QUARANTINE_ROOT/${BUNDLE_ID}__$(TZ=UTC date '+%Y%m%dT%H%M%SZ')"
 ```
 
-After the exact replacement exists and is strict-valid, record the old
-occurrence:
+After the exact replacement exists and is strict-valid, complete the detection
+step below before recording the old occurrence.
+
+Before consuming any operator-held corpus, run the following scan. Here an
+operator-held corpus means a runs root retained outside the current checkout,
+for example on attached custody or backup storage. "Consume" includes a
+whole-window verdict, governed extraction, mint, or analysis that could support
+a claim. Set `RUNS_ROOT` to that corpus's root and `LOG` to the exact campaign
+log that will be consumed; do not scan a copied or substitute log.
+
+```sh
+RUNS_ROOT=/operator/path/to/runs
+LOG="$RUNS_ROOT/campaign_log.jsonl"
+.venv/bin/python - "$RUNS_ROOT" "$LOG" <<'PY'
+from collections import defaultdict
+import json
+from pathlib import Path
+import sys
+
+from joulewise.whole_window import supersession_entry_validation_results
+
+result = supersession_entry_validation_results(Path(sys.argv[1]), Path(sys.argv[2]))
+if result is None:
+    print(json.dumps({"status": "unreadable_or_unidentifiable"}))
+    raise SystemExit(2)
+
+rows, validations = result
+grouped = defaultdict(list)
+for index, (row, valid) in enumerate(zip(rows, validations, strict=True), 1):
+    grouped[row["bundle_id"]].append({
+        "supersession_index": index,
+        "valid": valid,
+        "timestamp": row.get("timestamp"),
+        "entry_sha256": row.get("entry_sha256"),
+    })
+
+duplicates = {
+    bundle_id: entries
+    for bundle_id, entries in sorted(grouped.items())
+    if len(entries) > 1
+}
+print(json.dumps({
+    "status": "duplicates" if duplicates else "clean",
+    "duplicates": duplicates,
+}, indent=2, sort_keys=True))
+raise SystemExit(1 if duplicates else 0)
+PY
+```
+
+Exit `0` means the log is readable, every recognizable supersession has an
+identifiable bundle, and no bundle has more than one such row. Exit `1` prints
+the duplicated bundle IDs and their recorded row fields; preserve the bytes
+and stop consumption. Exit `2` means the log is unreadable or contains a
+recognizable supersession with an unidentifiable bundle; preserve the bytes
+and stop consumption. Save the JSON output with the corpus custody record.
+
+This per-`bundle_id` scan is mandatory even when the D-093 supersession audit
+reports clean. That audit compares totals only: `raw_count == validated_count`.
+Two valid rows for the same bundle therefore appear as two raw and two valid
+and pass that equality, so D-093 is blind to this duplicate-disposition defect.
+The scan above groups recognizable rows by the uniqueness key that D-093 does
+not inspect.
+
+Only after the scan exits `0`, record the old occurrence:
 
 ```sh
 .venv/bin/python scripts/run_campaign.py \

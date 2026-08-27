@@ -87,6 +87,18 @@ CONSUMPTION_PROVENANCE_PRECHECK_KEY = "calibration_rebracket_consumption"
 OCCURRENCE_SUPERSESSION_SCHEMA = (
     "joulewise.campaign_occurrence_supersession.v1"
 )
+REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED = (
+    "campaign_occurrence_supersession_already_recorded"
+)
+REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE = (
+    "campaign_occurrence_supersession_log_unreadable"
+)
+SUPERSESSION_RECORDER_REASON_CODES = frozenset(
+    {
+        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED,
+        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE,
+    }
+)
 CURRENT_MINT_REDUCER_VERSIONS = frozenset({"0.5.2", "0.6.2"})
 NEG8_DRIFT_BOUND_SCHEMA = "joulewise.neg8_drift_bound.v1"
 NEG8_REFERENCE_CORPUS_SCHEMA = "joulewise.neg8_reference_corpus.v1"
@@ -2272,6 +2284,18 @@ def supersession_entry_sha256(entry: Mapping[str, Any]) -> str:
     )
 
 
+class SupersessionRecorderError(ValueError):
+    """A refusal from the registered supersession-recorder vocabulary."""
+
+    def __init__(self, reason_code: str, message: str) -> None:
+        if reason_code not in SUPERSESSION_RECORDER_REASON_CODES:
+            raise ValueError(
+                f"unregistered supersession-recorder reason code {reason_code!r}"
+            )
+        super().__init__(message)
+        self.reason_code = reason_code
+
+
 def _safe_source_path(root: Path, text: Any) -> Path | None:
     if not isinstance(text, str) or not text:
         return None
@@ -2739,6 +2763,83 @@ def occurrence_descriptor_identity(
     return (path, member_index, bundle_index)
 
 
+def _is_recognizable_occurrence_supersession(value: Mapping[str, Any]) -> bool:
+    return bool(
+        value.get("record_type") == "campaign_occurrence_supersession"
+        or value.get("schema_version") == OCCURRENCE_SUPERSESSION_SCHEMA
+    )
+
+
+def _recorded_string(value: Any) -> str:
+    if not isinstance(value, str):
+        value = "<missing-or-non-string>"
+    return json.dumps(value)
+
+
+def require_occurrence_supersession_recordable(
+    log_rows: Sequence[Mapping[str, Any]],
+    bundle_id: str,
+    log_path: Path,
+    runs_root: Path,
+) -> None:
+    """Refuse a second disposition for one bundle in one campaign log."""
+
+    consumer_results = supersession_entry_validation_results(runs_root, log_path)
+    recognizable = [
+        row for row in log_rows if _is_recognizable_occurrence_supersession(row)
+    ]
+    unidentifiable = next(
+        (
+            row
+            for row in recognizable
+            if not isinstance(row.get("bundle_id"), str)
+            or not row.get("bundle_id")
+        ),
+        None,
+    )
+    if unidentifiable is not None:
+        first = unidentifiable
+        recorded_bundle_id = first.get("bundle_id")
+        same_bundle_count = sum(
+            row.get("bundle_id") == recorded_bundle_id for row in recognizable
+        )
+    else:
+        matching = [row for row in recognizable if row.get("bundle_id") == bundle_id]
+        if not matching:
+            if consumer_results is not None:
+                return
+            message = (
+                "supersession recording refused: no supersession row for this "
+                "bundle was recorded, but the target campaign log cannot be "
+                "read by the supersession consumer; appending would silently "
+                "quarantine and truncate the unreadable tail as a side effect "
+                "of the write, and that custody repair must be a deliberate "
+                "recorded act; "
+                f"target log path={json.dumps(str(log_path))}; "
+                "no row was appended"
+            )
+            raise SupersessionRecorderError(
+                REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE,
+                message,
+            )
+        first = matching[0]
+        recorded_bundle_id = bundle_id
+        same_bundle_count = len(matching)
+    message = (
+        "supersession recording refused: first recognizable existing row "
+        f"bundle_id={_recorded_string(recorded_bundle_id)}; "
+        f"recognizable same-bundle row count={same_bundle_count}; "
+        f"target log path={json.dumps(str(log_path))}; "
+        f"recorded timestamp={_recorded_string(first.get('timestamp'))}; "
+        f"recorded entry_sha256={_recorded_string(first.get('entry_sha256'))}; "
+        "no row was appended"
+    )
+    raise SupersessionRecorderError(
+        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED,
+        message,
+    )
+
+
 def supersession_entry_validation_results(
     runs_root: Path, log_path: Path | None = None
 ) -> tuple[list[dict[str, Any]], list[bool]] | None:
@@ -2779,11 +2880,7 @@ def supersession_entry_validation_results(
             return None
         if not isinstance(value, dict):
             return None
-        recognizable = (
-            value.get("record_type") == "campaign_occurrence_supersession"
-            or value.get("schema_version") == OCCURRENCE_SUPERSESSION_SCHEMA
-        )
-        if not recognizable:
+        if not _is_recognizable_occurrence_supersession(value):
             continue
         bundle_id = value.get("bundle_id")
         if not isinstance(bundle_id, str) or not bundle_id:
@@ -5798,6 +5895,10 @@ __all__ = [
     "MINTED_CONSUMPTION_SEMANTICS_ID",
     "SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID",
     "OCCURRENCE_SUPERSESSION_SCHEMA",
+    "REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED",
+    "REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE",
+    "SUPERSESSION_RECORDER_REASON_CODES",
+    "SupersessionRecorderError",
     "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
     "WHOLE_WINDOW_PROVENANCE_SCHEMA",
     "WHOLE_WINDOW_SCHEMA",
@@ -5816,6 +5917,7 @@ __all__ = [
     "neg8_claim_family_for_metric",
     "neg8_freshness_bindings_from_metadata",
     "ordinary_present_bundle_paths",
+    "require_occurrence_supersession_recordable",
     "source_manifest_descriptors",
     "supersession_entry_sha256",
     "supersession_entry_validation_results",

@@ -8873,7 +8873,12 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         return work_id
 
     def _install_v2_occurrence_sequence(
-        self, binding, bundle_id: str, sequence: list[str]
+        self,
+        binding,
+        bundle_id: str,
+        sequence: list[str],
+        *,
+        manifest_prefix: str = "",
     ) -> Path:
         manifest_dir = self.root / "campaign_manifests"
         log_path = self.root / "campaign_log.jsonl"
@@ -8881,7 +8886,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             for index, execution in enumerate(sequence):
                 manifest = {
                     "schema_version": "joulewise.campaign_provenance.v2",
-                    "session_id": f"projection-{index}",
+                    "session_id": f"{manifest_prefix}projection-{index}",
                     "analysis_manifest_id": "window-a",
                     "campaign_policy": {"sha256": binding.sha256},
                     "members": [
@@ -8899,12 +8904,13 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                     ],
                 }
                 run_campaign_module.write_campaign_provenance(
-                    manifest_dir / f"{index:02d}-{execution}.json",
+                    manifest_dir
+                    / f"{manifest_prefix}{index:02d}-{execution}.json",
                     manifest,
                     log_path,
                 )
         canonical = self.root / bundle_id
-        canonical.mkdir()
+        canonical.mkdir(exist_ok=True)
         quarantine = Path(tempfile.mkdtemp(prefix="jw-projection-quarantine-"))
         self.addCleanup(shutil.rmtree, quarantine, True)
         for name, payload in (
@@ -8916,6 +8922,414 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             (canonical / name).write_text(raw, encoding="utf-8")
             (quarantine / name).write_text(raw, encoding="utf-8")
         return quarantine
+
+    def _supersession_argv(
+        self, binding, bundle_id: str, quarantine: Path
+    ) -> list[str]:
+        return [
+            "--record-supersession",
+            bundle_id,
+            "--quarantine-path",
+            str(quarantine),
+            "--reason",
+            "failed occurrence quarantined before retry",
+            "--runs-dir",
+            str(self.root),
+            "--campaign-policy",
+            str(binding.path),
+        ]
+
+    def test_supersession_recorder_refuses_repeat_without_mutating_log(
+        self,
+    ) -> None:
+        binding = self._binding()
+        bundle_id = "repeat-refusal-bundle"
+        quarantine = self._install_v2_occurrence_sequence(
+            binding, bundle_id, ["existing", "existing", "invoked"]
+        )
+        argv = self._supersession_argv(binding, bundle_id, quarantine)
+        args = run_campaign_module.parse_args(argv)
+        first_stdout = io.StringIO()
+        with redirect_stdout(first_stdout):
+            self.assertEqual(run_campaign_module.run_record_supersession(args), 0)
+        first_row = json.loads(first_stdout.getvalue())
+        log_path = self.root / "campaign_log.jsonl"
+        before_repeat = log_path.read_bytes()
+
+        api_stdout = io.StringIO()
+        with (
+            redirect_stdout(api_stdout),
+            self.assertRaises(
+                run_campaign_module.SupersessionRecorderError
+            ) as caught,
+        ):
+            run_campaign_module.run_record_supersession(args)
+        self.assertEqual(api_stdout.getvalue(), "")
+        self.assertEqual(
+            caught.exception.reason_code,
+            "campaign_occurrence_supersession_already_recorded",
+        )
+        expected_message = (
+            "supersession recording refused: first recognizable existing row "
+            f"bundle_id={json.dumps(bundle_id)}; "
+            "recognizable same-bundle row count=1; "
+            f"target log path={json.dumps(str(log_path))}; "
+            f"recorded timestamp={json.dumps(first_row['timestamp'])}; "
+            f"recorded entry_sha256={json.dumps(first_row['entry_sha256'])}; "
+            "no row was appended"
+        )
+        self.assertEqual(str(caught.exception), expected_message)
+        self.assertEqual(log_path.read_bytes(), before_repeat)
+
+        cli_stdout = io.StringIO()
+        cli_stderr = io.StringIO()
+        with redirect_stdout(cli_stdout), redirect_stderr(cli_stderr):
+            self.assertEqual(run_campaign_module.main(argv), 2)
+        self.assertEqual(cli_stdout.getvalue(), "")
+        self.assertEqual(
+            cli_stderr.getvalue(),
+            "error: campaign_occurrence_supersession_already_recorded: "
+            f"{expected_message}\n",
+        )
+        self.assertEqual(log_path.read_bytes(), before_repeat)
+        supersessions = [
+            row
+            for row in read_wire_jsonl(log_path)
+            if row.get("record_type") == "campaign_occurrence_supersession"
+            or row.get("schema_version")
+            == run_campaign_module.OCCURRENCE_SUPERSESSION_SCHEMA
+        ]
+        self.assertEqual(supersessions, [first_row])
+
+    def test_supersession_recorder_refuses_widened_third_occurrence(
+        self,
+    ) -> None:
+        binding = self._binding()
+        bundle_id = "third-occurrence-refusal-bundle"
+        quarantine = self._install_v2_occurrence_sequence(
+            binding, bundle_id, ["existing", "existing", "invoked"]
+        )
+        first_args = run_campaign_module.parse_args(
+            self._supersession_argv(binding, bundle_id, quarantine)
+        )
+        first_stdout = io.StringIO()
+        with redirect_stdout(first_stdout):
+            self.assertEqual(
+                run_campaign_module.run_record_supersession(first_args), 0
+            )
+        first_row = json.loads(first_stdout.getvalue())
+
+        third_quarantine = self._install_v2_occurrence_sequence(
+            binding,
+            bundle_id,
+            ["invoked"],
+            manifest_prefix="third-",
+        )
+        self.assertTrue(
+            run_campaign_module.validate_occurrence_supersession_entry(
+                first_row, self.root
+            )
+        )
+
+        catalog = run_campaign_module.load_authenticated_campaign_catalog(
+            self.root, self.root / "campaign_log.jsonl"
+        )
+        self.assertIsNotNone(catalog)
+        assert catalog is not None
+        events = []
+        for record in catalog:
+            source = {
+                "path": f"campaign_manifests/{record.path.name}",
+                "sha256": hashlib.sha256(record.raw_bytes).hexdigest(),
+            }
+            for member_index, member in enumerate(record.value["members"]):
+                for bundle_index, declared_id in enumerate(member["bundle_ids"]):
+                    if declared_id == bundle_id:
+                        events.append(
+                            (
+                                member["execution"],
+                                {
+                                    "bundle_id": declared_id,
+                                    "source_manifest": dict(source),
+                                    "member_index": member_index,
+                                    "bundle_index": bundle_index,
+                                },
+                            )
+                        )
+        would_record = run_campaign_module.normalized_campaign_representatives(
+            {bundle_id: events}
+        )[bundle_id]
+        self.assertNotEqual(would_record[-1], first_row["selected_occurrence"])
+        self.assertEqual(
+            would_record[:-1],
+            [
+                *first_row["superseded_occurrences"],
+                first_row["selected_occurrence"],
+            ],
+        )
+
+        log_path = self.root / "campaign_log.jsonl"
+        before_repeat = log_path.read_bytes()
+        second_args = run_campaign_module.parse_args(
+            self._supersession_argv(binding, bundle_id, third_quarantine)
+        )
+        with self.assertRaises(
+            run_campaign_module.SupersessionRecorderError
+        ) as caught:
+            run_campaign_module.run_record_supersession(second_args)
+        self.assertEqual(
+            caught.exception.reason_code,
+            "campaign_occurrence_supersession_already_recorded",
+        )
+        self.assertEqual(log_path.read_bytes(), before_repeat)
+
+    def test_supersession_recorder_refuses_invalid_existing_row(self) -> None:
+        binding = self._binding()
+        bundle_id = "invalid-existing-bundle"
+        quarantine = self._install_v2_occurrence_sequence(
+            binding, bundle_id, ["existing", "existing", "invoked"]
+        )
+        args = run_campaign_module.parse_args(
+            self._supersession_argv(binding, bundle_id, quarantine)
+        )
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(run_campaign_module.run_record_supersession(args), 0)
+        log_path = self.root / "campaign_log.jsonl"
+        lines = log_path.read_bytes().splitlines(keepends=True)
+        corrupted_row = None
+        for index, raw_line in enumerate(lines):
+            row = json.loads(raw_line)
+            if row.get("record_type") == "campaign_occurrence_supersession":
+                row["entry_sha256"] = "0" * 64
+                corrupted_row = row
+                lines[index] = (
+                    json.dumps(row, sort_keys=True) + "\n"
+                ).encode("utf-8")
+                break
+        self.assertIsNotNone(corrupted_row)
+        assert corrupted_row is not None
+        log_path.write_bytes(b"".join(lines))
+        self.assertFalse(
+            run_campaign_module.validate_occurrence_supersession_entry(
+                corrupted_row, self.root
+            )
+        )
+        before_repeat = log_path.read_bytes()
+
+        with self.assertRaises(
+            run_campaign_module.SupersessionRecorderError
+        ) as caught:
+            run_campaign_module.run_record_supersession(args)
+        self.assertEqual(
+            caught.exception.reason_code,
+            "campaign_occurrence_supersession_already_recorded",
+        )
+        self.assertEqual(log_path.read_bytes(), before_repeat)
+        self.assertEqual(
+            sum(
+                row.get("record_type")
+                == "campaign_occurrence_supersession"
+                for row in read_wire_jsonl(log_path)
+            ),
+            1,
+        )
+
+    def test_supersession_recorder_allows_different_bundle_in_same_log(
+        self,
+    ) -> None:
+        binding = self._binding()
+        first_id = "first-bundle"
+        second_id = "second-bundle"
+        first_quarantine = self._install_v2_occurrence_sequence(
+            binding, first_id, ["existing", "existing", "invoked"]
+        )
+        second_quarantine = self._install_v2_occurrence_sequence(
+            binding,
+            second_id,
+            ["existing", "existing", "invoked"],
+            manifest_prefix="second-",
+        )
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(
+                run_campaign_module.run_record_supersession(
+                    run_campaign_module.parse_args(
+                        self._supersession_argv(
+                            binding, first_id, first_quarantine
+                        )
+                    )
+                ),
+                0,
+            )
+            self.assertEqual(
+                run_campaign_module.run_record_supersession(
+                    run_campaign_module.parse_args(
+                        self._supersession_argv(
+                            binding, second_id, second_quarantine
+                        )
+                    )
+                ),
+                0,
+            )
+        supersessions = [
+            row
+            for row in read_wire_jsonl(self.root / "campaign_log.jsonl")
+            if row.get("record_type") == "campaign_occurrence_supersession"
+        ]
+        self.assertEqual(
+            [row["bundle_id"] for row in supersessions],
+            [first_id, second_id],
+        )
+
+    def test_supersession_recorder_refuses_unidentifiable_log(self) -> None:
+        cases = ("missing", "empty", "non-string")
+        for case in cases:
+            with self.subTest(bundle_id_shape=case):
+                case_root = Path(tempfile.mkdtemp(prefix=f"jw-unidentified-{case}-"))
+                self.addCleanup(shutil.rmtree, case_root, True)
+                original_root = self.root
+                self.root = case_root
+                try:
+                    binding = self._binding()
+                    bundle_id = "requested-bundle"
+                    quarantine = self._install_v2_occurrence_sequence(
+                        binding,
+                        bundle_id,
+                        ["existing", "existing", "invoked"],
+                    )
+                    unidentifiable = {
+                        "schema_version": (
+                            run_campaign_module.OCCURRENCE_SUPERSESSION_SCHEMA
+                        ),
+                        "timestamp": None,
+                        "entry_sha256": None,
+                    }
+                    if case == "empty":
+                        unidentifiable["bundle_id"] = ""
+                    elif case == "non-string":
+                        unidentifiable["bundle_id"] = 7
+                    log_path = case_root / "campaign_log.jsonl"
+                    with log_path.open("a", encoding="utf-8") as handle:
+                        handle.write(json.dumps(unidentifiable) + "\n")
+                    before = log_path.read_bytes()
+                    args = run_campaign_module.parse_args(
+                        self._supersession_argv(binding, bundle_id, quarantine)
+                    )
+                    with self.assertRaises(
+                        run_campaign_module.SupersessionRecorderError
+                    ) as caught:
+                        run_campaign_module.run_record_supersession(args)
+                    self.assertEqual(
+                        caught.exception.reason_code,
+                        "campaign_occurrence_supersession_already_recorded",
+                    )
+                    message = str(caught.exception)
+                    self.assertIn(
+                        "recognizable same-bundle row count=1", message
+                    )
+                    self.assertIn(
+                        'recorded timestamp="<missing-or-non-string>"',
+                        message,
+                    )
+                    self.assertIn(
+                        'recorded entry_sha256="<missing-or-non-string>"',
+                        message,
+                    )
+                    if case == "empty":
+                        self.assertIn('bundle_id=""', message)
+                    else:
+                        self.assertIn(
+                            'bundle_id="<missing-or-non-string>"', message
+                        )
+                    self.assertIn("no row was appended", message)
+                    self.assertEqual(log_path.read_bytes(), before)
+                finally:
+                    self.root = original_root
+
+    def test_supersession_recorder_refuses_torn_recognizable_final_row(
+        self,
+    ) -> None:
+        binding = self._binding()
+        bundle_id = "torn-recognizable-refusal-bundle"
+        quarantine = self._install_v2_occurrence_sequence(
+            binding, bundle_id, ["existing", "existing", "invoked"]
+        )
+        args = run_campaign_module.parse_args(
+            self._supersession_argv(binding, bundle_id, quarantine)
+        )
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(run_campaign_module.run_record_supersession(args), 0)
+
+        log_path = self.root / "campaign_log.jsonl"
+        prefix, final_row, terminator = log_path.read_bytes().rsplit(b"\n", 2)
+        self.assertEqual(terminator, b"")
+        schema_prefix = (
+            f'"schema_version": '
+            f'{json.dumps(run_campaign_module.OCCURRENCE_SUPERSESSION_SCHEMA)}'
+        ).encode("ascii")
+        torn_end = final_row.index(schema_prefix) + len(schema_prefix)
+        before_repeat = prefix + b"\n" + final_row[:torn_end]
+        log_path.write_bytes(before_repeat)
+
+        lenient_rows = run_campaign_module.load_campaign_log_rows(log_path)
+        self.assertIsNotNone(lenient_rows)
+        assert lenient_rows is not None
+        self.assertGreater(len(lenient_rows), 0)
+        self.assertFalse(
+            any(
+                row.get("record_type") == "campaign_occurrence_supersession"
+                or row.get("schema_version")
+                == run_campaign_module.OCCURRENCE_SUPERSESSION_SCHEMA
+                for row in lenient_rows
+            )
+        )
+        self.assertIsNone(
+            run_campaign_module.supersession_entry_validation_results(
+                self.root, log_path
+            )
+        )
+
+        api_stdout = io.StringIO()
+        with redirect_stdout(api_stdout), self.assertRaises(
+            run_campaign_module.SupersessionRecorderError
+        ) as caught:
+            run_campaign_module.run_record_supersession(args)
+        # The truthful name matters: nothing was already recorded for this
+        # bundle, so the already-recorded code would misreport the condition.
+        self.assertEqual(
+            caught.exception.reason_code,
+            "campaign_occurrence_supersession_log_unreadable",
+        )
+        message = str(caught.exception)
+        self.assertIn(
+            "no supersession row for this bundle was recorded", message
+        )
+        self.assertIn(
+            "cannot be read by the supersession consumer", message
+        )
+        self.assertIn(
+            "quarantine and truncate the unreadable tail", message
+        )
+        self.assertIn(f"target log path={json.dumps(str(log_path))}", message)
+        self.assertIn("no row was appended", message)
+        self.assertEqual(api_stdout.getvalue(), "")
+        self.assertEqual(log_path.read_bytes(), before_repeat)
+
+        cli_stdout = io.StringIO()
+        cli_stderr = io.StringIO()
+        with redirect_stdout(cli_stdout), redirect_stderr(cli_stderr):
+            self.assertEqual(
+                run_campaign_module.main(
+                    self._supersession_argv(binding, bundle_id, quarantine)
+                ),
+                2,
+            )
+        self.assertEqual(cli_stdout.getvalue(), "")
+        self.assertEqual(
+            cli_stderr.getvalue(),
+            "error: campaign_occurrence_supersession_log_unreadable: "
+            f"{message}\n",
+        )
+        self.assertEqual(log_path.read_bytes(), before_repeat)
 
     def test_supersession_recorder_consumes_join_normalized_projection(self) -> None:
         binding = self._binding()
