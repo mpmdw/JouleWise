@@ -321,3 +321,31 @@ its own exclusive lane. Run separately it shows two subtest failures in
 (checked at `6f74a027`), so they pre-date this branch and belong to whoever owns
 that lane. They are timing-sensitive and this machine was running several
 concurrent agent sessions; the same job passed in CI earlier tonight.
+
+## Delta re-audit escalation: the stale pin BLOCKS THE MINT, not just CI
+
+The delta re-audit (execution lens, read-only, fresh session) established a
+consequence the earlier rounds had not: `_gate_receipt_histsem(predecessor)`
+runs at `joulewise/arm_readiness.py:6901`, BEFORE the new admission check at
+`:7061`. So the transaction's own C8 freeze route, run literally, now returns:
+
+    scripts/generate_arm_readiness.py freeze \
+      --pack-root configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4 \
+      --predecessor-pack-root configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3
+
+    {"status": "REFUSE", "reason_codes": ["histsem_pinset_mismatch"],
+     "detail": "current committed pack differs from the governed pin",
+     "receipt_path": null, "mutated": false, "arm_disposition": "NOT_APPLICABLE"}
+
+exit 1. The `_v3` gamma `arm` route refuses the same way, and
+`scripts/verify_receipt_histsem.py --require-published` exits 2. The eight other
+v1 pinset rows pass; only the gamma `_v3` row refuses.
+
+**This is therefore not CI hygiene. Until the pin is re-derived, this branch
+cannot mint `_v4` at all** — the transaction would stop at C8. The two literals
+above are a precondition of the transaction night, not a tidy-up after it.
+
+`scripts/build_v4_histsem_pinset.py` does not independently trip on the stale
+base row (it structurally validates the base pinset and recomputes only the
+supplied `_v4` roots, `:121-238`, `:259-260`) — but it cannot run either, because
+the `_v4` gamma pack it needs cannot be minted while C8 refuses.

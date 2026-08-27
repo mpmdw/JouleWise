@@ -427,7 +427,27 @@ class MintAnalysisAdmissionTests(unittest.TestCase):
 
     def test_mint_admits_resolved_shared_m2_manifest(self) -> None:
         pack, _tree_before = self._gamma_pack()
-        result = self._mint(pack)
+        # A PASS alone does not prove admission RAN: a valid pack also mints
+        # when the check is absent, which is exactly how this test survived its
+        # mutant in the delta re-audit.  Spy on the production predicate so the
+        # positive control pins the call site, not just the outcome.
+        calls: list[Path] = []
+        original = readiness._admit_bound_analysis_manifest
+
+        def spy(pack_root: Path, tree: object) -> None:
+            calls.append(Path(pack_root).resolve())
+            return original(pack_root, tree)
+
+        with mock.patch.object(
+            readiness, "_admit_bound_analysis_manifest", spy
+        ):
+            result = self._mint(pack)
+        self.assertEqual(
+            calls,
+            [Path(pack).resolve()],
+            "the mint must run analysis admission exactly once, on the pack "
+            "it is about to freeze",
+        )
         self.assertEqual(result["status"], "PASS")
         self.assertTrue(result["mutated"])
         self.assertTrue(Path(result["receipt_path"]).is_file())
