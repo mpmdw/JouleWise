@@ -191,3 +191,53 @@ found things the other seats missed. Rulings:
 23. **Length.** The seat says 8–10k; the others 12–16k. RULING: 12k
     main-text HARD ceiling, 10k the target; the round-2 PR reports the
     count.
+
+## Addendum 2 (2026-08-27) — round-1 verification returns; corrections and decisions
+
+Round 1 (PR #202, merged) verified six items against code and record.
+Two of this ruling's premises were WRONG and are corrected here:
+
+24. **Item 14 is WITHDRAWN.** Holm / p-values are implemented
+    (`analysis_engine/multiplicity.py`, `two_sided_student_t_p_value`,
+    `tost_p_value`) and ratified by D-139 A2. The paper keeps them. A
+    REAL conflict was found instead: `analysis_manifest_v3.py:476`
+    freezes m=1 while D-139 A2 rules m=2. This is potentially
+    claim-bearing for the `_v4` transaction; a three-seat blind consult
+    (Sol xhigh, Opus, Fable) is running and the ruling follows as
+    Addendum 3. Until then the paper text states m=2 per D-139 A2 and
+    footnotes nothing.
+25. **Item 15 is WITHDRAWN.** `[B_decode_claim_J]` has suppliers.
+    RULING on which: the column means the contrast's whole deterministic
+    bound, `deterministic_bounds.total` (`artifact.py:667`) — that is the
+    "comparison's own uncertainty bound" the sizing sum adds to the
+    floor; `E_clock_anchor_shift_bound_j` is one term of it and is not
+    the column. The column header names the quantity.
+26. **Item 11 — TERM A/B.** TERM B (`cells[].floor_gate_j`) issues for
+    all four claim-bearing cells; TERM A (point-only repeatability floor)
+    is emitted only when the dominance predicate is already true
+    (`detection_floor.py:3295`), so it cannot represent the negative
+    outcome of the falsifier. RULING: (i) TERM A is DERIVED AT THE DESK
+    from the emitted per-cell repeatability statistics, under a replay
+    fence, and the derivation is PROVEN by reproducing the emitted
+    diagnostic byte-for-value in every cell where the code does emit it
+    (self-consistency proof; a Sol xhigh + blind Fable check each); (ii)
+    TERM B for the dominance comparison is the CORNER-WIDENED floor — the
+    quantity the code's own dominance predicate compares — derived the
+    same way if not emitted; `floor_gate_j` (drift-widened) is reported
+    separately as the gate; (iii) a post-`_v4` kernel row makes the TERM A
+    emission unconditional. No pack change.
+27. **RQ row:** register as `candidate` now; no PROJECT_STATUS slot is
+    added during the sprint.
+28. **Title:** two titles are drafted and held in the results-fill
+    registry — the primary around attribution-limited resolution (used
+    if `_v4` reproduces dominance) and S8's protocol-first title as the
+    null-outcome title. Neither is typeset before `_v4` issues.
+29. **The 25.6–31.1 ms range** is stated once, with its n and its
+    diagnostic-era label (item 11), never as if 30 independent draws.
+30. **37/50 retained prompt phases fail the resolvability rule.** That
+    number IS the printed negative result of item 9 — reported as such,
+    with the rule, not as a limitation.
+31. **Round-2 writer brief carries the diff-ritual findings:** every
+    worked example names its time/space origin; every contribution
+    sentence cites the section that discharges it; every gloss added by
+    a pass is fidelity-checked against code before it lands.
