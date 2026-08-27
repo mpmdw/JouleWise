@@ -5,7 +5,27 @@ gate named beside it.
 
 ## Transaction gates (from the T25 checkpoint, unchanged)
 1. Venv relock at `-20260813` (runbook §1.1; ~10 min).
-2. Permission hygiene per `w6-prompt-inventory.md` NEEDS-ED.
+2. Permission hygiene per `w6-prompt-inventory.md` NEEDS-ED — **remote-doable
+   via SSH; the agent is hard-blocked from this file.** Edit
+   `/Users/edr/code/JouleWise/.claude/settings.local.json` (untracked):
+   (a) delete these five `permissions.allow` entries:
+       `Bash(gh pr merge:*)`,
+       `Bash(cd /Users/edr/JouleWise-measurement-20260818 && *)`,
+       `Bash(git -C /Users/edr/JouleWise-measurement-20260818 *)`,
+       `Bash(git -C /Users/edr/JouleWise-measurement-20260818 log --oneline -1)`,
+       `Bash(git -C /Users/edr/JouleWise-measurement-20260818 status --short)`,
+       plus `Read(//Users/edr/JouleWise-measurement-20260818/**)` and the
+       `-20260818/.venv/bin/python3 -c` line;
+   (b) add `"permissions": {"ask": [` … `]}` with the two licensed classes at
+       their `_v4` spellings:
+       `"Bash(.venv/bin/python3 scripts/project_identity_pins.py freeze *)"`,
+       `"Bash(.venv/bin/python3 scripts/generate_arm_readiness.py freeze *)"`;
+   (c) set `"permissions": {"defaultMode": "default"}` (manual prompting, not
+       `auto`) for the transaction session; restore afterwards if you like.
+   `gh pr merge` stays deleted from C11.1 until the fixation commit is pushed
+   (the magistrate merges by hand outside the freeze span).
+   Item 1 (venv relock) is being run by the magistrate under custody — no
+   hands needed; result recorded below when the empty-diff gate returns.
 3. Notification cadence: immediate (recommended) or batched.
 4. Transaction night — now the first free night AFTER W-10 (D-157) and
    W-11 (D-158) merge and estate 11 is green; ~2026-08-29/30.
