@@ -357,3 +357,16 @@ Two of this ruling's premises were WRONG and are corrected here:
     under the replay fence.
 51. **Branch linearity:** round 4 was cut from #215's head, so its ruling
     file lacks Addendum 4; on rebase after #215 merges this closes.
+
+## Addendum 6 (2026-08-27, round 5)
+
+52. **The appendix split.** The item-49 rewrite met the replication bar
+    (Opus pedagogy seat: PASSES; the old signature did not return; Sol
+    fidelity: three blockers, fixed and verified at the bench). RULING:
+    Appendix A ≈5,000 words (A.3.2 capture procedure in full, A.3.5's
+    cell lower bound, A.3.6's validity conjunction are non-movable;
+    floor ~4,500) and `docs/paper/artifact-guide.md` ≈4,700 (refusal
+    vocabulary, admission enumeration, grid/tie-break/traversal/budget
+    detail, record shapes, event pairing, the Evidence + Gaps index). The
+    replication bar is measured over the two together. Rounds 4+5 land as
+    one PR; the magistrate's full read follows on that PR.
