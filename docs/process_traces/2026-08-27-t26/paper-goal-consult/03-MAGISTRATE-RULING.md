@@ -128,3 +128,66 @@ result printed as a named result; (9) results-fill registry gains the
 dominance-test rows and the register-the-RQ delta is drafted for the
 registry. Round 1's mechanical pedagogy/fidelity fixes stand where they
 touch retained text; do not polish text slated for the cut.
+
+## Addendum (2026-08-27) — the blind Fable seat, and what it changes
+
+Ed asked why no blind Fable instance sat at the table; the magistrate
+had substituted itself, which is not blind. A fresh Fable seat
+(`04-fable-seat.md`) then ran on the identical prompt, blind to both
+seats and to this ruling. It picked the SAME goal (instrument-first,
+attribution finding; contrast demoted; negative result embedded) and
+independently proposed registering the same missing RQ — so items 1–6
+and 8 above now rest on three model families converging blind. It also
+found things the other seats missed. Rulings:
+
+14. **Holm / p-value text has no source.** The pipeline produces
+    deterministic intervals and two gates; no test statistic is defined
+    anywhere. RULING: the paper director VERIFIES against the code that
+    no p-value or Holm computation exists; if confirmed, delete the
+    multiplicity text and state "two deterministic gates, two registered
+    contrasts; no multiplicity correction is applicable" — and check the
+    analysis plan (AP) documents for the same orphan.
+15. **`[B_decode_claim_J]` is STOP_FILL / SUPPLIER_UNKNOWN** (Sol also
+    flagged missing suppliers). RULING: resolve the supplier at the desk
+    if one exists in the reduction outputs; otherwise DELETE the sizing
+    sum from the results table rather than print a placeholder that can
+    never fill. Director reports which.
+16. **Inserted-gap fiducial arm** (a commanded ~500 ms sleep between
+    prefill end and decode start on ~10 real-workload runs, edges fitted
+    with the existing pulse estimator, residual compared to the
+    pulse-derived bound) is the cheapest closure of the transfer
+    assumption — better-shaped than the generic "workload-shaped
+    calibration" of item 5. RULING: it does NOT enter `_v4` (frozen pack;
+    any non-config change is a new family generation). It is named as
+    Future Work #1 in concrete form and registered as a queued row
+    (TRANSFER-FIDUCIAL-01) for the first post-campaign diagnostic
+    window; the paper says plainly that `_v4` leaves transfer untested.
+17. **p256 prompt contrast vs D-117's decode-only default.** RULING:
+    director verifies whether Ed's option was exercised (decision log /
+    freeze manifest); the paper states which, in one sentence, where the
+    contrast is introduced.
+18. **Citations to add:** Hähnel et al. 2012 (RAPL for short code paths —
+    the closest ancestor to edge placement) and Hackenberg et al. 2013
+    (sampling-cadence bias), both [VERIFY] against real bibliographic
+    records before typesetting; nothing is cited on a seat's memory.
+19. **RQ count — dissent recorded.** The Fable seat would carry three
+    (RQ-METHOD-FLOOR, C5-1.3, C5-1.1-pairwise). RULING stands at item 9
+    (one primary + one demonstration + one printed negative result):
+    C5-1.3 asks about power asymmetry, not resolution — the seat's own
+    words — and a third carried RQ costs a floor the sprint does not
+    have. C5-1.3 is named in Future Work as the first characterisation
+    the calibrated boundary makes decidable.
+20. **Label regime — dissent recorded.** The seat would drop the
+    attribution-limited label rule and report the ratio. RULING: the
+    label regime is D-078 cl.11 and is not a paper edit; the PAPER
+    reports the ratio as the number and the label as its one-line
+    consequence, so a reader never needs the rule to use the result.
+21. **"Detection floor" gloss** — the seat's first-use gloss is adopted
+    verbatim alongside item 7: "the largest false difference this
+    measurement system can manufacture."
+22. **§5 before §3** (characterise, then compose). RULING: adopted — it
+    is the why-chain in section order; the director reports if it
+    creates more forward references than it removes.
+23. **Length.** The seat says 8–10k; the others 12–16k. RULING: 12k
+    main-text HARD ceiling, 10k the target; the round-2 PR reports the
+    count.
