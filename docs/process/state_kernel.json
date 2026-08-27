@@ -941,45 +941,6 @@
       "status_note": "Design warnings: holding file descriptors open does NOT seal bytes because a second descriptor can mutate the same inode; path-based launch-time revalidation alone leaves a revalidate-to-read race. Pending-ratification payload carried by this row: the proposed amendment to docs/process/coldgate_charter_registry.md separating validator observation from runner custody. The registry is Ed-ratified and is NOT edited by this or any session without a cold-gate/Ed ratification.",
       "stop_card": null
     },
-    "CONSUME-CONFIRMATION-SUPPLY-01": {
-      "acceptance": {
-        "evidence": [
-          "The consume path accepts an expected confirmation digest plus its table and forwards both to the confirmation-table authenticator",
-          "Regressions cover the valid pair, a missing path, a missing digest, a malformed digest, and mismatched bytes - the mismatch case refusing on the digest-mismatch reason, not the missing-input reason",
-          "Supplying nothing still fails closed, so the added route can never weaken the gate"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CONSUME-CONFIRMATION-SUPPLY-01/acceptance",
-          "label": "CONSUME-CONFIRMATION-SUPPLY-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The consume side of the real transaction can enforce the operator-confirmed step-6 digest instead of refusing for want of an input."
-      },
-      "authority": {
-        "label": "D-153 sweep synthesis R-4 (register the Opus-3f consume-side supply line, do not fix in the code stream)",
-        "path": "docs/process_traces/2026-08-24-d153-sweep/03-MAGISTRATE-SYNTHESIS.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Opus contract-lens seat finding 3f (out of S-0's path; register, do not fix here)",
-            "path": "docs/process_traces/2026-08-24-d153-sweep/01-opus-contract-lens-seat.md"
-          },
-          "rule": "Scoped to pre-real-transaction work on the consume lane only: S-0's consume step is retired to launch_window.py, so this row neither reopens nor re-cuts any S-0 runsheet step"
-        }
-      ],
-      "flags": [],
-      "goal": "Give the consume lane a step-6 confirmation supply line. scripts/generate_arm_readiness.py's consume subcommand (lines 73-76) carries no --expected-confirmation-digest option at all, so launch_window.py - the consumer the real transaction actually runs - has no route to hand the operator-confirmed digest and its table to _authenticate_confirmation_table. Add the option and its forwarding so the real transaction's consume-side C-to-S enforcement refuses on 'bytes differ from the confirmed digest' rather than on 'no expected confirmation digest supplied', mirroring the --step6-confirmation-table supply line landed for freeze in PR #188.",
-      "id": "CONSUME-CONFIRMATION-SUPPLY-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 97,
-      "status": "queued",
-      "status_note": "Opus contract-lens seat finding 3f, registered by synthesis R-4 verbatim ('The consume-side supply line (Opus 3f) is registered as a kernel row, NOT fixed here'). Same missing-supply-line signature as findings 3e (freeze, cured in PR #188 at f82247ee) and S0-O2: a contract-required input with no route from the operator to the consumer. Nothing in S-0 depends on this row - consume is out of S-0's path - so it is scoped to pre-real-transaction work and must land before consume-side C-to-S enforcement is relied on in the real transaction.",
-      "stop_card": null
-    },
     "CUSTODY-HARDEN-01": {
       "acceptance": {
         "evidence": [

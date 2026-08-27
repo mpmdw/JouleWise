@@ -49,6 +49,11 @@ def _parser() -> argparse.ArgumentParser:
         help="private window-chain operation; omit for Ed's physical launch",
     )
     parser.add_argument(
+        "--step6-confirmation-table",
+        type=Path,
+        help="path to the D-117 step-6 confirmation table",
+    )
+    parser.add_argument(
         "--expected-confirmation-digest",
         help="out-of-band SHA-256 of the D-117 step-6 confirmation table",
     )
@@ -122,6 +127,7 @@ def _assemble_launch_inputs(args: argparse.Namespace) -> dict[str, object]:
         pack_root,
         arm_path,
         require_unconsumed=False,
+        step6_confirmation_table=args.step6_confirmation_table,
         expected_confirmation_digest=args.expected_confirmation_digest,
     )
     arm_digest = hashlib.sha256(arm_raw).hexdigest()
@@ -238,6 +244,7 @@ def launch(args: argparse.Namespace) -> int:
     result = _consume_launch_capability(
         **launch_inputs,
         handoff_token_sha256=hashlib.sha256(token).hexdigest(),
+        step6_confirmation_table=args.step6_confirmation_table,
         expected_confirmation_digest=args.expected_confirmation_digest,
     )
     verified = verify_consumed_launch(
@@ -245,6 +252,7 @@ def launch(args: argparse.Namespace) -> int:
         result["consumption_path"],
         launch_manifest=args.launch_manifest,
         expected_exec_argv=argv,
+        step6_confirmation_table=args.step6_confirmation_table,
         expected_confirmation_digest=args.expected_confirmation_digest,
     )
     if verified["exec_argv"] != argv:
@@ -267,6 +275,7 @@ def lifecycle(args: argparse.Namespace) -> int:
             args.pack_root,
             consumption,
             launch_manifest=args.launch_manifest,
+            step6_confirmation_table=args.step6_confirmation_table,
             expected_confirmation_digest=args.expected_confirmation_digest,
         )
         token = _read_one_use_handoff()
