@@ -493,7 +493,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # rows from S3 delta2, and the six S9 should-fixes):
         # 90 + 18 = 108;
         # 108 - 1 = 107; the 2026-08-27 T26 S13 stream closes
-        # HISTPACK-TEMP-CLEANUP-01 (PR #PRNUM: the histsem scratch checkout
+        # HISTPACK-TEMP-CLEANUP-01 (PR #222: the histsem scratch checkout
         # is unwound when cleanup raises before removal):
         # 108 - 1 = 107 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
