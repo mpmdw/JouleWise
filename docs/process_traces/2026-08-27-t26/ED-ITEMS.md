@@ -59,9 +59,15 @@ Gate unattended WINDOWS, not the `_v4` mint night.
 14. The supervised rehearsal sitting itself (kernel acceptance item 2).
 
 ## Optional but valuable
-7. **PIPELINE-SMOKE-LIVE-01** (D-158 R-3): ~20 minutes at the machine the
-   evening before the night — decode-only, one ABBA block, quarantined.
-   Proves the hardware seam the desk replay cannot.
+7. **PIPELINE-SMOKE-LIVE-01 — now the ONLY end-to-end clean proof (D-160
+   R-2):** ~20 minutes at the machine the evening before the night — a
+   real, tiny, quarantined family generation (not smoke-scoped), real
+   telemetry, its own two calibration brackets, `fixed_n = 1`, decode-only,
+   one ABBA block, then finalize → analyze-claims at the desk. Zero new
+   production seams. A synthetic desk version was ruled impossible without
+   relaxing the floor rule; this is the honest path. Strongly recommended
+   before the night; the runbook for it is drafted by S10 once the
+   bracket-binding producer lands.
 8. `~/.local/bin/codex-run-v3`: add `.pytest_cache` to
    `ignored_bytecode_paths` (false exit-77 on every pytest-running Sol run).
 
