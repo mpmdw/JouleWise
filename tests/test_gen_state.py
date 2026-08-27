@@ -21,6 +21,27 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
+    # 2026-08-27 T26 end-of-sprint kernel wave (WAVE-ROWS.md ledger: S5 sweep,
+    # paper ruling item 16, D-156 Q1-B/Q4-B, S2 producers, S11 F4, D-160 R-3
+    # in flight, D-158 A-5, D-160 R-4, D-158 R-3, S3 delta2 D4/D3, S9-04/09/10/11/12/13)
+    "GIT-FIXTURE-MAINTENANCE-SWEEP-01",
+    "TRANSFER-FIDUCIAL-01",
+    "SUPERSESSION-CHAINED-RECOVERY-01",
+    "SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01",
+    "T0-REHEARSAL-PRODUCERS-01",
+    "COLLECTOR-MANIFEST-SHA-IDENTITY-01",
+    "BRACKET-BINDING-CLI-01",
+    "T0-ENV-PARSER-UNIFY-01",
+    "PIPELINE-SMOKE-TIER2-01",
+    "PIPELINE-SMOKE-LIVE-01",
+    "HISTPACK-PROMISOR-NOFETCH-01",
+    "HISTPACK-TEMP-CLEANUP-01",
+    "GAMMA-UNIT-ROSTER-GUARD-01",
+    "AUTHENTICATOR-ALLOWLIST-GUARD-01",
+    "TRANSACTION-RULED-ARTIFACTS-01",
+    "REISSUE-V3-GENERATION-GUARD-01",
+    "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01",
+    "RECORDER-SINGLE-OPERATOR-PREAMBLE-01",
     "ARM-PACKET-01",
     "CALEXITS-EVIDENCE-BYTES-01",
     "D144-SEATPASS-FOLLOWUPS",
@@ -463,9 +484,17 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # with its ninth ruled registry vocabulary entry, and the
         # successor-scoped field-wise arm pack comparisons with truthful
         # per-branch details):
-        # 92 - 2 = 90 exact live records.
+        # 92 - 2 = 90;
+        # 90 + 18 = 108; the 2026-08-27 T26 end-of-sprint wave registers
+        # the eighteen WAVE-ROWS.md ledger rows (GIT-FIXTURE-MAINTENANCE-SWEEP-01,
+        # TRANSFER-FIDUCIAL-01, the two D-156 supersession residuals,
+        # T0-REHEARSAL-PRODUCERS-01, COLLECTOR-MANIFEST-SHA-IDENTITY-01,
+        # BRACKET-BINDING-CLI-01 in flight on PR #217, T0-ENV-PARSER-UNIFY-01,
+        # PIPELINE-SMOKE-TIER2-01, PIPELINE-SMOKE-LIVE-01, the two HISTPACK
+        # rows from S3 delta2, and the six S9 should-fixes):
+        # 90 + 18 = 108 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 90)
+        self.assertEqual(len(self.tasks), 108)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -635,8 +664,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # The 2026-08-15 reconciliation formally retired P2-006 and installed
         # the D-117 ALPHA/BETA/GAMMA sequence at ranks 2/3/4. ALPHA is the
         # dependency-ready lane head, but WINDOW-COUNCIL-GATE suppresses it.
+        # 11 + 2 = 13: the 2026-08-27 T26 end-of-sprint wave added
+        # TRANSFER-FIDUCIAL-01 (Q12) and PIPELINE-SMOKE-LIVE-01 (Q13), both
+        # blocked, so the lane head is unchanged.
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 11)
+        self.assertEqual(len(quiet), 13)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertEqual(self.tasks["MET-WINDOW-C-01"]["rank"], 1)
