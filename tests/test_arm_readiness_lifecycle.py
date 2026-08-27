@@ -1423,6 +1423,27 @@ with mock.patch.object(
         self.assertFalse(replayed["mutated"])
         self.assertIsNotNone(replayed["receipt_path"])
 
+    def test_v4_freeze_replay_from_foreign_clone_accepts_original_declaration(
+        self,
+    ) -> None:
+        repository, clone, pack, predecessor = self.frozen_clone_fixture()
+        self.assertNotEqual(repository.resolve(), clone.resolve())
+
+        try:
+            replayed = generate_freeze_receipt(
+                pack,
+                measurement_checkout=repository,
+                predecessor_pack_root=predecessor,
+            )
+        except ArmReadinessError as exc:
+            self.fail(
+                "replay must bypass the mint-only measurement checkout gate; "
+                f"got {exc.reason_code}: {exc}"
+            )
+
+        self.assertFalse(replayed["mutated"])
+        self.assertIsNotNone(replayed["receipt_path"])
+
     def test_v4_freeze_replay_refuses_a_different_repository_relative_path(
         self,
     ) -> None:

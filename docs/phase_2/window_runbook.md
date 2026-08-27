@@ -273,11 +273,18 @@ other. Record the live registry's path, SHA-256, registry ID, and plan
 profile in the plan tree; the Markdown readiness pages are checked human
 views, not row authority.
 
-Freeze readiness only with the implemented command:
+Freeze readiness only with the implemented command. The
+`--measurement-checkout` flag declares the absolute repository checkout from
+which this mint is authorized to take its pack bytes. The operator makes that
+declaration explicitly by supplying `MEASUREMENT_REPO`; the tool never derives
+it. The mint refuses when the declaration is absent or does not name the
+repository containing `PACK_ROOT`, before any receipt byte is written, so the
+refusal does not spend the next freeze ordinal.
 
 ```sh
 python3 scripts/generate_arm_readiness.py freeze \
   --pack-root "$PACK_ROOT" \
+  --measurement-checkout "$MEASUREMENT_REPO" \
   --predecessor-pack-root "$PREDECESSOR_PACK_ROOT"
 ```
 
