@@ -300,3 +300,24 @@ magistrate should treat that as a finding rather than an omission:
 Three mechanisms agreeing that this file is not edited by an agent acting on its
 own judgement is the answer to whether it should be. The values above make the
 ruled edit a mechanical one-minute action for whoever holds the authority.
+
+## Full local suite at the S8 head (lead-run, 2026-08-27)
+
+`python -m pytest tests/ -q -p no:randomly --ignore=tests/test_calibration_exits.py`
+
+    2 failed, 3874 passed, 118 skipped, 19594 subtests passed in 1905.26s
+
+Both failures are in `tests/test_receipt_histsem.py` and both are the SAME stale
+pin — `test_full_corpus_verifies_two_coordinates_and_facts` and the
+`d117_contrast_qwen25_1p5b_vs_7b_v3` subtest of
+`test_differential_self_test_all_governed_packs`. Nothing else in the suite
+fails. `scripts/gen_state.py --check` and `compileall` over `joulewise`, the
+gamma pack and `tests` are clean.
+
+`tests/test_calibration_exits.py` was excluded from that run because CI gives it
+its own exclusive lane. Run separately it shows two subtest failures in
+`PublicGovernedExitWitnessTests::test_logical_producer_delay_preserves_exact_evidence_bytes`
+— and those **reproduce identically on a clean `origin/main` worktree**
+(checked at `6f74a027`), so they pre-date this branch and belong to whoever owns
+that lane. They are timing-sensitive and this machine was running several
+concurrent agent sessions; the same job passed in CI earlier tonight.
