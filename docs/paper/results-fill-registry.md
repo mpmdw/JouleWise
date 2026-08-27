@@ -757,14 +757,20 @@ template with `\[([A-Z][A-Za-z0-9_*.-]*)\]`; sort for the distinct vocabulary
 while retaining the unsorted stream for occurrence counts. Markdown citations
 such as `[1]` are excluded by construction.
 
-- Draft: 37 bracket-marker sites, representing 39 semantic fill slots because
-  the two interval markers `[PENDING, PENDING]` each contain two endpoints.
-  Re-counted 2026-08-24 after the Section 5 rewrite: unchanged at 35. Raised to 37
-  on 2026-08-27 by Addendum 3 item 38: the Section 6 resolvability example's realized
-  record spacing could not be traced to any issued artifact — the measured all-trace
-  median spacing is about 120.9 ms, not the 112 ms the draft asserted — so both of its
-  sites became registered `PENDING` markers with the diagnostic-era label (rows DG-071
-  and DG-075). The rewritten
+- Draft: **34 bracket-marker sites, representing 36 semantic fill slots**, because the two
+  interval markers `[PENDING, PENDING]` each contain two endpoints. MEASURED 2026-08-27
+  against the current draft, not carried forward.
+  **The previously stated 35/37 figures were stale and are corrected here.** They were last
+  re-counted on 2026-08-24, before the round-2 restructure rewrote every section; that
+  restructure changed the count to 32 sites / 34 slots and no pass re-counted it, so the
+  stale pair survived into round 3 and was briefly propagated as 37/39. Addendum 3 item 38
+  then added two sites — the Section 6 resolvability example's realized record spacing,
+  which no issued artifact supplies (the measured all-trace median spacing for that bundle
+  is about 120.9 ms, not the 112 ms the draft asserted), became registered `PENDING`
+  markers with the diagnostic-era label (rows DG-071 and DG-075). 32 + 2 = 34 sites,
+  34 + 2 = 36 slots.
+  Recount command: count matches of `\[PENDING[^\]]*\]` in `docs/paper/draft-v1.md`,
+  scoring a match containing a comma as two slots. The rewritten
   Section 5 carries square brackets only inside LaTeX math, which the census
   command's marker prefixes exclude.
 - Template: 437 token occurrences and 91 distinct exact tokens. The count
@@ -780,11 +786,12 @@ such as `[1]` are excluded by construction.
   tables. Six draft-site rows, DS-02 through DS-07, bind content anchors whose
   former markers are absent; three of those anchors (DS-03, DS-04, DS-07) no longer
   resolve in the draft and are pending a re-anchor-or-retire ruling. Marker-bound
-  rows now number 38 and cover all 37 bracket-marker sites: PG-02 and PG-03 share one
-  interval marker, DS-26 carries two semantic fills in one row, and DG-071 and DG-075
-  were added by Addendum 3 item 38 when the resolvability example's record spacing
-  proved untraceable. Together those rows cover all 39 semantic fill slots without
-  silently supplying a site-to-token gap.
+  rows cover the draft's 34 bracket-marker sites and 36 semantic fill slots: PG-02 and
+  PG-03 share one interval marker, DS-26 carries two semantic fills in one row, and
+  DG-071 and DG-075 were added by Addendum 3 item 38 when the resolvability example's
+  record spacing proved untraceable. The marker-bound ROW COUNT is deliberately not
+  restated here: the previous figure was derived from the stale 35/37 census and a
+  mechanical row-to-site recount is owed before any number is asserted again.
 
 ## Lead double-checks before renderer implementation
 
