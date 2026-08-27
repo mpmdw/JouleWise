@@ -5268,6 +5268,101 @@ def _pack_identity(pack_root: Path, tree: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _admit_bound_analysis_manifest(
+    pack_root: Path, tree: Mapping[str, Any]
+) -> None:
+    """Refuse a new freeze whose plan-bound prospective manifest is invalid.
+
+    Floor packs carry an extraction specification instead of a prospective
+    analysis manifest, so absence of both binding fields is the exact
+    non-applicability predicate.  Once either field is present, the pair is
+    mandatory and the manifest bytes are authenticated before they are parsed
+    or admitted by the claim-consumption validator.
+    """
+
+    downstream = tree.get("downstream_contract")
+    if not isinstance(downstream, Mapping):
+        return
+    raw_path = downstream.get("analysis_manifest_path")
+    raw_sha256 = downstream.get("analysis_manifest_sha256")
+    if raw_path is None and raw_sha256 is None:
+        return
+
+    relative = _require_relative_path(
+        raw_path, "downstream_contract.analysis_manifest_path"
+    )
+    expected_sha256 = _require_lower_sha256(
+        raw_sha256, "downstream_contract.analysis_manifest_sha256"
+    )
+    candidate = pack_root.joinpath(*PurePosixPath(relative).parts)
+    try:
+        current = pack_root
+        for component in PurePosixPath(relative).parts:
+            current = current / component
+            mode = current.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise ArmReadinessError(
+                    "readiness_pack_namespace_anomalous",
+                    "analysis-manifest binding traverses a symlink: "
+                    f"{relative}",
+                )
+        if not stat.S_ISREG(candidate.lstat().st_mode):
+            raise ArmReadinessError(
+                "readiness_pack_namespace_anomalous",
+                f"analysis-manifest binding is not a regular file: {relative}",
+            )
+        candidate.resolve(strict=True).relative_to(pack_root)
+        raw = candidate.read_bytes()
+    except ArmReadinessError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable",
+            "plan-bound analysis manifest is missing, unreadable, or outside "
+            f"the pack: {relative}",
+        ) from exc
+
+    if sha256_bytes(raw) != expected_sha256:
+        raise ArmReadinessError(
+            "readiness_pack_digest_mismatch",
+            "plan tree does not authenticate the exact prospective analysis "
+            "manifest bytes",
+        )
+    try:
+        value = parse_json_bytes(raw)
+    except ArmReadinessError as exc:
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"prospective analysis manifest is not strict JSON: {exc}",
+        ) from exc
+    if not isinstance(value, Mapping):
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            "prospective analysis manifest must contain an object",
+        )
+
+    # Import locally so arm/floor-only callers do not load the analysis stack.
+    # The validator itself exercises every family's production multiplicity
+    # method with {contrast_id: None}, including len(p_values) == m.
+    from joulewise.analysis_manifest_v3 import (
+        validate_prospective_analysis_manifest_v3,
+    )
+
+    refusals = validate_prospective_analysis_manifest_v3(
+        value,
+        manifest_dir=pack_root,
+        plan_tree_path=pack_root / "plan_tree.json",
+    )
+    if refusals:
+        detail = "; ".join(
+            f"{refusal.reason_code}: {refusal.detail}" for refusal in refusals
+        )
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"prospective analysis manifest admission refused: {detail}",
+        )
+
+
 def resolve_frozen_plan(
     pack_root: Path | str,
     tree: Mapping[str, Any] | None = None,
@@ -7454,6 +7549,7 @@ def generate_freeze_receipt(
             successor_receipt_id=f"freeze-{number:04d}",
             successor_profile=str(registry_reference["plan_profile"]),
         )
+    _admit_bound_analysis_manifest(root, tree)
     # The pre-freeze pack must be an exact committed tree.  The writes below
     # intentionally make it dirty until the lead commits the final frozen pack.
     pre_freeze_pack_sha = committed_pack_tree_sha256(root)
