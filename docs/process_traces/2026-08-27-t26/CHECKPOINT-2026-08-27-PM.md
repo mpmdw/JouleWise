@@ -30,6 +30,24 @@ Venv relock at the measurement checkout DONE (custody: `venv-relock/`).
   S10 reworking to R-3′ (producer BEFORE the whole-window verdict;
   run_campaign `--bracket-binding` input). Pre-CLOSE blocker, not pre-mint.
 
+## UPDATE ~13:20 PDT (after the prune ruling; this section supersedes the map below where they differ)
+- THREAT-MODEL-PRUNE-01 RULED: `threat-model-prune/04-MAGISTRATE-RULING.md`
+  (mistake-vs-deliberate test; asymmetric histsem cure; ONLY the refresh
+  lane before the night; prune waves (a)–(f) after `_v4`).
+- S13: HISTPACK-PROMISOR-NOFETCH-01 RETIRED unbuilt; S13 lands
+  HISTPACK-TEMP-CLEANUP-01 alone if small, else winds down.
+- S14: lane also refreshes the four custody-tool `.sha256` sidecars.
+- S8: hand-derived `_v3` row is VERIFICATION material only
+  (`d139-families/02-pinset-row-replacement.md`: the stale delta is ONE
+  string — `"generate_configs.py"` missing from `post_authoring_delta.modified`;
+  expected post-refresh file SHA `3e513c53…`); S8 runs the lane after S14
+  merges, then #209 → estate 11.
+- If this session dies: every director was told to push WIP to its branch
+  after every round; `git branch -r` + `gh pr list` + the worktree sweep
+  recover everything. Re-brief directors from DIRECTOR-BRIEF.md + the
+  stream's ruling file; do not re-run finished Sol work (harvest
+  `scratchpad/{s12,s14,t26}/*.status`).
+
 ## Streams RUNNING at checkpoint (agent → branch/worktree → task)
 - S8 (Opus) → fix/d139-a2-gamma-families, wt-s8-d139-families → hand-deriving
   the `_v3` pinset row as VERIFICATION material (02-pinset-row-replacement.md);
