@@ -2811,8 +2811,10 @@ def require_occurrence_supersession_recordable(
             message = (
                 "supersession recording refused: no supersession row for this "
                 "bundle was recorded, but the target campaign log cannot be "
-                "read by the supersession consumer, so appending one would "
-                "produce a log no consumer can use; "
+                "read by the supersession consumer; appending would silently "
+                "quarantine and truncate the unreadable tail as a side effect "
+                "of the write, and that custody repair must be a deliberate "
+                "recorded act; "
                 f"target log path={json.dumps(str(log_path))}; "
                 "no row was appended"
             )

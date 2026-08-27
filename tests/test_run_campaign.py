@@ -9299,16 +9299,15 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             caught.exception.reason_code,
             "campaign_occurrence_supersession_log_unreadable",
         )
-        self.assertNotEqual(
-            caught.exception.reason_code,
-            "campaign_occurrence_supersession_already_recorded",
-        )
         message = str(caught.exception)
         self.assertIn(
             "no supersession row for this bundle was recorded", message
         )
         self.assertIn(
             "cannot be read by the supersession consumer", message
+        )
+        self.assertIn(
+            "quarantine and truncate the unreadable tail", message
         )
         self.assertIn(f"target log path={json.dumps(str(log_path))}", message)
         self.assertIn("no row was appended", message)

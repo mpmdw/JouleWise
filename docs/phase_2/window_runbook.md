@@ -1895,8 +1895,8 @@ Fresh-process recovery examples:
 | `mock_telemetry_claim_ineligible` | A custody-bound config identifies mock telemetry. | Terminally refuse the member for claims. Mock data is development evidence and has no claim waiver. |
 | `whole_window_drift_allowance_unrecorded` | A passing basis lacks an authenticated family allowance, or a claim omitted its named allowance term. | Refuse the affected floor/claim. Never substitute zero; rerun the governed verdict/extraction path or recollect if provenance cannot be restored. |
 | `whole_window_campaign_membership_unresolved` | Campaign-log provenance is missing, ambiguous, duplicated, or unbound. | Repair custody or recollect. Do not replace manifest evidence with a directory scan. |
-| `campaign_occurrence_supersession_already_recorded` | The target campaign log already contains a recognizable supersession row for this bundle, or contains a recognizable supersession row whose bundle cannot be identified. A disposition for this bundle is already on the record. | Preserve the log and stop; no row was appended. Do not retry against this log. If the selected occurrence later failed, use a fresh runs root or keep the member non-claim-bearing; same-root chained recovery is not supported. |
-| `campaign_occurrence_supersession_log_unreadable` | No supersession row for this bundle was recorded, but the target campaign log cannot be read by the supersession consumer — for example a torn final line that is itself a partial supersession row, which the provenance loader tolerates and the consumer reader does not. Appending here would produce a log no consumer can use. | Preserve the log and stop; no row was appended. Repair custody, or collect into a fresh runs root. Do not retry the recorder against this log; a successful append would not make the log consumable. |
+| `campaign_occurrence_supersession_already_recorded` | The target campaign log already contains a recognizable supersession row for this bundle, or contains a recognizable supersession row whose bundle cannot be identified. A supersession disposition is already on the record — for this bundle, or, when the bundle cannot be identified, for a bundle that cannot be determined. | Preserve the log and stop; no row was appended. Do not retry against this log. If the selected occurrence later failed, use a fresh runs root or keep the member non-claim-bearing; same-root chained recovery is not supported. |
+| `campaign_occurrence_supersession_log_unreadable` | No supersession row for this bundle was recorded, but the target campaign log cannot be read by the supersession consumer — for example a torn final line that is itself a partial supersession row, which the provenance loader tolerates and the consumer reader does not. Appending here would silently quarantine and truncate that tail as a side effect of the write. | Preserve the log and stop; no row was appended. Repair custody deliberately and on the record, or collect into a fresh runs root. Do not retry the recorder against this log: the append itself would perform the custody repair, making an operator decision a side effect of a supersession write. |
 | `whole_window_verdict_conflict` | Different stored verdict rows purport to govern one basis, or verdict history is malformed. | Stop. Latest-wins is forbidden; preserve the conflict and mint a genuinely new basis if needed. |
 | `launch_consumption_missing` | A marker-bearing claim input lacks its required v2 consumption reference, primary, or sidecar. | Refuse the stage. Preserve any bytes only as diagnostic evidence; issue a newly frozen bracket session and ARM receipt. Never reconstruct or attach a receipt after collection. |
 | `launch_consumption_invalid` | Consumption or lifecycle custody is noncanonical, schema-invalid, has a bad sidecar/digest, or has an invalid predecessor chain. | Stop and preserve the entire namespace. The attempt is burned; no repair-in-place or retry exists. |
@@ -1948,9 +1948,13 @@ loader, which tolerates exactly one recognized torn final line, and the
 supersession consumer reader, which refuses the whole log outright when any
 line is not a JSON object. A torn final line that is itself a partial
 supersession row therefore falls in the gap: the loader drops it, but the
-consumer will refuse the log. Appending into that gap would produce a log no
-consumer can use, so the recorder refuses under its own reason code,
-`campaign_occurrence_supersession_log_unreadable`. That name is deliberately
+consumer will refuse the log. The recorder refuses under its own reason code,
+`campaign_occurrence_supersession_log_unreadable`, rather than appending into
+that gap. The append would not fail: `append_log` quarantines a recognized
+torn tail, truncates the log to the last complete line, and then appends. That
+is precisely the objection — quarantining an operator's torn evidence is a
+custody decision, and it must be made deliberately and recorded, not performed
+as a side effect of writing a supersession. That name is deliberately
 distinct from `campaign_occurrence_supersession_already_recorded`: in this
 case nothing was already recorded for the bundle, and a refusal name must
 report the condition that actually held. Preserve the log and repair custody;
