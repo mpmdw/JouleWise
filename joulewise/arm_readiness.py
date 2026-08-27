@@ -8272,10 +8272,17 @@ def _derive_arm_semantics_for_verification(
     expected_confirmation_digest: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     pack = _pack_record(root)
-    if receipt["pack"] != pack:
+    pack_mismatch = _pack_mapping_mismatch_kind(receipt["pack"], pack, root)
+    if pack_mismatch is not None:
+        if pack_mismatch == "content":
+            detail = "arm receipt pack binding differs from committed pack bytes"
+        elif pack_mismatch == "archival_location":
+            detail = "arm receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)"
+        else:
+            detail = "arm receipt repository-relative pack location differs"
         raise ArmReadinessError(
             "readiness_pack_digest_mismatch",
-            "arm receipt pack binding differs from committed pack bytes",
+            detail,
         )
     reviewed = reviewed_main(root)
     if receipt["reviewed_main"] != reviewed:

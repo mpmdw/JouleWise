@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -418,6 +421,448 @@ class LaunchWindowEntrypointTests(unittest.TestCase):
         refusal = json.loads(completed.stdout)
         self.assertEqual(refusal["reason_codes"], ["readiness_usage_invalid"])
         self.assertIn("scripts/launch_window.py", refusal["detail"])
+
+
+class ProductionArmRelocationLaunchTests(unittest.TestCase):
+    def _mint_v4_arm(
+        self,
+    ) -> tuple[tempfile.TemporaryDirectory[str], Path, Path, Path, Path, Path]:
+        from joulewise import arm_readiness_evidence as generic_evidence
+        from tests.test_arm_readiness_evidence_author import make_author_fixture
+        from tests.test_arm_readiness_evidence_t0 import (
+            _install_synthetic_identity_inputs,
+            _valid_session_receipt,
+            author_arm_readiness_evidence_t0,
+            author_environment,
+            make_t0_fixture,
+        )
+        from tests.test_arm_readiness_integration import (
+            PACKS,
+            install_passing_dry_run,
+        )
+        from tests.test_arm_readiness_lifecycle import (
+            git,
+            predecessor_pack_root,
+        )
+        from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
+
+        family = {
+            "ALPHA": "d117_floor_qwen25_1p5b_v4",
+            "BETA": "d117_floor_qwen25_7b_v4",
+            "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
+        }
+        fixture_now = time.monotonic_ns()
+        temporary, repository, pack, custody, context, input_root = (
+            make_t0_fixture(
+                now_monotonic_ns=fixture_now,
+                synthetic_clock=False,
+            )
+        )
+        template_temporary, template_repository, template_pack, _unused, _arm = (
+            make_author_fixture(pack.name)
+        )
+        try:
+            original_tree = json.loads((pack / "plan_tree.json").read_text())
+            shutil.copytree(
+                template_repository,
+                repository,
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns(".git"),
+            )
+            tree = json.loads((template_pack / "plan_tree.json").read_text())
+        finally:
+            template_temporary.cleanup()
+
+        tree["external_inputs"] = original_tree["external_inputs"]
+        tree["stage_graph"] = [
+            *original_tree["stage_graph"],
+            *tree["stage_graph"],
+        ]
+        tree["arm_attachments"]["arm_readiness"]["freeze_receipt"] = None
+        # The sandbox denies the production kern.bootsessionuuid sysctl.  The
+        # open v4 transaction also has no three-pack publication marker yet,
+        # so a temporary one-pack arm cannot cross that independent gate.  The
+        # copied module replaces those two prerequisites only; clocks, pack
+        # authentication, arm derivation, consumption, and consumed-arm replay
+        # all remain production paths.
+        _install_synthetic_identity_inputs(
+            repository,
+            pack,
+            tree,
+            boot_session_override=TEST_BOOT_SESSION_ID,
+            clock_override=None,
+        )
+        sitecustomize_path = repository / "sitecustomize.py"
+        sitecustomize_path.write_text(
+            sitecustomize_path.read_text()
+            + "from joulewise import arm_readiness_evidence\n"
+            + f"arm_readiness_evidence._PACKS_BY_PROFILE = {family!r}\n"
+            + "arm_readiness._gate_family_publication = lambda *args, **kwargs: None\n"
+        )
+        producer_path = pack / "producer_contract.json"
+        producer_raw = arm_readiness.render_json(
+            {
+                "schema_version": "synthetic-producer.v1",
+                "identity_pin_projection": copy.deepcopy(
+                    tree["arm_attachments"]["identity_pin_projection"]
+                ),
+            }
+        )
+        producer_path.write_bytes(producer_raw)
+        tree["downstream_contract"]["producer_contract"]["sha256"] = (
+            hashlib.sha256(producer_raw).hexdigest()
+        )
+        tree_raw = arm_readiness.render_json(tree)
+        (pack / "plan_tree.json").write_bytes(tree_raw)
+        (pack / "plan_tree.sha256").write_bytes(
+            arm_readiness.gnu_sidecar(
+                hashlib.sha256(tree_raw).hexdigest(),
+                "plan_tree.json",
+            )
+        )
+        for name in (
+            generic_evidence._EVIDENCE_DIRECTORY,
+            generic_evidence._SOURCE_DIRECTORY,
+            "arm_readiness.freeze.receipts",
+            "identity_pin_projection.receipts",
+        ):
+            shutil.rmtree(pack / name, ignore_errors=True)
+        self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "complete unprojected author pack")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+        environment = {
+            **os.environ,
+            "PYTHONPATH": str(repository),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+        projected = subprocess.run(
+            [
+                sys.executable,
+                "scripts/project_identity_pins.py",
+                "freeze",
+                str(pack),
+            ],
+            cwd=repository,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            projected.returncode,
+            0,
+            f"{projected.stdout}{projected.stderr}",
+        )
+        projected_unit = json.loads((pack / "plan_tree.json").read_text())[
+            "arm_attachments"
+        ]["identity_pin_projection"]["identity_units"][0]
+        beta_tree_path = (
+            repository
+            / "configs/campaigns"
+            / PACKS["BETA"]
+            / "plan_tree.json"
+        )
+        beta_unit = json.loads(beta_tree_path.read_text())["arm_attachments"][
+            "identity_pin_projection"
+        ]["identity_units"][0]
+        gamma_tree_path = (
+            repository
+            / "configs/campaigns"
+            / PACKS["GAMMA"]
+            / "plan_tree.json"
+        )
+        gamma_tree = json.loads(gamma_tree_path.read_text())
+        gamma_tree["arm_attachments"]["identity_pin_projection"][
+            "identity_units"
+        ] = [copy.deepcopy(projected_unit), copy.deepcopy(beta_unit)]
+        gamma_tree_path.write_bytes(arm_readiness.render_json(gamma_tree))
+        git(repository, "add", ".")
+        git(repository, "commit", "-qm", "project identity")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
+
+        with (
+            mock.patch.dict(generic_evidence._PACKS_BY_PROFILE, family),
+            mock.patch.object(
+                arm_readiness,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+        ):
+            authored = generic_evidence.author_arm_readiness_evidence(pack)
+        self.assertEqual(authored["status"], "PASS", authored)
+        pack_relative = pack.relative_to(repository).as_posix()
+        git(
+            repository,
+            "add",
+            "--",
+            f"{pack_relative}/{generic_evidence._SOURCE_DIRECTORY}",
+            f"{pack_relative}/{generic_evidence._EVIDENCE_DIRECTORY}",
+        )
+        git(repository, "commit", "-qm", "author freeze evidence")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
+
+        with (
+            mock.patch.dict(generic_evidence._PACKS_BY_PROFILE, family),
+            mock.patch.object(
+                arm_readiness,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+        ):
+            frozen = arm_readiness.generate_freeze_receipt(
+                pack,
+                predecessor_pack_root=predecessor_pack_root(
+                    repository,
+                    pack.name,
+                ),
+            )
+        if frozen["receipt_path"] is not None:
+            frozen["refusals"] = json.loads(
+                Path(frozen["receipt_path"]).read_text()
+            )["refusals"]
+        self.assertEqual(frozen["status"], "PASS", frozen)
+        git(repository, "add", "--", pack_relative)
+        git(repository, "commit", "-qm", "mint freeze")
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+        pack_sha256 = arm_readiness.committed_pack_tree_sha256(pack)
+        tree_oid = subprocess.run(
+            ["git", "rev-parse", "HEAD^{tree}"],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        terminal_review = "\n".join(
+            (
+                "terminal review",
+                "",
+                "JouleWise-Terminal-Review: PASS",
+                f"JouleWise-Terminal-Review-Tree-Oid: {tree_oid}",
+                "JouleWise-Terminal-Review-Pack-Sha256: "
+                f"{pack_sha256}",
+            )
+        )
+        git(
+            repository,
+            "commit",
+            "--allow-empty",
+            "-qm",
+            terminal_review,
+        )
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        install_passing_dry_run(pack, custody)
+
+        tree, _tree_raw = arm_readiness._plan_tree(pack)
+        plan_sha256 = arm_readiness._pack_identity(pack, tree)["plan_sha256"]
+        session = _valid_session_receipt(context, plan_sha256, tree)
+        temporary_root = Path(temporary.name)
+        (temporary_root / "identity-epoch.json").write_bytes(
+            arm_readiness.render_json(
+                session["slots"]["pre"]["identity_epoch"]
+            )
+        )
+        (temporary_root / "t1-bindings.json").write_bytes(
+            arm_readiness.render_json(
+                session["slots"]["pre"]["t1_bindings"]
+            )
+        )
+        (temporary_root / "production-ledger.jsonl").write_text(
+            json.dumps(session, sort_keys=True, separators=(",", ":")) + "\n"
+        )
+        readiness_capture_path = input_root / "ledger-readiness.json"
+        readiness_capture = json.loads(readiness_capture_path.read_text())
+        readiness_capture["stdout"] = json.dumps(
+            {
+                "status": "ready",
+                "early_warning_only": True,
+                "frozen_plan": {
+                    "path": str(pack / "calibration_plan.json"),
+                    "plan_id": tree["plan"]["plan_id"],
+                    "sha256": plan_sha256,
+                },
+            }
+        )
+        readiness_capture_path.write_bytes(
+            arm_readiness.render_json(readiness_capture)
+        )
+        reservation_capture_path = input_root / "ledger-reservation.json"
+        reservation_capture = json.loads(reservation_capture_path.read_text())
+        plan_index = reservation_capture["argv"].index("--plan-sha256") + 1
+        reservation_capture["argv"][plan_index] = plan_sha256
+        reservation_capture["stdout"] = json.dumps(
+            {"status": "reserved", "receipt": session}
+        )
+        reservation_capture_path.write_bytes(
+            arm_readiness.render_json(reservation_capture)
+        )
+        with author_environment(
+            repository,
+            now_monotonic_ns=fixture_now,
+        ):
+            authored_t0 = author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(authored_t0["status"], "PASS", authored_t0)
+        self.assertEqual(
+            len(authored_t0["authored_rows"]),
+            15,
+            authored_t0,
+        )
+
+        armed = subprocess.run(
+            [
+                sys.executable,
+                str(repository / "scripts/generate_arm_readiness.py"),
+                "arm",
+                "--pack-root",
+                str(pack),
+                "--arm-context",
+                json.dumps(context, sort_keys=True, separators=(",", ":")),
+                "--window-custody-root",
+                str(custody),
+            ],
+            cwd=repository,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(armed.returncode, 0, f"{armed.stdout}{armed.stderr}")
+        arm_result = json.loads(armed.stdout)
+        self.assertEqual(arm_result["status"], "PASS", arm_result)
+        arm_path = Path(arm_result["receipt_path"])
+        manifest_path = input_root / "launch-manifest.json"
+        return temporary, repository, pack, custody, arm_path, manifest_path
+
+    def _clone_repository(self, source: Path, destination: Path) -> None:
+        from tests.test_arm_readiness_lifecycle import git
+
+        git(
+            destination.parent,
+            "clone",
+            "-q",
+            "--no-local",
+            str(source),
+            str(destination),
+        )
+        git(destination, "config", "user.email", "tests@joulewise.invalid")
+        git(destination, "config", "user.name", "JouleWise tests")
+        git(destination, "config", "gc.auto", "0")
+        git(destination, "config", "maintenance.auto", "false")
+
+    def _run_launch(
+        self,
+        repository: Path,
+        pack: Path,
+        arm_path: Path,
+        custody: Path,
+        manifest_path: Path,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(repository / "scripts/launch_window.py"),
+                "--pack-root",
+                str(pack),
+                "--arm-receipt",
+                str(arm_path),
+                "--arm-readiness-custody-root",
+                str(custody),
+                "--launch-manifest",
+                str(manifest_path),
+            ],
+            cwd=repository,
+            env={
+                **os.environ,
+                "PYTHONPATH": str(repository),
+                "PYTHONDONTWRITEBYTECODE": "1",
+            },
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_real_minted_v4_launch_accepts_relocation_and_refuses_content_change(
+        self,
+    ) -> None:
+        temporary, repository, pack, custody, arm_path, manifest_path = (
+            self._mint_v4_arm()
+        )
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        pack_relative = pack.relative_to(repository)
+
+        content_repository = root / "content-different-repository"
+        self._clone_repository(repository, content_repository)
+        content_pack = content_repository / pack_relative
+        content_path = content_pack / "config.json"
+        content_path.write_bytes(b'{"run_id":"genuine-content-difference"}\n')
+        subprocess.run(
+            ["git", "add", pack_relative.as_posix()],
+            cwd=content_repository,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-qm", "genuine pack content difference"],
+            cwd=content_repository,
+            check=True,
+        )
+        refused = self._run_launch(
+            content_repository,
+            content_pack,
+            arm_path,
+            custody,
+            manifest_path,
+        )
+        self.assertEqual(refused.returncode, 2, refused.stderr)
+        refusal = json.loads(refused.stdout)
+        self.assertEqual(
+            refusal["reason_codes"],
+            ["readiness_pack_digest_mismatch"],
+        )
+        self.assertEqual(
+            refusal["detail"],
+            "arm receipt pack binding differs from committed pack bytes",
+        )
+
+        relocated_repository = root / "relocated-repository"
+        self._clone_repository(repository, relocated_repository)
+        relocated_pack = relocated_repository / pack_relative
+        shutil.rmtree(pack)
+        pack.symlink_to(relocated_pack, target_is_directory=True)
+        accepted = self._run_launch(
+            relocated_repository,
+            relocated_pack,
+            arm_path,
+            custody,
+            manifest_path,
+        )
+        self.assertEqual(
+            accepted.returncode,
+            0,
+            f"{accepted.stdout}{accepted.stderr}",
+        )
+        self.assertEqual(accepted.stdout, "")
+        consumption_path = (
+            custody
+            / relocated_pack.name
+            / "arm_readiness.consumptions"
+            / f"{arm_path.stem}.consumed.json"
+        )
+        self.assertTrue(consumption_path.is_file())
+        consumption = arm_readiness.validate_consumption_receipt(
+            arm_readiness.parse_json_bytes(
+                consumption_path.read_bytes(),
+                require_canonical=True,
+            )
+        )
+        self.assertEqual(
+            consumption["schema_version"],
+            arm_readiness.CONSUMPTION_RECEIPT_SCHEMA,
+        )
 
 
 class OperatorConfirmationDigestCliTests(unittest.TestCase):

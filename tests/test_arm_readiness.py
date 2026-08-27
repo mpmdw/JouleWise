@@ -1445,6 +1445,25 @@ class LaunchConsumptionV2Tests(unittest.TestCase):
 
 
 class ArmPackReplayComparisonTests(unittest.TestCase):
+    def _assert_verify_side_pack_refusal(
+        self,
+        pack: Path,
+        custody_pack_root: Path,
+        receipt: dict,
+        expected_detail: str,
+    ) -> None:
+        with self.assertRaises(readiness.ArmReadinessError) as caught:
+            readiness._derive_arm_semantics_for_verification(
+                pack,
+                custody_pack_root,
+                receipt,
+            )
+        self.assertEqual(
+            caught.exception.reason_code,
+            "readiness_pack_digest_mismatch",
+        )
+        self.assertEqual(str(caught.exception), expected_detail)
+
     def _consumption_for_arm(self, arm_path: Path) -> tuple[dict, Path]:
         raw = arm_path.read_bytes()
         return (
@@ -1583,6 +1602,70 @@ class ArmPackReplayComparisonTests(unittest.TestCase):
         self.assertEqual(
             str(caught.exception),
             "consumed arm pack record differs from authenticated pack bytes",
+        )
+
+    def test_verify_side_pack_comparison_names_content_or_keyset_difference(
+        self,
+    ) -> None:
+        from tests.test_arm_readiness_lifecycle import make_go_fixture
+
+        temporary, _repository, pack, custody, arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        expected_detail = (
+            "arm receipt pack binding differs from committed pack bytes"
+        )
+        for mutation in ("content", "keyset"):
+            with self.subTest(mutation=mutation):
+                receipt = json.loads(arm_path.read_text())
+                if mutation == "content":
+                    receipt["pack"]["plan_id"] = "different-plan"
+                else:
+                    receipt["pack"].pop("plan_id")
+                self._assert_verify_side_pack_refusal(
+                    pack,
+                    custody / pack.name,
+                    receipt,
+                    expected_detail,
+                )
+
+    def test_verify_side_pack_comparison_names_successor_relative_location_difference(
+        self,
+    ) -> None:
+        from tests.test_arm_readiness_lifecycle import make_go_fixture
+
+        temporary, _repository, pack, custody, arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        receipt = json.loads(arm_path.read_text())
+        receipt["pack"]["pack_root"] = (
+            f"/historical/checkout/relocated/{pack.name}"
+        )
+
+        self._assert_verify_side_pack_refusal(
+            pack,
+            custody / pack.name,
+            receipt,
+            "arm receipt repository-relative pack location differs",
+        )
+
+    def test_verify_side_pack_comparison_names_legacy_location_binding(
+        self,
+    ) -> None:
+        from tests.test_arm_readiness_lifecycle import make_go_fixture
+
+        temporary, _repository, pack, custody, arm_path = make_go_fixture(
+            "d117_floor_qwen25_1p5b_v3"
+        )
+        self.addCleanup(temporary.cleanup)
+        receipt = json.loads(arm_path.read_text())
+        receipt["pack"]["pack_root"] = (
+            f"/historical/checkout/configs/campaigns/{pack.name}"
+        )
+
+        self._assert_verify_side_pack_refusal(
+            pack,
+            custody / pack.name,
+            receipt,
+            "arm receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)",
         )
 
 
