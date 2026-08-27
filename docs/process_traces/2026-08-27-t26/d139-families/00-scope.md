@@ -200,3 +200,67 @@ and exactly one test fails because of it
 The digest is a function of the final committed generator bytes, so it must be
 recomputed at whatever head the magistrate rules on — the value above is
 correct for this head only.
+
+## Magistrate scope amendment (S9-02), folded in
+
+The ruled-not-installed sweep (`docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md`,
+item S9-02) reached this stream as a scope amendment while it was in flight. It
+names three sites. Each is answered here with the evidence the stream ran.
+
+**(a) The p256 floor dependency lives in a different file from the `families`
+block — CONFIRMED, and it was initially fixed with the wrong identifier
+grammar.** `consumer_family_declaration.json` carried
+`prefill_p256_floor_dependency.cell_ids` and `.transport_rule` as EMPTY/TODO
+slots, in a different artifact from the manifest. The first implementation round
+resolved them, but with PLAN FLOOR CELL ids
+(`d117-df-ph-prefill-p256-qwen25-1p5b-absolute`) taken from the floor packs'
+`calibration_plan.json`. The declaration's decode side names FLOOR ARTIFACT ids
+from the floor packs' `producer_contract.json`
+(`d117-qwen25-1p5b-decode-floor-v3`), a different namespace. The ruled analogue
+exists and is frozen — `d117-qwen25-1p5b-prefill-p256-floor-v3` and
+`d117-qwen25-7b-prefill-p256-floor-v3`, both at
+`configs/campaigns/d117_floor_qwen25_{1p5b,7b}_v3/producer_contract.json:986`,
+under the same `artifact_cell_id` key the decode ids come from. Fix round 2
+selects them mechanically from that file and field, so the two arms share one
+grammar.
+
+**(b) `m=1` at three sites — CONFIRMED PRESENT, REFUTED AS REACHABLE.** All three
+cited sites are the LEGACY one-contrast `splitwise_decode_v1` contract, exactly
+as D-157 finding F-1 already ruled: `_family_and_contrast`
+(`joulewise/analysis_manifest_v3.py:476`) hard-pins the legacy pack's own
+root-order digest, run-id grammar and single contrast
+`ctr-sw-decode-qwen25-1p5b-vs-7b`; the validator at `:968-971` compares against
+that same legacy family; and the block builder at `:566-578` builds
+`sw-decode-contrast-bNN` ids for that pack. The gamma pack is the separate
+`.v3.prospective` sibling, whose validator imposes no `m` constant at all and
+requires exactly two contrasts. Changing the legacy checker is therefore NOT
+required and would be wrong — it correctly describes a one-contrast family.
+Fix round 2 adds a regression that pins this reading rather than asserting it in
+prose, and is instructed to STOP and report a blocker if any route is found by
+which a gamma artifact reaches the legacy `m=1` comparison.
+
+**(c) Decode-only blocks vs the multi-contrast strata refusal — the cited site is
+also the legacy builder; the real question is answered at finalization.**
+`analysis_manifest_v3.py:566-578` is the legacy Splitwise block builder, so it
+does not describe the gamma pack. The live question S9-02 is pointing at is real
+and separate: `joulewise/analysis_engine/__init__.py` (~:1370-1394) hard-refuses
+a multi-contrast family whose frozen cross-arm strata are absent, via
+`frozen_family_block_strata` (`analysis_manifest_v3.py:1187-1295`), which needs a
+top-level `blocks` list mapping every `block_id` to a `block_number` plus
+per-contrast `block_ids` of length `planned_n_blocks`. The gamma PROSPECTIVE
+manifest has no top-level `blocks`; that list is derived at finalization
+(`_derive_arms_and_entries`, `:3003-3113`, which sorts by
+`(block_number, block_id)` — i.e. it is built to hold several block ids per
+number, which is what a cross-arm mapping is). The emitted gamma manifest gives
+both contrasts ten block ids and stamps `block_number` 1..10 on every member of
+both arms, and the prospective validator independently enforces contiguous block
+numbers 1..10 per contrast. So the mapping D-139 A2 names — "block numbers 1-10
+across both arms" — is present in the frozen bytes.
+
+Because "present in the bytes" is not the same as "derives correctly", fix round
+2 does not assert it: it builds the finalized shape from the EMITTED `_v4`
+prospective, calls `frozen_family_block_strata` for the one family, and asserts
+ten strata each mapping BOTH contrast ids. If that derivation cannot produce
+cross-arm strata, the stream returns NEEDS-RULING rather than inventing a stratum
+design — a stratum design would be a new scientific commitment, and none is
+ratified.
