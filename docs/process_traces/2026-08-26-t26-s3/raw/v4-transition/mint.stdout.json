@@ -1,0 +1,10 @@
+{
+  "arm_disposition": "NOT_APPLICABLE",
+  "mutated": true,
+  "reason_codes": [
+    "readiness_identity_pinset_frozen_mismatch"
+  ],
+  "receipt_path": "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.freeze.receipts/freeze-0004.json",
+  "receipt_sha256": "e4e76207705af62a11b10ebb69b25925f8e9f158dc1bf96b6fce55a0a6bc639a",
+  "status": "REFUSE"
+}

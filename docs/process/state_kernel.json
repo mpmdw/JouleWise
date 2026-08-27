@@ -1620,36 +1620,6 @@
       "status_note": "Minted 2026-07-25; scope corrected same day after the quantitative replay. NOT a blocker on the ABBA roadmap: under the labelled-floor path the queued stages remain scientifically viable at current sizes (tens-of-percent effects on ~50 J clear a ~3 J floor plus claim-side bound). This is a MARGIN optimisation — attribution error is duration-independent while effects scale with workload, so longer prefill/decode buys effect-to-floor ratio for free. Pilot the ratio at candidate sizes before committing the remaining quiet-machine nights.",
       "stop_card": null
     },
-    "FROZEN-RECEIPT-CONSTANT-STALE-01": {
-      "acceptance": {
-        "evidence": [
-          "The stale-constant behaviour is characterized per generation with executed evidence: the bare --check outcome for the ordinal-1 pack and for each successor",
-          "A ruling records whether the constant is refreshed per generation or the authentication path stops depending on it, with the regression that pins the chosen shape"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/FROZEN-RECEIPT-CONSTANT-STALE-01/acceptance",
-          "label": "FROZEN-RECEIPT-CONSTANT-STALE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Successor-family authentication no longer rests on a constant that names the predecessor's freeze receipt."
-      },
-      "authority": {
-        "label": "RUN_STATE 2026-08-24 T23 morning entry — two independent soundness rows surfaced for the next kernel wave",
-        "path": "RUN_STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Close the first soundness row from the S-0 §3.4 PACK_AUTHENTICATION round: every successor family inherits a STALE CURRENT_FROZEN_RECEIPT_SHA256 — the generator constant names the PREDECESSOR's freeze receipt, so PRESERVE_CURRENT_FROZEN_BYTES is false and only the ordinal-1 pack can authenticate by a bare generator --check; every later generation exits 1 with 'the current frozen identity requires preserve mode'. Decide whether the constant is refreshed per generation or the authentication path stops depending on it.",
-      "id": "FROZEN-RECEIPT-CONSTANT-STALE-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 93,
-      "status": "queued",
-      "status_note": "Surfaced by the §3.4 round on S-0 estate 2; independent of the projected-pack cure that landed in PR #178. Executed corroboration (all six _v2/_v3 successor generators exit 1) is recorded in docs/process_traces/2026-08-19-prep-sprint/ready-packet/rows/ROW-L5.md.",
-      "stop_card": null
-    },
     "LINE-AUDIT-GUARD-01": {
       "acceptance": {
         "evidence": [
@@ -3207,36 +3177,6 @@
       "priority": "p3_research_expansion",
       "rank": 28,
       "status": "blocked",
-      "stop_card": null
-    },
-    "PACKAUTH-PRESERVE-TAUTOLOGY-01": {
-      "acceptance": {
-        "evidence": [
-          "What a bare --check and a preserve-mode --check each PROVE for an ordinal-1 pack is characterized with executed evidence",
-          "Either a non-tautological derivation lands with a regression, or the limit is recorded at every site that consumes the PACK_AUTHENTICATION verdict"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PACKAUTH-PRESERVE-TAUTOLOGY-01/acceptance",
-          "label": "PACKAUTH-PRESERVE-TAUTOLOGY-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The ordinal-1 PACK_AUTHENTICATION claim is either made non-tautological or stated honestly wherever it is consumed."
-      },
-      "authority": {
-        "label": "RUN_STATE 2026-08-24 T23 morning entry — two independent soundness rows surfaced for the next kernel wave",
-        "path": "RUN_STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Close the second soundness row from the same §3.4 round: preserve mode makes ordinal-1 PACK_AUTHENTICATION a TAUTOLOGY. When PRESERVE_CURRENT_FROZEN_BYTES is true the generator takes the echo path — it re-emits the committed frozen bytes instead of re-deriving them — so a check that compares generator output against the committed pack compares those bytes with themselves. Establish what the kind actually claims for an ordinal-1 pack.",
-      "id": "PACKAUTH-PRESERVE-TAUTOLOGY-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 94,
-      "status": "queued",
-      "status_note": "Second of the two independent soundness rows from the §3.4 round; distinct from the projected-pack cure (PR #178) and from the stale-constant row. 'Echo path' is the ready-packet ROW-L5 term for the preserve-mode branch.",
       "stop_card": null
     },
     "PHASE-SHARE-ESTIMAND-01": {

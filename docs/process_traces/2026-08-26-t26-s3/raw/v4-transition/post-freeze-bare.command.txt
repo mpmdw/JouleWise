@@ -1,0 +1,2 @@
+cwd=/tmp/jw-packauth-v4-transition.iaTOaJ
+/Users/edr/code/JouleWise/.venv/bin/python -I -B configs/campaigns/d117_floor_qwen25_1p5b_v4/generate_configs.py --check

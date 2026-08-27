@@ -1,0 +1,9 @@
+diff --git a/configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json b/configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json
+index 9f3b5c2..f38f7a7 100644
+--- a/configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json
++++ b/configs/campaigns/d117_floor_qwen25_1p5b_v1/calibration_plan.json
+@@ -1377,3 +1377,4 @@
+     "sha256": "b0d7b228b88bea717aa9269c103aca760cc36cf05239e0f86c235b4b29665efd"
+   }
+ }
++

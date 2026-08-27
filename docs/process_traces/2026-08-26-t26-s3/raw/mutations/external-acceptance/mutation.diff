@@ -1,0 +1,9 @@
+diff --git a/configs/calibration/calibration_acceptance_d079_v2.json b/configs/calibration/calibration_acceptance_d079_v2.json
+index 4e748b6..23a60cb 100644
+--- a/configs/calibration/calibration_acceptance_d079_v2.json
++++ b/configs/calibration/calibration_acceptance_d079_v2.json
+@@ -499,3 +499,4 @@
+   },
+   "derivation_sha256": "4f6633d5fb89a6e8fd137a834728b843915027b6f0b0afd6c37ae24e65d23f02"
+ }
++

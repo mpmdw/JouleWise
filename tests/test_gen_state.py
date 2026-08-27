@@ -26,9 +26,7 @@ EXPECTED_IDS = {
     "D144-SEATPASS-FOLLOWUPS",
     "ED-HANDS-BATCH-01",
     "EDQ-L9-3-CAPTURE-01",
-    "FROZEN-RECEIPT-CONSTANT-STALE-01",
     "MIDCAMPAIGN-CURE-GENERATION-01",
-    "PACKAUTH-PRESERVE-TAUTOLOGY-01",
     # (PAPER-REPLAY-FENCE-01 closed 2026-08-25 on PR #189 (94a93e3a squashed
     # to main at b186710a): 43/43 fenced values live-re-derived and matched,
     # no joulewise/ or ESTIMATOR_CODE_PATHS-pinned file touched.)
@@ -169,7 +167,10 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "CODEX-BRIDGE-SANDBOX-01",
                 # 2026-08-27 T26 S5 test-reliability wave (PR #203).
                 "MLX-ACID-SIGABRT-01", "CALEXITS-FOURTH-SHAPE-01",
-                "PLANTEST-RGLOB-RACE-01"}
+                "PLANTEST-RGLOB-RACE-01",
+                # 2026-08-27 T26 S3 pack-authentication soundness wave (PR #214).
+                "FROZEN-RECEIPT-CONSTANT-STALE-01",
+                "PACKAUTH-PRESERVE-TAUTOLOGY-01"}
 
 
 def load_kernel():
@@ -440,9 +441,26 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # same-bundle_id row in the target log, valid or not, refuses before
         # the candidate row is constructed, and a log the consumer reader
         # cannot reason about refuses under its own sibling code):
-        # 95 - 1 = 94 exact live records.
+        # 95 - 1 = 94; the 2026-08-27 T26 S3 pack-authentication soundness
+        # wave closes FROZEN-RECEIPT-CONSTANT-STALE-01 (PR #214: the adopted
+        # ruling is that CURRENT_FROZEN_RECEIPT_SHA256 is never refreshed and
+        # the authentication path stops depending on it -- refreshing is
+        # impossible because a successor generator is emitted before its own
+        # freeze receipt exists and editing it after the mint would change
+        # frozen pack bytes; recorded normatively in
+        # docs/contracts/receipt_histsem_verifier.md and pinned by
+        # test_frozen_receipt_constant_variants_do_not_change_the_authentication_verdict).
+        # Its branch-mate PACKAUTH-PRESERVE-TAUTOLOGY-01 closes on the same
+        # PR after a magistrate-authorized second fix round cured the delta
+        # re-audit's D1 blocker -- flagless-generator preserve detection was a
+        # name scan, so an echo written under another identifier was recorded
+        # as regenerated; flagless generators are now default-denied and
+        # admitted only by exact SHA-256 membership in a closed allowlist of
+        # reviewed historical generators, and the second fresh delta re-audit
+        # returned no blocker findings with A94 MET:
+        # 94 - 2 = 92 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 94)
+        self.assertEqual(len(self.tasks), 92)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

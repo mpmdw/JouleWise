@@ -61,9 +61,81 @@ prevent worktree deletion or mutation from disengaging a pack whose HEAD row
 exists, and the gate verifies against those same HEAD-anchored rows. Committed
 mutation/deletion remains owned by byte pins and changed-set controls.
 
+## Adopted A93 ruling: the frozen-receipt constant is not authority
+
+**Adopted 2026-08-26.** This section is normative. A pack generator is the
+plan-pinned Python program that creates or checks a campaign pack. The
+authentication path is the code that selects that program's command, runs the
+check, and returns PASS or REFUSE. That path MUST NOT read the presence, syntax,
+value, extraction status, or recorded relation of
+`CURRENT_FROZEN_RECEIPT_SHA256` when it selects the command or decides the
+verdict.
+
+The adopted choice is that `CURRENT_FROZEN_RECEIPT_SHA256` is **not refreshed
+per generation; the authentication path stops depending on it**. Refreshing is
+impossible, not merely undesirable. A successor generator is emitted before
+the successor's own freeze receipt exists, so the SHA-256 value needed for the
+constant does not yet exist. Editing the generator after that receipt is minted
+would change the already-frozen pack bytes. The rejected refresh-per-generation
+alternative is therefore circular: it requires the receipt digest before the
+receipt can be made, then requires a pack-byte edit after the receipt has fixed
+those bytes. It would also contradict D-153's new-family rule, under which each
+later family receives new versioned custody artifacts rather than retargeting
+an already-frozen family.
+
+The constant is frozen compatibility metadata: an old, pack-owned value kept
+because changing it would change frozen bytes. A total diagnostic extractor
+parses it without raising and records
+`authentication_dependency: false`. Nothing consults that diagnostic. The
+extractor records `constant_extraction_status` as follows:
+
+- `absent`: no top-level assignment exists;
+- `readable`: exactly one literal lowercase SHA-256 exists;
+- `duplicated`: more than one top-level assignment exists;
+- `non_literal`: the one value is computed or otherwise cannot be read by
+  `ast.literal_eval`;
+- `malformed`: the declaration has no assigned value, or its literal is not a
+  lowercase SHA-256; and
+- `source_unreadable`: the bytes cannot be decoded as UTF-8 Python or parsed as
+  Python syntax.
+
+The recorded `relation` is `unreadable` for the last four failure statuses. For
+`absent` it is `absent`. For `readable` it is `no_current_receipt` when the plan
+names no current freeze receipt, `matches_current` when the value equals that
+receipt's digest, `names_predecessor` only when it equals the predecessor
+receipt's digest, and `unrelated` otherwise. These values are observations,
+not verdict inputs.
+
+Preserve capability is classified separately from constant extraction. A
+preserve mechanism is generator behavior that can accept already-frozen bytes
+instead of rebuilding them; for example, a branch controlled by
+`preserve_current_frozen_bytes`. A generator that declares
+`--preserve-current-frozen-bytes` with `argparse.BooleanOptionalAction` has an
+explicit two-way selection, so authentication invokes
+`--no-preserve-current-frozen-bytes`. A generator with a preserve mechanism but
+without that explicit flag refuses because a bare invocation would leave the
+choice implicit. Every flagless generator is denied by default. It can reach a
+bare `--check` only when the SHA-256 of its exact bytes is a member of the
+library's closed allowlist of reviewed ordinal-1 historical generators, after
+which syntax inspection must also find no preserve mechanism. Allowlist
+membership admits the blob to those later checks; it does not prove
+regeneration, admit a rewrite with the same claimed behavior, or override the
+preserve-mechanism refusal. The constant does not alter any of these decisions.
+
+The ruling is pinned by
+`tests.test_arm_readiness_evidence_packauth.ProjectedPackAuthenticationTests.test_frozen_receipt_constant_variants_do_not_change_the_authentication_verdict`.
+That regression holds one generator behavior and authentication context fixed,
+varies the constant through absent, current, predecessor, unrelated, computed,
+duplicated, and malformed forms, and requires an identical authentication
+verdict with only diagnostic differences.
+
 ## Coordinates and checks
 
 The verifier has two coordinates, and they are not interchangeable.
+A **custody coordinate** is the current committed pack state being protected:
+one Git commit identifies the tree and one pack digest identifies the exact
+pack bytes in that tree. In this gate, `HEAD` and `current_pack_sha256` identify
+that current custody state.
 
 | Coordinate | Governed checks |
 |---|---|
@@ -76,6 +148,54 @@ modifications must be drawn only from the closed freeze-retarget set encoded
 there. K5 and K12 are the load-bearing historical and current byte checks. K7
 is layered delta-shape hardening and the bootstrap check used when a new
 pinset row is minted; it is not the sole byte-integrity check.
+
+For every authenticated `PACK_AUTHENTICATION` item, the verifier also parses
+the bound source and requires its `head_commit` and `pack_sha256` to equal the
+receipt's values. A derivation coordinate is that exact Git commit plus pack
+digest; for example, the receipt's `head_commit` identifies the committed tree
+and its `pack_sha256` identifies the pack bytes inside that tree. The verifier
+materializes the derivation coordinate from local Git in a temporary checkout
+and executes the plan-pinned generator through `python -I -B`. Regeneration
+means that the generator rebuilds and checks its declared outputs from pinned
+inputs; the verifier selects it with `--no-preserve-current-frozen-bytes` when
+the explicit flag exists. A flagless generator runs bare only when its exact
+SHA-256 is in the closed reviewed historical allowlist and the independent
+syntax scan finds no preserve mechanism.
+
+A **tautology** is a comparison that cannot independently detect the change
+under review because both sides come from the same already-changed bytes. For a
+concrete echo, suppose a committed `plan_tree.json` is mutated. A preserve-mode
+`--check` reads that mutated `plan_tree.json` as its saved output, re-emits the
+same bytes as its candidate, and compares the candidate with the same mutated
+file; both sides match, so the mutation is accepted. Regeneration instead
+rebuilds `plan_tree.json` from `calibration_plan.json` and the pinned external
+artifacts without using the committed `plan_tree.json` as its output source.
+The rebuilt candidate then differs from the mutated committed file, so
+`--check` notices the mutation.
+
+A U11-projected derivation coordinate is a post-generation pack state produced
+by the identity-pin projection procedure; concretely, that procedure rewrites
+`plan_tree.json`, `plan_tree.sha256`, and `producer_contract.json` and adds a
+projection receipt plus its sidecar. Its projection anchor is the earlier
+reviewed Git commit named by that receipt, where the pre-projection pack still
+exists. The evidence author regenerates the pack at that anchor, then performs
+a replay, meaning it applies the projection receipt's recorded write set and
+compares every resulting byte with the U11-projected coordinate. A bare check
+at the post-projection coordinate is not equivalent. The temporary checkout is
+removed after verification, including after refusal. Temporary-workspace
+allocation and cleanup failures yield `histsem_history_unavailable`. Failure to
+execute the bounded local Git clone that materializes the workspace yields
+`histsem_git_unavailable`; if the clone succeeds but the named commit cannot be
+checked out, the coordinate yields `histsem_commit_unresolvable`. The generator
+is never imported into the verifier process, and neither receipt nor pinset
+schema gains a field.
+
+Normative honest limit: `pack_generator_check_status: PASS` proves that the
+plan-pinned generator regenerated the authenticated historical pack coordinate
+(composed with the receipted projection replay when that coordinate is
+U11-projected); it does not prove that current HEAD pack bytes were regenerated,
+and a preserve-mode echo—a check that accepts already-frozen bytes without
+rebuilding them—cannot establish or renew this claim.
 
 The differential self-test over every governed pack mechanically requires
 `historical_pack_tree_sha256(..., "HEAD")` to equal
@@ -115,7 +235,7 @@ from `READINESS_REASON_CODES`:
 | `histsem_historical_digest_mismatch` | Pure-Git historical recomputation differs from the governed historical digest or receipt coordinate. |
 | `histsem_historical_tree_anomalous` | The historical tree contains malformed or inadmissible entries. |
 | `histsem_historical_tree_not_pre_authoring` | The historical coordinate already contains custody artifacts. |
-| `histsem_history_unavailable` | A required historical tree, blob, or delta cannot be read. |
+| `histsem_history_unavailable` | A required historical tree, blob, or delta cannot be read, or the temporary historical workspace cannot be created or cleaned up. |
 | `histsem_history_shallow` | The checkout does not contain full history. |
 | `histsem_pack_absent_at_commit` | The governed pack is absent at its historical coordinate. |
 | `histsem_pinset_absent` | The worktree pinset is missing for a pack whose HEAD row engages the gate. An unambiguous absent-at-HEAD path returns to ordinary readiness instead (see Governed identity and activation). |

@@ -1,0 +1,227 @@
+[
+  {
+    "current_committed_pack_tree_sha256": "878f16eadfbfe70415ecab5dd9067752b3f4f909c2becdf7252cc44408503e84",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": null,
+    "generator": {
+      "actual_sha256": "e6a0ac14ab601b57f1116fef762b108c5850769ccec279f8cd72dbe35cbb9d52",
+      "matches": false,
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py",
+      "plan_tree_sha256": "550035ae92199185e9ad21ae0277593e4821c1788f645ee5345bd6d3268a1c09"
+    },
+    "pack": "d117_contrast_qwen25_1p5b_vs_7b_v1",
+    "pack_authentication_receipt": {
+      "actual_sha256": "a181b88bec19386509fc03dcd5639c8747a56d7f2acd159935997d3261b30f23",
+      "freeze_receipt_sha256": "a181b88bec19386509fc03dcd5639c8747a56d7f2acd159935997d3261b30f23",
+      "matches": true,
+      "pack_sha256_at_derivation": "5390a03aa5b90224353c1b8bbdc0246917ac39d9bdd5b761a583eaadfc1648a7",
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "e2e40d5a40b0907f22b2620fe67d90b8f31ee83f7083c3ec06d42abeaff64422",
+      "evidence_receipt_sha256": "e2e40d5a40b0907f22b2620fe67d90b8f31ee83f7083c3ec06d42abeaff64422",
+      "matches": true,
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/arm_readiness.sources/pack-authentication.json"
+    }
+  },
+  {
+    "current_committed_pack_tree_sha256": "2fe51b037ad063f932c29445ef60cde24479f76d465d5f013810e0287274e540",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": "878f16eadfbfe70415ecab5dd9067752b3f4f909c2becdf7252cc44408503e84",
+    "generator": {
+      "actual_sha256": "8b3afb5e7415e02338635f25a370b9affb8e18cdc581868dae56cd00868dcfb1",
+      "matches": true,
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/generate_configs.py",
+      "plan_tree_sha256": "8b3afb5e7415e02338635f25a370b9affb8e18cdc581868dae56cd00868dcfb1"
+    },
+    "pack": "d117_contrast_qwen25_1p5b_vs_7b_v2",
+    "pack_authentication_receipt": {
+      "actual_sha256": "e5b598b92bed666090526fa399a75145506239e3fe53ac47f4c9ff746e7b6d82",
+      "freeze_receipt_sha256": "e5b598b92bed666090526fa399a75145506239e3fe53ac47f4c9ff746e7b6d82",
+      "matches": true,
+      "pack_sha256_at_derivation": "edd0eaf9efcbb6f9a9b8ecd36f8ffc05c3d17497b462d1382b8d66970311d91a",
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "df9b45b5186e62a2cfd810b4e6414ed3cef5cda974ebba8f090e84616ad748e6",
+      "evidence_receipt_sha256": "df9b45b5186e62a2cfd810b4e6414ed3cef5cda974ebba8f090e84616ad748e6",
+      "matches": true,
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/arm_readiness.sources/pack-authentication.json"
+    }
+  },
+  {
+    "current_committed_pack_tree_sha256": "0d07194143702b266267f0faa7b051695ffb5e1c56dc7a69d0b2dca8aaa883ef",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": "2fe51b037ad063f932c29445ef60cde24479f76d465d5f013810e0287274e540",
+    "generator": {
+      "actual_sha256": "67b68f661aa289dbdef4071117f9a5dc8deb39d90a8005fe341cd6a5fea06b09",
+      "matches": true,
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/generate_configs.py",
+      "plan_tree_sha256": "67b68f661aa289dbdef4071117f9a5dc8deb39d90a8005fe341cd6a5fea06b09"
+    },
+    "pack": "d117_contrast_qwen25_1p5b_vs_7b_v3",
+    "pack_authentication_receipt": {
+      "actual_sha256": "5d8e49302b24ac6d5d4f9702e866a62c1d74fef16c9ab56bb86bb53f23c2bff8",
+      "freeze_receipt_sha256": "5d8e49302b24ac6d5d4f9702e866a62c1d74fef16c9ab56bb86bb53f23c2bff8",
+      "matches": true,
+      "pack_sha256_at_derivation": "07dff08b32006a0fc4be4c2f853a8284c19924fcf241edf0773faad1731a9ce2",
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "333159243c64f17343a5f8b53f3e19d869cb44c86a25f597e3cf063b5b368407",
+      "evidence_receipt_sha256": "333159243c64f17343a5f8b53f3e19d869cb44c86a25f597e3cf063b5b368407",
+      "matches": true,
+      "path": "configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/arm_readiness.sources/pack-authentication.json"
+    }
+  },
+  {
+    "current_committed_pack_tree_sha256": "5def6e514116184d106702a588e4246959dba2f0d8e8714e70b5ddf6343786b7",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": null,
+    "generator": {
+      "actual_sha256": "82d263bf18024875eaad2124bdcc65e3a9801c76e80a867938611b8979a9ffc6",
+      "matches": false,
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py",
+      "plan_tree_sha256": "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06"
+    },
+    "pack": "d117_floor_qwen25_1p5b_v1",
+    "pack_authentication_receipt": {
+      "actual_sha256": "85e743fc182c415e987ba9ccbdcf1de1db8edac4ec31f7f030d444f9cdd80337",
+      "freeze_receipt_sha256": "85e743fc182c415e987ba9ccbdcf1de1db8edac4ec31f7f030d444f9cdd80337",
+      "matches": true,
+      "pack_sha256_at_derivation": "7a41a8788242c18f08d3b87e4ad7c1404ec616569399d525f68303956fc4b16d",
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "05ae960b3cca80ae70636f6bd2617f7ed33892aa08b3511d0b8cd87977234e3f",
+      "evidence_receipt_sha256": "05ae960b3cca80ae70636f6bd2617f7ed33892aa08b3511d0b8cd87977234e3f",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v1/arm_readiness.sources/pack-authentication.json"
+    }
+  },
+  {
+    "current_committed_pack_tree_sha256": "95f7c51ca4f2833a69d2767e9a35fcbf028365332edeb36d1b43d73b6eea31b9",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": "5def6e514116184d106702a588e4246959dba2f0d8e8714e70b5ddf6343786b7",
+    "generator": {
+      "actual_sha256": "f55955c51b04fb80647935d16527e7de7927079ef807dea1cefa2a173eeaf5b7",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v2/generate_configs.py",
+      "plan_tree_sha256": "f55955c51b04fb80647935d16527e7de7927079ef807dea1cefa2a173eeaf5b7"
+    },
+    "pack": "d117_floor_qwen25_1p5b_v2",
+    "pack_authentication_receipt": {
+      "actual_sha256": "fb7ccf5a7b22e137a859f0d3dc8318bb51bb3bc50e13a695c93c3898c06dec2a",
+      "freeze_receipt_sha256": "fb7ccf5a7b22e137a859f0d3dc8318bb51bb3bc50e13a695c93c3898c06dec2a",
+      "matches": true,
+      "pack_sha256_at_derivation": "1b3892f4f40a5a36a628cc47858b276076c1869e7eac0e2535adf3402c200277",
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v2/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "6ece6f3031ac9ae006f2c4a7597e4830d3a2cf1866eda530594e0c6ddecf5193",
+      "evidence_receipt_sha256": "6ece6f3031ac9ae006f2c4a7597e4830d3a2cf1866eda530594e0c6ddecf5193",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v2/arm_readiness.sources/pack-authentication.json"
+    }
+  },
+  {
+    "current_committed_pack_tree_sha256": "1e3f1fa31027e57053c7d26bacf2f373cf2c9ed840ee2bb3befafd99302d63f6",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": "95f7c51ca4f2833a69d2767e9a35fcbf028365332edeb36d1b43d73b6eea31b9",
+    "generator": {
+      "actual_sha256": "120b60e86ec4233fa97e180060f7eaba64039a4fb0525255d18134194c7c4b2a",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v3/generate_configs.py",
+      "plan_tree_sha256": "120b60e86ec4233fa97e180060f7eaba64039a4fb0525255d18134194c7c4b2a"
+    },
+    "pack": "d117_floor_qwen25_1p5b_v3",
+    "pack_authentication_receipt": {
+      "actual_sha256": "b9bf943d6a0e08d1dc94598643640b7ad7f32f2e87a89df3b8ff54f1b2eef2a2",
+      "freeze_receipt_sha256": "b9bf943d6a0e08d1dc94598643640b7ad7f32f2e87a89df3b8ff54f1b2eef2a2",
+      "matches": true,
+      "pack_sha256_at_derivation": "b170fe0bb02fa29b829203b759030048a1a5442f91603e000e18bb0f23845ddb",
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v3/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "f23a3d82381918e83f6600b20d59f30ffc224741eabd54067e9ced1acfbd887c",
+      "evidence_receipt_sha256": "f23a3d82381918e83f6600b20d59f30ffc224741eabd54067e9ced1acfbd887c",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_1p5b_v3/arm_readiness.sources/pack-authentication.json"
+    }
+  },
+  {
+    "current_committed_pack_tree_sha256": "2091df582c9fa5aa7b513d53ba82bb678d56f4b8ff6132738db175f1ec98d8c2",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": null,
+    "generator": {
+      "actual_sha256": "a3f652ff72cfcad15c2b0bf0193d4e1336c526ef330dd76c05a74076f19d7da5",
+      "matches": false,
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v1/generate_configs.py",
+      "plan_tree_sha256": "5519b18ae971fd3655af5d7e7be67d4462ee1fd487e179ba9961cb971a1c6dca"
+    },
+    "pack": "d117_floor_qwen25_7b_v1",
+    "pack_authentication_receipt": {
+      "actual_sha256": "abc060454c1c5451ae0d85f040f62304f2857752ca00e6f00968ac7add6943b5",
+      "freeze_receipt_sha256": "abc060454c1c5451ae0d85f040f62304f2857752ca00e6f00968ac7add6943b5",
+      "matches": true,
+      "pack_sha256_at_derivation": "34f07db7db669838b86f39cf92795718d32a8201b9272687c053d3a9ea014b85",
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v1/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "02a762754cc5c56737139e63e7ab6eaf4d50db7aa50316c72e0bdebcdf94f5e5",
+      "evidence_receipt_sha256": "02a762754cc5c56737139e63e7ab6eaf4d50db7aa50316c72e0bdebcdf94f5e5",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v1/arm_readiness.sources/pack-authentication.json"
+    }
+  },
+  {
+    "current_committed_pack_tree_sha256": "e5ec0f74df3a61daff3ffdb8c6521c2ae69dae25ac6b6490394ee64d89015968",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": "2091df582c9fa5aa7b513d53ba82bb678d56f4b8ff6132738db175f1ec98d8c2",
+    "generator": {
+      "actual_sha256": "49255ee2ad0bcd109978b3ea0b0de1f0c2874a64d5b2e92fdf6765f8a911c96b",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v2/generate_configs.py",
+      "plan_tree_sha256": "49255ee2ad0bcd109978b3ea0b0de1f0c2874a64d5b2e92fdf6765f8a911c96b"
+    },
+    "pack": "d117_floor_qwen25_7b_v2",
+    "pack_authentication_receipt": {
+      "actual_sha256": "0c4ecb168b8ff4af186f39a7d0a9ab59cb8cdaa45c7e574e062dcfefc3c34b1d",
+      "freeze_receipt_sha256": "0c4ecb168b8ff4af186f39a7d0a9ab59cb8cdaa45c7e574e062dcfefc3c34b1d",
+      "matches": true,
+      "pack_sha256_at_derivation": "7ada4f4f1e0cdd6d4aa943ae6ee0ed5fd2266b46479166ef9a8d044984f0cf5c",
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v2/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "226f5419a5544693ae52c997ec8aff03cb13958d82e87774ea481aec8b5d562d",
+      "evidence_receipt_sha256": "226f5419a5544693ae52c997ec8aff03cb13958d82e87774ea481aec8b5d562d",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v2/arm_readiness.sources/pack-authentication.json"
+    }
+  },
+  {
+    "current_committed_pack_tree_sha256": "6d0b9b758d6a37a69a88827cb47ac58566d957099a3e714143d2e6508a93e45f",
+    "freeze_receipt_current_pack_digest_field": null,
+    "freeze_receipt_predecessor_pack_sha256": "e5ec0f74df3a61daff3ffdb8c6521c2ae69dae25ac6b6490394ee64d89015968",
+    "generator": {
+      "actual_sha256": "656667d08bc243c2a3282ccec32b4d947ec73e40871eef8ca9c9989f2e2e17fd",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v3/generate_configs.py",
+      "plan_tree_sha256": "656667d08bc243c2a3282ccec32b4d947ec73e40871eef8ca9c9989f2e2e17fd"
+    },
+    "pack": "d117_floor_qwen25_7b_v3",
+    "pack_authentication_receipt": {
+      "actual_sha256": "0ddae659c8106a9b9d1b67f04ada056920170d0a70cbd44303c2da2b42ce4691",
+      "freeze_receipt_sha256": "0ddae659c8106a9b9d1b67f04ada056920170d0a70cbd44303c2da2b42ce4691",
+      "matches": true,
+      "pack_sha256_at_derivation": "bd82f7da900a00fe33221e26052c56f7df8bd77487302532c5c4ae764a84d0a1",
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v3/arm_readiness.evidence/evidence-pack-authentication.json"
+    },
+    "pack_authentication_source": {
+      "actual_sha256": "8dcbccecbd7a62d303228fbb22d84ad10c70cd751f8d1fcab1471fb660b9cbe9",
+      "evidence_receipt_sha256": "8dcbccecbd7a62d303228fbb22d84ad10c70cd751f8d1fcab1471fb660b9cbe9",
+      "matches": true,
+      "path": "configs/campaigns/d117_floor_qwen25_7b_v3/arm_readiness.sources/pack-authentication.json"
+    }
+  }
+]

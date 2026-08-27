@@ -1,0 +1,1 @@
+d117_floor_qwen25_7b_v2 frozen by d134 receipt check passed: 100 science configs, 6 floor cells, 3 reporting cells

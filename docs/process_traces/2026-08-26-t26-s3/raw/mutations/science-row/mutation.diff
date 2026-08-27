@@ -1,0 +1,9 @@
+diff --git a/configs/campaigns/d117_floor_qwen25_1p5b_v1/01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json b/configs/campaigns/d117_floor_qwen25_1p5b_v1/01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json
+index 1593010..955875e 100644
+--- a/configs/campaigns/d117_floor_qwen25_1p5b_v1/01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json
++++ b/configs/campaigns/d117_floor_qwen25_1p5b_v1/01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json
+@@ -50,3 +50,4 @@
+     ]
+   }
+ }
++

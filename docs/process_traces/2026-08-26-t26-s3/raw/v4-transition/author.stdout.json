@@ -1,0 +1,30 @@
+{
+  "authored_kinds": [
+    "ACCEPTANCE_OWNER",
+    "DOCTRINE_PIN",
+    "ESTIMATOR_IDENTITY",
+    "MINT_TRUST",
+    "MULTICELL_MINT",
+    "PACK_AUTHENTICATION",
+    "PACK_FAMILY",
+    "REASON_CODE_COVERAGE",
+    "RECEIPT_ORACLE",
+    "RECOVERY_LEDGER_TEST",
+    "THREE_WINDOW_REGRESSION"
+  ],
+  "mutated": true,
+  "receipt_paths": [
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-acceptance-owner.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-doctrine-pin.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-estimator-identity.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-mint-trust.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-multicell-mint.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-pack-authentication.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-pack-family.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-reason-code-coverage.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-receipt-oracle.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-recovery-ledger-test.json",
+    "/private/tmp/jw-packauth-v4-transition.iaTOaJ/configs/campaigns/d117_floor_qwen25_1p5b_v4/arm_readiness.evidence/evidence-three-window-regression.json"
+  ],
+  "status": "PASS"
+}

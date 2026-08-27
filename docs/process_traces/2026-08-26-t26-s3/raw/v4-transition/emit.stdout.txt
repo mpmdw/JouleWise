@@ -1,0 +1,1 @@
+generated d117_floor_qwen25_1p5b_v4 unfrozen draft: 100 science configs; calibration_plan_sha256=f91d58ea106dd63a4497904d8f6d568ce82a06ef82b6301f96fc94494e4d06b9; plan_tree_sha256=7859cb3298335e98b7e60cd8638a535192b5b8c36ca667efa08cde818769c24b

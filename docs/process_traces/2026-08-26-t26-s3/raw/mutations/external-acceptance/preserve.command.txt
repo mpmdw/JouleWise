@@ -1,0 +1,2 @@
+cwd=/tmp/jw-packauth-external-acceptance.UF6Pas
+/Users/edr/code/JouleWise/.venv/bin/python -I -B configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py --check --preserve-current-frozen-bytes

@@ -1,0 +1,6 @@
+{
+  "actual_freeze_receipt_sha256": "e4e76207705af62a11b10ebb69b25925f8e9f158dc1bf96b6fce55a0a6bc639a",
+  "compiled_current_frozen_receipt_sha256": "1277103b42090f3ce41df0e030a2a5f2a3998598efec12fef812ca5b36b89666",
+  "constant_matches_actual": false,
+  "plan_tree_reference_sha256": "e4e76207705af62a11b10ebb69b25925f8e9f158dc1bf96b6fce55a0a6bc639a"
+}

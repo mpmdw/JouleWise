@@ -1,0 +1,6 @@
+HEAD=2fd7c920314333535ea2631bec887a19b964f834
+origin/main=3109c0dc960a21c4ec0881b8a9f725995224ebe1
+branch=fix/packauth-soundness-rows
+outside-authorized-scope=CLEAN
+pack-__pycache__-directories=NONE
+full-status=?? docs/process_traces/2026-08-26-t26-s3/
