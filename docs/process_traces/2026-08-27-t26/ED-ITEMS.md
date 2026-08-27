@@ -10,6 +10,25 @@ gate named beside it.
 4. Transaction night — now the first free night AFTER W-10 (D-157) and
    W-11 (D-158) merge and estate 11 is green; ~2026-08-29/30.
 
+## BLOCKING THE MINT — one two-line edit only your hands can make (W-10, PR #209)
+0. The reviewed pinset `configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json`
+   row `d117_contrast_qwen25_1p5b_vs_7b_v3` pins the OLD pack bytes; W-10
+   regenerated the `_v3` pack, so the mint refuses `histsem_pinset_mismatch`
+   at `arm_readiness.py:6901` before the new admission check runs. The
+   pinset has no update lane BY DESIGN (byte tripwires; the harness
+   classifier refused both the agent and the magistrate). On branch
+   `fix/d139-a2-gamma-families` (worktree `/Users/edr/code/JouleWise-wt-s8-d139-families`):
+   (a) in that JSON, change that row's `current_pack_sha256` from
+   `0d07194143702b266267f0faa7b051695ffb5e1c56dc7a69d0b2dca8aaa883ef` to
+   `6986bb496aed2b2b0329f79e1c2877ff4cb0ab537ca1be26ff7b7d65bb121d0a`
+   (recomputed independently by the magistrate with
+   `committed_pack_tree_sha256` at head `2e49910e` — recompute again if
+   any later commit touches that pack);
+   (b) in `tests/test_receipt_histsem.py:33` set `PINSET_SHA256` to the
+   SHA-256 of the edited JSON file (`shasum -a 256 <file>`).
+   Then `python -m pytest -q tests/test_receipt_histsem.py`, commit, push.
+   Everything else on #209 is done and gauntleted.
+
 ## New from the S9 ruled-not-installed sweep (PR #210, SHORTLIST.md)
 5. **S9-05 (NEEDS-RULING, ruled number):** the live calibration screen
    constant is `0.009724` while D-125 rules a `0.010818` floor. Either

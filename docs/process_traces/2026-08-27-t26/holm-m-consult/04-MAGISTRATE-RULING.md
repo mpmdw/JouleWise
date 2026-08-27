@@ -96,3 +96,18 @@ claim edge would refuse. Recorded as D-157.
 `01-sol-seat.md`, `02-opus-seat.md`, `03-fable-seat.md` (verbatim);
 implementation stream S8 on `fix/d139-a2-gamma-families`, scope note under
 `../d139-families/`.
+
+## Addendum (2026-08-27, post S8) — two items
+
+A-1. **`freeze_status: "frozen"` at C1.** The prospective manifest's
+`freeze_status` means "analysis semantics are pre-registered and byte-pinned
+at generation" — a property of the manifest's bytes, distinct from the pack
+freeze event (`freeze-000N`), which is a custody act recorded in receipts.
+The implementation's reading is adopted as the definition; the contract
+text gains that sentence at first use.
+
+A-2. **The stale reviewed pin blocks the mint** (`histsem_pinset_mismatch`
+at `arm_readiness.py:6901`, before admission). The pinset has no update
+lane by design; the edit is Ed's hands (ED-ITEMS item 0), reviewed by the
+magistrate: independent recompute of the regenerated `_v3` pack digest
+matched S8's value at head `2e49910e`.
