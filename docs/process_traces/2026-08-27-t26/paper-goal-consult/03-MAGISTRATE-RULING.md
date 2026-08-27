@@ -325,3 +325,35 @@ Two of this ruling's premises were WRONG and are corrected here:
 47. **After round 4 the magistrate reads the entire main text** before
     any further round is ordered; round 5, if any, is a single fidelity
     pass over results fills when `_v4` issues.
+
+## Addendum 5 (2026-08-27, post round 4)
+
+48. **Item 46 is CORRECTED on measurement** (the director refused the
+    order; right). 112 ms is the sampling-record INTERVAL WIDTH
+    (111.8–112.5 ms), 120.9 ms is the median timestamp SPACING; the
+    resolvability rule counts overlapping support intervals
+    (`prefill_overlap_sample_count = 2` vs threshold 3, clip-to-window
+    edge handling), not a duration/cadence ratio. The two `[PENDING]`
+    markers stand; the paper states the interval width and the spacing
+    each ONCE, named as such, and the rule as a count.
+49. **Item 42 — fourth occurrence of the replication-bar signature.**
+    No fifth edit. The cure is a consult-shaped REWRITE OF THE APPENDIX A
+    CALIBRATION MATERIAL FROM THE CODE: a fresh blind Fable writer seat
+    derives the accepted-region algorithm, the onset-candidate grid (as an
+    explicit set), the baseline set (stating whether warm-up pulses
+    participate), the channel sums for `p_i`/`E_i`, the 120 s work-clock
+    origin, and every symbol (`pre`, `parse`, `post`, `k_pre`, `k_parse`,
+    `e_0`) DEFINED BEFORE FIRST DISPLAYED USE, reading
+    `joulewise/powermetrics_fiducial.py` and the reduction code as the
+    only sources; then a Sol xhigh fidelity seat checks every equation and
+    number against the code and the fence-verified values, and an Opus
+    pedagogy seat runs the first-use test. The four-term anchor sum is
+    already correct (`0.0011349971959968977…` → `…978`) and `k_pre` differs
+    from `e_0` by one clock-resolution unit by design — the writer states
+    that. The director assembles; no seat edits another seat's prose.
+50. **Two fidelity should-fixes** land in the same PR after the rewrite:
+    refresh the registry locators the §2 move invalidated, and register
+    the new appendix worked continuation in the diagnostic-value registry
+    under the replay fence.
+51. **Branch linearity:** round 4 was cut from #215's head, so its ruling
+    file lacks Addendum 4; on rebase after #215 merges this closes.
