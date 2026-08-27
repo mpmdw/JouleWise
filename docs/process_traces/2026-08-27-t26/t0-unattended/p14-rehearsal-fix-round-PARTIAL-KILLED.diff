@@ -1,0 +1,1470 @@
+diff --git a/joulewise/t0_rehearsal.py b/joulewise/t0_rehearsal.py
+index f1358dbc..fabe21d4 100644
+--- a/joulewise/t0_rehearsal.py
++++ b/joulewise/t0_rehearsal.py
+@@ -10,13 +10,14 @@ makes the rehearsal FAIL; otherwise any UNRULED makes it INCOMPLETE; only ten
+ PASS results can make it PASS.
+ 
+ The terms used below are mechanical.  A *custody document* is a canonical JSON
+-artifact found under the declared T-0 namespace.  A *RAW anchor* is
++artifact found by the loader's on-disk crawl of the T-0 namespace.  A *RAW anchor* is
+ ``CLOCK_REALTIME - CLOCK_MONOTONIC_RAW``.  An *agreement interval* is the
+ intersection of every successful parseable SNTP leg's
+-``offset +/- uncertainty`` interval.  A *production root* is one of the
+-production runs, custody, quarantine, backup, or ledger roots enumerated in
+-the custodied bundle manifest.  The rehearsal root must not contain, or be
+-contained by, any such root.
++``offset +/- uncertainty`` interval.  A *production path* is one of the
++production runs, custody, quarantine, backup, or ledger paths derived from the
++producer-written ``arm-context.json`` and ledger-reservation capture.  The
++manifest's production-path list is checked against that derived census; it is
++never accepted as the authority for the census.
+ """
+ 
+ from __future__ import annotations
+@@ -45,16 +46,29 @@ G7_UNRULED_REASON = (
+ )
+ 
+ EXECUTION_SCHEMA = "joulewise.t0_unattended_execution_record.v1"
++HID_WITNESS_SCHEMA = "joulewise.t0_unattended_hid_witness.v1"
+ D149_SCHEMA = "joulewise.t0_unattended_d149_go_receipt.v1"
+ REHEARSAL_RECEIPT_SCHEMA = "joulewise.t0_unattended_rehearsal_receipt.v1"
+ PROCESS_LINEAGE_SCHEMA = "joulewise.t0_unattended_process_lineage.v1"
+ LIFECYCLE_SCHEMA = "joulewise.t0_unattended_lifecycle.v1"
+ FALSIFIER_SCHEMA = "joulewise.t0_unattended_falsifier_controls.v1"
+ POSITIVE_CONTROL_SCHEMA = "joulewise.t0_unattended_anchor_positive_control.v1"
++POSITIVE_CONTROL_CAPTURE_SCHEMA = (
++    "joulewise.t0_unattended_anchor_positive_control_capture.v1"
++)
+ 
+ _SHA256_RE = re.compile(r"[0-9a-f]{64}")
+ _HID_IDLE_RE = re.compile(r'^\s*"HIDIdleTime"\s*=\s*([0-9]+)\s*$')
+-_AGENT_TOKEN_RE = re.compile(r"(?:^|[/\s])(codex|claude|t3)(?:[/\s]|$)", re.I)
++# Agent process names are executable-token stems.  A stem must begin a basename
++# and end there or be followed by a normal executable suffix separator/digit.
++# Thus codex-helper and /usr/local/bin/codex-run match, while mycodex and
++# codexical do not merely because they contain the same letters.
++_AGENT_NAME_STEMS = ("codex", "claude", "t3")
++_AGENT_BASENAME_RE = re.compile(
++    rf"^(?:{'|'.join(re.escape(stem) for stem in _AGENT_NAME_STEMS)})(?:$|[-_.0-9])",
++    re.I,
++)
++_HID_WITNESS_ARGV = ["/usr/sbin/ioreg", "-c", "IOHIDSystem"]
+ _CLOCK_ROW_DEFINITION = {
+     "applicability_rule": "ALWAYS",
+     "evaluation_phase": "ARM_ONLY",
+@@ -83,6 +97,14 @@ _EXECUTION_PROCESS_KEYS = {
+     "eof_refusal",
+     "timed_out",
+ }
++_HID_WITNESS_KEYS = {
++    "schema_version",
++    "argv",
++    "raw_stdout",
++    "exit_code",
++    "boot_session_id",
++    "sampled_monotonic_raw_ns",
++}
+ _D149_KEYS = {"schema_version", "verdict", "conditions"}
+ _D149_CONDITION_KEYS = {"condition_id", "status", "evidence"}
+ _REHEARSAL_RECEIPT_KEYS = {
+@@ -92,7 +114,18 @@ _REHEARSAL_RECEIPT_KEYS = {
+     "window_id",
+     "custody_root",
+     "acceptance_target",
++    "rehearsal_paths",
++}
++_SEPARATION_PATH_ROLES = {
++    "claim_runs_root",
++    "bound_runs_root",
++    "custody_root",
++    "quarantine_root",
++    "ledger_path",
++    "claim_backup_destination",
++    "bound_backup_destination",
+ }
++_PRODUCTION_ARM_CONTEXT_ROLES = _SEPARATION_PATH_ROLES - {"ledger_path"}
+ _PROCESS_LINEAGE_KEYS = {
+     "schema_version",
+     "agent_pid",
+@@ -147,10 +180,152 @@ _POSITIVE_CONTROL_KEYS = {
+     "outside_t0_sequence",
+     "network_time_reenabled",
+     "forced_resync",
+-    "anchor_before_ns",
+-    "anchor_after_ns",
++    "argv",
++    "raw_stdout",
++    "exit_code",
++    "sampled_monotonic_raw_ns",
++    "boot_session_id",
++    "capture_artifact",
+     "author_refusal_reason_code",
+ }
++_POSITIVE_CONTROL_CAPTURE_KEYS = {
++    "schema_version",
++    "argv",
++    "stdout",
++    "stderr",
++    "exit_code",
++    "sampled_monotonic_raw_ns",
++    "boot_session_id",
++}
++_POSITIVE_CONTROL_OUTPUT_RE = re.compile(
++    r"\Aanchor_before_ns=([0-9]+)\n"
++    r"anchor_after_ns=([0-9]+)\n"
++    r"author_refusal_reason_code=([a-z0-9_]+)\n\Z"
++)
++
++
++# Follow-on producer work order.  These are the seven ruled gates whose
++# required records no production path writes at HEAD.  Missing records are
++# therefore UNRULED; a supplied but malformed/contradictory record FAILS.
++REHEARSAL_PRODUCER_WORK_ORDER = {
++    "G1": {
++        "record": "execution",
++        "producer": "supervised-rehearsal collector (missing at HEAD)",
++        "required_fields": (
++            "schema_version",
++            "sequence_completed",
++            "processes[].role",
++            "processes[].pid",
++            "processes[].argv",
++            "processes[].stdin_fd0_target",
++            "processes[].state",
++            "processes[].exit_code",
++            "processes[].prompt_count",
++            "processes[].eof_refusal",
++            "processes[].timed_out",
++        ),
++    },
++    "G3": {
++        "record": "hid_idle",
++        "producer": "joulewise/arm_readiness_evidence_t0.py",
++        "required_fields": (
++            "schema_version",
++            "argv",
++            "raw_stdout",
++            "exit_code",
++            "boot_session_id",
++            "sampled_monotonic_raw_ns",
++        ),
++    },
++    "G5": {
++        "record": "d149_go",
++        "producer": "docs/process/d149-go-receipt-template.md mechanical issuer",
++        "required_fields": (
++            "schema_version",
++            "verdict",
++            "conditions[].condition_id",
++            "conditions[].status",
++            "conditions[].evidence[].path",
++            "conditions[].evidence[].sha256",
++        ),
++    },
++    "G6": {
++        "record": "rehearsal_receipt",
++        "producer": "docs/process/d149-go-receipt-template.md mechanical issuer plus scripts/capture_t0_step.py rehearsal bindings; authoritative production-path registry absent at HEAD",
++        "required_fields": (
++            "schema_version",
++            "receipt_class",
++            "claim_eligible",
++            "window_id",
++            "custody_root",
++            "acceptance_target",
++            "rehearsal_paths.claim_runs_root",
++            "rehearsal_paths.bound_runs_root",
++            "rehearsal_paths.custody_root",
++            "rehearsal_paths.quarantine_root",
++            "rehearsal_paths.ledger_path",
++            "rehearsal_paths.claim_backup_destination",
++            "rehearsal_paths.bound_backup_destination",
++        ),
++    },
++    "G8": {
++        "record": "process_lineage",
++        "producer": "supervised-rehearsal collector (missing at HEAD)",
++        "required_fields": (
++            "schema_version",
++            "agent_pid",
++            "agent_exit_monotonic_ns",
++            "capture_started_monotonic_ns",
++            "capture_finished_monotonic_ns",
++            "pre_launch_census.processes[].pid",
++            "pre_launch_census.processes[].argv",
++            "capture_censuses[].processes[].pid",
++            "capture_censuses[].processes[].argv",
++        ),
++    },
++    "G9": {
++        "record": "lifecycle",
++        "producer": "supervised-rehearsal collector (missing at HEAD)",
++        "required_fields": (
++            "schema_version",
++            "stages[].stage_id",
++            "stages[].status",
++            "stages[].evidence.path",
++            "stages[].evidence.sha256",
++            "operator_actions_at_t0",
++            "human_interventions",
++        ),
++    },
++    "G10": {
++        "record": "falsifier_controls + positive_control",
++        "producer": "supervised-rehearsal collector (missing at HEAD)",
++        "required_fields": (
++            "falsifier_controls.schema_version",
++            "falsifier_controls.author_inputs",
++            "falsifier_controls.author_cases",
++            "falsifier_controls.arm_cases",
++            "positive_control.schema_version",
++            "positive_control.argv",
++            "positive_control.raw_stdout",
++            "positive_control.exit_code",
++            "positive_control.sampled_monotonic_raw_ns",
++            "positive_control.boot_session_id",
++            "positive_control.capture_artifact.path",
++            "positive_control.capture_artifact.sha256",
++            "positive_control.author_refusal_reason_code",
++        ),
++    },
++}
++
++# FIX-4 repository census result: no concrete authoritative production-path
++# set exists at HEAD.  window_runbook.md lines 202-211 contain an operator
++# template with YYYYMMDD placeholders; campaign plan_tree files define binding
++# types/leaves, not deployed paths; readiness.ARM_CONTEXT_KEYS validates values
++# supplied at runtime.  Tests patch this private seam with real temporary paths
++# to prove omission/overlap refusal behavior, while the real evaluator remains
++# UNRULED instead of treating the manifest or rehearsal arm-context as production
++# authority.
++_REPOSITORY_PRODUCTION_PATHS: Mapping[str, Path] | None = None
+ 
+ 
+ class GateStatus(str, Enum):
+@@ -204,6 +379,7 @@ class EvidenceBundle:
+     manifest: EvidenceArtifact
+     artifacts: tuple[EvidenceArtifact, ...]
+     record_paths: Mapping[str, str]
++    declared_t0_documents: tuple[str, ...]
+     production_roots: tuple[ProductionRoot, ...]
+     load_issues: tuple[str, ...] = ()
+ 
+@@ -499,11 +675,24 @@ def evaluate_g2(bundle: EvidenceBundle) -> GateResult:
+         return _result("G2", name, GateStatus.FAIL, "clock fact census is absent or ambiguous")
+     if clock[0][2].get("source_kind") != "PROBE":
+         return _result("G2", name, GateStatus.FAIL, "clock fact source_kind is not PROBE", clock[0][0].citation())
++    on_disk = tuple(sorted(item.relative_path for item in documents))
++    declared = tuple(sorted(bundle.declared_t0_documents))
++    if on_disk != declared:
++        undeclared = sorted(set(on_disk) - set(declared))
++        absent = sorted(set(declared) - set(on_disk))
++        return _result(
++            "G2",
++            name,
++            GateStatus.FAIL,
++            "on-disk T-0 document census differs from the manifest declaration: "
++            f"undeclared={undeclared!r}, declared_but_absent={absent!r}",
++            bundle.manifest.citation(),
++        )
+     return _result(
+         "G2",
+         name,
+         GateStatus.PASS,
+-        "all T-0 documents contain zero OPERATOR_ATTESTATION facts, zero operator-interactive argvs, and one PROBE clock fact",
++        "the exhaustive on-disk T-0 document set matches its declaration and contains zero OPERATOR_ATTESTATION facts, zero operator-interactive argvs, and one PROBE clock fact",
+         *[item.citation() for item in documents],
+     )
+ 
+@@ -512,13 +701,32 @@ def evaluate_g3(bundle: EvidenceBundle) -> GateResult:
+     """Evaluate the local-HID idle witness against the measured T-0 span."""
+ 
+     name = "LOCAL-INPUT WITNESS"
+-    artifact = bundle.record("hid_idle")
++    artifact, witness, error = _json_record(bundle, "hid_idle")
+     if artifact is None:
+-        return _result("G3", name, GateStatus.FAIL, "HIDIdleTime output is absent")
++        return _result(
++            "G3",
++            name,
++            GateStatus.UNRULED,
++            "HIDIdleTime authoring witness is unavailable: "
++            "joulewise/arm_readiness_evidence_t0.py does not record its argv, "
++            "raw stdout, boot session, or monotonic sample time",
++        )
++    if error is not None or witness is None:
++        return _result("G3", name, GateStatus.FAIL, error or "invalid HID witness", artifact.citation())
+     try:
+-        text = artifact.raw.decode("utf-8", errors="strict")
+-        idle_ns = parse_hid_idle_time(text)
+-        _receipt_artifact, _receipt, fact = _clock_receipt(bundle)
++        if set(witness) != _HID_WITNESS_KEYS or witness.get("schema_version") != HID_WITNESS_SCHEMA:
++            raise ValueError("HID witness schema is invalid")
++        if witness.get("argv") != _HID_WITNESS_ARGV:
++            raise ValueError("HID witness argv is absent or is not /usr/sbin/ioreg -c IOHIDSystem")
++        if witness.get("exit_code") != 0:
++            raise ValueError("HID witness command did not exit zero")
++        raw_stdout = witness.get("raw_stdout")
++        if not isinstance(raw_stdout, str):
++            raise ValueError("HID witness raw stdout is absent")
++        idle_ns = parse_hid_idle_time(raw_stdout)
++        _receipt_artifact, receipt, fact = _clock_receipt(bundle)
++        if witness.get("boot_session_id") != receipt.get("boot_session_id"):
++            raise ValueError("HID witness boot session differs from the T-0 clock receipt")
+         value = fact.get("value")
+         if not isinstance(value, Mapping):
+             raise ValueError("clock fact value is absent")
+@@ -527,11 +735,20 @@ def evaluate_g3(bundle: EvidenceBundle) -> GateResult:
+         if not _real_int(r0_raw) or not _real_int(author_raw):
+             raise ValueError("clock fact T-0 span endpoints are not integers")
+         span_ns = author_raw - r0_raw
+-    except (UnicodeError, ValueError) as exc:
++        sampled = witness.get("sampled_monotonic_raw_ns")
++        if not _real_int(sampled) or not r0_raw <= sampled <= author_raw:
++            raise ValueError("HID witness monotonic sample time is outside the T-0 sequence")
++    except ValueError as exc:
+         return _result("G3", name, GateStatus.FAIL, str(exc), artifact.citation())
+     if idle_ns < span_ns:
+         return _result("G3", name, GateStatus.FAIL, f"HIDIdleTime {idle_ns} ns is below measured T-0 span {span_ns} ns", artifact.citation())
+-    return _result("G3", name, GateStatus.PASS, f"strict HIDIdleTime {idle_ns} ns covers measured T-0 span {span_ns} ns", artifact.citation())
++    return _result(
++        "G3",
++        name,
++        GateStatus.PASS,
++        f"hash-custodied authoring witness ran the exact ioreg argv on the T-0 boot at {sampled} ns; strict HIDIdleTime {idle_ns} ns covers measured T-0 span {span_ns} ns",
++        artifact.citation(),
++    )
+ 
+ 
+ def _real_int(value: object) -> bool:
+@@ -708,12 +925,27 @@ def evaluate_g4(bundle: EvidenceBundle) -> GateResult:
+ 
+ 
+ def evaluate_g5(bundle: EvidenceBundle) -> GateResult:
+-    """Evaluate the structured D-149 C1-C5 GO receipt and evidence hashes."""
++    """Evaluate D-149 conditions from mechanics, never their PASS labels.
++
++    At HEAD only C4 has a complete mechanical form in this bundle: the raw
++    clock receipt/source/captures evaluated by G4.  C1 has no machine-readable
++    council-verdict schema; C2 has no bundle binding for an authenticated ARM
++    receipt plus evaluation time; C3 has no combined quiet/ledger/display
++    producer record; and the D-149 template explicitly gives C5 no evidence.
++    Those four conditions are therefore UNRULED even when a receipt says PASS.
++    """
+ 
+     name = "D-149 EVALUATION"
+     artifact, value, error = _json_record(bundle, "d149_go")
+-    if artifact is None or value is None:
+-        return _result("G5", name, GateStatus.FAIL, error or "D-149 receipt is absent")
++    if artifact is None:
++        return _result(
++            "G5",
++            name,
++            GateStatus.UNRULED,
++            "D-149 mechanical GO record is unavailable: the D-149 template has no production evaluator/issuer",
++        )
++    if error is not None or value is None:
++        return _result("G5", name, GateStatus.FAIL, error or "invalid D-149 record", artifact.citation())
+     evidence = [artifact.citation()]
+     try:
+         if set(value) != _D149_KEYS or value.get("schema_version") != D149_SCHEMA or value.get("verdict") != "GO":
+@@ -726,16 +958,69 @@ def evaluate_g5(bundle: EvidenceBundle) -> GateResult:
+             if set(condition) != _D149_CONDITION_KEYS:
+                 raise ValueError(f"D-149 {condition_id} keys are not exact")
+             if condition.get("status") != "PASS":
+-                raise ValueError(f"D-149 {condition_id} is not mechanically green")
++                raise ValueError(f"D-149 {condition_id} declaration is not PASS")
+             references = condition.get("evidence")
+-            if not isinstance(references, list) or not references:
+-                raise ValueError(f"D-149 {condition_id} has no evidence/hash record")
++            if not isinstance(references, list):
++                raise ValueError(f"D-149 {condition_id} evidence is not a list")
+             for index, reference in enumerate(references):
+                 used = _verify_artifact_reference(bundle, reference, label=f"D-149 {condition_id} evidence {index}")
+                 evidence.append(used.citation())
+     except ValueError as exc:
+         return _result("G5", name, GateStatus.FAIL, str(exc), *evidence)
+-    return _result("G5", name, GateStatus.PASS, "D-149 VERDICT is GO and C1-C5 are mechanically green with matching custody hashes", *evidence)
++
++    clock_result = evaluate_g4(bundle)
++    condition_results: list[dict[str, str]] = [
++        {
++            "condition_id": "C1",
++            "status": GateStatus.UNRULED.value,
++            "method": "no mechanical form at HEAD",
++            "reason": "the READY-candidate council verdict has no machine-readable verdict/form schema",
++        },
++        {
++            "condition_id": "C2",
++            "status": GateStatus.UNRULED.value,
++            "method": "no mechanical form in the bundle at HEAD",
++            "reason": "no record binds an authenticated ARM receipt, its pack, and the D-149 evaluation monotonic time",
++        },
++        {
++            "condition_id": "C3",
++            "status": GateStatus.UNRULED.value,
++            "method": "no mechanical form at HEAD",
++            "reason": "no producer writes the combined process, pristine-ledger, display, and interactive-idle condition",
++        },
++        {
++            "condition_id": "C4",
++            "status": clock_result.status.value,
++            "method": "mechanically evaluated from G4 raw clock/source/capture evidence",
++            "reason": clock_result.message,
++        },
++        {
++            "condition_id": "C5",
++            "status": GateStatus.UNRULED.value,
++            "method": "no mechanical form at HEAD",
++            "reason": "the D-149 template defines C5 as an issuer acknowledgement with no evidence",
++        },
++    ]
++    condition_evidence = {"d149_condition_results": condition_results}
++    if clock_result.status is GateStatus.FAIL:
++        return _result(
++            "G5",
++            name,
++            GateStatus.FAIL,
++            "D-149 C4 declaration says PASS but underlying clock mechanics contradict it",
++            *evidence,
++            condition_evidence,
++            *clock_result.mechanical_evidence,
++        )
++    return _result(
++        "G5",
++        name,
++        GateStatus.UNRULED,
++        "D-149 is not mechanically decidable at HEAD: C4 is evaluated from underlying evidence; C1, C2, C3, and C5 have no complete mechanical form",
++        *evidence,
++        condition_evidence,
++        *clock_result.mechanical_evidence,
++    )
+ 
+ 
+ def _contains(parent: Path, child: Path) -> bool:
+@@ -746,22 +1031,135 @@ def _contains(parent: Path, child: Path) -> bool:
+     return True
+ 
+ 
++def _ledger_path_from_capture(capture: Mapping[str, Any]) -> Path:
++    argv = capture.get("argv")
++    if not isinstance(argv, list) or any(not isinstance(item, str) for item in argv):
++        raise ValueError("production ledger-reservation argv is malformed")
++    values = [argv[index + 1] for index, item in enumerate(argv[:-1]) if item == "--ledger"]
++    if len(values) != 1 or not Path(values[0]).is_absolute():
++        raise ValueError("production ledger-reservation capture does not bind exactly one absolute --ledger")
++    return Path(values[0])
++
++
++def _producer_bound_rehearsal_paths(
++    bundle: EvidenceBundle,
++) -> tuple[dict[str, Path] | None, tuple[Mapping[str, object], ...]]:
++    """Derive rehearsal paths from records the existing T-0 producer checks.
++
++    ``docs/phase_2/window_runbook.md`` names the six root/backup roles in
++    ``ARM_CONTEXT_JSON`` and the calibration ledger in the reservation command.
++    ``readiness.validate_arm_context`` owns the exact six path keys, while
++    ``arm_readiness_evidence_t0._derive_ledger`` authenticates the captured
++    reservation's ``--ledger`` and ledger bytes.  During a rehearsal these are
++    the rehearsal paths, not an authority for the production paths to avoid.
++    """
++
++    arm_candidates = [
++        item
++        for item in bundle.namespace_documents()
++        if Path(item.relative_path).name == "arm-context.json"
++    ]
++    ledger_candidates = [
++        item
++        for item in bundle.namespace_documents()
++        if isinstance(item.value, Mapping)
++        and item.value.get("schema_version")
++        == "joulewise.arm_readiness_t0_command_capture.v1"
++        and item.value.get("step_id") == "ledger-reservation"
++    ]
++    if not arm_candidates or not ledger_candidates:
++        return None, ()
++    if len(arm_candidates) != 1 or len(ledger_candidates) != 1:
++        raise ValueError("producer-bound rehearsal path evidence is ambiguous in the T-0 namespace")
++    arm_artifact = arm_candidates[0]
++    ledger_artifact = ledger_candidates[0]
++    if arm_artifact.parse_error is not None or not isinstance(arm_artifact.value, Mapping):
++        raise ValueError("producer-written arm-context.json is invalid")
++    if ledger_artifact.parse_error is not None or not isinstance(ledger_artifact.value, Mapping):
++        raise ValueError("producer-written ledger-reservation capture is invalid")
++    try:
++        arm = readiness.validate_arm_context(arm_artifact.value)
++    except readiness.ArmReadinessError as exc:
++        raise ValueError(f"producer-written arm-context.json is invalid: {exc}") from exc
++    unresolved = {
++        role: Path(str(arm[role])) for role in _PRODUCTION_ARM_CONTEXT_ROLES
++    }
++    unresolved["ledger_path"] = _ledger_path_from_capture(ledger_artifact.value)
++    resolved: dict[str, Path] = {}
++    for role, path in unresolved.items():
++        try:
++            target = path.resolve(strict=True)
++        except OSError as exc:
++            raise ValueError(f"producer-bound rehearsal path {role} cannot be resolved: {exc}") from exc
++        if target.is_symlink() or (role == "ledger_path" and not target.is_file()):
++            raise ValueError(f"producer-bound rehearsal path {role} is not a regular ledger file")
++        if role != "ledger_path" and not target.is_dir():
++            raise ValueError(f"producer-bound rehearsal path {role} is not a directory")
++        resolved[role] = target
++    return resolved, (arm_artifact.citation(), ledger_artifact.citation())
++
++
++def _repository_production_paths() -> dict[str, Path] | None:
++    if _REPOSITORY_PRODUCTION_PATHS is None:
++        return None
++    if set(_REPOSITORY_PRODUCTION_PATHS) != _SEPARATION_PATH_ROLES:
++        raise ValueError("repository production-path authority role census is not exact")
++    result: dict[str, Path] = {}
++    for role, path in _REPOSITORY_PRODUCTION_PATHS.items():
++        try:
++            resolved = Path(path).resolve(strict=True)
++        except OSError as exc:
++            raise ValueError(f"repository production path {role} cannot be resolved: {exc}") from exc
++        if role == "ledger_path" and not resolved.is_file():
++            raise ValueError(f"repository production path {role} is not a regular ledger file")
++        if role != "ledger_path" and not resolved.is_dir():
++            raise ValueError(f"repository production path {role} is not a directory")
++        result[role] = resolved
++    return result
++
++
++def _resolved_rehearsal_paths(value: Mapping[str, Any]) -> dict[str, Path]:
++    raw_paths = value.get("rehearsal_paths")
++    if not isinstance(raw_paths, Mapping) or set(raw_paths) != _SEPARATION_PATH_ROLES:
++        raise ValueError("rehearsal path census is not exact")
++    result: dict[str, Path] = {}
++    for role in sorted(_SEPARATION_PATH_ROLES):
++        raw = raw_paths.get(role)
++        if not isinstance(raw, str) or not Path(raw).is_absolute():
++            raise ValueError(f"rehearsal path {role} is not absolute")
++        try:
++            resolved = Path(raw).resolve(strict=True)
++        except OSError as exc:
++            raise ValueError(f"rehearsal path {role} cannot be resolved: {exc}") from exc
++        if resolved.is_symlink() or (role == "ledger_path" and not resolved.is_file()):
++            raise ValueError(f"rehearsal path {role} is not a regular ledger file")
++        if role != "ledger_path" and not resolved.is_dir():
++            raise ValueError(f"rehearsal path {role} is not a directory")
++        result[role] = resolved
++    return result
++
++
+ def evaluate_g6(bundle: EvidenceBundle) -> GateResult:
+     """Evaluate rehearsal authority separation and real path containment.
+ 
+-    The production-root census follows the accepted design's dedicated
+-    runs/custody/ledger/backup requirement (``seat-sol-design.md`` lines
+-    148-170) and the ruling's outside-production requirement
+-    (``MAGISTRATE-RULING-T0-UNATTENDED.md`` lines 96-99).  The manifest must
+-    enumerate those role-labelled roots; resolved ``Path.relative_to`` tests,
+-    in both directions, reject containment or equality without string-prefix
+-    guesses.
++    Producer-written arm-context/ledger evidence must bind the rehearsal paths.
++    A separate concrete repository authority must define production paths; no
++    such authority exists at HEAD, so real evidence remains UNRULED.  When that
++    authority is available, the manifest must exactly match it and resolved
++    ``Path.relative_to`` tests reject containment/equality.
+     """
+ 
+     name = "REHEARSAL SEPARATION"
+     artifact, value, error = _json_record(bundle, "rehearsal_receipt")
+-    if artifact is None or value is None:
+-        return _result("G6", name, GateStatus.FAIL, error or "rehearsal receipt is absent")
++    if artifact is None:
++        return _result(
++            "G6",
++            name,
++            GateStatus.UNRULED,
++            "rehearsal separation record is unavailable: the D-149 template has no mechanical rehearsal issuer",
++        )
++    if error is not None or value is None:
++        return _result("G6", name, GateStatus.FAIL, error or "invalid rehearsal receipt", artifact.citation())
+     if set(value) != _REHEARSAL_RECEIPT_KEYS or value.get("schema_version") != REHEARSAL_RECEIPT_SCHEMA:
+         return _result("G6", name, GateStatus.FAIL, "rehearsal receipt schema is invalid", artifact.citation())
+     if value.get("receipt_class") != REHEARSAL_RECEIPT_CLASS:
+@@ -773,18 +1171,96 @@ def evaluate_g6(bundle: EvidenceBundle) -> GateResult:
+         return _result("G6", name, GateStatus.FAIL, f"window id does not begin {REHEARSAL_WINDOW_PREFIX}", artifact.citation())
+     try:
+         custody = bundle.custody_root.resolve(strict=True)
+-    except OSError as exc:
+-        return _result("G6", name, GateStatus.FAIL, f"rehearsal custody root cannot be resolved: {exc}", artifact.citation())
+-    if value.get("custody_root") != str(custody):
++        rehearsal_paths = _resolved_rehearsal_paths(value)
++        producer_bound, producer_evidence = _producer_bound_rehearsal_paths(bundle)
++        authoritative = _repository_production_paths()
++    except ValueError as exc:
++        return _result("G6", name, GateStatus.FAIL, str(exc), artifact.citation())
++    if value.get("custody_root") != str(custody) or rehearsal_paths["custody_root"] != custody:
+         return _result("G6", name, GateStatus.FAIL, "rehearsal receipt custody_root does not bind the evaluated root", artifact.citation())
+-    if not bundle.production_roots:
+-        return _result("G6", name, GateStatus.FAIL, "production-root census is absent", artifact.citation())
+-    for production in bundle.production_roots:
+-        if production.resolution_error is not None:
+-            return _result("G6", name, GateStatus.FAIL, f"production root {production.role} cannot be resolved: {production.resolution_error}", artifact.citation())
+-        if _contains(production.path, custody) or _contains(custody, production.path):
+-            return _result("G6", name, GateStatus.FAIL, f"rehearsal custody overlaps production root {production.role}: {production.path}", artifact.citation())
+-    return _result("G6", name, GateStatus.PASS, "receipt is non-claim rehearsal authority and resolved custody is disjoint from every enumerated production root", artifact.citation(), bundle.manifest.citation())
++    if producer_bound is None:
++        return _result(
++            "G6",
++            name,
++            GateStatus.UNRULED,
++            "rehearsal path binding is unavailable: scripts/capture_t0_step.py must supply arm-context.json and the ledger-reservation capture",
++            artifact.citation(),
++        )
++    for role, path in rehearsal_paths.items():
++        if producer_bound[role] != path:
++            return _result(
++                "G6",
++                name,
++                GateStatus.FAIL,
++                f"rehearsal path {role} differs from producer-written arm-context/ledger evidence",
++                artifact.citation(),
++                *producer_evidence,
++            )
++    if authoritative is None:
++        return _result(
++            "G6",
++            name,
++            GateStatus.UNRULED,
++            "production path set is UNRULED: the runbook has dated placeholders, campaign configs define path binding types/leaves, and readiness validates runtime-supplied paths; none is a concrete authoritative in-repo production-path registry, so the manifest declaration is not accepted",
++            artifact.citation(),
++            *producer_evidence,
++        )
++
++    declared = {item.role: item for item in bundle.production_roots}
++    if set(declared) != set(authoritative):
++        return _result(
++            "G6",
++            name,
++            GateStatus.FAIL,
++            "declared production path roles differ from producer-written authority: "
++            f"declared={sorted(declared)!r}, authoritative={sorted(authoritative)!r}",
++            artifact.citation(),
++            bundle.manifest.citation(),
++            *producer_evidence,
++        )
++    for role, production in declared.items():
++        if production.resolution_error is not None or production.path != authoritative[role]:
++            return _result(
++                "G6",
++                name,
++                GateStatus.FAIL,
++                f"declared production path {role} differs from producer-written authority",
++                artifact.citation(),
++                bundle.manifest.citation(),
++                *producer_evidence,
++            )
++
++    rehearsal_items = sorted(rehearsal_paths.items())
++    for index, (left_role, left_path) in enumerate(rehearsal_items):
++        for right_role, right_path in rehearsal_items[index + 1 :]:
++            if _contains(left_path, right_path) or _contains(right_path, left_path):
++                return _result(
++                    "G6",
++                    name,
++                    GateStatus.FAIL,
++                    f"rehearsal paths are not dedicated: {left_role} overlaps {right_role}",
++                    artifact.citation(),
++                )
++    for rehearsal_role, rehearsal_path in rehearsal_items:
++        for production_role, production_path in authoritative.items():
++            if _contains(production_path, rehearsal_path) or _contains(rehearsal_path, production_path):
++                return _result(
++                    "G6",
++                    name,
++                    GateStatus.FAIL,
++                    f"rehearsal {rehearsal_role} overlaps production {production_role}: {production_path}",
++                    artifact.citation(),
++                    *producer_evidence,
++                )
++    return _result(
++        "G6",
++        name,
++        GateStatus.PASS,
++        "receipt is non-claim rehearsal authority; rehearsal paths match producer-written arm-context/ledger evidence; declared production paths exactly match repository authority; rehearsal ledger, roots, and backups are resolved, mutually dedicated, and disjoint from production",
++        artifact.citation(),
++        bundle.manifest.citation(),
++        *producer_evidence,
++    )
+ 
+ 
+ def evaluate_g7(_bundle: EvidenceBundle) -> GateResult:
+@@ -799,7 +1275,11 @@ def _process_is_agent(process: object) -> bool:
+     argv = process.get("argv")
+     if not isinstance(argv, list) or any(not isinstance(item, str) for item in argv):
+         return False
+-    return _AGENT_TOKEN_RE.search(" ".join(argv)) is not None
++    return any(
++        _AGENT_BASENAME_RE.search(Path(token).name) is not None
++        for token in argv
++        if token
++    )
+ 
+ 
+ def evaluate_g8(bundle: EvidenceBundle) -> GateResult:
+@@ -807,8 +1287,15 @@ def evaluate_g8(bundle: EvidenceBundle) -> GateResult:
+ 
+     name = "ZERO-AGENT CAPTURE"
+     artifact, value, error = _json_record(bundle, "process_lineage")
+-    if artifact is None or value is None:
+-        return _result("G8", name, GateStatus.FAIL, error or "process-lineage record is absent")
++    if artifact is None:
++        return _result(
++            "G8",
++            name,
++            GateStatus.UNRULED,
++            "process-lineage record is unavailable: no supervised-rehearsal collector exists at HEAD",
++        )
++    if error is not None or value is None:
++        return _result("G8", name, GateStatus.FAIL, error or "invalid process-lineage record", artifact.citation())
+     try:
+         if set(value) != _PROCESS_LINEAGE_KEYS or value.get("schema_version") != PROCESS_LINEAGE_SCHEMA:
+             raise ValueError("process-lineage schema is invalid")
+@@ -861,8 +1348,15 @@ def evaluate_g9(bundle: EvidenceBundle) -> GateResult:
+ 
+     name = "FULL LIFECYCLE"
+     artifact, value, error = _json_record(bundle, "lifecycle")
+-    if artifact is None or value is None:
+-        return _result("G9", name, GateStatus.FAIL, error or "lifecycle record is absent")
++    if artifact is None:
++        return _result(
++            "G9",
++            name,
++            GateStatus.UNRULED,
++            "lifecycle record is unavailable: no supervised-rehearsal collector exists at HEAD",
++        )
++    if error is not None or value is None:
++        return _result("G9", name, GateStatus.FAIL, error or "invalid lifecycle record", artifact.citation())
+     evidence = [artifact.citation()]
+     try:
+         if set(value) != _LIFECYCLE_KEYS or value.get("schema_version") != LIFECYCLE_SCHEMA:
+@@ -1024,8 +1518,15 @@ def evaluate_g10(bundle: EvidenceBundle) -> GateResult:
+ 
+     name = "FALSIFIER CONTROLS"
+     controls_artifact, controls, controls_error = _json_record(bundle, "falsifier_controls")
+-    if controls_artifact is None or controls is None:
+-        return _result("G10", name, GateStatus.FAIL, controls_error or "software falsifier-control record is absent")
++    if controls_artifact is None:
++        return _result(
++            "G10",
++            name,
++            GateStatus.UNRULED,
++            "falsifier-control record is unavailable: no supervised-rehearsal collector exists at HEAD",
++        )
++    if controls_error is not None or controls is None:
++        return _result("G10", name, GateStatus.FAIL, controls_error or "invalid falsifier-control record", controls_artifact.citation())
+     evidence: list[Mapping[str, object]] = [controls_artifact.citation()]
+     try:
+         if set(controls) != _FALSIFIER_KEYS or controls.get("schema_version") != FALSIFIER_SCHEMA:
+@@ -1077,21 +1578,70 @@ def evaluate_g10(bundle: EvidenceBundle) -> GateResult:
+         )
+     evidence.append(positive_artifact.citation())
+     try:
++        if positive_error is not None:
++            raise ValueError(positive_error)
+         if set(positive) != _POSITIVE_CONTROL_KEYS or positive.get("schema_version") != POSITIVE_CONTROL_SCHEMA:
+             raise ValueError("Ed-hands privileged anchor positive-control schema is invalid")
+         if positive.get("performed_by") != "Ed" or positive.get("outside_t0_sequence") is not True:
+             raise ValueError("privileged anchor positive control was not recorded as Ed-hands outside T-0")
+         if positive.get("network_time_reenabled") is not True or positive.get("forced_resync") is not True:
+             raise ValueError("privileged anchor positive control lacks network-time re-enable/forced-resync evidence")
+-        before = positive.get("anchor_before_ns")
+-        after = positive.get("anchor_after_ns")
+-        if not _real_int(before) or not _real_int(after) or abs(after - before) <= 5_000_000:
++        argv = positive.get("argv")
++        raw_stdout = positive.get("raw_stdout")
++        sampled = positive.get("sampled_monotonic_raw_ns")
++        if not isinstance(argv, list) or not argv or any(not isinstance(item, str) or not item for item in argv):
++            raise ValueError("privileged anchor positive control raw command argv is absent")
++        if not isinstance(raw_stdout, str) or not raw_stdout:
++            raise ValueError("privileged anchor positive control raw output is absent")
++        if positive.get("exit_code") != 0 or not _real_int(sampled):
++            raise ValueError("privileged anchor positive control command result/timestamp is invalid")
++        capture_artifact = _verify_artifact_reference(
++            bundle,
++            positive.get("capture_artifact"),
++            label="privileged anchor positive-control capture",
++        )
++        evidence.append(capture_artifact.citation())
++        capture = capture_artifact.value
++        if (
++            not isinstance(capture, Mapping)
++            or set(capture) != _POSITIVE_CONTROL_CAPTURE_KEYS
++            or capture.get("schema_version") != POSITIVE_CONTROL_CAPTURE_SCHEMA
++        ):
++            raise ValueError("privileged anchor positive-control capture schema is invalid")
++        if (
++            capture.get("argv") != argv
++            or capture.get("stdout") != raw_stdout
++            or capture.get("exit_code") != positive.get("exit_code")
++            or capture.get("sampled_monotonic_raw_ns") != sampled
++            or capture.get("boot_session_id") != positive.get("boot_session_id")
++        ):
++            raise ValueError("privileged anchor positive-control record is not bound to its raw capture")
++        output_match = _POSITIVE_CONTROL_OUTPUT_RE.fullmatch(raw_stdout)
++        if output_match is None:
++            raise ValueError("privileged anchor positive-control raw output is unparsable")
++        before = int(output_match.group(1))
++        after = int(output_match.group(2))
++        output_reason_code = output_match.group(3)
++        if abs(after - before) <= 5_000_000:
+             raise ValueError("privileged anchor positive control did not visibly move the RAW anchor beyond 5 ms")
+-        if positive.get("author_refusal_reason_code") != "evidence_author_t0_clock_attestation_underivable":
++        receipt_artifact, receipt, fact = _clock_receipt(bundle)
++        clock_value = fact.get("value")
++        if not isinstance(clock_value, Mapping):
++            raise ValueError("clock fact value is absent for positive-control binding")
++        if positive.get("boot_session_id") != receipt.get("boot_session_id"):
++            raise ValueError("privileged anchor positive control belongs to another boot session")
++        author_raw = clock_value.get("anchor_monotonic_raw_ns")
++        if not _real_int(author_raw) or sampled <= author_raw:
++            raise ValueError("privileged anchor positive-control timestamp is not outside and after the T-0 sequence")
++        if (
++            positive.get("author_refusal_reason_code")
++            != "evidence_author_t0_clock_attestation_underivable"
++            or output_reason_code != positive.get("author_refusal_reason_code")
++        ):
+             raise ValueError("privileged anchor positive control did not record the real author refusal code")
+     except ValueError as exc:
+         return _result("G10", name, GateStatus.FAIL, str(exc), *evidence)
+-    return _result("G10", name, GateStatus.PASS, "real author and arm paths enforce 5 ms +/- 1 ns, and Ed's adjacent privileged control visibly moved the RAW anchor", *evidence)
++    return _result("G10", name, GateStatus.PASS, "real author and arm paths enforce 5 ms +/- 1 ns, and Ed's adjacent same-boot raw command capture hash-binds a post-T-0 RAW-anchor movement beyond 5 ms", *evidence)
+ 
+ 
+ GATE_EVALUATORS = (
+@@ -1135,13 +1685,16 @@ __all__ = [
+     "GATE_EVALUATORS",
+     "GateResult",
+     "GateStatus",
++    "HID_WITNESS_SCHEMA",
+     "LIFECYCLE_SCHEMA",
+     "OverallVerdict",
+     "POSITIVE_CONTROL_SCHEMA",
++    "POSITIVE_CONTROL_CAPTURE_SCHEMA",
+     "PROCESS_LINEAGE_SCHEMA",
+     "ProductionRoot",
+     "REHEARSAL_RECEIPT_CLASS",
+     "REHEARSAL_RECEIPT_SCHEMA",
++    "REHEARSAL_PRODUCER_WORK_ORDER",
+     "REHEARSAL_WINDOW_PREFIX",
+     "compose_overall_verdict",
+     "evaluate_g1",
+diff --git a/scripts/rehearse_t0_unattended.py b/scripts/rehearse_t0_unattended.py
+index 75601f02..67fecd23 100644
+--- a/scripts/rehearse_t0_unattended.py
++++ b/scripts/rehearse_t0_unattended.py
+@@ -35,6 +35,7 @@ RECORD_NAMES = frozenset(
+ _MANIFEST_KEYS = {
+     "schema_version",
+     "t0_namespace",
++    "t0_documents",
+     "records",
+     "production_roots",
+ }
+@@ -146,6 +147,26 @@ def load_evidence_bundle(root: Path | str) -> t0_rehearsal.EvidenceBundle:
+     if not namespace_resolved.is_dir() or namespace_resolved.is_symlink():
+         raise BundleLoadError("T-0 namespace must be a regular directory")
+ 
++    declared_documents_raw = manifest_value.get("t0_documents")
++    if not isinstance(declared_documents_raw, list):
++        raise BundleLoadError("t0_documents must be a list")
++    declared_documents = tuple(
++        _safe_relative(item, label=f"t0_documents[{index}]")
++        for index, item in enumerate(declared_documents_raw)
++    )
++    if len(set(declared_documents)) != len(declared_documents):
++        raise BundleLoadError("t0_documents contains a duplicate path")
++    for relative in declared_documents:
++        candidate = custody / PurePosixPath(relative)
++        try:
++            candidate.resolve().relative_to(namespace_resolved)
++        except (OSError, ValueError) as exc:
++            raise BundleLoadError(
++                f"declared T-0 document is outside the T-0 namespace: {relative}"
++            ) from exc
++        if not relative.endswith(".json"):
++            raise BundleLoadError(f"declared T-0 document is not JSON: {relative}")
++
+     production_items = manifest_value.get("production_roots")
+     if not isinstance(production_items, list):
+         raise BundleLoadError("production_roots must be a list")
+@@ -191,6 +212,7 @@ def load_evidence_bundle(root: Path | str) -> t0_rehearsal.EvidenceBundle:
+         manifest=manifest_artifact,
+         artifacts=artifacts,
+         record_paths=record_paths,
++        declared_t0_documents=declared_documents,
+         production_roots=tuple(production_roots),
+         load_issues=tuple(load_issues),
+     )
+diff --git a/tests/test_t0_rehearsal.py b/tests/test_t0_rehearsal.py
+index b51c85a2..a28c92c1 100644
+--- a/tests/test_t0_rehearsal.py
++++ b/tests/test_t0_rehearsal.py
+@@ -1,13 +1,16 @@
+ from __future__ import annotations
+ 
++import ast
+ import copy
+ import io
++import inspect
+ import tempfile
+ import unittest
+ from pathlib import Path
+ from typing import Any, Mapping
+ 
+ from joulewise import arm_readiness as readiness
++from joulewise import arm_readiness_evidence
+ from joulewise import clock_reference
+ from joulewise import t0_rehearsal as rehearsal
+ from scripts import rehearse_t0_unattended as cli
+@@ -147,8 +150,12 @@ class FixtureBuilder:
+         g10_case: str = "pass",
+     ) -> None:
+         self.base = base
+-        self.root = base / "fixture"
+-        self.root.mkdir()
++        self.root = (
++            base / "production-overlap" / "fixture"
++            if broken_gate == "G6"
++            else base / "fixture"
++        )
++        self.root.mkdir(parents=True)
+         self.namespace = self.root / "t0-namespace"
+         self.inputs = self.namespace / "arm_readiness.t0.inputs"
+         self.sources = self.namespace / "arm_readiness.t0.sources"
+@@ -157,9 +164,47 @@ class FixtureBuilder:
+         self.broken_gate = broken_gate
+         self.hid_case = hid_case
+         self.g10_case = g10_case
++        production = self.base / "production"
++        self.production_paths = {
++            role: production / role
++            for role in (
++                "claim_runs_root",
++                "bound_runs_root",
++                "custody_root",
++                "quarantine_root",
++                "claim_backup_destination",
++                "bound_backup_destination",
++            )
++        }
++        for path in self.production_paths.values():
++            path.mkdir(parents=True)
++        self.production_paths["ledger_path"] = production / "calibration-ledger.jsonl"
++        self.production_paths["ledger_path"].write_text("{}\n", encoding="utf-8")
++        if self.broken_gate == "G6":
++            self.production_paths["claim_runs_root"] = self.base / "production-overlap"
++
++        rehearsal_resources = self.base / "rehearsal-resources"
++        self.rehearsal_paths = {
++            "custody_root": self.root,
++            **{
++                role: rehearsal_resources / role
++                for role in (
++                    "claim_runs_root",
++                    "bound_runs_root",
++                    "quarantine_root",
++                    "claim_backup_destination",
++                    "bound_backup_destination",
++                )
++            },
++        }
++        for path in self.rehearsal_paths.values():
++            path.mkdir(parents=True, exist_ok=True)
++        self.rehearsal_paths["ledger_path"] = rehearsal_resources / "rehearsal-ledger.jsonl"
++        self.rehearsal_paths["ledger_path"].write_text("{}\n", encoding="utf-8")
+ 
+     def build(self) -> Path:
+         self._build_clock_namespace()
++        self._build_production_path_authority()
+         self._build_execution()
+         self._build_hid()
+         self._build_d149()
+@@ -170,6 +215,46 @@ class FixtureBuilder:
+         self._build_manifest()
+         return self.root
+ 
++    def _build_production_path_authority(self) -> None:
++        waiver_path = self.base / "production" / "waivers.json"
++        _write_json(waiver_path, {})
++        _write_json(
++            self.inputs / "arm-context.json",
++            {
++                "bracket_session_id": "fixture-bracket",
++                "pre_attempt_id": "fixture-pre",
++                "post_attempt_id": "fixture-post",
++                "clock_route": "MANUAL",
++                **{
++                    role: str(self.production_paths[role].resolve())
++                    for role in (
++                        "claim_runs_root",
++                        "bound_runs_root",
++                        "custody_root",
++                        "quarantine_root",
++                        "claim_backup_destination",
++                        "bound_backup_destination",
++                    )
++                },
++                "waiver_path": str(waiver_path.resolve()),
++            },
++        )
++        _write_json(
++            self.inputs / "ledger-reservation.json",
++            _command_capture(
++                "ledger-reservation",
++                [
++                    "/fixture/repository/.venv/bin/python",
++                    "/fixture/repository/scripts/reserve_calibration_window_bracket.py",
++                    "--ledger",
++                    str(self.production_paths["ledger_path"].resolve()),
++                ],
++                "{}",
++                started=50,
++                finished=60,
++            ),
++        )
++
+     def _build_clock_namespace(self) -> None:
+         r0 = _clock_reference_value()
+         r0_capture = _command_capture(
+@@ -339,7 +424,7 @@ class FixtureBuilder:
+         _write_json(self.records / "execution.json", value)
+ 
+     def _build_hid(self) -> None:
+-        path = self.records / "hid-idle.txt"
++        path = self.records / "hid-idle.json"
+         path.parent.mkdir(parents=True, exist_ok=True)
+         if self.hid_case == "absent":
+             return
+@@ -349,7 +434,17 @@ class FixtureBuilder:
+             "unparsable": '"HIDIdleTime" = 0x8bb2c97000\n',
+             "below": '"HIDIdleTime" = 599999999999\n',
+         }
+-        path.write_text(values[self.hid_case], encoding="utf-8")
++        _write_json(
++            path,
++            {
++                "schema_version": rehearsal.HID_WITNESS_SCHEMA,
++                "argv": ["/usr/sbin/ioreg", "-c", "IOHIDSystem"],
++                "raw_stdout": values[self.hid_case],
++                "exit_code": 0,
++                "boot_session_id": BOOT_ID,
++                "sampled_monotonic_raw_ns": AUTHOR_RAW_NS,
++            },
++        )
+ 
+     def _build_d149(self) -> None:
+         conditions = []
+@@ -386,6 +481,10 @@ class FixtureBuilder:
+                 "window_id": rehearsal.REHEARSAL_WINDOW_PREFIX + "fixture-001",
+                 "custody_root": str(self.root.resolve()),
+                 "acceptance_target": "T0-UNATTENDED-01",
++                "rehearsal_paths": {
++                    role: str(path.resolve())
++                    for role, path in self.rehearsal_paths.items()
++                },
+             },
+         )
+ 
+@@ -499,6 +598,24 @@ class FixtureBuilder:
+             },
+         )
+         if self.broken_gate != "G10":
++            raw_stdout = (
++                f"anchor_before_ns={OFFSET_NS}\n"
++                f"anchor_after_ns={OFFSET_NS + 5_000_001}\n"
++                "author_refusal_reason_code=evidence_author_t0_clock_attestation_underivable\n"
++            )
++            capture_path = self.records / "positive-control-capture.json"
++            _write_json(
++                capture_path,
++                {
++                    "schema_version": rehearsal.POSITIVE_CONTROL_CAPTURE_SCHEMA,
++                    "argv": ["/fixture/supervised-rehearsal-anchor-collector"],
++                    "stdout": raw_stdout,
++                    "stderr": "",
++                    "exit_code": 0,
++                    "sampled_monotonic_raw_ns": AUTHOR_RAW_NS + 1,
++                    "boot_session_id": BOOT_ID,
++                },
++            )
+             _write_json(
+                 self.records / "positive-control.json",
+                 {
+@@ -507,25 +624,30 @@ class FixtureBuilder:
+                     "outside_t0_sequence": True,
+                     "network_time_reenabled": True,
+                     "forced_resync": True,
+-                    "anchor_before_ns": OFFSET_NS,
+-                    "anchor_after_ns": OFFSET_NS + 5_000_001,
++                    "argv": ["/fixture/supervised-rehearsal-anchor-collector"],
++                    "raw_stdout": raw_stdout,
++                    "exit_code": 0,
++                    "sampled_monotonic_raw_ns": AUTHOR_RAW_NS + 1,
++                    "boot_session_id": BOOT_ID,
++                    "capture_artifact": _reference(capture_path, self.root),
+                     "author_refusal_reason_code": "evidence_author_t0_clock_attestation_underivable",
+                 },
+             )
+ 
+     def _build_manifest(self) -> None:
+-        production = self.base / "production"
+-        production.mkdir()
+-        if self.broken_gate == "G6":
+-            production = self.base
++        t0_documents = sorted(
++            path.relative_to(self.root).as_posix()
++            for path in self.namespace.rglob("*.json")
++        )
+         _write_json(
+             self.root / cli.MANIFEST_NAME,
+             {
+                 "schema_version": cli.MANIFEST_SCHEMA,
+                 "t0_namespace": self.namespace.relative_to(self.root).as_posix(),
++                "t0_documents": t0_documents,
+                 "records": {
+                     "execution": "records/execution.json",
+-                    "hid_idle": "records/hid-idle.txt",
++                    "hid_idle": "records/hid-idle.json",
+                     "d149_go": "records/d149-go.json",
+                     "rehearsal_receipt": "records/rehearsal-receipt.json",
+                     "process_lineage": "records/process-lineage.json",
+@@ -534,7 +656,8 @@ class FixtureBuilder:
+                     "positive_control": "records/positive-control.json",
+                 },
+                 "production_roots": [
+-                    {"role": "production_custody_root", "path": str(production.resolve())}
++                    {"role": role, "path": str(path.resolve())}
++                    for role, path in sorted(self.production_paths.items())
+                 ],
+             },
+         )
+@@ -580,14 +703,17 @@ class T0RehearsalTests(unittest.TestCase):
+         self.assertEqual([gate["gate_id"] for gate in failed], [gate_id])
+         self.assertIn(message, failed[0]["message"])
+         for gate in verdict["gates"]:
+-            if gate["gate_id"] not in {gate_id, "G7"}:
++            if gate["gate_id"] == "G5" and gate_id != "G5":
++                self.assertEqual(gate["status"], "UNRULED", gate)
++            elif gate["gate_id"] not in {gate_id, "G7"}:
+                 self.assertEqual(gate["status"], "PASS", gate)
+         return verdict
+ 
+-    def test_passing_bundle_is_incomplete_for_exact_g7_reason(self) -> None:
++    def test_complete_synthetic_bundle_is_incomplete_for_g5_and_g7(self) -> None:
+         _temporary, _root, verdict = self._evaluate()
+         self.assertEqual(verdict["overall_verdict"], "INCOMPLETE")
+-        self.assertEqual(verdict["gate_counts"], {"PASS": 9, "FAIL": 0, "UNRULED": 1})
++        self.assertEqual(verdict["gate_counts"], {"PASS": 8, "FAIL": 0, "UNRULED": 2})
++        self.assertEqual(verdict["gates"][4]["status"], "UNRULED")
+         g7 = verdict["gates"][6]
+         self.assertEqual(g7["gate_id"], "G7")
+         self.assertEqual(g7["status"], "UNRULED")
+@@ -617,9 +743,33 @@ class T0RehearsalTests(unittest.TestCase):
+         clock_gate = verdict["gates"][1]
+         self.assertIn("evidence-t0-other.json", clock_gate["message"])
+ 
+-    def test_g3_absent_ambiguous_unparsable_and_one_ns_below_all_fail(self) -> None:
++    def test_g2_receipt_omitted_from_manifest_is_still_censused_on_disk(self) -> None:
++        # Defect kill: changing G2's iteration from on-disk documents back to
++        # the manifest-declared paths makes this OPERATOR_ATTESTATION disappear.
++        _temporary, root, _verdict = self._evaluate(broken_gate="G2")
++        manifest_path = root / cli.MANIFEST_NAME
++        manifest = readiness.parse_json_bytes(manifest_path.read_bytes(), require_canonical=True)
++        manifest["t0_documents"].remove(
++            "t0-namespace/arm_readiness.evidence/evidence-t0-other.json"
++        )
++        _write_json(manifest_path, manifest)
++        verdict = rehearsal.evaluate_rehearsal(cli.load_evidence_bundle(root))
++        gate = verdict["gates"][1]
++        self.assertEqual(gate["status"], "FAIL")
++        self.assertIn("OPERATOR_ATTESTATION fact", gate["message"])
++
++    def test_g2_benign_on_disk_manifest_census_disagreement_fails(self) -> None:
++        # Defect kill: deleting the on_disk != declared comparison makes this
++        # undeclared but otherwise benign document pass G2.
++        _temporary, root, _verdict = self._evaluate()
++        _write_json(root / "t0-namespace/undeclared-benign.json", {"benign": True})
++        verdict = rehearsal.evaluate_rehearsal(cli.load_evidence_bundle(root))
++        gate = verdict["gates"][1]
++        self.assertEqual(gate["status"], "FAIL")
++        self.assertIn("on-disk T-0 document census differs", gate["message"])
++
++    def test_g3_ambiguous_unparsable_and_one_ns_below_all_fail(self) -> None:
+         for case, message in (
+-            ("absent", "HIDIdleTime output is absent"),
+             ("ambiguous", "HIDIdleTime output is ambiguous"),
+             ("unparsable", "HIDIdleTime output is unparsable"),
+             ("below", "is below measured T-0 span"),
+@@ -627,27 +777,126 @@ class T0RehearsalTests(unittest.TestCase):
+             with self.subTest(case=case):
+                 self._assert_single_failure("G3", hid_case=case, message=message)
+ 
+-    def test_g4_empty_r1_intersection_fails_only_clock_mechanics(self) -> None:
+-        self._assert_single_failure(
+-            "G4",
+-            broken_gate="G4",
+-            message="R1 reference agreement intervals have empty intersection",
++    def test_g3_missing_current_producer_record_is_unruled(self) -> None:
++        # Defect kill: inverting the missing-record UNRULED return to PASS
++        # would let today's producer gap count as success.
++        _temporary, _root, verdict = self._evaluate(hid_case="absent")
++        self.assertEqual(verdict["gates"][2]["status"], "UNRULED")
++        self.assertNotEqual(verdict["overall_verdict"], "PASS")
++
++    def test_g3_wrong_boot_outside_timestamp_and_missing_argv_each_fail(self) -> None:
++        cases = (
++            ("wrong_boot", "boot session differs"),
++            ("outside_timestamp", "outside the T-0 sequence"),
++            ("missing_argv", "HID witness schema is invalid"),
+         )
++        for case, message in cases:
++            with self.subTest(case=case):
++                temporary = tempfile.TemporaryDirectory()
++                self.addCleanup(temporary.cleanup)
++                root = FixtureBuilder(Path(temporary.name)).build()
++                path = root / "records/hid-idle.json"
++                value = readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
++                if case == "wrong_boot":
++                    value["boot_session_id"] = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
++                elif case == "outside_timestamp":
++                    value["sampled_monotonic_raw_ns"] = AUTHOR_RAW_NS + 1
++                else:
++                    del value["argv"]
++                _write_json(path, value)
++                gate = rehearsal.evaluate_g3(cli.load_evidence_bundle(root))
++                # Defect kill: deleting the matching boot/range/exact-argv
++                # check for this row changes its result from FAIL to PASS.
++                self.assertEqual(gate.status, rehearsal.GateStatus.FAIL)
++                self.assertIn(message, gate.message)
++
++    def test_g4_empty_r1_intersection_fails_clock_mechanics_and_dependent_d149_c4(self) -> None:
++        # Defect kill: deleting G4's raw interval recomputation removes both the
++        # primary G4 refusal and G5's mechanically dependent C4 contradiction.
++        _temporary, _root, verdict = self._evaluate(broken_gate="G4")
++        failures = [gate for gate in verdict["gates"] if gate["status"] == "FAIL"]
++        self.assertEqual([gate["gate_id"] for gate in failures], ["G4", "G5"])
++        self.assertIn("R1 reference agreement intervals have empty intersection", failures[0]["message"])
++        self.assertIn("C4 declaration says PASS", failures[1]["message"])
+ 
+     def test_g5_non_green_c3_fails_only_d149(self) -> None:
+         self._assert_single_failure(
+             "G5",
+             broken_gate="G5",
+-            message="D-149 C3 is not mechanically green",
++            message="D-149 C3 declaration is not PASS",
+         )
+ 
++    def test_g5_declared_pass_c4_with_contradictory_clock_evidence_fails(self) -> None:
++        # Defect kill: deleting the evaluate_g4(bundle) call lets the five PASS
++        # labels and their arbitrary hashes override contradictory raw evidence.
++        _temporary, root, _verdict = self._evaluate(broken_gate="G4")
++        gate = rehearsal.evaluate_g5(cli.load_evidence_bundle(root))
++        self.assertEqual(gate.status, rehearsal.GateStatus.FAIL)
++        self.assertIn("C4 declaration says PASS", gate.message)
++
++    def test_g5_declared_pass_with_no_condition_evidence_never_passes(self) -> None:
++        # Defect kill: replacing the four no-mechanical-form UNRULED statuses
++        # with the receipt's PASS labels changes this result to PASS.
++        _temporary, root, _verdict = self._evaluate()
++        path = root / "records/d149-go.json"
++        value = readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
++        for condition in value["conditions"]:
++            condition["evidence"] = []
++        _write_json(path, value)
++        gate = rehearsal.evaluate_g5(cli.load_evidence_bundle(root))
++        self.assertEqual(gate.status, rehearsal.GateStatus.UNRULED)
++
++    def test_g5_condition_result_record_states_each_mechanical_disposition(self) -> None:
++        # Defect kill: deleting the d149_condition_results evidence item loses
++        # the required C1-C5 per-condition mechanical/UNRULED accounting.
++        _temporary, _root, verdict = self._evaluate()
++        gate = verdict["gates"][4]
++        results = next(
++            item["d149_condition_results"]
++            for item in gate["mechanical_evidence"]
++            if "d149_condition_results" in item
++        )
++        self.assertEqual([item["condition_id"] for item in results], ["C1", "C2", "C3", "C4", "C5"])
++        self.assertEqual([item["status"] for item in results], ["UNRULED", "UNRULED", "UNRULED", "PASS", "UNRULED"])
++
+     def test_g6_real_path_containment_rejects_production_overlap(self) -> None:
+         self._assert_single_failure(
+             "G6",
+             broken_gate="G6",
+-            message="rehearsal custody overlaps production root",
++            message="rehearsal custody_root overlaps production claim_runs_root",
+         )
+ 
++    def test_g6_declared_list_omitting_authoritative_production_root_fails(self) -> None:
++        # Defect kill: deleting the declared-role equality check makes a
++        # manifest that omits the producer-bound claim root pass.
++        _temporary, root, _verdict = self._evaluate()
++        path = root / cli.MANIFEST_NAME
++        value = readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
++        value["production_roots"] = [
++            item for item in value["production_roots"] if item["role"] != "claim_runs_root"
++        ]
++        _write_json(path, value)
++        gate = rehearsal.evaluate_g6(cli.load_evidence_bundle(root))
++        self.assertEqual(gate.status, rehearsal.GateStatus.FAIL)
++        self.assertIn("declared production path roles differ", gate.message)
++
++    def test_g6_shared_production_ledger_or_backup_destination_fails(self) -> None:
++        for role in ("ledger_path", "claim_backup_destination"):
++            with self.subTest(role=role):
++                temporary = tempfile.TemporaryDirectory()
++                self.addCleanup(temporary.cleanup)
++                builder = FixtureBuilder(Path(temporary.name))
++                root = builder.build()
++                path = root / "records/rehearsal-receipt.json"
++                value = readiness.parse_json_bytes(path.read_bytes(), require_canonical=True)
++                value["rehearsal_paths"][role] = str(builder.production_paths[role].resolve())
++                _write_json(path, value)
++                gate = rehearsal.evaluate_g6(cli.load_evidence_bundle(root))
++                # Defect kill: deleting the cross-census containment/equality
++                # comparison makes this shared ledger/backup pass.
++                self.assertEqual(gate.status, rehearsal.GateStatus.FAIL)
++                self.assertIn(f"rehearsal {role} overlaps production {role}", gate.message)
++
+     def test_g7_is_first_class_unruled_and_never_faked_as_failure_or_pass(self) -> None:
+         _temporary, _root, verdict = self._evaluate()
+         gate = verdict["gates"][6]
+@@ -662,6 +911,29 @@ class T0RehearsalTests(unittest.TestCase):
+             message="agent process existed during capture",
+         )
+ 
++    def test_agent_name_stems_cover_real_suffixes_without_substring_false_positives(self) -> None:
++        cases = (
++            ("codex", True),
++            ("codex-helper", True),
++            ("claude", True),
++            ("claude-code", True),
++            ("claude-code-helper", True),
++            ("/usr/local/bin/codex-run", True),
++            ("mycodex", False),
++            ("codexical-worker", False),
++            ("claudette", False),
++            ("/usr/local/bin/decode-x", False),
++        )
++        for process_name, expected in cases:
++            with self.subTest(process_name=process_name):
++                # Defect kill: reverting the basename stem pattern to a token
++                # boundary misses the positive hyphen/path cases; dropping the
++                # basename-start boundary flips the longer-word negatives.
++                self.assertEqual(
++                    rehearsal._process_is_agent({"pid": 1, "argv": [process_name]}),
++                    expected,
++                )
++
+     def test_g9_incomplete_capture_fails_only_full_lifecycle(self) -> None:
+         self._assert_single_failure(
+             "G9",
+@@ -724,6 +996,92 @@ class T0RehearsalTests(unittest.TestCase):
+             message="outstanding Ed-hands privileged anchor positive-control record is absent",
+         )
+ 
++    def test_g10_positive_control_wrong_boot_missing_output_and_bad_hash_fail(self) -> None:
++        cases = (
++            ("wrong_boot", "another boot session"),
++            ("missing_output", "positive-control schema is invalid"),
++            ("bad_hash", "SHA-256 does not match"),
++        )
++        for case, message in cases:
++            with self.subTest(case=case):
++                temporary = tempfile.TemporaryDirectory()
++                self.addCleanup(temporary.cleanup)
++                root = FixtureBuilder(Path(temporary.name)).build()
++                record_path = root / "records/positive-control.json"
++                capture_path = root / "records/positive-control-capture.json"
++                record = readiness.parse_json_bytes(record_path.read_bytes(), require_canonical=True)
++                if case == "wrong_boot":
++                    wrong = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
++                    capture = readiness.parse_json_bytes(capture_path.read_bytes(), require_canonical=True)
++                    capture["boot_session_id"] = wrong
++                    _write_json(capture_path, capture)
++                    record["boot_session_id"] = wrong
++                    record["capture_artifact"] = _reference(capture_path, root)
++                elif case == "missing_output":
++                    del record["raw_stdout"]
++                else:
++                    record["capture_artifact"]["sha256"] = "0" * 64
++                _write_json(record_path, record)
++                gate = rehearsal.evaluate_g10(cli.load_evidence_bundle(root))
++                # Defect kill: deleting the same-boot/raw-output/artifact-hash
++                # check for this row changes its result from FAIL to PASS.
++                self.assertEqual(gate.status, rehearsal.GateStatus.FAIL)
++                self.assertIn(message, gate.message)
++
++    def test_generic_replay_call_sites_explicitly_pass_static_anchor_sentinel(self) -> None:
++        # Defect kill: deleting live_clock_anchor=... at any of the three call
++        # sites leaves runtime behavior unchanged (callee default) but this
++        # source-structure witness fails, so it now proves explicitness itself.
++        module = ast.parse(inspect.getsource(arm_readiness_evidence))
++        functions = {
++            node.name: node
++            for node in module.body
++            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
++        }
++        for function_name in (
++            "_authenticate_existing",
++            "_authenticate_existing_r1",
++            "author_arm_readiness_evidence",
++        ):
++            with self.subTest(function_name=function_name):
++                calls = [
++                    node
++                    for node in ast.walk(functions[function_name])
++                    if isinstance(node, ast.Call)
++                    and isinstance(node.func, ast.Attribute)
++                    and node.func.attr == "_predicate_passes"
++                ]
++                explicit = [
++                    keyword.value
++                    for call in calls
++                    for keyword in call.keywords
++                    if keyword.arg == "live_clock_anchor"
++                ]
++                self.assertEqual(len(explicit), 1)
++                self.assertIsInstance(explicit[0], ast.Attribute)
++                self.assertEqual(explicit[0].attr, "_PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE")
++
++    def test_today_producer_only_bundle_is_incomplete_with_missing_gates_unruled(self) -> None:
++        # Defect kill: changing any missing proposed-record return from UNRULED
++        # to PASS would put that gate in the PASS set asserted below.
++        temporary = tempfile.TemporaryDirectory()
++        self.addCleanup(temporary.cleanup)
++        root = FixtureBuilder(Path(temporary.name)).build()
++        for path in sorted((root / "records").rglob("*"), reverse=True):
++            if path.is_file():
++                path.unlink()
++        verdict = rehearsal.evaluate_rehearsal(cli.load_evidence_bundle(root))
++        self.assertEqual(verdict["overall_verdict"], "INCOMPLETE")
++        self.assertEqual(
++            {gate["gate_id"] for gate in verdict["gates"] if gate["status"] == "PASS"},
++            {"G2", "G4"},
++        )
++        self.assertEqual(
++            {gate["gate_id"] for gate in verdict["gates"] if gate["status"] == "UNRULED"},
++            {"G1", "G3", "G5", "G6", "G7", "G8", "G9", "G10"},
++        )
++        self.assertFalse(any(gate["status"] == "FAIL" for gate in verdict["gates"]))
++
+     def test_verdict_composition_distinguishes_all_status_combinations(self) -> None:
+         cases = (
+             (("PASS",), "PASS"),
+@@ -759,7 +1117,7 @@ class T0RehearsalTests(unittest.TestCase):
+         code = cli.main(["--custody-root", str(root)], stdout=output)
+         parsed = readiness.parse_json_bytes(output.getvalue(), require_canonical=True)
+         self.assertEqual(code, 3)
+-        self.assertEqual(parsed["gate_counts"]["UNRULED"], 1)
++        self.assertEqual(parsed["gate_counts"]["UNRULED"], 2)
+ 
+ 
+ if __name__ == "__main__":
