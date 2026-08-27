@@ -60,7 +60,46 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
     def fixture(self):
         temporary, repository, pack, _custody, _arm = make_author_fixture()
         self.addCleanup(temporary.cleanup)
-        return repository.resolve(strict=True), pack
+        repository = repository.resolve(strict=True)
+        pack_relative = pack.resolve(strict=True).relative_to(repository).as_posix()
+        receipt = json.loads((pack / RECEIPT_RELATIVE).read_bytes())
+        anchor = receipt["pack"]["reviewed_git_commit"]
+        git(repository, "checkout", anchor, "--", pack_relative)
+        shutil.rmtree(pack / "identity_pin_projection.receipts")
+
+        # The shared author fixture also declares the explicit two-way flag,
+        # but it defaults to preserve=False; these PACKAUTH tests model the
+        # modern _v4 path and need an anchor whose default is overridden
+        # explicitly on the command line, so they rebuild the generator here.
+        # Either way the synthetic digest is never added to the production
+        # allowlist: that list stays closed to the reviewed historical
+        # anchors, and a synthetic fixture earns admission by CAPABILITY.
+        generator_raw = (
+            "import argparse\n"
+            "parser = argparse.ArgumentParser()\n"
+            "parser.add_argument('--check', action='store_true')\n"
+            "parser.add_argument('--preserve-current-frozen-bytes', "
+            "action=argparse.BooleanOptionalAction, default=True)\n"
+            "args = parser.parse_args()\n"
+            "if not args.check:\n"
+            "    raise SystemExit(2)\n"
+            "print('synthetic pack check passed')\n"
+        ).encode("utf-8")
+        (pack / "generate_configs.py").write_bytes(generator_raw)
+        tree = json.loads((pack / "plan_tree.json").read_bytes())
+        tree["generator"]["sha256"] = hashlib.sha256(generator_raw).hexdigest()
+        tree_raw = readiness.render_json(tree)
+        (pack / "plan_tree.json").write_bytes(tree_raw)
+        (pack / "plan_tree.sha256").write_bytes(
+            readiness.gnu_sidecar(
+                hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json"
+            )
+        )
+        git(repository, "add", "-A", ".")
+        git(repository, "commit", "-qm", "install explicit PACKAUTH generator")
+        commit_u11_projection(repository, pack, ("alpha",))
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        return repository, pack
 
     def derive(self, repository: Path, pack: Path):
         tree, _raw = readiness._plan_tree(pack)
@@ -371,6 +410,8 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
             "import argparse\n"
             "parser = argparse.ArgumentParser()\n"
             "parser.add_argument('--check', action='store_true')\n"
+            "parser.add_argument('--preserve-current-frozen-bytes', "
+            "action=argparse.BooleanOptionalAction, default=True)\n"
             "args = parser.parse_args()\n"
             "if not args.check:\n"
             "    raise SystemExit(2)\n"
@@ -441,9 +482,7 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
                 self.assertFalse(relation["authentication_dependency"])
         self.assertTrue(verdicts)
         self.assertTrue(all(verdict == verdicts[0] for verdict in verdicts[1:]))
-        implicit_preserve = (
-            "preserve_current_frozen_bytes = True\n" + fixed_generator
-        ).encode("utf-8")
+        implicit_preserve = b"preserve_current_frozen_bytes = True\n"
         with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
             evidence._generator_invocation(
                 generator["path"],
@@ -451,7 +490,7 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
                 kind="PACK_AUTHENTICATION",
                 preserve_current_frozen_bytes=False,
             )
-        self.assertIn("preserve mechanism", str(caught.exception))
+        self.assertIn("closed reviewed historical allowlist", str(caught.exception))
 
     def test_unrelated_frozen_receipt_constant_has_its_own_relation(self) -> None:
         pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v2"

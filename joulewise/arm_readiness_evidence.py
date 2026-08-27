@@ -1049,6 +1049,21 @@ def _validate_manifests(context: _DerivationContext, *, kind: str) -> dict[str, 
     }
 
 
+# Closed admission list for historical generators that predate the explicit
+# BooleanOptionalAction preserve flag.  Membership means only that the exact
+# generator blob was reviewed at a governed ordinal-1 PACK_AUTHENTICATION
+# derivation coordinate and may proceed to the independent syntax and runtime
+# checks below.  It does NOT prove regeneration, excuse a detected preserve
+# mechanism, admit a same-behavior rewrite, or authorize any other digest.
+_REVIEWED_FLAGLESS_GENERATOR_SHA256_ALLOWLIST = frozenset(
+    {
+        "550035ae92199185e9ad21ae0277593e4821c1788f645ee5345bd6d3268a1c09",
+        "5519b18ae971fd3655af5d7e7be67d4462ee1fd487e179ba9961cb971a1c6dca",
+        "ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06",
+    }
+)
+
+
 def _generator_preserve_capability(raw: bytes, *, kind: str) -> dict[str, bool]:
     """Classify only the generator's preserve mechanism without import.
 
@@ -1177,11 +1192,18 @@ def _generator_invocation(
             preserve_current_frozen_bytes=preserve_current_frozen_bytes,
         )
     else:
-        # A flagless call is regeneration evidence only when AST proves that
-        # the generator has no preserve mechanism.  Constant presence and
-        # value are compatibility diagnostics and do not participate here.
         if preserve_current_frozen_bytes:
             raise _underivable(kind, "legacy generator cannot select preserve mode")
+        generator_sha256 = _readiness.sha256_bytes(raw)
+        if generator_sha256 not in _REVIEWED_FLAGLESS_GENERATOR_SHA256_ALLOWLIST:
+            raise _underivable(
+                kind,
+                "flagless generator digest is not in the closed reviewed "
+                "historical allowlist",
+            )
+        # Digest membership is the only admission path for a flagless
+        # generator.  The name scan remains a second, defence-in-depth denial;
+        # constant presence and value remain compatibility diagnostics only.
         if capability["has_preserve_mechanism"]:
             raise _underivable(
                 kind,

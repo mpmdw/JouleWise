@@ -97,6 +97,32 @@ def write_pinset(path: Path, mutate: callable) -> Path:
 
 
 class ReceiptHistoricalSemanticsTests(unittest.TestCase):
+    def test_contract_defines_custody_coordinate_and_tautology_at_first_use(
+        self,
+    ) -> None:
+        contract = (
+            ROOT / "docs/contracts/receipt_histsem_verifier.md"
+        ).read_text(encoding="utf-8")
+        custody_definition = (
+            "A **custody coordinate** is the current committed pack state being "
+            "protected"
+        )
+        tautology_definition = (
+            "A **tautology** is a comparison that cannot independently detect "
+            "the change"
+        )
+        self.assertEqual(
+            contract.lower().find("custody coordinate"),
+            contract.lower().find(custody_definition.lower()) + 4,
+        )
+        self.assertEqual(
+            contract.lower().find("tautology"),
+            contract.lower().find(tautology_definition.lower()) + 4,
+        )
+        echo = contract.index("committed `plan_tree.json` is mutated")
+        self.assertLess(echo, contract.index("`calibration_plan.json`", echo))
+        self.assertRegex(contract[echo:], r"pinned\s+external\s+artifacts")
+
     def test_pinset_chain_is_closed_ordered_and_absent_successor_is_unchanged(self) -> None:
         self.assertEqual(
             readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH,
@@ -657,18 +683,118 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            successor = Path(temporary) / "successor"
+            root = Path(temporary)
+            successor = root / "successor"
             successor.mkdir()
+            workspace_parent = root / "workspaces"
+            workspace_parent.mkdir()
             failure = OSError("simulated histsem temporary-workspace exhaustion")
             with mock.patch.object(
                 readiness.tempfile, "TemporaryDirectory", side_effect=failure
             ):
                 arm = generate_arm_receipt(
-                    REPRESENTATIVE_PACK, {}, Path(temporary) / "custody"
+                    REPRESENTATIVE_PACK, {}, root / "custody"
                 )
                 freeze = generate_freeze_receipt(
                     successor, predecessor_pack_root=REPRESENTATIVE_PACK
                 )
+            self.assertEqual(list(workspace_parent.iterdir()), [])
+        self.assertEqual(arm["status"], "REFUSE")
+        self.assertEqual(arm["reason_codes"], ["histsem_history_unavailable"])
+        self.assertIn("temporary workspace", arm["detail"])
+        self.assertEqual(freeze["status"], "REFUSE")
+        self.assertEqual(freeze["reason_codes"], ["histsem_history_unavailable"])
+        self.assertIn("temporary workspace", freeze["detail"])
+
+    def test_temporary_workspace_materialization_failure_is_governed_at_arm_and_freeze_boundaries(
+        self,
+    ) -> None:
+        real_run = subprocess.run
+        real_temporary_directory = tempfile.TemporaryDirectory
+        with real_temporary_directory() as temporary:
+            root = Path(temporary)
+            successor = root / "successor"
+            successor.mkdir()
+            workspace_parent = root / "workspaces"
+            workspace_parent.mkdir()
+            created: list[Path] = []
+
+            def tracking_directory(*args, **kwargs):
+                kwargs.setdefault("dir", workspace_parent)
+                workspace = real_temporary_directory(*args, **kwargs)
+                created.append(Path(workspace.name))
+                return workspace
+
+            def fail_clone(command, *args, **kwargs):
+                if tuple(command[:2]) == ("git", "clone"):
+                    raise OSError("simulated historical clone failure")
+                return real_run(command, *args, **kwargs)
+
+            with (
+                mock.patch.object(
+                    readiness.tempfile,
+                    "TemporaryDirectory",
+                    side_effect=tracking_directory,
+                ),
+                mock.patch.object(
+                    readiness.subprocess, "run", side_effect=fail_clone
+                ),
+            ):
+                arm = generate_arm_receipt(
+                    REPRESENTATIVE_PACK, {}, root / "materialization-custody"
+                )
+                freeze = generate_freeze_receipt(
+                    successor, predecessor_pack_root=REPRESENTATIVE_PACK
+                )
+
+            self.assertEqual(len(created), 2)
+            self.assertTrue(all(not path.exists() for path in created))
+            self.assertEqual(list(workspace_parent.iterdir()), [])
+        self.assertEqual(arm["status"], "REFUSE")
+        self.assertEqual(arm["reason_codes"], ["histsem_git_unavailable"])
+        self.assertIn("materialize", arm["detail"])
+        self.assertEqual(freeze["status"], "REFUSE")
+        self.assertEqual(freeze["reason_codes"], ["histsem_git_unavailable"])
+        self.assertIn("materialize", freeze["detail"])
+
+    def test_temporary_workspace_cleanup_failure_is_governed_at_arm_and_freeze_boundaries(
+        self,
+    ) -> None:
+        real_temporary_directory = tempfile.TemporaryDirectory
+        with real_temporary_directory() as temporary:
+            root = Path(temporary)
+            successor = root / "successor"
+            successor.mkdir()
+            workspace_parent = root / "workspaces"
+            workspace_parent.mkdir()
+            created: list[Path] = []
+
+            class CleanupFailure:
+                def __init__(self, *args, **kwargs):
+                    kwargs.setdefault("dir", workspace_parent)
+                    self.inner = real_temporary_directory(*args, **kwargs)
+                    created.append(Path(self.inner.name))
+
+                def __enter__(self):
+                    return self.inner.__enter__()
+
+                def __exit__(self, exc_type, exc_value, traceback):
+                    self.inner.__exit__(exc_type, exc_value, traceback)
+                    raise OSError("simulated historical workspace cleanup failure")
+
+            with mock.patch.object(
+                readiness.tempfile, "TemporaryDirectory", CleanupFailure
+            ):
+                arm = generate_arm_receipt(
+                    REPRESENTATIVE_PACK, {}, root / "cleanup-custody"
+                )
+                freeze = generate_freeze_receipt(
+                    successor, predecessor_pack_root=REPRESENTATIVE_PACK
+                )
+
+            self.assertEqual(len(created), 2)
+            self.assertTrue(all(not path.exists() for path in created))
+            self.assertEqual(list(workspace_parent.iterdir()), [])
         self.assertEqual(arm["status"], "REFUSE")
         self.assertEqual(arm["reason_codes"], ["histsem_history_unavailable"])
         self.assertIn("temporary workspace", arm["detail"])
@@ -1223,6 +1349,133 @@ class PreAuthoringProjectionCustodyTests(unittest.TestCase):
 
 class PackAuthenticationRegenerationTests(unittest.TestCase):
     """Defect-shaped A94 regressions over the recorded generator coordinate."""
+
+    def test_same_bytes_echo_under_a_foreign_identifier_is_refused_at_both_boundaries(
+        self,
+    ) -> None:
+        pack_relative = "configs/campaigns/d117_floor_qwen25_1p5b_v1"
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "repository"
+            subprocess.run(
+                ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
+                check=True,
+                capture_output=True,
+            )
+            git(repository, "config", "user.email", "histsem@invalid")
+            git(repository, "config", "user.name", "histsem test")
+            current_pack = repository / pack_relative
+            source = json.loads(
+                (
+                    current_pack
+                    / "arm_readiness.sources/pack-authentication.json"
+                ).read_bytes()
+            )
+            historical_head = str(source["head_commit"])
+            historical_digest = str(source["pack_sha256"])
+            git(repository, "checkout", "-q", "--detach", historical_head)
+            historical_pack = repository / pack_relative
+            tree, _tree_raw = readiness._plan_tree(historical_pack)
+            context = evidence_author._DerivationContext(
+                pack_root=historical_pack,
+                repository=repository.resolve(strict=True),
+                tree=tree,
+                pack_sha256=historical_digest,
+                head_commit=historical_head,
+            )
+            generator_artifact, generator_raw = evidence_author._pinned_artifact(
+                context,
+                tree["generator"],
+                kind="PACK_AUTHENTICATION",
+                label="pack generator",
+            )
+
+            # The closed exception is not deny-everything: this exact reviewed
+            # historical blob runs bare and proves its recorded coordinate.
+            self.assertIn(
+                hashlib.sha256(generator_raw).hexdigest(),
+                evidence_author._REVIEWED_FLAGLESS_GENERATOR_SHA256_ALLOWLIST,
+            )
+            admitted = evidence_author._recorded_generator_check(
+                context,
+                generator_artifact["path"],
+                generator_raw,
+                kind="PACK_AUTHENTICATION",
+                preserve_current_frozen_bytes=False,
+            )
+            self.assertEqual(admitted["derivation_mode"], "regenerated")
+            self.assertFalse(admitted["preserve_flag_supported"])
+            readiness._histsem_rederive_pack_authentication(
+                repository, pack_relative, historical_head, historical_digest
+            )
+
+            # V7's shape: the generator reads the already-mutated committed
+            # output under `saved`, re-emits it as its candidate, and compares
+            # the bytes with themselves.  There is deliberately no identifier
+            # containing `preserve_current_frozen_bytes`.
+            foreign_raw = (
+                "import sys\n"
+                "from pathlib import Path\n"
+                "if '--check' not in sys.argv:\n"
+                "    raise SystemExit(2)\n"
+                "saved = Path(__file__).with_name('plan_tree.json').read_bytes()\n"
+                "candidate = saved\n"
+                "if candidate != saved:\n"
+                "    raise SystemExit(1)\n"
+                "print('accepted existing bytes', len(candidate))\n"
+            ).encode("utf-8")
+            generator_path = repository / generator_artifact["path"]
+            generator_path.write_bytes(foreign_raw)
+            tree["generator"]["sha256"] = hashlib.sha256(foreign_raw).hexdigest()
+            mutated_tree_raw = render_json(tree)
+            (historical_pack / "plan_tree.json").write_bytes(mutated_tree_raw)
+            (historical_pack / "plan_tree.sha256").write_bytes(
+                gnu_sidecar(
+                    hashlib.sha256(mutated_tree_raw).hexdigest(), "plan_tree.json"
+                )
+            )
+            git(repository, "add", pack_relative)
+            git(repository, "commit", "-qm", "install foreign same-bytes echo")
+            foreign_head = git(repository, "rev-parse", "HEAD").stdout.strip()
+            foreign_digest = committed_pack_tree_sha256(historical_pack)
+            bare = subprocess.run(
+                evidence_author._generator_command(str(generator_path)),
+                cwd=repository,
+                check=False,
+                capture_output=True,
+                env=evidence_author._generator_environment(),
+            )
+            self.assertEqual(bare.returncode, 0, bare.stderr.decode())
+
+            foreign_tree, _tree_raw = readiness._plan_tree(historical_pack)
+            foreign_context = evidence_author._DerivationContext(
+                pack_root=historical_pack,
+                repository=repository.resolve(strict=True),
+                tree=foreign_tree,
+                pack_sha256=foreign_digest,
+                head_commit=foreign_head,
+            )
+            with self.assertRaises(evidence_author.EvidenceAuthoringError) as author:
+                evidence_author._recorded_generator_check(
+                    foreign_context,
+                    foreign_tree["generator"]["path"],
+                    foreign_raw,
+                    kind="PACK_AUTHENTICATION",
+                    preserve_current_frozen_bytes=False,
+                )
+            self.assertEqual(
+                author.exception.reason_code,
+                "evidence_author_pack_authentication_underivable",
+            )
+            self.assertIn("closed reviewed historical allowlist", str(author.exception))
+
+            with self.assertRaises(HistoricalSemanticsError) as histsem:
+                readiness._histsem_rederive_pack_authentication(
+                    repository, pack_relative, foreign_head, foreign_digest
+                )
+            self.assertEqual(
+                histsem.exception.reason_code, "histsem_historical_digest_mismatch"
+            )
+            self.assertIn("closed reviewed historical allowlist", str(histsem.exception))
 
     def _projected_histsem_fixture(self) -> tuple[Path, Path, dict[str, object]]:
         temporary, repository, pack, _custody, _arm_path = make_author_fixture()

@@ -29,12 +29,20 @@ Unit 2, so Unit 2 can be dropped without changing Unit 1.
    always supplies `--no-preserve-current-frozen-bytes` and records
    `derivation_mode: regenerated`. An explicitly selected preserve call is
    recorded as `derivation_mode: echo`.
-3. Preserve-capability classification and constant extraction are independent.
-   A flagless historical generator is admitted when its AST contains no
-   preserve identifier/attribute, regardless of the presence, syntax, or value
-   of `CURRENT_FROZEN_RECEIPT_SHA256`. Its bare `--check` is classified as
-   `regenerated`. A generator with a preserve mechanism but no explicit
-   `BooleanOptionalAction` flag refuses, as does a flagless preserve request.
+3. Preserve-capability classification and constant extraction are independent,
+   and neither the constant nor the name scan can ADMIT a generator. A flagless
+   generator -- one that does not declare `--preserve-current-frozen-bytes`
+   with `argparse.BooleanOptionalAction` -- is DENIED BY DEFAULT. Its single
+   admission is exact SHA-256 membership in the closed, minimal allowlist of
+   reviewed historical generators encoded in the library (fix round 2, D1).
+   Once admitted that way, its bare `--check` is classified as `regenerated`.
+   The AST preserve-mechanism scan is retained only as a second condition that
+   can REFUSE an allowlisted generator; it never admits one, because a name
+   scan cannot see an echo written under a different identifier -- the exact
+   attack the first delta re-audit executed. A generator with a preserve
+   mechanism but no explicit `BooleanOptionalAction` flag refuses, as does a
+   flagless preserve request. Nothing in any of this reads
+   `CURRENT_FROZEN_RECEIPT_SHA256`.
 4. A projected pack runs the anchored generator under the same explicit
    no-preserve rule (or the AST-admitted historical bare rule), then composes
    that regeneration with the existing byte-exact U11 projection replay.
@@ -47,6 +55,38 @@ Unit 2, so Unit 2 can be dropped without changing Unit 1.
    to the authenticated current D-134 receipt is recorded as a named source
    check with `authentication_dependency: false`; authentication never reads
    the value, status, or relation.
+
+## Round-2 flagless-generator allowlist derivation
+
+The allowlist comes only from the generator blobs at the three ordinal-1
+`PACK_AUTHENTICATION` derivation coordinates named identically by each source
+and receipt. These were derived from local Git with the following exact
+commands; the dash in `shasum` output means standard input.
+
+| Coordinate (`head_commit`, `pack_sha256`) | Exact command | Generator SHA-256 |
+|---|---|---|
+| `c3d805ee94629a0588f44b0ccb8430fd52ec07b3`, `5390a03aa5b90224353c1b8bbdc0246917ac39d9bdd5b761a583eaadfc1648a7` (`d117_contrast_qwen25_1p5b_vs_7b_v1`) | `git show c3d805ee94629a0588f44b0ccb8430fd52ec07b3:configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/generate_configs.py \| shasum -a 256` | `550035ae92199185e9ad21ae0277593e4821c1788f645ee5345bd6d3268a1c09` |
+| `3c8677d982cfdf2651fca6809cae5b8ee0c0d9f1`, `7a41a8788242c18f08d3b87e4ad7c1404ec616569399d525f68303956fc4b16d` (`d117_floor_qwen25_1p5b_v1`) | `git show 3c8677d982cfdf2651fca6809cae5b8ee0c0d9f1:configs/campaigns/d117_floor_qwen25_1p5b_v1/generate_configs.py \| shasum -a 256` | `ea0d93ac653bf2b0610691aff668e4f4f7941ae7734ca2e0500589ddfd325c06` |
+| `6193379490de0733f142d5ff6248389d99d224a9`, `34f07db7db669838b86f39cf92795718d32a8201b9272687c053d3a9ea014b85` (`d117_floor_qwen25_7b_v1`) | `git show 6193379490de0733f142d5ff6248389d99d224a9:configs/campaigns/d117_floor_qwen25_7b_v1/generate_configs.py \| shasum -a 256` | `5519b18ae971fd3655af5d7e7be67d4462ee1fd487e179ba9961cb971a1c6dca` |
+
+Each result also exactly equals `plan_tree.json.generator.sha256` at its named
+coordinate. All three blobs are distinct, so no digest appears at more than one
+admitted coordinate and none can be removed. No other historical or synthetic
+generator digest is admitted.
+
+The admission rule is mechanical: parse the authenticated generator bytes
+without importing them. If they declare `--preserve-current-frozen-bytes` with
+`argparse.BooleanOptionalAction`, invoke `--check
+--no-preserve-current-frozen-bytes`; the flagless allowlist is irrelevant. If
+they do not declare that exact two-way flag, hash the exact bytes and refuse
+unless the digest is one of the three values above. Digest membership is only
+admission to the next checks: the independent syntax scan must still find no
+preserve mechanism, the bare `--check` must exit zero, and the result must be
+classified `regenerated`. The evidence author emits
+`evidence_author_pack_authentication_underivable` for a foreign flagless blob;
+the histsem composition catches the same refusal at its boundary and emits
+`histsem_historical_digest_mismatch`. A different spelling such as `saved`
+cannot admit; only digest membership admits.
 
 ## Frozen-receipt constant relation vocabulary
 
@@ -84,6 +124,19 @@ and Python 3.14 tar deprecation warnings omitted).
 | `test_frozen_receipt_constant_variants_do_not_change_the_authentication_verdict` | Hold one flagless, no-preserve derivation behavior and context fixed while varying the constant through absent, current, predecessor, unrelated, computed, duplicated, and malformed forms. | `EvidenceAuthoringError: flagless generator has a preserve branch or frozen-receipt constant` (valid present variants); `EvidenceAuthoringError: pack generator frozen-receipt constant is not a literal` (computed variant). |
 | `test_unrelated_frozen_receipt_constant_has_its_own_relation` | Supply one readable digest equal to neither the current nor predecessor freeze receipt. | `AssertionError: 'names_predecessor' != 'unrelated'` |
 | `test_temporary_workspace_allocation_failure_is_governed_at_arm_and_freeze_boundaries` | Force `TemporaryDirectory` allocation to raise while entering both public histsem gates. | `OSError: simulated histsem temporary-workspace exhaustion` |
+| `test_same_bytes_echo_under_a_foreign_identifier_is_refused_at_both_boundaries` | Replace the reviewed historical generator with a flagless generator that reads the already-present committed `plan_tree.json` under `saved`, re-emits those bytes, and compares them with themselves. | Pre-fix V7 output was exactly `{"after_exit": 0, "after_mode": "regenerated", "before_exit": 0, "before_mode": "regenerated", "capability": {"has_preserve_mechanism": false, "supports_boolean_optional_preserve_flag": false}, "tamper_admitted": true}` followed by `PROBE_RC=1`. |
+
+## Round-2 temporary-workspace lifecycle mapping
+
+The lifecycle is pinned at both `generate_arm_receipt` and predecessor-mode
+`generate_freeze_receipt`, and every case asserts that each tracked temporary
+path no longer exists and its temporary parent is empty:
+
+| Phase | Injected failure | Governed result | Regression |
+|---|---|---|---|
+| Allocation | `TemporaryDirectory` cannot create the checkout. | `histsem_history_unavailable` | `test_temporary_workspace_allocation_failure_is_governed_at_arm_and_freeze_boundaries` |
+| Materialization | Execution of the bounded local `git clone --shared --no-checkout` raises. | `histsem_git_unavailable` | `test_temporary_workspace_materialization_failure_is_governed_at_arm_and_freeze_boundaries` |
+| Cleanup | The checkout is removed and cleanup then raises. | `histsem_history_unavailable` | `test_temporary_workspace_cleanup_failure_is_governed_at_arm_and_freeze_boundaries` |
 
 ## Durable A93 record
 

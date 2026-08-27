@@ -114,8 +114,13 @@ instead of rebuilding them; for example, a branch controlled by
 explicit two-way selection, so authentication invokes
 `--no-preserve-current-frozen-bytes`. A generator with a preserve mechanism but
 without that explicit flag refuses because a bare invocation would leave the
-choice implicit. A flagless generator with no preserve mechanism runs bare;
-the constant does not alter any of these decisions.
+choice implicit. Every flagless generator is denied by default. It can reach a
+bare `--check` only when the SHA-256 of its exact bytes is a member of the
+library's closed allowlist of reviewed ordinal-1 historical generators, after
+which syntax inspection must also find no preserve mechanism. Allowlist
+membership admits the blob to those later checks; it does not prove
+regeneration, admit a rewrite with the same claimed behavior, or override the
+preserve-mechanism refusal. The constant does not alter any of these decisions.
 
 The ruling is pinned by
 `tests.test_arm_readiness_evidence_packauth.ProjectedPackAuthenticationTests.test_frozen_receipt_constant_variants_do_not_change_the_authentication_verdict`.
@@ -127,6 +132,10 @@ verdict with only diagnostic differences.
 ## Coordinates and checks
 
 The verifier has two coordinates, and they are not interchangeable.
+A **custody coordinate** is the current committed pack state being protected:
+one Git commit identifies the tree and one pack digest identifies the exact
+pack bytes in that tree. In this gate, `HEAD` and `current_pack_sha256` identify
+that current custody state.
 
 | Coordinate | Governed checks |
 |---|---|
@@ -149,8 +158,20 @@ materializes the derivation coordinate from local Git in a temporary checkout
 and executes the plan-pinned generator through `python -I -B`. Regeneration
 means that the generator rebuilds and checks its declared outputs from pinned
 inputs; the verifier selects it with `--no-preserve-current-frozen-bytes` when
-the explicit flag exists, or with bare `--check` only when syntax inspection
-finds no preserve mechanism.
+the explicit flag exists. A flagless generator runs bare only when its exact
+SHA-256 is in the closed reviewed historical allowlist and the independent
+syntax scan finds no preserve mechanism.
+
+A **tautology** is a comparison that cannot independently detect the change
+under review because both sides come from the same already-changed bytes. For a
+concrete echo, suppose a committed `plan_tree.json` is mutated. A preserve-mode
+`--check` reads that mutated `plan_tree.json` as its saved output, re-emits the
+same bytes as its candidate, and compares the candidate with the same mutated
+file; both sides match, so the mutation is accepted. Regeneration instead
+rebuilds `plan_tree.json` from `calibration_plan.json` and the pinned external
+artifacts without using the committed `plan_tree.json` as its output source.
+The rebuilt candidate then differs from the mutated committed file, so
+`--check` notices the mutation.
 
 A U11-projected derivation coordinate is a post-generation pack state produced
 by the identity-pin projection procedure; concretely, that procedure rewrites
@@ -161,10 +182,13 @@ exists. The evidence author regenerates the pack at that anchor, then performs
 a replay, meaning it applies the projection receipt's recorded write set and
 compares every resulting byte with the U11-projected coordinate. A bare check
 at the post-projection coordinate is not equivalent. The temporary checkout is
-removed after verification, including after refusal; creation, materialization,
-or cleanup failure refuses `histsem_history_unavailable`. The generator is
-never imported into the verifier process, and neither receipt nor pinset schema
-gains a field.
+removed after verification, including after refusal. Temporary-workspace
+allocation and cleanup failures yield `histsem_history_unavailable`. Failure to
+execute the bounded local Git clone that materializes the workspace yields
+`histsem_git_unavailable`; if the clone succeeds but the named commit cannot be
+checked out, the coordinate yields `histsem_commit_unresolvable`. The generator
+is never imported into the verifier process, and neither receipt nor pinset
+schema gains a field.
 
 Normative honest limit: `pack_generator_check_status: PASS` proves that the
 plan-pinned generator regenerated the authenticated historical pack coordinate
@@ -211,7 +235,7 @@ from `READINESS_REASON_CODES`:
 | `histsem_historical_digest_mismatch` | Pure-Git historical recomputation differs from the governed historical digest or receipt coordinate. |
 | `histsem_historical_tree_anomalous` | The historical tree contains malformed or inadmissible entries. |
 | `histsem_historical_tree_not_pre_authoring` | The historical coordinate already contains custody artifacts. |
-| `histsem_history_unavailable` | A required historical tree, blob, or delta cannot be read, or the temporary historical workspace cannot be created, materialized, or cleaned up. |
+| `histsem_history_unavailable` | A required historical tree, blob, or delta cannot be read, or the temporary historical workspace cannot be created or cleaned up. |
 | `histsem_history_shallow` | The checkout does not contain full history. |
 | `histsem_pack_absent_at_commit` | The governed pack is absent at its historical coordinate. |
 | `histsem_pinset_absent` | The worktree pinset is missing for a pack whose HEAD row engages the gate. An unambiguous absent-at-HEAD path returns to ordinary readiness instead (see Governed identity and activation). |

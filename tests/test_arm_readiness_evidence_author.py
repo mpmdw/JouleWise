@@ -194,9 +194,23 @@ def make_author_fixture(pack_name: str = "d117_floor_qwen25_1p5b_v1"):
     (pack / "order_manifest.json").write_bytes(readiness.render_json(manifest))
 
     generator_relative = f"configs/campaigns/{pack.name}/generate_configs.py"
+    # The synthetic generator declares the SAME explicit two-way preserve flag
+    # the real pack generators do.  Authentication admits a FLAGLESS generator
+    # only by exact digest membership in the reviewed historical allowlist, and
+    # this fixture is not a reviewed historical anchor -- so it must carry the
+    # flag rather than be allowlisted, which would widen a list that is
+    # deliberately closed and minimal.
     generator_raw = (
-        "import sys\n"
-        "if '--check' not in sys.argv:\n"
+        "import argparse\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--check', action='store_true')\n"
+        "parser.add_argument(\n"
+        "    '--preserve-current-frozen-bytes',\n"
+        "    action=argparse.BooleanOptionalAction,\n"
+        "    default=False,\n"
+        ")\n"
+        "args = parser.parse_args()\n"
+        "if not args.check:\n"
         "    raise SystemExit(2)\n"
         "print('synthetic pack check passed')\n"
     ).encode("utf-8")
