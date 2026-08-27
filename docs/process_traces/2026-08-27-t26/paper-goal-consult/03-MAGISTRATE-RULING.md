@@ -241,3 +241,54 @@ Two of this ruling's premises were WRONG and are corrected here:
     worked example names its time/space origin; every contribution
     sentence cites the section that discharges it; every gloss added by
     a pass is fidelity-checked against code before it lands.
+
+## Addendum 3 (2026-08-27, post round 2) — nine decisions
+
+32. **Drift screen 9.724 ms vs 10.818 ms.** The frozen artifacts
+    `n17_r3..r6` bind `bracket_screen_s = 0.009724`; D-125 rules
+    0.010818; this is S9-05 on Ed's list. RULING for the paper: print the
+    value the frozen artifacts bind (9.724 ms) wherever the number is
+    used, ONCE, with a registered note that D-125's ruled value differs
+    and the reconciliation is pending Ed's ruling; the §4 figure
+    10.817749309 is replaced by the same reference. The paper never
+    states two values for one screen.
+33. **Item 25 is WITHDRAWN** (second withdrawal on verification). The
+    renderer guard at `scripts/render_results_fills.py:977` and the
+    registry's own fill rule deliberately forbid binding
+    `deterministic_bounds.total` to `[B_decode_claim_J]`; the column is
+    the CLAIM-SIDE bound as the registry defines it. It stays STOP_FILL
+    with the rule text until a supplier is built post-`_v4`; the sizing
+    sum renders only then. The column rename and DS-29/PG-05 anchors
+    stand. The magistrate's lesson is recorded: two rulings this sprint
+    contradicted code that was right; verification items stay mandatory
+    on every numeric ruling.
+34. **TERM A aggregation and TERM B semantics.** RULING: the paper's
+    falsifier IS the code's dominance predicate, verbatim — per-component
+    comparison as coded (`A_guarded = guard_factor × max(max_abs_residual_j
+    | max_abs_delta_j, prediction_component_j)`; no invented aggregate),
+    and TERM B is the exact corner maximum the predicate compares (derived
+    at the desk under the replay fence). The emitted
+    `corner_widened_guarded_floor_j` (≥ that maximum) is reported as the
+    PUBLISHED floor and `floor_gate_j` (drift-added) as the GATE; the
+    paper says in one sentence which quantity each of the three
+    sentences tests. Registry rows are written to that.
+35. **DS-08 marker.** A successor marker DS-08a is AUTHORIZED naming the
+    renumbered sections; the old marker's bytes are retained with a
+    superseded note in the registry.
+36. **Holm m=2 replay.** Appendix A and the artifact guide say claim
+    replay becomes executable when W-10 (D-157) lands; the paper's m=2
+    stands.
+37. **Hackenberg 2013.** Escalation trigger honoured. RULING: DROP the
+    citation from the draft (it was a seat suggestion, marginal to the
+    argument); keep Hähnel 2012 as characterised. No round three.
+38. **Diagnostic values with no issued custody** (0.2888/0.4934/0.3113 J;
+    25.6–31.1 ms). RULING: trace each to the actual July-25 artifact path
+    in the results-fill registry; any value that cannot be traced becomes
+    a registered `[PENDING]` with the diagnostic-era label. No number
+    stands on seat prose.
+39. **Replication bar.** Restore to the artifact guide the
+    reference-repeatability construction and the 120 s projection
+    deadline (as stated facts with their code anchors), restore Table 1,
+    re-anchor Figures 2 and 3, refresh the registry's 42 line locators.
+    Round 3 is this list plus a full pedagogy + fidelity pass over the
+    NEW text (a cut this deep re-opens the first-use test everywhere).
