@@ -3360,6 +3360,7 @@ def _authenticate_finalization_inputs(
     )
     try:
         from joulewise.calibration_ledger import (
+            canonical_json_bytes as calibration_ledger_canonical_json_bytes,
             load_calibration_ledger_snapshot,
             terminal_head_pin_for_session,
         )
@@ -3455,6 +3456,21 @@ def _authenticate_finalization_inputs(
             "analysis_finalization_attachment_invalid",
             f"authoritative whole-window validation failed: {exc}",
         ) from exc
+    evaluated_bracket_binding = session._basis_bracket_binding()
+    if not isinstance(evaluated_bracket_binding, Mapping):
+        # Older evaluation bases can omit endpoint selectors. The parsed binding
+        # was already rejoined above to the prospective identity and unique
+        # authenticated ledger session, so it is the same canonical object.
+        evaluated_bracket_binding = bracket
+    if (
+        bracket_raw
+        != calibration_ledger_canonical_json_bytes(evaluated_bracket_binding)
+        + b"\n"
+    ):
+        raise AnalysisManifestFinalizationError(
+            "analysis_finalization_bracket_binding_mismatch",
+            "bracket binding bytes are not canonical / differ from the evaluated binding",
+        )
     if verdict_reasons:
         raise AnalysisManifestFinalizationError(
             "analysis_finalization_attachment_invalid",
