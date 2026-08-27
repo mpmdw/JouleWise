@@ -10,6 +10,42 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T25 (2026-08-26) — PAUSED at an Ed checkpoint. D-155 ruled the 13
+real-transaction gaps and the pre-window worklist is DONE through W-7;
+the ONLY remaining gates are Ed's four items. RESUME FROM:
+`docs/process_traces/2026-08-22-t20/CHECKPOINT-2026-08-26.md` (the full
+map), then this file.**
+
+- The runbook draft surfaced 13 real-lane ruling gaps (NR-1..13, four
+  invisible to S-0 because it forged `origin/main`); the mechanical packet,
+  two adjudication seats, and the magistrate synthesis are custodied in
+  `docs/process_traces/2026-08-22-t20/` (`nr-adjudication-packet.md`,
+  `nr-seat-opus.md`, `nr-seat-sol.md`, `nr-synthesis-ruling.md` = D-155).
+- W-2 code cure MERGED (PR #199, head `3c96b18f` = the DECLARED reviewed
+  head, CI run 32970864856): terminal-review Pack-Sha256 membership at
+  BOTH parsers (the twin at `scripts/capture_t0_step.py` was found by the
+  seats, not the packet) + the `window_status.sh` freeze-span sentinel.
+  Gauntlet: contract-lens refuter SOUND + magistrate bench execution of
+  the producer-bytes seam.
+- W-3 docs reconciliation MERGED (PR #198, after a 4-blocker refuter
+  round); W-6 prompt inventory MERGED (PR #200 →
+  `w6-prompt-inventory.md`); W-5 done (measurement checkout
+  `/Users/edr/JouleWise-measurement-20260813` fast-forwarded to
+  `3c96b18f`, clean, `reviewed_main` exact_match true, zero `_v4`
+  output); W-7 done (full suite at the reviewed head: rc=0 in 2084 s).
+- **Ed's four gates (all detailed in the CHECKPOINT file):** (1) venv
+  relock at `-20260813` (runbook §1.1 checklist, ~10 min); (2) permission
+  hygiene per `w6-prompt-inventory.md` NEEDS-ED (manual mode + ask-rules
+  for the six licensed prompts; delete the `-20260818` blanket allows;
+  suspend `gh pr merge` inside the freeze span; launch sessions from the
+  dev checkout); (3) one word on notification cadence (immediate
+  recommended); (4) pick the transaction night — earliest credible
+  2026-08-28, ahead of a free week for the 168-hour campaign clock.
+- The operator sequence for the night is
+  `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md`
+  (Phases A–H, every D-155 ruling folded in). W-8 (§1.5 preflight) runs
+  the evening before; W-9 items gate the SHAKEDOWN, not the transaction.
+
 **T24 (2026-08-25) — S-0 IS COMPLETE. The clone proof ran END TO END with
 zero failures at estate 10; the magistrate's §5 acceptance read returned
 ALL BOXES PASS. Kernel 99 -> 100. Everything that remains on the `_v4`
