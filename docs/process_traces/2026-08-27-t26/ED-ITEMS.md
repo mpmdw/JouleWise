@@ -22,12 +22,12 @@ gate named beside it.
    `0d07194143702b266267f0faa7b051695ffb5e1c56dc7a69d0b2dca8aaa883ef` to
    `6986bb496aed2b2b0329f79e1c2877ff4cb0ab537ca1be26ff7b7d65bb121d0a`
    (recomputed independently by the magistrate with
-   `committed_pack_tree_sha256` at head `2e49910e` — recompute again if
+   `committed_pack_tree_sha256` at head `c3e7aa06` (rebased on main 2026-08-27 ~11:40; digest re-verified three ways, unchanged) — recompute again if
    any later commit touches that pack);
-   (b) in `tests/test_receipt_histsem.py:33` set `PINSET_SHA256` to the
+   (b) in `tests/test_receipt_histsem.py:42` (moved from :33 by #214) set `PINSET_SHA256` to the
    SHA-256 of the edited JSON file (`shasum -a 256 <file>`).
    Then `python -m pytest -q tests/test_receipt_histsem.py`, commit, push.
-   Everything else on #209 is done and gauntleted (head `9c8d5632`).
+   Everything else on #209 is done, gauntleted and rebased (head `c3e7aa06`, 0 behind main); CI shows exactly the two pin failures.
    HAZARD: the digest covers every committed blob under
    `configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/`; NO commit may
    touch that directory before the pin lands (a stray `__pycache__` there
