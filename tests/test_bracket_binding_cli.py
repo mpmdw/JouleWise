@@ -7,16 +7,25 @@ import json
 import shutil
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
 from joulewise.analysis_manifest_v3 import FINALIZED_BASENAME_SUFFIX
+from joulewise.calibration_bracketing import build_calibration_bracket_binding
 from joulewise.calibration_ledger import (
+    CUSTODY_STORE_MANIFEST_NAME,
+    GENESIS_DIGEST,
+    LEDGER_SCHEMA,
+    append_bracket_session_receipt,
+    artifact_hashes,
+    calibration_custody_store_manifest_bytes,
     canonical_json_bytes,
     canonical_sha256,
+    finalize_bracket_session_slot,
     load_calibration_ledger_snapshot,
+    terminal_head_pin_for_session,
 )
 from joulewise.whole_window import AuthenticatedConsumptionSession
 from scripts import build_bracket_binding as binding_cli
@@ -32,8 +41,11 @@ def _install_cli_fixture(
     root: Path,
     *,
     edit_descriptors: object | None = None,
+    complete_custody_store: bool = False,
 ) -> dict:
     fixture = install_synthetic_finalization_fixture(root)
+    if complete_custody_store:
+        _rebuild_complete_calibration_session(fixture)
     binding = json.loads(fixture["bracket_path"].read_text())
     fixture["original_verdict_bytes"] = fixture["verdict_path"].read_bytes()
     fixture["original_campaign_log_bytes"] = (
@@ -95,6 +107,96 @@ def _install_cli_fixture(
     return fixture
 
 
+def _rebuild_complete_calibration_session(fixture: dict) -> None:
+    """Upgrade the shared four-artifact fixture for real store authentication."""
+
+    old_snapshot = load_calibration_ledger_snapshot(
+        fixture["ledger_path"],
+        fixture["ledger_path"].with_name("calibration_ledger_head.json"),
+        require_committed_pin=False,
+        verify_custody=False,
+    )
+    old_session = old_snapshot.bracket_sessions[0]
+    slots = {}
+    for role in ("pre", "post"):
+        observation = old_session.finalized_slots[role]
+        custody = Path(observation.custody_locator)
+        (custody / "power_trace.csv").write_text(
+            "timestamp_s,power_w\n99.0,1.0\n",
+            encoding="utf-8",
+        )
+        slots[role] = {
+            "attempt_id": observation.attempt_id,
+            "custody_locator": observation.custody_locator,
+            "identity_epoch": dict(observation.identity_epoch),
+            "t1_bindings": dict(observation.t1_bindings),
+        }
+
+    ledger_path = fixture["ledger_path"]
+    head_pin_path = ledger_path.with_name("calibration_ledger_head.json")
+    ledger_path.unlink()
+    _write_json(
+        head_pin_path,
+        {
+            "sequence": 0,
+            "head_digest": GENESIS_DIGEST,
+            "ledger_schema": LEDGER_SCHEMA,
+        },
+    )
+    append_bracket_session_receipt(
+        ledger_path,
+        session_id=old_session.session_id,
+        window_id=old_session.window_id,
+        plan_id=old_session.plan_id,
+        plan_sha256=old_session.plan_sha256,
+        evidence_root_id=old_session.evidence_root_id,
+        runs_root=old_session.runs_root,
+        slots=slots,
+        head_pin_path=head_pin_path,
+        require_committed_pin=False,
+    )
+    for role in ("pre", "post"):
+        old_observation = old_session.finalized_slots[role]
+        custody = Path(old_observation.custody_locator)
+        finalize_bracket_session_slot(
+            ledger_path,
+            session_id=old_session.session_id,
+            slot=role,
+            disposition="valid",
+            custody_locator=str(custody),
+            artifact_sha256=artifact_hashes(custody),
+            identity_epoch=old_observation.identity_epoch,
+            t1_bindings=old_observation.t1_bindings,
+            capture_wall_time_s=old_observation.capture_wall_time_s,
+            exact_bound_lexeme_s=old_observation.exact_bound_lexeme_s,
+        )
+    _write_json(
+        head_pin_path,
+        terminal_head_pin_for_session(
+            ledger_path,
+            session_id=old_session.session_id,
+        ),
+    )
+    snapshot = load_calibration_ledger_snapshot(
+        ledger_path,
+        head_pin_path,
+        require_committed_pin=False,
+        verify_custody=True,
+    )
+    binding = build_calibration_bracket_binding(
+        snapshot,
+        session_id=old_session.session_id,
+        window_id=old_session.window_id,
+        plan_id=old_session.plan_id,
+        plan_sha256=old_session.plan_sha256,
+        evidence_root_id=old_session.evidence_root_id,
+        runs_root=old_session.runs_root,
+    )
+    if binding is None:
+        raise AssertionError("complete calibration fixture did not bind")
+    _write_json(fixture["bracket_path"], binding)
+
+
 def _restore_original_whole_window_fixture(fixture: dict) -> None:
     """Restore the helper's deliberately descriptor-free calibration seam."""
 
@@ -104,8 +206,13 @@ def _restore_original_whole_window_fixture(fixture: dict) -> None:
     )
 
 
-def _binding_args(fixture: dict, *, output: Path | None = None) -> list[str]:
-    return [
+def _binding_args(
+    fixture: dict,
+    *,
+    output: Path | None = None,
+    custody_store: Path | None = None,
+) -> list[str]:
+    args = [
         "--custody-root",
         str(fixture["root"]),
         "--whole-window-verdict",
@@ -114,18 +221,52 @@ def _binding_args(fixture: dict, *, output: Path | None = None) -> list[str]:
         str(fixture["ledger_path"]),
         "--head-pin",
         str(fixture["head_pin_path"]),
-        "--output",
-        str(output or fixture["produced_path"]),
     ]
+    if custody_store is not None:
+        args.extend(("--calibration-custody-store", str(custody_store)))
+    args.extend(("--output", str(output or fixture["produced_path"])))
+    return args
 
 
 def _run_binding_cli(
-    fixture: dict, *, output: Path | None = None
+    fixture: dict,
+    *,
+    output: Path | None = None,
+    custody_store: Path | None = None,
 ) -> tuple[int, dict]:
     stdout = io.StringIO()
     with redirect_stdout(stdout):
-        code = binding_cli.main(_binding_args(fixture, output=output))
+        code = binding_cli.main(
+            _binding_args(
+                fixture,
+                output=output,
+                custody_store=custody_store,
+            )
+        )
     return code, json.loads(stdout.getvalue())
+
+
+def _install_calibration_custody_store(fixture: dict) -> Path:
+    snapshot = load_calibration_ledger_snapshot(
+        fixture["ledger_path"],
+        fixture["head_pin_path"],
+        require_committed_pin=False,
+        verify_custody=True,
+    )
+    if snapshot.refusal_reasons:
+        raise AssertionError(snapshot.refusal_reasons)
+    store = fixture["root"] / "calibration-custody-store"
+    store.mkdir()
+    for observation in snapshot.observations:
+        if observation.content_id is not None:
+            shutil.copytree(
+                observation.custody_locator,
+                store / observation.content_id,
+            )
+    (store / CUSTODY_STORE_MANIFEST_NAME).write_bytes(
+        calibration_custody_store_manifest_bytes(snapshot)
+    )
+    return store
 
 
 def _finalizer_args(
@@ -311,6 +452,43 @@ class BracketBindingCliTests(unittest.TestCase):
                 )
                 self.assertFalse(fixture["produced_path"].exists())
 
+    def test_refuses_explicit_invalid_calibration_custody_store(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _install_cli_fixture(Path(tmp))
+            empty_store = fixture["root"] / "empty-custody-store"
+            empty_store.mkdir()
+
+            code, refusal = _run_binding_cli(
+                fixture,
+                custody_store=empty_store,
+            )
+
+            self.assertEqual(code, 2)
+            self.assertEqual(refusal["status"], "REFUSE")
+            self.assertEqual(
+                refusal["reason"], binding_cli.REFUSAL_LEDGER_REFUSED
+            )
+            self.assertIn(
+                "calibration_ledger_custody_invalid", refusal["detail"]
+            )
+            self.assertFalse(fixture["produced_path"].exists())
+
+    def test_accepts_explicit_valid_calibration_custody_store(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _install_cli_fixture(
+                Path(tmp), complete_custody_store=True
+            )
+            custody_store = _install_calibration_custody_store(fixture)
+
+            code, result = _run_binding_cli(
+                fixture,
+                custody_store=custody_store,
+            )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(result["status"], "BUILT")
+            self.assertTrue(fixture["produced_path"].is_file())
+
     def test_refuses_session_that_is_not_finalized(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             fixture = _install_cli_fixture(Path(tmp))
@@ -420,6 +598,92 @@ class BracketBindingCliTests(unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertEqual(refusal["reason"], binding_cli.REFUSAL_OUTPUT_EXISTS)
             self.assertEqual(fixture["produced_path"].read_bytes(), b"owned\n")
+
+    def test_publish_failure_leaves_no_target_or_temporary_and_can_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _install_cli_fixture(Path(tmp))
+            with mock.patch.object(
+                binding_cli.os,
+                "write",
+                side_effect=OSError("injected write failure"),
+            ):
+                code, refusal = _run_binding_cli(fixture)
+
+            self.assertEqual(code, 2)
+            self.assertEqual(refusal["status"], "REFUSE")
+            self.assertEqual(refusal["reason"], binding_cli.REFUSAL_OUTPUT_FAILED)
+            self.assertFalse(fixture["produced_path"].exists())
+            self.assertEqual(
+                list(
+                    fixture["produced_path"].parent.glob(
+                        f"{fixture['produced_path'].name}.tmp-*"
+                    )
+                ),
+                [],
+            )
+
+            retry_code, retry_result = _run_binding_cli(fixture)
+            self.assertEqual(retry_code, 0)
+            self.assertEqual(retry_result["status"], "BUILT")
+            self.assertTrue(fixture["produced_path"].is_file())
+
+    def test_temporary_close_failure_is_an_output_refusal_and_cleans_up(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "binding.json"
+            real_close = binding_cli.os.close
+
+            def close_then_fail(descriptor: int) -> None:
+                real_close(descriptor)
+                raise OSError("injected close failure")
+
+            with mock.patch.object(
+                binding_cli.os,
+                "close",
+                side_effect=close_then_fail,
+            ):
+                with self.assertRaises(binding_cli.BracketBindingRefusal) as raised:
+                    binding_cli._publish_no_clobber(target, b"{}\n")
+
+            self.assertEqual(
+                raised.exception.reason, binding_cli.REFUSAL_OUTPUT_FAILED
+            )
+            self.assertFalse(target.exists())
+            self.assertEqual(list(target.parent.glob(f"{target.name}.tmp-*")), [])
+
+    def test_invalid_invocation_is_one_json_refusal_on_stdout(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            try:
+                code = binding_cli.main([])
+            except SystemExit as exc:
+                code = exc.code
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertEqual(len(stdout.getvalue().splitlines()), 1)
+        self.assertEqual(
+            json.loads(stdout.getvalue()),
+            {
+                "status": "REFUSE",
+                "reason": "bracket_binding_invocation_invalid",
+                "detail": (
+                    "the following arguments are required: --custody-root, "
+                    "--whole-window-verdict, --calibration-ledger, --output"
+                ),
+            },
+        )
+
+    def test_help_keeps_normal_successful_argparse_behavior(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as raised:
+                binding_cli.main(["--help"])
+
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn("usage:", stdout.getvalue())
+        self.assertEqual(stderr.getvalue(), "")
 
 
 if __name__ == "__main__":

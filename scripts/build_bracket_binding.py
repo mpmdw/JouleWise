@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import stat
 import sys
 from pathlib import Path
@@ -55,6 +56,7 @@ REFUSAL_ENDPOINT_MISMATCH = "bracket_binding_endpoint_mismatch"
 REFUSAL_BUILD_REFUSED = "bracket_binding_build_refused"
 REFUSAL_OUTPUT_EXISTS = "bracket_binding_output_exists"
 REFUSAL_OUTPUT_FAILED = "bracket_binding_output_failed"
+REFUSAL_INVOCATION_INVALID = "bracket_binding_invocation_invalid"
 REFUSAL_INTERNAL_ERROR = "bracket_binding_internal_error"
 
 
@@ -65,6 +67,13 @@ class BracketBindingRefusal(Exception):
         super().__init__(f"{reason}: {detail}")
         self.reason = reason
         self.detail = detail
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    """Report invalid invocations through the CLI's refusal protocol."""
+
+    def error(self, message: str) -> NoReturn:
+        raise BracketBindingRefusal(REFUSAL_INVOCATION_INVALID, message)
 
 
 def _refuse(reason: str, detail: str) -> NoReturn:
@@ -356,10 +365,26 @@ def _build_binding(
 
 def _publish_no_clobber(path: Path, raw: bytes) -> None:
     descriptor: int | None = None
+    directory_descriptor: int | None = None
+    temporary: Path | None = None
+    target_installed = False
+    succeeded = False
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, flags, 0o600)
+        for _ in range(100):
+            candidate = path.with_name(
+                f"{path.name}.tmp-{os.getpid()}-{secrets.token_hex(8)}"
+            )
+            try:
+                descriptor = os.open(candidate, flags, 0o600)
+            except FileExistsError:
+                continue
+            temporary = candidate
+            break
+        else:
+            raise OSError("cannot allocate an exclusive temporary output")
+
         remaining = memoryview(raw)
         while remaining:
             written = os.write(descriptor, remaining)
@@ -367,13 +392,23 @@ def _publish_no_clobber(path: Path, raw: bytes) -> None:
                 raise OSError("zero-byte write")
             remaining = remaining[written:]
         os.fsync(descriptor)
-        os.close(descriptor)
+        closing_descriptor = descriptor
         descriptor = None
-        directory = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        os.close(closing_descriptor)
+
+        # A hard link creates the target atomically and fails with EEXIST;
+        # unlike rename/replace, it can never clobber an existing target.
+        os.link(temporary, path, follow_symlinks=False)
+        target_installed = True
+        os.unlink(temporary)
+        temporary = None
+
+        directory_descriptor = os.open(path.parent, os.O_RDONLY)
+        os.fsync(directory_descriptor)
+        closing_directory = directory_descriptor
+        directory_descriptor = None
+        os.close(closing_directory)
+        succeeded = True
     except FileExistsError as exc:
         raise BracketBindingRefusal(
             REFUSAL_OUTPUT_EXISTS, f"refusing to overwrite existing output {path}"
@@ -384,11 +419,29 @@ def _publish_no_clobber(path: Path, raw: bytes) -> None:
         ) from exc
     finally:
         if descriptor is not None:
-            os.close(descriptor)
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        if directory_descriptor is not None:
+            try:
+                os.close(directory_descriptor)
+            except OSError:
+                pass
+        if not succeeded and target_installed:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        if temporary is not None:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = JsonArgumentParser(description=__doc__)
     parser.add_argument("--custody-root", required=True, type=Path)
     parser.add_argument("--whole-window-verdict", required=True, type=Path)
     parser.add_argument("--calibration-ledger", required=True, type=Path)
@@ -410,8 +463,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
     try:
+        args = build_parser().parse_args(argv)
         lexical_root, resolved_root = _custody_root(args.custody_root)
         verdict_path = _existing_custody_path(
             args.whole_window_verdict,
@@ -476,6 +529,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             calibration_custody_store=custody_store,
         )
         if custody_store is not None:
+            if snapshot.refusal_reasons:
+                _refuse(
+                    REFUSAL_LEDGER_REFUSED,
+                    "calibration custody store snapshot refused: "
+                    + ", ".join(snapshot.refusal_reasons),
+                )
             # The current finalizer has no custody-store argument. A store-only
             # success would therefore manufacture a binding H6 cannot consume.
             # Re-run its exact ledger load and make that compatibility a gate.
