@@ -292,3 +292,36 @@ Two of this ruling's premises were WRONG and are corrected here:
     re-anchor Figures 2 and 3, refresh the registry's 42 line locators.
     Round 3 is this list plus a full pedagogy + fidelity pass over the
     NEW text (a cut this deep re-opens the first-use test everywhere).
+
+## Addendum 4 (2026-08-27, post round 3) — six decisions; round 4 is the last polish round
+
+40. **DS-03 / DS-04 / DS-07.** DS-04 and DS-07 name sites demoted to
+    Future Work by item 12: RETIRE both with a superseded note in the
+    registry. DS-03: re-anchor if its site still exists in the main text;
+    otherwise retire the same way. No locator is ever guessed.
+41. **§4's second build of the resolution bound.** TRIM: the abstract and
+    §1 built it at first use; §4 keeps a one-sentence recall and the
+    formal composition (terms, corner rule, drift allowance, the three
+    quantities and what each tests). No re-derivation of the physics.
+42. **§2 replication bar (third round, same signature — escalation
+    honoured; resolved structurally, not by another edit).** The
+    pulse accepted-region algorithm and the clock-anchor equations, with
+    EVERY symbol and constraint defined, move to Appendix A as the
+    scientific-reproduction material item 2 always reserved for it; §2
+    keeps the forcing problem, the named diagram, the algorithm in prose,
+    the one numeric reconstruction, and a pointer. The appendix is part
+    of the text the standard measures; the replication bar is met there.
+43. **DG-097.** NARROW to what the source supports: "no 7B corpus above
+    128 tokens among the 40 contrast configurations"; no inventory is
+    commissioned. Traced count becomes 98.
+44. **Figure 3 SVG.** Edit the figure source to read "direction
+    unresolved" — figure sources are within the paper director's scope.
+45. **Marker-bound row count.** Mechanical recount, recorded with its
+    command; nothing asserted until it runs.
+46. **The 112 ms cadence was never real** (≈120.9 ms measured for that
+    bundle). Both `[PENDING]` markers stand; the resolvability rule's
+    worked example is re-run against the measured cadence and the
+    sampler-cadence figure is stated ONCE with its source.
+47. **After round 4 the magistrate reads the entire main text** before
+    any further round is ordered; round 5, if any, is a single fidelity
+    pass over results fills when `_v4` issues.
