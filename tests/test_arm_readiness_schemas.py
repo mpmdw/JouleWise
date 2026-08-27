@@ -609,7 +609,25 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         escaped = readiness.EvidenceLifecycleError(
             lifecycle, "DEPENDENCY_CHANGED_SET", "corrupt confirmation custody"
         )
-        pack = {"pack_id": "synthetic", "pack_sha256": "a" * 64}
+        # A schema-shaped pack record: `_validate_pack` enforces exactly
+        # `PACK_KEYS` on every receipt read, so both sides of the D-154
+        # field-wise comparison always carry `pack_root` in production.  The
+        # earlier two-key stub no longer modelled that record and made the
+        # comparison report a content difference before the escape site could
+        # be reached.
+        pack = {
+            "pack_id": "synthetic",
+            "plan_id": "synthetic-plan",
+            "window_id": "synthetic-window",
+            "pack_root": "/synthetic/repository/configs/campaigns/synthetic",
+            "pack_digest_algorithm": readiness.PACK_DIGEST_ALGORITHM,
+            "pack_sha256": "a" * 64,
+            "plan_tree_path": "plan_tree.json",
+            "plan_tree_sha256": "d" * 64,
+            "plan_tree_sidecar_path": "plan_tree.sha256",
+            "plan_tree_sidecar_sha256": "e" * 64,
+        }
+        self.assertEqual(set(pack), readiness.PACK_KEYS)
         reviewed = {"head_commit": "b" * 40}
         reference = {
             "registry_id": registry["registry_id"],

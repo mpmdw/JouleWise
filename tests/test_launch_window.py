@@ -615,6 +615,10 @@ class ProductionArmRelocationLaunchTests(unittest.TestCase):
         ):
             frozen = arm_readiness.generate_freeze_receipt(
                 pack,
+                # D-154 R-3 (MINT-CHECKOUT-DECLARATION-01): the mint requires an
+                # explicit operator declaration; the fixture's own repository is
+                # this mint's declared measurement checkout.
+                measurement_checkout=repository,
                 predecessor_pack_root=predecessor_pack_root(
                     repository,
                     pack.name,
@@ -1200,7 +1204,11 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             lifecycle_tests.git(
                 repository, "commit", "-qm", "install synthetic R1 evidence"
             )
-            minted = arm_readiness.generate_freeze_receipt(pack)
+            # D-154 R-3: the mint requires an explicit operator declaration;
+            # this fixture's own repository is its declared measurement checkout.
+            minted = arm_readiness.generate_freeze_receipt(
+                pack, measurement_checkout=repository
+            )
             self.assertTrue(minted["mutated"])
             lifecycle_tests.git(repository, "add", ".")
             lifecycle_tests.git(

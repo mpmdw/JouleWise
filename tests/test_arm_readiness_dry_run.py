@@ -399,8 +399,12 @@ class ArmReadinessDryRunTests(unittest.TestCase):
             git(repository, "commit", "-qm", "author freeze evidence")
             git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
             predecessor = predecessor_pack_root(repository, pack.name)
+            # D-154 R-3: the mint requires an explicit operator declaration;
+            # this fixture's own repository is its declared measurement checkout.
             frozen = readiness.generate_freeze_receipt(
-                pack, predecessor_pack_root=predecessor
+                pack,
+                measurement_checkout=repository,
+                predecessor_pack_root=predecessor,
             )
             self.assertEqual(frozen["status"], "PASS", frozen)
             git(repository, "add", "--", pack_relative)
