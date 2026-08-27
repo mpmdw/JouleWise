@@ -281,6 +281,7 @@ class MintAnalysisAdmissionTests(unittest.TestCase):
         mutate: Callable[[dict], None] | None = None,
         refresh_identity: bool = True,
         tamper_after_binding: bool = False,
+        binding_mode: str = "complete",
     ) -> tuple[Path, bytes]:
         temporary, repo, pack, _custody, _arm = make_go_fixture(
             GAMMA_PACK_NAME, "GAMMA", project=False
@@ -304,10 +305,28 @@ class MintAnalysisAdmissionTests(unittest.TestCase):
             "actual_sha256": value["plan"]["sha256"],
             "declared_sha256": value["plan"]["sha256"],
         }
-        tree["downstream_contract"] = {
+        binding = {
             "analysis_manifest_path": "analysis_manifest_v3.json",
             "analysis_manifest_sha256": hashlib.sha256(bound_raw).hexdigest(),
         }
+        if binding_mode == "complete":
+            tree["downstream_contract"] = binding
+        elif binding_mode == "missing_contract":
+            tree.pop("downstream_contract", None)
+        elif binding_mode == "missing_pair":
+            tree["downstream_contract"] = {}
+        elif binding_mode == "path_only":
+            tree["downstream_contract"] = {
+                "analysis_manifest_path": binding["analysis_manifest_path"]
+            }
+        elif binding_mode == "sha_only":
+            tree["downstream_contract"] = {
+                "analysis_manifest_sha256": binding[
+                    "analysis_manifest_sha256"
+                ]
+            }
+        else:
+            self.fail(f"unsupported binding mode: {binding_mode}")
         tree_raw = readiness.render_json(tree)
         tree_path.write_bytes(tree_raw)
         (pack / "plan_tree.sha256").write_bytes(
@@ -412,6 +431,31 @@ class MintAnalysisAdmissionTests(unittest.TestCase):
         self.assertEqual(result["status"], "PASS")
         self.assertTrue(result["mutated"])
         self.assertTrue(Path(result["receipt_path"]).is_file())
+
+    def test_mint_refuses_root_manifest_without_binding_pair(self) -> None:
+        for binding_mode in ("missing_contract", "missing_pair"):
+            with self.subTest(binding_mode=binding_mode):
+                pack, tree_before = self._gamma_pack(binding_mode=binding_mode)
+                self._assert_prewrite_refusal(
+                    pack,
+                    tree_before,
+                    reason_code="readiness_schema_invalid",
+                    detail_code="analysis_manifest_v3.json",
+                )
+
+    def test_mint_refuses_partial_analysis_manifest_binding(self) -> None:
+        for binding_mode, missing_field in (
+            ("path_only", "analysis_manifest_sha256"),
+            ("sha_only", "analysis_manifest_path"),
+        ):
+            with self.subTest(binding_mode=binding_mode):
+                pack, tree_before = self._gamma_pack(binding_mode=binding_mode)
+                self._assert_prewrite_refusal(
+                    pack,
+                    tree_before,
+                    reason_code="readiness_schema_invalid",
+                    detail_code=missing_field,
+                )
 
     def test_mint_without_prospective_manifest_still_succeeds(self) -> None:
         temporary, repo, pack, _custody, _arm = make_go_fixture(

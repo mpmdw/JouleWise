@@ -5271,21 +5271,53 @@ def _pack_identity(pack_root: Path, tree: Mapping[str, Any]) -> dict[str, Any]:
 def _admit_bound_analysis_manifest(
     pack_root: Path, tree: Mapping[str, Any]
 ) -> None:
-    """Refuse a new freeze whose plan-bound prospective manifest is invalid.
+    """Refuse a new freeze whose root prospective manifest is not admitted.
 
-    Floor packs carry an extraction specification instead of a prospective
-    analysis manifest, so absence of both binding fields is the exact
-    non-applicability predicate.  Once either field is present, the pair is
-    mandatory and the manifest bytes are authenticated before they are parsed
-    or admitted by the claim-consumption validator.
+    A root-local v3 manifest makes this check applicable even when a regressed
+    plan tree omits its binding.  Floor packs carry only an extraction
+    specification, so they remain exempt when neither the artifact nor either
+    binding field is present.
     """
+
+    # Import locally so ordinary arm-readiness imports do not load the analysis
+    # stack.  MANIFEST_NAME is the generator/builder's production locator for
+    # the root-local prospective artifact; it is not inferred from pack names.
+    from joulewise.analysis_manifest_v3 import (
+        MANIFEST_NAME,
+        validate_prospective_analysis_manifest_v3,
+    )
+
+    prospective_path = pack_root / MANIFEST_NAME
+    try:
+        prospective_path.lstat()
+    except FileNotFoundError:
+        prospective_present = False
+    except OSError as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable",
+            f"cannot inspect prospective analysis manifest: {MANIFEST_NAME}",
+        ) from exc
+    else:
+        prospective_present = True
 
     downstream = tree.get("downstream_contract")
     if not isinstance(downstream, Mapping):
+        if prospective_present:
+            raise ArmReadinessError(
+                "readiness_schema_invalid",
+                f"pack root contains {MANIFEST_NAME} but plan tree omits its "
+                "mandatory downstream binding",
+            )
         return
     raw_path = downstream.get("analysis_manifest_path")
     raw_sha256 = downstream.get("analysis_manifest_sha256")
     if raw_path is None and raw_sha256 is None:
+        if prospective_present:
+            raise ArmReadinessError(
+                "readiness_schema_invalid",
+                f"pack root contains {MANIFEST_NAME} but downstream_contract "
+                "omits its mandatory path/SHA-256 binding",
+            )
         return
 
     relative = _require_relative_path(
@@ -5294,6 +5326,11 @@ def _admit_bound_analysis_manifest(
     expected_sha256 = _require_lower_sha256(
         raw_sha256, "downstream_contract.analysis_manifest_sha256"
     )
+    if prospective_present and relative != MANIFEST_NAME:
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"downstream_contract must bind the root-local {MANIFEST_NAME}",
+        )
     candidate = pack_root.joinpath(*PurePosixPath(relative).parts)
     try:
         current = pack_root
@@ -5341,13 +5378,8 @@ def _admit_bound_analysis_manifest(
             "prospective analysis manifest must contain an object",
         )
 
-    # Import locally so arm/floor-only callers do not load the analysis stack.
     # The validator itself exercises every family's production multiplicity
     # method with {contrast_id: None}, including len(p_values) == m.
-    from joulewise.analysis_manifest_v3 import (
-        validate_prospective_analysis_manifest_v3,
-    )
-
     refusals = validate_prospective_analysis_manifest_v3(
         value,
         manifest_dir=pack_root,
