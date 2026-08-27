@@ -37,20 +37,17 @@ from joulewise.arm_readiness import (  # noqa: E402
     plan_arm_readiness_attachment,
 )
 from joulewise.analysis_manifest_v3 import (  # noqa: E402
+    DETECTION_FLOOR_ARTIFACT_SCHEMA,
     EXACT_STACK_RULE_ID,
     FINALIZATION_CONTRACT_ID,
     FINALIZED_BASENAME_SUFFIX,
     FINALIZED_NAMESPACE_RULE_ID,
     GOVERNED_TRANSPORT_RULE_ID,
     SEMANTICS_PROJECTION_RULE_ID,
-    _BRACKET_BINDING_SCHEMA,
-    _FLOOR_SCHEMA,
-    _LEDGER_SCHEMA,
-    _REQUIRED_ATTACHMENT_ROLES,
-    _WHOLE_WINDOW_SCHEMA,
     analysis_semantics_projection_v1,
     analysis_semantics_sha256_v1,
     calculate_manifest_id,
+    prospective_finalization_required_attachments,
 )
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
@@ -1578,7 +1575,7 @@ def build_analysis_manifest(
             for row in family_rows
         }
         return {
-            "required_artifact_schema": _FLOOR_SCHEMA,
+            "required_artifact_schema": DETECTION_FLOOR_ARTIFACT_SCHEMA,
             "floor_selector": {
                 "backend": "powermetrics",
                 "metric": metric_for(measurement_arm),
@@ -1656,14 +1653,11 @@ def build_analysis_manifest(
             }
         return common
 
-    attachment_schemas = {
-        "whole_window_verdict": _WHOLE_WINDOW_SCHEMA,
-        "bracket_binding": _BRACKET_BINDING_SCHEMA,
-        "calibration_ledger": _LEDGER_SCHEMA,
-        "aggregate_floor_artifact": _FLOOR_SCHEMA,
-    }
-    if set(attachment_schemas) != _REQUIRED_ATTACHMENT_ROLES:
-        raise ValueError("analysis finalization attachment roles drifted")
+    # The four roles and their schema versions come from the supported
+    # accessor rather than a local copy, so this generator -- which is
+    # committed into the frozen successor pack -- cannot drift from the
+    # validator it must satisfy.
+    required_attachments = prospective_finalization_required_attachments()
 
     manifest = {
         "schema_version": "joulewise.analysis_manifest.v3.prospective",
@@ -1736,10 +1730,7 @@ def build_analysis_manifest(
             "projection_rule_id": SEMANTICS_PROJECTION_RULE_ID,
             "namespace_rule_id": FINALIZED_NAMESPACE_RULE_ID,
             "output_basename_suffix": FINALIZED_BASENAME_SUFFIX,
-            "required_attachments": [
-                {"role": role, "schema_version": schema}
-                for role, schema in attachment_schemas.items()
-            ],
+            "required_attachments": required_attachments,
         },
         "frozen_semantics_sha256": "",
     }

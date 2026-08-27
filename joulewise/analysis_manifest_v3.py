@@ -1176,6 +1176,16 @@ _WHOLE_WINDOW_OCCURRENCE_KEYS = {
 _BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
 _LEDGER_SCHEMA = "joulewise.calibration_observation_ledger.v1"
 _FLOOR_SCHEMA = "joulewise.detection_floor_artifact.v2"
+DETECTION_FLOOR_ARTIFACT_SCHEMA = _FLOOR_SCHEMA
+"""Public name for the floor-artifact schema a contrast must require.
+
+A pack generator names this schema in every contrast's
+``floor_dependency.required_artifact_schema``.  The generator it emits is
+committed into a frozen pack and must stay runnable for the life of the
+evidence, so it binds this supported name rather than the private constant.
+"""
+
+
 _REQUIRED_ATTACHMENT_SCHEMA_VERSIONS = {
     "whole_window_verdict": _WHOLE_WINDOW_SCHEMA,
     "bracket_binding": _BRACKET_BINDING_SCHEMA,
