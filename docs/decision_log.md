@@ -9894,9 +9894,9 @@ NO-GO pending those gates and the full C-028 gauntlet.
 
 The prospective registry (D-078 amendment 2026-08-15, "analysis-manifest
 consumption-edge refusal registry") additionally admits the exact spelling
-`analysis_prospective_input_unreadable`: the selected prospective manifest
-(or its marker) exists but cannot be read — an `OSError` on the read itself —
-so no source hash was obtained and none was compared.
+`analysis_prospective_input_unreadable`: the selected marker exists but
+cannot be read — an `OSError` on the read itself — so no source hash was
+obtained and none was compared.
 
 Why a new code and not a reuse: the collector's resolver in
 `scripts/run_campaign.py` (`_reachable_analysis_manifest_v3` → the read that

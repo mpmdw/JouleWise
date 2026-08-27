@@ -673,10 +673,11 @@
     "BRACKET-BINDING-CLI-01": {
       "acceptance": {
         "evidence": [
-          "A fail-closed CLI beside the finalizer serialises build_calibration_bracket_binding's output under custody with schema joulewise.calibration_bracket_binding.v1, refusing machine-readably rather than escaping tracebacks",
-          "A regression drives the produced file through finalize_analysis_manifest end to end and the finalizer accepts it",
-          "A regression proves --runs-root equality (D-160 F-5) is enforced with an exact registered refusal",
-          "Tamper regressions (flipped binding digest, substituted endpoint receipt digest, changed runs_root) and byte-identity with the in-memory producer are pinned"
+          "A fail-closed CLI beside the finalizer builds the binding from the builder's real inputs and publishes it under custody with schema joulewise.calibration_bracket_binding.v1, refusing machine-readably rather than escaping tracebacks",
+          "The whole-window evaluator accepts the produced binding as its --bracket-binding INPUT (a binding-less whole-window verdict stays status failed with calibration_bracket_binding_missing), and the identity is threaded into calibration_bracket_for_bundles",
+          "One production-valid rich verdict is carried unchanged through producer, evaluator and finalizer with hashes asserted equal (replacing the fixture-swap test), and finalize_analysis_manifest accepts it end to end",
+          "A regression proves --runs-root equality (D-160 F-5) is enforced with an exact registered refusal, plus tamper regressions (flipped binding digest, substituted endpoint receipt digest, changed runs_root)",
+          "The runbook's H5/H6 carry the 'build binding before the whole-window verdict' ordering note"
         ],
         "pointer": {
           "json_pointer": "/tasks/BRACKET-BINDING-CLI-01/acceptance",
@@ -702,21 +703,20 @@
         },
         {
           "authority": {
-            "anchor": "rulings",
-            "label": "D-160 finding F-4 / ruling R-3 (serialises build_calibration_bracket_binding's output)",
+            "label": "D-160 addendum R-3-prime (adopted, option (b): producer BEFORE the whole-window verdict; options (a) and (c) rejected)",
             "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
           },
-          "rule": "joulewise/calibration_bracketing.py's in-memory builder is the identity source; the CLI re-derives window identity from the whole-window verdict's evaluation_basis rather than hand-typed flags"
+          "rule": "The producer runs BEFORE the whole-window verdict and takes nothing from a verdict; identity flags alone (option a) are insufficient and persisting provisional descriptors in a failed verdict (option c) is rejected, because unbound evaluation would pick the identity the binding exists to authorise; lands before the night, touches no pack bytes and not the mint path"
         }
       ],
       "flags": [],
-      "goal": "Build the missing producer for the finalizer's --bracket-binding file: a fail-closed CLI that serialises build_calibration_bracket_binding's output under custody (schema joulewise.calibration_bracket_binding.v1), with a regression that scripts/finalize_analysis_manifest.py accepts it and that --runs-root equality (D-160 F-5) holds.",
+      "goal": "Build the missing producer for the finalizer's --bracket-binding file: a fail-closed CLI that builds the binding from exactly the builder's real inputs (finalized ledger session, session id, plan identity, runs_root; NOTHING from a verdict) and publishes it under custody with schema joulewise.calibration_bracket_binding.v1, in the R-3-prime lifecycle: frozen plan + finalized ledger session, build the binding, run_campaign --whole-window-verdict --bracket-binding <path> with the identity threaded into calibration_bracket_for_bundles, then finalize, which checks verdict and file agree byte for byte; with --runs-root equality (D-160 F-5) enforced.",
       "id": "BRACKET-BINDING-CLI-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
       "rank": 104,
       "status": "partial",
-      "status_note": "IN FLIGHT at registration (2026-08-27, the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md)): S10 stream, PR #217 open at head 94947441 (scripts/build_bracket_binding.py, 11 regressions). Registered as partial (the kernel's convention for in-flight rows, as V4-TRANSACTION-01 and T0-UNATTENDED-01) rather than skipped, because #217 had not merged when the wave was cut; the merging PR closes this row. MAGISTRATE-FACING FINDING carried by #217: the ledger session stores the exact absolute runs_root and both builder and validator bind it, while consumption requires that path to be a canonical non-symlink descendant of the finalized manifest's custody root, so the custody layout must be ruled and established BEFORE bracket reservation and collection (copying the corpus to a sibling analysis root, or rewriting the binding to a relative path, both fail); this is the same open question H6 already carries.",
+      "status_note": "IN FLIGHT at registration (2026-08-27, under the R-3-prime shape adopted after #217's gauntlet: #217's first CLI shape read identity from a whole-window verdict that can never exist in production and is being reshaped to the producer-before-verdict lifecycle; the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md)): S10 stream, PR #217 open at head 94947441 (scripts/build_bracket_binding.py, 11 regressions). Registered as partial (the kernel's convention for in-flight rows, as V4-TRANSACTION-01 and T0-UNATTENDED-01) rather than skipped, because #217 had not merged when the wave was cut; the merging PR closes this row. MAGISTRATE-FACING FINDING carried by #217: the ledger session stores the exact absolute runs_root and both builder and validator bind it, while consumption requires that path to be a canonical non-symlink descendant of the finalized manifest's custody root, so the custody layout must be ruled and established BEFORE bracket reservation and collection (copying the corpus to a sibling analysis root, or rewriting the binding to a relative path, both fail); this is the same open question H6 already carries.",
       "stop_card": null
     },
     "C3-RECOGNIZER-EXACT-01": {
@@ -768,7 +768,7 @@
       "acceptance": {
         "evidence": [
           "test_logical_producer_delay_preserves_exact_evidence_bytes passes deterministically at the bench and in CI",
-          "The root cause of temp-path bytes reaching evidence is identified and cured code-side or fixture-side with a defect-shaped regression"
+          "The root cause (the two witness captures not running the same exit case) is identified and cured code-side or fixture-side so both captures deterministically select and order the same case, with a defect-shaped regression; the instrument_evidence.json difference is treated as downstream of events.jsonl, one cure for both subtests"
         ],
         "pointer": {
           "json_pointer": "/tasks/CALEXITS-EVIDENCE-BYTES-01/acceptance",
@@ -785,7 +785,7 @@
       "fallback": null,
       "fences": [],
       "flags": [],
-      "goal": "Cure the pre-existing deterministic failure of test_logical_producer_delay_preserves_exact_evidence_bytes (tests/test_calibration_exits.py): temp-path bytes leak into the two evidence artifacts, failing byte-exactness on pristine main at the bench. Distinct from both diagnosed CI-red classes (not the mutation race, not the ack backstop).",
+      "goal": "Cure the pre-existing deterministic failure of test_logical_producer_delay_preserves_exact_evidence_bytes (tests/test_calibration_exits.py): the delayed and baseline witness captures select a DIFFERENT exit case (case-selection/ordering nondeterminism), so events.jsonl differs and instrument_evidence.json differs downstream of it, failing byte-exactness on pristine main at the bench. Distinct from both diagnosed CI-red classes (not the mutation race, not the ack backstop). The row's original temp-path-leak hypothesis was disproved by the T26 S4 reproduction.",
       "id": "CALEXITS-EVIDENCE-BYTES-01",
       "lane": "agent",
       "priority": "p2_next_slice",
@@ -1913,7 +1913,7 @@
         "evidence": [
           "The real-transaction runbook (or its post-mint successor) carries a named phase that re-runs the full claim edge at the transaction head on the production pack before any window is spent, with its evidence custodied",
           "The pre-window worklist carries the entry and the _v4 night is sequenced behind it",
-          "The executed rehearsal record exists before the first spent window, or the magistrate's explicit waiver is recorded in its place"
+          "The executed rehearsal record exists, custodied, before the first spent window"
         ],
         "pointer": {
           "json_pointer": "/tasks/L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01/acceptance",
@@ -4117,7 +4117,7 @@
       "acceptance": {
         "evidence": [
           "One shared exact parser and key contract is consumed by both scripts/capture_t0_step.py and joulewise/arm_readiness_evidence_t0.py; neither retains a private key set",
-          "Unknown-key and missing-key regressions exist at both boundaries and refuse under the registered evidence_author_t0_capture_environment_invalid reason",
+          "Unknown-key and missing-key regressions exist at both boundaries, each preserving and asserting its existing registered boundary-specific refusal mapping (the capture wrapper's evidence_author_t0_capture_environment_invalid; the evidence author's evidence_author_t0_<kind>_underivable via _underivable); the reason vocabularies are not unified by this row",
           "tests/test_window_env_allowlist.py test_additionally_bound_runbook_keys_pending_ruling no longer skips on the OPEN DEFECT branch: the runbook's 'additionally bind' instruction for ARM_RECEIPT and LAUNCH_MANIFEST is removed and those paths are derived and exported after ARM and before E-10 (mirroring docs/process/rehearsal-operator-card.md), without widening window.env",
           "The T-0 capture chain in docs/phase_2/window_runbook.md no longer dereferences a variable the allowlist refuses under set -euo pipefail"
         ],
