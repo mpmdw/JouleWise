@@ -698,7 +698,9 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
                     REPRESENTATIVE_PACK, {}, root / "custody"
                 )
                 freeze = generate_freeze_receipt(
-                    successor, predecessor_pack_root=REPRESENTATIVE_PACK
+                    successor,
+                    measurement_checkout=root,
+                    predecessor_pack_root=REPRESENTATIVE_PACK,
                 )
             self.assertEqual(list(workspace_parent.iterdir()), [])
         self.assertEqual(arm["status"], "REFUSE")
@@ -746,7 +748,9 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
                     REPRESENTATIVE_PACK, {}, root / "materialization-custody"
                 )
                 freeze = generate_freeze_receipt(
-                    successor, predecessor_pack_root=REPRESENTATIVE_PACK
+                    successor,
+                    measurement_checkout=root,
+                    predecessor_pack_root=REPRESENTATIVE_PACK,
                 )
 
             self.assertEqual(len(created), 2)
@@ -791,7 +795,9 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
                     REPRESENTATIVE_PACK, {}, root / "cleanup-custody"
                 )
                 freeze = generate_freeze_receipt(
-                    successor, predecessor_pack_root=REPRESENTATIVE_PACK
+                    successor,
+                    measurement_checkout=root,
+                    predecessor_pack_root=REPRESENTATIVE_PACK,
                 )
 
             self.assertEqual(len(created), 2)
@@ -1555,7 +1561,7 @@ class PackAuthenticationRegenerationTests(unittest.TestCase):
             self.assertEqual(authored["status"], "PASS")
             git(repository, "add", "-A")
             git(repository, "commit", "-qm", "author projected evidence")
-            frozen = generate_freeze_receipt(pack)
+            frozen = generate_freeze_receipt(pack, measurement_checkout=repository)
             self.assertEqual(frozen["status"], "PASS", frozen)
         git(repository, "add", "-A")
         git(repository, "commit", "-qm", "freeze projected evidence")
