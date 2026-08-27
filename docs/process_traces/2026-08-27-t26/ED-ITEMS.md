@@ -27,7 +27,12 @@ gate named beside it.
    (b) in `tests/test_receipt_histsem.py:33` set `PINSET_SHA256` to the
    SHA-256 of the edited JSON file (`shasum -a 256 <file>`).
    Then `python -m pytest -q tests/test_receipt_histsem.py`, commit, push.
-   Everything else on #209 is done and gauntleted.
+   Everything else on #209 is done and gauntleted (head `9c8d5632`).
+   HAZARD: the digest covers every committed blob under
+   `configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/`; NO commit may
+   touch that directory before the pin lands (a stray `__pycache__` there
+   also makes the digest refuse — clean it first). Recompute with
+   `committed_pack_tree_sha256` if in doubt.
 
 ## New from the S9 ruled-not-installed sweep (PR #210, SHORTLIST.md)
 5. **S9-05 (NEEDS-RULING, ruled number):** the live calibration screen
