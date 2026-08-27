@@ -36,6 +36,22 @@ window.env open-defect marker) · #206 (S6) · #207 (paper round 2) · #208
 (S4 D-154 follow-ons) · #209 (S8 W-10) · #210 (S9 sweep). CI runner pool
 was saturated; superseded queued runs cancelled once.
 
+## COLD RESUME PROCEDURE (any fresh session, no loop context needed)
+1. `git -C /Users/edr/code/JouleWise worktree list` — one `JouleWise-wt-<stream>`
+   per stream below; for each: `git -C <wt> status --short` and
+   `git -C <wt> log --oneline origin/main..HEAD` to see uncommitted and
+   unpushed work (S1 was mid-commit, S6 mid-fix-round when stopped).
+2. Sol out-files for each stream live under the T26 scratchpad
+   `/private/tmp/claude-501/-Users-edr-code-JouleWise/5ce660ee-d53f-472d-98bc-e236206db99d/scratchpad/t26/<stream>/`
+   (`*.status` sentinels, `*-out.md` final messages) — harvest before
+   re-running anything; if the scratchpad is gone, the worktree diff is
+   the truth.
+3. `gh pr list --state open` for the PR map below; merge order as stated.
+4. Re-brief one Opus director per unfinished stream with its card from
+   `scratchpad/t26/DIRECTOR-BRIEF.md` (copy in this directory:
+   `DIRECTOR-BRIEF.md`) plus the stream's ruling file; the cards are
+   reconstructible from the rulings named in this checkpoint.
+
 ## Streams still running or stalled at the window reset
 S1 (docs), S2 T0-UNATTENDED (+ S9-06/S9-08b assessment), S3 pack-auth
 soundness, S4, S6 fix round, S8 W-10, S10 W-11, S11, paper round 2. On
