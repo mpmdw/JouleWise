@@ -27,7 +27,7 @@ from .claims import REASON_CODES
 # claims._SENSITIVITY are deliberately NOT DATA, because _SENSITIVITY membership
 # only drives ordered_reason_codes() precedence and does not make a code an
 # answer about the measurement:
-#   * outcome_dependent_top_up   (__init__.py:730) - unregistered matching
+#   * outcome_dependent_top_up   (__init__.py:732) - unregistered matching
 #     bundles exist, so the frozen sampling plan was violated.
 #   * legacy_l1_mechanics_only   (__init__.py:734) - a caller-declared degraded
 #     evidence class, i.e. a mode, not a measured result.
