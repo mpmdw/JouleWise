@@ -370,3 +370,46 @@ Two of this ruling's premises were WRONG and are corrected here:
     detail, record shapes, event pairing, the Evidence + Gaps index). The
     replication bar is measured over the two together. Rounds 4+5 land as
     one PR; the magistrate's full read follows on that PR.
+
+## Addendum 7 (2026-08-27) — the magistrate's full read of the main text (PR #218, 4fc1d9ff) → round 6
+
+The main text (9,779 words) was read in full. Verdict: coherent, plain,
+physically built, honest; the arithmetic checked in passing
+(0.030067931757111657 − 0.0011349971959968978; the three ratios; the p256
+sizing) is correct; 10.164835 ms traces to DG-057. Round 6 is SHORT and
+the last before `_v4` fills:
+
+53. **Inconsistency (blocker):** §4 "Two gates" says the decision
+    interval is widened by `deterministic_bounds.total` and "that total is
+    the claim-side bound B_claim" — item 33 withdrew exactly that
+    equation, and §6 correctly says the claim-side bound's supplier is
+    not built. FIX: the decision interval IS widened by the whole
+    deterministic total (true of the code); the claim-side bound used in
+    the sizing disclosure is a separately registered quantity whose
+    supplier is unbuilt; the two are not equated anywhere. Sweep every
+    occurrence of `B_claim`/"claim-side bound".
+54. **Two Holm families, one sentence each.** §3 (null-mean and
+    prefill-invariance containment, m=2) and §6 (decode + p256 contrasts,
+    m=2) are DIFFERENT families; each says so where it appears.
+55. **Code identifiers in advisor-facing text** (`characterization_operative_floor_unavailable`,
+    `admissible_set_uncertainty_dominates_point_floor`,
+    `not_resolvable_sample_count`, `corner_widened_guarded_floor_j`,
+    `floor_gate_j`, `E_clock_anchor_shift_bound_j`): each is named ONCE as
+    "the artifact's field/outcome name" at first use and then referred to
+    by its plain name; none appears un-glossed.
+56. **Resolvability wording aligned:** §1 "fewer than three power samples
+    fall inside it" → "fewer than three sampling records overlap it", to
+    match §6's rule.
+57. **References [29] Hähnel, [30] Georges, [31] Mytkowicz:** verify each
+    entry exists in §11 with a correct DOI (bibliography audit shape);
+    Hackenberg must be absent.
+58. **Director's three decisions:** DG-063 RETIRED with a superseded
+    note; the appendix budget reading is A.3 ≈5,000 — A.3 at 5,711
+    stands (replication over budget), and A.4 (executable verification
+    order, ~1,500 w) moves to the artifact guide with a pointer, bringing
+    Appendix A to ≈5,700; the Opus pedagogy verdict is RE-RUN as a fresh
+    seat and its transcript custodied under
+    `docs/process_traces/2026-08-27-t26/paper-round5/` (a load-bearing
+    verdict lives in custody, not in a commit message).
+59. Round 6 lands as one PR; after it the draft is FROZEN except for
+    results fills when `_v4` issues (round 7 = fills + one fidelity pass).
