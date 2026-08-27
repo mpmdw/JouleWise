@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 """Execute and byte-canonically capture one governed D-134 T-0 E-step.
 
-The production CLI is a trusted-operator ceremony interface, not independent
-producer attestation.  When faithfully invoked it derives commands,
-identities, and canonical captures; beyond the step selector and the three
-governed path arguments, the only operator-supplied values are E-4's two
-registered irreducible observations (the independent-clock UTC literal and
-the pasted prior network-time state output). v1 does not defend against
-deliberate operator fabrication.
+The governed steps take no operator-supplied values.  The trusted-operator
+limitation now attaches only to faithful invocation: v1 does not defend against
+deliberate operator fabrication of the surrounding custody ceremony.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -23,7 +18,6 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
@@ -36,20 +30,8 @@ from joulewise import arm_readiness as readiness  # noqa: E402
 
 
 COMMAND_CAPTURE_SCHEMA = "joulewise.arm_readiness_t0_command_capture.v1"
-CLOCK_ATTESTATION_SCHEMA = "joulewise.arm_readiness_t0_clock_attestation.v1"
 LAUNCH_MANIFEST_SCHEMA = "joulewise.arm_readiness_t0_launch_manifest.v1"
 INPUT_DIRECTORY = "arm_readiness.t0.inputs"
-REFERENCE_TIME_PROMPT = (
-    "Independent trusted-clock UTC literal (for example 2026-08-15T12:34:56Z): "
-)
-PRIOR_STATE_PROMPT = (
-    "Paste Ed's exact interactive prior network-time output "
-    "(Network Time: On or Network Time: Off): "
-)
-INTERACTIVE_PRIOR_STATE_ARGV = (
-    "operator-interactive",
-    "network-time-prior-state",
-)
 GOVERNED_SUBPROCESS_ENVIRONMENT = {
     "LANG": "C",
     "LC_ALL": "C",
@@ -57,7 +39,7 @@ GOVERNED_SUBPROCESS_ENVIRONMENT = {
 }
 
 STEP_FILENAMES = {
-    "clock-prior-state": "clock-prior-state.json",
+    "clock-reference": "clock-reference.json",
     "clock-disable": "clock-disable.json",
     "quiet-mac-prep": "quiet-mac-prep.json",
     "prewindow-check": "prewindow-check.json",
@@ -542,77 +524,14 @@ def _prepare_derived_inputs(context: CaptureContext) -> list[str]:
     return [str(arm_path), str(launch_path)]
 
 
-def _clock_attestation(
-    context: CaptureContext,
-    *,
-    prompt: Callable[[str], str],
-    monotonic_ns: Callable[[], int],
-    utc_now: Callable[[], str],
-) -> str:
-    try:
-        literal = prompt(REFERENCE_TIME_PROMPT).strip()
-    except (EOFError, OSError) as exc:
-        raise _refuse(
-            "evidence_author_t0_capture_clock_observation_invalid",
-            "trusted-clock literal was not provided",
-        ) from exc
-    try:
-        reference = datetime.fromisoformat(literal.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise _refuse(
-            "evidence_author_t0_capture_clock_observation_invalid",
-            "trusted-clock literal is not an ISO-8601 timestamp",
-        ) from exc
-    if reference.tzinfo is None or reference.utcoffset() != timedelta(0):
-        raise _refuse(
-            "evidence_author_t0_capture_clock_observation_invalid",
-            "trusted-clock literal must carry the UTC offset",
-        )
-    system_literal = utc_now()
-    try:
-        system = datetime.fromisoformat(system_literal.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise _refuse(
-            "evidence_author_t0_capture_internal_error",
-            "derived system clock is not ISO-8601",
-        ) from exc
-    if system.tzinfo is None or system.utcoffset() != timedelta(0):
-        raise _refuse(
-            "evidence_author_t0_capture_internal_error",
-            "derived system clock does not carry the UTC offset",
-        )
-    difference = abs(
-        (system.astimezone(UTC) - reference.astimezone(UTC)).total_seconds()
-    )
-    if difference > 2.0:
-        raise _refuse(
-            "evidence_author_t0_capture_clock_observation_invalid",
-            f"independent clocks differ by {difference:.6f} seconds",
-        )
-    observed = monotonic_ns()
-    seed = (
-        f"{context.boot_session_id}\0{observed}\0{system_literal}\0{literal}"
-    ).encode("utf-8")
-    value = {
-        "schema_version": CLOCK_ATTESTATION_SCHEMA,
-        "attestation_id": f"clock-{hashlib.sha256(seed).hexdigest()[:24]}",
-        "observer": "lead_operator",
-        "reference_source": "independent_trusted_clock",
-        "system_time_utc": system_literal,
-        "reference_time_utc": literal,
-        "observed_monotonic_ns": observed,
-        "boot_session_id": context.boot_session_id,
-    }
-    path = context.input_root / "clock-attestation.json"
-    _write_no_clobber(path, readiness.render_json(value), accept_identical=False)
-    return str(path)
-
-
 def _command_for_step(context: CaptureContext, step_id: str) -> tuple[str, ...]:
     values = context.assignments
     python = str(context.repository / ".venv/bin/python")
-    if step_id == "clock-prior-state":
-        return INTERACTIVE_PRIOR_STATE_ARGV
+    if step_id == "clock-reference":
+        return (
+            python,
+            str(context.repository / "scripts/collect_clock_reference.py"),
+        )
     if step_id == "clock-disable":
         return (
             "/usr/bin/sudo",
@@ -752,6 +671,7 @@ def _execute(argv: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[b
         return subprocess.run(
             list(argv),
             cwd=cwd,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
@@ -768,39 +688,14 @@ def _text(value: bytes | str) -> str:
     return value if isinstance(value, str) else value.decode("utf-8", errors="replace")
 
 
-def _interactive_prior_state(
-    *, prompt: Callable[[str], str]
-) -> subprocess.CompletedProcess[bytes]:
-    """Capture Ed's separately executed interactive observation without privilege."""
-
-    try:
-        output = prompt(PRIOR_STATE_PROMPT).strip()
-    except (EOFError, OSError) as exc:
-        raise _refuse(
-            "evidence_author_t0_capture_result_invalid",
-            "E-4 interactive prior network-time output was not provided",
-        ) from exc
-    if re.fullmatch(r"Network Time:\s*(?:On|Off)", output) is None:
-        raise _refuse(
-            "evidence_author_t0_capture_result_invalid",
-            "E-4 interactive prior network-time output is not exact",
-        )
-    return subprocess.CompletedProcess(
-        INTERACTIVE_PRIOR_STATE_ARGV,
-        0,
-        f"{output}\n".encode("utf-8"),
-        b"",
-    )
-
-
 def _validate_result(
     context: CaptureContext, step_id: str, stdout: str, stderr: str
 ) -> None:
-    if step_id == "clock-prior-state":
-        if re.search(r"Network Time:\s*(?:On|Off)\s*$", stdout, re.MULTILINE) is None:
+    if step_id == "clock-disable":
+        if stdout != readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT:
             raise _refuse(
                 "evidence_author_t0_capture_result_invalid",
-                "E-4 did not capture the prior network-time state",
+                "E-5 stdout does not exactly prove the ruled Off postcondition",
             )
     elif step_id == "quiet-mac-prep":
         required = (
@@ -892,10 +787,8 @@ def _capture_step_with_dependencies(
     custody_root: Path | str,
     window_plan_root: Path | str,
     *,
-    prompt: Callable[[str], str] = input,
     execute: Callable[..., subprocess.CompletedProcess[bytes]] = _execute,
     monotonic_ns: Callable[[], int] = time.monotonic_ns,
-    utc_now: Callable[[], str] = readiness._utc_now,
 ) -> dict[str, object]:
     if step_id not in STEP_FILENAMES:
         raise _refuse(
@@ -904,12 +797,6 @@ def _capture_step_with_dependencies(
     context = _load_context(pack_root, custody_root, window_plan_root)
     derived_paths = _prepare_derived_inputs(context)
     _require_sequence(context, step_id)
-    if step_id == "clock-prior-state":
-        derived_paths.append(
-            _clock_attestation(
-                context, prompt=prompt, monotonic_ns=monotonic_ns, utc_now=utc_now
-            )
-        )
     argv = _command_for_step(context, step_id)
     starting_boot = _current_boot_session_id()
     if starting_boot != context.boot_session_id:
@@ -918,10 +805,7 @@ def _capture_step_with_dependencies(
             "boot session changed before command execution",
         )
     started = monotonic_ns()
-    if step_id == "clock-prior-state":
-        completed = _interactive_prior_state(prompt=prompt)
-    else:
-        completed = execute(argv, cwd=context.repository)
+    completed = execute(argv, cwd=context.repository)
     finished = monotonic_ns()
     ending_boot = _current_boot_session_id()
     if ending_boot != starting_boot:
@@ -980,10 +864,8 @@ def _capture_step_for_test(
     custody_root: Path | str,
     window_plan_root: Path | str,
     *,
-    prompt: Callable[[str], str] = input,
     execute: Callable[..., subprocess.CompletedProcess[bytes]] = _execute,
     monotonic_ns: Callable[[], int] = time.monotonic_ns,
-    utc_now: Callable[[], str] = readiness._utc_now,
 ) -> dict[str, object]:
     """Private test hook for deterministic capture dependencies."""
 
@@ -992,10 +874,8 @@ def _capture_step_for_test(
         pack_root,
         custody_root,
         window_plan_root,
-        prompt=prompt,
         execute=execute,
         monotonic_ns=monotonic_ns,
-        utc_now=utc_now,
     )
 
 
@@ -1012,10 +892,8 @@ def capture_step(
         pack_root,
         custody_root,
         window_plan_root,
-        prompt=input,
         execute=_execute,
         monotonic_ns=time.monotonic_ns,
-        utc_now=readiness._utc_now,
     )
 
 

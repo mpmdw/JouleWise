@@ -2,11 +2,11 @@
 
 The public author accepts only the committed pack and the D-134 custody root.
 It never accepts conclusions, evidence paths, hashes, probe output, or row
-states.  Irreducible operator observations and command captures live in the
-private custody input namespace.  Fresh current-state conditions are probed
-again here; historical E-step captures are authenticated for canonical bytes,
-same-boot freshness, and ordering.  Their producer origin remains a
-trusted-operator limitation: v1 cannot detect deliberate operator fabrication.
+states.  Governed machine-authored command captures live in the private
+custody input namespace.  Fresh current-state conditions are probed again here;
+historical E-step captures are authenticated for canonical bytes, same-boot
+freshness, and ordering.  Faithful invocation remains a trusted-operator
+limitation: v1 cannot detect deliberate operator fabrication.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import subprocess as _subprocess
 import tempfile as _tempfile
 import time as _time
 from dataclasses import dataclass as _dataclass, field as _field
-from datetime import UTC as _UTC, datetime as _datetime
+from decimal import Decimal as _Decimal
 from pathlib import Path as _Path, PurePosixPath as _PurePosixPath
 from typing import (
     Any as _Any,
@@ -34,12 +34,12 @@ from typing import (
 
 from joulewise import arm_readiness as _readiness
 from joulewise import calibration_ledger as _ledger
+from joulewise import clock_reference as _clock_reference
 from joulewise import identity_pins as _identity
 
 
 _SOURCE_SCHEMA = "joulewise.arm_readiness_t0_evidence_source.v1"
 _COMMAND_SCHEMA = "joulewise.arm_readiness_t0_command_capture.v1"
-_ATTESTATION_SCHEMA = "joulewise.arm_readiness_t0_clock_attestation.v1"
 _LAUNCH_SCHEMA = "joulewise.arm_readiness_t0_launch_manifest.v1"
 _INPUT_DIRECTORY = "arm_readiness.t0.inputs"
 _SOURCE_DIRECTORY = "arm_readiness.t0.sources"
@@ -54,9 +54,11 @@ _MIN_BACKUP_FREE_BYTES = 20 * 1024**3
 _PROBE_TIMEOUT_SECONDS = 45
 _RUNNING_REPOSITORY = _Path(__file__).resolve().parents[1]
 _AUTHORING_ARTIFACTS = (
+    "joulewise/clock_reference.py",
     "joulewise/arm_readiness_evidence_t0.py",
     "scripts/author_arm_evidence_t0.py",
     "scripts/capture_t0_step.py",
+    "scripts/collect_clock_reference.py",
 )
 _INTERNAL_ROWS = frozenset(
     {
@@ -133,22 +135,17 @@ _PUBLICATION_COMPLETION_MARKER = (
     "evidence-t0-t0-storage-backup-capacity.json.sha256"
 )
 _CAPTURE_FILES = {
-    "clock-prior-state": "clock-prior-state.json",
+    "clock-reference": "clock-reference.json",
     "clock-disable": "clock-disable.json",
     "quiet-mac-prep": "quiet-mac-prep.json",
     "prewindow-check": "prewindow-check.json",
     "ledger-readiness": "ledger-readiness.json",
     "ledger-reservation": "ledger-reservation.json",
 }
-_INTERACTIVE_PRIOR_STATE_ARGV = [
-    "operator-interactive",
-    "network-time-prior-state",
-]
 _CAPTURE_ORDER = tuple(_CAPTURE_FILES)
 _RUNBOOK_ARTIFACT_REASON_CODES = {
     "arm_context": "evidence_author_t0_arm_context_missing",
-    "clock_attestation": "evidence_author_t0_clock_attestation_missing",
-    "clock_prior_state_capture": "evidence_author_t0_clock_prior_state_missing",
+    "clock_reference_capture": "evidence_author_t0_clock_attestation_missing",
     "clock_disable_capture": "evidence_author_t0_clock_disable_missing",
     "quiet_mac_prep_capture": "evidence_author_t0_quiet_mac_prep_missing",
     "prewindow_check_capture": "evidence_author_t0_prewindow_check_missing",
@@ -190,15 +187,30 @@ _CAPTURE_KEYS = {
     "finished_monotonic_ns",
     "boot_session_id",
 }
-_ATTESTATION_KEYS = {
+_CLOCK_REFERENCE_KEYS = {
     "schema_version",
-    "attestation_id",
-    "observer",
-    "reference_source",
-    "system_time_utc",
-    "reference_time_utc",
-    "observed_monotonic_ns",
+    "sample_policy_id",
     "boot_session_id",
+    "anchor_realtime_ns",
+    "anchor_monotonic_raw_ns",
+    "anchor_read_skew_ns",
+    "batch_started_monotonic_raw_ns",
+    "batch_finished_monotonic_raw_ns",
+    "samples",
+}
+_CLOCK_REFERENCE_SAMPLE_KEYS = {
+    "server",
+    "argv",
+    "exit_code",
+    "started_monotonic_raw_ns",
+    "finished_monotonic_raw_ns",
+    "stdout",
+    "stderr",
+    "parsed",
+    "offset_s",
+    "uncertainty_s",
+    "peer_address",
+    "raw_line",
 }
 _LAUNCH_KEYS = {
     "schema_version",
@@ -242,6 +254,7 @@ class _ProbeResult:
 class _DerivationClock:
     monotonic_ns: _Callable[[], int]
     utc_now: _Callable[[], str]
+    sample_anchor: _Callable[[], _clock_reference.ClockAnchor]
 
 
 def _production_clock() -> _DerivationClock:
@@ -250,6 +263,7 @@ def _production_clock() -> _DerivationClock:
     return _DerivationClock(
         monotonic_ns=_time.monotonic_ns,
         utc_now=_readiness._utc_now,
+        sample_anchor=_clock_reference.sample_anchor,
     )
 
 
@@ -428,6 +442,16 @@ def _fresh_probe(
     label: str,
     argv: _Sequence[str],
 ) -> _ProbeResult:
+    if kind in {"MAINTENANCE_CENSUS", "PROCESS_CENSUS"}:
+        r1_finished = context.values.get("r1_batch_finished_monotonic_ns")
+        if (
+            not _real_int(r1_finished)
+            or r1_finished > context.clock.monotonic_ns()
+        ):
+            raise _underivable(
+                kind,
+                "fresh census cannot run before the R1 clock-reference batch completes",
+            )
     try:
         return _execute_probe(argv, cwd=context.repository)
     except Exception as exc:
@@ -504,53 +528,181 @@ def _capture(
     return result
 
 
-def _clock_attestation(
+@_dataclass(frozen=True)
+class _ReferenceAgreement:
+    server_count: int
+    midpoint: _Decimal
+    bound: _Decimal
+
+
+def _real_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _clock_reference_capture_argv(context: _Context) -> list[str]:
+    return [
+        str(context.repository / ".venv/bin/python"),
+        str(context.repository / "scripts/collect_clock_reference.py"),
+    ]
+
+
+def _validate_reference_object(
+    value: object,
+    *,
+    kind: str,
+    label: str,
+    boot_session_id: str,
+) -> list[tuple[str, _clock_reference.ParsedSntpLine]]:
+    if (
+        not isinstance(value, _Mapping)
+        or set(value) != _CLOCK_REFERENCE_KEYS
+        or value.get("schema_version") != _clock_reference.SCHEMA_VERSION
+        or value.get("sample_policy_id") != _clock_reference.SAMPLE_POLICY_ID
+        or value.get("boot_session_id") != boot_session_id
+    ):
+        raise _underivable(
+            kind, f"{label} schema, sample policy, or boot binding is invalid"
+        )
+    integer_names = (
+        "anchor_realtime_ns",
+        "anchor_monotonic_raw_ns",
+        "anchor_read_skew_ns",
+        "batch_started_monotonic_raw_ns",
+        "batch_finished_monotonic_raw_ns",
+    )
+    if any(not _real_int(value.get(name)) for name in integer_names):
+        raise _underivable(kind, f"{label} numeric endpoint is not an integer")
+    if not (
+        value["anchor_read_skew_ns"] >= 0
+        and value["anchor_monotonic_raw_ns"]
+        <= value["batch_started_monotonic_raw_ns"]
+        <= value["batch_finished_monotonic_raw_ns"]
+    ):
+        raise _underivable(kind, f"{label} RAW endpoint ordering is invalid")
+    samples = value.get("samples")
+    if not isinstance(samples, list) or len(samples) != len(
+        _clock_reference.SERVER_ROSTER
+    ):
+        raise _underivable(
+            kind, f"{label} does not prove the fixed roster and one-attempt policy"
+        )
+    parsed_legs: list[tuple[str, _clock_reference.ParsedSntpLine]] = []
+    previous_finish = value["batch_started_monotonic_raw_ns"]
+    for server, sample in zip(_clock_reference.SERVER_ROSTER, samples):
+        if (
+            not isinstance(sample, _Mapping)
+            or set(sample) != _CLOCK_REFERENCE_SAMPLE_KEYS
+            or sample.get("server") != server
+            or sample.get("argv") != _clock_reference.build_sntp_argv(server)
+        ):
+            raise _underivable(
+                kind, f"{label} does not prove the fixed roster and one-attempt policy"
+            )
+        if any(
+            not _real_int(sample.get(name))
+            for name in (
+                "exit_code",
+                "started_monotonic_raw_ns",
+                "finished_monotonic_raw_ns",
+            )
+        ):
+            raise _underivable(kind, f"{label} leg endpoint is not an integer")
+        if (
+            not isinstance(sample.get("stdout"), str)
+            or not isinstance(sample.get("stderr"), str)
+            or not isinstance(sample.get("parsed"), bool)
+            or not previous_finish <= sample["started_monotonic_raw_ns"]
+            <= sample["finished_monotonic_raw_ns"]
+            <= value["batch_finished_monotonic_raw_ns"]
+        ):
+            raise _underivable(kind, f"{label} leg fields or ordering are invalid")
+        previous_finish = sample["finished_monotonic_raw_ns"]
+        # The JSON float values are reader aids.  Evidence arithmetic always
+        # reparses raw_line/stdout so Decimal retains the exact measured text.
+        parsed = (
+            _clock_reference.parse_sntp_stdout(sample["stdout"], server=server)
+            if sample["exit_code"] == 0
+            else None
+        )
+        if parsed is None:
+            if sample["parsed"] is not False or any(
+                sample.get(name) is not None
+                for name in (
+                    "offset_s",
+                    "uncertainty_s",
+                    "peer_address",
+                    "raw_line",
+                )
+            ):
+                raise _underivable(kind, f"{label} unparseable leg fields disagree")
+            continue
+        if (
+            sample["parsed"] is not True
+            or not isinstance(sample.get("offset_s"), float)
+            or not isinstance(sample.get("uncertainty_s"), float)
+            or sample["offset_s"] != float(parsed.offset_s)
+            or sample["uncertainty_s"] != float(parsed.uncertainty_s)
+        ):
+            raise _underivable(
+                kind, f"{label} parseable leg omits or alters its numeric fields"
+            )
+        if sample.get("peer_address") != parsed.peer_address:
+            raise _underivable(kind, f"{label} parseable leg alters its peer address")
+        if sample.get("raw_line") != parsed.raw_line:
+            raise _underivable(kind, f"{label} parseable leg alters its raw line")
+        parsed_legs.append((server, parsed))
+    return parsed_legs
+
+
+def _reference_agreement(
+    legs: _Sequence[tuple[str, _clock_reference.ParsedSntpLine]],
+    *,
+    kind: str,
+    label: str,
+) -> _ReferenceAgreement:
+    if len(legs) < 2:
+        raise _underivable(kind, f"{label} quorum has fewer than two parseable legs")
+    lower = max(parsed.offset_s - parsed.uncertainty_s for _server, parsed in legs)
+    upper = min(parsed.offset_s + parsed.uncertainty_s for _server, parsed in legs)
+    if lower > upper:
+        raise _underivable(kind, f"{label} agreement intervals have empty intersection")
+    midpoint = (lower + upper) / _Decimal(2)
+    halfwidth = (upper - lower) / _Decimal(2)
+    bound = abs(midpoint) + halfwidth
+    if bound > _Decimal("0.5"):
+        raise _underivable(kind, f"{label} bound exceeds 0.5 seconds")
+    return _ReferenceAgreement(len(legs), midpoint, bound)
+
+
+def _captured_clock_reference(
     context: _Context, *, kind: str
-) -> tuple[_Mapping[str, _Any], dict[str, str], float]:
-    cached = context.values.get("clock_attestation")
+) -> tuple[_Mapping[str, _Any], dict[str, str], _ReferenceAgreement]:
+    cached = context.values.get("clock_reference")
     if cached is not None:
         return cached
-    path = context.custody_pack_root / _INPUT_DIRECTORY / "clock-attestation.json"
-    try:
-        value, identity, _raw = _canonical_object(
-            path, kind=kind, label="independent-clock attestation"
+    capture, identity = _capture(context, "clock-reference", kind=kind)
+    _capture_ok(capture, kind=kind, label="R0 clock-reference capture")
+    if capture["argv"] != _clock_reference_capture_argv(context):
+        raise _underivable(
+            kind, "R0 clock reference does not prove the fixed collector invocation"
         )
-    except T0EvidenceAuthoringError as exc:
-        raise _refuse(
-            kind,
-            "evidence_author_t0_clock_attestation_missing",
-            str(exc),
-        ) from exc
-    if set(value) != _ATTESTATION_KEYS or value.get("schema_version") != _ATTESTATION_SCHEMA:
-        raise _underivable(kind, "independent-clock attestation schema/keys are invalid")
-    for name in ("attestation_id", "observer", "reference_source"):
-        if not isinstance(value.get(name), str) or not value[name]:
-            raise _underivable(kind, f"independent-clock attestation {name} is invalid")
-    observed = value.get("observed_monotonic_ns")
-    now = context.clock.monotonic_ns()
-    if (
-        value.get("boot_session_id") != context.boot_session_id
-        or not isinstance(observed, int)
-        or isinstance(observed, bool)
-        or observed < 1
-        or observed > now
-        or now - observed > _MAX_T0_SEQUENCE_AGE_NS
-    ):
-        raise _underivable(kind, "independent-clock attestation is stale")
     try:
-        system = _datetime.fromisoformat(str(value["system_time_utc"]).replace("Z", "+00:00"))
-        reference = _datetime.fromisoformat(
-            str(value["reference_time_utc"]).replace("Z", "+00:00")
+        value = _readiness.parse_json_bytes(
+            capture["stdout"].encode("utf-8"), require_canonical=True
         )
-    except ValueError as exc:
-        raise _underivable(kind, "independent-clock timestamps are invalid") from exc
-    if system.tzinfo is None or reference.tzinfo is None:
-        raise _underivable(kind, "independent-clock timestamps must be timezone-aware")
-    difference = abs((system.astimezone(_UTC) - reference.astimezone(_UTC)).total_seconds())
-    if difference > 2.0:
-        raise _underivable(kind, f"independent clocks differ by {difference:.6f} seconds")
-    result = (value, identity, difference)
-    context.values["clock_attestation"] = result
+    except (UnicodeError, _readiness.ArmReadinessError) as exc:
+        raise _underivable(kind, f"R0 clock reference stdout is not canonical: {exc}") from exc
+    legs = _validate_reference_object(
+        value,
+        kind=kind,
+        label="R0 clock reference",
+        boot_session_id=context.boot_session_id,
+    )
+    if value["anchor_read_skew_ns"] > 1_000_000:
+        raise _underivable(kind, "R0 anchor read skew exceeds 1000000 ns")
+    agreement = _reference_agreement(legs, kind=kind, label="R0 reference")
+    result = (value, identity, agreement)
+    context.values["clock_reference"] = result
     return result
 
 
@@ -852,39 +1004,149 @@ def _systemsetup_argv(argv: _Sequence[str], operation: _Sequence[str]) -> bool:
     )
 
 
+def _sample_anchor(
+    context: _Context, *, kind: str, label: str
+) -> _clock_reference.ClockAnchor:
+    try:
+        anchor = context.clock.sample_anchor()
+    except Exception as exc:
+        raise _underivable(kind, f"{label} could not be sampled: {exc}") from exc
+    if any(
+        not _real_int(value)
+        for value in (
+            anchor.realtime_ns,
+            anchor.monotonic_raw_ns,
+            anchor.read_skew_ns,
+        )
+    ) or anchor.read_skew_ns < 0:
+        raise _underivable(kind, f"{label} endpoints are invalid")
+    return anchor
+
+
+def _fresh_clock_reference_batch(
+    context: _Context, *, kind: str
+) -> tuple[
+    _ReferenceAgreement,
+    tuple[_ProbeResult, ...],
+    int,
+    _clock_reference.ClockAnchor,
+    int,
+]:
+    r1_started_monotonic_ns = context.clock.monotonic_ns()
+    context.values["r1_batch_started_monotonic_ns"] = r1_started_monotonic_ns
+    started_anchor = _sample_anchor(context, kind=kind, label="R1 batch start")
+    probes: list[_ProbeResult] = []
+    legs: list[tuple[str, _clock_reference.ParsedSntpLine]] = []
+    for server in _clock_reference.SERVER_ROSTER:
+        argv = tuple(_clock_reference.build_sntp_argv(server))
+        probe = _fresh_probe(context, kind, f"R1 {server}", argv)
+        probes.append(probe)
+        if probe.argv != argv:
+            raise _underivable(
+                kind, "R1 clock reference does not prove the fixed one-attempt roster"
+            )
+        parsed = (
+            _clock_reference.parse_sntp_stdout(probe.stdout, server=server)
+            if probe.exit_code == 0
+            else None
+        )
+        if parsed is not None:
+            legs.append((server, parsed))
+    finished_anchor = _sample_anchor(context, kind=kind, label="author anchor")
+    r1_finished_monotonic_ns = context.clock.monotonic_ns()
+    duration = finished_anchor.monotonic_raw_ns - started_anchor.monotonic_raw_ns
+    if not 0 <= duration <= 30_000_000_000:
+        raise _underivable(kind, "R1 batch duration is outside 0 through 30000000000 ns")
+    agreement = _reference_agreement(legs, kind=kind, label="R1 reference")
+    context.values["r1_batch_finished_monotonic_ns"] = r1_finished_monotonic_ns
+    return (
+        agreement,
+        tuple(probes),
+        started_anchor.monotonic_raw_ns,
+        finished_anchor,
+        r1_finished_monotonic_ns,
+    )
+
+
 def _derive_clock_attestation(context: _Context) -> _DerivedRow:
     kind = "CLOCK_ATTESTATION"
-    attestation, attestation_identity, difference = _clock_attestation(context, kind=kind)
-    prior, prior_identity = _capture(context, "clock-prior-state", kind=kind)
+    r0, r0_identity, _r0_agreement = _captured_clock_reference(
+        context, kind=kind
+    )
     disable, disable_identity = _capture(context, "clock-disable", kind=kind)
-    _capture_ok(prior, kind=kind, label="prior clock-state capture")
     _capture_ok(disable, kind=kind, label="network-time disable capture")
-    if prior["argv"] != _INTERACTIVE_PRIOR_STATE_ARGV:
-        raise _underivable(kind, "prior clock-state capture was not Ed's interactive action")
     if not _systemsetup_argv(disable["argv"], ("-setusingnetworktime", "off")):
         raise _underivable(kind, "network-time disable capture used the wrong command")
-    match = _re.search(r"Network Time:\s*(On|Off)\s*$", prior["stdout"], _re.MULTILINE)
-    if match is None:
-        raise _underivable(kind, "prior systemsetup state was not captured")
     if not (
-        attestation["observed_monotonic_ns"] <= prior["started_monotonic_ns"]
-        <= prior["finished_monotonic_ns"]
+        r0["batch_finished_monotonic_raw_ns"]
+        >= r0["anchor_monotonic_raw_ns"]
+        and context.captures["clock-reference"][0]["finished_monotonic_ns"]
         <= disable["started_monotonic_ns"]
     ):
-        raise _underivable(kind, "clock procedure artifact ordering is invalid")
+        raise _underivable(kind, "R0 did not complete before the first clock-disable action")
+    (
+        r1_agreement,
+        r1_probes,
+        r1_started_raw,
+        author_anchor,
+        r1_finished_monotonic_ns,
+    ) = _fresh_clock_reference_batch(context, kind=kind)
+    r1_started_monotonic_ns = context.values.get("r1_batch_started_monotonic_ns")
+    # ``_fresh_clock_reference_batch`` samples its ordinary start before any
+    # network probe.  Record it only for the same-clock capture-order proof;
+    # the governed value publishes the RAW endpoint used for duration.
+    if r1_started_monotonic_ns is None:
+        r1_started_monotonic_ns = context.clock.monotonic_ns()
+    if disable["finished_monotonic_ns"] > r1_started_monotonic_ns:
+        raise _underivable(kind, "clock-disable did not finish before the R1 batch")
+    span = author_anchor.monotonic_raw_ns - r0["anchor_monotonic_raw_ns"]
+    if span < _MIN_IDLE_NS:
+        raise _underivable(kind, "T-0 RAW anchor span is below 600000000000 ns")
+    if span > _MAX_T0_SEQUENCE_AGE_NS:
+        raise _underivable(kind, "T-0 RAW anchor span exceeds 3600000000000 ns")
+    anchor_delta = abs(
+        (author_anchor.realtime_ns - author_anchor.monotonic_raw_ns)
+        - (r0["anchor_realtime_ns"] - r0["anchor_monotonic_raw_ns"])
+    )
+    if anchor_delta > 5_000_000:
+        raise _underivable(kind, "R0-to-author RAW anchor delta exceeds 5000000 ns")
+    if author_anchor.read_skew_ns > 1_000_000:
+        raise _underivable(kind, "author anchor read skew exceeds 1000000 ns")
+    r1_finished_raw = author_anchor.monotonic_raw_ns
+    r1_duration = r1_finished_raw - r1_started_raw
     value = {
         "independent_clock_attestation": True,
-        "prior_systemsetup_state_captured": True,
-        "comparison_delta_seconds": difference,
-        "prior_network_time": match.group(1).lower(),
+        "reference_quorum_satisfied": True,
+        "absolute_offset_within_ceiling": True,
+        # True means no adjustment above the 5 ms ceiling was detected between
+        # the reference sample and authoring; it does not assert that the clock
+        # is disciplined.
+        "unstepped_across_t0_sequence": True,
+        "sample_policy_id": _clock_reference.SAMPLE_POLICY_ID,
+        "reference_server_count": r1_agreement.server_count,
+        "reference_bound_seconds": float(r1_agreement.bound),
+        "comparison_delta_seconds": float(r1_agreement.midpoint),
+        "r0_anchor_realtime_ns": r0["anchor_realtime_ns"],
+        "r0_anchor_monotonic_raw_ns": r0["anchor_monotonic_raw_ns"],
+        "r0_anchor_read_skew_ns": r0["anchor_read_skew_ns"],
+        "anchor_realtime_ns": author_anchor.realtime_ns,
+        "anchor_monotonic_raw_ns": author_anchor.monotonic_raw_ns,
+        "anchor_read_skew_ns": author_anchor.read_skew_ns,
+        "anchor_delta_ns": anchor_delta,
+        "t0_span_ns": span,
+        "r1_batch_started_monotonic_raw_ns": r1_started_raw,
+        "r1_batch_finished_monotonic_raw_ns": r1_finished_raw,
+        "r1_batch_duration_ns": r1_duration,
+        "r1_batch_finished_monotonic_ns": r1_finished_monotonic_ns,
     }
     return _DerivedRow(
         "clock.correct_and_prior_state",
         kind,
         value,
-        "OPERATOR_ATTESTATION",
-        input_artifacts=(attestation_identity, prior_identity, disable_identity),
-        derivation={"attestation_id": attestation["attestation_id"]},
+        "PROBE",
+        input_artifacts=(r0_identity, disable_identity),
+        probes=r1_probes,
+        derivation={"sample_policy_id": _clock_reference.SAMPLE_POLICY_ID},
     )
 
 
@@ -905,7 +1167,13 @@ def _derive_clock_probe(context: _Context) -> _DerivedRow:
         ),
     )
     if probe.exit_code != 0:
-        raise _underivable(kind, "fresh D-127 enforcement did not set network time Off")
+        raise _underivable(
+            kind, "fresh D-127 enforcement exited nonzero before setting Off"
+        )
+    if probe.stdout != _readiness.EXPECTED_NETWORK_TIME_OFF_STDOUT:
+        raise _underivable(
+            kind, "fresh D-127 enforcement stdout did not exactly report Off"
+        )
     return _DerivedRow(
         "clock.network_time_off",
         kind,
@@ -1642,7 +1910,7 @@ def _validate_capture_order(context: _Context) -> None:
         raise _refuse(
             "AUTHORING_SET",
             "evidence_author_t0_tap_sequence_invalid",
-            "T-0 command captures do not follow E-4/E-5/E-7a/E-7b/E-8/E-9 order",
+            "T-0 command captures do not follow E-4 clock-reference/E-5/E-7a/E-7b/E-8/E-9 order",
         )
 
 
@@ -1888,7 +2156,12 @@ def _authenticate_existing(
             or receipt["facts"][0]["value"] != source["facts"][0]["value"]
             or receipt != expected_receipt
             or not _readiness._predicate_passes(
-                receipt, row["predicate_id"], expected_plan_sha256=context.plan_sha256
+                receipt,
+                row["predicate_id"],
+                expected_plan_sha256=context.plan_sha256,
+                # Existing-namespace re-authentication must remain byte/semantic
+                # replay and cannot add a later live anchor observation.
+                live_clock_anchor=_readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
             )
         ):
             raise _refuse(kind, "evidence_author_t0_existing_stale", f"existing {row_id} evidence is stale or semantically invalid")
@@ -2011,6 +2284,9 @@ def author_arm_readiness_evidence_t0(
             receipt,
             definitions[item.row_id]["predicate_id"],
             expected_plan_sha256=context.plan_sha256,
+            # Issuance proves the published numeric relations; the separate
+            # live anchor check belongs only to original ARM evaluation.
+            live_clock_anchor=_readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
         ):
             raise _refuse(item.kind, "evidence_author_t0_predicate_refused", f"derived facts do not satisfy {item.row_id}")
         raw = _readiness.render_json(receipt)

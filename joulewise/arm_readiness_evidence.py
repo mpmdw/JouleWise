@@ -2816,7 +2816,13 @@ def _authenticate_existing(
                 if receipt["kind"] in row["required_evidence_kinds"]
             ]
             if not any(
-                _readiness._predicate_passes(item, row["predicate_id"])
+                _readiness._predicate_passes(
+                    item,
+                    row["predicate_id"],
+                    live_clock_anchor=(
+                        _readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE
+                    ),
+                )
                 for item in matching
             ):
                 raise _refuse(
@@ -2958,7 +2964,13 @@ def _authenticate_existing_r1(
                 if receipt["kind"] in row["required_evidence_kinds"]
             ]
             if not any(
-                _readiness._predicate_passes(item, row["predicate_id"])
+                _readiness._predicate_passes(
+                    item,
+                    row["predicate_id"],
+                    live_clock_anchor=(
+                        _readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE
+                    ),
+                )
                 for item in matching
             ):
                 raise _refuse(
@@ -3125,7 +3137,13 @@ def author_arm_readiness_evidence(
                 if receipt["kind"] in row["required_evidence_kinds"]
             ]
             if not any(
-                _readiness._predicate_passes(item, row["predicate_id"])
+                _readiness._predicate_passes(
+                    item,
+                    row["predicate_id"],
+                    live_clock_anchor=(
+                        _readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE
+                    ),
+                )
                 for item in matching
             ):
                 raise _refuse(

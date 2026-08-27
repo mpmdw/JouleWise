@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import inspect
 import json
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,6 +43,35 @@ ZERO_SHA = "0" * 64
 TEST_BOOT_SESSION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 
+def probe_clock_value() -> dict[str, Any]:
+    r0_raw = 1_000_000_000
+    anchor_raw = r0_raw + 600_000_000_000
+    realtime_offset = 2_000_000_000_000_000_000
+    r1_started = anchor_raw - 1_000
+    return {
+        "independent_clock_attestation": True,
+        "reference_quorum_satisfied": True,
+        "absolute_offset_within_ceiling": True,
+        "unstepped_across_t0_sequence": True,
+        "sample_policy_id": readiness._clock_reference.SAMPLE_POLICY_ID,
+        "reference_server_count": 3,
+        "reference_bound_seconds": 0.03,
+        "comparison_delta_seconds": 0.01,
+        "r0_anchor_realtime_ns": realtime_offset + r0_raw,
+        "r0_anchor_monotonic_raw_ns": r0_raw,
+        "r0_anchor_read_skew_ns": 1_000,
+        "anchor_realtime_ns": realtime_offset + anchor_raw,
+        "anchor_monotonic_raw_ns": anchor_raw,
+        "anchor_read_skew_ns": 1_000,
+        "anchor_delta_ns": 0,
+        "t0_span_ns": 600_000_000_000,
+        "r1_batch_started_monotonic_raw_ns": r1_started,
+        "r1_batch_finished_monotonic_raw_ns": anchor_raw,
+        "r1_batch_duration_ns": anchor_raw - r1_started,
+        "r1_batch_finished_monotonic_ns": 2_000_000_000,
+    }
+
+
 def predicate_content(
     predicate_id: str, *, plan_sha256: str | None = None
 ) -> dict[str, Any]:
@@ -55,6 +86,8 @@ def predicate_content(
     content = copy.deepcopy(readiness._PREDICATE_CONTENT_REQUIREMENTS[predicate_id])
     if predicate_id == "t0.ledger_reservation.v1":
         content["plan_sha256"] = plan_sha256 or ZERO_SHA
+    elif predicate_id == "clock.correct_and_prior_state.v1":
+        content.update(probe_clock_value())
     elif predicate_id == "t0.background_quiet.v1":
         content["closed_operator_observation"] = True
         content["fresh_maintenance_census"] = True
@@ -827,18 +860,360 @@ class ArmReadinessSchemaTests(unittest.TestCase):
         receipt = sample_evidence()
         evidence_kind = row["required_evidence_kinds"][0]
         receipt["kind"] = evidence_kind
+        selected_source = source_kind or predicate_source_kind(evidence_kind)
+        value = predicate_content(row["predicate_id"])
+        if (
+            row["predicate_id"] == "clock.correct_and_prior_state.v1"
+            and selected_source == "OPERATOR_ATTESTATION"
+        ):
+            value = {
+                "independent_clock_attestation": True,
+                "prior_systemsetup_state_captured": True,
+            }
         receipt["facts"] = [
             {
                 "fact_id": row["predicate_id"],
                 "value_type": "OBJECT",
-                "value": predicate_content(row["predicate_id"]),
-                "source_kind": source_kind or predicate_source_kind(evidence_kind),
+                "value": value,
+                "source_kind": selected_source,
                 "source_path": "source.json",
                 "source_sha256": ZERO_SHA,
             }
         ]
         validate_evidence_receipt(receipt)
         return receipt
+
+    def _clock_predicate_receipt(
+        self,
+        *,
+        source_kind: str = "PROBE",
+        value: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        registry, _raw = load_registry(ROOT)
+        row = next(
+            item
+            for item in registry["rows"]
+            if item["predicate_id"] == "clock.correct_and_prior_state.v1"
+        )
+        receipt = self._generic_predicate_receipt(row, source_kind=source_kind)
+        if value is not None:
+            receipt["facts"][0]["value"] = copy.deepcopy(dict(value))
+        if source_kind == "PROBE":
+            finished = receipt["facts"][0]["value"][
+                "r1_batch_finished_monotonic_ns"
+            ]
+            receipt["valid_until_monotonic_ns"] = (
+                finished + 21_600_000_000_000
+            )
+        return receipt
+
+    def _probe_passes(
+        self,
+        receipt: Mapping[str, Any],
+        *,
+        live_clock_anchor: Mapping[str, Any] | object | None = (
+            readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE
+        ),
+    ) -> bool:
+        return readiness._predicate_passes(
+            receipt,
+            "clock.correct_and_prior_state.v1",
+            live_clock_anchor=live_clock_anchor,
+        )
+
+    @staticmethod
+    def _set_span(value: dict[str, Any], span: int) -> None:
+        raw = value["r0_anchor_monotonic_raw_ns"] + span
+        offset = (
+            value["r0_anchor_realtime_ns"]
+            - value["r0_anchor_monotonic_raw_ns"]
+        )
+        value["anchor_monotonic_raw_ns"] = raw
+        value["anchor_realtime_ns"] = offset + raw
+        value["t0_span_ns"] = span
+        value["anchor_delta_ns"] = 0
+
+    def test_clock_probe_omitted_live_anchor_defaults_to_static_replay(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        self.assertTrue(
+            readiness._predicate_passes(
+                receipt,
+                "clock.correct_and_prior_state.v1",
+            )
+        )
+
+    def test_evaluate_rows_omitted_live_anchor_defaults_to_static_replay(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        registry, _raw = load_registry(ROOT)
+        definition = next(
+            item
+            for item in registry["rows"]
+            if item["predicate_id"] == "clock.correct_and_prior_state.v1"
+        )
+        rows, refusals = readiness._evaluate_rows(
+            [definition],
+            {receipt["evidence_id"]: receipt},
+            clock_route="MANUAL",
+            successor_acceptance=False,
+        )
+        self.assertEqual(rows[0]["verdict"], "PASS")
+        self.assertEqual(refusals, [])
+
+    def test_evaluate_rows_threads_an_explicit_live_anchor_value(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        registry, _raw = load_registry(ROOT)
+        definition = next(
+            item
+            for item in registry["rows"]
+            if item["predicate_id"] == "clock.correct_and_prior_state.v1"
+        )
+        observed: list[object] = []
+
+        def predicate(_receipt, _predicate_id, **kwargs):
+            observed.append(kwargs.get("live_clock_anchor", mock.sentinel.omitted))
+            return True
+
+        with mock.patch.object(
+            readiness,
+            "_predicate_passes",
+            side_effect=predicate,
+        ):
+            readiness._evaluate_rows(
+                [definition],
+                {receipt["evidence_id"]: receipt},
+                clock_route="MANUAL",
+                successor_acceptance=False,
+                live_clock_anchor=None,
+            )
+        self.assertEqual(observed, [None])
+
+    def test_clock_source_branches_preserve_attended_and_close_probe_hole(self) -> None:
+        attended = self._clock_predicate_receipt(source_kind="OPERATOR_ATTESTATION")
+        self.assertTrue(
+            readiness._predicate_passes(
+                attended, "clock.correct_and_prior_state.v1"
+            )
+        )
+        del attended["facts"][0]["value"]["prior_systemsetup_state_captured"]
+        self.assertFalse(
+            readiness._predicate_passes(
+                attended, "clock.correct_and_prior_state.v1"
+            )
+        )
+        minimal_probe = self._clock_predicate_receipt()
+        minimal_probe["facts"][0]["value"] = {
+            "independent_clock_attestation": True
+        }
+        self.assertFalse(self._probe_passes(minimal_probe))
+
+    def test_clock_probe_gate_booleans_and_reference_bound_are_recomputed(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        self.assertTrue(self._probe_passes(receipt))
+        for gate in (
+            "independent_clock_attestation",
+            "reference_quorum_satisfied",
+            "absolute_offset_within_ceiling",
+            "unstepped_across_t0_sequence",
+        ):
+            mutated = copy.deepcopy(receipt)
+            mutated["facts"][0]["value"][gate] = False
+            with self.subTest(gate=gate):
+                self.assertFalse(self._probe_passes(mutated))
+        wrong_policy = copy.deepcopy(receipt)
+        wrong_policy["facts"][0]["value"]["sample_policy_id"] = "substitute.v1"
+        self.assertFalse(self._probe_passes(wrong_policy))
+        extra = copy.deepcopy(receipt)
+        extra["facts"][0]["value"]["unruled"] = 1
+        self.assertFalse(self._probe_passes(extra))
+        for bound, expected in (
+            (0.5, True),
+            (math.nextafter(0.5, 0.0), True),
+            (math.nextafter(0.5, math.inf), False),
+        ):
+            mutated = copy.deepcopy(receipt)
+            mutated["facts"][0]["value"]["reference_bound_seconds"] = bound
+            with self.subTest(bound=bound):
+                self.assertEqual(self._probe_passes(mutated), expected)
+
+    def test_clock_probe_span_boundaries_and_exact_difference_gate(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        for span, expected in (
+            (599_999_999_999, False),
+            (600_000_000_000, True),
+            (600_000_000_001, True),
+            (3_599_999_999_999, True),
+            (3_600_000_000_000, True),
+            (3_600_000_000_001, False),
+        ):
+            mutated = copy.deepcopy(receipt)
+            self._set_span(mutated["facts"][0]["value"], span)
+            with self.subTest(span=span):
+                self.assertEqual(self._probe_passes(mutated), expected)
+        mismatch = copy.deepcopy(receipt)
+        mismatch["facts"][0]["value"]["t0_span_ns"] += 1
+        self.assertFalse(self._probe_passes(mismatch))
+
+    def test_clock_probe_anchor_delta_and_skew_boundaries_gate(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        for delta, expected in (
+            (4_999_999, True),
+            (5_000_000, True),
+            (5_000_001, False),
+        ):
+            mutated = copy.deepcopy(receipt)
+            value = mutated["facts"][0]["value"]
+            value["anchor_realtime_ns"] += delta
+            value["anchor_delta_ns"] = delta
+            with self.subTest(delta=delta):
+                self.assertEqual(self._probe_passes(mutated), expected)
+        mismatch = copy.deepcopy(receipt)
+        mismatch["facts"][0]["value"]["anchor_delta_ns"] = 1
+        self.assertFalse(self._probe_passes(mismatch))
+        for name in ("r0_anchor_read_skew_ns", "anchor_read_skew_ns"):
+            for skew, expected in ((-1, False), (0, True), (999_999, True), (1_000_000, True), (1_000_001, False)):
+                mutated = copy.deepcopy(receipt)
+                mutated["facts"][0]["value"][name] = skew
+                with self.subTest(name=name, skew=skew):
+                    self.assertEqual(self._probe_passes(mutated), expected)
+
+    def test_clock_probe_r1_duration_quorum_and_horizon_boundaries_gate(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        for duration, expected in (
+            (-1, False),
+            (0, True),
+            (1, True),
+            (29_999_999_999, True),
+            (30_000_000_000, True),
+            (30_000_000_001, False),
+        ):
+            mutated = copy.deepcopy(receipt)
+            value = mutated["facts"][0]["value"]
+            value["r1_batch_started_monotonic_raw_ns"] = (
+                value["r1_batch_finished_monotonic_raw_ns"] - duration
+            )
+            value["r1_batch_duration_ns"] = duration
+            with self.subTest(duration=duration):
+                self.assertEqual(self._probe_passes(mutated), expected)
+        for count, expected in ((1, False), (2, True), (3, True)):
+            mutated = copy.deepcopy(receipt)
+            mutated["facts"][0]["value"]["reference_server_count"] = count
+            with self.subTest(count=count):
+                self.assertEqual(self._probe_passes(mutated), expected)
+        finished = receipt["facts"][0]["value"]["r1_batch_finished_monotonic_ns"]
+        for delta, expected in (
+            (21_599_999_999_999, False),
+            (21_600_000_000_000, True),
+            (21_600_000_000_001, True),
+        ):
+            mutated = copy.deepcopy(receipt)
+            mutated["valid_until_monotonic_ns"] = finished + delta
+            with self.subTest(horizon_delta=delta):
+                self.assertEqual(self._probe_passes(mutated), expected)
+
+    def test_clock_probe_rejects_every_non_integer_and_ordered_endpoint_reversal(self) -> None:
+        expected_integer_fields = (
+            "reference_server_count",
+            "r0_anchor_realtime_ns",
+            "r0_anchor_monotonic_raw_ns",
+            "r0_anchor_read_skew_ns",
+            "anchor_realtime_ns",
+            "anchor_monotonic_raw_ns",
+            "anchor_read_skew_ns",
+            "anchor_delta_ns",
+            "t0_span_ns",
+            "r1_batch_started_monotonic_raw_ns",
+            "r1_batch_finished_monotonic_raw_ns",
+            "r1_batch_duration_ns",
+            "r1_batch_finished_monotonic_ns",
+        )
+        self.assertEqual(
+            readiness._CLOCK_PROBE_INTEGER_FIELDS,
+            expected_integer_fields,
+        )
+        receipt = self._clock_predicate_receipt()
+        for name in (*expected_integer_fields, "valid_until_monotonic_ns"):
+            for bad in (True, 1.0, "1"):
+                mutated = copy.deepcopy(receipt)
+                if name == "valid_until_monotonic_ns":
+                    mutated[name] = bad
+                else:
+                    mutated["facts"][0]["value"][name] = bad
+                with self.subTest(field=name, value=bad):
+                    self.assertFalse(self._probe_passes(mutated))
+
+        def reverse_t0_span(mutated: dict[str, Any]) -> None:
+            value = mutated["facts"][0]["value"]
+            value["anchor_monotonic_raw_ns"] = (
+                value["r0_anchor_monotonic_raw_ns"] - 1
+            )
+            value["anchor_realtime_ns"] = value["r0_anchor_realtime_ns"] - 1
+            value["t0_span_ns"] = -1
+            value["anchor_delta_ns"] = 0
+
+        def reverse_r1_batch(mutated: dict[str, Any]) -> None:
+            value = mutated["facts"][0]["value"]
+            value["r1_batch_started_monotonic_raw_ns"] = (
+                value["r1_batch_finished_monotonic_raw_ns"] + 1
+            )
+            value["r1_batch_duration_ns"] = -1
+
+        def reverse_validity_horizon(mutated: dict[str, Any]) -> None:
+            value = mutated["facts"][0]["value"]
+            mutated["valid_until_monotonic_ns"] = (
+                value["r1_batch_finished_monotonic_ns"] - 1
+            )
+
+        for relation, mutate in (
+            ("r0_before_author", reverse_t0_span),
+            ("r1_start_before_finish", reverse_r1_batch),
+            ("r1_finish_before_valid_until", reverse_validity_horizon),
+        ):
+            mutated = copy.deepcopy(receipt)
+            mutate(mutated)
+            with self.subTest(relation=relation):
+                self.assertFalse(self._probe_passes(mutated))
+
+    def test_probe_fact_none_fails_closed_while_static_replay_uses_receipt_bytes(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        self.assertFalse(self._probe_passes(receipt, live_clock_anchor=None))
+        self.assertTrue(
+            self._probe_passes(
+                receipt,
+                live_clock_anchor=(
+                    readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE
+                ),
+            )
+        )
+
+    def test_clock_probe_live_anchor_states_and_falsifier_boundaries_gate(self) -> None:
+        receipt = self._clock_predicate_receipt()
+        value = receipt["facts"][0]["value"]
+        base = {
+            "boot_session_id": receipt["boot_session_id"],
+            "realtime_ns": value["anchor_realtime_ns"],
+            "monotonic_raw_ns": value["anchor_monotonic_raw_ns"],
+            "read_skew_ns": 1_000,
+        }
+        for delta, expected in (
+            (4_999_999, True),
+            (5_000_000, True),
+            (5_000_001, False),
+        ):
+            live = dict(base)
+            live["realtime_ns"] += delta
+            with self.subTest(delta=delta):
+                self.assertEqual(
+                    self._probe_passes(receipt, live_clock_anchor=live), expected
+                )
+        high_skew = dict(base, read_skew_ns=1_000_001)
+        self.assertFalse(self._probe_passes(receipt, live_clock_anchor=high_skew))
+        wrong_boot = dict(base, boot_session_id="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+        self.assertFalse(self._probe_passes(receipt, live_clock_anchor=wrong_boot))
+
+    def test_original_arm_path_samples_once_and_passes_value_explicitly(self) -> None:
+        source = inspect.getsource(readiness.generate_arm_receipt)
+        self.assertEqual(source.count("_sample_live_clock_anchor()"), 1)
+        self.assertIn("live_clock_anchor=live_clock_anchor", source)
 
     def test_all_35_contract_predicates_require_named_content_and_admissible_sources(self) -> None:
         registry, _raw = load_registry(ROOT)
@@ -875,7 +1250,10 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             with self.subTest(row=row["row_id"], case="genuine"):
                 self.assertTrue(
                     readiness._predicate_passes(
-                        receipt, predicate_id, expected_plan_sha256=ZERO_SHA
+                        receipt,
+                        predicate_id,
+                        expected_plan_sha256=ZERO_SHA,
+                        live_clock_anchor=readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
                     )
                 )
 
@@ -891,7 +1269,10 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             with self.subTest(row=row["row_id"], case="missing-content"):
                 self.assertFalse(
                     readiness._predicate_passes(
-                        missing_content, predicate_id, expected_plan_sha256=ZERO_SHA
+                        missing_content,
+                        predicate_id,
+                        expected_plan_sha256=ZERO_SHA,
+                        live_clock_anchor=readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
                     )
                 )
 
@@ -904,7 +1285,10 @@ class ArmReadinessSchemaTests(unittest.TestCase):
             with self.subTest(row=row["row_id"], case="bare-boolean"):
                 self.assertFalse(
                     readiness._predicate_passes(
-                        mutated, predicate_id, expected_plan_sha256=ZERO_SHA
+                        mutated,
+                        predicate_id,
+                        expected_plan_sha256=ZERO_SHA,
+                        live_clock_anchor=readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
                     )
                 )
 
@@ -915,7 +1299,10 @@ class ArmReadinessSchemaTests(unittest.TestCase):
                 with self.subTest(row=row["row_id"], case="operator-source"):
                     self.assertEqual(
                         readiness._predicate_passes(
-                            operator, predicate_id, expected_plan_sha256=ZERO_SHA
+                            operator,
+                            predicate_id,
+                            expected_plan_sha256=ZERO_SHA,
+                            live_clock_anchor=readiness._PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
                         ),
                         row["row_id"]
                         in {

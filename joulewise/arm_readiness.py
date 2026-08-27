@@ -1,9 +1,10 @@
 """D-134 arm-readiness receipts and fail-closed launch consumption.
 
-This module authenticates committed pack bytes and evidence receipts.  It does
-not perform live machine probes and it never treats a diagnostic result as
-authority to start a measurement.  ``GO`` is only a machine-readable necessary
-condition; physical launch remains outside this module.
+This module authenticates committed pack bytes and evidence receipts.  Original
+ARM evaluation also takes the ruled live clock anchor used by the PROBE clock
+predicate; replay and verification paths remain receipt-only.  ``GO`` is only
+a machine-readable necessary condition; physical launch remains outside this
+module.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
+from joulewise import clock_reference as _clock_reference
 from joulewise.identity_pins import (
     IDENTITY_PIN_PROJECTION_RECEIPT_SCHEMA,
     IDENTITY_PIN_PROJECTION_REASON_CODES,
@@ -88,6 +90,8 @@ CONTRACT_ID = "D-134"
 ROW_REGISTRY_RELATIVE_PATH = Path("configs/arm_readiness/d117_row_registry_v2.json")
 _T0_EVIDENCE_SOURCE_SCHEMA = "joulewise.arm_readiness_t0_evidence_source.v1"
 _T0_INPUT_DIRECTORY = "arm_readiness.t0.inputs"
+EXPECTED_NETWORK_TIME_OFF_STDOUT = "setUsingNetworkTime: Off\n"
+"""Ed must bench-verify these exact sudo bytes before this value gates a window."""
 # Launch-recipe receipts and sources are canonical JSON records measured in
 # kilobytes.  Freeze generous ceilings here so reconciliation never slurps an
 # attacker-sized artifact before its digest can fail closed.
@@ -802,7 +806,6 @@ _LOWER_SHA256_CONTENT = object()
 _PREDICATE_CONTENT_REQUIREMENTS: dict[str, Mapping[str, Any]] = {
     "clock.correct_and_prior_state.v1": {
         "independent_clock_attestation": True,
-        "prior_systemsetup_state_captured": True,
     },
     "clock.network_time_off.v1": {
         "fresh_probe": True,
@@ -5899,11 +5902,176 @@ def _content_matches(value: object, required: object) -> bool:
     return value == required
 
 
+_PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE = object()
+_CLOCK_PROBE_VALUE_KEYS = frozenset(
+    {
+        "independent_clock_attestation",
+        "reference_quorum_satisfied",
+        "absolute_offset_within_ceiling",
+        "unstepped_across_t0_sequence",
+        "sample_policy_id",
+        "reference_server_count",
+        "reference_bound_seconds",
+        "comparison_delta_seconds",
+        "r0_anchor_realtime_ns",
+        "r0_anchor_monotonic_raw_ns",
+        "r0_anchor_read_skew_ns",
+        "anchor_realtime_ns",
+        "anchor_monotonic_raw_ns",
+        "anchor_read_skew_ns",
+        "anchor_delta_ns",
+        "t0_span_ns",
+        "r1_batch_started_monotonic_raw_ns",
+        "r1_batch_finished_monotonic_raw_ns",
+        "r1_batch_duration_ns",
+        "r1_batch_finished_monotonic_ns",
+    }
+)
+_LIVE_ANCHOR_KEYS = frozenset(
+    {"boot_session_id", "realtime_ns", "monotonic_raw_ns", "read_skew_ns"}
+)
+_CLOCK_PROBE_INTEGER_FIELDS = (
+    "reference_server_count",
+    "r0_anchor_realtime_ns",
+    "r0_anchor_monotonic_raw_ns",
+    "r0_anchor_read_skew_ns",
+    "anchor_realtime_ns",
+    "anchor_monotonic_raw_ns",
+    "anchor_read_skew_ns",
+    "anchor_delta_ns",
+    "t0_span_ns",
+    "r1_batch_started_monotonic_raw_ns",
+    "r1_batch_finished_monotonic_raw_ns",
+    "r1_batch_duration_ns",
+    "r1_batch_finished_monotonic_ns",
+)
+
+
+def _is_real_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _sample_live_clock_anchor() -> Mapping[str, Any] | None:
+    """Return the one governed live ARM anchor, or ``None`` to fail closed."""
+
+    try:
+        anchor = _clock_reference.sample_anchor()
+        boot_session_id = _current_boot_session_id()
+    except Exception:
+        return None
+    return {
+        "boot_session_id": boot_session_id,
+        "realtime_ns": anchor.realtime_ns,
+        "monotonic_raw_ns": anchor.monotonic_raw_ns,
+        "read_skew_ns": anchor.read_skew_ns,
+    }
+
+
+def _clock_probe_predicate_passes(
+    receipt: Mapping[str, Any],
+    value: Mapping[str, Any],
+    live_clock_anchor: Mapping[str, Any] | object | None,
+) -> bool:
+    """Recompute every ruled PROBE gate from the published numeric inputs."""
+
+    if set(value) != _CLOCK_PROBE_VALUE_KEYS:
+        return False
+    if any(
+        value.get(name) is not True
+        for name in (
+            "independent_clock_attestation",
+            "reference_quorum_satisfied",
+            "absolute_offset_within_ceiling",
+            "unstepped_across_t0_sequence",
+        )
+    ):
+        return False
+    if value.get("sample_policy_id") != _clock_reference.SAMPLE_POLICY_ID:
+        return False
+    float_names = ("reference_bound_seconds", "comparison_delta_seconds")
+    if any(
+        not isinstance(value.get(name), float)
+        or not math.isfinite(value[name])
+        for name in float_names
+    ):
+        return False
+    if not (
+        0.0 <= value["reference_bound_seconds"] <= 0.5
+        and abs(value["comparison_delta_seconds"])
+        <= value["reference_bound_seconds"]
+    ):
+        return False
+    if any(
+        not _is_real_int(value.get(name))
+        for name in _CLOCK_PROBE_INTEGER_FIELDS
+    ):
+        return False
+    valid_until = receipt.get("valid_until_monotonic_ns")
+    if not _is_real_int(valid_until):
+        return False
+    t0_span = value["anchor_monotonic_raw_ns"] - value["r0_anchor_monotonic_raw_ns"]
+    anchor_delta = abs(
+        (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
+        - (
+            value["r0_anchor_realtime_ns"]
+            - value["r0_anchor_monotonic_raw_ns"]
+        )
+    )
+    r1_duration = (
+        value["r1_batch_finished_monotonic_raw_ns"]
+        - value["r1_batch_started_monotonic_raw_ns"]
+    )
+    if not (
+        600_000_000_000 <= value["t0_span_ns"] <= 3_600_000_000_000
+        and value["t0_span_ns"] == t0_span
+        and value["anchor_delta_ns"] == anchor_delta
+        and 0 <= value["anchor_delta_ns"] <= 5_000_000
+        and 0 <= value["r0_anchor_read_skew_ns"] <= 1_000_000
+        and 0 <= value["anchor_read_skew_ns"] <= 1_000_000
+        and 0 <= value["r1_batch_duration_ns"] <= 30_000_000_000
+        and value["r1_batch_duration_ns"] == r1_duration
+        and value["reference_server_count"] >= 2
+        # The R1-completion-to-validity-origin <=5 s upper bound is an open
+        # magistrate item at HEAD's derivation order.  The ruled six-hour
+        # lower horizon remains enforceable and is not weakened here.
+        and valid_until - value["r1_batch_finished_monotonic_ns"]
+        >= 21_600_000_000_000
+    ):
+        return False
+    if live_clock_anchor is _PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE:
+        return True
+    if not isinstance(live_clock_anchor, Mapping):
+        # Missing/None is a programming error for a live PROBE evaluation and
+        # deliberately fails closed instead of sampling implicitly here.
+        return False
+    if set(live_clock_anchor) != _LIVE_ANCHOR_KEYS or any(
+        not _is_real_int(live_clock_anchor.get(name))
+        for name in ("realtime_ns", "monotonic_raw_ns", "read_skew_ns")
+    ):
+        return False
+    if (
+        live_clock_anchor.get("boot_session_id") != receipt.get("boot_session_id")
+        or not 0 <= live_clock_anchor["read_skew_ns"] <= 1_000_000
+    ):
+        return False
+    live_delta = abs(
+        (
+            live_clock_anchor["realtime_ns"]
+            - live_clock_anchor["monotonic_raw_ns"]
+        )
+        - (value["anchor_realtime_ns"] - value["anchor_monotonic_raw_ns"])
+    )
+    return live_delta <= 5_000_000
+
+
 def _predicate_passes(
     receipt: Mapping[str, Any],
     predicate_id: str,
     *,
     expected_plan_sha256: str | None = None,
+    live_clock_anchor: Mapping[str, Any] | object | None = (
+        _PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE
+    ),
 ) -> bool:
     """Apply the D-134 row's content and source derivation predicate.
 
@@ -5941,6 +6109,16 @@ def _predicate_passes(
         ):
             continue
         value = fact["value"]
+        if predicate_id == "clock.correct_and_prior_state.v1":
+            source_kind = fact["source_kind"]
+            if source_kind == "OPERATOR_ATTESTATION" and value.get(
+                "prior_systemsetup_state_captured"
+            ) is not True:
+                continue
+            if source_kind == "PROBE" and not _clock_probe_predicate_passes(
+                receipt, value, live_clock_anchor
+            ):
+                continue
         if predicate_id == "t0.background_quiet.v1":
             source_kind = fact["source_kind"]
             if source_kind == "OPERATOR_ATTESTATION" and value.get(
@@ -6004,6 +6182,9 @@ def _evaluate_rows(
     internal_passes: Iterable[str] = (),
     forced_reason_codes: Mapping[str, Sequence[str]] | None = None,
     expected_plan_sha256: str | None = None,
+    live_clock_anchor: Mapping[str, Any] | object | None = (
+        _PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE
+    ),
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     internal = set(internal_passes)
     forced = forced_reason_codes or {}
@@ -6040,6 +6221,7 @@ def _evaluate_rows(
                 receipts[evidence_id],
                 definition["predicate_id"],
                 expected_plan_sha256=expected_plan_sha256,
+                live_clock_anchor=live_clock_anchor,
             )
         ]
         forced_codes = sorted(set(forced.get(row_id, ())))
@@ -6657,6 +6839,9 @@ def _load_freeze_reference(
         forced_reason_codes={
             "desk.identity_pin_projection": identity_reasons
         },
+        # Freeze replay re-authenticates recorded bytes; it must not add a
+        # later live-clock observation to the recorded conclusion.
+        live_clock_anchor=_PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
     )
     # Loading a freeze receipt is BYTE AUTHENTICATION plus RECORDED-CONCLUSION
     # RETURN, never a re-adjudication of the conclusion itself.  Everything the
@@ -6971,6 +7156,9 @@ def generate_freeze_receipt(
         forced_reason_codes={
             "desk.identity_pin_projection": identity_reasons
         },
+        # Freeze issuance evaluates authenticated evidence without performing
+        # the later ARM-consumption anchor check.
+        live_clock_anchor=_PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
     )
     refusals = sorted(
         evidence_refusals + refusals,
@@ -7680,6 +7868,7 @@ def generate_arm_receipt(
         if refusal["row_id"] is not None:
             forced.setdefault(str(refusal["row_id"]), []).append(refusal["code"])
     definitions = _profile_rows(registry, registry_reference["plan_profile"], phase="arm")
+    live_clock_anchor = _sample_live_clock_anchor()
     rows, row_refusals = _evaluate_rows(
         definitions,
         evidence_receipts,
@@ -7688,6 +7877,9 @@ def generate_arm_receipt(
         internal_passes=internal_passes,
         forced_reason_codes=forced,
         expected_plan_sha256=_pack_identity(root, tree)["plan_sha256"],
+        # This is the sole original ARM evaluation: sample once and thread the
+        # result into the source-discriminated clock predicate.
+        live_clock_anchor=live_clock_anchor,
     )
     refusals = list(evidence_refusals) + list(root_refusals) + row_refusals
     if freeze_receipt["status"] != "PASS":
@@ -7951,6 +8143,9 @@ def _derive_arm_semantics_for_verification(
         internal_passes=internal_passes,
         forced_reason_codes=forced,
         expected_plan_sha256=_pack_identity(root, tree)["plan_sha256"],
+        # Receipt verification replays the recorded ARM conclusion and must
+        # not turn a later wall-clock observation into a new adjudication.
+        live_clock_anchor=_PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
     )
     refusals = list(evidence_refusals) + list(root_refusals) + row_refusals
     if freeze_receipt["status"] != "PASS":
@@ -8425,7 +8620,11 @@ def _attested_launch_artifact_references(
                 launch_binding_cache=launch_binding_cache,
             )
             if _predicate_passes(
-                evidence, "t0.single_launch_capability.v1"
+                evidence,
+                "t0.single_launch_capability.v1",
+                # Launch binding is authenticated receipt replay, never an ARM
+                # clock evaluation.
+                live_clock_anchor=_PREDICATE_LIVE_ANCHOR_NOT_APPLICABLE,
             ):
                 candidates.append(evidence)
         if len(candidates) != 1:
