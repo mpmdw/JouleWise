@@ -3179,36 +3179,6 @@
       "status": "blocked",
       "stop_card": null
     },
-    "PACKAUTH-PRESERVE-TAUTOLOGY-01": {
-      "acceptance": {
-        "evidence": [
-          "What a bare --check and a preserve-mode --check each PROVE for an ordinal-1 pack is characterized with executed evidence",
-          "Either a non-tautological derivation lands with a regression, or the limit is recorded at every site that consumes the PACK_AUTHENTICATION verdict"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PACKAUTH-PRESERVE-TAUTOLOGY-01/acceptance",
-          "label": "PACKAUTH-PRESERVE-TAUTOLOGY-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The ordinal-1 PACK_AUTHENTICATION claim is either made non-tautological or stated honestly wherever it is consumed."
-      },
-      "authority": {
-        "label": "RUN_STATE 2026-08-24 T23 morning entry — two independent soundness rows surfaced for the next kernel wave",
-        "path": "RUN_STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Close the second soundness row from the same §3.4 round: preserve mode makes ordinal-1 PACK_AUTHENTICATION a TAUTOLOGY. When PRESERVE_CURRENT_FROZEN_BYTES is true the generator takes the echo path — it re-emits the committed frozen bytes instead of re-deriving them — so a check that compares generator output against the committed pack compares those bytes with themselves. Establish what the kind actually claims for an ordinal-1 pack.",
-      "id": "PACKAUTH-PRESERVE-TAUTOLOGY-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 94,
-      "status": "queued",
-      "status_note": "Second of the two independent soundness rows from the §3.4 round. OPEN AFTER PR #214's first gauntlet pass: the authoring-boundary and histsem-verifier cures landed on that branch (an echo can no longer set pack_generator_check_status, and an authenticated PACK_AUTHENTICATION item is re-derived at the coordinate its own source and receipt record), but the delta re-audit found a residual blocker — flagless-generator preserve detection is a NAME scan for the identifier preserve_current_frozen_bytes, so a generator that echoes committed bytes under any other identifier is invoked bare and its echo is recorded as regenerated, which reopens the tautology for that shape. Cure named by the delta seat: default-deny flagless generators except a closed reviewed-digest allowlist, or regenerate into an empty output tree, pinned at both the author and histsem boundaries. No generator committed in this repository takes that path today — all nine expose the explicit --preserve-current-frozen-bytes BooleanOptionalAction — so the _v4 transaction is unaffected. Custody: docs/process_traces/2026-08-26-t26-s3/ (delta/report.md finding D1).",
-      "stop_card": null
-    },
     "PHASE-SHARE-ESTIMAND-01": {
       "acceptance": {
         "evidence": [
