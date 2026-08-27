@@ -46,7 +46,6 @@ EXPECTED_IDS = {
     # R-4's registration of Opus finding 3f (consume-side supply line), and
     # the joint delta re-audit's adjudication item 4 (006-* guard strength).
     "EPOCH-LINT-01",
-    "CONSUME-CONFIRMATION-SUPPLY-01",
     "LINE-AUDIT-GUARD-01",
     # [AGENT]
     # 2026-08-15 council Phase-1 repair program. The landed U11 identity
@@ -408,9 +407,17 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # WINDOW-STATUS-FREEZE-GUARD-01 (already landed by D-155 W-2, PR #199
         # at 3c96b18f: freeze-span sentinel + tests/test_window_status_guard.py;
         # the row predated its cure):
-        # 100 - 1 = 99 exact live records.
+        # 100 - 1 = 99; the 2026-08-27 T26 s1-consume-supply wave closes
+        # CONSUME-CONFIRMATION-SUPPLY-01 (PR #204, 318f5a70:
+        # scripts/launch_window.py gains --step6-confirmation-table and
+        # forwards it at all four sites that already forward the digest, so
+        # the real transaction's consume-side C-to-S gate refuses on
+        # "bytes differ from the confirmed digest" rather than for want of an
+        # input; seven regressions including a real-chain reach proof down to
+        # _authenticate_confirmation_table):
+        # 99 - 1 = 98 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 99)
+        self.assertEqual(len(self.tasks), 98)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
