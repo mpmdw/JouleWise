@@ -416,9 +416,9 @@ the last before `_v4` fills:
 
 ## Addendum 8 (2026-08-27) — D-161
 
-60. **§7 sentence at fills time (round 7):** "The repository is
-    tamper-evident for the operator's own benefit — every input and refusal
-    is fingerprinted and preserved so that honest drift is visible — not
-    tamper-proof against an adversary; the single-operator assumption is
-    stated, not defended." Replaces the TOCTOU/operator-trust paragraph's
+60. **§7 sentence at fills time (round 7)** (final wording from the prune
+    ruling R-6): "The repository is tamper-evident for the operator's own
+    benefit — a way to catch one's own mistakes — not tamper-proof against
+    anyone; it assumes a single trusted operator, so every gate defends
+    against error and post-hoc choice, never against an adversary." Replaces the TOCTOU/operator-trust paragraph's
     defensive framing; no other change while frozen.

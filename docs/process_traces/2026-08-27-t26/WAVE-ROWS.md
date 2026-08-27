@@ -33,3 +33,7 @@ entry names its draft text / authority; none is registered yet.
 
 ## Cold-gate packet (process, not rows)
 `process-proposals/ruling-status-semantics.md` (+ addenda: merge-gate ledger; the 5 s T-0 bound; evidence-path rulings).
+
+## Registered by the T26 wave (#220) — post-wave changes
+- HISTPACK-PROMISOR-NOFETCH-01 (A107): RETIRE unbuilt per the prune ruling R-2 (close with a superseded note in the next wave).
+- THREAT-MODEL-PRUNE-01: register post-`_v4`, p2, acceptance = prune ruling R-4 waves (a)–(f), authority `threat-model-prune/04-MAGISTRATE-RULING.md`.
