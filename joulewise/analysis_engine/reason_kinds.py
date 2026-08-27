@@ -22,6 +22,17 @@ from .artifact import validate_claim_verdicts
 from .claims import REASON_CODES
 
 
+# D-158 R-2 defines DATA by an enumerated list plus "the randomization/LOO
+# sensitivity set", and CONTRACT as "everything else".  Two codes that live in
+# claims._SENSITIVITY are deliberately NOT DATA, because _SENSITIVITY membership
+# only drives ordered_reason_codes() precedence and does not make a code an
+# answer about the measurement:
+#   * outcome_dependent_top_up   (__init__.py:730) - unregistered matching
+#     bundles exist, so the frozen sampling plan was violated.
+#   * legacy_l1_mechanics_only   (__init__.py:734) - a caller-declared degraded
+#     evidence class, i.e. a mode, not a measured result.
+# Both are therefore CONTRACT.  This is strictly stricter: assert_data_reason_only
+# refuses artifacts it would previously have passed.
 DATA_REASON_CODES = frozenset(
     {
         "deterministic_bound_obscures_direction",
@@ -30,11 +41,9 @@ DATA_REASON_CODES = frozenset(
         "equivalence_not_supported",
         "interpolation_bound_exceeds_floor",
         "interpolation_bound_exceeds_half_effect",
-        "legacy_l1_mechanics_only",
         "loo_magnitude_influential",
         "loo_verdict_influential",
         "multiplicity_not_rejected",
-        "outcome_dependent_top_up",
         "randomization_check_insufficient_blocks",
         "randomization_sensitivity_disagrees",
     }
