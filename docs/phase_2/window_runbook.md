@@ -1405,11 +1405,19 @@ record its SHA-256 before closing all agents. `window.env` must additionally
 bind the absolute `ARM_RECEIPT`, `ARM_READINESS_CUSTODY_ROOT`, and
 `LAUNCH_MANIFEST` paths used by E-10:
 
-> **OPEN DEFECT — the chain has no supply line for three of its own inputs
-> (registered 2026-08-27; NEEDS A MAGISTRATE RULING; do not launch a `_v4`
-> window on this chain until it is ruled).** Two separate problems meet here,
-> and both are about getting a value into a chain that runs after Ed has walked
-> away.
+> **OPEN DEFECT (registered 2026-08-27; S9-08a; NEEDS A MAGISTRATE RULING) —
+> the chain has no supply line for three of its own inputs.** Two separate
+> problems meet here, and both are about getting a value into a chain that runs
+> after Ed has walked away.
+>
+> **What this does and does not gate.** It does **not** gate transaction night:
+> `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md` governs that
+> session, and its Phase G is the dry-run ceremony with no real arm (D-155,
+> NR-6), so nothing on that night invokes this chain. It **does** gate every
+> later measurement window, which cannot run this chain until the defect is
+> cured. The cure being assessed is **T-0 parser unification** — one parser
+> shared by `capture_t0_step.py` and the chain, so a key the chain needs cannot
+> be a key `window.env` refuses — under stream **S2**.
 >
 > *First, the one that predates this note.* The paragraph immediately above
 > tells the operator to bind `ARM_RECEIPT` and `LAUNCH_MANIFEST` in
@@ -1450,6 +1458,9 @@ bind the absolute `ARM_RECEIPT`, `ARM_READINESS_CUSTODY_ROOT`, and
 > below**: writing the flags in against variables nothing defines would only
 > move the abort from the gate to `set -u`. E-10 above is unaffected — Ed types
 > that command himself and can supply both values directly.
+>
+> Both problems are the same shape and would likely fall to the same cure: a
+> key the chain must read is a key `window.env` is not allowed to hold.
 
 ```zsh
 #!/bin/zsh
@@ -2070,6 +2081,22 @@ The allowance widens the already guarded/corner-widened floor. It does not
 replace instrument uncertainty, and it is never silently omitted.
 
 ## 12. Close-out record
+
+**What this window's close-out is not (registered 2026-08-27, S9-07).** Closing
+a window is not closing the campaign, and neither one produces a claim. After
+the LAST window of a campaign, three further acts happen at the desk, in this
+order, and they are governed by
+`docs/process_traces/2026-08-22-t20/real-transaction-runbook.md`: the campaign
+is declared closed (§2 H5, D-155 NR-8), the fixation commit is made (H5 step 4),
+and only then is the campaign's *prospective* analysis manifest turned into a
+*finalized* one by `scripts/finalize_analysis_manifest.py` (§2 H6). That
+finalizer re-reads the prospective manifest against the plan tree and the
+campaign's postcollection custody — run corpus, whole-window verdict, bracket
+binding, calibration ledger, aggregate floor artifact — and writes one immutable
+finalized manifest binding all of them, without reading an effect estimate.
+`analyze-claims` refuses a `…v3.prospective` manifest, so **no claim exists
+until that step has run.** Do not run it after a single window: it binds the
+whole campaign's custody, which does not exist until the last window is in.
 
 Record:
 

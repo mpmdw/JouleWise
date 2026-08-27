@@ -1212,6 +1212,72 @@ A `RUN_STATE` header update written before fixation would occupy the slot
 D-153 A1 reserves for the fixation commit. That is why step 5 is numbered
 after step 4 rather than left to judgement.
 
+### H6 — Finalization: the desk step between the fixation commit and any claim (registered 2026-08-27, S9-07)
+
+**Why this section exists.** Neither this runbook nor
+`docs/phase_2/window_runbook.md` named the step that turns a campaign's
+collected evidence into something a claim consumer will accept. Without it the
+record stops at H5 step 7 and the next honest act is undefined.
+
+**What the step is.** A *prospective* analysis manifest is written before
+collection: it fixes what will be analysed, so the analysis cannot be chosen
+after the numbers are seen. Once the campaign closes, that prospective manifest
+must be turned into a **finalized** one, which is the only form
+`analyze-claims` consumes. `scripts/finalize_analysis_manifest.py` performs
+that transition.
+
+**What it authenticates, in one sentence:** it re-reads the prospective
+manifest against the plan tree and the campaign's postcollection custody — the
+run corpus, the whole-window verdict, the bracket binding, the calibration
+ledger, and the aggregate floor artifact — and writes one immutable finalized
+manifest binding all of them, **without reading an effect estimate**, so
+finalization cannot be steered by the result it is about to enable.
+
+**Where it sits, and why exactly there.** After H5 step 4, the fixation commit,
+and before any claim consumption. Not earlier: the finalized manifest binds the
+campaign's complete custody, which does not exist until the last window is
+collected and the campaign is declared closed at H5. Not later than the first
+claim: `analyze-claims` refuses a `…v3.prospective` manifest outright, so
+nothing can be claimed until this has run. Running it before fixation would
+also add custody bytes inside the window H5 step 4 reserves.
+
+**The command.** Every argument is required, and `--output-dir` must be the
+same directory as `--custody-root` — the finalizer refuses with
+`analysis_finalization_noncanonical` otherwise, because consumer-relative
+lineage is only stable when the finalized manifest sits in the custody root it
+describes. The prospective manifest and the plan tree must both live under that
+custody root.
+
+```sh
+.venv/bin/python scripts/finalize_analysis_manifest.py \
+  --prospective-manifest "$CUSTODY_ROOT/<prospective manifest>.json" \
+  --plan-tree "$CUSTODY_ROOT/<plan tree>.json" \
+  --custody-root "$CUSTODY_ROOT" \
+  --runs-root "$RUNS_ROOT" \
+  --whole-window-verdict "$WHOLE_WINDOW_VERDICT" \
+  --bracket-binding "$BRACKET_BINDING" \
+  --calibration-ledger "$CALIBRATION_LEDGER" \
+  --aggregate-floor-artifact "$AGGREGATE_FLOOR_ARTIFACT" \
+  --output-dir "$CUSTODY_ROOT"
+```
+
+It prints the finalized manifest's path on success, and on refusal prints
+`{"status": "REFUSE", "reason": …, "detail": …}` and exits 2. Only then is the
+claim consumer admissible:
+
+```sh
+python3 -m joulewise.cli analyze-claims \
+  --analysis-manifest "$FINALIZED_MANIFEST" \
+  --runs-root "$RUNS_ROOT" \
+  --floor-artifact "$AGGREGATE_FLOOR_ARTIFACT" \
+  --output "$CUSTODY_ROOT/claim_verdicts.json"
+```
+
+`--evidence-root ID=PATH` is additionally required once per declared
+`evidence_root_id` when the manifest declares floor-evidence roots, and
+`--legacy-l1-mechanics` is a mechanics-only legacy mode that has no place in a
+`_v4` claim.
+
 ---
 
 # 3. Time budget
