@@ -43,19 +43,27 @@ D-078 reason rather than being silently dropped from the selection — a silent 
 reproduces the exact failure shape S9-01 had (empty join, `campaign_cooldown_evidence_missing`,
 no indication of cause).
 
-## Compatibility fence
+## Compatibility fence — RULED (magistrate, T26 2026-08-27)
 
 Campaign provenance written before PR #213 has **no** `analysis_manifest_sha256` key,
-and 142 pre-existing manifests on disk carry `analysis_manifest_id: null`. The cure
-must therefore distinguish three cases explicitly, not two:
+and 142 pre-existing manifests on disk carry `analysis_manifest_id: null`. The
+disposition is ruled, not open:
 
-- SHA present and equal → select;
-- SHA present and different → refuse with a registered reason;
-- SHA absent (pre-#213 provenance) → the row predates the field. Decide and record
-  whether these are selected on id alone (backward-compatible, keeps the current
-  claim corpus readable) or refused (fail-closed, but voids id-only history). This
-  is the row's one design-bearing question and belongs in the ruling, not in the
-  implementation.
+- **Provenance authored BEFORE #213** (no SHA key): selected on **id alone**. Every
+  pre-#213 corpus is non-claim-bearing under D-078 / D-146, so nothing that could
+  reach a claim rides the weaker join. This keeps the existing corpus readable
+  instead of voiding id-only history.
+- **Provenance authored AFTER #213**: the SHA is **required**. Present and equal →
+  select. Present and different → **refuse** under a registered D-078 reason. Absent
+  → refuse; a post-#213 collector always writes the field, so its absence is
+  tampering or truncation, not age.
+
+The implementation therefore needs an authorship discriminator that cannot be forged
+by simply omitting the key. Deriving "post-#213" from the absence of the field is
+circular. Bind it to something the record already carries and the collector already
+writes — the campaign-provenance schema version, the attestation row, or an explicit
+authoring-generation marker — and state which in the implementation. This is the
+row's one remaining implementation question; the policy above is settled.
 
 ## Acceptance evidence
 
@@ -64,8 +72,10 @@ must therefore distinguish three cases explicitly, not two:
   refusal, not an empty selection.
 - The matching case still selects, with `campaign_cooldown_evidence` returning the
   collected bundles (assertion A2 of `estate11-assertions.md`).
-- The absent-SHA case behaves per the ruled disposition, pinned by a test naming the
-  pre-#213 provenance shape.
+- Pre-#213 provenance (no SHA key) still selects on id alone, pinned by a test naming
+  that shape; post-#213 provenance with the SHA absent or different REFUSES, pinned
+  separately. The authorship discriminator itself has a test proving it cannot be
+  defeated by deleting the SHA key.
 - No claim fixture currently passing regresses; if any must be re-fixtured, they land
   in the same change.
 
