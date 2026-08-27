@@ -10,6 +10,16 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T26 (2026-08-27, resumed) — SPRINT DAY 1 CLOSING. MERGED today: #201
+#202 #203 #204 #205 #206 #207 #208 #210 #211 #212 #213 #214 #215 #216 #218
+#219 (kernel 100 → 90 live). PAPER FROZEN at round 6 (9,980 main-text
+words; Appendix A rewritten from code to the replication bar; fence
+43/43) until `_v4` fills. RULINGS D-156..D-160. OPEN: #217 (bracket-binding
+producer, gauntlet in flight) and #209 (W-10) which waits ONLY on Ed's
+reviewed-pinset edit — `docs/process_traces/2026-08-27-t26/ED-ITEMS.md`
+item 0; then estate 11, then the night (~08-29/30). Wave ledger:
+`WAVE-ROWS.md` (registration in progress).**
+
 **T26 (2026-08-27) — CHECKPOINTED at the usage-window reset. Sprint
 (paper + pre-window worklist) resumes from
 `docs/process_traces/2026-08-27-t26/CHECKPOINT-2026-08-27.md`. Two new

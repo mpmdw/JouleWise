@@ -22,38 +22,29 @@ Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-08-25)
+## Current activity (refreshed each work block; last: 2026-08-27)
 
-**Just completed (2026-08-25): the rehearsal is finished.** The *freeze
-transaction* is the governed sequence that locks the campaign plan and
-its supporting files, issues the fourth-generation campaign family, and
-records a person's hand-checked confirmation of exactly which bytes were
-locked. Because that sequence has to be right the first time on the real
-measuring machine, it is first run in full on a throwaway copy of the
-repository — a rehearsal, so that any defect is found before real
-measurement data depends on it.
+**Just completed (2026-08-27): a one-day verification sprint.** Before
+running the week-long measurement campaign, we checked every rule the
+project had decided on against the code that is supposed to enforce it.
+One in four had never been installed. The most important one — the
+statistical plan for the two model comparisons — had been agreed on
+2026-08-17 but never written into the plan the campaign would freeze, so
+the campaign would have run for a week and then refused to report. That
+is now fixed, and the freeze step checks for it. We also built a
+minutes-long end-to-end check of the pipeline so this class of defect
+fails loudly at the desk instead of after a campaign, and rewrote the
+paper around its actual scientific finding (where the phase boundary
+lands, not run-to-run noise, sets the smallest energy difference the
+instrument can resolve), cutting it from 30k to 10k words.
 
-Ten rehearsal attempts were made in all. The first nine each stopped on a
-genuine defect in the instrument, and each one would have stopped the
-real run: a step that demanded an input which cannot exist yet at the
-moment it asks for it; a record written at the wrong step of the
-sequence; a comparison that reported "these bytes differ" when in truth
-only the folder path differed; line references that had drifted out of
-date; and six tamper checks that were never reaching the check they were
-written to test, because an earlier gate refused first. Every one was
-diagnosed, fixed, reviewed, and merged before the next attempt started.
+**Now:** one small operator edit remains before the campaign can freeze
+(a reviewed digest that only human hands may change), then a ten-minute
+clone rehearsal, then the campaign night — earliest 2026-08-29/30.
 
-The tenth attempt ran end to end with no failures: three real freezes on
-the measuring runtime, the confirmation table read and confirmed by hand,
-all three frozen packs passing the readiness checks that gate a real run,
-and every tamper check refusing for exactly the reason predicted from the
-code beforehand.
-
-**Next:** run the same transaction for real. That needs the measuring
-machine itself — a person at the keyboard approving each freeze, a
-reboot, and a quiet machine with nothing else running — after which the
-fresh calibration captures and quiet measurement windows begin, and those
-produce the data the paper's results tables are waiting for.
+**Next:** the campaign (about a week of nights), the paper's results
+section from its output, and a 20-minute live end-to-end check the
+evening before.
 
 ## Current State
 
