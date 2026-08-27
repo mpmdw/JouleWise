@@ -30,6 +30,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -40,7 +41,10 @@ if str(ROOT / "tests") not in sys.path:
 import joulewise.arm_readiness as readiness  # noqa: E402
 import joulewise.arm_readiness_evidence as evidence  # noqa: E402
 from joulewise import identity_pins  # noqa: E402
-from test_arm_readiness_evidence_author import make_author_fixture  # noqa: E402
+from test_arm_readiness_evidence_author import (  # noqa: E402
+    commit_u11_projection,
+    make_author_fixture,
+)
 from test_arm_readiness_lifecycle import git  # noqa: E402
 
 RECORDED_FREEZE = ROOT / "tests/fixtures/packauth_recorded_freeze"
@@ -73,6 +77,87 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
         git(repository, "add", "-A", ".")
         git(repository, "commit", "-qm", message)
         git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    def committed_clone(self) -> tuple[Path, Path]:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name) / "repository"
+        subprocess.run(
+            ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
+            check=True,
+            capture_output=True,
+        )
+        git(repository, "config", "user.name", "packauth test")
+        git(repository, "config", "user.email", "packauth@invalid")
+        return repository, repository / "configs/campaigns/d117_floor_qwen25_1p5b_v1"
+
+    def derivation_context(self, repository: Path, pack: Path):
+        tree, _raw = readiness._plan_tree(pack)
+        return evidence._DerivationContext(
+            pack_root=pack,
+            repository=repository.resolve(strict=True),
+            tree=tree,
+            pack_sha256=readiness.committed_pack_tree_sha256(pack),
+            head_commit=subprocess.run(
+                ("git", "rev-parse", "HEAD"),
+                cwd=repository,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip(),
+        )
+
+    def modern_projected_fixture(self) -> tuple[Path, Path, str]:
+        repository, pack = self.fixture()
+        pack_relative = pack.resolve(strict=True).relative_to(repository).as_posix()
+        receipt = json.loads((pack / RECEIPT_RELATIVE).read_bytes())
+        anchor = receipt["pack"]["reviewed_git_commit"]
+        git(repository, "checkout", anchor, "--", pack_relative)
+        shutil.rmtree(pack / "identity_pin_projection.receipts")
+
+        predecessor_digest = "a" * 64
+        generator_raw = (
+            "import argparse\n"
+            f"CURRENT_FROZEN_RECEIPT_SHA256 = {predecessor_digest!r}\n"
+            "parser = argparse.ArgumentParser()\n"
+            "parser.add_argument('--check', action='store_true')\n"
+            "parser.add_argument('--preserve-current-frozen-bytes', "
+            "action=argparse.BooleanOptionalAction, default=True)\n"
+            "args = parser.parse_args()\n"
+            "if not args.check:\n"
+            "    raise SystemExit(2)\n"
+            "print('synthetic pack check passed')\n"
+        ).encode("utf-8")
+        (pack / "generate_configs.py").write_bytes(generator_raw)
+        tree = json.loads((pack / "plan_tree.json").read_bytes())
+        tree["generator"]["sha256"] = hashlib.sha256(generator_raw).hexdigest()
+        tree_raw = readiness.render_json(tree)
+        (pack / "plan_tree.json").write_bytes(tree_raw)
+        (pack / "plan_tree.sha256").write_bytes(
+            readiness.gnu_sidecar(hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json")
+        )
+        self.recommit(repository, "install modern predecessor-naming generator")
+        commit_u11_projection(repository, pack, ("alpha",))
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        return repository, pack, predecessor_digest
+
+    def recorded_generator(
+        self, repository: Path, pack: Path, *, preserve_current_frozen_bytes: bool
+    ):
+        context = self.derivation_context(repository, pack)
+        generator = context.tree["generator"]
+        artifact, raw = evidence._committed_artifact(
+            context.repository,
+            generator["path"],
+            kind="PACK_AUTHENTICATION",
+        )
+        return evidence._recorded_generator_check(
+            context,
+            artifact["path"],
+            raw,
+            kind="PACK_AUTHENTICATION",
+            preserve_current_frozen_bytes=preserve_current_frozen_bytes,
+        )
 
     def assert_refuses(self, repository: Path, pack: Path, needle: str) -> None:
         with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
@@ -204,7 +289,295 @@ class ProjectedPackAuthenticationTests(unittest.TestCase):
         derived = self.derive(repository, pack)
         checks = {item["check_id"] for item in derived.checks}
         self.assertNotIn("projected_pack_authentication", checks)
-        self.assertEqual(checks, {"pack_generator_check", "manifest_validator"})
+        self.assertEqual(
+            checks,
+            {
+                "frozen_receipt_constant_relation",
+                "pack_generator_check",
+                "manifest_validator",
+            },
+        )
+
+    def test_preserve_authentication_refuses_canonical_committed_freeze_receipt_tamper_with_regenerated_sidecar(
+        self,
+    ) -> None:
+        repository, pack = self.committed_clone()
+        receipt = pack / "arm_readiness.freeze.receipts/freeze-0001.json"
+        value = json.loads(receipt.read_bytes())
+        value["pack_identity"]["pack_root"] += "-tampered"
+        raw = readiness.render_json(value)
+        receipt.write_bytes(raw)
+        receipt.with_name(f"{receipt.name}.sha256").write_bytes(
+            readiness.gnu_sidecar(hashlib.sha256(raw).hexdigest(), receipt.name)
+        )
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "tamper current freeze receipt")
+
+        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+            self.recorded_generator(
+                repository, pack, preserve_current_frozen_bytes=True
+            )
+        self.assertIn(
+            "committed freeze receipt is not the receipt the plan pins",
+            str(caught.exception),
+        )
+
+    def test_stale_current_frozen_receipt_constant_is_detected_but_not_an_authentication_dependency(
+        self,
+    ) -> None:
+        # A current v2 pack has the exact imminent-v4 shape: U11 projected,
+        # D-134 frozen, and a compiled constant that names freeze-0001.
+        pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v2"
+        context = self.derivation_context(ROOT, pack)
+        _artifact, generator_raw = evidence._pinned_artifact(
+            context,
+            context.tree["generator"],
+            kind="PACK_AUTHENTICATION",
+            label="pack generator",
+        )
+        relation, _primaries = evidence._frozen_receipt_constant_relation(
+            context, generator_raw, kind="PACK_AUTHENTICATION"
+        )
+        self.assertEqual(relation["relation"], "names_predecessor")
+        self.assertFalse(relation["authentication_dependency"])
+        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+            self.derive(ROOT, pack)
+        self.assertIn("pack subtree adds files", str(caught.exception))
+        self.assertNotIn("CURRENT_FROZEN_RECEIPT_SHA256", str(caught.exception))
+
+    def test_frozen_receipt_constant_variants_do_not_change_the_authentication_verdict(
+        self,
+    ) -> None:
+        pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v2"
+        context = self.derivation_context(ROOT, pack)
+        generator = context.tree["generator"]
+        _artifact, recorded_raw = evidence._pinned_artifact(
+            context,
+            generator,
+            kind="PACK_AUTHENTICATION",
+            label="pack generator",
+        )
+        recorded_relation, _primaries = evidence._frozen_receipt_constant_relation(
+            context, recorded_raw, kind="PACK_AUTHENTICATION"
+        )
+        current = recorded_relation["current_freeze_receipt_sha256"]
+        predecessor = recorded_relation["predecessor_freeze_receipt_sha256"]
+        self.assertRegex(current, r"^[0-9a-f]{64}$")
+        self.assertRegex(predecessor, r"^[0-9a-f]{64}$")
+        unrelated = "b" * 64
+        self.assertNotIn(unrelated, (current, predecessor))
+
+        fixed_generator = (
+            "import argparse\n"
+            "parser = argparse.ArgumentParser()\n"
+            "parser.add_argument('--check', action='store_true')\n"
+            "args = parser.parse_args()\n"
+            "if not args.check:\n"
+            "    raise SystemExit(2)\n"
+            "print('fixed derivation passed')\n"
+        )
+        variants = {
+            "absent": ("", "absent", "absent"),
+            "matching_current": (
+                f"CURRENT_FROZEN_RECEIPT_SHA256 = {current!r}\n",
+                "matches_current",
+                "readable",
+            ),
+            "names_predecessor": (
+                f"CURRENT_FROZEN_RECEIPT_SHA256 = {predecessor!r}\n",
+                "names_predecessor",
+                "readable",
+            ),
+            "unrelated": (
+                f"CURRENT_FROZEN_RECEIPT_SHA256 = {unrelated!r}\n",
+                "unrelated",
+                "readable",
+            ),
+            "computed": (
+                "CURRENT_FROZEN_RECEIPT_SHA256 = 'a' * 64\n",
+                "unreadable",
+                "non_literal",
+            ),
+            "duplicated": (
+                f"CURRENT_FROZEN_RECEIPT_SHA256 = {current!r}\n"
+                f"CURRENT_FROZEN_RECEIPT_SHA256 = {predecessor!r}\n",
+                "unreadable",
+                "duplicated",
+            ),
+            "syntactically_malformed": (
+                "CURRENT_FROZEN_RECEIPT_SHA256: str\n",
+                "unreadable",
+                "malformed",
+            ),
+        }
+        verdicts: list[dict[str, object]] = []
+        for name, (constant_source, expected_relation, expected_status) in variants.items():
+            with self.subTest(name=name):
+                raw = (constant_source + fixed_generator).encode("utf-8")
+                completed = subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout=b"fixed derivation passed\n", stderr=b""
+                )
+                with mock.patch.object(
+                    evidence.subprocess, "run", return_value=completed
+                ):
+                    result = evidence._recorded_generator_check(
+                        context,
+                        generator["path"],
+                        raw,
+                        kind="PACK_AUTHENTICATION",
+                        preserve_current_frozen_bytes=False,
+                    )
+                evidence._require_regenerated_generator_result(
+                    result, kind="PACK_AUTHENTICATION"
+                )
+                verdicts.append(result)
+                relation, _primaries = evidence._frozen_receipt_constant_relation(
+                    context, raw, kind="PACK_AUTHENTICATION"
+                )
+                self.assertEqual(relation["relation"], expected_relation)
+                self.assertEqual(
+                    relation["constant_extraction_status"], expected_status
+                )
+                self.assertFalse(relation["authentication_dependency"])
+        self.assertTrue(verdicts)
+        self.assertTrue(all(verdict == verdicts[0] for verdict in verdicts[1:]))
+        implicit_preserve = (
+            "preserve_current_frozen_bytes = True\n" + fixed_generator
+        ).encode("utf-8")
+        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+            evidence._generator_invocation(
+                generator["path"],
+                implicit_preserve,
+                kind="PACK_AUTHENTICATION",
+                preserve_current_frozen_bytes=False,
+            )
+        self.assertIn("preserve mechanism", str(caught.exception))
+
+    def test_unrelated_frozen_receipt_constant_has_its_own_relation(self) -> None:
+        pack = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v2"
+        context = self.derivation_context(ROOT, pack)
+        raw = (
+            "CURRENT_FROZEN_RECEIPT_SHA256 = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'\n"
+        ).encode("utf-8")
+        relation, _primaries = evidence._frozen_receipt_constant_relation(
+            context, raw, kind="PACK_AUTHENTICATION"
+        )
+        self.assertEqual(relation["relation"], "unrelated")
+        self.assertEqual(relation["constant_extraction_status"], "readable")
+        self.assertFalse(relation["constant_matches_predecessor"])
+
+    def test_preserve_echo_accepts_science_row_tamper_but_cannot_set_generator_pass(
+        self,
+    ) -> None:
+        repository, pack = self.committed_clone()
+        science = (
+            pack
+            / "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json"
+        )
+        science.write_bytes(science.read_bytes() + b"\n")
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "tamper committed science row")
+
+        command = evidence._generator_command(str(pack / "generate_configs.py"))
+        command.append("--preserve-current-frozen-bytes")
+        completed = subprocess.run(
+            command,
+            cwd=repository,
+            check=False,
+            capture_output=True,
+            env=evidence._generator_environment(),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr.decode())
+        recorded = self.recorded_generator(
+            repository, pack, preserve_current_frozen_bytes=True
+        )
+        self.assertEqual(recorded["derivation_mode"], "echo")
+        with self.assertRaises(evidence.EvidenceAuthoringError) as caught:
+            evidence._require_regenerated_generator_result(
+                recorded, kind="PACK_AUTHENTICATION"
+            )
+        self.assertIn("echo", str(caught.exception))
+
+    def test_external_pinned_input_drift_is_checked_in_derivation_mode(self) -> None:
+        repository, pack = self.committed_clone()
+        successor = repository / "configs/campaigns/d117_floor_qwen25_1p5b_v4"
+        emit = evidence._generator_command(str(pack / "generate_configs.py"))[:-1]
+        emit.extend(
+            (
+                "--pack-id",
+                successor.name,
+                "--family-suffix",
+                "_v4",
+                "--no-preserve-current-frozen-bytes",
+            )
+        )
+        emitted = subprocess.run(
+            emit,
+            cwd=repository,
+            check=False,
+            capture_output=True,
+            env=evidence._generator_environment(),
+        )
+        self.assertEqual(emitted.returncode, 0, emitted.stderr.decode())
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "emit unfrozen successor")
+
+        acceptance = repository / "configs/calibration/calibration_acceptance_d079_v2_r2.json"
+        acceptance.write_bytes(acceptance.read_bytes() + b"\n")
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "drift pinned acceptance")
+
+        base = evidence._generator_command(str(successor / "generate_configs.py"))
+        preserve = subprocess.run(
+            [*base, "--preserve-current-frozen-bytes"],
+            cwd=repository,
+            check=False,
+            capture_output=True,
+            env=evidence._generator_environment(),
+        )
+        regenerate = subprocess.run(
+            [*base, "--no-preserve-current-frozen-bytes"],
+            cwd=repository,
+            check=False,
+            capture_output=True,
+            env=evidence._generator_environment(),
+        )
+        self.assertEqual(preserve.returncode, 0, preserve.stderr.decode())
+        self.assertNotEqual(regenerate.returncode, 0)
+        self.assertIn(b"pinned input drifted", regenerate.stderr)
+        recorded = self.recorded_generator(
+            repository, successor, preserve_current_frozen_bytes=True
+        )
+        self.assertEqual(recorded["derivation_mode"], "echo")
+        with self.assertRaises(evidence.EvidenceAuthoringError):
+            evidence._require_regenerated_generator_result(
+                recorded, kind="PACK_AUTHENTICATION"
+            )
+
+    def test_projected_pack_authentication_uses_no_preserve_anchor_when_constant_is_stale(
+        self,
+    ) -> None:
+        repository, pack, predecessor_digest = self.modern_projected_fixture()
+        derived = self.derive(repository, pack)
+        checks = {item["check_id"]: item["evidence"] for item in derived.checks}
+        command = checks["pack_generator_check"]["command"]
+        self.assertEqual(command[-1], "--no-preserve-current-frozen-bytes")
+        self.assertEqual(checks["pack_generator_check"]["derivation_mode"], "regenerated")
+        self.assertEqual(
+            checks["frozen_receipt_constant_relation"]["relation"],
+            "no_current_receipt",
+        )
+        self.assertEqual(
+            checks["frozen_receipt_constant_relation"][
+                "compiled_current_frozen_receipt_sha256"
+            ],
+            predecessor_digest,
+        )
+        self.assertFalse(
+            checks["frozen_receipt_constant_relation"]["authentication_dependency"]
+        )
+        self.assertTrue(checks["projected_pack_authentication"]["replayed_files"])
 
 
     # ---- the subprocess boundary ----------------------------------------

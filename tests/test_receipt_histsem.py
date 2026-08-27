@@ -4,7 +4,9 @@ import copy
 import hashlib
 import io
 import json
+import shutil
 import subprocess
+import sys
 import tempfile
 import tokenize
 import unittest
@@ -12,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 import joulewise.arm_readiness as readiness
+import joulewise.arm_readiness_evidence as evidence_author
 from joulewise.arm_readiness import (
     HISTSEM_REASON_CODES,
     READINESS_REASON_CODES,
@@ -26,6 +29,12 @@ from joulewise.arm_readiness import (
     verify_all_receipt_histsem,
     verify_receipt_histsem_pack,
 )
+from tests.test_arm_readiness_evidence_author import (
+    make_author_fixture,
+    passing_suites,
+)
+from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID
+from tests.test_arm_readiness_lifecycle import commit_u11_projection
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -644,6 +653,29 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             self.assertIsNone(freeze["receipt_path"])
             self.assertFalse((pack / "arm_readiness.freeze.receipts").exists())
 
+    def test_temporary_workspace_allocation_failure_is_governed_at_arm_and_freeze_boundaries(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            successor = Path(temporary) / "successor"
+            successor.mkdir()
+            failure = OSError("simulated histsem temporary-workspace exhaustion")
+            with mock.patch.object(
+                readiness.tempfile, "TemporaryDirectory", side_effect=failure
+            ):
+                arm = generate_arm_receipt(
+                    REPRESENTATIVE_PACK, {}, Path(temporary) / "custody"
+                )
+                freeze = generate_freeze_receipt(
+                    successor, predecessor_pack_root=REPRESENTATIVE_PACK
+                )
+        self.assertEqual(arm["status"], "REFUSE")
+        self.assertEqual(arm["reason_codes"], ["histsem_history_unavailable"])
+        self.assertIn("temporary workspace", arm["detail"])
+        self.assertEqual(freeze["status"], "REFUSE")
+        self.assertEqual(freeze["reason_codes"], ["histsem_history_unavailable"])
+        self.assertIn("temporary workspace", freeze["detail"])
+
 
 class SuccessorPinsetDigestConditionTests(unittest.TestCase):
     """D-151 condition 2 — the C -> S edge, exercised in both directions.
@@ -1187,6 +1219,324 @@ class PreAuthoringProjectionCustodyTests(unittest.TestCase):
                 caught.exception.reason_code,
                 "histsem_historical_tree_not_pre_authoring",
             )
+
+
+class PackAuthenticationRegenerationTests(unittest.TestCase):
+    """Defect-shaped A94 regressions over the recorded generator coordinate."""
+
+    def _projected_histsem_fixture(self) -> tuple[Path, Path, dict[str, object]]:
+        temporary, repository, pack, _custody, _arm_path = make_author_fixture()
+        self.addCleanup(temporary.cleanup)
+        repository = repository.resolve(strict=True)
+        pack = pack.resolve(strict=True)
+        pack_relative = pack.relative_to(repository).as_posix()
+        projection_receipt = json.loads(
+            (pack / "identity_pin_projection.receipts/projection-0001.json").read_bytes()
+        )
+        projection_anchor = projection_receipt["pack"]["reviewed_git_commit"]
+        git(repository, "checkout", projection_anchor, "--", pack_relative)
+        shutil.rmtree(pack / "identity_pin_projection.receipts")
+        predecessor_digest = "a" * 64
+        generator_raw = (
+            "import argparse\n"
+            "import json\n"
+            "import sys\n"
+            "from pathlib import Path\n"
+            f"CURRENT_FROZEN_RECEIPT_SHA256 = {predecessor_digest!r}\n"
+            "pack = Path(__file__).resolve().parent\n"
+            "tree = json.loads((pack / 'plan_tree.json').read_bytes())\n"
+            "readiness = tree.get('arm_attachments', {}).get('arm_readiness', {})\n"
+            "reference = readiness.get('freeze_receipt')\n"
+            "current = reference.get('sha256') if isinstance(reference, dict) else None\n"
+            "parser = argparse.ArgumentParser()\n"
+            "parser.add_argument('--check', action='store_true')\n"
+            "parser.add_argument('--preserve-current-frozen-bytes', "
+            "action=argparse.BooleanOptionalAction, default=None)\n"
+            "args = parser.parse_args()\n"
+            "preserve = (current == CURRENT_FROZEN_RECEIPT_SHA256) "
+            "if args.preserve_current_frozen_bytes is None "
+            "else args.preserve_current_frozen_bytes\n"
+            "if not args.check:\n"
+            "    raise SystemExit(2)\n"
+            "if preserve:\n"
+            "    print('synthetic preserved pack check passed')\n"
+            "elif (pack / 'identity_pin_projection.receipts').exists():\n"
+            "    print('projected current tree cannot regenerate bare', file=sys.stderr)\n"
+            "    raise SystemExit(1)\n"
+            "else:\n"
+            "    print('synthetic regenerated pack check passed')\n"
+        ).encode("utf-8")
+        (pack / "generate_configs.py").write_bytes(generator_raw)
+        tree = json.loads((pack / "plan_tree.json").read_bytes())
+        tree["generator"]["sha256"] = hashlib.sha256(generator_raw).hexdigest()
+        tree_raw = render_json(tree)
+        (pack / "plan_tree.json").write_bytes(tree_raw)
+        (pack / "plan_tree.sha256").write_bytes(
+            gnu_sidecar(hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json")
+        )
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "install stale-constant projected generator")
+        commit_u11_projection(repository, pack, ("alpha",))
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        historical_head = git(repository, "rev-parse", "HEAD").stdout.strip()
+        historical_digest = committed_pack_tree_sha256(pack)
+        with (
+            mock.patch.object(
+                readiness,
+                "_current_boot_session_id",
+                return_value=TEST_BOOT_SESSION_ID,
+            ),
+            mock.patch.object(
+                readiness, "_utc_now", return_value="2026-08-12T12:00:00Z"
+            ),
+            mock.patch.object(evidence_author.time, "monotonic_ns", return_value=100),
+            mock.patch.object(
+                evidence_author,
+                "_execute_unittest_suite_subprocess",
+                side_effect=lambda repo, test_ids: passing_suites(repo, test_ids),
+            ),
+        ):
+            authored = evidence_author.author_arm_readiness_evidence(pack)
+            self.assertEqual(authored["status"], "PASS")
+            git(repository, "add", "-A")
+            git(repository, "commit", "-qm", "author projected evidence")
+            frozen = generate_freeze_receipt(pack)
+            self.assertEqual(frozen["status"], "PASS", frozen)
+        git(repository, "add", "-A")
+        git(repository, "commit", "-qm", "freeze projected evidence")
+
+        tree_raw = (pack / "plan_tree.json").read_bytes()
+        tree = json.loads(tree_raw)
+        freeze_reference = tree["arm_attachments"]["arm_readiness"]["freeze_receipt"]
+        freeze = json.loads((pack / freeze_reference["path"]).read_bytes())
+        pack_receipts = [
+            dict(item)
+            for item in freeze["evidence"]
+            if item["namespace"] == "PACK"
+            and item["schema_version"] in readiness.GENERIC_EVIDENCE_RECEIPT_SCHEMAS
+        ]
+        row: dict[str, object] = {
+            "pack_id": pack.name,
+            "pack_path": pack_relative,
+            "head_commit": historical_head,
+            "historical_pack_sha256": historical_digest,
+            "current_pack_sha256": committed_pack_tree_sha256(pack),
+            "freeze_receipt": dict(freeze_reference),
+            "plan_tree_sha256": hashlib.sha256(tree_raw).hexdigest(),
+            "plan_sha256": freeze["pack_identity"]["plan_sha256"],
+            "post_authoring_delta": readiness._histsem_delta(
+                repository, pack_relative, historical_head
+            ),
+            "receipt_count": len(pack_receipts),
+            "receipts": pack_receipts,
+            "published_anchor": "synthetic-local-history",
+        }
+        return repository, pack, row
+
+    def test_recorded_anchor_replay_refuses_historical_science_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "repository"
+            subprocess.run(
+                ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
+                check=True,
+                capture_output=True,
+            )
+            git(repository, "config", "user.email", "histsem@invalid")
+            git(repository, "config", "user.name", "histsem test")
+            current_pack = repository / REPRESENTATIVE_PACK.relative_to(ROOT)
+            receipt = next(
+                json.loads(path.read_bytes())
+                for path in (current_pack / "arm_readiness.evidence").glob("*.json")
+                if json.loads(path.read_bytes())["kind"] == "PACK_AUTHENTICATION"
+            )
+            historical_head = str(receipt["head_commit"])
+            git(repository, "checkout", "-q", "--detach", historical_head)
+            historical_pack = repository / REPRESENTATIVE_PACK.relative_to(ROOT)
+            science_row = (
+                historical_pack
+                / "01_phase_decode_absolute/d117f15-df-ph-decode-abs-r01.json"
+            )
+            science_row.write_bytes(science_row.read_bytes() + b"\n")
+            git(repository, "add", science_row.relative_to(repository).as_posix())
+            git(repository, "commit", "-qm", "mutate historical science row")
+            mutated_head = git(repository, "rev-parse", "HEAD").stdout.strip()
+            mutated_digest = committed_pack_tree_sha256(historical_pack)
+
+            with self.assertRaises(HistoricalSemanticsError) as caught:
+                readiness._histsem_rederive_pack_authentication(
+                    repository,
+                    REPRESENTATIVE_PACK.relative_to(ROOT).as_posix(),
+                    mutated_head,
+                    mutated_digest,
+                )
+            self.assertEqual(
+                caught.exception.reason_code, "histsem_historical_digest_mismatch"
+            )
+            self.assertIn("generator", str(caught.exception))
+
+    def test_recorded_anchor_replay_refuses_unresolvable_or_off_lineage_commit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "repository"
+            subprocess.run(
+                ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
+                check=True,
+                capture_output=True,
+            )
+            git(repository, "config", "user.email", "histsem@invalid")
+            git(repository, "config", "user.name", "histsem test")
+            pack = repository / REPRESENTATIVE_PACK.relative_to(ROOT)
+            pinset = json.loads(PINSET.read_bytes())
+            row = copy.deepcopy(
+                next(item for item in pinset["packs"] if item["pack_id"] == pack.name)
+            )
+            absent_head = "b" * 40
+
+            freeze_path = pack / row["freeze_receipt"]["path"]
+            freeze = json.loads(freeze_path.read_bytes())
+            pack_auth_item = next(
+                item
+                for item in freeze["evidence"]
+                if item["receipt_kind"] == "PACK_AUTHENTICATION"
+            )
+            receipt_path = pack / pack_auth_item["path"]
+            receipt = json.loads(receipt_path.read_bytes())
+            source_path = pack / next(
+                fact["source_path"]
+                for fact in receipt["facts"]
+                if fact["fact_id"] == "desk.current_pack.v1"
+            )
+            source = json.loads(source_path.read_bytes())
+            source["head_commit"] = absent_head
+            source_raw = render_json(source)
+            source_path.write_bytes(source_raw)
+            source_digest = hashlib.sha256(source_raw).hexdigest()
+            for fact in receipt["facts"]:
+                if fact["fact_id"] == "desk.current_pack.v1":
+                    fact["source_sha256"] = source_digest
+            receipt["head_commit"] = absent_head
+            receipt_raw = render_json(receipt)
+            receipt_path.write_bytes(receipt_raw)
+            receipt_digest = hashlib.sha256(receipt_raw).hexdigest()
+            receipt_path.with_name(f"{receipt_path.name}.sha256").write_bytes(
+                gnu_sidecar(receipt_digest, receipt_path.name)
+            )
+            pack_auth_item["sha256"] = receipt_digest
+            freeze_raw = render_json(freeze)
+            freeze_path.write_bytes(freeze_raw)
+            freeze_digest = hashlib.sha256(freeze_raw).hexdigest()
+            freeze_path.with_name(f"{freeze_path.name}.sha256").write_bytes(
+                gnu_sidecar(freeze_digest, freeze_path.name)
+            )
+            tree_path = pack / "plan_tree.json"
+            tree = json.loads(tree_path.read_bytes())
+            tree["arm_attachments"]["arm_readiness"]["freeze_receipt"][
+                "sha256"
+            ] = freeze_digest
+            tree_raw = readiness._render_plan_tree(tree)
+            tree_path.write_bytes(tree_raw)
+            (pack / "plan_tree.sha256").write_bytes(
+                gnu_sidecar(hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json")
+            )
+            git(repository, "add", pack.relative_to(repository).as_posix())
+            git(repository, "commit", "-qm", "coherently replace recorded anchor")
+
+            row.update(
+                {
+                    "head_commit": absent_head,
+                    "current_pack_sha256": committed_pack_tree_sha256(pack),
+                    "freeze_receipt": copy.deepcopy(
+                        tree["arm_attachments"]["arm_readiness"]["freeze_receipt"]
+                    ),
+                    "plan_tree_sha256": hashlib.sha256(tree_raw).hexdigest(),
+                    "receipt_count": len(
+                        [
+                            item
+                            for item in freeze["evidence"]
+                            if item["namespace"] == "PACK"
+                            and item["schema_version"]
+                            in readiness.GENERIC_EVIDENCE_RECEIPT_SCHEMAS
+                        ]
+                    ),
+                    "receipts": [
+                        copy.deepcopy(item)
+                        for item in freeze["evidence"]
+                        if item["namespace"] == "PACK"
+                        and item["schema_version"]
+                        in readiness.GENERIC_EVIDENCE_RECEIPT_SCHEMAS
+                    ],
+                }
+            )
+            with self.assertRaises(HistoricalSemanticsError) as absent:
+                verify_receipt_histsem_pack(pack, _pinset_rows=(row,))
+            self.assertEqual(absent.exception.reason_code, "histsem_commit_unresolvable")
+
+        original = readiness._histsem_git
+
+        def off_lineage(repository: Path, *args: str):
+            if args[:2] == ("merge-base", "--is-ancestor") and args[-1] == "HEAD":
+                return 1, b"", b""
+            return original(repository, *args)
+
+        with mock.patch.object(readiness, "_histsem_git", side_effect=off_lineage):
+            with self.assertRaises(HistoricalSemanticsError) as off_lineage_error:
+                verify_receipt_histsem_pack(REPRESENTATIVE_PACK)
+        self.assertEqual(
+            off_lineage_error.exception.reason_code, "histsem_commit_off_lineage"
+        )
+
+    def test_projected_pack_pack_auth_receipt_survives_histsem_regeneration_gate(
+        self,
+    ) -> None:
+        _repository, pack, row = self._projected_histsem_fixture()
+        with mock.patch.object(
+            readiness,
+            "_histsem_rederive_pack_authentication",
+            wraps=readiness._histsem_rederive_pack_authentication,
+        ) as regeneration:
+            result = verify_receipt_histsem_pack(pack, _pinset_rows=(row,))
+        self.assertEqual(result["status"], "PASS")
+        regeneration.assert_called_once()
+        pack_authentication = next(
+            json.loads((pack / item["path"]).read_bytes())
+            for item in row["receipts"]
+            if item["receipt_kind"] == "PACK_AUTHENTICATION"
+        )
+        self.assertEqual(
+            pack_authentication.get(
+                "derivation_commit", pack_authentication.get("head_commit")
+            ),
+            row["head_commit"],
+        )
+
+    def test_v4_prefreeze_authors_then_postfreeze_bare_refuses_without_invalidating_recorded_authentication(
+        self,
+    ) -> None:
+        repository, pack, row = self._projected_histsem_fixture()
+        bare = subprocess.run(
+            (
+                sys.executable,
+                "-I",
+                "-B",
+                str(pack / "generate_configs.py"),
+                "--check",
+            ),
+            cwd=repository,
+            check=False,
+            capture_output=True,
+        )
+        self.assertNotEqual(bare.returncode, 0, bare.stdout.decode(errors="replace"))
+        with mock.patch.object(
+            readiness,
+            "_histsem_rederive_pack_authentication",
+            wraps=readiness._histsem_rederive_pack_authentication,
+        ) as regeneration:
+            self.assertEqual(
+                verify_receipt_histsem_pack(pack, _pinset_rows=(row,))["status"],
+                "PASS",
+            )
+        regeneration.assert_called_once()
 
 
 

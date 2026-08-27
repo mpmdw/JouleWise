@@ -21,7 +21,7 @@ import subprocess
 import tempfile
 import time
 import uuid
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
@@ -3388,7 +3388,7 @@ def _histsem_authenticate_legacy_item(
     pack_relative: str,
     item: Mapping[str, Any],
     receipt_raw: bytes,
-) -> Mapping[str, Any]:
+) -> tuple[Mapping[str, Any], Mapping[str, Any] | None]:
     """Authenticate frozen receipt metadata and every mandatory fact source."""
 
     try:
@@ -3411,6 +3411,7 @@ def _histsem_authenticate_legacy_item(
         raise HistoricalSemanticsError(
             "histsem_binding_mismatch", "freeze item metadata differs from receipt bytes"
         )
+    pack_authentication_source: Mapping[str, Any] | None = None
     for fact in receipt["facts"]:
         source_path = str(fact["source_path"])
         source_raw = _histsem_read_bound_file(
@@ -3421,7 +3422,214 @@ def _histsem_authenticate_legacy_item(
                 "histsem_binding_mismatch",
                 f"mandatory fact source digest differs for {source_path!r}",
             )
-    return receipt
+        if receipt["kind"] == "PACK_AUTHENTICATION":
+            try:
+                source = parse_json_bytes(source_raw, require_canonical=True)
+            except ArmReadinessError as exc:
+                raise HistoricalSemanticsError(
+                    "histsem_binding_mismatch",
+                    f"PACK_AUTHENTICATION source is not canonical: {exc}",
+                ) from exc
+            if not isinstance(source, Mapping) or source.get("kind") != receipt["kind"]:
+                raise HistoricalSemanticsError(
+                    "histsem_binding_mismatch",
+                    "PACK_AUTHENTICATION source kind differs from its receipt",
+                )
+            if fact["fact_id"] == "desk.current_pack.v1":
+                if pack_authentication_source is not None:
+                    raise HistoricalSemanticsError(
+                        "histsem_binding_mismatch",
+                        "PACK_AUTHENTICATION receipt binds multiple current-pack sources",
+                    )
+                pack_authentication_source = source
+    if receipt["kind"] == "PACK_AUTHENTICATION":
+        if pack_authentication_source is None:
+            raise HistoricalSemanticsError(
+                "histsem_binding_mismatch",
+                "PACK_AUTHENTICATION receipt has no bound current-pack source",
+            )
+        receipt_head = receipt.get("derivation_commit", receipt.get("head_commit"))
+        source_head = pack_authentication_source.get(
+            "derivation_commit", pack_authentication_source.get("head_commit")
+        )
+        if (
+            pack_authentication_source.get("head_commit") != receipt_head
+            or source_head != receipt_head
+            or pack_authentication_source.get("pack_sha256")
+            != receipt.get("pack_sha256")
+        ):
+            raise HistoricalSemanticsError(
+                "histsem_historical_digest_mismatch",
+                "PACK_AUTHENTICATION source/receipt historical coordinates differ",
+            )
+    return receipt, pack_authentication_source
+
+
+def _histsem_rederive_pack_authentication(
+    repository: Path,
+    pack_relative: str,
+    head_commit: str,
+    expected_pack_sha256: str,
+) -> None:
+    """Re-derive one recorded PACK_AUTHENTICATION coordinate in local Git.
+
+    ``pack_generator_check_status: PASS`` proves that the plan-pinned generator
+    regenerated the authenticated historical pack coordinate (composed with
+    the receipted projection replay when that coordinate is U11-projected); it
+    does not prove that current HEAD pack bytes were regenerated, and a
+    preserve-mode echo cannot establish or renew this claim.
+
+    The checkout is temporary and local-only.  The generator is never imported
+    into this process; the evidence boundary executes it with ``python -I -B``.
+    """
+
+    try:
+        from joulewise import arm_readiness_evidence as evidence_author
+    except ImportError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_history_unavailable",
+            f"PACK_AUTHENTICATION evidence boundary is unavailable: {exc}",
+        ) from exc
+
+    with _histsem_temporary_workspace() as scratch:
+        checkout = scratch / "repository"
+        try:
+            cloned = subprocess.run(
+                (
+                    "git",
+                    "clone",
+                    "-q",
+                    "--shared",
+                    "--no-checkout",
+                    str(repository),
+                    str(checkout),
+                ),
+                check=False,
+                capture_output=True,
+                timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise HistoricalSemanticsError(
+                "histsem_git_unavailable",
+                f"cannot materialize historical PACK_AUTHENTICATION coordinate: {exc}",
+            ) from exc
+        if cloned.returncode != 0:
+            raise HistoricalSemanticsError(
+                "histsem_git_unavailable",
+                "local Git clone for PACK_AUTHENTICATION re-derivation refused",
+            )
+        checkout = checkout.resolve(strict=True)
+        try:
+            checked_out = subprocess.run(
+                (
+                    "git",
+                    "-C",
+                    str(checkout),
+                    "checkout",
+                    "-q",
+                    "--detach",
+                    head_commit,
+                ),
+                check=False,
+                capture_output=True,
+                timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise HistoricalSemanticsError(
+                "histsem_git_unavailable",
+                f"cannot check out historical PACK_AUTHENTICATION coordinate: {exc}",
+            ) from exc
+        if checked_out.returncode != 0:
+            raise HistoricalSemanticsError(
+                "histsem_commit_unresolvable",
+                f"historical commit {head_commit} cannot be materialized locally",
+            )
+        historical_pack = checkout / PurePosixPath(pack_relative)
+        try:
+            actual_pack_sha256 = committed_pack_tree_sha256(historical_pack)
+            if actual_pack_sha256 != expected_pack_sha256:
+                raise HistoricalSemanticsError(
+                    "histsem_historical_digest_mismatch",
+                    "materialized PACK_AUTHENTICATION pack differs from its receipt coordinate",
+                )
+            tree, _tree_raw = _plan_tree(historical_pack)
+            attachments = tree.get("arm_attachments")
+            arm_readiness = (
+                attachments.get("arm_readiness")
+                if isinstance(attachments, Mapping)
+                else None
+            )
+            if (
+                isinstance(arm_readiness, Mapping)
+                and arm_readiness.get("freeze_receipt") is not None
+            ):
+                raise HistoricalSemanticsError(
+                    "histsem_historical_tree_not_pre_authoring",
+                    "PACK_AUTHENTICATION coordinate already names a D-134 receipt",
+                )
+            context = evidence_author._DerivationContext(
+                pack_root=historical_pack,
+                repository=checkout,
+                tree=tree,
+                pack_sha256=actual_pack_sha256,
+                head_commit=head_commit,
+            )
+            generator = tree.get("generator")
+            generator_artifact, generator_raw = evidence_author._pinned_artifact(
+                context,
+                generator,
+                kind="PACK_AUTHENTICATION",
+                label="pack generator",
+            )
+            projection = evidence_author._pack_projection(context)
+            if projection is not None and projection.get("state") == "frozen":
+                generator_result, _projection_result, _primaries = (
+                    evidence_author._recorded_projected_pack_authentication(
+                        context,
+                        generator_artifact,
+                        projection,
+                        kind="PACK_AUTHENTICATION",
+                    )
+                )
+            else:
+                generator_result = evidence_author._recorded_generator_check(
+                    context,
+                    generator_artifact["path"],
+                    generator_raw,
+                    kind="PACK_AUTHENTICATION",
+                    preserve_current_frozen_bytes=False,
+                )
+            evidence_author._require_regenerated_generator_result(
+                generator_result, kind="PACK_AUTHENTICATION"
+            )
+        except HistoricalSemanticsError:
+            raise
+        except evidence_author.EvidenceAuthoringError as exc:
+            raise HistoricalSemanticsError(
+                "histsem_historical_digest_mismatch",
+                f"recorded PACK_AUTHENTICATION regeneration refused: {exc}",
+            ) from exc
+        except (ArmReadinessError, OSError, ValueError) as exc:
+            raise HistoricalSemanticsError(
+                "histsem_history_unavailable",
+                f"recorded PACK_AUTHENTICATION regeneration is unavailable: {exc}",
+            ) from exc
+
+
+@contextmanager
+def _histsem_temporary_workspace() -> Iterable[Path]:
+    """Translate the complete temporary-checkout lifecycle into histsem refusal."""
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="joulewise-histsem-") as scratch:
+            yield Path(scratch)
+    except HistoricalSemanticsError:
+        raise
+    except OSError as exc:
+        raise HistoricalSemanticsError(
+            "histsem_history_unavailable",
+            f"historical PACK_AUTHENTICATION temporary workspace is unavailable: {exc}",
+        ) from exc
 
 
 def _histsem_delta(
@@ -3522,6 +3730,11 @@ def verify_receipt_histsem_pack(
             "histsem_pinset_mismatch", "current committed pack differs from the governed pin"
         )
     head_commit = str(row["head_commit"])
+    # Resolve and authenticate the object before asking ancestry questions.
+    # A missing/pruned object is distinct from a present off-lineage commit.
+    historical_digest, historical_paths = _historical_pack_tree(
+        repository, pack_relative, head_commit
+    )
     code, _stdout, _stderr = _histsem_git(
         repository, "merge-base", "--is-ancestor", head_commit, "HEAD"
     )
@@ -3540,9 +3753,6 @@ def verify_receipt_histsem_pack(
                 "historical receipt commit is not an ancestor of origin/main",
             )
         advisories.append("histsem_commit_unpublished")
-    historical_digest, historical_paths = _historical_pack_tree(
-        repository, pack_relative, head_commit
-    )
     if historical_digest != row["historical_pack_sha256"]:
         raise HistoricalSemanticsError(
             "histsem_historical_digest_mismatch",
@@ -3663,10 +3873,10 @@ def verify_receipt_histsem_pack(
             raise HistoricalSemanticsError(
                 "histsem_binding_mismatch", f"receipt sidecar differs for {receipt_path!r}"
             )
-        receipt = _histsem_authenticate_legacy_item(
+        receipt, pack_authentication_source = _histsem_authenticate_legacy_item(
             repository, root, pack_relative, item, receipt_raw
         )
-        receipt_head = receipt.get("head_commit", receipt.get("derivation_commit"))
+        receipt_head = receipt.get("derivation_commit", receipt.get("head_commit"))
         if (
             receipt["schema_version"] not in GENERIC_EVIDENCE_RECEIPT_SCHEMAS
             or re.fullmatch(r"[0-9a-f]{40}", str(receipt_head)) is None
@@ -3679,6 +3889,18 @@ def verify_receipt_histsem_pack(
             raise HistoricalSemanticsError(
                 "histsem_historical_digest_mismatch",
                 f"receipt historical coordinate differs from recomputed tree: {receipt_path}",
+            )
+        if receipt["kind"] == "PACK_AUTHENTICATION":
+            if pack_authentication_source is None:  # defensive; authenticated above
+                raise HistoricalSemanticsError(
+                    "histsem_binding_mismatch",
+                    "PACK_AUTHENTICATION source is absent after authentication",
+                )
+            _histsem_rederive_pack_authentication(
+                repository,
+                pack_relative,
+                str(receipt_head),
+                str(receipt["pack_sha256"]),
             )
         if sha256_bytes(receipt_raw) != item["sha256"]:
             raise HistoricalSemanticsError(

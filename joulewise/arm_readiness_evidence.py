@@ -1049,10 +1049,166 @@ def _validate_manifests(context: _DerivationContext, *, kind: str) -> dict[str, 
     }
 
 
+def _generator_preserve_capability(raw: bytes, *, kind: str) -> dict[str, bool]:
+    """Classify only the generator's preserve mechanism without import.
+
+    The generator is executable, pack-owned input.  Capability discovery must
+    therefore be syntax-only: never import it, execute it with speculative
+    argv, or trust ``--help`` output.  Frozen-receipt constant extraction is a
+    separate diagnostic operation and cannot affect this result.
+    """
+    try:
+        source = raw.decode("utf-8", errors="strict")
+        module = _ast.parse(source, filename="<authenticated pack generator>")
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise _underivable(kind, f"pack generator source is not valid UTF-8 Python: {exc}") from exc
+
+    def syntax_nodes(root: _ast.AST) -> Sequence[_ast.AST]:
+        pending = [root]
+        result: list[_ast.AST] = []
+        while pending:
+            node = pending.pop()
+            result.append(node)
+            pending.extend(_ast.iter_child_nodes(node))
+        return result
+
+    nodes = syntax_nodes(module)
+    supports_flag = False
+    for node in nodes:
+        if not isinstance(node, _ast.Call):
+            continue
+        if not (
+            isinstance(node.func, _ast.Attribute)
+            and node.func.attr == "add_argument"
+            and any(
+                isinstance(argument, _ast.Constant)
+                and argument.value == "--preserve-current-frozen-bytes"
+                for argument in node.args
+            )
+        ):
+            continue
+        action = next(
+            (keyword.value for keyword in node.keywords if keyword.arg == "action"),
+            None,
+        )
+        supports_flag = (
+            isinstance(action, _ast.Attribute)
+            and action.attr == "BooleanOptionalAction"
+        ) or (
+            isinstance(action, _ast.Name)
+            and action.id == "BooleanOptionalAction"
+        )
+        break
+
+    preserve_names = {
+        node.id
+        for node in nodes
+        if isinstance(node, _ast.Name)
+        and "preserve_current_frozen_bytes" in node.id.lower()
+    }
+    preserve_attributes = {
+        node.attr
+        for node in nodes
+        if isinstance(node, _ast.Attribute)
+        and "preserve_current_frozen_bytes" in node.attr.lower()
+    }
+    has_preserve_mechanism = bool(preserve_names or preserve_attributes)
+    return {
+        "supports_boolean_optional_preserve_flag": supports_flag,
+        "has_preserve_mechanism": has_preserve_mechanism,
+    }
+
+
+def _generator_frozen_receipt_constant(raw: bytes) -> tuple[str | None, str]:
+    """Extract compatibility metadata totally, without affecting authentication.
+
+    The status vocabulary is diagnostic: ``absent``, ``readable``,
+    ``duplicated``, ``non_literal``, ``malformed``, or ``source_unreadable``.
+    No generator-controlled bytes can make this function raise.
+    """
+
+    try:
+        source = raw.decode("utf-8", errors="strict")
+        module = _ast.parse(source, filename="<authenticated pack generator>")
+    except Exception:
+        return None, "source_unreadable"
+
+    assignments: list[_ast.AST | None] = []
+    for node in module.body:
+        if isinstance(node, _ast.Assign):
+            names = [target.id for target in node.targets if isinstance(target, _ast.Name)]
+            value_node: _ast.AST | None = node.value
+        elif isinstance(node, _ast.AnnAssign) and isinstance(node.target, _ast.Name):
+            names = [node.target.id]
+            value_node = node.value
+        else:
+            continue
+        if "CURRENT_FROZEN_RECEIPT_SHA256" in names:
+            assignments.append(value_node)
+
+    if not assignments:
+        return None, "absent"
+    if len(assignments) != 1:
+        return None, "duplicated"
+    value_node = assignments[0]
+    if value_node is None:
+        return None, "malformed"
+    try:
+        candidate = _ast.literal_eval(value_node)
+    except Exception:
+        return None, "non_literal"
+    if not isinstance(candidate, str) or _SHA_RE.fullmatch(candidate) is None:
+        return None, "malformed"
+    return candidate, "readable"
+
+
+def _generator_invocation(
+    generator: str,
+    raw: bytes,
+    *,
+    kind: str,
+    preserve_current_frozen_bytes: bool,
+) -> tuple[list[str], str, bool]:
+    capability = _generator_preserve_capability(raw, kind=kind)
+    supports_flag = bool(capability["supports_boolean_optional_preserve_flag"])
+    if supports_flag:
+        command = _generator_command(
+            generator,
+            preserve_current_frozen_bytes=preserve_current_frozen_bytes,
+        )
+    else:
+        # A flagless call is regeneration evidence only when AST proves that
+        # the generator has no preserve mechanism.  Constant presence and
+        # value are compatibility diagnostics and do not participate here.
+        if preserve_current_frozen_bytes:
+            raise _underivable(kind, "legacy generator cannot select preserve mode")
+        if capability["has_preserve_mechanism"]:
+            raise _underivable(
+                kind,
+                "flagless generator has a preserve mechanism without an explicit flag",
+            )
+        command = _generator_command(generator)
+    return (
+        command,
+        "echo" if preserve_current_frozen_bytes else "regenerated",
+        supports_flag,
+    )
+
+
 def _recorded_generator_check(
-    context: _DerivationContext, generator_path: str, *, kind: str
+    context: _DerivationContext,
+    generator_path: str,
+    generator_raw: bytes,
+    *,
+    kind: str,
+    preserve_current_frozen_bytes: bool,
 ) -> dict[str, Any]:
-    command = _generator_command(str(context.repository / generator_path))
+    command, derivation_mode, supports_flag = _generator_invocation(
+        str(context.repository / generator_path),
+        generator_raw,
+        kind=kind,
+        preserve_current_frozen_bytes=preserve_current_frozen_bytes,
+    )
     try:
         completed = subprocess.run(
             command,
@@ -1068,11 +1224,31 @@ def _recorded_generator_check(
         detail = completed.stderr.decode("utf-8", errors="replace").strip()
         raise _underivable(kind, f"pack generator --check refused: {detail}")
     return {
-        "command": _generator_command(generator_path),
+        "command": _generator_invocation(
+            generator_path,
+            generator_raw,
+            kind=kind,
+            preserve_current_frozen_bytes=preserve_current_frozen_bytes,
+        )[0],
+        "derivation_mode": derivation_mode,
+        "preserve_flag_supported": supports_flag,
         "exit_code": completed.returncode,
         "stdout_sha256": _readiness.sha256_bytes(completed.stdout),
         "stderr_sha256": _readiness.sha256_bytes(completed.stderr),
     }
+
+
+def _require_regenerated_generator_result(
+    result: Mapping[str, Any], *, kind: str
+) -> None:
+    """Forbid echo-integrity from satisfying the generator PASS assertion."""
+
+    if result.get("derivation_mode") != "regenerated":
+        raise _underivable(
+            kind,
+            "pack generator evidence is echo-only and cannot satisfy "
+            "pack_generator_check_status",
+        )
 
 
 # --- U11 projected-pack authentication (PACKAUTH) -------------------------
@@ -1139,7 +1315,9 @@ _GENERATOR_ENVIRONMENT_ALLOWLIST = ("HOME", "TMPDIR", "LANG", "LC_ALL")
 _GENERATOR_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 
 
-def _generator_command(generator: str) -> list[str]:
+def _generator_command(
+    generator: str, *, preserve_current_frozen_bytes: bool | None = None
+) -> list[str]:
     """Interpreter invocation for a generator subprocess.
 
     ``-I`` is isolated mode: it implies ``-E`` (ignore every PYTHON* variable,
@@ -1158,7 +1336,14 @@ def _generator_command(generator: str) -> list[str]:
     intent survives if these flags are ever edited.
     """
 
-    return [sys.executable, "-I", "-B", generator, "--check"]
+    command = [sys.executable, "-I", "-B", generator, "--check"]
+    if preserve_current_frozen_bytes is not None:
+        command.append(
+            "--preserve-current-frozen-bytes"
+            if preserve_current_frozen_bytes
+            else "--no-preserve-current-frozen-bytes"
+        )
+    return command
 
 
 def _generator_environment() -> dict[str, str]:
@@ -1577,9 +1762,15 @@ def _recorded_projected_pack_authentication(
                 )
 
         # 6. The generator's own derivation of the pre-projection pack.
+        command, derivation_mode, supports_flag = _generator_invocation(
+            str(anchored_generator),
+            anchored_generator.read_bytes(),
+            kind=kind,
+            preserve_current_frozen_bytes=False,
+        )
         try:
             completed = subprocess.run(
-                _generator_command(str(anchored_generator)),
+                command,
                 cwd=anchored,
                 check=False,
                 capture_output=True,
@@ -1596,7 +1787,14 @@ def _recorded_projected_pack_authentication(
                 kind, f"pack generator --check refused at the anchored commit: {detail}"
             )
         generator_result = {
-            "command": _generator_command(generator_relative),
+            "command": _generator_invocation(
+                generator_relative,
+                anchored_generator.read_bytes(),
+                kind=kind,
+                preserve_current_frozen_bytes=False,
+            )[0],
+            "derivation_mode": derivation_mode,
+            "preserve_flag_supported": supports_flag,
             "exit_code": completed.returncode,
             "stdout_sha256": _readiness.sha256_bytes(completed.stdout),
             "stderr_sha256": _readiness.sha256_bytes(completed.stderr),
@@ -1644,11 +1842,97 @@ def _pack_projection(context: _DerivationContext) -> Mapping[str, Any] | None:
     return projection if isinstance(projection, Mapping) else None
 
 
+def _frozen_receipt_constant_relation(
+    context: _DerivationContext, generator_raw: bytes, *, kind: str
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    """Relate frozen compatibility metadata to authenticated receipt bytes.
+
+    This is deliberately diagnostic.  Its result is recorded in source
+    ``checks`` and never consulted by the authentication verdict.
+    """
+
+    compiled, extraction_status = _generator_frozen_receipt_constant(generator_raw)
+    evidence: dict[str, Any] = {
+        "authentication_dependency": False,
+        "constant_extraction_status": extraction_status,
+        "compiled_current_frozen_receipt_sha256": compiled,
+        "current_freeze_receipt_sha256": None,
+        "predecessor_freeze_receipt_sha256": None,
+    }
+    primaries: list[dict[str, str]] = []
+    attachments = context.tree.get("arm_attachments")
+    readiness = (
+        attachments.get("arm_readiness")
+        if isinstance(attachments, Mapping)
+        else None
+    )
+    reference = (
+        readiness.get("freeze_receipt") if isinstance(readiness, Mapping) else None
+    )
+    if reference is None:
+        if extraction_status == "absent":
+            evidence["relation"] = "absent"
+        elif extraction_status == "readable":
+            evidence["relation"] = "no_current_receipt"
+        else:
+            evidence["relation"] = "unreadable"
+        return evidence, primaries
+    if not isinstance(reference, Mapping):
+        raise _underivable(kind, "plan-tree freeze receipt reference is malformed")
+    relative = _safe_pack_relative(
+        reference.get("path"), kind=kind, label="freeze receipt path"
+    )
+    expected = reference.get("sha256")
+    if not isinstance(expected, str) or _SHA_RE.fullmatch(expected) is None:
+        raise _underivable(kind, "plan-tree freeze receipt digest is malformed")
+    pack_relative = _repo_relative(context.repository, context.pack_root)
+    artifact, raw = _committed_artifact(
+        context.repository, f"{pack_relative}/{relative}", kind=kind
+    )
+    if artifact["sha256"] != expected:
+        raise _underivable(
+            kind, "committed freeze receipt differs from the plan-tree reference"
+        )
+    primaries.append(artifact)
+    try:
+        receipt = _readiness.validate_freeze_receipt(
+            _readiness.parse_json_bytes(raw, require_canonical=True)
+        )
+    except _readiness.ArmReadinessError as exc:
+        raise _underivable(kind, f"committed freeze receipt is invalid: {exc}") from exc
+    predecessor = receipt.get("predecessor")
+    predecessor_digest = (
+        predecessor.get("freeze_receipt", {}).get("sha256")
+        if isinstance(predecessor, Mapping)
+        and isinstance(predecessor.get("freeze_receipt"), Mapping)
+        else None
+    )
+    evidence["current_freeze_receipt_sha256"] = artifact["sha256"]
+    evidence["predecessor_freeze_receipt_sha256"] = predecessor_digest
+    evidence["constant_matches_predecessor"] = (
+        isinstance(compiled, str) and compiled == predecessor_digest
+    )
+    if extraction_status == "absent":
+        evidence["relation"] = "absent"
+    elif extraction_status != "readable":
+        evidence["relation"] = "unreadable"
+    elif compiled == artifact["sha256"]:
+        evidence["relation"] = "matches_current"
+    elif isinstance(predecessor_digest, str) and compiled == predecessor_digest:
+        evidence["relation"] = "names_predecessor"
+    else:
+        evidence["relation"] = "unrelated"
+    return evidence, primaries
+
+
 def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
     kind = "PACK_AUTHENTICATION"
     generator = context.tree.get("generator")
-    generator_artifact, _ = _pinned_artifact(
+    generator_artifact, generator_raw = _pinned_artifact(
         context, generator, kind=kind, label="pack generator"
+    )
+    constant_relation, constant_primaries = _frozen_receipt_constant_relation(
+        context, generator_raw, kind=kind
     )
     projection = _pack_projection(context)
     projection_result: dict[str, Any] | None = None
@@ -1669,8 +1953,13 @@ def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
         )
     else:
         generator_result = _recorded_generator_check(
-            context, generator_artifact["path"], kind=kind
+            context,
+            generator_artifact["path"],
+            generator_raw,
+            kind=kind,
+            preserve_current_frozen_bytes=False,
         )
+    _require_regenerated_generator_result(generator_result, kind=kind)
     manifests = _validate_manifests(context, kind=kind)
     downstream = context.tree.get("downstream_contract")
     if not isinstance(downstream, Mapping):
@@ -1726,6 +2015,7 @@ def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
         context.repository, "joulewise/floor_extraction.py", kind=kind
     )
     primary = [generator_artifact, extraction_artifact, validator_artifact]
+    primary.extend(constant_primaries)
     primary.extend(projection_primary)
     primary.extend(manifests["authenticated_artifacts"])
     return _DerivedKind(
@@ -1734,6 +2024,7 @@ def _derive_pack_authentication(context: _DerivationContext) -> _DerivedKind:
         tuple(primary),
         (
             _check("pack_generator_check", generator_result),
+            _check("frozen_receipt_constant_relation", constant_relation),
             *(
                 ()
                 if projection_result is None
