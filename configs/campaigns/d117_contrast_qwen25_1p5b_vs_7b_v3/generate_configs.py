@@ -36,6 +36,22 @@ from joulewise.identity_pins import (  # noqa: E402
 from joulewise.arm_readiness import (  # noqa: E402
     plan_arm_readiness_attachment,
 )
+from joulewise.analysis_manifest_v3 import (  # noqa: E402
+    EXACT_STACK_RULE_ID,
+    FINALIZATION_CONTRACT_ID,
+    FINALIZED_BASENAME_SUFFIX,
+    FINALIZED_NAMESPACE_RULE_ID,
+    GOVERNED_TRANSPORT_RULE_ID,
+    SEMANTICS_PROJECTION_RULE_ID,
+    _BRACKET_BINDING_SCHEMA,
+    _FLOOR_SCHEMA,
+    _LEDGER_SCHEMA,
+    _REQUIRED_ATTACHMENT_ROLES,
+    _WHOLE_WINDOW_SCHEMA,
+    analysis_semantics_projection_v1,
+    analysis_semantics_sha256_v1,
+    calculate_manifest_id,
+)
 from joulewise.receipt_oracle import (  # noqa: E402
     derive_bracket_session_receipt_oracle,
 )
@@ -445,6 +461,10 @@ PREFILL_FAMILY_IDS = {
 }
 MODELS = {"A": MODEL_A, "B": MODEL_B}
 MODEL_TAGS = {"A": "qwen25-1p5b-mlx", "B": "qwen25-7b-mlx"}
+FROZEN_FLOOR_PACKS = {
+    "A": Path("configs/campaigns/d117_floor_qwen25_1p5b_v3"),
+    "B": Path("configs/campaigns/d117_floor_qwen25_7b_v3"),
+}
 
 PROMPT_SENTENCE = "The plan remains easy to audit."
 PROMPT_FINAL_SENTENCE = "The plan remains easy to audit and simple to review."
@@ -524,6 +544,62 @@ def sha256_bytes(data: bytes) -> str:
 
 def file_sha256(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
+
+
+def target_versioned_id(stem: str, *, separator: str = "-") -> str:
+    """Return an identifier carrying the selected family generation."""
+
+    version = active_generation().family_suffix.removeprefix("_")
+    return f"{stem}{separator}{version}"
+
+
+def producer_floor_cell_id(measurement_arm: str, arm: str) -> str:
+    """Select the dedicated absolute floor cell from the frozen producer plan."""
+
+    source = REPO_ROOT / FROZEN_FLOOR_PACKS[arm] / "calibration_plan.json"
+    plan = json.loads(source.read_text(encoding="utf-8"))
+    metric = metric_for(measurement_arm)
+    family_marker = "prefill-p256" if measurement_arm == "prefill_p256" else "decode"
+    matches = [
+        cell
+        for cell in plan.get("floor_cells", [])
+        if isinstance(cell, dict)
+        and cell.get("kind") == "absolute"
+        and cell.get("metric") == metric
+        and family_marker in str(cell.get("condition_family_id", ""))
+    ]
+    if len(matches) != 1 or not isinstance(matches[0].get("cell_id"), str):
+        raise ValueError(
+            f"frozen floor plan {source} does not identify one dedicated "
+            f"{measurement_arm} absolute cell"
+        )
+    return str(matches[0]["cell_id"])
+
+
+def producer_transport_group_id(measurement_arm: str, arm: str) -> str:
+    """Select and generation-thread the producer's governed floor group."""
+
+    source = REPO_ROOT / FROZEN_FLOOR_PACKS[arm] / "producer_contract.json"
+    contract = json.loads(source.read_text(encoding="utf-8"))
+    matches = [
+        role
+        for role in contract.get("roles", [])
+        if isinstance(role, dict) and role.get("role") == measurement_arm
+    ]
+    if len(matches) != 1 or not isinstance(
+        matches[0].get("transport_group_id"), str
+    ):
+        raise ValueError(
+            f"frozen floor contract {source} does not identify one "
+            f"{measurement_arm} transport group"
+        )
+    group_id = str(matches[0]["transport_group_id"])
+    identity = active_generation()
+    return (
+        group_id
+        if identity.target_is_current
+        else _successor_token(group_id, identity)
+    )
 
 
 def write_bytes(path: Path, data: bytes) -> None:
@@ -797,15 +873,14 @@ def consumer_declaration() -> dict[str, Any]:
             "floor_rule": "cross_stack_armwise_max.v1",
         },
         "prefill_p256_floor_dependency": {
-            "cell_ids": empty_slot(
-                "TODO(lead authority): D-122 does not identify ruled 256-token "
-                "prefill floor cells",
-                value=[],
-            ),
-            "transport_rule": empty_slot(
-                "TODO(lead authority): D-122 does not ratify transport from the "
-                "alpha/beta 128-token prefill floor cells to this 256-token estimand"
-            ),
+            "cell_ids": [
+                producer_floor_cell_id("prefill_p256", arm)
+                for arm in ("A", "B")
+            ],
+            "transport_rule": {
+                "mode": "exact_stack_only",
+                "rule_id": EXACT_STACK_RULE_ID,
+            },
         },
         "forbidden_content": [
             "aggregate artifact byte SHA",
@@ -905,7 +980,7 @@ def build_plan(
         "plan_id": PLAN_ID,
         "calibration_scope": "production_window",
         "fixed_n": N_BLOCKS,
-        "authorities": ["D-117", "D-122", "D-123", "D-124", "D-125"],
+        "authorities": ["D-117", "D-122", "D-123", "D-124", "D-125", "D-139"],
         "stack_scope": {
             "hardware_target": "macbook_m3_max",
             "runtime_backend": "mlx",
@@ -946,12 +1021,7 @@ def build_plan(
                 "scientific_hypothesis_direction": "positive",
                 "family_alpha": 0.05,
                 "multiplicity": "Holm",
-                "family_m": 1,
-                "multiplicity_note": (
-                    "family_m=1 is contingent on unresolved decode/prefill "
-                    "family-cardinality ratification; see the prefill_p256 cell's "
-                    "multiplicity TODO."
-                ),
+                "family_m": 2,
                 "equivalence_margin": None,
                 "mde": None,
                 "ordered_blocks": ordered_blocks(runs, "decode"),
@@ -971,19 +1041,11 @@ def build_plan(
                     "sha256": prompt_sha,
                     "status": PROMPT_STATUS,
                 },
-                "test": empty_slot(
-                    "TODO(lead authority): D-122 requires the arm but does not pin "
-                    "the prefill inferential test"
-                ),
-                "family_alpha": empty_slot(
-                    "TODO(lead authority): ratify the prefill contrast family alpha"
-                ),
-                "multiplicity": empty_slot(
-                    "TODO(lead authority): ratify whether decode and prefill share a family"
-                ),
-                "family_m": empty_slot(
-                    "TODO(lead authority): ratify multiplicity cardinality"
-                ),
+                "test": "two_sided",
+                "scientific_hypothesis_direction": "positive",
+                "family_alpha": 0.05,
+                "multiplicity": "Holm",
+                "family_m": 2,
                 "equivalence_margin": None,
                 "mde": None,
                 "ordered_blocks": ordered_blocks(runs, "prefill_p256"),
@@ -1485,14 +1547,75 @@ def build_analysis_manifest(
     prompt_sha: str,
     declaration_sha: str,
 ) -> dict[str, Any]:
+    del declaration_sha  # The prospective floor contract replaces the draft pin.
+
+    analysis_family_id = target_versioned_id(
+        "d117-gamma-decode-prefill-p256-primary-holm"
+    )
+    family_instance_id = target_versioned_id(
+        "fam-d117-gamma-decode-prefill-p256-primary-holm"
+    )
+    family_metric_tag = target_versioned_id(
+        "phase_decode_prefill_p256_energy", separator="_"
+    )
+
+    def contrast_id(measurement_arm: str) -> str:
+        return f"ctr-d117-{measurement_arm.replace('_', '-')}-qwen25-1p5b-vs-7b"
+
+    def floor_dependency(measurement_arm: str) -> dict[str, Any]:
+        condition_ids = [
+            family_id_for_arm
+            for family_id_for_arm in (
+                family_id(measurement_arm, "A"),
+                family_id(measurement_arm, "B"),
+            )
+        ]
+        domain_sha_by_id = {
+            row["condition_family_id"]: row["canonical_domain_sha256"]
+            for row in family_rows
+        }
+        return {
+            "required_artifact_schema": _FLOOR_SCHEMA,
+            "floor_selector": {
+                "backend": "powermetrics",
+                "metric": metric_for(measurement_arm),
+                "window_class": "phase",
+                "condition_family_ids": condition_ids,
+                "floor_field": "floor_gate_j",
+                "transport_rule_id": EXACT_STACK_RULE_ID,
+                "claim_floor_rule": "cross_stack_armwise_max.v1",
+            },
+            "transport": {
+                "mode": "exact_stack_only",
+                "rule_id": EXACT_STACK_RULE_ID,
+                "transport_groups": [
+                    {
+                        "transport_group_id": producer_transport_group_id(
+                            measurement_arm, arm
+                        ),
+                        "condition_family_id": condition_id,
+                        "condition_domain_sha256": domain_sha_by_id[condition_id],
+                        "group_rule_id": GOVERNED_TRANSPORT_RULE_ID,
+                    }
+                    for arm, condition_id in zip(
+                        ("A", "B"), condition_ids, strict=True
+                    )
+                ],
+            },
+        }
+
     def contrast(measurement_arm: str) -> dict[str, Any]:
         entries = [entry for entry in all_entries if entry["measurement_arm"] == measurement_arm]
         common: dict[str, Any] = {
-            "contrast_id": (
-                f"ctr-d117-{measurement_arm.replace('_', '-')}-qwen25-1p5b-vs-7b"
-            ),
+            "contrast_id": contrast_id(measurement_arm),
             "measurement_arm": measurement_arm,
             "metric": metric_for(measurement_arm),
+            "metric_tag": target_versioned_id(
+                "phase_decode_energy"
+                if measurement_arm == "decode"
+                else "phase_prefill_p256_energy",
+                separator="_",
+            ),
             "target_precheck_path": ["phase", "decode" if measurement_arm == "decode" else "prefill"],
             "condition_a_id": family_id(measurement_arm, "A"),
             "condition_b_id": family_id(measurement_arm, "B"),
@@ -1513,58 +1636,39 @@ def build_analysis_manifest(
                 }
                 for entry in entries
             ],
+            "family_instance_id": family_instance_id,
+            "claim_role": "primary",
+            "test": "two_sided",
+            "scientific_hypothesis_direction": "positive",
+            "equivalence": None,
+            "mde": None,
+            "floor_dependency": floor_dependency(measurement_arm),
         }
         if measurement_arm == "decode":
-            common.update(
-                {
-                    "test": "two_sided",
-                    "scientific_hypothesis_direction": "positive",
-                    "multiplicity": {
-                        "method": "Holm",
-                        "alpha": 0.05,
-                        "m": 1,
-                        "note": (
-                            "family_m=1 is contingent on unresolved decode/prefill "
-                            "family-cardinality ratification; see the prefill_p256 "
-                            "contrast multiplicity TODO."
-                        ),
-                    },
-                    "equivalence_margin": None,
-                    "mde": None,
-                    "floor_dependency": {
-                        "consumer_family_declaration_path": "consumer_family_declaration.json",
-                        "consumer_family_declaration_sha256": declaration_sha,
-                        "binding_mode": "declaration_only",
-                    },
-                }
-            )
+            common["prompt"] = None
         else:
-            common.update(
-                {
-                    "prompt_candidate": {
-                        "path": "prefill_prompt_candidate.json",
-                        "sha256": prompt_sha,
-                        "status": PROMPT_STATUS,
-                    },
-                    "test": empty_slot(
-                        "TODO(lead authority): ratify prefill inferential test"
-                    ),
-                    "multiplicity": empty_slot(
-                        "TODO(lead authority): ratify prefill multiplicity family"
-                    ),
-                    "equivalence_margin": None,
-                    "mde": None,
-                    "floor_dependency": empty_slot(
-                        "TODO(lead authority): ratify a 256-token prefill floor or transport rule"
-                    ),
-                }
-            )
+            common["prompt"] = {
+                "path": "prefill_prompt_candidate.json",
+                "sha256": prompt_sha,
+                "status": PROMPT_STATUS,
+            }
         return common
 
-    return {
+    attachment_schemas = {
+        "whole_window_verdict": _WHOLE_WINDOW_SCHEMA,
+        "bracket_binding": _BRACKET_BINDING_SCHEMA,
+        "calibration_ledger": _LEDGER_SCHEMA,
+        "aggregate_floor_artifact": _FLOOR_SCHEMA,
+    }
+    if set(attachment_schemas) != _REQUIRED_ATTACHMENT_ROLES:
+        raise ValueError("analysis finalization attachment roles drifted")
+
+    manifest = {
         "schema_version": "joulewise.analysis_manifest.v3.prospective",
-        # The frozen gamma plan tree pins this analysis manifest by SHA.
-        "draft_status": emitted_draft_status(),
+        "manifest_id": "",
+        # D-139 A2 freezes analysis semantics at production generation; the
+        # D-134 pack receipt remains the separate dynamic pack-freeze state.
+        "freeze_status": "frozen",
         "plan": {
             "plan_id": PLAN_ID,
             "path": "calibration_plan.json",
@@ -1578,25 +1682,68 @@ def build_analysis_manifest(
         },
         "stage_manifests": stage_manifest_rows,
         "condition_families": family_rows,
-        "contrasts": [contrast("decode"), contrast("prefill_p256")],
-        "postcollection_attachments": {
-            "whole_window_verdict_sha256": empty_slot(
-                "TODO(postcollection): passed whole-window verdict does not exist before collection"
-            ),
-            "evaluation_basis_sha256": empty_slot(
-                "TODO(postcollection): derive exact 80-member basis after collection"
-            ),
-            "bracket_binding_sha256": empty_slot(
-                "TODO(postcollection): populate from the completed bracket session",
-            ),
-            "committed_terminal_ledger_head": empty_slot(
-                "TODO(postcollection): populate from the committed terminal head",
-            ),
-            "aggregate_floor_artifact_sha256": empty_slot(
-                "TODO(U10): declaration-only pack cannot bind postcollection artifact bytes"
-            ),
+        "design": {
+            "design_id": target_versioned_id("d117-gamma-two-arm-abba-design"),
+            "analysis_type": "comparative_contrast",
+            "null_alias": False,
+            "unit_of_analysis": "abba_block_arm_mean_difference",
+            "difference_orientation": "condition_b_minus_condition_a",
+            "sampling_plan": {
+                "design": "fixed_n",
+                "planned_n_blocks": N_BLOCKS,
+                "freeze_basis": "frozen_before_measurement",
+                "allowed_replacement_reasons": [],
+            },
+            "randomization": {
+                "scheme": "deterministic_abba",
+                "exchangeability": "none",
+                "seed": None,
+            },
         },
+        "replacement_policy": {
+            "outcome_dependent_top_up": "forbidden",
+            "science_member_replacements": 0,
+            "allowed_replacement_reasons": [],
+        },
+        "families": [
+            {
+                "family_id": analysis_family_id,
+                "family_instance_id": family_instance_id,
+                "plan_id": PLAN_ID,
+                "claim_role": "primary",
+                "metric_tag": family_metric_tag,
+                "multiplicity": {
+                    "method": "holm",
+                    "alpha": 0.05,
+                    "q": None,
+                    "m": 2,
+                },
+                "contrast_ids": [
+                    contrast_id("decode"),
+                    contrast_id("prefill_p256"),
+                ],
+            }
+        ],
+        "contrasts": [contrast("decode"), contrast("prefill_p256")],
+        "finalization_contract": {
+            "contract_id": FINALIZATION_CONTRACT_ID,
+            "projection_rule_id": SEMANTICS_PROJECTION_RULE_ID,
+            "namespace_rule_id": FINALIZED_NAMESPACE_RULE_ID,
+            "output_basename_suffix": FINALIZED_BASENAME_SUFFIX,
+            "required_attachments": [
+                {"role": role, "schema_version": schema}
+                for role, schema in attachment_schemas.items()
+            ],
+        },
+        "frozen_semantics_sha256": "",
     }
+    manifest = thread_generation_identity(manifest)
+    projection = analysis_semantics_projection_v1(manifest)
+    if projection.get("projection_rule_id") != SEMANTICS_PROJECTION_RULE_ID:
+        raise ValueError("analysis semantics projection rule drifted")
+    manifest["frozen_semantics_sha256"] = analysis_semantics_sha256_v1(manifest)
+    manifest["manifest_id"] = calculate_manifest_id(manifest)
+    return manifest
 
 
 def build_tree(

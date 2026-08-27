@@ -28,6 +28,8 @@ from scripts.run_campaign import load_order_entries
 ROOT = Path(__file__).resolve().parents[1]
 PACK = ROOT / "configs" / "campaigns" / "d117_contrast_qwen25_1p5b_vs_7b_v1"
 GENERATOR = PACK / "generate_configs.py"
+V3_PACK = ROOT / "configs" / "campaigns" / "d117_contrast_qwen25_1p5b_vs_7b_v3"
+V3_GENERATOR = V3_PACK / "generate_configs.py"
 GENERATOR_SPEC = importlib.util.spec_from_file_location("d117_gamma_generator", GENERATOR)
 assert GENERATOR_SPEC is not None and GENERATOR_SPEC.loader is not None
 GENERATOR_MODULE = importlib.util.module_from_spec(GENERATOR_SPEC)
@@ -2488,22 +2490,80 @@ class D117GammaPlanTest(unittest.TestCase):
         )
         self.assertNotIn(stale_marker, generated_text)
 
-    def test_decode_multiplicity_is_explicitly_contingent(self) -> None:
-        decode = next(
+    def test_frozen_pre_d139_v3_and_production_successor_multiplicity(self) -> None:
+        # The committed v3 bytes predate D-139 A2 and are receipt-frozen, so
+        # this records their historical m=1 shape without treating it as the
+        # production family that a newly emitted successor must carry.
+        frozen_plan = read_json(V3_PACK / "calibration_plan.json")
+        frozen_tree = read_json(V3_PACK / "plan_tree.json")
+        frozen_decode = next(
             cell
-            for cell in self.plan["floor_cells"]
+            for cell in frozen_plan["floor_cells"]
             if cell["measurement_arm"] == "decode"
         )
-        self.assertEqual(decode["family_m"], 1)
-        self.assertIn("contingent", decode["multiplicity_note"])
-        self.assertIn("prefill_p256", decode["multiplicity_note"])
-        analysis_decode = next(
-            contrast
-            for contrast in self.analysis["contrasts"]
-            if contrast["measurement_arm"] == "decode"
+        self.assertEqual(frozen_decode["family_m"], 1)
+        self.assertNotIn("D-139", frozen_plan["authorities"])
+        frozen_receipt = frozen_tree["arm_attachments"]["arm_readiness"][
+            "freeze_receipt"
+        ]
+        self.assertEqual(
+            frozen_receipt["path"],
+            "arm_readiness.freeze.receipts/freeze-0003.json",
         )
-        self.assertEqual(analysis_decode["multiplicity"]["m"], 1)
-        self.assertIn("contingent", analysis_decode["multiplicity"]["note"])
+        self.assertEqual(len(frozen_receipt["sha256"]), 64)
+
+        with tempfile.TemporaryDirectory(prefix="d117-gamma-d139a2-") as temporary:
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(V3_GENERATOR),
+                    "--output-root",
+                    temporary,
+                    "--pack-id",
+                    "d117_contrast_qwen25_1p5b_vs_7b_v4",
+                    "--family-suffix",
+                    "_v4",
+                    "--no-preserve-current-frozen-bytes",
+                ],
+                cwd=ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            successor = (
+                Path(temporary)
+                / "configs"
+                / "campaigns"
+                / "d117_contrast_qwen25_1p5b_vs_7b_v4"
+            )
+            production_plan = read_json(successor / "calibration_plan.json")
+            production_manifest = read_json(successor / "analysis_manifest_v3.json")
+
+        cells = {
+            cell["measurement_arm"]: cell for cell in production_plan["floor_cells"]
+        }
+        for measurement_arm in ("decode", "prefill_p256"):
+            cell = cells[measurement_arm]
+            self.assertEqual(cell["test"], "two_sided")
+            self.assertEqual(cell["scientific_hypothesis_direction"], "positive")
+            self.assertEqual(cell["family_alpha"], 0.05)
+            self.assertEqual(cell["multiplicity"], "Holm")
+            self.assertEqual(cell["family_m"], 2)
+            self.assertNotIn("multiplicity_note", cell)
+
+        self.assertEqual(len(production_manifest["families"]), 1)
+        family = production_manifest["families"][0]
+        self.assertEqual(
+            family["multiplicity"],
+            {"method": "holm", "alpha": 0.05, "q": None, "m": 2},
+        )
+        self.assertEqual(
+            family["contrast_ids"],
+            [
+                "ctr-d117-decode-qwen25-1p5b-vs-7b",
+                "ctr-d117-prefill-p256-qwen25-1p5b-vs-7b",
+            ],
+        )
 
 
 if __name__ == "__main__":
