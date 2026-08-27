@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import importlib.machinery
 import importlib.util
 import inspect
 import io
@@ -703,6 +704,13 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         fake_mlx = ModuleType("mlx")
         fake_mlx.__path__ = []
         fake_core = ModuleType("mlx.core")
+        # The adapter remembers ONLY a module loaded from a native shared
+        # object, so this stand-in must present itself as one. A plain
+        # ModuleType models a test double, and a test double must never be
+        # remembered; tests/test_mlx_runtime.py pins that other half.
+        fake_core.__loader__ = importlib.machinery.ExtensionFileLoader(
+            "mlx.core", "/nonexistent/mlx/core.so"
+        )
         fake_core.get_active_memory = lambda: 101
         fake_core.get_cache_memory = lambda: 202
         fake_core.get_peak_memory = lambda: 303
@@ -1855,7 +1863,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     @unittest.skip(
-        "STRUCTURE-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
+        "STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
     )
     def test_acid_authored_fifteen_then_real_arm_generator_reaches_go(self) -> None:
         """Blocked on fixture R1 schema modernization (A84)."""
@@ -1867,7 +1875,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
 
     @unittest.skip(
-        "STRUCTURE-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
+        "STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
     )
     def test_synthetic_acid_is_hermetic_to_system_timezone(self) -> None:
         """Blocked on fixture R1 schema modernization (A84)."""
@@ -1891,7 +1899,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
                 time.tzset()
 
     @unittest.skip(
-        "STRUCTURE-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
+        "STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
     )
     def test_synthetic_acid_ignores_wall_clock_48_hours_in_future(self) -> None:
         """Blocked on fixture R1 schema modernization (A84)."""
@@ -1911,7 +1919,7 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         sys.platform == "darwin", "requires Darwin's real boot-session sysctl command"
     )
     @unittest.skip(
-        "STRUCTURE-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
+        "STRUCTURAL-BLOCKED: fixture R1 schemas require FIXTURE-MODERNIZATION-01 (A84)"
     )
     def test_acid_real_boot_session_then_real_arm_generator_reaches_go(self) -> None:
         """Blocked on fixture R1 schema modernization (A84)."""

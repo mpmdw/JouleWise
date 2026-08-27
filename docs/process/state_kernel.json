@@ -744,37 +744,7 @@
       "priority": "p2_next_slice",
       "rank": 86,
       "status": "queued",
-      "status_note": "Found 2026-08-24 during the flake-fix round; fails identically on main and the fix branch, so it is NOT a regression of either cure. May be environment-sensitive (path length/normalization) — reproduce first.",
-      "stop_card": null
-    },
-    "CALEXITS-FOURTH-SHAPE-01": {
-      "acceptance": {
-        "evidence": [
-          "The fourth shape is classified with a deterministic regression proving red-before/green-after",
-          "The mutation test passes repeatedly on hosted runners across both interpreters"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/CALEXITS-FOURTH-SHAPE-01/acceptance",
-          "label": "CALEXITS-FOURTH-SHAPE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The terminal-shape taxonomy is complete rather than grown one flake at a time."
-      },
-      "authority": {
-        "label": "RUN_STATE 2026-08-24 T23 entries",
-        "path": "RUN_STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Complete the mutation-race terminal-shape taxonomy: run 32739939880 (a branch CONTAINING both landed cures) failed test_forced_auto_maintenance_mutation_reproduces_cleanup_race with a FOURTH terminal shape the widened predicate (write-pack OR prepare-kill) rejects. Diagnose from the preserved attempt-1 log archive, admit the shape or fix the topology model, with deterministic classifier regressions per the third-shape pattern.",
-      "id": "CALEXITS-FOURTH-SHAPE-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 88,
-      "status": "queued",
-      "status_note": "Hosted-only, intermittent. Evidence archive preserved in the session scratchpad (fourth-shape-run32739939880-attempt1.zip); capture into custody before scratchpad expiry if work has not started by then.",
+      "status_note": "NOT REPRODUCIBLE AT THE BENCH as of 2026-08-26 (T26 S5). test_logical_producer_delay_preserves_exact_evidence_bytes passes three consecutive times at branch head, once inside a full 46-test module run, and once at the exact commit this row names as the pristine-main reproduction (74794af). The test compares two independently captured witness runs byte-for-byte, and each capture builds a fresh TemporaryDirectory with a random suffix, so any temp-path bytes in the four artifacts would fail EVERY run, not intermittently — the four green subtests are positive evidence that no such leak is present on this bench at either commit. Left queued rather than closed: with no reproduction there is nothing to cure red-before/green-after, and a speculative hardening change would be the tolerance-widening this row forbids. To resume, the row needs the original failing output — the assertion message emits delayed_sha256, baseline_sha256 and the differing artifact name. Custody: docs/process_traces/2026-08-26-t26-ci-reliability/README.md.",
       "stop_card": null
     },
     "CALEXITS-HYGIENE-FIXES-01": {
@@ -1969,45 +1939,6 @@
       "rank": 19,
       "status": "blocked",
       "status_note": "2026-08-03: D-110 (sweep finding RT-1/RT-2): mint #1 is retroactively NON-CLAIM-BEARING (taint-and-remint); the night consult's conditional 7B-mint license is SUSPENDED. The mint-1 byte-compare replay completed BYTE-IDENTICAL at pinned 3de370ec (all four digests; docs/process_traces/2026-08-03-q1-remint-bytecompare/). 2026-08-05: condition (a) is satisfied by merged PR #100. Condition (b) preparation is complete and its verification blocker is resolved: the B1 disposition is lead-ruled 30/2/6 and deterministic bootstrap is implemented on impl/ledger-bootstrap, under audit. Condition (c) is in flight on impl/validator-rootpins. The row remains hard-blocked on the still-pending D-110 (b)+(c) completion gate.",
-      "stop_card": null
-    },
-    "MLX-ACID-SIGABRT-01": {
-      "acceptance": {
-        "evidence": [
-          "The mlx_runtime.py:1159 abort no longer kills the interpreter under pytest at the four ACID tests",
-          "The four CRASH-BLOCKED skips can be narrowed to their remaining structural cause (A84) with reason strings updated",
-          "Full-suite pytest collection completes with zero deselection"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/MLX-ACID-SIGABRT-01/acceptance",
-          "label": "MLX-ACID-SIGABRT-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The interpreter-killing abort is cured; the four CRASH-BLOCKED tests become runnable (they then need FIXTURE-MODERNIZATION-01 to go green — this row is necessary but NOT sufficient)."
-      },
-      "authority": {
-        "label": "S-1 delta re-audit S1D-3 + the independent seat's SIGABRT finding",
-        "path": "docs/process_traces/2026-08-22-t20/s1-candidate/s1-fixround-packet.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Cold-pair-166 discipline",
-            "path": "docs/process_traces/2026-08-20-go-session/cold-pair-166/cold-ruling-166.md"
-          },
-          "rule": "Distinct mechanism, distinct row: expectedFailure/skip markers cannot contain a process-level abort — the cure is code-side, not marker-side"
-        }
-      ],
-      "flags": [],
-      "goal": "Cure the pre-existing pytest SIGABRT at joulewise/adapters/mlx_runtime.py:1159 reached via the four ACID tests in tests/test_arm_readiness_evidence_t0.py (reproduces at merge-base 5523003; not a branch regression), so the suite is pytest-collectable without deselection.",
-      "id": "MLX-ACID-SIGABRT-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 85,
-      "status": "queued",
-      "status_note": "Necessary but not sufficient for the four CRASH-BLOCKED tests (they also need A84). mlx_runtime.py is NOT in the r6 pinset but is adapter code — gauntlet applies.",
       "stop_card": null
     },
     "MODULARITY-01": {
@@ -3367,36 +3298,6 @@
       "rank": 95,
       "status": "queued",
       "status_note": "REGISTRATION ANOMALY CURED: the refuter envelope that was nowhere in the repository record at registration was recovered POST-HOC on 2026-08-24 from the T23 session record - PR #182 merged while the refuter (agent task-id afa98fc4eaa4512e1, adjudicated verdict SOUND FOR MERGE) was still running - and is custodied verbatim at docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md. The goal is now restated from the envelope's own wording, satisfying the first acceptance clause; what remains is the fix or recorded waiver.",
-      "stop_card": null
-    },
-    "PLANTEST-RGLOB-RACE-01": {
-      "acceptance": {
-        "evidence": [
-          "The inventory walk survives concurrent directory removal (regression exercises it deterministically)",
-          "test_emitted_successor_generator_refuses_downgrade_targets green repeatedly on hosted runners"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/PLANTEST-RGLOB-RACE-01/acceptance",
-          "label": "PLANTEST-RGLOB-RACE-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The inventory helper cannot be killed by its own fixture teardown."
-      },
-      "authority": {
-        "label": "RUN_STATE 2026-08-24 T23 entries",
-        "path": "RUN_STATE.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Cure the checkout_inventory rglob/scandir race in tests/test_d117_decode_contrast_plan.py:67 (run 32745254371: os.scandir died mid-walk when a directory vanished during the recursive inventory, presumably the generator fixture's own TemporaryDirectory teardown). Make the walk tolerant of vanishing entries or sequence the teardown, with a regression.",
-      "id": "PLANTEST-RGLOB-RACE-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 89,
-      "status": "queued",
-      "status_note": "Single hosted occurrence 2026-08-24; docs-only commit, so the race is environmental to the test, not a product change.",
       "stop_card": null
     },
     "PREWINDOW-REGEX-01": {

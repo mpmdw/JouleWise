@@ -8,6 +8,7 @@ mapping and event shape with fakes, while real runs use the same adapter path.
 from __future__ import annotations
 
 import importlib
+import importlib.machinery
 import inspect
 import json
 import operator
@@ -54,11 +55,60 @@ DEFAULT_OUTPUT_TOKENS = 8
 WARMUP_TOKENS = 4
 SYNTHETIC_PROMPT_SEED = "JouleWise synthetic prompt token sequence."
 
-# ``mlx.core`` is a nanobind extension whose native initializer aborts the
-# process if it runs twice and tries to register the same types/enums again.
-# Keep a successful import alive even if another context evicts it from
-# ``sys.modules`` so memory probes never re-execute that initializer.
+# ``mlx.core`` is a nanobind extension whose native initializer ABORTS the
+# process if it runs a second time and finds its types already registered
+# ("Critical nanobind error: refusing to add duplicate key ..."). Nothing in
+# Python catches that. Any code that removes "mlx.core" from ``sys.modules``
+# after it has been loaded therefore arms a fatal re-import, and
+# ``mock.patch.dict(sys.modules, ...)`` does exactly that on exit for every
+# module imported inside its block.
+#
+# So the adapter keeps its own reference to the loaded extension. Only a
+# GENUINE extension module is ever remembered -- see ``_is_loaded_extension``.
 _MLX_CORE_MODULE: Any | None = None
+
+# Distinguishes "no such key in sys.modules" from a key whose value is None.
+# ``sys.modules["mlx.core"] = None`` is Python's blocked-import sentinel: an
+# import must raise ImportError, and so must this adapter's probe.
+_MODULE_KEY_ABSENT = object()
+
+
+def _is_loaded_extension(module: Any) -> bool:
+    """True only for a module backed by a native shared object.
+
+    The remembered reference is what survives an eviction, so it must never be
+    a test stand-in. A stand-in built with ``ModuleType("mlx.core")``, or a
+    fixture's ``core.py``, is loaded by something other than
+    ``ExtensionFileLoader``; the real ``mlx/core.cpython-*.so`` is not. That
+    keeps stand-ins authoritative for as long as they sit in ``sys.modules``
+    and forgotten the moment they leave it, while a real extension imported by
+    any component -- including ``mlx_lm.load()`` before the memory snapshot
+    runs -- is retained.
+    """
+
+    return isinstance(
+        getattr(module, "__loader__", None),
+        importlib.machinery.ExtensionFileLoader,
+    )
+
+
+def _resolve_mlx_core() -> Any:
+    """Return ``mlx.core`` without ever initialising the extension twice."""
+
+    global _MLX_CORE_MODULE
+
+    module = sys.modules.get("mlx.core", _MODULE_KEY_ABSENT)
+    if module is None:
+        raise ImportError("import of mlx.core is blocked by sys.modules")
+    if module is _MODULE_KEY_ABSENT:
+        # Evicted, or never imported. A remembered extension answers without
+        # re-running the native initializer; otherwise this is a first import.
+        module = _MLX_CORE_MODULE
+        if module is None:
+            module = importlib.import_module("mlx.core")
+    if _is_loaded_extension(module):
+        _MLX_CORE_MODULE = module
+    return module
 
 
 @dataclass(frozen=True)
@@ -1156,8 +1206,6 @@ def _process_rss_bytes(errors: dict[str, str]) -> int | None:
 
 
 def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
-    global _MLX_CORE_MODULE
-
     unavailable = {
         "api_available": False,
         "active_memory_bytes": None,
@@ -1165,19 +1213,7 @@ def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
         "peak_memory_bytes": None,
     }
     try:
-        # ``sys.modules`` stays authoritative so a test that installs a stand-in
-        # under "mlx.core" still gets its stand-in. The fallback below is only
-        # for the case a stand-in cannot create: the real extension already
-        # loaded into this process but evicted from ``sys.modules``.
-        mx = sys.modules.get("mlx.core")
-        if mx is None:
-            mx = _MLX_CORE_MODULE
-        if mx is None:
-            # Only a module WE imported is remembered; caching whatever happens
-            # to sit in ``sys.modules`` would let a test stand-in outlive its
-            # own patch and silently supply memory numbers to real evidence.
-            mx = importlib.import_module("mlx.core")
-            _MLX_CORE_MODULE = mx
+        mx = _resolve_mlx_core()
     except ImportError:
         errors["mlx_metal"] = "mlx_core_not_found"
         return unavailable

@@ -6,6 +6,7 @@ import hashlib
 import inspect
 import io
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -319,13 +320,62 @@ def rebind_frozen_chain(
 
 
 class SharedDerivationTests(unittest.TestCase):
-    def test_fixture_repositories_disable_detached_git_maintenance(self) -> None:
+    def test_fixture_commits_start_no_detached_maintenance_process(self) -> None:
+        """A fixture commit must leave nothing running behind it.
+
+        Without the controls in ``init_git``, `git commit` spawns
+        `git maintenance run --auto --quiet --detach`, and a DETACHED child
+        outlives the test body. Whatever that child then writes into the
+        repository races `TemporaryDirectory.cleanup()`, which is how run
+        32974766555 attempt 1 (job 98196695324) died in teardown with
+        `[Errno 39] Directory not empty: '/tmp/tmpxbynrw01/.git/info'`.
+
+        Reading the four config keys back is not enough on its own: it proves
+        the settings are stored, not that no process starts. Git's own Trace2
+        event stream names every child the commit spawns, so this asserts the
+        absence directly. Delete any one control from ``init_git`` and the
+        `maintenance` child reappears in the trace.
+        """
+
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             init_git(root)
             payload = root / "payload.txt"
             payload.write_text("fixture\n", encoding="utf-8")
-            commit_paths(root, [payload], "fixture commit")
+            git(root, "add", "--", "payload.txt")
+
+            trace = Path(temporary).parent / f"trace2-{root.name}.json"
+            self.addCleanup(lambda: trace.unlink(missing_ok=True))
+            environment = {**os.environ, "GIT_TRACE2_EVENT": str(trace)}
+            subprocess.run(
+                ["git", "commit", "-q", "-m", "fixture commit"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            events = [
+                json.loads(line)
+                for line in trace.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertTrue(events, "git emitted no Trace2 events")
+            children = [
+                event.get("argv", [])
+                for event in events
+                if event.get("event") == "child_start"
+            ]
+            self.assertEqual(
+                [
+                    argv
+                    for argv in children
+                    if "maintenance" in argv or "gc" in argv
+                ],
+                [],
+                f"the fixture commit spawned a maintenance child: {children}",
+            )
 
             for key, expected in GIT_MAINTENANCE_CONTROLS:
                 with self.subTest(key=key):
