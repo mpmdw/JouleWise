@@ -84,3 +84,30 @@ cannot execute. Recorded in the cold-gate packet.
 
 ## Custody
 `00-brief.md`, `01-sol-seat.md`, `02-opus-seat.md`, `03-fable-seat.md`.
+
+## Addendum (2026-08-27, post S10 gauntlet on #217) — R-3 shape corrected
+
+R-3 said the producer "serialises `build_calibration_bracket_binding`'s
+output", which reads as post-verdict. Executed evidence (refuter A's
+probe; director's bench check; `run_campaign.py` has zero references to
+the binding; `calibration_bracket_for_bundles` :4646 takes only the
+ledger snapshot; the builder at `calibration_bracketing.py:864` takes
+ledger + session_id + plan identity + runs_root and NOTHING from a
+verdict) shows the evaluator requires the binding as an INPUT: a
+binding-less whole-window verdict is `status=failed` with
+`calibration_bracket_binding_missing`, so the verdict the first CLI shape
+read from can never exist in production.
+
+R-3′ (adopted, option (b)): the lifecycle is **frozen plan + finalized
+ledger session → build the binding (from exactly the builder's real
+inputs) → `run_campaign --whole-window-verdict --bracket-binding <path>`
+with the identity threaded into `calibration_bracket_for_bundles` →
+finalize, which checks verdict and file agree byte-for-byte**. Option (a)
+(identity flags alone) is insufficient; option (c) (persist provisional
+descriptors in a failed verdict) is rejected — unbound evaluation would
+pick the identity the binding exists to authorise. The F1 fixture-swap
+test is replaced by one production-valid rich verdict carried unchanged
+through producer → evaluator → finalizer with hashes asserted equal. The
+runbook's H5/H6 gain the "build binding before the whole-window verdict"
+ordering note. This lands BEFORE the night so finalization code is inside
+the reviewed head; it does not touch pack bytes or the mint path.
