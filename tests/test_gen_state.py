@@ -435,7 +435,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # deterministic vanishing-directory regressions) -- the latter two rows
         # predated their cures:
         # 98 - 3 = 95; the 2026-08-27 T26 S6 wave closes
-        # SUPERSESSION-DUP-REFUSAL-01 (PR #PRNUM, SHAPLACEHOLDER: D-156's
+        # SUPERSESSION-DUP-REFUSAL-01 (PR #206, 36dcdd76: D-156's
         # write-time refusal in the supersession recorder -- a recognizable
         # same-bundle_id row in the target log, valid or not, refuses before
         # the candidate row is constructed, and a log the consumer reader
