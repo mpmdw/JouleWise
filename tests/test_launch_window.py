@@ -659,6 +659,281 @@ class OperatorConfirmationDigestCliTests(unittest.TestCase):
             gate_discharged=False,
         )
 
+    def _real_confirmation_reach_fixture(self) -> argparse.Namespace:
+        """Build a committed pack whose real replay reaches the C-to-S gate."""
+
+        from tests import test_arm_readiness_lifecycle as lifecycle_tests
+        from tests.test_arm_readiness_evidence import content_source_and_receipt
+        from tests.test_arm_readiness_schemas import TEST_BOOT_SESSION_ID, sample_arm
+        from tests.test_family_marker import confirmation
+
+        temporary, repository, pack, custody, arm_path = (
+            lifecycle_tests.make_go_fixture(
+                lifecycle_tests.HISTORICAL_PACK_NAME
+            )
+        )
+        self.addCleanup(temporary.cleanup)
+
+        # These two setup-only seams are the same ones the lifecycle fixture
+        # uses to mint synthetic evidence. Both patches end before main() runs;
+        # the launcher-to-authenticator receiving chain below remains real.
+        with mock.patch.object(
+            arm_readiness, "_current_boot_session_id", return_value=TEST_BOOT_SESSION_ID
+        ), mock.patch.object(
+            arm_readiness, "_gate_receipt_histsem", return_value=None
+        ), mock.patch(
+            "joulewise.arm_readiness_evidence._r1_rederive_at_arm",
+            return_value=None,
+        ):
+            (repository / "dependency.txt").write_text("stable\n")
+            lifecycle_tests.git(repository, "add", "dependency.txt")
+            lifecycle_tests.git(
+                repository, "commit", "-qm", "dependency baseline"
+            )
+            derivation = lifecycle_tests.git_text(
+                repository, "rev-parse", "HEAD"
+            ).strip()
+            source, receipt = content_source_and_receipt(
+                repository, derivation
+            )
+            registry = json.loads(
+                (
+                    repository / arm_readiness.ROW_REGISTRY_RELATIVE_PATH
+                ).read_bytes()
+            )
+            policy = next(
+                item
+                for item in registry["freeze_evidence_lifecycle"][
+                    "evidence_policies"
+                ]
+                if item["kind"] == "DOCTRINE_PIN"
+            )
+            source["freshness_policy_id"] = policy["freshness_policy_id"]
+            receipt["freshness_policy_id"] = policy["freshness_policy_id"]
+            source_raw = arm_readiness.render_json(source)
+            source_digest = hashlib.sha256(source_raw).hexdigest()
+            receipt["dependency_manifest_sha256"] = source_digest
+            receipt["facts"][0]["source_sha256"] = source_digest
+
+            source_path = pack / "arm_readiness.sources/doctrine-pin.json"
+            source_path.parent.mkdir()
+            source_path.write_bytes(source_raw)
+            receipt_path = (
+                pack / "arm_readiness.evidence/evidence-doctrine-pin.json"
+            )
+            receipt_path.parent.mkdir()
+            receipt_raw = arm_readiness.render_json(receipt)
+            receipt_path.write_bytes(receipt_raw)
+            receipt_path.with_name(f"{receipt_path.name}.sha256").write_bytes(
+                arm_readiness.gnu_sidecar(
+                    hashlib.sha256(receipt_raw).hexdigest(), receipt_path.name
+                )
+            )
+            lifecycle_tests.git(repository, "add", ".")
+            lifecycle_tests.git(
+                repository, "commit", "-qm", "install synthetic R1 evidence"
+            )
+            minted = arm_readiness.generate_freeze_receipt(pack)
+            self.assertTrue(minted["mutated"])
+            lifecycle_tests.git(repository, "add", ".")
+            lifecycle_tests.git(
+                repository, "commit", "-qm", "mint freeze receipt"
+            )
+
+        successor_relative = arm_readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1]
+        successor_path = repository / successor_relative
+        successor_path.parent.mkdir(parents=True, exist_ok=True)
+        successor_raw = b'{"packs": []}\n'
+        successor_path.write_bytes(successor_raw)
+        lifecycle_tests.git(repository, "add", successor_relative.as_posix())
+        lifecycle_tests.git(
+            repository, "commit", "-qm", "mint successor pinset"
+        )
+        lifecycle_tests.git(
+            repository, "update-ref", "refs/remotes/origin/main", "HEAD"
+        )
+
+        table_path = (
+            Path(temporary.name)
+            / "operator-confirmations"
+            / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME
+        )
+        table_path.parent.mkdir()
+        table = confirmation()
+        table["successor_pinset"]["sha256"] = hashlib.sha256(
+            successor_raw
+        ).hexdigest()
+        table_raw = arm_readiness.render_json(table)
+        table_path.write_bytes(table_raw)
+        table_path.with_name(f"{table_path.name}.sha256").write_bytes(
+            arm_readiness.gnu_sidecar(
+                hashlib.sha256(table_raw).hexdigest(), table_path.name
+            )
+        )
+
+        arm = sample_arm(Path(temporary.name) / "context")
+        arm["pack"] = arm_readiness._pack_record(pack)
+        arm["reviewed_main"] = arm_readiness.reviewed_main(pack)
+        tree, _tree_raw = arm_readiness._plan_tree(pack)
+        attachment = tree["arm_attachments"]["arm_readiness"]
+        freeze_reference = attachment["freeze_receipt"]
+        arm["freeze_receipt"] = {
+            "receipt_id": Path(freeze_reference["path"]).stem,
+            "path": freeze_reference["path"],
+            "sha256": freeze_reference["sha256"],
+        }
+        arm["row_registry"] = attachment["row_registry"]
+        arm_raw = arm_readiness.render_json(arm)
+        arm_path.write_bytes(arm_raw)
+        arm_path.with_name(f"{arm_path.name}.sha256").write_bytes(
+            arm_readiness.gnu_sidecar(
+                hashlib.sha256(arm_raw).hexdigest(), arm_path.name
+            )
+        )
+
+        window_root = custody / "window-plan"
+        window_root.mkdir()
+        (window_root / "window.env").write_text(f"PACK_ROOT={pack}\n")
+        chain_path = window_root / "window-chain.zsh"
+        chain_path.write_text("#!/bin/zsh\nexit 0\n")
+        exec_argv = [
+            "/usr/bin/caffeinate",
+            "-is",
+            "/bin/zsh",
+            str(chain_path),
+            str(window_root),
+        ]
+        manifest_path = (
+            custody
+            / pack.name
+            / "arm_readiness.t0.inputs"
+            / "launch-manifest.json"
+        )
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_bytes(
+            arm_readiness.render_json(
+                {
+                    "schema_version": arm_readiness.LAUNCH_MANIFEST_SCHEMA,
+                    "boot_session_id": TEST_BOOT_SESSION_ID,
+                    "window_plan_root": str(window_root),
+                    "prewindow_command": ["/bin/true"],
+                    "launch_command": exec_argv,
+                }
+            )
+        )
+        return argparse.Namespace(
+            arm_path=arm_path,
+            boot_session_id=TEST_BOOT_SESSION_ID,
+            custody=custody,
+            table_digest=hashlib.sha256(table_raw).hexdigest(),
+            table_path=table_path,
+            argv=[
+                "--pack-root",
+                str(pack),
+                "--arm-receipt",
+                str(arm_path),
+                "--arm-readiness-custody-root",
+                str(custody),
+                "--launch-manifest",
+                str(manifest_path),
+            ],
+        )
+
+    def _run_real_confirmation_reach(
+        self, supply: argparse.Namespace, extra_argv: list[str]
+    ) -> tuple[Path, str]:
+        reached: list[tuple[Path | None, str | None]] = []
+
+        def stop_at_authenticator(
+            confirmation_path: Path | str | None,
+            expected_confirmation_digest: str | None,
+        ) -> None:
+            reached.append(
+                (
+                    Path(confirmation_path)
+                    if confirmation_path is not None
+                    else None,
+                    expected_confirmation_digest,
+                )
+            )
+            raise arm_readiness.FamilyPublicationError(
+                "confirmation_mismatch", "confirmation reach sentinel"
+            )
+
+        sink, stdout_patch = self._captured_stdout(launch_window)
+        with stdout_patch, mock.patch.object(
+            arm_readiness,
+            "_current_boot_session_id",
+            return_value=supply.boot_session_id,
+        ), mock.patch.object(
+            arm_readiness,
+            "_authenticate_confirmation_table",
+            side_effect=stop_at_authenticator,
+        ) as authenticator, mock.patch.object(
+            launch_window, "_consume_launch_capability"
+        ) as consume, mock.patch.object(
+            launch_window, "verify_consumed_launch"
+        ) as verify_consumed, mock.patch.object(
+            launch_window.os, "execve"
+        ) as execve:
+            code = launch_window.main(supply.argv + extra_argv)
+        refusal = json.loads(sink.getvalue())
+        self.assertEqual(code, 2)
+        self.assertEqual(refusal["status"], "REFUSE")
+        self.assertIn("confirmation reach sentinel", refusal["detail"])
+        authenticator.assert_called_once()
+        consume.assert_not_called()
+        verify_consumed.assert_not_called()
+        execve.assert_not_called()
+        self.assertEqual(len(reached), 1)
+        observed_path, observed_digest = reached[0]
+        self.assertIsNotNone(observed_path)
+        self.assertIsNotNone(observed_digest)
+        return observed_path, observed_digest
+
+    def test_launch_cli_real_chain_reaches_confirmation_authenticator(
+        self,
+    ) -> None:
+        supply = self._real_confirmation_reach_fixture()
+        cases = (
+            (
+                "explicit operator path",
+                [
+                    "--step6-confirmation-table",
+                    str(supply.table_path),
+                    "--expected-confirmation-digest",
+                    supply.table_digest,
+                ],
+                supply.table_path,
+            ),
+            (
+                "auto-resolved custody path",
+                [
+                    "--expected-confirmation-digest",
+                    supply.table_digest,
+                ],
+                supply.arm_path.resolve().parent.parent.parent
+                / "family_publication"
+                / arm_readiness.STEP6_CONFIRMATION_TABLE_NAME,
+            ),
+        )
+        for label, extra_argv, expected_path in cases:
+            with self.subTest(case=label):
+                observed_path, observed_digest = (
+                    self._run_real_confirmation_reach(supply, extra_argv)
+                )
+                # The explicit expectation stays unresolved to pin the exact
+                # argv Path. The default starts from the resolved arm receipt,
+                # just as _verify_arm_receipt does, then compares the derived
+                # lexical Path without a final resolve() that could hide a
+                # substitution.
+                if observed_path != expected_path:
+                    self.fail(
+                        "confirmation authenticator path mismatch: "
+                        f"spy recorded {observed_path}; expected {expected_path}"
+                    )
+                self.assertEqual(observed_digest, supply.table_digest)
+
     @staticmethod
     def _confirmation_verifier(supply: argparse.Namespace) -> object:
         def verify_arm(
