@@ -10,6 +10,12 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T26 (2026-08-27 ~12:45 PDT) — CHECKPOINT (Ed's usage-limit pause; streams
+LEFT RUNNING). Resume from
+`docs/process_traces/2026-08-27-t26/CHECKPOINT-2026-08-27-PM.md`. D-161
+(threat-model prune) ratified; #209 waits on the S14 refresh lane, not on
+Ed; then estate 11 → shakedown (08-28) → transaction (08-29).**
+
 **T26 (2026-08-27, resumed) — SPRINT DAY 1 CLOSING. MERGED today: #201
 #202 #203 #204 #205 #206 #207 #208 #210 #211 #212 #213 #214 #215 #216 #218
 #219 (kernel 100 → 90 live). PAPER FROZEN at round 6 (9,980 main-text

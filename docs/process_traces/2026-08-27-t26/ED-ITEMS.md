@@ -38,7 +38,7 @@ gate named beside it.
    All of it runs under lead custody (D-148 (4)); the six licensed prompts
    reach Ed in this session wherever he is.
 
-## BLOCKING THE MINT — one two-line edit only your hands can make (W-10, PR #209)
+## ~~BLOCKING THE MINT~~ SUPERSEDED by D-161: the pin is refreshed by a reviewed lane (S14), not by hand. Ed's two edits (8b2a1317, d8f7e6a1) were exact but the row's post_authoring_delta was stale too; no further hand edit is requested.
 0. The reviewed pinset `configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json`
    row `d117_contrast_qwen25_1p5b_vs_7b_v3` pins the OLD pack bytes; W-10
    regenerated the `_v3` pack, so the mint refuses `histsem_pinset_mismatch`
