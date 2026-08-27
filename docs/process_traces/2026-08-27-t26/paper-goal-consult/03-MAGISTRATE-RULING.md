@@ -413,3 +413,12 @@ the last before `_v4` fills:
     verdict lives in custody, not in a commit message).
 59. Round 6 lands as one PR; after it the draft is FROZEN except for
     results fills when `_v4` issues (round 7 = fills + one fidelity pass).
+
+## Addendum 8 (2026-08-27) — D-161
+
+60. **§7 sentence at fills time (round 7):** "The repository is
+    tamper-evident for the operator's own benefit — every input and refusal
+    is fingerprinted and preserved so that honest drift is visible — not
+    tamper-proof against an adversary; the single-operator assumption is
+    stated, not defended." Replaces the TOCTOU/operator-trust paragraph's
+    defensive framing; no other change while frozen.
