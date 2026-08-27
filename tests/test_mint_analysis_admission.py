@@ -350,7 +350,15 @@ class MintAnalysisAdmissionTests(unittest.TestCase):
             ),
             mock.patch.object(readiness, "_profile_rows", return_value=[]),
         ):
-            return readiness.generate_freeze_receipt(pack)
+            # D-154 R-3 (#208) made the operator's measurement-checkout
+            # declaration a required argument and gates on it BEFORE analysis
+            # admission runs, so the fixture must declare the repository this
+            # pack actually lives in or the gate refuses first and these tests
+            # never reach the seam they exist to pin.
+            return readiness.generate_freeze_receipt(
+                pack,
+                measurement_checkout=readiness._repo_for_pack(pack).resolve(),
+            )
 
     def _assert_prewrite_refusal(
         self,

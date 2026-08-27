@@ -282,7 +282,7 @@ The cure is two literals:
    `pack_id` is `d117_contrast_qwen25_1p5b_vs_7b_v3`: replace
    `current_pack_sha256` `0d07194143702b266267f0faa7b051695ffb5e1c56dc7a69d0b2dca8aaa883ef`
    with the digest above. It occurs exactly once in the file.
-2. `tests/test_receipt_histsem.py:33`: `PINSET_SHA256` must become the SHA-256 of
+2. `tests/test_receipt_histsem.py:42` (the line moved from :33 when #214 landed): `PINSET_SHA256` must become the SHA-256 of
    the edited pinset file — recompute it after step 1, do not guess it.
 
 The stream did not make this edit, for three converging reasons, and the
