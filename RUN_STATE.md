@@ -48,6 +48,12 @@ map), then this file.**
   resolver + a mint-time admission refusal; S-0 re-runs as estate 11;
   earliest credible night ~2026-08-29/30. Ruling:
   `docs/process_traces/2026-08-27-t26/holm-m-consult/04-MAGISTRATE-RULING.md`.
+- **T26 AMENDMENT 2 — W-11 ADDED (D-158, Ed's ask):** a minutes-long
+  end-to-end PIPELINE SMOKE (generate → freeze → arm → launch → collect →
+  finalize → claim edge on a throwaway claim-ineligible family; pass =
+  the claim edge answers for a DATA reason). The 48-hour cut lands before
+  the night (S10); full chaining and the 20-minute live variant follow.
+  Ruling: `docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md`.
 - The operator sequence for the night is
   `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md`
   (Phases A–H, every D-155 ruling folded in). W-8 (§1.5 preflight) runs
