@@ -41,6 +41,13 @@ map), then this file.**
   dev checkout); (3) one word on notification cadence (immediate
   recommended); (4) pick the transaction night — earliest credible
   2026-08-28, ahead of a free week for the 168-hour campaign clock.
+- **T26 (2026-08-27) AMENDMENT — W-10 ADDED, the night is gated on it
+  (D-157):** the gamma analysis manifest is inadmissible as generated
+  (D-139 A2's m=2 family never installed; no `families` block; EMPTY
+  prefill slots; the freeze path never validates it). S8 installs the
+  resolver + a mint-time admission refusal; S-0 re-runs as estate 11;
+  earliest credible night ~2026-08-29/30. Ruling:
+  `docs/process_traces/2026-08-27-t26/holm-m-consult/04-MAGISTRATE-RULING.md`.
 - The operator sequence for the night is
   `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md`
   (Phases A–H, every D-155 ruling folded in). W-8 (§1.5 preflight) runs
