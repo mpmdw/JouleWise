@@ -138,7 +138,7 @@ frozen plan and policy
 
 At claim consumption, check the registered `FLOOR-BIND-01` row in `docs/process/state_kernel.json`. While its claim-side limitation remains open, do not describe a standalone floor artifact as independently authenticating complete extraction evidence. The paper's Appendix A therefore conditions claim replay on closure of that row.
 
-The claim-side bound printed in the paper is `deterministic_bounds.total`. `E_clock_anchor_shift_bound_j` is only one term. Do not substitute it into tables, templates, or release metadata.
+The paper's Table 3 claim-side bound has NO supplier yet; the registry holds that column unresolved and it renders only after the prospective campaign. Do not bind it to `deterministic_bounds.total`: that quantity widens the decision interval, but the registry's own rule forbids assuming it is identical to the template's clock-anchor claim-side term, and `scripts/render_results_fills.py:977` enforces that. `E_clock_anchor_shift_bound_j` is one term inside `deterministic_bounds.terms[]` and is likewise not the column.
 
 ## 7. Repository checks moved out of the paper
 
