@@ -1201,15 +1201,81 @@ arming; they do not authorize the live night.
    so Ed can personally inspect the complete `PASS`/`GO` result. No verdict,
    author, verifier, or other automated command may cross this boundary.
 3. **E-10 — Ed's deliberate physical launch:** after that inspection, Ed
-   personally invokes the sole reviewed launcher exactly once:
+   personally invokes the sole reviewed launcher exactly once.
+
+   **Two values the command needs, built before they appear in it.** Every pack
+   family is produced by a *freeze transaction*: a session that mints the
+   family's receipts and then publishes them. **Step 6** of that session is the
+   point at which Ed personally confirms the result, and the artefact it leaves
+   behind is a small JSON file named `d117_step6_confirmation_table_v4.json`.
+   That file records Ed's `YES` over the family, and in a section called
+   `successor_pinset` it records the SHA-256 of one specific repository file —
+   the successor-pinset file — as that file was committed at the reviewed head.
+   Call the JSON file **the table**. Its published home is a directory named
+   `family_publication` inside the arm-readiness custody tree, alongside the
+   packs; set `$STEP6_CONFIRMATION_TABLE` to its absolute path:
+
+   ```sh
+   STEP6_CONFIRMATION_TABLE="$ARM_READINESS_CUSTODY_ROOT/family_publication/d117_step6_confirmation_table_v4.json"
+   ```
+
+   The second value is a different thing about that same file: the SHA-256 **of
+   the table's own bytes**, computed once during that step-6 confirmation and
+   recorded in the transaction's custody tree. It is written `hC` in the
+   transaction record, and it reaches this command through
+   `$ED_STEP6_CONFIRMED_SHA256`. Read it out of the transaction's
+   `085-ed-step6-confirmed-sha256.txt` transcript — the file written at the
+   moment Ed's confirmation was executed, which holds the digest and nothing
+   else:
+
+   ```sh
+   ED_STEP6_CONFIRMED_SHA256="$(/bin/cat "$TRANSACTION_CUSTODY/085-ed-step6-confirmed-sha256.txt")"
+   ```
+
+   `$TRANSACTION_CUSTODY` is the custody directory of the freeze transaction
+   that produced this family; it is outside this repository, and `hC` is never
+   anywhere inside the repository. Path and digest are two different facts
+   about one file, and the launcher wants both.
+
+   **Why both.** Before it consumes anything, the launcher re-derives the arm
+   receipt's contents from the repository and compares them to what the receipt
+   says — a replay, to prove the receipt still describes reality. That replay
+   reaches a check which refuses to treat the successor-pinset file as reviewed
+   unless Ed's table vouches for it. The check will not read a single field out
+   of the table until it has hashed the table's bytes and found them equal to
+   `hC`, so it needs a file to hash and a digest to compare against, and it
+   refuses when it has one without the other. Note the asymmetry: the digest
+   has no default and must be supplied, while the *file* the check hashes is
+   the one at `--step6-confirmation-table` if that flag is given and the one at
+   the `family_publication` default above if it is not. So omitting the path
+   flag is not itself a refusal — a missing digest is, and so is a table that
+   is neither supplied nor sitting at that default.
 
    ```sh
    .venv/bin/python scripts/launch_window.py \
      --pack-root "$PACK_ROOT" \
      --arm-receipt "$ARM_RECEIPT" \
      --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
-     --launch-manifest "$LAUNCH_MANIFEST"
+     --launch-manifest "$LAUNCH_MANIFEST" \
+     --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \
+     --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
    ```
+
+   **`hC` is carried here, never recomputed here.** Take
+   `$ED_STEP6_CONFIRMED_SHA256` from the freeze transaction's custody record of
+   Ed's step-6 confirmation — the `085-ed-step6-confirmed-sha256.txt`
+   transcript, written at the moment that confirmation was executed. Do **not**
+   produce it with `shasum -a 256 "$STEP6_CONFIRMATION_TABLE"`. That would hash
+   the file under test to make the value the file under test is then checked
+   against, so it would agree no matter what the file contained; the table's own
+   contract calls that out and forbids it. The digest is worth something only
+   because it reached this command from Ed's out-of-band confirmation rather
+   than from the bytes it is meant to authenticate.
+
+   **Pass the path even though it is optional.** Stating it puts the exact file
+   under test into the command Ed is inspecting, rather than leaving it implied
+   by a default he would have to know to check; and it is the only route when
+   custody keeps the table somewhere other than `family_publication`.
 
    This one invocation generates the anonymous-FD handoff, atomically creates
    and fsyncs the no-clobber consumption primary (the single-use
@@ -1339,6 +1405,64 @@ record its SHA-256 before closing all agents. `window.env` must additionally
 bind the absolute `ARM_RECEIPT`, `ARM_READINESS_CUSTODY_ROOT`, and
 `LAUNCH_MANIFEST` paths used by E-10:
 
+> **OPEN DEFECT (registered 2026-08-26; S9-08a; NEEDS A MAGISTRATE RULING) —
+> the chain has no supply line for three of its own inputs.** Two separate
+> problems meet here, and both are about getting a value into a chain that runs
+> after Ed has walked away.
+>
+> **What this does and does not gate.** It does **not** gate transaction night.
+> `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md` governs that
+> session and states in terms that `scripts/launch_window.py` is never invoked
+> during it (§6 item 1); its Phase G is a ceremony with no real arm at all
+> (D-155, NR-6). Nothing that night reaches this chain. It **does** gate every
+> later measurement window, which cannot run this chain until the defect is
+> cured. The cure being assessed is **T-0 parser unification** — one parser
+> shared by `capture_t0_step.py` and the chain, so that a key the chain must
+> read cannot be a key `window.env` is forbidden to hold — under stream **S2**.
+>
+> *First, the one that predates this note.* The paragraph immediately above
+> tells the operator to bind `ARM_RECEIPT` and `LAUNCH_MANIFEST` in
+> `window.env`, and the chain below dereferences both under `set -u` at all
+> three of its launcher calls. But `window.env` is read by
+> `scripts/capture_t0_step.py`, whose `_parse_window_environment` compares the
+> file's keys against an exact 25-key allowlist, `_ENV_KEYS`, and refuses with
+> `evidence_author_t0_capture_environment_invalid` on any key that is missing
+> *or* unknown. `ARM_RECEIPT` and `LAUNCH_MANIFEST` are not in that allowlist.
+> So binding them in `window.env` makes T-0 refuse, and leaving them out makes
+> the chain abort on an unbound variable at its first launcher call. **This
+> predates the confirmation pair entirely and blocks the chain on its own.**
+>
+> *Second, the confirmation pair.* The chain's `--lifecycle-event start` call
+> below performs the full consumption replay, so it crosses the same table
+> check E-10 crosses and refuses without the table path and `hC`. It cannot
+> inherit them from E-10's command line: E-10 replaced itself with this chain
+> by calling `execve`, and the new process gets the launch manifest's argv, not
+> E-10's. `window.env` cannot carry them, for the exact-allowlist reason above.
+> And no operator is present to type them — the chain begins after Ed steps
+> away, which is the whole point of the frozen chain.
+>
+> **One channel does remain open, and the magistrate should weigh it rather
+> than assume it away.** `scripts/launch_window.py` calls
+> `os.execve(argv[0], argv, dict(os.environ))`: the *environment* crosses even
+> though argv does not. A variable Ed `export`s in the shell he runs E-10 from
+> would therefore be visible to the chain — which is exactly how the rehearsal
+> operator card already supplies `ED_STEP6_CONFIRMED_SHA256`. Whether that is
+> an acceptable custody route for `hC` is a policy question, not a mechanical
+> one, and it is the question this note hands over. Weigh it against
+> `docs/process_traces/2026-08-24-d153-sweep/01-opus-contract-lens-seat.md`
+> "Cure for 3a-3d", which holds that `hC` is operator-pasted per use and never
+> stored in an environment file, and against
+> `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md` §2 Phase E4,
+> which keeps `hC` in transaction custody only.
+>
+> Until that ruling, the pair is **deliberately absent from the `start` command
+> below**: writing the flags in against variables nothing defines would only
+> move the abort from the gate to `set -u`. E-10 above is unaffected — Ed types
+> that command himself and can supply both values directly.
+>
+> Both problems are the same shape and would likely fall to the same cure: a
+> key the chain must read is a key `window.env` is not allowed to hold.
+
 ```zsh
 #!/bin/zsh
 set -euo pipefail
@@ -1352,6 +1476,15 @@ PY="$REPO/.venv/bin/python"
 # First executable action: consume the inherited one-use FD and mint start
 # custody. Direct shell invocation has no FD 198 and refuses
 # launch_handoff_invalid before settle or collection.
+#
+# INCOMPLETE, BY DECISION: this call performs the full consumption replay, so
+# it also needs --step6-confirmation-table and --expected-confirmation-digest
+# and refuses without them. It cannot inherit them from E-10's command line
+# (execve hands this process the manifest's argv, not E-10's), and window.env
+# cannot hold them (exact-key allowlist). The exported environment DOES cross
+# execve and is the one remaining candidate channel. See the OPEN DEFECT note
+# above this chain; choosing the supply line is a magistrate ruling, not
+# something to improvise at the bench.
 "$PY" "$REPO/scripts/launch_window.py" \
   --pack-root "$PACK_ROOT" \
   --arm-receipt "$ARM_RECEIPT" \
@@ -1493,6 +1626,12 @@ echo "$(timestamp) chain_start" >> "$OPERATOR_LOG_ROOT/window-chain.log"
 # Final settle is chain-owned (D-117 §5C): operator activity ends at launch,
 # and §1's post-activity settle happens here, before the pre-calibration.
 settle
+# No confirmation pair here, and none at completion below, even once the open
+# defect above is ruled. Settle and completion do replay the consumed arm --
+# every lifecycle event does -- but they replay it with arm semantics switched
+# off (replay_arm_semantics=False), and the table check lives inside those
+# semantics. Only the start event runs the full replay that reaches it. Their
+# omission is deliberate, not an oversight.
 "$PY" "$REPO/scripts/launch_window.py" \
   --pack-root "$PACK_ROOT" \
   --arm-receipt "$ARM_RECEIPT" \
@@ -1943,6 +2082,25 @@ The allowance widens the already guarded/corner-widened floor. It does not
 replace instrument uncertainty, and it is never silently omitted.
 
 ## 12. Close-out record
+
+**What this window's close-out is not (registered 2026-08-26, S9-07).** Closing
+a window is not closing the campaign, and neither one produces a claim. After
+the LAST window of a campaign, three further acts happen at the desk, in this
+order, and they are governed by
+`docs/process_traces/2026-08-22-t20/real-transaction-runbook.md`: the campaign
+is declared closed (§2 H5, D-155 NR-8), the fixation commit is made (H5 step 4),
+and only then is the campaign's *prospective* analysis manifest turned into a
+*finalized* one by `scripts/finalize_analysis_manifest.py` (§2 H6). That
+finalizer re-reads the prospective manifest against the plan tree and the
+campaign's postcollection custody — run corpus, whole-window verdict, bracket
+binding, calibration ledger, aggregate floor artifact — and writes one immutable
+finalized manifest binding all of them, without computing or reading the effect
+estimate. `analyze-claims` reads several manifest forms but refuses the
+prospective one specifically, so **a campaign carrying a prospective manifest
+has no consumable claim until that step has run.** Do not run it after a single
+window: it binds the whole campaign's custody, which does not exist until the
+last window is in. H6 carries an OPEN item — which custody root it writes into
+is not yet settled — so read it there before executing.
 
 Record:
 
