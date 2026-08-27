@@ -19,14 +19,20 @@ gate named beside it.
    it is owned and *ratified* where it is consumed; Ed ratifies the prompt
    (one word) and the code then pins it. Gates the mint.
 
-## From T0-UNATTENDED-01 (S2, PR #212) — hands items
-10. The `setUsingNetworkTime: Off` bench verification must happen BEFORE
-    that check gates (else every window refuses); plus the four other
-    Ed-hands items in the D-127.1 proposed amendment
-    (`impl/d127-1-proposed-decision-log-delta.md` on the PR branch) —
-    the sudoers rule install (SHA-256 recorded), the supervised rehearsal
-    sitting, and two observability-only checks. Gates unattended windows,
-    not the `_v4` night.
+## From T0-UNATTENDED-01 (S2, PR #212) — five hands items, verbatim from the stream
+Gate unattended WINDOWS, not the `_v4` mint night.
+10. D-127 sudoers install/exercise — pre-existing; blocks every window
+    regardless of design.
+11. ~2 min privileged anchor positive control during the supervised
+    rehearsal sitting (closes the detector-inertness risk).
+12. Ratification: D-127.1 (scope closure — retire the operator
+    `-getusingnetworktime` read; NO new privileged command) and the ruled
+    6 h retention. Paste-ready text: `impl/d127-1-proposed-decision-log-delta.md`
+    on the PR branch.
+13. Exact `setUsingNetworkTime: Off` bytes bench-verified under sudo BEFORE
+    the strengthened postcondition gates — a wrong byte refuses every window
+    forever; the constant is one line.
+14. The supervised rehearsal sitting itself (kernel acceptance item 2).
 
 ## Optional but valuable
 7. **PIPELINE-SMOKE-LIVE-01** (D-158 R-3): ~20 minutes at the machine the
