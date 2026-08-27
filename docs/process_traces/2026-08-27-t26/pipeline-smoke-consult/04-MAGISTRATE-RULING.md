@@ -98,3 +98,41 @@ registered in the end-of-sprint wave with this file as authority; the
 ## Custody
 `00-brief.md`, `01-sol-seat.md`, `02-opus-seat.md`, `03-fable-seat.md`
 (verbatim); implementation stream S10 on `feat/pipeline-smoke-w11`.
+
+## Addendum (2026-08-27, post S10) — R-1/R-2 corrected on execution evidence
+
+A-1. **The mock-telemetry "lock" (R-1) is WITHDRAWN.** `inputs.py:2753-2755`
+excludes any bundle carrying a reason before the predicate runs, so a
+config-byte reason on every bundle makes R-2's DATA-only pass
+unsatisfiable. The smoke family's claim-ineligibility moves to where it is
+enforceable without touching bundles: `generation_kind: pipeline_smoke`
+refused by production `arm`/`freeze` by class, dry-run receipts refused as
+arms, the family absent from `d117_row_registry_v2` and every marker, and
+the smoke driver asserting the pack-id prefix on the verdict artifact.
+Smoke bundles carry NO synthetic reasons.
+
+A-2. **No checked-in corpus is claim-consumable** (80/80
+`config_hash_mismatch` even with real telemetry; the repo's only
+"end-to-end" test patches six seams). R-4 item (3)'s premise was wrong:
+the clean leg's corpus must be PRODUCED BY THE REAL COLLECTOR on the smoke
+pack via the fake-collector seam (tier-1 chaining, previously deferred),
+so hashes match by construction. This is the next S10 deliverable
+(PIPELINE-SMOKE-01 proper). The `_v4` night is NOT gated on it; the
+mutation legs, partition, argv regression and window.env assertion (PR
+#211) are W-11 as landed.
+
+A-3. **Reachability domain for the partition:** the `analyze_claims` call
+graph (edge-reachable). Codes live elsewhere but unreachable from the edge
+are CONTRACT (fail-closed), listed as such with the note. The reachability
+test is rewritten to executable witnesses once the corpus exists.
+
+A-4. **`--bracket-binding` has no producer** (`build_calibration_bracket_binding`
+has no CLI). Registered as BRACKET-BINDING-CLI-01; it gates FINALIZATION
+after the night (≈ T+7 d), not the mint — it lands before the campaign
+closes.
+
+A-5. window.env truth recorded: `ARM_RECEIPT` and `LAUNCH_MANIFEST` are
+bound by the runbook and refused by the allowlist (S9-08a confirmed
+mechanically); cure is the T-0 parser unification row (S2 reports it is
+outside its footprint) — registered as T0-ENV-PARSER-UNIFY-01, gating
+later windows.
