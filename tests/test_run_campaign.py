@@ -9288,13 +9288,47 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
             )
         )
 
-        with self.assertRaises(
+        api_stdout = io.StringIO()
+        with redirect_stdout(api_stdout), self.assertRaises(
             run_campaign_module.SupersessionRecorderError
         ) as caught:
             run_campaign_module.run_record_supersession(args)
+        # The truthful name matters: nothing was already recorded for this
+        # bundle, so the already-recorded code would misreport the condition.
         self.assertEqual(
             caught.exception.reason_code,
+            "campaign_occurrence_supersession_log_unreadable",
+        )
+        self.assertNotEqual(
+            caught.exception.reason_code,
             "campaign_occurrence_supersession_already_recorded",
+        )
+        message = str(caught.exception)
+        self.assertIn(
+            "no supersession row for this bundle was recorded", message
+        )
+        self.assertIn(
+            "cannot be read by the supersession consumer", message
+        )
+        self.assertIn(f"target log path={json.dumps(str(log_path))}", message)
+        self.assertIn("no row was appended", message)
+        self.assertEqual(api_stdout.getvalue(), "")
+        self.assertEqual(log_path.read_bytes(), before_repeat)
+
+        cli_stdout = io.StringIO()
+        cli_stderr = io.StringIO()
+        with redirect_stdout(cli_stdout), redirect_stderr(cli_stderr):
+            self.assertEqual(
+                run_campaign_module.main(
+                    self._supersession_argv(binding, bundle_id, quarantine)
+                ),
+                2,
+            )
+        self.assertEqual(cli_stdout.getvalue(), "")
+        self.assertEqual(
+            cli_stderr.getvalue(),
+            "error: campaign_occurrence_supersession_log_unreadable: "
+            f"{message}\n",
         )
         self.assertEqual(log_path.read_bytes(), before_repeat)
 

@@ -90,8 +90,14 @@ OCCURRENCE_SUPERSESSION_SCHEMA = (
 REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED = (
     "campaign_occurrence_supersession_already_recorded"
 )
+REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE = (
+    "campaign_occurrence_supersession_log_unreadable"
+)
 SUPERSESSION_RECORDER_REASON_CODES = frozenset(
-    {REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED}
+    {
+        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED,
+        REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE,
+    }
 )
 CURRENT_MINT_REDUCER_VERSIONS = frozenset({"0.5.2", "0.6.2"})
 NEG8_DRIFT_BOUND_SCHEMA = "joulewise.neg8_drift_bound.v1"
@@ -2803,13 +2809,15 @@ def require_occurrence_supersession_recordable(
             if consumer_results is not None:
                 return
             message = (
-                "supersession recording refused: target campaign log cannot be "
-                "reasoned about by the supersession consumer; "
+                "supersession recording refused: no supersession row for this "
+                "bundle was recorded, but the target campaign log cannot be "
+                "read by the supersession consumer, so appending one would "
+                "produce a log no consumer can use; "
                 f"target log path={json.dumps(str(log_path))}; "
                 "no row was appended"
             )
             raise SupersessionRecorderError(
-                REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED,
+                REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE,
                 message,
             )
         first = matching[0]
@@ -5886,6 +5894,7 @@ __all__ = [
     "SALVAGE_DANGLER_CONSUMPTION_SEMANTICS_ID",
     "OCCURRENCE_SUPERSESSION_SCHEMA",
     "REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_ALREADY_RECORDED",
+    "REASON_CAMPAIGN_OCCURRENCE_SUPERSESSION_LOG_UNREADABLE",
     "SUPERSESSION_RECORDER_REASON_CODES",
     "SupersessionRecorderError",
     "WHOLE_WINDOW_EVALUATION_BASIS_SCHEMA",
