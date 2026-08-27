@@ -6811,13 +6811,13 @@ def _derive_freeze_predecessor(
     }
 
 
-def _freeze_pack_identity_mismatch_detail(
+def _pack_mapping_mismatch_kind(
     recorded: Mapping[str, Any],
     current: Mapping[str, Any],
     pack_root: Path,
-    registry: Mapping[str, Any],
+    registry: Mapping[str, Any] | None = None,
 ) -> str | None:
-    """Return the truthful freeze-identity refusal detail, if any."""
+    """Compare pack terms under D-154's successor-scoped location rule."""
 
     recorded_keys = set(recorded)
     current_keys = set(current)
@@ -6826,7 +6826,16 @@ def _freeze_pack_identity_mismatch_detail(
         for key in recorded_keys
         if key != "pack_root"
     ):
-        return "freeze receipt pack identity differs from committed pack bytes"
+        return "content"
+
+    locations_equal = recorded["pack_root"] == current["pack_root"]
+    if locations_equal and registry is None:
+        return None
+
+    if registry is None:
+        registry, _registry_raw, _registry_reference_value = _registry_reference(
+            pack_root
+        )
 
     generation = _pack_generation(pack_root.name)
     successor_relative = (
@@ -6834,9 +6843,7 @@ def _freeze_pack_identity_mismatch_detail(
         and generation >= _family_first_generation(registry)
     )
     if not successor_relative:
-        if recorded["pack_root"] != current["pack_root"]:
-            return "freeze receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)"
-        return None
+        return None if locations_equal else "archival_location"
 
     _repository, _pack_prefix, pack_relative = _repository_and_pack_relative(
         pack_root
@@ -6872,6 +6879,26 @@ def _freeze_pack_identity_mismatch_detail(
         or current_projection is None
         or recorded_projection != current_projection
     ):
+        return "repository_relative_location"
+    return None
+
+
+def _freeze_pack_identity_mismatch_detail(
+    recorded: Mapping[str, Any],
+    current: Mapping[str, Any],
+    pack_root: Path,
+    registry: Mapping[str, Any],
+) -> str | None:
+    """Return the truthful freeze-identity refusal detail, if any."""
+
+    mismatch = _pack_mapping_mismatch_kind(
+        recorded, current, pack_root, registry
+    )
+    if mismatch == "content":
+        return "freeze receipt pack identity differs from committed pack bytes"
+    if mismatch == "archival_location":
+        return "freeze receipt archival location differs; replay below the registry's family-publication generation threshold is location-bound (see the 2026-08-20 ruling)"
+    if mismatch == "repository_relative_location":
         return "freeze receipt repository-relative pack location differs"
     return None
 
@@ -7757,8 +7784,11 @@ def _latest_dry_run_binding(
         for check in receipt["checks"]
         if check["check_id"] == "same_head_pack_binding"
     ]
+    pack_mismatch = _pack_mapping_mismatch_kind(
+        receipt["pack"], pack, Path(str(pack["pack_root"]))
+    )
     if (
-        receipt["pack"] != pack
+        pack_mismatch is not None
         or reviewed["head_commit"] == "unavailable"
         or not reviewed["clean"]
         or not reviewed["exact_match"]
@@ -9074,10 +9104,19 @@ def _replay_consumed_arm(
             "launch_binding_mismatch",
             f"consumed arm pack root cannot be authenticated: {exc}",
         ) from exc
-    if dict(authenticated_pack) != dict(arm["pack"]):
+    pack_mismatch = _pack_mapping_mismatch_kind(
+        arm["pack"], authenticated_pack, recorded_pack_root
+    )
+    if pack_mismatch is not None:
+        if pack_mismatch == "content":
+            detail = "consumed arm pack record differs from authenticated pack bytes"
+        elif pack_mismatch == "archival_location":
+            detail = "consumed arm pack archival location differs from the authenticated pack location"
+        else:
+            detail = "consumed arm pack repository-relative location differs from the authenticated pack location"
         raise LaunchLineageError(
             "launch_binding_mismatch",
-            "consumed arm pack record differs from authenticated pack bytes",
+            detail,
         )
     if consumption_path.parent.parent.name != recorded_pack_root.name:
         raise LaunchLineageError(

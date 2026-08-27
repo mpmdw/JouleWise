@@ -22,7 +22,12 @@ from joulewise.arm_readiness import (
     validate_freeze_receipt,
     validate_dry_run_receipt,
 )
-from tests.test_arm_readiness_lifecycle import PACK_NAME, git, make_go_fixture
+from tests.test_arm_readiness_lifecycle import (
+    PACK_NAME,
+    git,
+    make_go_fixture,
+    predecessor_pack_root,
+)
 from tests.test_arm_readiness_schemas import (
     TEST_BOOT_SESSION_ID,
     predicate_content,
@@ -168,6 +173,286 @@ class ArmReadinessDryRunTests(unittest.TestCase):
         receipt["arm_disposition"] = "GO"
         with self.assertRaises(ValueError):
             validate_dry_run_receipt(receipt)
+
+    def test_pack_comparison_is_fieldwise_and_successor_scoped(self) -> None:
+        temporary, _repo, pack, _custody, _arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        current = _pack_record(pack)
+        registry, _raw, _reference = readiness._registry_reference(pack)
+
+        for field in sorted(set(current) - {"pack_root"}):
+            with self.subTest(field=field):
+                recorded = copy.deepcopy(current)
+                recorded[field] = f"{recorded[field]}-different"
+                self.assertEqual(
+                    readiness._pack_mapping_mismatch_kind(
+                        recorded, current, pack, registry
+                    ),
+                    "content",
+                )
+        for keyset in ("missing", "extra"):
+            with self.subTest(keyset=keyset):
+                recorded = copy.deepcopy(current)
+                if keyset == "missing":
+                    recorded.pop("plan_id")
+                else:
+                    recorded["unexpected"] = "different"
+                self.assertEqual(
+                    readiness._pack_mapping_mismatch_kind(
+                        recorded, current, pack, registry
+                    ),
+                    "content",
+                )
+
+        _repository, _prefix, relative = readiness._repository_and_pack_relative(
+            pack
+        )
+        relocated = copy.deepcopy(current)
+        relocated["pack_root"] = f"/historical/checkout/{relative}"
+        self.assertIsNone(
+            readiness._pack_mapping_mismatch_kind(
+                relocated, current, pack, registry
+            )
+        )
+        relocated["pack_root"] = f"/historical/checkout/other/{pack.name}"
+        self.assertEqual(
+            readiness._pack_mapping_mismatch_kind(
+                relocated, current, pack, registry
+            ),
+            "repository_relative_location",
+        )
+
+        legacy_temporary, _legacy_repo, legacy_pack, _custody, _arm = (
+            make_go_fixture("d117_floor_qwen25_1p5b_v3")
+        )
+        self.addCleanup(legacy_temporary.cleanup)
+        legacy_current = _pack_record(legacy_pack)
+        legacy_registry, _raw, _reference = readiness._registry_reference(
+            legacy_pack
+        )
+        legacy_recorded = copy.deepcopy(legacy_current)
+        legacy_recorded["pack_root"] = (
+            f"/historical/checkout/configs/campaigns/{legacy_pack.name}"
+        )
+        self.assertEqual(
+            readiness._pack_mapping_mismatch_kind(
+                legacy_recorded, legacy_current, legacy_pack, legacy_registry
+            ),
+            "archival_location",
+        )
+
+    def test_every_non_pack_staleness_limb_still_refuses(self) -> None:
+        current_pack = copy.deepcopy(sample_dry_run()["pack"])
+        current_reviewed = {
+            "head_commit": "a" * 40,
+            "clean": True,
+            "exact_match": True,
+        }
+        expected_binding = hashlib.sha256(
+            "\0".join(
+                [
+                    "reviewed-head",
+                    current_reviewed["head_commit"],
+                    "pack",
+                    current_pack["pack_sha256"],
+                ]
+            ).encode("utf-8")
+        ).hexdigest()
+        passing_check = readiness._dry_run_check(
+            "same_head_pack_binding",
+            [
+                "reviewed-head",
+                current_reviewed["head_commit"],
+                "pack",
+                current_pack["pack_sha256"],
+            ],
+            0,
+            current_reviewed["head_commit"],
+            "",
+        )
+        self.assertEqual(passing_check["command_sha256"], expected_binding)
+
+        cases = {
+            "pack_content": lambda receipt, reviewed: receipt["pack"].__setitem__(
+                "plan_id", "different-plan"
+            ),
+            "head_unavailable": lambda receipt, reviewed: reviewed.__setitem__(
+                "head_commit", "unavailable"
+            ),
+            "dirty": lambda receipt, reviewed: reviewed.__setitem__("clean", False),
+            "not_exact": lambda receipt, reviewed: reviewed.__setitem__(
+                "exact_match", False
+            ),
+            "binding_missing": lambda receipt, reviewed: receipt.__setitem__(
+                "checks", []
+            ),
+            "binding_duplicate": lambda receipt, reviewed: receipt.__setitem__(
+                "checks", [copy.deepcopy(passing_check), copy.deepcopy(passing_check)]
+            ),
+            "binding_digest": lambda receipt, reviewed: receipt["checks"][0].__setitem__(
+                "command_sha256", "0" * 64
+            ),
+        }
+        for name, mutate in cases.items():
+            with self.subTest(limb=name), tempfile.TemporaryDirectory() as directory:
+                custody_pack_root = Path(directory) / "pack-v1"
+                namespace = custody_pack_root / "arm_readiness.dry_run.receipts"
+                namespace.mkdir(parents=True)
+                receipt = sample_dry_run()
+                receipt["pack"] = copy.deepcopy(current_pack)
+                receipt["checks"] = [copy.deepcopy(passing_check)]
+                reviewed = copy.deepcopy(current_reviewed)
+                mutate(receipt, reviewed)
+                validate_dry_run_receipt(receipt)
+                raw = render_json(receipt)
+                receipt_path = namespace / "dry-run-0001.json"
+                receipt_path.write_bytes(raw)
+                receipt_path.with_name(f"{receipt_path.name}.sha256").write_bytes(
+                    gnu_sidecar(hashlib.sha256(raw).hexdigest(), receipt_path.name)
+                )
+
+                _latest, code = _latest_dry_run(
+                    custody_pack_root, current_pack, reviewed
+                )
+
+                self.assertEqual(code, "readiness_dry_run_stale")
+
+    def test_dry_run_accepts_successor_location_only_difference(self) -> None:
+        temporary, _repository, pack, custody, _arm_path = make_go_fixture()
+        self.addCleanup(temporary.cleanup)
+        current_pack = _pack_record(pack)
+        reviewed = reviewed_main(pack)
+        _repository_root, _prefix, relative = (
+            readiness._repository_and_pack_relative(pack)
+        )
+        receipt = sample_dry_run()
+        receipt["pack"] = copy.deepcopy(current_pack)
+        receipt["pack"]["pack_root"] = f"/historical/checkout/{relative}"
+        receipt["checks"] = [
+            readiness._dry_run_check(
+                "same_head_pack_binding",
+                [
+                    "reviewed-head",
+                    reviewed["head_commit"],
+                    "pack",
+                    current_pack["pack_sha256"],
+                ],
+                0,
+                reviewed["head_commit"],
+                "",
+            )
+        ]
+        namespace = custody / pack.name / "arm_readiness.dry_run.receipts"
+        namespace.mkdir(parents=True)
+        raw = render_json(receipt)
+        receipt_path = namespace / "dry-run-0001.json"
+        receipt_path.write_bytes(raw)
+        receipt_path.with_name(f"{receipt_path.name}.sha256").write_bytes(
+            gnu_sidecar(hashlib.sha256(raw).hexdigest(), receipt_path.name)
+        )
+
+        latest, code = _latest_dry_run(
+            custody / pack.name, current_pack, reviewed
+        )
+
+        self.assertIsNotNone(latest)
+        self.assertIsNone(code)
+
+    def test_production_minted_dry_run_survives_repository_relocation(self) -> None:
+        from joulewise import arm_readiness_evidence as evidence
+        from tests.test_arm_readiness_evidence_author import make_author_fixture
+
+        family = {
+            "ALPHA": "d117_floor_qwen25_1p5b_v4",
+            "BETA": "d117_floor_qwen25_7b_v4",
+            "GAMMA": "d117_contrast_qwen25_1p5b_vs_7b_v4",
+        }
+        with (
+            mock.patch.dict(evidence._PACKS_BY_PROFILE, family),
+            mock.patch.object(
+                readiness, "_utc_now", return_value="2026-08-12T12:00:00Z"
+            ),
+            mock.patch.object(evidence.time, "monotonic_ns", return_value=100),
+        ):
+            temporary, repository, pack, custody, _arm_path = make_author_fixture(
+                PACK_NAME
+            )
+            self.addCleanup(temporary.cleanup)
+            # The production author executes copied Python modules inside this
+            # intentionally minimal repository. Give it the bytecode ignore a
+            # normal checkout already has so that the real reviewed-main gate,
+            # rather than fixture-only __pycache__ residue, decides cleanliness.
+            (repository / ".gitignore").write_text("__pycache__/\n*.pyc\n")
+            git(repository, "add", ".gitignore")
+            git(repository, "commit", "-qm", "ignore interpreter bytecode")
+            git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+            authored = evidence.author_arm_readiness_evidence(pack)
+            self.assertEqual(authored["status"], "PASS", authored)
+            pack_relative = pack.relative_to(repository).as_posix()
+            git(
+                repository,
+                "add",
+                "--",
+                f"{pack_relative}/{evidence._SOURCE_DIRECTORY}",
+                f"{pack_relative}/{evidence._EVIDENCE_DIRECTORY}",
+            )
+            git(repository, "commit", "-qm", "author freeze evidence")
+            git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+            predecessor = predecessor_pack_root(repository, pack.name)
+            frozen = readiness.generate_freeze_receipt(
+                pack, predecessor_pack_root=predecessor
+            )
+            self.assertEqual(frozen["status"], "PASS", frozen)
+            git(repository, "add", "--", pack_relative)
+            git(repository, "commit", "-qm", "mint freeze receipt")
+            git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+            minted = generate_dry_run_receipt(
+                pack,
+                custody,
+                "relocation-rehearsal",
+                Path(temporary.name) / "synthetic-relocation",
+            )
+            self.assertEqual(minted["status"], "PASS", minted)
+            recorded = json.loads(Path(minted["receipt_path"]).read_text())
+
+            relocated_repository = Path(temporary.name) / "relocated-repository"
+            git(
+                Path(temporary.name),
+                "clone",
+                "-q",
+                "--no-local",
+                str(repository),
+                str(relocated_repository),
+            )
+            git(relocated_repository, "config", "gc.auto", "0")
+            git(relocated_repository, "config", "maintenance.auto", "false")
+            relocated_pack = relocated_repository / pack.relative_to(repository)
+            current_pack = _pack_record(relocated_pack)
+
+            latest, code = _latest_dry_run(
+                custody / pack.name,
+                current_pack,
+                reviewed_main(relocated_pack),
+            )
+
+        self.assertIsNotNone(latest)
+        self.assertNotEqual(
+            recorded["pack"]["pack_root"], current_pack["pack_root"]
+        )
+        self.assertEqual(
+            {
+                key: value
+                for key, value in recorded["pack"].items()
+                if key != "pack_root"
+            },
+            {
+                key: value
+                for key, value in current_pack.items()
+                if key != "pack_root"
+            },
+        )
+        self.assertIsNone(code)
 
     @unittest.skip(
         "STRUCTURAL-BLOCKED: synthetic fixture authors legacy generic evidence; "
