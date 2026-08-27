@@ -47,3 +47,10 @@ derivation order. The implementing stream stopped correctly (endpoint
 published on the right clock; no bound; no inert substitute). Reinterpreting
 a prior verdict is a mandatory cold-gate trigger; the cold seat rules the
 clock and the constant. Packet: PR #212's `impl/reason-code-coverage-delta.md`.
+
+## Addendum 3 (D-160 R-5) — evidence-path rulings
+
+A ruling that assumes an evidence-production path is made only after a seat
+has EXECUTED that path or proven from code that it cannot execute. Forcing
+evidence: D-158 R-1, R-4(3) and A-2 — three consecutive premises falsified by
+execution in one design.
