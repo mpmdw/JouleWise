@@ -42,43 +42,13 @@ Figure 1 names the mechanism. Its horizontal time axis, vertical power axis, pal
 
 ### Bracketed pulse-train algorithm
 
-An independent operator can rebuild the calibration as follows.
+Immediately before and after each science window—one uninterrupted measurement session—JouleWise records a calibration under the same declared machine state. Its recorded SHA-256 values, which identify exact file bytes, must match the fixed record; its timestamps must place it before the first or after the last science run and no more than 24 hours from the window's far end. After three warm-up pulses, it commands 59 one-second GPU matrix-multiplication pulses on preallocated \(4096\times4096\) 16-bit floating-point matrices. A fixed base-two varied-gap schedule prevents the pulse edges from repeatedly lining up with the requested 100-ms sampler cadence. Five seconds of quiet trace are requested on both sides of the train, of which at least 4.5 s must be present.
 
-1. **Command and bracket.** Immediately before and after each science window—one uninterrupted measurement session—collect a calibration capture under the same declared machine state. Authenticate it by matching its recorded fingerprints to the fixed record; its timestamps must place it before the first or after the last science run and no more than 24 hours from the window's far end. Command three warm-up pulses before starting the protocol schedule's own clock. From that origin, command 59 GPU matrix-multiplication pulses on preallocated \(4096\times4096\) matrices stored as 16-bit floating-point values. Each pulse lasts 1.0 s; between pulse \(j\) and \(j+1\), for \(j=1,\ldots,58\), wait \(1.5+v_2(j)\) s, where \(v_2\) is formed by reflecting \(j\)'s base-two digits across the radix point. Request 100-ms sampling and 5.0 s of quiet trace before and after the train; authentication requires at least 4.5 s on each side. The varied gaps prevent repeated alignment with the sampler cadence.
+For each commanded pulse, the detector estimates resting GPU power from samples outside every pulse margin and pulse height from samples wholly inside its plateau. It predicts each reported interval average from the fraction of that interval covered by a shifted rectangular pulse, then scores the difference between predicted and observed power with a rule that limits the influence of one large discrepancy while moving the onset and offset separately. After finding the best pair, it encloses every pair close enough to that fit: a rectangle is rejected only when a mathematical lower bound proves that none of it can pass, and every surviving rectangle is split to a fixed resolution. The four outer edge values are widened for uncertainty in the two command timestamps. A capture is refused unless all 59 pulses pass the signal, fit, range, trace-coverage, and completeness checks; no uncommanded plateau appears; and the shared search-work limits remain unexhausted. The accepted capture bound is the largest allowed edge displacement among all pulses plus the trace's clock-anchor bound.
 
-2. **Fit each pulse.** For interval \(I_i\) with average GPU power \(y_i\), take baseline \(b\) as the median outside every pulse's 0.75-s margin and noise \(\sigma=\max(1.4826\operatorname{median}|y_i-b|,0.001\ \mathrm W)\). Set amplitude \(P\) to the median of intervals at least 0.25 s inside the plateau minus \(b\), and predict
+The clock anchor uses five wall-clock readings, each bracketed by monotonic-clock readings, together with every whole-second label embedded in the native power records. It retains the complete set of straight-line clock mappings whose rate, offset, first-record endpoint, stamp brackets, native labels, and launch-to-first-parse ordering agree. The method permits the two clocks to run at slightly different fixed rates and charges the full allowed departure of a native label from that line. It refuses missing or malformed inputs, an empty or unbounded set, inadequate capture span, implausible clock rate, active automatic network-time correction, or a bound outside the accepted range. Otherwise it finds the earliest and latest allowed first-record endpoint and adds four separately named allowances. This corrected rate-aware model replaced the false equal-rate assumption, which could move every fitted edge in the same direction.
 
-   \[
-   \hat y_i=b+P\frac{|I_i\cap[t_{\mathrm{on}}+d_{\mathrm{on}},t_{\mathrm{off}}+d_{\mathrm{off}}]|}{|I_i|}.
-   \]
-
-   Minimize \(L=\sum_i H_{1.345}((y_i-\hat y_i)/\sigma)\), where \(H_c(r)=r^2/2\) for \(|r|\leq c\) and \(c(|r|-c/2)\) otherwise. Coordinate search covers each lag from \(-0.75\) to \(+0.75\) s in 0.005-s and then 0.0005-s steps.
-
-3. **Accept or refuse.** A pulse passes only when \(P\geq10\) W, \(P/\sigma\geq10\), its best loss is less than half the flat-baseline loss, both best-fit lags have magnitude below 0.50 s, and the trace covers the full search range. Retain every lag pair with \(L\leq L_{\min}+\max(1,0.05L_{\min})\): discard a rectangle only when an analytic lower bound excludes all of it, and bisect every survivor until both dimensions are at most 0.0001 s. Widen the four surviving edge extremes by command-stamp uncertainty; the pulse residual is their largest absolute value. Refuse unless all 59 pulses pass, no extra plateau is detected, the complete region is enclosed, and the shared 165,000-rectangle budget is not exhausted. The capture bound is the largest pulse residual plus the capture's clock-anchor bound. Appendix A specifies the event schema, authentication, extra-plateau test, causal/readiness checks, and supplementary host-safety deadline required to reproduce these steps.
-<!-- evidence: joulewise/powermetrics_fiducial.py -->
-
-4. **Anchor the sampled trace.** Fit wall time as \(w(M)=\alpha+\beta(M-m_0)\), using the five paired stamps `pre_spawn`, `first_parse`, `sampling_started`, `sampling_stopped`, and `post_parse`, plus every native whole-second label. For stamp \(s\), retain exactly the \((\alpha,\beta)\) satisfying
-
-   \[
-   W_s-R_s-\beta(M_s^++R_s-m_0)\leq\alpha\leq W_s+R_s-\beta(M_s^--R_s-m_0).
-   \]
-
-   If \(a\) is the wall time when the first averaging interval ends, \(q_i\) is elapsed time from that first record, \(N_i\) its whole-second wall label, and \(D=0.000250\) s, also require \(N_i-D\leq a+\beta q_i\leq N_i+1\ \mathrm{s}+D\) and the launch/first-parse causal interval. Refuse an empty set, active network clock correction, a fixed \(10^{-6}\)-s pad smaller than four representable-number spacings at the largest wall stamp, or a fitted rate interval extending strictly beyond \(1\pm50\) parts per million. Otherwise minimize and maximize \(a\) over the same set. The four-term anchor bound is
-
-   \[
-   B_{\mathrm{anchor}}=(a_{\max}-a_{\min})/2+S_{W-M}+R_{\max}+10^{-6}\ \mathrm{s},
-   \]
-
-   where \(S_{W-M}\) is the observed span of wall-minus-monotonic offsets and \(R_{\max}\) is the coarser stamp resolution. The fixed-rate affine clock relation with bounded departures is the estimator's physical assumption. It replaced the false assumption \(\beta=1\), which could bias edges consistently rather than add random scatter.
-<!-- evidence: joulewise/uncertainty_evidence.py -->
-
-5. **Compose the bracket.** Let \(B_{\mathrm{pre}}\) and \(B_{\mathrm{post}}\) be the two accepted capture bounds and \(d=|B_{\mathrm{pre}}-B_{\mathrm{post}}|\). Refuse the window if \(d>10.164835\) ms. Otherwise use the operative bound
-
-   \[
-   B_{\mathrm{op}}=\max(B_{\mathrm{pre}},B_{\mathrm{post}})+\max(d,9.724\ \mathrm{ms}).
-   \]
-
-   The complete second term is added once; 9.724 ms is the current bracket screen, not a probabilistic confidence limit. If the post-calibration widens a bound already used, recompute the affected phase energies with \(B_{\mathrm{op}}\) or refuse them.
+Finally, the pre-window and post-window capture bounds form a bracket. A difference greater than 10.164835 ms refuses the window. Otherwise the operative bound is the larger capture bound plus the larger of their absolute difference and the 9.724-ms screen; that complete, never-zero allowance is added once. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 defines the pulse accepted region, clock-anchor feasible set, objectives, ranges, and every refusal constraint formally.
 
 This calibrates edge placement under commanded GPU pulses and then transports that bound to sustained mixed inference load. That load-regime transfer is an applicability assumption, not a result: the pre/post bracket tests change across a window, but it does not test whether the pulse-derived bound transfers to inference.
 
@@ -138,7 +108,7 @@ No retained fragment can be promoted to a current row outcome. Workload response
 
 ## 4. The resolution bound and how it is composed
 
-Repeating the same workload does not repeat the same physical event. Temperature, background work, hardware frequency choices, and the placement of power samples change slightly between runs. For phase energy there is an additional problem: uncertainty about the prompt-processing/token-generation boundary moves energy from one phase to the other even when request energy is unchanged. Thus an unchanged condition can produce a nonzero measured difference. We bound that false difference separately for each *cell*: one fixed hardware-and-software stack, workload shape, energy metric, phase or request window, and collection regime. The result is the cell's **resolution bound** — the artifact calls it the **detection floor** — **the largest false difference this measurement system can manufacture.** It is a worst-case bound, not an estimated population percentile.
+As §1 establishes, each cell's resolution bound covers both same-condition run-to-run variation and phase energy reassigned by calibrated boundary uncertainty; it is a worst-case bound, not an estimated population percentile.
 
 The only window classes are `request` and `phase`. Gross and idle-subtracted energy are request-window metrics; idle-subtracted request energy is gross request energy minus mean idle power times request duration. Phase energy is gross-only because no phase-idle model is defined.
 
@@ -283,7 +253,7 @@ The rule is mechanical. A *powermetrics* record has a support interval. It count
 \]
 A phase is resolvable only when at least three records count; fewer yields `not_resolvable_sample_count`. Boundary records may count even when only part of their support lies inside the phase, because integration clips them to that overlap.
 
-For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the times: its runtime events place prompt-processing start and end 0.121034145 s apart. The raw power trace supplies the [PENDING] (DIAGNOSTIC-ERA VALUE: realized record spacing for p2015-df-ph-decode-abs-r03) and the support geometry, which gives two positive-overlap records. The code supplies the threshold of three. Thus **2 < 3**, so this phase fails even though the duration is **0.121 s** and the diagnostic-era cadence is **[PENDING]** (DIAGNOSTIC-ERA VALUE: realized record spacing in seconds for p2015-df-ph-decode-abs-r03); duration divided by cadence is not the rule because alignment decides whether a third support interval overlaps. The persisted audit supplies the population counts: 37 phases had two overlapping records and 13 had three.
+For a concrete case, retained bundle `p2015-df-ph-decode-abs-r03` supplies the times: its runtime events place prompt-processing start and end 0.121034145 s apart. Two different quantities describe the sampler here, and confusing them is the trap this example exists to close. The **sampling-record interval width** is how long one power record covers — the width of its support in time — and for this bundle it is [PENDING] (DIAGNOSTIC-ERA VALUE: sampling-record interval width for p2015-df-ph-decode-abs-r03). The **record spacing** is the gap between the start times of consecutive records, which is longer than the width because the sampler pauses between records; for this bundle it is [PENDING] (DIAGNOSTIC-ERA VALUE: median record spacing for p2015-df-ph-decode-abs-r03). Neither number decides the rule. **The rule is a count**: how many record supports, after each is clipped to the phase window, retain positive overlap with it. Here that count is two, against a threshold of three, so **2 < 3** and the phase is not resolvable — even though the phase lasts 0.121 s, which is longer than a single record's support. Dividing duration by either quantity would give the wrong answer, because alignment, not arithmetic, decides whether a third support interval happens to overlap the window. The persisted audit supplies the population counts: 37 phases had two overlapping records and 13 had three.
 
 ### Demonstration fixed before collection
 
@@ -299,7 +269,7 @@ The sizing evidence is diagnostic, not a demonstration result. Ten historical 12
 \[
 \widehat\Delta_{256}=\frac{256}{128}(5.809930)=11.619860\ \mathrm{J}.
 \]
-The planning disclosure was `C = F + B`, where F is the applicable cell floor and B is the contrast's claim-side bound. That bound's supplier is not yet built: the registry registers it as unresolved and it is filled only after the prospective campaign issues its contrast artifact. The decision record gives only approximately 5 J for C, not its exact components: [[NEEDS-VALUE: exact cell-floor F, whole deterministic claim-side bound B, and any fixed required margin used by the D-122 p256 sizing decision; checked D-122, D-139 A2, the prefill-feasibility synthesis and consult, and the current gamma manifest]]. With the disclosed approximation, 128-token clearance was `5.809930 - 5 = 0.809930 J`, or 1.16 times C; 256-token clearance was `11.619860 - 5 = 6.619860 J`, or 2.32 times C. That arithmetic selected 256. It is an **extrapolation**: no historical 7B corpus uses more than 128 prompt tokens, so the prospective arm will be the first direct longer-prompt 7B check.
+The planning disclosure was `C = F + B`, where F is the applicable cell floor and B is the contrast's claim-side bound. That bound's supplier is not yet built: the registry registers it as unresolved and it is filled only after the prospective campaign issues its contrast artifact. The decision record gives only approximately 5 J for C, not its exact components: [[NEEDS-VALUE: exact cell-floor F, whole deterministic claim-side bound B, and any fixed required margin used by the D-122 p256 sizing decision; checked D-122, D-139 A2, the prefill-feasibility synthesis and consult, and the current gamma manifest]]. With the disclosed approximation, 128-token clearance was `5.809930 - 5 = 0.809930 J`, or 1.16 times C; 256-token clearance was `11.619860 - 5 = 6.619860 J`, or 2.32 times C. That arithmetic selected 256. It is an **extrapolation**: none of the forty retained contrast configurations uses more than 128 prompt tokens, so the prospective arm will be the first direct longer-prompt 7B check within that evidence. No inventory of every historical corpus was compiled, so the paper claims absence only across those forty configurations.
 
 **[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3, 6, and 7.]**
 
@@ -438,13 +408,256 @@ Fresh collection additionally requires the configured Apple-silicon instrument, 
 The repository contains programs and plans, but measured run directories are excluded from Git. The separate archive must provide these connected objects:
 
 1. A run bundle at `<runs root>/<run id>/`. `config.json` identifies the condition; `events.jsonl` supplies phase boundaries; `raw/powermetrics.plist` is the native power capture; `power_trace.csv` is its parsed trace; and `summary_metrics.json` contains the reduction. `metadata.config_sha256` binds the stored result to the exact configuration bytes. Strict validation independently rebuilds the trace and summary rather than trusting either derived file.
-2. The bundle's `instrument_calibration/` subtree. Its `raw/powermetrics.plist` and `events.jsonl` hold the calibration trace and commanded pulse times; `instrument_evidence.json` names the clock-anchor method and published pulse-edge bound. Removing any member breaks the scientific binding.
+2. The bundle's `instrument_calibration/` subtree. Its `raw/powermetrics.plist` and `events.jsonl` hold the calibration trace and commanded pulse times; `instrument_evidence.json` names the clock-anchor method and published pulse-edge bound. Removing any member breaks the scientific binding. Section A.3 gives the complete estimators that turn those inputs into the bound.
 3. The fixed campaign plan, its freeze receipt, calibration-acceptance file, policy, drift-bound artifact, extraction specification, and analysis manifest. The receipt issue time and fingerprints establish which membership, limits, estimator, and contrasts were fixed before the evidence they judge.
 4. The append-only whole-window verdict, which binds admitted members, preserved failures and replacements, the calibration bracket, policy, and drift evidence. The floor extraction then binds each reported floor to its admitted cell. The claim verdict binds the contrast estimate, composed uncertainty, cell floor, and two decision gates to those authenticated inputs.
 
 A fingerprint proves equality to disclosed bytes, not who created the original capture. Presence in the archive also does not mean a bundle was analyzed: the whole-window verdict, not directory membership, decides that.
 
-### A.3 Executable verification order
+### A.3 Formal calibration algorithms
+
+This appendix specifies the two calculations behind the calibration numbers in Section 2 precisely enough that a reader can rebuild them from this text alone: the **clock-anchor estimator**, which places the instrument's power trace on the controller's wall clock and prices how far that placement can be wrong, and the **pulse-fit (accepted-region) algorithm**, which measures how far the instrument's reported edge timing departs from commanded edges and turns the worst departure into the calibration bound. Everything below is stated as the code executes it. Constants are quoted with their values; a reader who wants the source line for any equation, constant, or rule will find it in the evidence list that follows the prose.
+
+Two conventions hold throughout. All times are in seconds unless marked "ns" (nanoseconds). "Wall clock" means the controller's Unix-epoch UTC clock (`time.time()`), and "monotonic clock" means the controller's monotonic counter (`time.monotonic()`), which cannot jump backward or be adjusted but has an arbitrary origin. "binary64" means the IEEE-754 double-precision floating-point format that Python floats use. "Exact floating summation" means a compensated, correctly rounded sum (Python's `math.fsum`): the result is the true sum of the inputs rounded once to binary64, so summation order cannot change it. "ppm" is parts per million.
+
+#### A.3.1 The objects the algorithms operate on
+
+**The instrument and its records.** The instrument is macOS `powermetrics`, run with the samplers `cpu_power,gpu_power,ane_power,thermal` at a commanded sampling interval of 100 ms. It emits a stream of property-list documents. Each document is one *record*; record *i* (counting from 0) carries:
+
+- `elapsed_ns`, written *e_i*: the length in nanoseconds of the averaging window the record summarises.
+- a `timestamp` date, written *n_i* once converted to Unix-epoch nanoseconds. The instrument writes this date at whole-second granularity, and the estimator refuses any record whose *n_i* is not a whole number of seconds. *n_i* labels the **end** of the record's averaging window, quantised down to the second.
+- three processor power fields, `cpu_power`, `gpu_power`, `ane_power`, each in milliwatts; and three processor energy counters, `cpu_energy`, `gpu_energy`, `ane_energy`, each an integer in millijoules.
+- an `is_delta` flag, which must be `true` (the record is an interval aggregate, not a cumulative counter).
+
+From those fields the parser derives, for every record *i*:
+
+- the per-channel powers in watts, `rail_power_w[ch] = field_ch / 1000` for each channel *ch* in {`cpu_power`, `gpu_power`, `ane_power`};
+- the **combined power** *p_i* = Σ_ch `rail_power_w[ch]`, i.e. cpu + gpu + ane, in watts, formed by converting each channel to watts first and then summing the three;
+- the **record energy** *E_i* = (`cpu_energy` + `gpu_energy` + `ane_energy`) / 1000, in joules, formed by summing the three integer millijoule counters (with exact floating summation) and then dividing by 1000.
+
+*p_i* and *E_i* are used for only one thing: a health check that the record's power and energy agree, |*p_i* · (*e_i*/10⁹) − *E_i*| ≤ 0.002 J + 0.001·|*E_i*|. Worked example (capture `20260722T145535-e941c821`, record 0): *e_0* = 111 242 541 ns; the parsed channel powers are 0.9169149999999999 W + 0.00898937 W + 0.0 W, giving *p_0* = 0.9259043699999999 W; counters 102 + 1 + 0 mJ give *E_0* = 0.103 J; and *p_0* · 0.111242541 s = 0.10299995484180416 J, which differs from *E_0* by 4.5·10⁻⁸ J, far inside the tolerance. The pulse fit itself never uses *p_i*; it reads only the `gpu_power` channel (Section A.3.5).
+
+**Cumulative elapsed time.** Define *q_0* = 0 and *q_i* = *e_1* + *e_2* + … + *e_i* (nanoseconds) for *i* ≥ 1. *q_i* is the instrument's own count of time from the end of record 0 to the end of record *i*. Note that *e_0* is deliberately excluded: record 0's end is the reference point, so its own length does not enter *q*.
+
+**Clock stamps.** The controller reads time with a *paired stamp*: it reads the monotonic clock, then the wall clock, then the monotonic clock again, and records all three values together with the operating system's stated resolution of each clock. A stamp *S* therefore has five fields: *w* (wall epoch seconds), *mb* (monotonic before), *ma* (monotonic after), and the two resolutions, from which we define *r* = max(wall resolution, monotonic resolution). The wall read happened somewhere between the two monotonic reads. The stamp's **half-width** is
+
+    u(S) = (ma − mb)/2 + r,
+
+the largest amount by which the wall value can be wrong as a label for the midpoint of the monotonic bracket. On the capture used below every stamp reports a wall resolution of 0.0000010000000000000002 s (the closest binary64 value to 1 µs) and a monotonic resolution of 4.166666666666666e-8 s, so *r* = 0.0000010000000000000002 s for every stamp.
+
+**Trace intervals.** After the trace is anchored (A.3.4), each record becomes a *trace interval* *I_i* = [*t_i* − *e_i*/10⁹, *t_i*) carrying one power value *y_i* = `gpu_power` in watts, where *t_i* is the wall-clock time of the record's end. |*I_i*| denotes its length in seconds.
+
+**Commanded pulses.** A commanded pulse *P* is a pair of stamps, one taken immediately before the controller starts driving the GPU and one immediately after it stops. It is stored as four numbers: *on* = wall time of the on-stamp, *off* = wall time of the off-stamp, *u_on* = half-width of the on-stamp, *u_off* = half-width of the off-stamp. Pulses are numbered *j* = 0 … 58.
+
+#### A.3.2 The capture procedure
+
+The forcing problem: the instrument labels its records only to the whole second, and the operating system tells us nothing about when the first record's window began. Without a deliberate protocol there is no way to know where the trace sits on the wall clock, let alone how sharply it reports an edge. The protocol below manufactures both kinds of evidence.
+
+The capture is protocol `powermetrics_pulse_fiducial_v3`. (*Fiducial* here means a commanded reference edge whose wall-clock time is known independently of the instrument; it is not fiducial inference in the statistical sense.) In order, the controller:
+
+1. Takes stamp **S_pre** (named `pre_spawn`), then spawns `powermetrics`.
+2. Polls the output file until the first record parses, then takes stamp **S_parse** (named `first_parse`). Because the poll succeeded, record 0 had been completely written before S_parse.
+3. Waits until the whole-second `timestamp` label of a record advances at least once (a *rollover*), so that the anchor interval is bounded on both sides before any work happens. (The estimator in A.3.3 later requires at least *two* such label increases across the whole capture; the capture-time wait guarantees only the first, and a 197-second capture supplies the rest.)
+4. Takes stamp **S_start** (`sampling_started`), then rests 5 s (the pre-train quiet baseline, `BASELINE_S`).
+5. Drives 3 **warm-up pulses**, each 1 s of GPU work followed by a 1.5 s rest. Each warm-up on/off edge is stamped and logged as `warmup_command_on` / `warmup_command_off`, but warm-ups are not protocol pulses (see A.3.4 for what happens to them).
+6. Rests 5 s.
+7. Drives the **59 measured pulses**. Pulse *j* (0-based) is commanded on at planned schedule offset *τ_j* and off at *τ_j* + 1.0 s, where *τ_0* = 0 and *τ_{j+1}* = *τ_j* + 1.0 + gap(*j*+1), with gap(*k*) = 1.5 + vdC₂(*k*). vdC₂ is the base-2 van der Corput sequence: write *k* in binary, reverse its digits, and read the result as a binary fraction after the point. Equivalently, if *k* = Σ_m d_m·2^m with binary digits d_m, then vdC₂(*k*) = Σ_m d_m·2^(−m−1). So vdC₂(1) = 0.1₂ = 0.5, vdC₂(2) = 0.01₂ = 0.25, vdC₂(3) = 0.11₂ = 0.75, vdC₂(4) = 0.001₂ = 0.125, and vdC₂(1…8) = 0.5, 0.25, 0.75, 0.125, 0.625, 0.375, 0.875, 0.0625. The first five gaps are therefore 2.0, 1.75, 2.25, 1.625, 2.125 s. The purpose of the irregular gaps is to stop pulse edges from landing at the same phase of the ~10 Hz sampling cadence pulse after pulse. Offsets are measured from a monotonic reading taken immediately before the loop starts (after step 6), not from S_start. Each on/off edge is stamped and logged as `pulse_command_on` / `pulse_command_off` with the full stamp. The GPU work is repeated 4096×4096 float16 matrix multiplications with a fence after each (`mx.eval`), on buffers allocated before the capture, so that the commanded off-edge is honest: no queued work spills past the off-stamp.
+8. Rests 5 s, takes stamp **S_stop** (`sampling_stopped`), terminates `powermetrics`, and takes stamp **S_post** (`post_parse`).
+
+The five stamps S_pre, S_parse, S_start, S_stop, S_post are recorded in that order; the pulses are recorded in `events.jsonl`; the raw record stream is retained byte-for-byte and hashed. Every quantity below is re-derived from those primary bytes; stored summary values are never inputs.
+
+#### A.3.3 The clock-anchor estimator
+
+The estimator's identity is `powermetrics_native_second_rate_aware_set_membership_v1`. Its output is the wall-clock time of the **end of record 0**, called the **anchor** and written *A*, together with a bound on how wrong *A* can be. The design principle is *set membership*: rather than estimating *A* and attaching a statistical error, the estimator writes down every constraint the evidence imposes and computes the exact set of (*A*, rate) values consistent with all of them. The reported interval is that set's extent in *A*; the point value is its midpoint. Arithmetic is exact rational (Python `Fraction`); only the final outputs are converted to binary64. Every *limit* and *bound* is rounded *outward* (a lower limit toward −∞, an upper limit or a bound toward +∞) to the nearest binary64 in that direction; the point anchor (the midpoint) is converted with ordinary round-to-nearest.
+
+**The model.** Two unknowns:
+
+- *β*, the rate of the wall clock relative to the monotonic clock (dimensionless; 1 means the two clocks tick at the same speed);
+- *α*, the wall time (ns) at the monotonic instant *m_0* = *mb*(S_pre) · 10⁹, i.e. at the first monotonic read of the pre-spawn stamp.
+
+The wall clock is assumed affine in monotonic time over the capture: wall(*m*) = *α* + *β*·(*m* − *m_0*) for any monotonic reading *m* (ns). The third unknown, *A*, is expressed through this relation as described under "causal constraints."
+
+**Model condition (stated because the containment claim depends on it).** The estimator's interval contains the true anchor *provided that* (i) the wall clock has a single rate across the capture with no step adjustment, and (ii) each whole-second label departs from the affine relation by at most 250 µs (`MAX_AFFINE_CLOCK_RESIDUAL_S`), an allowance charged in full and never shrunk to the observed residual. A wall-clock excursion of less than 250 µs occurring between stamps is invisible to the arithmetic; it is excluded by the requirement that any capture whose numbers support a published claim runs with network time synchronisation off, which is a recorded admission condition, not something the estimator can verify.
+
+**Inputs and their admission checks.** All five stamps must be present and well formed, the trace must be non-empty, and every record's elapsed value must be finite and non-negative. Each failure returns `clock_anchor_unresolved` with a named detail; the repository artifact guide enumerates the checks and their detail strings.
+
+**Wall-minus-monotonic span.** Index the five stamps by *v* (reserving *j* for pulses). For each stamp *v* compute the raw offset range [*w_v* − *ma_v*, *w_v* − *mb_v*]. The **span** is
+
+    span = max_v (w_v − mb_v) − min_v (w_v − ma_v)
+
+over the five stamps, in seconds. It measures how much the wall clock drifted against the monotonic clock over the whole capture, including any slew (gradual rate adjustment applied by the operating system's time discipline). If span > 0.005 s the capture is refused (`wall_minus_monotonic_span_exceeded`). Worked example (same capture; wall origin is the Unix epoch, monotonic origin is the machine's boot): the largest raw upper offset *w* − *mb* is 1784298599.0949996 s (at S_stop) and the smallest raw lower offset *w* − *ma* is 1784298599.0945535 s (at S_pre); the difference is span = 0.00044608116149902344 s (446 µs), the second of the four terms in the final bound.
+
+**Numeric-padding check.** Let *w_max* = the largest |*w_v*| over the five stamps. The estimator requires 4·ulp(*w_max*) ≤ 10⁻⁶ s, where ulp is the spacing of binary64 numbers at that magnitude, and refuses otherwise (`numeric_padding_insufficient`). For epochs in 2004–2038 the ulp is 2⁻²² s ≈ 238 ns, so the term is ≈ 954 ns and the check passes. Why four: at most four epoch-scale floating-point roundings can lean inward in the emitted bound (two inside the span's subtractions, one per anchor endpoint).
+
+**Stamp constraints.** For each stamp *v* (all quantities converted to ns by multiplying by 10⁹; *r_v* is the stamp's resolution in ns):
+
+    α ≤ h_v(β) := (w_v + r_v) − β·(mb_v − r_v − m_0)
+    α ≥ g_v(β) := (w_v − r_v) − β·(ma_v + r_v − m_0)
+
+These say: the wall value *w_v*, padded by ±*r_v*, must lie between the affine wall times of the monotonic bracket ends, each end padded outward by *r_v*.
+
+**Native-label constraints.** For each record *i*, with *δ* = 250 µs = 250 000 ns:
+
+    n_i − δ ≤ A + β·q_i ≤ n_i + 10⁹ + δ
+
+*A* + *β*·*q_i* is the model's wall time for the end of record *i* (record 0's end, advanced by the instrument-counted elapsed time *q_i* scaled by the rate). The label *n_i* is that time rounded down to the second, so the true value lies in [*n_i*, *n_i* + 1 s), widened by the 250 µs allowance on each side.
+
+**Causal constraints, and the two symbols k_pre and k_parse.** Two facts tie *A* to *α*. First, record 0's averaging window cannot have started before `powermetrics` was spawned, which happened after S_pre; so the window's end is at least *e_0* after the earliest possible time of S_pre's monotonic bracket. Second, record 0 had been fully written by S_parse; so its end is no later than the latest possible time of S_parse's monotonic bracket. In monotonic nanoseconds relative to *m_0*:
+
+    k_pre   := (mb(S_pre)·10⁹ − r_pre − m_0) + e_0  =  e_0 − r_pre        (all in ns)
+    k_parse := ma(S_parse)·10⁹ + r_parse − m_0                          (all in ns)
+
+and the constraints are
+
+    α + β·k_pre ≤ A ≤ α + β·k_parse.
+
+Because *m_0* is *by definition* *mb*(S_pre) · 10⁹, the first bracket collapses and **k_pre equals e_0 minus one resolution unit r_pre**. This is by design, not error: *k_pre* is the earliest monotonic instant (relative to *m_0*) at which record 0 can end, and the pre-spawn stamp's own monotonic read is uncertain by *r_pre*, so the earliest instant is pushed *earlier* by exactly that amount. Worked example: *e_0* = 111 242 541 ns and *r_pre* = 0.0000010000000000000002 s ≈ 1000 ns, so *k_pre* = 111 241 541 ns; and *k_parse* = (458737.509840291 − 458736.4081875)·10⁹ + 1000 ns = 1.1016537909669094·10⁹ ns, i.e. record 0 ended between 0.111 s and 1.102 s after *m_0*. If *k_pre* > *k_parse* the stamps are inconsistent and the capture is refused (`clock_stamp_invalid`).
+
+**Eliminating α.** *α* appears with coefficient 1 in every stamp and causal constraint, so it is removed exactly by Fourier–Motzkin elimination, leaving linear constraints in (*β*, *A*) only:
+
+- for every ordered pair of stamps (*v*, *v′*), including *v* = *v′*: *g_v′*(β) ≤ *h_v*(β) (25 rows; these say some *α* exists);
+- for every stamp *v*: *A* ≤ *h_v*(β) + *β*·*k_parse* (5 rows);
+- for every stamp *v*: *A* ≥ *g_v*(β) + *β*·*k_pre* (5 rows).
+
+**The feasible set and the solver.** The variables are boxed: *β* ∈ [1 − 10⁻³, 1 + 10⁻³] and *A* ∈ [min_i *n_i* − 2·10⁹, max_i *n_i* + 2·10⁹] ns, a bracket deliberately far wider than any feasible extent; only *β* attaining a box edge is treated as a refusal (step 4 below). The feasible set is the polygon cut from that box by all native, stamp, and causal rows (two native rows per record; 1665 records give 3330 rows on the example capture). Every optimum below is an exact two-variable linear programme over that polygon; the code uses an incremental (Seidel-type) exact rational solver with a fixed-seed row order, but any exact LP solver returns the same optimal *values*, which is all that is used.
+
+The solver is applied in this order, each step refusing on infeasibility:
+
+1. Native rows alone infeasible → `rate_aware_native_set_empty`.
+2. Native + stamp rows infeasible → `affine_clock_fit_empty`.
+3. All rows infeasible → the native rows are re-formed with *δ* = 1 s; if that relaxed set is feasible the detail is `affine_clock_residual_exceeded`, otherwise `admissible_interval_empty`.
+4. *β_lo* = min *β*, *β_hi* = max *β* over the full set. If either equals its box edge → `clock_fit_unbounded`. If *β_lo* < 1 − 50·10⁻⁶ or *β_hi* > 1 + 50·10⁻⁶ (50 ppm, `MAX_CLOCK_RATE_DEVIATION_PPM`) → `clock_rate_limit_exceeded`. The rate is refused, never clipped.
+5. *A_lo* = min *A*, *A_hi* = max *A* over the full set.
+6. First-parse lag: the largest value over the feasible set of min_v (*h_v*(β) + *β*·*k_parse* − *A*), computed by solving one LP per stamp with the other stamps' forms constrained to be no smaller and taking the best. This is the longest time, consistent with all evidence, between record 0's end and the latest instant the first-parse stamp allows for it — how loosely the causal upper constraint holds. A negative value means the causal constraint is inconsistent with the rest; a value above 0.25 s (`MAX_FIRST_PARSE_LAG_S`) means the controller noticed record 0 too long after it was written for the upper causal constraint to be trusted as a tight physical bound; either → `first_parse_lag_exceeded`. On the example capture it is 0.05247795879145338 s.
+7. A diagnostic-only relaxation search is also run; the repository artifact guide gives its bounds and step count.
+
+**Composing the bound.** With *A_lo*, *A_hi* in ns:
+
+    H       = (A_hi − A_lo) / 2 / 10⁹                       (seconds)
+    r_max   = max over the five stamps of r_v               (seconds)
+    B_anchor = roundup( H + span + r_max + 10⁻⁶ )
+
+where roundup is outward rounding to binary64 and 10⁻⁶ s is `NUMERIC_PADDING_S`. The point anchor is *A* = (*A_lo* + *A_hi*)/2 converted to seconds. If *B_anchor* > 0.005 s the capture is refused (`effective_clock_anchor_bound_exceeded`).
+
+The four terms price four different errors and none subsumes another:
+
+1. **H** prices *where record 0's end sits on the wall clock* — the half-width of the exact admissible interval for *A*.
+2. **span** prices *within-capture wall-versus-elapsed drift*. It is needed because the trace anchoring of A.3.4 advances the trace from the single point *A* at rate exactly 1 using the instrument's elapsed counts, while the pulse edges the fit of A.3.5 compares it against carry wall-clock stamps; if the wall clock ran fast or slow relative to elapsed time during the capture, every later trace interval is displaced by up to the span, and *H* knows nothing about it.
+3. **r_max** prices the *reported resolution of the clocks* that produced the stamps.
+4. **10⁻⁶ s** prices *binary64 representation error* of the epoch-scale inputs that were exactified into rationals (see the numeric-padding check above).
+
+Worked example (capture `20260722T145535-e941c821`, wall origin the Unix epoch): *A_lo* = 1784757336.5519202 s and *A_hi* = 1784757336.5532944 s after outward rounding, point anchor *A* = 1784757336.5526073 s, and the four terms are
+
+    H      = 0.0006869160344978743
+    span   = 0.00044608116149902344
+    r_max  = 0.0000010000000000000002
+    pad    = 0.000001
+    sum    = 0.0011349971959968977402  →  roundup  →  0.0011349971959968978 s
+
+so *B_anchor* = 0.0011349971959968978 s (1.135 ms). The sum is exact in decimal; the published value is that sum rounded outward to the nearest binary64, which is the one shown. *H* is computed from the exact rational endpoints, before they were rounded to the printed *A_lo* and *A_hi*: recomputing (*A_hi* − *A_lo*)/2 from the printed endpoints gives 0.0006871223449707031 s, 0.0000002063105 s above the exact *H* — less than one binary64 spacing at the epoch magnitude 1.78·10⁹ s, which is 2.4·10⁻⁷ s — because each endpoint was rounded outward before printing. A reader who does that subtraction should not expect the headline sum to close from the printed endpoints. Fitted rate window: [1.0000022202281935, 1.0000022646196323], i.e. the wall clock ran about 2.2 ppm fast against the monotonic clock over the 197-second capture; 197 rollovers and 1665 records were checked.
+
+#### A.3.4 Placing the trace on the wall clock, trimming warm-ups, and authenticating the schedule
+
+**Anchoring.** With the point anchor *A* (seconds), record *i*'s end time *t_i* is produced by floating-point accumulation as the records are read: *t_0* = *A* exactly, and each later record adds its own *e_i*/10⁹ to a running binary64 sum. That accumulation is the normative definition; *t_i* = *A* + *q_i*/10⁹ is its exact-arithmetic equivalent. Its trace interval is *I_i* = [*t_i* − *e_i*/10⁹, *t_i*) with *y_i* = the record's `gpu_power` in watts. The whole trace therefore moves rigidly with *A*, at rate 1 — the reason the span term exists.
+
+**Reading the pulses.** The command event log is scanned for on/off events and paired into pulses, warm-up and measured; the repository artifact guide gives the event names and the pairing rules.
+
+**Trimming warm-ups.** Let *T_warm* = the wall time of the last warm-up's off-stamp. Every trace interval whose start is earlier than *T_warm* is discarded; only intervals with start ≥ *T_warm* survive. Consequently **warm-up pulses do not participate in the baseline set and are never fitted**: their plateaus are removed from the trace altogether, along with the pre-train quiet baseline and everything else before *T_warm*. The 1.5 s rest plus 5 s rest that follow the last warm-up remain in the trace and supply quiet support before the first measured pulse. Warm-ups exist to bring the GPU to its operating state before the measured train; leaving them in the trace would make the baseline classifier (A.3.5) report them as uncommanded plateaus and invalidate the capture.
+
+**Authenticating the executed schedule.** From the pulse stamps and the trimmed trace, all of the following must hold, else the capture is refused: every measured pulse's *off* − *on* lies in [0.8 s, 1.2 s]; for every consecutive pair (*j*, *j*+1), counting *k* = *j*+1 from 1, the executed gap *on_{j+1}* − *off_j* is within 0.25 s (`MAX_AUTHENTICATED_GAP_ERROR_S`) of 1.5 + vdC₂(*k*); the trimmed trace begins at least 4.5 s before pulse 0's *on*; and it ends at least 4.5 s after pulse 58's *off*. No planned-offset metadata is trusted; only stamps and trace extent.
+
+#### A.3.5 The pulse-fit (accepted-region) algorithm
+
+The forcing problem: a 1 s rectangular GPU pulse, sampled by an instrument averaging over ~100 ms windows, appears in the trace as a plateau with two smeared edges. We want to know how far the instrument's reported edge positions sit from the commanded ones, and we want the *whole set* of edge positions the data cannot rule out, not merely the best-fitting one — because it is the extent of that set, not the best fit, that bounds what a later measurement window can trust.
+
+**Baseline set and robust scale.** Define the *margin window* of pulse *j* as [*on_j* − 0.75 s, *off_j* + 0.75 s] (`LOCAL_MARGIN_S` = 0.75). The **baseline set** *O* is every trace interval (after trimming) that overlaps no measured pulse's margin window, where "overlaps" means min(interval end, *off_j* + 0.75) > max(interval start, *on_j* − 0.75). Only the 59 measured pulses define margin windows; as established in A.3.4, warm-up intervals are already gone. There must be at least 3 intervals in *O*. Then
+
+    b = median{ y_i : I_i ∈ O }                                    (baseline power, W)
+    σ = max( 1.4826 · median{ |y_i − b| : I_i ∈ O },  0.001 W )    (robust scale)
+
+The median absolute deviation (MAD) is the median of the absolute distances from the median; 1.4826 converts it to a standard-deviation equivalent for Gaussian noise; the 1 mW floor prevents a perfectly flat baseline from producing σ = 0. Worked example: on the example capture the idle GPU channel reads 0.0 W throughout the baseline set, so *b* = 0.0 W, the MAD is 0, and the floor engages: σ = 0.001 W.
+
+**Spurious-plateau check on the baseline set.** Sort *O* by start time. With threshold *b* + max(5.0 W, 5σ), count each run of at least 2 consecutive baseline intervals above the threshold as one spurious plateau (a run of any length ≥ 2 counts once). Any spurious plateau invalidates the capture — it means the GPU did work when nothing was commanded, and a fit could not distinguish that from instrument timing.
+
+**Per-pulse fit.** For pulse *j* with commanded (*on*, *off*, *u_on*, *u_off*):
+
+1. **Local set** *L*: all trace intervals overlapping the margin window [*on* − 0.75, *off* + 0.75], by the same overlap test as above. Everything below sums over *L* only.
+2. **Interior set**: intervals in *L* with start ≥ *on* + 0.25 and end ≤ *off* − 0.25 (`PLATEAU_INSET_S` = 0.25) — the part of the plateau that no plausible edge smear reaches. If empty → reject `no_plateau_interior_intervals`.
+3. **Amplitude** *a* = median{ *y_i* : interior } − *b*, and **robust SNR** = *a*/σ. Reject if *a* < 10 W (`plateau_below_minimum`) or SNR < 10 (`robust_snr_below_minimum`). The amplitude is fixed at this value for the rest of the fit; it is not a free parameter. Example (pulse 0 of the capture): *a* = 40.6667 W, SNR = 40 666.7. All pulse-0 fit values quoted in this section were computed when the capture was first processed, under an earlier anchor point 1784757336.5528765 s, about 0.27 ms later than the current point quoted in A.3.3; a refit under the current anchor would move them slightly. They are quoted to show magnitudes, not as claim values.
+4. **Edge coverage**: the earliest start in *L* must be ≤ *on* − 0.75 and the latest end in *L* ≥ *off* + 0.75; otherwise → `edge_coverage_missing`. A trace truncated near either edge cannot certify that edge.
+5. **The model and the objective.** For candidate edge shifts (*d_on*, *d_off*) in seconds, the model predicts interval *i*'s power as
+
+       ŷ_i(d_on, d_off) = b + a · | I_i ∩ [on + d_on, off + d_off] | / |I_i|
+
+   i.e. baseline plus amplitude times the fraction of the averaging window that the shifted pulse covers. The overlap length is max(0, min(end_i, off + d_off) − max(start_i, on + d_on)). The objective is the Huber loss of the standardised residuals,
+
+       Loss(d_on, d_off) = Σ_{I_i ∈ L} ρ( (y_i − ŷ_i) / σ ),
+       ρ(x) = x²/2            if |x| ≤ 1.345,
+       ρ(x) = 1.345·(|x| − 0.6725)   otherwise,
+
+   summed with exact floating summation. Huber's loss is quadratic for small residuals and linear for large ones, so a single wild sample cannot dominate.
+
+6. **The search (constrained coordinate descent).** The two shifts are searched one at a time on explicit grids, starting from *d_on* = *d_off* = 0, with the half-range *R* = 0.75 s (`FIT_HALF_RANGE_S`), a coarse step *s_coarse* = 0.005 s and a fine step *s_fine* = 0.0005 s. Define the candidate grid centred on a value *c* with step *s* as the explicit set
+
+       G(c, s) = { c + s·k : k ∈ ℤ, −N ≤ k ≤ N,  N = ⌈R / s⌉ } ∩ { d : |d| ≤ R }.
+
+    The grid is finite and explicit, so the search is reproducible; the repository artifact guide gives the point counts for each step and the clipping behaviour.
+
+   The procedure is exactly:
+
+       for s in (s_coarse, s_fine):
+           repeat 2 times:
+               d_on  ← argmin over d ∈ G(d_on,  s) of Loss(d, d_off)
+               d_off ← argmin over d ∈ G(d_off, s) of Loss(d_on, d)
+
+    Eight one-dimensional searches in all — onset and offset at the coarse step, then the same pair at the fine step. The repository artifact guide states the tie-break rule.
+
+7. **Significance.** Let *Loss_flat* = Σ_{I_i ∈ L} ρ((*y_i* − *b*)/σ), the loss of a model with no pulse at all. Require *Loss** < 0.5·*Loss_flat*; otherwise → `model_fit_not_significant`.
+8. **Shift limit.** Require |*d_on*| < 0.5 s and |*d_off*| < 0.5 s (`MAX_VALIDATED_EDGE_SHIFT_S`); a fitted shift of 0.5 s or more → `fitted_shift_exceeds_validation_limit`. The search range (±0.75 s) is deliberately wider than the acceptance range (±0.5 s) so that a true shift near the acceptance edge is found rather than pinned.
+
+**The accepted region.** The fitted point is not the output. Define the **loss limit**
+
+    Λ = Loss* + max(1.0, 0.05 · Loss*).
+
+The **accepted region** is the set of all (*d_on*, *d_off*) in the square [−0.75, 0.75]² whose loss is at most Λ — every edge placement the data cannot distinguish from the best one by more than the tolerance. The algorithm computes a guaranteed *enclosure* of that region, not a sample of it, by interval branch-and-bound:
+
+- **Cell lower bound.** For a rectangle *C* = [on_lo, on_hi] × [off_lo, off_hi] of shifts, the covered fraction of any interval is monotone: it decreases as the onset moves later and increases as the offset moves later. So over *C* the model prediction for interval *i* lies between ŷ_i(on_hi, off_lo) and ŷ_i(on_lo, off_hi). Writing *z_i* = (*y_i* − *b*)/σ and the two normalised predictions *ẑ_lo* ≤ *ẑ_hi* (amplitude times fraction, over σ), the distance from *z_i* to the nearest point of [*ẑ_lo*, *ẑ_hi*] is 0 if *z_i* lies inside, else min(|*z_i* − *ẑ_lo*|, |*z_i* − *ẑ_hi*|). LB(*C*) = Σ_i ρ(distance_i). No point of *C* can have loss below LB(*C*), because each term is the smallest Huber value its interval can attain anywhere in *C*.
+- **Procedure.** Start with the single cell [−0.75, 0.75]² on a last-in-first-out stack. Repeatedly pop the most recently pushed cell: if LB(*C*) > Λ, discard it (no accepted point can lie inside). Otherwise, if both of its side lengths are ≤ 10⁻⁴ s (`REGION_COVERAGE_RESOLUTION_S`), *retain the entire cell*. Otherwise bisect it at the midpoint of its wider side (the onset side when the two are equal) and push the lower half first, then the upper half, so the upper half is processed next (depth-first). Because a cell is discarded only on a rigorous lower bound and retained cells are kept whole, every accepted point is inside some retained cell — including points between resolution cells. Starting from a side of 1.5 s, 14 halvings bring a side to 1.5/2¹⁴ ≈ 9.16·10⁻⁵ s ≤ 10⁻⁴ s, so a full-depth cell is 28 bisections deep.
+- **Projection.** The region's enclosure is the bounding box of the retained cells:
+
+      [on_lo, on_hi]   = [min over retained cells of on_lo,  max of on_hi]
+      [off_lo, off_hi] = [min over retained cells of off_lo, max of off_hi]
+
+  If no cell is retained the run raises an error (the best-fit point always satisfies Loss ≤ Λ, so this cannot happen for a fit that reached this step).
+
+**Widening by stamp uncertainty.** The commanded edges themselves are known only to the stamp half-widths, so
+
+    on_lo ← on_lo − u_on,   on_hi ← on_hi + u_on,
+    off_lo ← off_lo − u_off,  off_hi ← off_hi + u_off.
+
+Example: pulse 0's on-stamp has *ma* − *mb* = 2.500019036233425e-7 s as executed in binary64 and *r* = 0.0000010000000000000002 s, so *u_on* = 1.1250009518116714e-6 s. Its reported onset region (under the earlier anchor noted above) is [0.014921970702173189, 0.017213039063451813] s and its offset region is [−0.012269482911167666, −0.009886278807582334] s: the instrument reported this pulse starting about 16 ms late and ending about 11 ms early, and the data rule out any onset outside a 2.3 ms-wide band around that.
+
+The pulse's record retains the fitted shifts, the widened edge intervals, and, for a rejected pulse, its reasons; the repository artifact guide gives the exact record shape.
+
+#### A.3.6 The calibration bound B_fiducial and validity
+
+For every detected pulse and each of its two edges, take the **worst excursion** of that edge's widened region, max(|lo|, |hi|). Over 59 pulses this gives 118 values. Then
+
+    B_fiducial = max over the 118 edge excursions  +  B_anchor
+
+where *B_anchor* is the clock-anchor bound of A.3.3 for the same capture. The anchor term is added because the whole trace was placed on the wall clock from a single point whose error is independent of, and additive to, the per-edge fit error. Two diagnostics are also reported and are not used for any claim: the median of the 118 values and their 95th percentile, defined as the ⌈0.95·118⌉ = 113th smallest value.
+
+Worked example (capture `20260722T145535-e941c821`, re-derived under the anchor estimator of A.3.3): *B_fiducial* = 0.030067931757111657 s, of which *B_anchor* = 0.0011349971959968978 s and the difference between the two printed bounds is 0.0289329345611147592 s (28.9 ms). That difference is what the two published numbers give when subtracted; it is not itself the value the code retains for the worst edge excursion, which is computed and stored separately.
+
+The evidence file is marked `valid` only if all of the following hold: every one of the 59 pulses is detected; the spurious-plateau count is 0; every region limit is finite; the pulse count equals the protocol's 59; the raw record stream and `events.jsonl` both carry 64-hex-character SHA-256 digests; a capture wall time is recorded; the projection completed within budget (next section); and all ten binding fields are present and non-empty (`hardware_model`, `os_build`, `powermetrics_sha256`, `sampling_interval_ms`, `anchor_method_version`, `mlx_version`, `pulse_protocol_id`, `power_policy`, `estimator_revision`, `protocol_sha256`), whose hash pins the calibration to one machine, operating system build, instrument binary, and protocol. Otherwise the status is `invalid` and the reasons are listed from a closed vocabulary; a numerical bound may still be printed in an invalid file (for example when the detection succeeded but a binding field is missing), and it then has no standing. "Calibration distribution" below means the distribution of edge excursions the instrument produces under this protocol on this machine. Because the bound is the sample maximum over 59 draws from it, it is a "95/95" bound: with at least 95 % confidence it exceeds at least 95 % of that distribution (the probability that all 59 draws fall below the 95th percentile is 0.95⁵⁹ ≈ 0.048, so 1 − 0.95⁵⁹ ≥ 0.95). It is not a deterministic out-of-sample guarantee.
+
+#### A.3.7 The work budget and the 120 s work clock
+
+The branch-and-bound of A.3.5 must terminate on a flat loss surface. Two shared limits bound it — a cell budget and a wall-clock budget — whose constants and exhaustion behaviour are in the repository artifact guide.
+
+**Origin of the 120 s work clock.** The clock starts at the moment the budget object is created, which is inside the detection routine immediately after the baseline set, *b*, and σ have been computed and immediately before the first pulse's fit begins. It is a monotonic-clock reading, not a wall-clock one, and it is not reset between pulses. It excludes the anchor estimation, trace anchoring, trimming, and schedule authentication of A.3.3–A.3.4, all of which finish before the budget exists.
+
+### A.4 Executable verification order
 
 First obtain the release manifest. It must supply the repository revision, archive root, bundle identifiers, plan and policy files, drift-bound artifact, whole-window consumption semantics and any custody-store arguments, extraction specification, evaluation-basis fingerprint, floor artifact, and analysis manifest. Do not infer a missing value from a nearby file.
 
@@ -522,12 +735,12 @@ python3 -m joulewise.cli analyze-claims \
 
 Compare the point estimate, `deterministic_bounds.total`, full interval, Holm multiplicity with alpha = 0.05 and m = 2, floor gate, direction gate, outcome, and reason names. The clock-anchor shift bound is only one deterministic term, not the total.
 
-### A.4 Interpreting a refusal
+### A.5 Interpreting a refusal
 
 A matching refusal is a reproduced result, not a failed replication. Given identical bytes and a fixed plan, the program should emit the same reason name. A different reason, a different admitted member set, a changed phase energy or pulse bound, or a changed final verdict is the discrepancy to report.
 
 A refused contrast does not show equality. It says the named instrument and evidence cannot adjudicate that difference: the effect may be absent or may lie below what the cell resolves. Failed and interrupted occurrences remain in the archive, while replacements are named separately; therefore extra directories are expected and must never be treated as admitted merely because they exist.
 
-### A.5 Release locators
+### A.6 Release locators
 
 The repository locator, evidence-archive locator, and published fingerprint manifest are pending by design under the release checklist, so none is supplied here. Until they issue—and until the L1 floor-binding limitation closes—the evidence-dependent commands above cannot support a claim of open, independent re-reducibility. Release will make the placeholders concrete; it will not remove the pulse-to-workload transfer assumption.
