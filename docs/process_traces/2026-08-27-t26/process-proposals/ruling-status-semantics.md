@@ -37,3 +37,13 @@ or any loaded skill. Every merge since D-118 has been gated by memory.
 PROPOSED: a PR-template checklist that names the D-118 gate items and a
 CI check that refuses a merge whose body lacks the ledger block. Same
 cold gate as the ruling-status rule; the S9 sweep is the packet.
+
+## Addendum 2 (S2, 2026-08-27) — cold-gate item: the T-0 ruling's 5 s bound is ill-typed
+
+MAGISTRATE-RULING-T0-UNATTENDED's ruled `validity_origin − R1_completion
+≤ 5 s` compares CLOCK_UPTIME_RAW (validity origin, ordinary monotonic on
+Darwin) with CLOCK_MONOTONIC_RAW (R1 endpoints) and cannot hold at HEAD's
+derivation order. The implementing stream stopped correctly (endpoint
+published on the right clock; no bound; no inert substitute). Reinterpreting
+a prior verdict is a mandatory cold-gate trigger; the cold seat rules the
+clock and the constant. Packet: PR #212's `impl/reason-code-coverage-delta.md`.
