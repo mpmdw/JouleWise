@@ -162,6 +162,71 @@ source value.
 | `[F_7B_decode_cmp_J]` | Same cell, `floor_cmp_j` | beta / decode comparative component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
 | `[F_7B_decode_operative_J]` | `max(F_7B_decode_abs_J, F_7B_decode_cmp_J)`; verify against `floor_gate_j` | beta / decode aggregate cell | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, MINT |
 
+### Attribution-dominance test terms (T26 ruling item 26)
+
+The primary research question compares, per claim-bearing cell, a point-only
+repeatability term (TERM A) against a timing-widened term (TERM B). TERM B as the
+published GATE is already registered above as the operative floor. TERM A is NOT
+emitted unconditionally: `joulewise/detection_floor.py` attaches the
+`point_floor_diagnostic` container only when the dominance predicate is already true,
+and the validator FORBIDS it when the predicate is false. A cell where the claim FAILS
+therefore carries no emitted TERM A, so the falsifier cannot be read off an artifact
+and TERM A is derived at the desk.
+
+**The derivation, per component record** (`cells[].absolute` or `cells[].comparative`):
+
+    A_unguarded = max( max_abs_residual_j (absolute) | max_abs_delta_j (comparative),
+                       prediction_component_j )
+    A_guarded   = guard_factor * A_unguarded
+
+**Self-consistency proof (executed, two blind seats).** A Sol xhigh seat and a blind
+Fable seat independently derived the identity and independently reproduced every
+emitted `point_floor_diagnostic` available in the repository byte-for-value, and both
+confirmed that container presence matches the recomputed predicate. Custody:
+`docs/process_traces/2026-08-27-t26/term-a-derivation/`. The two seats agree on the
+identity and on both open questions below.
+
+**Two questions remain NEEDS-RULING and gate every row in this table:**
+
+1. **Aggregation.** Nothing in code or contract combines the absolute and comparative
+   point terms into one per-cell TERM A. Candidates: the component maximum, by analogy
+   to `floor_gate_j = max(floor_abs_j, floor_cmp_j)`; per-component comparison with no
+   aggregation, which is what the code's own predicate does; or selection of the
+   component matching the claim's use. A sum has contrary evidence and is not a candidate.
+2. **Which quantity is TERM B for the comparison.** The code's predicate compares an
+   exact linear corner maximum that is never emitted; the emitted
+   `corner_widened_guarded_floor_j` is greater than or equal to it. The drift-widened
+   `floor_gate_j` adds a whole-window drift allowance, which is not a timing term, so
+   comparing it against TERM A would test a different proposition and it is reported
+   only as the gate.
+
+Until both are ruled, every row below is `STOP_FILL`.
+
+| Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
+|---|---|---|---|---|---|
+| `[TERM_A_1p5B_prompt_J]` | Desk derivation over the alpha prompt cell's unconditional component fields `max_abs_residual_j`, `max_abs_delta_j`, `prediction_component_j`, `guard_factor` | alpha / prompt dominance TERM A | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; aggregation NEEDS-RULING | TPL, DF, MINT, PLAN |
+| `[TERM_B_1p5B_prompt_J]` | Same cell; NEEDS-RULING between `corner_widened_guarded_floor_j` and the exact derived predicate comparand | alpha / prompt dominance TERM B | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; TERM B semantics NEEDS-RULING | TPL, DF, MINT, PLAN |
+| `[TERM_A_1p5B_decode_J]` | Same derivation over the alpha decode cell | alpha / decode dominance TERM A | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; aggregation NEEDS-RULING | TPL, DF, MINT, PLAN |
+| `[TERM_B_1p5B_decode_J]` | Same cell; same TERM B alternatives | alpha / decode dominance TERM B | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; TERM B semantics NEEDS-RULING | TPL, DF, MINT, PLAN |
+| `[TERM_A_7B_prompt_J]` | Same derivation over the beta prompt cell | beta / prompt dominance TERM A | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; aggregation NEEDS-RULING | TPL, DF, MINT, PLAN |
+| `[TERM_B_7B_prompt_J]` | Same cell; same TERM B alternatives | beta / prompt dominance TERM B | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; TERM B semantics NEEDS-RULING | TPL, DF, MINT, PLAN |
+| `[TERM_A_7B_decode_J]` | Same derivation over the beta decode cell | beta / decode dominance TERM A | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; aggregation NEEDS-RULING | TPL, DF, MINT, PLAN |
+| `[TERM_B_7B_decode_J]` | Same cell; same TERM B alternatives | beta / decode dominance TERM B | STOP_FILL | PROPOSED_KEY / VALUE_UNISSUED; TERM B semantics NEEDS-RULING | TPL, DF, MINT, PLAN |
+
+`PROPOSED_KEY` marks a token whose name is not yet frozen because the quantity it
+names is still under ruling. It is not a licence to render.
+
+### Held title pair (T26 ruling item 28)
+
+Neither title is typeset before `_v4` issues. The draft carries a neutral placeholder
+H1 and both candidates as non-rendering comments. The choice is made by the outcome of
+the attribution-dominance test, not by preference.
+
+| Slot | Condition of use | Title |
+|---|---|---|
+| PRIMARY | `_v4` reproduces attribution dominance | Held in the draft's non-rendering title block; built around attribution-limited resolution of phase energy, and readable without prior exposure to either term. |
+| NULL-OUTCOME | `_v4` does not reproduce dominance | Held in the same block; the protocol-first framing, under which the capstone is a calibration that corrected its own clock-model error followed by a prospective null. |
+
 ### Floor-cell branch text and diagnostics
 
 For each row below, the cell selector must first validate both component
@@ -255,7 +320,7 @@ invented here.
 | `[E_decode_contrast_upper_J]` | `contrasts[decode].deterministic_bounds.decision_interval.upper` | gamma / decode contrast | MEASURED | KEY_FROZEN / VALUE_UNISSUED | TPL, CV |
 | `[M_decode_contrast_abs_J_per_request]` | `abs(E_decode_contrast_signed_J_per_request)` | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
 | `[F_claim_decode_armwise_max_J]` | `max(F_1p5B_decode_operative_J, F_7B_decode_operative_J)`; verify against the claim artifact's armwise floor gate | gamma consumer of alpha and beta decode floors | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, CV, MINT |
-| `[B_decode_claim_J]` | UNKNOWN binding. Candidate field is `contrasts[decode].deterministic_bounds.total`, but no named authority equates that entire field with the template's claim-side `E_clock_anchor_shift_bound_j` magnitude | gamma / decode claim interval | STOP_FILL | SUPPLIER_UNKNOWN; resolve by naming the exact claim-side-bound output field in the gamma claim artifact | TPL, CV, DF |
+| `[B_decode_claim_J]` | `contrasts[decode].deterministic_bounds.total` — RESOLVED by the T26 ruling Addendum 2 item 25: the column means the contrast's WHOLE deterministic bound, the quantity that expands the decision interval (`joulewise/analysis_engine/artifact.py:667`). `E_clock_anchor_shift_bound_j` is one named term inside `deterministic_bounds.terms[]` and is NOT this column. | gamma / decode claim interval | MEASURED | KEY_FROZEN / VALUE_UNISSUED; supplier resolved 2026-08-27, value awaits the `_v4` gamma artifact | TPL, CV, DF |
 | `[C_decode_floor_clearance_J]` | `M_decode_contrast_abs_J_per_request - F_claim_decode_armwise_max_J`, only after floor-gate passage | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
 | `[S_decode_floor_shortfall_J]` | `F_claim_decode_armwise_max_J - M_decode_contrast_abs_J_per_request`, only on floor-gate refusal | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
 | `[R_decode_effect_x_floor]` | `M_decode_contrast_abs_J_per_request / F_claim_decode_armwise_max_J` | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; denominator must be exact and nonzero | TPL |
@@ -471,7 +536,7 @@ anchor text.
 | DS-26 — Table 3 decode interval, line 420, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `E_decode_contrast_lower_J`, `E_decode_contrast_upper_J` | gamma / decode contrast | MEASURED | VALUE_UNISSUED; one bracket marker contains two semantic fills | DRAFT, TPL, CV |
 | DS-27 — Table 3 decode floor, line 420, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `F_claim_decode_armwise_max_J` | gamma consuming alpha/beta decode floors | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
 | DS-28 — Table 3 decode clearance, line 420, col 5 under `Clearance (point − floor)` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `C_decode_floor_clearance_J` on passage or negative of `S_decode_floor_shortfall_J` on refusal; branch must be explicit | gamma / decode contrast | DERIVE | DRAFT/TEMPLATE SHAPE MISMATCH; draft has one unconditional cell | DRAFT, TPL |
-| DS-29 — Table 3 decode claim-side bound, line 420, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `B_decode_claim_J` | gamma / decode contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, DF, CV |
+| DS-29 — Table 3 decode contrast deterministic bound, col 6 under `Comparison's own deterministic bound (deterministic_bounds.total)` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `B_decode_claim_J` | gamma / decode contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, DF, CV |
 | DS-30 — Table 3 decode floor-gate outcome, line 420, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from authenticated magnitude and claim floor, consistent with claim verdict | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; renderer contract must add a binding without renaming existing tokens | DRAFT, TPL, CV |
 | DS-31 — Table 3 decode direction-gate outcome, line 420, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from the fully composed interval and registered direction | gamma / decode contrast | STOP_FILL | TOKEN_MISSING | DRAFT, TPL, CV |
 | DS-32 — Table 3 decode verdict, line 420, col 9 under `Verdict` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; candidate source `contrasts[decode].claim_evaluation.outcome` | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; bind a professor-facing conservative rendering | DRAFT, TPL, CV, AUTH |
@@ -481,7 +546,7 @@ anchor text.
 | PG-02 — Table 3 prompt interval lower endpoint, line 421, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed lower endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
 | PG-03 — Table 3 prompt interval upper endpoint, line 421, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed upper endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
 | PG-04 — Table 3 prompt clearance, line 421, col 5 under `Clearance (point − floor)` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future branch-explicit clearance or shortfall derivation | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING; shape contract required | DRAFT, TPL, CV |
-| PG-05 — Table 3 prompt claim-side bound, line 421, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token and no named claim-side-bound output field | gamma / prompt contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, CV, AUTH |
+| PG-05 — Table 3 prompt contrast deterministic bound, col 6 under `Comparison's own deterministic bound (deterministic_bounds.total)` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token and no named claim-side-bound output field | gamma / prompt contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, CV, AUTH |
 | PG-06 — Table 3 prompt floor-gate outcome, line 421, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering consistent with authenticated magnitude, floor, and verdict | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV |
 | PG-07 — Table 3 prompt direction-gate outcome, line 421, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering from the fully composed interval and registered direction | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
 | PG-08 — Table 3 prompt verdict, line 421, col 9 under `Verdict` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt rendering token; future authenticated claim-evaluation outcome | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
