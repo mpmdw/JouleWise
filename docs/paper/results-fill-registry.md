@@ -507,7 +507,7 @@ number the reader has no way to judge.
 Addendum 3 item 38 ruled that every diagnostic-era value in the draft is traced to an
 actual artifact path or becomes a registered `[PENDING]` with the diagnostic-era label:
 no number stands on seat prose. A sweep of all 101 diagnostic numeric value-sites in the
-draft traced 99 and converted 2. The two conversions are the Section 6 resolvability
+draft traced 98, left one (DG-097) narrowed to what its source supports, and converted 2. The two conversions are the Section 6 resolvability
 example's realized record spacing: the draft asserted about 112 ms, and no issued artifact
 supplies it — the measured all-trace median spacing for that bundle is about 120.9 ms.
 Both sites are now `[PENDING]` markers (rows DG-071 and DG-075) and the marker census rose
@@ -632,7 +632,7 @@ Path abbreviations below are exact:
 | DG-094 — Section 6 256-clearance result, line 302 | 6.619860 J | DG-092 - DG-093 | prospective gamma / prefill sizing | DERIVE | PROJECTION_ARITHMETIC; SIZING_ONLY | DRAFT, AUTH |
 | DG-095 — Section 6 256 ratio, line 302 | 2.32 | unrounded DG-084 / 5; round 2 decimals | prospective gamma / prefill sizing | DERIVE | PROJECTION_ARITHMETIC; SIZING_ONLY | DRAFT, AUTH |
 | DG-096 — Section 6 selected prompt size, line 302 | 256 | same DL D-122 target as DG-081 | prospective gamma / prefill sizing | MEASURED | DESIGN_FROZEN; PROJECTION_ONLY | DRAFT, AUTH |
-| DG-097 — Section 6 historical prompt ceiling, line 302 | 128 | max ABC#workload_profile.prompt_tokens; search found no historical 7B corpus above it | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
+| DG-097 — Section 6 historical prompt ceiling, line 302 | 128 | max ABC#workload_profile.prompt_tokens; no 7B corpus above 128 tokens AMONG THE 40 CONTRAST CONFIGURATIONS named by ABC (narrowed by Addendum 4 item 43; the 40 configs cannot establish absence across all historical corpora, and no inventory is commissioned) | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
 | DG-098 — Section 7 repeated retained-cell count, line 328 | three | len(XS#cells[0..2]) | historical a10 / three absolute cells | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-099 — Section 7 repeated prefill ratio, line 328 | 10.92 | same derivation as DG-050 | historical a10 / prefill absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
 | DG-100 — Section 7 repeated decode ratio, line 328 | 5.92 | same derivation as DG-051 | historical a10 / decode absolute | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; NON_CLAIM_BEARING | DRAFT, AUTH, DF |
@@ -661,12 +661,13 @@ The six characterization rows DS-02 through DS-07 bind exact content anchors
 whose former bracket markers are absent. The Section 5 rewrite at `ec11f3f`
 replaced every `TODO-EVIDENCE` guard inside those rows with a frozen value, a
 derivation rule, or an explicit statement that a value must be ratified before
-the plan is frozen. Three of those six content anchors — DS-02, DS-05 and DS-06 — are unchanged
-and still occur exactly once. The other three no longer resolve after the round-2 restructure and
-are NOT re-anchored by guess: DS-03's null row was renamed, and DS-04 (deliberate small-difference
-challenge) and DS-07 (between-session stability) name sites that Addendum 1 item 12 demoted to
-Future Work and that the round-2 rewrite therefore removed. All three await a ruling on whether to
-re-anchor or retire them; their locators were left unset rather than invented. Those sites remain
+the plan is frozen. Addendum 4 item 40 settled the three anchors that the round-2 restructure broke.
+DS-02, DS-05 and DS-06 were never broken and still occur exactly once. DS-03 IS RE-ANCHORED: its
+site survives in the main text — the round-2 rewrite renamed the row rather than removing it — and
+the new locator was derived by searching for the renamed anchor. DS-04 and DS-07 are RETIRED with
+superseded notes: they name sites that Addendum 1 item 12 demoted from characterization to Future
+Work, so the round-2 rewrite removed them and there is nothing to re-anchor. No locator was guessed
+at any point. Those sites remain
 protocol-specification rows, not fillable result cells: results render through
 the template's Section 6 variants, never by filling draft Table 1. Every line
 number below was re-derived on 2026-08-24 by searching for the site's own
@@ -676,11 +677,25 @@ anchor text.
 |---|---|---|---|---|---|---|
 | DS-01 — Section 4 operative-floor hold, line 219 | `[RESULT PENDING ISSUED ARTIFACTS]` | Four cell decompositions from all `F_*_abs_J`, `F_*_cmp_J`, and `F_*_operative_J` tokens | alpha and beta / all phase floor cells | DERIVE | DRAFT_GENERIC; guarded template output only | DRAFT, TPL, DF |
 | DS-02 — Section 3 characterization specification row, line 124 | `\| Workload response \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_linearity` plus licensed linearity diagnostics, only after an authenticated characterization report is issued | characterization / linearity | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
-| DS-03 — Section 5 characterization specification row, line 349 | `\| Identical-condition null response \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_null` plus licensed null diagnostics, only after an authenticated characterization report is issued | characterization / null response | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
-| DS-04 — Section 5 characterization specification row, line 350 | `\| Deliberate small-difference challenge \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_floor` plus licensed floor diagnostics, only after an authenticated characterization report is issued | characterization / empirical floor | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-03 — Section 3 characterization criteria row, line 125 | `**Identical-condition null:**` content anchor (RE-ANCHORED 2026-08-27, Addendum 4 item 40: the site survives in the main text at Section 3 line 125; the round-2 rewrite renamed the row from "Identical-condition null response" and the anchor was re-derived by search, not by offset); the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_null` plus licensed null diagnostics, only after an authenticated characterization report is issued | characterization / null response | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-04 (RETIRED) — Section 5 characterization specification row, line 350 | `\| Deliberate small-difference challenge \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_floor` plus licensed floor diagnostics, only after an authenticated characterization report is issued | characterization / empirical floor | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+
+**DS-04 RETIRED (Addendum 4 item 40).** This row bound a Section 5 characterization
+site for the deliberate small-difference challenge. Addendum 1 item 12 demoted that criterion from characterization to Future
+Work, and the round-2 rewrite removed the site accordingly, so the anchor no longer occurs in
+the draft. The row is retired rather than re-anchored: no locator is ever guessed. Its bytes
+are retained immediately above for provenance and must not be rendered.
+
 | DS-05 — Section 3 characterization specification row, line 126 | `\| Phase accounting \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_phase` plus licensed additivity/invariance diagnostics, only after an authenticated characterization report is issued | characterization / phase attribution | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
 | DS-06 — Section 3 characterization specification row, line 127 | `\| Drift and recovery \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_drift` plus licensed excursion/recovery diagnostics, only after an authenticated characterization report is issued | characterization / drift and settling | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
-| DS-07 — Section 5 characterization specification row, line 353 | `\| Between-session stability \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_between_sessions` and `N_C_eligible_sessions`, only after an authenticated characterization report is issued | characterization / between sessions | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+| DS-07 (RETIRED) — Section 5 characterization specification row, line 353 | `\| Between-session stability \|` content anchor; the row's former `TODO-EVIDENCE` guards were replaced by the Section 5 rewrite | `PLAIN_LANGUAGE_RESULT_between_sessions` and `N_C_eligible_sessions`, only after an authenticated characterization report is issued | characterization / between sessions | STOP_FILL | KEY_FROZEN / VALUE_UNISSUED; the frozen characterization result specification is the named supplier, and the specification row itself remains not a fillable result cell | DRAFT, TPL, SPEC |
+
+**DS-07 RETIRED (Addendum 4 item 40).** This row bound a Section 5 characterization
+site for between-session stability. Addendum 1 item 12 demoted that criterion from characterization to Future
+Work, and the round-2 rewrite removed the site accordingly, so the anchor no longer occurs in
+the draft. The row is retired rather than re-anchored: no locator is ever guessed. Its bytes
+are retained immediately above for provenance and must not be rendered.
+
 | DS-08a — Section 6 results branch hold, line 304 | `[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3, 6, and 7.]` | Exactly one guarded template result variant; template-internal section labels are not draft section locators | alpha, beta, gamma | DERIVE | DRAFT_GENERIC; no historical or diagnostic result is a supplier | DRAFT, TPL, LINT |
 
 **DS-08 superseded by DS-08a (Addendum 3 item 35).** The round-2 restructure renumbered the
@@ -783,15 +798,22 @@ such as `[1]` are excluded by construction.
   landed template counterpart, and are excluded from the template-key census.
   The discrepancy table contains no additional fill token.
 - Reconciliation: all 91 template tokens occur literally in the exact-token
-  tables. Six draft-site rows, DS-02 through DS-07, bind content anchors whose
-  former markers are absent; three of those anchors (DS-03, DS-04, DS-07) no longer
-  resolve in the draft and are pending a re-anchor-or-retire ruling. Marker-bound
-  rows cover the draft's 34 bracket-marker sites and 36 semantic fill slots: PG-02 and
-  PG-03 share one interval marker, DS-26 carries two semantic fills in one row, and
-  DG-071 and DG-075 were added by Addendum 3 item 38 when the resolvability example's
-  record spacing proved untraceable. The marker-bound ROW COUNT is deliberately not
-  restated here: the previous figure was derived from the stale 35/37 census and a
-  mechanical row-to-site recount is owed before any number is asserted again.
+  tables. Draft-site rows DS-02, DS-05 and DS-06 bind content anchors whose former
+  markers are absent; DS-03 was re-anchored and DS-04 and DS-07 retired under Addendum 4
+  item 40.
+  **Marker-bound row recount, MEASURED 2026-08-27 under Addendum 4 item 45** (nothing here
+  is carried forward). Command:
+
+  ```sh
+  grep -cE '^\| (DS|PG|DG)-[0-9]+[a-z]? — .*\[PENDING' docs/paper/results-fill-registry.md
+  ```
+
+  Result: **35 marker-bound rows** (25 DS, 8 PG, 2 DG). These reconcile exactly with the
+  measured draft census of 34 bracket-marker sites and 36 semantic fill slots: 35 rows less
+  the one site that carries two rows (PG-02 and PG-03 share a single interval marker) gives
+  34 sites; and 32 single-slot sites plus the 2 interval sites at two endpoints each gives
+  36 slots. DS-26 carries two semantic fills in one row, which changes neither total. No
+  site-to-token gap is silently supplied.
 
 ## Lead double-checks before renderer implementation
 
