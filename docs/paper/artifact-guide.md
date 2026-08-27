@@ -65,6 +65,38 @@ Calibration-acceptance editions are retained side by side under `configs/calibra
 
 Every bundle also carries a schema version and clock-anchor method. `joulewise/uncertainty_evidence.py` maps registered methods to schema eras and distinguishes two failures: `capture_pipeline_absent` for missing current presentation and `capture_pipeline_superseded` for a recorded retired method. Strict replay uses the method named by the bundle, preserving old evidence as auditable. Claim admission is narrower and requires a method in `CLAIM_BEARING_ANCHOR_METHODS`. Never migrate an old bundle by editing its method label.
 
+### Pulse-projection deadline
+
+Run one complete multi-pulse accepted-region projection—the search that encloses every pulse-edge lag pair permitted by the fit's loss limit—with the frozen default work limits. The primary reproducible limit is 165,000 evaluated cells (`joulewise/powermetrics_fiducial.py:77-88`). The code calls the second limit the “FROZEN supplementary host-safety deadline” and fixes it at 120.0 s; it “only catches unexpected per-cell cost or host pathologies that a cell count cannot bound” (`joulewise/powermetrics_fiducial.py:89-92`). One cell counter and one monotonic-clock deadline are shared across every pulse in the detection attempt. Before evaluating another cell, the detector checks the cell limit first and then the 120 s deadline (`joulewise/powermetrics_fiducial.py:524-550`). If either limit is exhausted, discard every partial pulse fit and issue invalid evidence with `detection_nonconvergent`, no fitted pulses, and no `b_fiducial_s`; never retain a truncated accepted region as a calibration result (`joulewise/powermetrics_fiducial.py:976-1010`).
+
+### Reference repeatability and whole-window drift allowance
+
+Build the reference-repeatability bound separately for gross request energy and idle-subtracted request energy. Start from a settled, same-condition reference corpus with at least ten members; the mint rejects an unsettled manifest, too few members, unsafe or duplicate paths, non-current reductions, and mixed scientific configurations (`joulewise/whole_window.py:3373-3454`). The code fixes the corpus minimum at \(n_c=10\), the replicated endpoint count at three, and the freshness horizon at 86,400 s (`joulewise/whole_window.py:90-104`). For one claim family, sort the corpus point energies as \(C_{(1)}\leq\cdots\leq C_{(n_c)}\), compute their sample standard deviation \(s_c\), and let \(t_{0.975,n_c-1}\) be the Student-\(t\) critical value used by the implementation. Then compute
+
+\[
+R_c=\max\!\left(
+\frac{C_{(n_c)}+C_{(n_c-1)}+C_{(n_c-2)}}{3}
+-\frac{C_{(1)}+C_{(2)}+C_{(3)}}{3},
+\ t_{0.975,n_c-1}s_c\sqrt{2/3}
+\right).
+\]
+
+This is the code's `replicated_endpoint_bound_j`: the larger of the mean of the largest three minus the mean of the smallest three and the two-endpoint-means prediction term (`joulewise/whole_window.py:1430-1477`). The artifact builder evaluates that construction independently for the gross and idle-subtracted families (`joulewise/whole_window.py:1480-1492`). A current window must supply exactly three start references, one midpoint reference, and three end references for both families (`joulewise/whole_window.py:1859-1888`).
+
+For each family, let \(S\) be the mean of its three start points, \(M\) its midpoint point, and \(E\) the mean of its three end points. Compute the endpoint screen statistic \(|E-S|\), the trajectory excursion
+
+\[
+X=\max(S,M,E)-\min(S,M,E),
+\]
+
+and the never-zero whole-window allowance
+
+\[
+A_{\mathrm{drift}}=\max(X,R_c).
+\]
+
+The endpoint screen passes only when \(|E-S|\leq R_c\), while the allowance uses the larger three-point excursion \(X\), so the midpoint can expose an interior excursion hidden by similar endpoints (`joulewise/whole_window.py:1752-1803`). Perform the complete calculation separately for the gross and idle-subtracted families (`joulewise/whole_window.py:1921-1938`). Apply no duration multiplier: the implementation records `not_applied_no_governed_time_law` (`joulewise/whole_window.py:1797-1803`). Refuse a claim-time use when the bound is older than 86,400 s or when the observed operating-system build, power-supply identity, or calibration identity differs from the artifact bindings (`joulewise/whole_window.py:1245-1344`).
+
 ## 5. Bundle custody, failures, and replacements
 
 The bundle at `<runs root>/<run id>/` is written once. `summary_metrics.json` is the completion marker; an absent or invalid marker means incomplete collection, not a successful member with missing results. Native artifacts under `raw/` are the source of truth. For powermetrics, preserve `raw/powermetrics.plist` even when derived `power_trace.csv` and rich telemetry exist.
@@ -106,7 +138,7 @@ frozen plan and policy
 
 At claim consumption, check the registered `FLOOR-BIND-01` row in `docs/process/state_kernel.json`. While its claim-side limitation remains open, do not describe a standalone floor artifact as independently authenticating complete extraction evidence. The paper's Appendix A therefore conditions claim replay on closure of that row.
 
-The claim-side bound printed in the paper is `deterministic_bounds.total`. `E_clock_anchor_shift_bound_j` is only one term. Do not substitute it into tables, templates, or release metadata.
+The paper's Table 3 claim-side bound has NO supplier yet; the registry holds that column unresolved and it renders only after the prospective campaign. Do not bind it to `deterministic_bounds.total`: that quantity widens the decision interval, but the registry's own rule forbids assuming it is identical to the template's clock-anchor claim-side term, and `scripts/render_results_fills.py:977` enforces that. `E_clock_anchor_shift_bound_j` is one term inside `deterministic_bounds.terms[]` and is likewise not the column.
 
 ## 7. Repository checks moved out of the paper
 
