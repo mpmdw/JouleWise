@@ -479,13 +479,13 @@ The wall clock is assumed affine in monotonic time over the capture: wall(*m*) =
 
 **Model condition (stated because the containment claim depends on it).** The estimator's interval contains the true anchor *provided that* (i) the wall clock has a single rate across the capture with no step adjustment, and (ii) each whole-second label departs from the affine relation by at most 250 µs (`MAX_AFFINE_CLOCK_RESIDUAL_S`), an allowance charged in full and never shrunk to the observed residual. A wall-clock excursion of less than 250 µs occurring between stamps is invisible to the arithmetic; it is excluded by the requirement that any capture whose numbers support a published claim runs with network time synchronisation off, which is a recorded admission condition, not something the estimator can verify.
 
-**Inputs and their admission checks.** All five stamps must be present and well formed, the trace must be non-empty, and every record's elapsed value must be finite and non-negative. Each failure returns `clock_anchor_unresolved` with a named detail; the repository artifact guide enumerates the checks and their detail strings.
+**Inputs and their admission checks.** All five stamps must be present and well formed, the trace must be non-empty, and every record's elapsed value must be finite and non-negative. Each failure returns `clock_anchor_unresolved` with a named detail; the repository artifact guide (`docs/paper/artifact-guide.md` Section 9, "Calibration algorithm operator detail" — the target of every such pointer below) enumerates the checks and their detail strings.
 
 **Wall-minus-monotonic span.** Index the five stamps by *v* (reserving *j* for pulses). For each stamp *v* compute the raw offset range [*w_v* − *ma_v*, *w_v* − *mb_v*]. The **span** is
 
     span = max_v (w_v − mb_v) − min_v (w_v − ma_v)
 
-over the five stamps, in seconds. It measures how much the wall clock drifted against the monotonic clock over the whole capture, including any slew (gradual rate adjustment applied by the operating system's time discipline). If span > 0.005 s the capture is refused (`wall_minus_monotonic_span_exceeded`). Worked example (same capture; wall origin is the Unix epoch, monotonic origin is the machine's boot): the largest raw upper offset *w* − *mb* is 1784298599.0949996 s (at S_stop) and the smallest raw lower offset *w* − *ma* is 1784298599.0945535 s (at S_pre); the difference is span = 0.00044608116149902344 s (446 µs), the second of the four terms in the final bound.
+over the five stamps, in seconds. These two subtractions are the one place the estimator does not use exact rational arithmetic: they are performed in binary64 on the stored stamp values, and the resulting float is then exactified — which is what the 10⁻⁶ s padding term below pays for. The span measures how much the wall clock drifted against the monotonic clock over the whole capture, including any slew (gradual rate adjustment applied by the operating system's time discipline). If span > 0.005 s the capture is refused (`wall_minus_monotonic_span_exceeded`). Worked example (same capture; wall origin is the Unix epoch, monotonic origin is the machine's boot): the largest raw upper offset *w* − *mb* is 1784298599.0949996 s (at S_stop) and the smallest raw lower offset *w* − *ma* is 1784298599.0945535 s (at S_pre); the difference is span = 0.00044608116149902344 s (446 µs), the second of the four terms in the final bound.
 
 **Numeric-padding check.** Let *w_max* = the largest |*w_v*| over the five stamps. The estimator requires 4·ulp(*w_max*) ≤ 10⁻⁶ s, where ulp is the spacing of binary64 numbers at that magnitude, and refuses otherwise (`numeric_padding_insufficient`). For epochs in 2004–2038 the ulp is 2⁻²² s ≈ 238 ns, so the term is ≈ 954 ns and the check passes. Why four: at most four epoch-scale floating-point roundings can lean inward in the emitted bound (two inside the span's subtractions, one per anchor endpoint).
 
@@ -525,7 +525,7 @@ The solver is applied in this order, each step refusing on infeasibility:
 
 1. Native rows alone infeasible → `rate_aware_native_set_empty`.
 2. Native + stamp rows infeasible → `affine_clock_fit_empty`.
-3. All rows infeasible → the native rows are re-formed with *δ* = 1 s; if that relaxed set is feasible the detail is `affine_clock_residual_exceeded`, otherwise `admissible_interval_empty`.
+3. All rows infeasible → the native rows are re-formed with *δ* = 1 s and recombined with the same stamp and causal rows; if that full relaxed set is feasible the detail is `affine_clock_residual_exceeded`, otherwise `admissible_interval_empty`.
 4. *β_lo* = min *β*, *β_hi* = max *β* over the full set. If either equals its box edge → `clock_fit_unbounded`. If *β_lo* < 1 − 50·10⁻⁶ or *β_hi* > 1 + 50·10⁻⁶ (50 ppm, `MAX_CLOCK_RATE_DEVIATION_PPM`) → `clock_rate_limit_exceeded`. The rate is refused, never clipped.
 5. *A_lo* = min *A*, *A_hi* = max *A* over the full set.
 6. First-parse lag: the largest value over the feasible set of min_v (*h_v*(β) + *β*·*k_parse* − *A*), computed by solving one LP per stamp with the other stamps' forms constrained to be no smaller and taking the best. This is the longest time, consistent with all evidence, between record 0's end and the latest instant the first-parse stamp allows for it — how loosely the causal upper constraint holds. A negative value means the causal constraint is inconsistent with the rest; a value above 0.25 s (`MAX_FIRST_PARSE_LAG_S`) means the controller noticed record 0 too long after it was written for the upper causal constraint to be trusted as a tight physical bound; either → `first_parse_lag_exceeded`. On the example capture it is 0.05247795879145338 s.
@@ -577,7 +577,7 @@ The forcing problem: a 1 s rectangular GPU pulse, sampled by an instrument avera
 
 The median absolute deviation (MAD) is the median of the absolute distances from the median; 1.4826 converts it to a standard-deviation equivalent for Gaussian noise; the 1 mW floor prevents a perfectly flat baseline from producing σ = 0. Worked example: on the example capture the idle GPU channel reads 0.0 W throughout the baseline set, so *b* = 0.0 W, the MAD is 0, and the floor engages: σ = 0.001 W.
 
-**Spurious-plateau check on the baseline set.** Sort *O* by start time. With threshold *b* + max(5.0 W, 5σ), count each run of at least 2 consecutive baseline intervals above the threshold as one spurious plateau (a run of any length ≥ 2 counts once). Any spurious plateau invalidates the capture — it means the GPU did work when nothing was commanded, and a fit could not distinguish that from instrument timing.
+**Spurious-plateau check on the baseline set.** The check is evaluated once, after every pulse in the train has been fitted, not as a gate before the fits; a capture that exhausts the work budget of A.3.7 is therefore recorded as nonconvergent whether or not it also carries a spurious plateau. Sort *O* by start time. With threshold *b* + max(5.0 W, 5σ), count each run of at least 2 consecutive baseline intervals above the threshold as one spurious plateau (a run of any length ≥ 2 counts once). Any spurious plateau invalidates the capture — it means the GPU did work when nothing was commanded, and a fit could not distinguish that from instrument timing.
 
 **Per-pulse fit.** For pulse *j* with commanded (*on*, *off*, *u_on*, *u_off*):
 
@@ -610,7 +610,7 @@ The median absolute deviation (MAD) is the median of the absolute distances from
                d_on  ← argmin over d ∈ G(d_on,  s) of Loss(d, d_off)
                d_off ← argmin over d ∈ G(d_off, s) of Loss(d_on, d)
 
-    Eight one-dimensional searches in all — onset and offset at the coarse step, then the same pair at the fine step. The repository artifact guide states the tie-break rule.
+    Eight one-dimensional searches in all — onset and offset at the coarse step, then the same pair at the fine step. The repository artifact guide states the tie-break rule. Write *Loss** for the loss at the pair (*d_on*, *d_off*) the procedure ends with — the fit's best loss. It is used in steps 7 and 8 and in the loss limit below.
 
 7. **Significance.** Let *Loss_flat* = Σ_{I_i ∈ L} ρ((*y_i* − *b*)/σ), the loss of a model with no pulse at all. Require *Loss** < 0.5·*Loss_flat*; otherwise → `model_fit_not_significant`.
 8. **Shift limit.** Require |*d_on*| < 0.5 s and |*d_off*| < 0.5 s (`MAX_VALIDATED_EDGE_SHIFT_S`); a fitted shift of 0.5 s or more → `fitted_shift_exceeds_validation_limit`. The search range (±0.75 s) is deliberately wider than the acceptance range (±0.5 s) so that a true shift near the acceptance edge is found rather than pinned.
@@ -641,11 +641,11 @@ The pulse's record retains the fitted shifts, the widened edge intervals, and, f
 
 #### A.3.6 The calibration bound B_fiducial and validity
 
-For every detected pulse and each of its two edges, take the **worst excursion** of that edge's widened region, max(|lo|, |hi|). Over 59 pulses this gives 118 values. Then
+A pulse is **detected** when it passes every check of A.3.5 and so carries two widened edge regions; a pulse rejected at any of those checks is not detected and carries none. For every detected pulse and each of its two edges, take the **worst excursion** of that edge's widened region, max(|lo|, |hi|). The bound below is formed only when all 59 pulses are detected, so it always draws on exactly 118 values. Then
 
     B_fiducial = max over the 118 edge excursions  +  B_anchor
 
-where *B_anchor* is the clock-anchor bound of A.3.3 for the same capture. The anchor term is added because the whole trace was placed on the wall clock from a single point whose error is independent of, and additive to, the per-edge fit error. Two diagnostics are also reported and are not used for any claim: the median of the 118 values and their 95th percentile, defined as the ⌈0.95·118⌉ = 113th smallest value.
+where *B_anchor* is the clock-anchor bound of A.3.3 for the same capture. The anchor term is added because the whole trace was placed on the wall clock from a single point whose error is independent of, and additive to, the per-edge fit error. Two diagnostics are also reported and are not used for any claim: the median of the 118 values — the mean of the 59th and 60th smallest, the count being even — and their 95th percentile, defined as the ⌈0.95·118⌉ = 113th smallest value.
 
 Worked example (capture `20260722T145535-e941c821`, re-derived under the anchor estimator of A.3.3): *B_fiducial* = 0.030067931757111657 s, of which *B_anchor* = 0.0011349971959968978 s and the difference between the two printed bounds is 0.0289329345611147592 s (28.9 ms). That difference is what the two published numbers give when subtracted; it is not itself the value the code retains for the worst edge excursion, which is computed and stored separately.
 
