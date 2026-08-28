@@ -16,16 +16,16 @@
   <!-- refusal inlet row -->
   <rect x="40" y="100" width="410" height="80" fill="#ffffff" stroke="#777777" stroke-width="1.8" stroke-dasharray="7 5"/>
   <text x="245" y="126" font-family="sans-serif" font-size="13" font-weight="bold" fill="#1b1b1b" text-anchor="middle">any admission or custody check fails</text>
-  <text x="245" y="146" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">evidence missing, stale, contaminated, duplicated,</text>
-  <text x="245" y="164" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">inconsistent, or not authenticated</text>
+  <text x="245" y="146" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">missing, stale, contaminated, duplicated, inconsistent,</text>
+  <text x="245" y="164" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">or unauthenticated evidence</text>
 
   <line x1="450" y1="140" x2="718" y2="140" stroke="#333333" stroke-width="2" marker-end="url(#f3aEnd)"/>
   <text x="584" y="130" font-family="sans-serif" font-size="12" fill="#555555" text-anchor="middle">enters from the side; reaches no gate</text>
 
   <rect x="720" y="100" width="240" height="80" fill="#ffffff" stroke="#1b1b1b" stroke-width="2.5"/>
   <text x="840" y="130" font-family="sans-serif" font-size="14.5" font-weight="bold" fill="#1b1b1b" text-anchor="middle">refused</text>
-  <text x="840" y="152" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">no result of any kind is reported</text>
-  <text x="840" y="170" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">from this evidence</text>
+  <text x="840" y="152" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">this evidence produces</text>
+  <text x="840" y="170" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">no result of any kind</text>
 
   <!-- separator -->
   <line x1="40" y1="205" x2="960" y2="205" stroke="#e2e2e2" stroke-width="1.5"/>
@@ -41,16 +41,17 @@
 
   <!-- gate 1 -->
   <rect x="250" y="235" width="200" height="110" rx="6" fill="#ffffff" stroke="#444444" stroke-width="2.5"/>
-  <text x="350" y="262" font-family="sans-serif" font-size="12" font-weight="bold" fill="#777777" text-anchor="middle" letter-spacing="1.2">GATE 1</text>
-  <text x="350" y="290" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">does the magnitude exceed</text>
-  <text x="350" y="310" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">the cell&#8217;s detection floor?</text>
+  <text x="350" y="262" font-family="sans-serif" font-size="12" font-weight="bold" fill="#777777" text-anchor="middle" letter-spacing="1.2">Gate 1</text>
+  <text x="350" y="284" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">does the estimate</text>
+  <text x="350" y="302" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">magnitude exceed the cell&#8217;s</text>
+  <text x="350" y="320" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">detection floor?</text>
 
   <line x1="450" y1="290" x2="488" y2="290" stroke="#333333" stroke-width="2" marker-end="url(#f3aEnd)"/>
   <text x="469" y="280" font-family="sans-serif" font-size="12" fill="#333333" text-anchor="middle">yes</text>
 
   <!-- gate 2 -->
   <rect x="490" y="235" width="200" height="110" rx="6" fill="#ffffff" stroke="#444444" stroke-width="2.5"/>
-  <text x="590" y="262" font-family="sans-serif" font-size="12" font-weight="bold" fill="#777777" text-anchor="middle" letter-spacing="1.2">GATE 2</text>
+  <text x="590" y="262" font-family="sans-serif" font-size="12" font-weight="bold" fill="#777777" text-anchor="middle" letter-spacing="1.2">Gate 2</text>
   <text x="590" y="290" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">does the whole uncertainty</text>
   <text x="590" y="310" font-family="sans-serif" font-size="13" fill="#1b1b1b" text-anchor="middle">interval point one way?</text>
 
@@ -69,9 +70,9 @@
 
   <rect x="240" y="440" width="220" height="100" fill="#ffffff" stroke="#666666" stroke-width="2"/>
   <text x="350" y="468" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1b1b1b" text-anchor="middle">not resolvable</text>
-  <text x="350" y="490" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">smaller than what this</text>
-  <text x="350" y="508" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">instrument can resolve &#8212; not</text>
-  <text x="350" y="526" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">zero, equal, or no difference</text>
+  <text x="350" y="490" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">smaller than this instrument</text>
+  <text x="350" y="508" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">can resolve &#8212; not zero,</text>
+  <text x="350" y="526" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">equality, or no difference</text>
 
   <!-- gate 2 no -->
   <line x1="590" y1="345" x2="590" y2="438" stroke="#333333" stroke-width="2" marker-end="url(#f3aEnd)"/>
@@ -79,14 +80,14 @@
 
   <rect x="480" y="440" width="220" height="100" fill="#ffffff" stroke="#666666" stroke-width="2"/>
   <text x="590" y="468" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1b1b1b" text-anchor="middle">direction unresolved</text>
-  <text x="590" y="490" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">clears the floor, but the</text>
-  <text x="590" y="508" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">interval does not settle the</text>
-  <text x="590" y="526" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">direction; no claim is made</text>
+  <text x="590" y="490" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">the floor clears, but the</text>
+  <text x="590" y="508" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">interval does not settle direction,</text>
+  <text x="590" y="526" font-family="sans-serif" font-size="12.5" fill="#333333" text-anchor="middle">so no claim is made</text>
 
   <!-- side annotation -->
   <g font-family="sans-serif" font-size="12.5" fill="#333333">
     <text x="40" y="572">The detection floor is the largest apparent effect this instrument produces on this kind of measurement when nothing has actually changed.</text>
-    <text x="40" y="592">The floor and the interval are checked as separate gates. Their sum is disclosed only to show how large an effect must generally be to clear</text>
-    <text x="40" y="612">both gates; it is never used as a single acceptance threshold, and the uncertainty interval is never compared with that sum.</text>
+    <text x="40" y="592">The floor and the interval are checked as separate gates. Their sum is only a sizing disclosure — a planning disclosure — and is never</text>
+    <text x="40" y="612">used as a single acceptance threshold; the uncertainty interval is never compared with that sum.</text>
   </g>
 </svg>
