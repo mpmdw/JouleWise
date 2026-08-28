@@ -18,12 +18,10 @@ checked-in procedure naming the exact commands, inputs, and stop conditions
 for one window — so it is not the route taught here.
 
 This tutorial is a procedure, not permission to collect. Before using it,
-confirm two things. First, read the bolded status paragraphs at the top of
-`RUN_STATE.md`. They are the project's running record, written in project
-shorthand; the only thing you need from them is whether a quiet-machine
-collection night is currently permitted or blocked. Second, verify that a
-current operator card names this exact campaign and has not been superseded. In this
-checkout, `RUN_STATE.md` blocks quiet-machine collection and no operator card
+ask the person supervising the campaign to confirm two things: that a
+quiet-machine collection night is currently permitted, and that a current
+operator card names this exact campaign and has not been superseded. In this
+checkout, quiet-machine collection is blocked and no operator card
 authorizes the one-run route below, so do not **arm** — grant a single-use
 launch authorization — and do not sample. The
 historical card at `docs/process/window-run-cards/shakedown-v3-first-light.md`
@@ -237,8 +235,8 @@ pinset** — the later committed file identified by its path, required
 field-and-value structure, fixed value computed from its exact bytes, and
 counts. `--expected-confirmation-digest` is the out-of-band SHA-256 — a
 fixed-length value computed from exact bytes to make changes practically
-detectable — of those exact table bytes, supplied independently of repository
-paths; no repository path or operator card stores it.
+detectable — of those exact table bytes. The governing contract requires the
+operator to supply it independently of the repository path being checked.
 
 ```sh
 .venv/bin/python scripts/launch_window.py \
