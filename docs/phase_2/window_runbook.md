@@ -1202,6 +1202,16 @@ arming; they do not authorize the live night.
      --window-custody-root "$ARM_READINESS_CUSTODY_ROOT"
    ```
 
+   The successful ARM result prints its exact absolute `receipt_path`. Copy
+   that printed `arm-NNNN.json` path into the first export below; do not search
+   the receipt directory or select a lexicographically "latest" file. Derive
+   the launch-manifest path from the already bound custody root and pack ID:
+
+   ```sh
+   export ARM_RECEIPT='/exact/absolute/arm-NNNN.json/path/printed/by/ARM'
+   export LAUNCH_MANIFEST="$ARM_READINESS_CUSTODY_ROOT/$PACK_ID/arm_readiness.t0.inputs/launch-manifest.json"
+   ```
+
    `ARM_CONTEXT_JSON` is the exact JSON object itself, not a path. Its keys are
    exactly `bracket_session_id`, `pre_attempt_id`, `post_attempt_id`,
    `clock_route`, `claim_runs_root`, `bound_runs_root`, `custody_root`,
@@ -1223,6 +1233,13 @@ arming; they do not authorize the live night.
    remains necessary evidence, never launch authority. Stop at this boundary
    so Ed can personally inspect the complete `PASS`/`GO` result. No verdict,
    author, verifier, or other automated command may cross this boundary.
+   `ARM_RECEIPT` and `LAUNCH_MANIFEST` are non-secret filesystem paths. The
+   `export` commands put them in Ed's process environment, and
+   `scripts/launch_window.py` passes that environment unchanged to the frozen
+   chain with `os.execve(argv[0], argv, dict(os.environ))`
+   (`scripts/launch_window.py:264`). They are deliberately not written to
+   `window.env`, because both T-0 producers enforce that file's exact 25-key
+   contract.
 3. **E-10 — Ed's deliberate physical launch:** after that inspection, Ed
    personally invokes the sole reviewed launcher exactly once.
 
@@ -1424,38 +1441,36 @@ The reservation argv is deliberately the superset: `--ledger` and
 three is a launch-procedure error.
 
 Save the following as `WINDOW_PLAN_ROOT/window-chain.zsh`, review it, and
-record its SHA-256 before closing all agents. `window.env` must additionally
-bind the absolute `ARM_RECEIPT`, `ARM_READINESS_CUSTODY_ROOT`, and
-`LAUNCH_MANIFEST` paths used by E-10:
+record its SHA-256 before closing all agents. Keep `window.env` at its exact
+25-key contract: it already binds `ARM_READINESS_CUSTODY_ROOT`, while E-9c
+derives and exports `ARM_RECEIPT` and `LAUNCH_MANIFEST` outside that file.
 
-> **OPEN DEFECT (registered 2026-08-26; S9-08a; NEEDS A MAGISTRATE RULING) —
-> the chain has no supply line for three of its own inputs.** Two separate
-> problems meet here, and both are about getting a value into a chain that runs
-> after Ed has walked away.
+> **OPEN DEFECT (registered 2026-08-26; confirmation pair only; ruling
+> pending) — the chain still has no ruled supply line for the confirmation
+> pair.** The earlier `ARM_RECEIPT` / `LAUNCH_MANIFEST` supply problem is
+> **CURED by T0-ENV-PARSER-UNIFY-01**: E-9c derives and exports those two
+> non-secret paths without changing `window.env`, and the chain guards both
+> bindings before its first use.
 >
 > **What this does and does not gate.** It does **not** gate transaction night.
 > `docs/process_traces/2026-08-22-t20/real-transaction-runbook.md` governs that
 > session and states in terms that `scripts/launch_window.py` is never invoked
 > during it (§6 item 1); its Phase G is a ceremony with no real arm at all
 > (D-155, NR-6). Nothing that night reaches this chain. It **does** gate every
-> later measurement window, which cannot run this chain until the defect is
-> cured. The cure being assessed is **T-0 parser unification** — one parser
-> shared by `capture_t0_step.py` and the chain, so that a key the chain must
-> read cannot be a key `window.env` is forbidden to hold — under stream **S2**.
+> later measurement window, which cannot run this chain until the remaining
+> confirmation-pair defect is cured. T0-ENV-PARSER-UNIFY-01 closes the separate
+> parser/runbook contradiction; it does not rule the confirmation pair.
 >
-> *First, the one that predates this note.* The paragraph immediately above
-> tells the operator to bind `ARM_RECEIPT` and `LAUNCH_MANIFEST` in
-> `window.env`, and the chain below dereferences both under `set -u` at all
-> three of its launcher calls. But `window.env` is read by
-> `scripts/capture_t0_step.py`, whose `_parse_window_environment` compares the
-> file's keys against an exact 25-key allowlist, `_ENV_KEYS`, and refuses with
-> `evidence_author_t0_capture_environment_invalid` on any key that is missing
-> *or* unknown. `ARM_RECEIPT` and `LAUNCH_MANIFEST` are not in that allowlist.
-> So binding them in `window.env` makes T-0 refuse, and leaving them out makes
-> the chain abort on an unbound variable at its first launcher call. **This
-> predates the confirmation pair entirely and blocks the chain on its own.**
+> *The cured first problem.* `window.env` remains an exact 25-key input at both
+> T-0 producers, so it refuses `ARM_RECEIPT` and `LAUNCH_MANIFEST`. E-9c now
+> takes the exact ARM-emitted receipt path, derives the manifest path, and
+> exports both. They physically reach the chain because
+> `scripts/launch_window.py:264` gives `execve` a copy of the exporting
+> process's environment. The explicit `:?` guards below turn an omitted export
+> into a named E-10 refusal instead of a later bare `set -u` abort.
 >
-> *Second, the confirmation pair.* The chain's `--lifecycle-event start` call
+> *The remaining open problem is the confirmation pair.* The chain's
+> `--lifecycle-event start` call
 > below performs the full consumption replay, so it crosses the same table
 > check E-10 crosses and refuses without the table path and `hC`. It cannot
 > inherit them from E-10's command line: E-10 replaced itself with this chain
@@ -1483,8 +1498,8 @@ bind the absolute `ARM_RECEIPT`, `ARM_READINESS_CUSTODY_ROOT`, and
 > move the abort from the gate to `set -u`. E-10 above is unaffected — Ed types
 > that command himself and can supply both values directly.
 >
-> Both problems are the same shape and would likely fall to the same cure: a
-> key the chain must read is a key `window.env` is not allowed to hold.
+> The confirmation-pair supply line remains ruling-pending; do not infer one
+> from the now-cured non-secret path exports.
 
 ```zsh
 #!/bin/zsh
@@ -1492,6 +1507,8 @@ set -euo pipefail
 
 WINDOW_PLAN_ROOT="$1"
 source "$WINDOW_PLAN_ROOT/window.env"
+: "${ARM_RECEIPT:?E-10 export step must export ARM_RECEIPT}"
+: "${LAUNCH_MANIFEST:?E-10 export step must export LAUNCH_MANIFEST}"
 
 REPO=/Users/edr/JouleWise-measurement-20260813
 PY="$REPO/.venv/bin/python"
@@ -1506,8 +1523,8 @@ PY="$REPO/.venv/bin/python"
 # (execve hands this process the manifest's argv, not E-10's), and window.env
 # cannot hold them (exact-key allowlist). The exported environment DOES cross
 # execve and is the one remaining candidate channel. See the OPEN DEFECT note
-# above this chain; choosing the supply line is a magistrate ruling, not
-# something to improvise at the bench.
+# above this chain; choosing the confirmation-pair supply line is a magistrate
+# ruling, not something to improvise at the bench.
 "$PY" "$REPO/scripts/launch_window.py" \
   --pack-root "$PACK_ROOT" \
   --arm-receipt "$ARM_RECEIPT" \

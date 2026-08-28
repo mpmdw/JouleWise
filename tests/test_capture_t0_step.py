@@ -782,6 +782,43 @@ class CaptureT0StepTests(unittest.TestCase):
             "evidence_author_t0_capture_environment_invalid",
         )
 
+    def test_refuses_unknown_window_environment_key_with_registered_detail(
+        self,
+    ) -> None:
+        raw = "".join(
+            f"{key}=/synthetic/{key.lower()}\n"
+            for key in sorted(capture.WINDOW_ENV_KEYS | {"SYNTHETIC_UNKNOWN"})
+        ).encode()
+        with self.assertRaises(capture.CaptureT0Error) as caught:
+            capture._parse_window_environment(raw)
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_capture_environment_invalid",
+        )
+        self.assertEqual(
+            str(caught.exception),
+            "window.env exact keys differ; missing=[], "
+            "unknown=['SYNTHETIC_UNKNOWN']",
+        )
+
+    def test_refuses_missing_window_environment_key_with_registered_detail(
+        self,
+    ) -> None:
+        raw = "".join(
+            f"{key}=/synthetic/{key.lower()}\n"
+            for key in sorted(capture.WINDOW_ENV_KEYS - {"PACK_ROOT"})
+        ).encode()
+        with self.assertRaises(capture.CaptureT0Error) as caught:
+            capture._parse_window_environment(raw)
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_capture_environment_invalid",
+        )
+        self.assertEqual(
+            str(caught.exception),
+            "window.env exact keys differ; missing=['PACK_ROOT'], unknown=[]",
+        )
+
     def test_reason_code_registry_is_closed(self) -> None:
         self.assertEqual(len(capture.CAPTURE_REASON_CODES), 12)
         decision_log = (Path(__file__).resolve().parents[1] / "docs/decision_log.md").read_text(

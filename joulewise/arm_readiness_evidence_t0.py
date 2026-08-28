@@ -60,6 +60,35 @@ _AUTHORING_ARTIFACTS = (
     "scripts/capture_t0_step.py",
     "scripts/collect_clock_reference.py",
 )
+WINDOW_ENV_KEYS = frozenset(
+    {
+        "MEASUREMENT_REPO",
+        "WINDOW_ID",
+        "BRACKET_SESSION_ID",
+        "FROZEN_PLAN",
+        "PACK_ROOT",
+        "PACK_ID",
+        "PLAN_ID",
+        "EVIDENCE_ROOT_ID",
+        "IDENTITY_EPOCH_JSON",
+        "T1_BINDINGS_JSON",
+        "PRE_ATTEMPT_ID",
+        "POST_ATTEMPT_ID",
+        "RUNS_ROOT",
+        "BOUND_RUNS_ROOT",
+        "CALIBRATION_LEDGER",
+        "LEDGER_HEAD_PIN",
+        "ARM_READINESS_CUSTODY_ROOT",
+        "CUSTODY_ROOT",
+        "WINDOW_CUSTODY_ROOT",
+        "QUARANTINE_ROOT",
+        "CLAIM_BACKUP_DEST",
+        "BOUND_BACKUP_DEST",
+        "WAIVER_PATH",
+        "POWER_POLICY",
+        "SETTLE_S",
+    }
+)
 _INTERNAL_ROWS = frozenset(
     {
         "desk.identity_pin_projection",
@@ -230,6 +259,14 @@ class T0EvidenceAuthoringError(ValueError):
         super().__init__(detail)
         self.kind = kind
         self.reason_code = reason_code
+
+
+class WindowEnvironmentParseError(ValueError):
+    """Boundary-neutral refusal from the shared exact window.env parser."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
 
 
 @_dataclass(frozen=True)
@@ -727,11 +764,13 @@ def _arm_context(
     return result
 
 
-def _parse_shell_assignments(raw: bytes, *, kind: str) -> dict[str, str]:
+def parse_window_environment(raw: bytes) -> dict[str, str]:
+    """Parse the exact 25-key T-0 window environment contract."""
+
     try:
         text = raw.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
-        raise _underivable(kind, "window.env is not UTF-8") from exc
+        raise WindowEnvironmentParseError("window.env is not UTF-8") from exc
     values: dict[str, str] = {}
     for line in text.splitlines():
         stripped = line.strip()
@@ -739,16 +778,36 @@ def _parse_shell_assignments(raw: bytes, *, kind: str) -> dict[str, str]:
             continue
         match = _re.fullmatch(r"([A-Z][A-Z0-9_]*)=(.*)", stripped)
         if match is None:
-            raise _underivable(kind, f"window.env has a non-assignment line: {stripped!r}")
+            raise WindowEnvironmentParseError(
+                f"window.env contains a non-assignment line: {stripped!r}"
+            )
         name, raw_value = match.groups()
         try:
             parts = _shlex.split(raw_value, posix=True)
         except ValueError as exc:
-            raise _underivable(kind, f"window.env value for {name} is malformed") from exc
+            raise WindowEnvironmentParseError(
+                f"window.env value for {name} is malformed"
+            ) from exc
         if len(parts) != 1 or "$" in parts[0] or name in values:
-            raise _underivable(kind, f"window.env value for {name} is ambiguous")
+            raise WindowEnvironmentParseError(
+                f"window.env value for {name} is ambiguous"
+            )
         values[name] = parts[0]
+    missing = WINDOW_ENV_KEYS - set(values)
+    unknown = set(values) - WINDOW_ENV_KEYS
+    if missing or unknown:
+        raise WindowEnvironmentParseError(
+            "window.env exact keys differ; "
+            f"missing={sorted(missing)!r}, unknown={sorted(unknown)!r}"
+        )
     return values
+
+
+def _parse_window_environment(raw: bytes, *, kind: str) -> dict[str, str]:
+    try:
+        return parse_window_environment(raw)
+    except WindowEnvironmentParseError as exc:
+        raise _underivable(kind, exc.detail) from exc
 
 
 def _launch_manifest(
@@ -806,7 +865,7 @@ def _launch_manifest(
         )
     except T0EvidenceAuthoringError as exc:
         raise _missing_artifact(kind, "window_chain", str(exc)) from exc
-    assignments = _parse_shell_assignments(env_raw, kind=kind)
+    assignments = _parse_window_environment(env_raw, kind=kind)
     arm, arm_identity = _arm_context(context, kind=kind)
     expected_env = {
         "PACK_ROOT": str(context.pack_root),
@@ -2372,4 +2431,10 @@ def _assert_public_author_signature() -> None:
 _assert_public_author_signature()
 
 
-__all__ = ["T0EvidenceAuthoringError", "author_arm_readiness_evidence_t0"]
+__all__ = [
+    "T0EvidenceAuthoringError",
+    "WINDOW_ENV_KEYS",
+    "WindowEnvironmentParseError",
+    "author_arm_readiness_evidence_t0",
+    "parse_window_environment",
+]

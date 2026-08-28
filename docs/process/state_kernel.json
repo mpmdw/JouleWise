@@ -4015,60 +4015,6 @@
       "status_note": "Registered 2026-08-23 by the T0 synthesis ruling (Sol's concern adopted, cure deferred; coupling to the horizon decision is ruled).",
       "stop_card": null
     },
-    "T0-ENV-PARSER-UNIFY-01": {
-      "acceptance": {
-        "evidence": [
-          "One shared exact parser and key contract is consumed by both scripts/capture_t0_step.py and joulewise/arm_readiness_evidence_t0.py; neither retains a private key set",
-          "Unknown-key and missing-key regressions exist at both boundaries, each preserving and asserting its existing registered boundary-specific refusal mapping (the capture wrapper's evidence_author_t0_capture_environment_invalid; the evidence author's evidence_author_t0_<kind>_underivable via _underivable); the reason vocabularies are not unified by this row",
-          "tests/test_window_env_allowlist.py test_additionally_bound_runbook_keys_pending_ruling no longer skips on the OPEN DEFECT branch: the runbook's 'additionally bind' instruction for ARM_RECEIPT and LAUNCH_MANIFEST is removed and those paths are derived and exported after ARM and before E-10 (mirroring docs/process/rehearsal-operator-card.md), without widening window.env",
-          "The T-0 capture chain in docs/phase_2/window_runbook.md no longer dereferences a variable the allowlist refuses under set -euo pipefail"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/T0-ENV-PARSER-UNIFY-01/acceptance",
-          "label": "T0-ENV-PARSER-UNIFY-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Both T-0 producers read window.env under one exact contract, and the runbook's bound keys agree with it."
-      },
-      "authority": {
-        "label": "D-158 addendum item A-5 (window.env truth recorded: ARM_RECEIPT and LAUNCH_MANIFEST are bound by the runbook and refused by the allowlist; cure is the T-0 parser unification row, gating later windows)",
-        "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "S9-08 (a) cure (delete the 'additionally bind' instruction; derive and export ARM_RECEIPT and LAUNCH_MANIFEST after ARM and before E-10; do not widen window.env)",
-            "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
-          },
-          "rule": "Do not widen window.env: the cure removes the runbook instruction and derives the two paths at the operator step; the 25-key allowlist is not extended"
-        },
-        {
-          "authority": {
-            "label": "S9-08 reachability (the refuter's finding that the contradiction gates later windows, not the transaction night)",
-            "path": "docs/process_traces/2026-08-27-t26/ruled-not-installed-sweep/SHORTLIST.md"
-          },
-          "rule": "Not a transaction-night gate: D-155 makes real-transaction-runbook.md the governing document for the freeze transaction, whose Phase G is dry-run-only; the contradiction blocks the LATER measurement windows where the handoff to window_runbook.md occurs"
-        },
-        {
-          "authority": {
-            "label": "MAGISTRATE-RULING-T0-UNATTENDED (T-0 evidence modules are the most safety-critical in the repository)",
-            "path": "docs/process_traces/2026-08-23-t22/t0-unattended/MAGISTRATE-RULING-T0-UNATTENDED.md"
-          },
-          "rule": "Touches the T-0 author and the capture ceremony, so the full C-028 gauntlet applies and no existing T-0 refusal is weakened"
-        }
-      ],
-      "flags": [],
-      "goal": "Unify the two window.env parsers: scripts/capture_t0_step.py enforces exact equality against its exhaustive 25-key _ENV_KEYS allowlist and refuses unknown keys, while joulewise/arm_readiness_evidence_t0.py accepts arbitrary syntactically valid assignments and checks only eleven expected bindings; share one exact parser and key contract between both callers, with unknown-key and missing-key regressions at both boundaries, and dispose of the runbook contradiction that binds ARM_RECEIPT and LAUNCH_MANIFEST into a file the allowlist refuses.",
-      "id": "T0-ENV-PARSER-UNIFY-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 105,
-      "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md); no prior draft, written from the skipTest text in tests/test_window_env_allowlist.py ('OPEN DEFECT: the runbook requires ARM_RECEIPT and LAUNCH_MANIFEST but _ENV_KEYS refuses both; PR #205 records the pending magistrate ruling') and S9-08 of the ruled-not-installed sweep. S9-08 (b), the twin parsers, was found by the refuter, not the enumeration: two producers reading the same file under two different contracts is the shape D-155 NR-11 was ruled to close for the terminal-review parser, and it is still live here. Known and recorded rather than fixed since 2026-08-19 (docs/process/rehearsal-operator-card.md documents the divergence and works around it). S2 reported the cure outside its footprint.",
-      "stop_card": null
-    },
     "T0-REHEARSAL-PRODUCERS-01": {
       "acceptance": {
         "evidence": [

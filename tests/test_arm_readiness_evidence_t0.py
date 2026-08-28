@@ -1144,6 +1144,61 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         self.assertNotIn("clock-prior-state", source)
         self.assertNotIn("-getusingnetworktime", source)
 
+    def test_author_refuses_unknown_window_environment_key(self) -> None:
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        launch = json.loads((inputs / "launch-manifest.json").read_text())
+        env_path = Path(launch["window_plan_root"]) / "window.env"
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8")
+            + "SYNTHETIC_UNKNOWN=/synthetic/unknown\n",
+            encoding="utf-8",
+        )
+        with (
+            author_environment(repository),
+            self.assertRaises(T0EvidenceAuthoringError) as caught,
+        ):
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.kind, "MAINTENANCE_CENSUS")
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_maintenance_census_underivable",
+        )
+        self.assertEqual(
+            str(caught.exception),
+            "window.env exact keys differ; missing=[], "
+            "unknown=['SYNTHETIC_UNKNOWN']",
+        )
+        self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
+        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
+
+    def test_author_refuses_missing_window_environment_key(self) -> None:
+        temporary, repository, pack, custody, _context, inputs = make_t0_fixture()
+        self.addCleanup(temporary.cleanup)
+        launch = json.loads((inputs / "launch-manifest.json").read_text())
+        env_path = Path(launch["window_plan_root"]) / "window.env"
+        lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
+        env_path.write_text(
+            "".join(line for line in lines if not line.startswith("MEASUREMENT_REPO=")),
+            encoding="utf-8",
+        )
+        with (
+            author_environment(repository),
+            self.assertRaises(T0EvidenceAuthoringError) as caught,
+        ):
+            author_arm_readiness_evidence_t0(pack, custody)
+        self.assertEqual(caught.exception.kind, "MAINTENANCE_CENSUS")
+        self.assertEqual(
+            caught.exception.reason_code,
+            "evidence_author_t0_maintenance_census_underivable",
+        )
+        self.assertEqual(
+            str(caught.exception),
+            "window.env exact keys differ; missing=['MEASUREMENT_REPO'], unknown=[]",
+        )
+        self.assertFalse((custody / pack.name / t0._SOURCE_DIRECTORY).exists())
+        self.assertFalse((custody / pack.name / t0._EVIDENCE_DIRECTORY).exists())
+
     def test_rf01_r0_fixed_roster_and_one_attempt_policy_refuses(self) -> None:
         def mutate(inputs: Path) -> None:
             path = inputs / "clock-reference.json"
@@ -1747,14 +1802,23 @@ class ArmReadinessEvidenceT0Tests(unittest.TestCase):
         )
         self.assertEqual(
             t0.__all__,
-            ["T0EvidenceAuthoringError", "author_arm_readiness_evidence_t0"],
+            [
+                "T0EvidenceAuthoringError",
+                "WINDOW_ENV_KEYS",
+                "WindowEnvironmentParseError",
+                "author_arm_readiness_evidence_t0",
+                "parse_window_environment",
+            ],
         )
         self.assertEqual(
             sorted(name for name in vars(t0) if not name.startswith("_")),
             [
                 "T0EvidenceAuthoringError",
+                "WINDOW_ENV_KEYS",
+                "WindowEnvironmentParseError",
                 "annotations",
                 "author_arm_readiness_evidence_t0",
+                "parse_window_environment",
             ],
         )
         self.assertFalse(hasattr(t0, "DERIVERS"))
