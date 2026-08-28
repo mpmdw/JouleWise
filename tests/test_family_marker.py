@@ -426,6 +426,24 @@ class FamilyMarkerSchemaTests(unittest.TestCase):
 
 
 class FamilyMarkerMechanismTests(unittest.TestCase):
+    def _assert_custody_tool_sidecars_current(self, root: Path, lane: object) -> None:
+        for name in lane.CUSTODY_TOOL_SIDECARS:
+            tool = root / "scripts" / name
+            sidecar = tool.with_name(f"{name}.sha256")
+            self.assertTrue(sidecar.is_file(), f"missing sidecar for {name}")
+            tool_bytes = tool.read_bytes()
+            sidecar_bytes = sidecar.read_bytes()
+            self.assertEqual(
+                sidecar_bytes,
+                readiness.gnu_sidecar(readiness.sha256_bytes(tool_bytes), name),
+                f"{name}.sha256 differs from the independent GNU-sidecar oracle",
+            )
+            self.assertEqual(
+                sidecar_bytes,
+                lane.render_tool_sidecar(tool_bytes, name),
+                f"{name}.sha256 differs from the refresh-lane binding",
+            )
+
     def test_family_member_converts_lifecycle_escape_to_family_diagnostic(self) -> None:
         registry, _raw = readiness.load_registry(ROOT)
         lifecycle = registry["freeze_evidence_lifecycle"]
@@ -803,16 +821,7 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             len(lane.CUSTODY_TOOL_SIDECARS),
             len(set(lane.CUSTODY_TOOL_SIDECARS)),
         )
-        for name in lane.CUSTODY_TOOL_SIDECARS:
-            with self.subTest(tool=name):
-                tool = ROOT / "scripts" / name
-                sidecar = tool.with_name(f"{name}.sha256")
-                self.assertTrue(sidecar.is_file(), f"missing sidecar for {name}")
-                self.assertEqual(
-                    sidecar.read_bytes(),
-                    lane.render_tool_sidecar(tool.read_bytes(), name),
-                    f"{name}.sha256 is stale -- run the reviewed refresh lane",
-                )
+        self._assert_custody_tool_sidecars_current(ROOT, lane)
 
         # The lane's own sidecar uses the identical renderer but is not in the
         # CLI-owned set: self-rewriting plus the dirty-path refusal would need
@@ -823,6 +832,21 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
             REFRESH_SCRIPT.with_name(f"{name}.sha256").read_bytes(),
             lane.render_tool_sidecar(REFRESH_SCRIPT.read_bytes(), name),
         )
+
+    def test_custody_tool_sidecar_tripwire_has_an_independent_oracle(self) -> None:
+        lane = refresh_lane_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            scratch = Path(temporary)
+            scripts = scratch / "scripts"
+            scripts.mkdir()
+            for name in lane.CUSTODY_TOOL_SIDECARS:
+                (scripts / name).write_bytes((ROOT / "scripts" / name).read_bytes())
+                (scripts / f"{name}.sha256").write_bytes(b"WRONG\n")
+            with (
+                mock.patch.object(lane, "render_tool_sidecar", return_value=b"WRONG\n"),
+                self.assertRaises(AssertionError),
+            ):
+                self._assert_custody_tool_sidecars_current(scratch, lane)
 
 
 class FamilyMarkerLiveFixtureTests(unittest.TestCase):

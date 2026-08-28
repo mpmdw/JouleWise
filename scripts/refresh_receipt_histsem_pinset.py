@@ -72,7 +72,28 @@ def _refusal(reason_code: str, detail: str) -> readiness.HistoricalSemanticsErro
 
 
 def _resolve_from(repository: Path, supplied: Path) -> Path:
-    return supplied.resolve(strict=False) if supplied.is_absolute() else repository / supplied
+    candidate = supplied if supplied.is_absolute() else repository / supplied
+    try:
+        return candidate.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise _refusal(
+            "histsem_pinset_invalid", f"path cannot be normalized: {supplied}: {exc}"
+        ) from exc
+
+
+def _enumerated_pinset_paths(repository: Path) -> tuple[Path, ...]:
+    return tuple(
+        _resolve_from(repository, relative)
+        for relative in readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH
+    )
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def _load_pinset(path: Path) -> tuple[dict[str, Any], bytes]:
@@ -109,6 +130,7 @@ def _require_clean_pack(repository: Path, pack_path: str) -> None:
         "status",
         "--porcelain",
         "--untracked-files=all",
+        "--ignored=matching",
         "--",
         pack_path,
     )
@@ -297,6 +319,30 @@ def _verify_candidate(
         ) from exc
 
 
+def _verify_whole_candidate(
+    repository: Path,
+    rows: tuple[Mapping[str, Any], ...],
+) -> None:
+    for row in rows:
+        pack_id = str(row["pack_id"])
+        pack_path = str(row["pack_path"])
+        try:
+            pack_root = _resolve_from(repository, Path(pack_path)).resolve(strict=True)
+            pack_root.relative_to(repository)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise _refusal(
+                "histsem_pinset_invalid",
+                f"whole-candidate pack path is invalid for {pack_id!r}: {pack_path!r}",
+            ) from exc
+        try:
+            _verify_candidate(repository, pack_root, rows)
+        except readiness.HistoricalSemanticsError as exc:
+            raise _refusal(
+                exc.reason_code,
+                f"whole-candidate verification refused for {pack_id}: {exc}",
+            ) from exc
+
+
 def _derive_row(
     repository: Path,
     row: Mapping[str, Any],
@@ -401,22 +447,74 @@ def _require_sidecar_write_separation(
     repository: Path,
     args: argparse.Namespace,
 ) -> None:
-    targets: list[Path] = []
-    if args.output is not None:
-        targets.append(_resolve_from(repository, args.output))
-    if args.write_test_pin is not None:
-        targets.append(_resolve_from(repository, args.write_test_pin))
+    pinset_path = _resolve_from(repository, args.pinset)
+    output_path = (
+        pinset_path if args.output is None else _resolve_from(repository, args.output)
+    )
+    test_pin_path = (
+        None
+        if args.write_test_pin is None
+        else _resolve_from(repository, args.write_test_pin)
+    )
+    targets = [("pinset output", output_path)]
+    if test_pin_path is not None:
+        targets.append(("test pin", test_pin_path))
+        if test_pin_path == output_path:
+            raise _refusal(
+                "histsem_pinset_invalid", "test pin file and pinset output must differ"
+            )
+
+    enumerated = _enumerated_pinset_paths(repository)
+    if args.output is None and pinset_path not in enumerated:
+        raise _refusal(
+            "histsem_pinset_invalid",
+            "in-place refresh requires an enumerated pinset member; use --output for a preview",
+        )
+
     governed_paths = {
-        (repository / relative).resolve(strict=False)
+        _resolve_from(repository, Path(relative))
         for name in CUSTODY_TOOL_SIDECARS
         for relative in _tool_paths(name)
     }
-    collisions = sorted(str(path) for path in targets if path in governed_paths)
+    collisions = sorted(str(path) for _label, path in targets if path in governed_paths)
     if collisions:
         raise _refusal(
             "histsem_pinset_invalid",
             "pinset outputs must not target governed custody tools or sidecars: "
             + ", ".join(collisions),
+        )
+
+    scripts_root = _resolve_from(repository, Path("scripts"))
+    script_targets = sorted(
+        f"{label}: {path}" for label, path in targets if _is_within(path, scripts_root)
+    )
+    if script_targets:
+        raise _refusal(
+            "histsem_pinset_invalid",
+            "pinset outputs must not target paths under repository scripts: "
+            + ", ".join(script_targets),
+        )
+
+    other_members = sorted(
+        f"{label}: {path}"
+        for label, path in targets
+        if path in enumerated and path != pinset_path
+    )
+    if other_members:
+        raise _refusal(
+            "histsem_pinset_invalid",
+            "pinset outputs must not target an enumerated member other than --pinset: "
+            + ", ".join(other_members),
+        )
+
+    if (
+        args.output is not None
+        and output_path not in enumerated
+        and _is_within(output_path, repository)
+    ):
+        raise _refusal(
+            "histsem_pinset_invalid",
+            "a non-enumerated --output is a preview and must be outside the repository root",
         )
 
 
@@ -435,9 +533,6 @@ def refresh(args: argparse.Namespace) -> tuple[bytes, list[str], list[str]]:
             )
         _value, raw = _load_pinset(pinset_path)
         return raw, [], []
-    if test_pin_path is not None and test_pin_path == output_path:
-        raise _refusal("histsem_pinset_invalid", "test pin file and pinset output must differ")
-
     value, original_pinset = _load_pinset(pinset_path)
     requested = list(dict.fromkeys(args.refresh_row))
     rows_by_id: dict[str, list[int]] = {}
@@ -469,8 +564,7 @@ def refresh(args: argparse.Namespace) -> tuple[bytes, list[str], list[str]]:
     candidate_rows = readiness._validate_histsem_pinset(
         readiness.parse_json_bytes(candidate_raw, require_canonical=True)
     )
-    for pack_id in requested:
-        _verify_candidate(repository, pack_roots[pack_id], candidate_rows)
+    _verify_whole_candidate(repository, candidate_rows)
 
     changed = candidate_raw != original_pinset
     output_existed = output_path.exists()
@@ -485,6 +579,7 @@ def refresh(args: argparse.Namespace) -> tuple[bytes, list[str], list[str]]:
 
     wrote_output = False
     wrote_test = False
+    preview = output_path not in _enumerated_pinset_paths(repository)
     try:
         if changed:
             wrote_output = True
@@ -493,11 +588,23 @@ def refresh(args: argparse.Namespace) -> tuple[bytes, list[str], list[str]]:
             if written_raw != candidate_raw:
                 raise _refusal("histsem_pinset_invalid", "written pinset bytes differ from candidate")
             written_rows = readiness._validate_histsem_pinset(written_value)
-            for pack_id in requested:
-                _verify_candidate(repository, pack_roots[pack_id], written_rows)
         if test_pin_path is not None and test_replacement != test_original:
             wrote_test = True
             test_pin_path.write_bytes(test_replacement)
+        if changed and preview:
+            for pack_id in requested:
+                _verify_candidate(repository, pack_roots[pack_id], written_rows)
+        elif changed:
+            try:
+                readiness.verify_all_receipt_histsem(
+                    repository,
+                    require_published=False,
+                )
+            except readiness.HistoricalSemanticsError as exc:
+                raise _refusal(
+                    exc.reason_code,
+                    f"post-write whole-pinset verification refused: {exc}",
+                ) from exc
     except BaseException:
         if wrote_test and test_pin_path is not None:
             _restore(test_pin_path, test_existed, test_original)
@@ -527,8 +634,7 @@ def main(argv: list[str] | None = None) -> int:
     sidecar_current: list[str] = []
     try:
         repository = args.repository_root.resolve(strict=True)
-        if args.refresh_tool_sidecars:
-            _require_sidecar_write_separation(repository, args)
+        _require_sidecar_write_separation(repository, args)
         prepared = (
             _prepare_tool_sidecars(repository)
             if args.refresh_tool_sidecars
@@ -567,6 +673,13 @@ def main(argv: list[str] | None = None) -> int:
 
     for diff in diffs:
         sys.stdout.write(diff)
+    if args.output is not None:
+        output_path = _resolve_from(repository, args.output)
+        if output_path not in _enumerated_pinset_paths(repository):
+            sys.stdout.write(
+                f"preview: {output_path} is not an enumerated pinset member and cannot be "
+                "loaded by scripts/verify_receipt_histsem.py\n"
+            )
     for pack_id in current:
         sys.stdout.write(f"row {pack_id} is already current\n")
     for diff in sidecar_diffs:

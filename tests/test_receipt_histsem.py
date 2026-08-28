@@ -44,6 +44,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"
 PINSET_SHA256 = "d81515505d677c2ca045238e721c87eae8f38439a89a5377e58fa9064eaf2f21"
 REPRESENTATIVE_PACK = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
+SECOND_REPRESENTATIVE_PACK = ROOT / "configs/campaigns/d117_floor_qwen25_7b_v3"
 REFRESH_SCRIPT = ROOT / "scripts/refresh_receipt_histsem_pinset.py"
 
 # The versioned successor member of the code-enumerated chain.  It does not
@@ -1147,6 +1148,86 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         self.assertIn("must not target", payload["detail"])
         self.assertEqual(tool.read_bytes(), original)
 
+    def test_refresh_lane_universal_write_fence_normalizes_scripts_output(
+        self,
+    ) -> None:
+        for sidecars in (False, True):
+            with self.subTest(refresh_tool_sidecars=sidecars):
+                repository, _pack, _pinset = self._repository()
+                tool = repository / "scripts/build_family_marker.py"
+                original = tool.read_bytes()
+                arguments = [
+                    "--refresh-row",
+                    REPRESENTATIVE_PACK.name,
+                    "--output",
+                    "scripts/../scripts/build_family_marker.py",
+                ]
+                if sidecars:
+                    arguments.append("--refresh-tool-sidecars")
+                refused = self._run_refresh(repository, *arguments)
+                self.assertEqual(refused.returncode, 2, refused.stdout)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+                self.assertIn("must not target", payload["detail"])
+                self.assertEqual(tool.read_bytes(), original)
+
+    def test_refresh_lane_refuses_relative_output_equal_to_test_pin(self) -> None:
+        repository, _pack, _pinset = self._repository()
+        collision = repository.parent / "same-preview-and-test-pin.json"
+        refused = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--output",
+            "../same-preview-and-test-pin.json",
+            "--write-test-pin",
+            "../same-preview-and-test-pin.json",
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+        self.assertIn("must differ", payload["detail"])
+        self.assertFalse(collision.exists())
+
+    def test_refresh_lane_refuses_preview_output_inside_repository(self) -> None:
+        repository, _pack, _pinset = self._repository()
+        preview = repository / "preview.json"
+        refused = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--output",
+            "preview.json",
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+        self.assertIn("outside the repository root", payload["detail"])
+        self.assertFalse(preview.exists())
+
+    def test_refresh_lane_refuses_other_enumerated_member_as_output_or_test_pin(
+        self,
+    ) -> None:
+        repository, _pack, _pinset = self._repository()
+        other = readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1].as_posix()
+        for option in ("--output", "--write-test-pin"):
+            with self.subTest(option=option):
+                arguments = [
+                    "--refresh-row",
+                    REPRESENTATIVE_PACK.name,
+                    option,
+                    other,
+                ]
+                if option == "--write-test-pin":
+                    arguments.extend(
+                        ["--output", str(repository.parent / "allowed-preview.json")]
+                    )
+                refused = self._run_refresh(repository, *arguments)
+                self.assertEqual(refused.returncode, 2, refused.stdout)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+                self.assertIn("other than --pinset", payload["detail"])
+
     def test_refresh_row_and_tool_sidecars_compose_in_one_invocation(self) -> None:
         repository, pack, pinset = self._repository()
         self._commit_custody(repository, pack, "refresh-composed.json")
@@ -1244,6 +1325,25 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
                 self.assertEqual(payload["reason_codes"], ["histsem_binding_mismatch"])
                 self.assertIn("not the HEAD blob", payload["detail"])
                 self.assertEqual(pinset.read_bytes(), original)
+
+    def test_refresh_lane_refuses_ignored_pack_entry_as_binding_mismatch(self) -> None:
+        repository, pack, pinset = self._repository()
+        original = pinset.read_bytes()
+        ignored = pack / "__pycache__/refresh_ignored.pyc"
+        ignored.parent.mkdir()
+        ignored.write_bytes(b"ignored bytecode regression")
+        self.assertEqual(
+            git(repository, "check-ignore", ignored.relative_to(repository).as_posix()).stdout.strip(),
+            ignored.relative_to(repository).as_posix(),
+        )
+        refused = self._run_refresh(
+            repository, "--refresh-row", REPRESENTATIVE_PACK.name
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_binding_mismatch"])
+        self.assertIn("!!", payload["detail"])
+        self.assertEqual(pinset.read_bytes(), original)
 
     def test_refresh_lane_refuses_unpublished_head(self) -> None:
         with self.subTest(check="historical-head-vs-origin-main"):
@@ -1378,30 +1478,100 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         self.assertIn("before = True\n", updated)
         self.assertIn("after = True\n", updated)
 
+    def test_refresh_lane_in_place_requires_enumerated_pinset_member(self) -> None:
+        repository, _pack, pinset = self._repository()
+        scratch_pinset = repository.parent / "nonmember-pinset.json"
+        scratch_pinset.write_bytes(pinset.read_bytes())
+        original = scratch_pinset.read_bytes()
+        refused = self._run_refresh(
+            repository,
+            "--pinset",
+            str(scratch_pinset),
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+        self.assertIn("in-place refresh requires an enumerated pinset member", payload["detail"])
+        self.assertEqual(scratch_pinset.read_bytes(), original)
+
+    def test_refresh_lane_labels_preview_but_not_in_place_output(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-preview-label.json")
+        original = pinset.read_bytes()
+        preview = repository.parent / "labelled-preview.json"
+        previewed = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--output",
+            str(preview),
+        )
+        self.assertEqual(previewed.returncode, 0, previewed.stdout + previewed.stderr)
+        self.assertIn(f"preview: {preview.resolve()}", previewed.stdout)
+        self.assertIn("cannot be loaded by scripts/verify_receipt_histsem.py", previewed.stdout)
+        self.assertLess(
+            previewed.stdout.index(f"#{REPRESENTATIVE_PACK.name}@new"),
+            previewed.stdout.index("preview:"),
+        )
+        self.assertEqual(pinset.read_bytes(), original)
+
+        in_place = self._run_refresh(
+            repository, "--refresh-row", REPRESENTATIVE_PACK.name
+        )
+        self.assertEqual(in_place.returncode, 0, in_place.stdout + in_place.stderr)
+        self.assertNotIn("preview:", in_place.stdout)
+
+    def test_refresh_lane_whole_candidate_requires_every_stale_row(self) -> None:
+        repository, first_pack, pinset = self._repository()
+        second_pack = repository / SECOND_REPRESENTATIVE_PACK.relative_to(ROOT)
+        self._commit_custody(repository, first_pack, "whole-candidate-first.json")
+        self._commit_custody(repository, second_pack, "whole-candidate-second.json")
+        original = pinset.read_bytes()
+
+        refused = self._run_refresh(
+            repository, "--refresh-row", first_pack.name
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_mismatch"])
+        self.assertIn("whole-candidate verification refused", payload["detail"])
+        self.assertIn(second_pack.name, payload["detail"])
+        self.assertEqual(pinset.read_bytes(), original)
+
+        refreshed = self._run_refresh(
+            repository,
+            "--refresh-row",
+            first_pack.name,
+            "--refresh-row",
+            second_pack.name,
+        )
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+        self.assertNotEqual(pinset.read_bytes(), original)
+        result = readiness.verify_all_receipt_histsem(
+            repository, require_published=False
+        )
+        self.assertEqual(result["status"], "PASS")
+
     def test_refresh_lane_never_leaves_a_pinset_the_verifier_rejects(self) -> None:
         repository, pack, pinset = self._repository()
         self._commit_custody(repository, pack, "refresh-rollback.json")
         original = pinset.read_bytes()
         module = self._refresh_module()
-        real_verify = module.readiness.verify_receipt_histsem_pack
-        calls = 0
-
-        def injected_failure(*args, **kwargs):
-            nonlocal calls
-            calls += 1
-            if calls == 2:
-                raise HistoricalSemanticsError(
-                    "histsem_binding_mismatch", "injected post-write refusal"
-                )
-            return real_verify(*args, **kwargs)
-
         stdout = io.StringIO()
         with (
             mock.patch.object(
-                module.readiness,
-                "verify_receipt_histsem_pack",
-                side_effect=injected_failure,
+                module,
+                "_verify_whole_candidate",
             ),
+            mock.patch.object(
+                module.readiness,
+                "verify_all_receipt_histsem",
+                side_effect=HistoricalSemanticsError(
+                    "histsem_binding_mismatch", "injected post-write refusal"
+                ),
+            ) as whole_pinset,
             mock.patch.object(sys, "stdout", stdout),
         ):
             exit_code = module.main(
@@ -1413,11 +1583,70 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
                 ]
             )
         self.assertEqual(exit_code, 2)
-        self.assertEqual(calls, 2)
+        whole_pinset.assert_called_once_with(
+            repository.resolve(), require_published=False
+        )
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["reason_codes"], ["histsem_binding_mismatch"])
-        self.assertIn("injected post-write refusal", payload["detail"])
+        self.assertIn(
+            "post-write whole-pinset verification refused: injected post-write refusal",
+            payload["detail"],
+        )
         self.assertEqual(pinset.read_bytes(), original)
+
+    def test_refresh_lane_writes_pinset_before_test_pin_and_restores_both(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-write-order.json")
+        original_pinset = pinset.read_bytes()
+        test_pin = repository.parent / "write-order-test-pin.py"
+        test_pin.write_text(
+            'PINSET_SHA256 = "' + ("0" * 64) + '"\n', encoding="utf-8"
+        )
+        original_test_pin = test_pin.read_bytes()
+        module = self._refresh_module()
+        real_write_bytes = Path.write_bytes
+        writes: list[str] = []
+        injected = False
+
+        def write_then_fail(path: Path, raw: bytes) -> int:
+            nonlocal injected
+            resolved = path.resolve(strict=False)
+            if resolved == pinset.resolve():
+                writes.append("pinset")
+            elif resolved == test_pin.resolve():
+                writes.append("test-pin")
+            result = real_write_bytes(path, raw)
+            if resolved == test_pin.resolve() and not injected:
+                injected = True
+                raise OSError("injected failure after pinset write")
+            return result
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(module, "_verify_whole_candidate"),
+            mock.patch.object(
+                module.readiness,
+                "verify_all_receipt_histsem",
+                return_value={"status": "PASS"},
+            ),
+            mock.patch.object(Path, "write_bytes", autospec=True, side_effect=write_then_fail),
+            mock.patch.object(sys, "stdout", stdout),
+        ):
+            exit_code = module.main(
+                [
+                    "--repository-root",
+                    str(repository),
+                    "--refresh-row",
+                    pack.name,
+                    "--write-test-pin",
+                    str(test_pin),
+                ]
+            )
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(writes[:2], ["pinset", "test-pin"])
+        self.assertIn("injected failure after pinset write", stdout.getvalue())
+        self.assertEqual(pinset.read_bytes(), original_pinset)
+        self.assertEqual(test_pin.read_bytes(), original_test_pin)
 
 
 class SuccessorPinsetDigestConditionTests(unittest.TestCase):

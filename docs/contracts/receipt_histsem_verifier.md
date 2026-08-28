@@ -52,9 +52,14 @@ the two **current-coordinate** fields only:
 verifier. It requires a clean pack directory, requires the row's historical
 commit to be published on `origin/main`, and requires current `HEAD` to be
 reachable from a remote-tracking ref. It also reproduces the historical tree
-and digest before constructing a candidate, then requires that candidate to
-pass the ordinary pack verifier before and after the canonical write; a
-post-write refusal restores the original bytes.
+and digest before constructing a candidate, then requires every row in the
+complete candidate to pass the ordinary pack verifier before any write. The
+candidate is verified through `verify_receipt_histsem_pack` itself with pinset
+membership supplied in-band; a pinset written to a non-enumerated `--output` is
+a preview and is deliberately not loadable by
+`scripts/verify_receipt_histsem.py`. After a governed in-place write, the CLI
+verifier's whole-pinset entry point verifies the complete enumerated chain; a
+post-write refusal restores the original pinset and test-pin bytes.
 
 The same lane's composable `--refresh-tool-sidecars` mode owns the exact GNU
 sidecar rendering and the ruled set `build_family_marker.py`,
