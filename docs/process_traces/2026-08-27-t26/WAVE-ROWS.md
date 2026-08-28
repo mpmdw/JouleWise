@@ -44,3 +44,7 @@ ledger now records the registered wave and subsequent status changes.
   `bracket-binding/bracket-evaluator-plan-identity-01.md`.
 - CONSUMPTION-SESSION-IDENTITY-PARAM-01 — should-fix; draft:
   `bracket-binding/consumption-session-identity-param-01.md`.
+
+- PINSET-REFRESH-LANE-01 (D-161 (1), stream S14, PR #228): register CLOSED-on-merge in the next wave with a Completed line; authority `threat-model-prune/04-MAGISTRATE-RULING.md` R-1 + D-161 index row.
+- Post-`_v4` rows from #217's split verdicts (drafts in `bracket-binding/`): BRACKET-EVALUATOR-PLAN-IDENTITY-01, CONSUMPTION-SESSION-IDENTITY-PARAM-01.
+- PIPELINE-SMOKE-LIVE-01: RE-SCOPE per D-162 (G1/G2/G3 desk script + shakedown-night assertions), not a separate live family; the diagnostic-family path moves into PIPELINE-SMOKE-TIER2-01's acceptance.
