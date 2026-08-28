@@ -135,3 +135,19 @@ the reviewed head; it does not touch pack bytes or the mint path.
   transaction custody root; the seal at H5 step 7 stays where it is. The
   runbook delta (build binding → evaluate with `--bracket-binding` →
   finalize) lands as a docs PR naming that root.
+
+## Addendum (2026-08-28) — NR-14 ratified
+
+The "distinct analysis root" wording of the previous addendum was not
+executable on merged code (seat probes: the evaluator requires the binding
+beneath `$RUNS_ROOT`, `run_campaign.py:4884-4920`; the authoritative
+verdict row is appended to `$RUNS_ROOT/campaign_log.jsonl`, `:6364`; the
+finalizer replays exactly that row, `analysis_manifest_v3.py:3447-3504`).
+RULING (NR-14): the runbook's executable placement is RATIFIED — the
+bracket binding and the whole-window verdict row live beneath
+`$RUNS_ROOT` and are built BEFORE H5 step 1, so `campaign-close.json`
+digests them and step 7 seals them; only the finalized manifest goes under
+`$ANALYSIS_ROOT` and claims under the sibling `$CLAIMS_ROOT`. No code
+change. The aggregate floor artifact path stays `TODO(ruling)` until the
+live mini-run shows where the mint places it (FLOOR-BIND-01 context).
+Lesson (D-160 R-5 again): rule placement only after a seat has executed it.
