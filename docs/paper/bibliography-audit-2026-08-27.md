@@ -1,5 +1,20 @@
 # Bibliography audit — draft-v1 (2026-08-27)
 
+> **Director disposition (Fable, 2026-08-28) — read before the tables.** The Sol
+> seat below removed the ten uncited entries ([4], [9], [11], [14], [16], [17],
+> [18], [21], [24], [25]) from §11. That removal was **NOT applied** to the
+> branch: it leaves a numbered reference list with ten gaps, and closing the
+> gaps means renumbering body citations, which the round-6 freeze forbids. The
+> ten entries therefore still stand in §11 and every "removed as uncited" status
+> in the tables below should be read as "uncited; removal proposed, pending a
+> magistrate ruling" (options: keep as-is, remove with gaps, or renumber at
+> round 7 alongside the fills). The two edits that WERE applied to §11 are the
+> JouleSort DOI on [3] (`10.1145/1247480.1247522`) and the DOI/arXiv ordering on
+> [27]. Online verification by the director via api.crossref.org on
+> 2026-08-28: DOIs for [3], [27], [29] Hähnel, [30] Georges, and [31] Mytkowicz
+> each resolve to the stated title, first author, venue, and year. [19] and
+> [23] (HotCarbon '26) remain UNVERIFIED (no DOI in the entries).
+
 ## Method and scope
 
 This was an offline audit. No network lookup or DOI resolver was used. I read the
