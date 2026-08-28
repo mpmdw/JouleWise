@@ -48,3 +48,8 @@ ledger now records the registered wave and subsequent status changes.
 - PINSET-REFRESH-LANE-01 (D-161 (1), stream S14, PR #228): register CLOSED-on-merge in the next wave with a Completed line; authority `threat-model-prune/04-MAGISTRATE-RULING.md` R-1 + D-161 index row.
 - Post-`_v4` rows from #217's split verdicts (drafts in `bracket-binding/`): BRACKET-EVALUATOR-PLAN-IDENTITY-01, CONSUMPTION-SESSION-IDENTITY-PARAM-01.
 - PIPELINE-SMOKE-LIVE-01: RE-SCOPE per D-162 (G1/G2/G3 desk script + shakedown-night assertions), not a separate live family; the diagnostic-family path moves into PIPELINE-SMOKE-TIER2-01's acceptance.
+
+## From the docs stream (#227) — clarifications owed
+- Confirmation-digest contract (`docs/contracts/d117_step6_confirmation_table.md:76`) forbids repository storage of the REAL transaction's digest; the six tracked digests are the S-0 clone-proof estates' `hC` values (throwaway clones). Add one sentence to the contract distinguishing estate digests from the transaction digest (docs PR, post-night).
+- `docs/paper/figures/fig3_decision_gates.svg` carries an internal term; paper round 7 nit.
+- Ratified: `tutorial-run-a-window.md` teaches the one-member production-shakedown route labelled diagnostic / not claim-bearing until the G2 runsheet lands; then it points at the G2 runsheet.
