@@ -117,7 +117,40 @@ if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
   else
     fail 'mlx or mlx_lm is not importable in the source venv'
   fi
+
+  # B10: authenticate the physical calibration ledger against the committed
+  # tracked pin with the production loader. This deliberately disables only
+  # custody-store replay; it does not weaken ledger parsing, chain, head-pin,
+  # rollback, stale-head, or committed-pin checks.
+  ledger_path="$SMOKE_CHECKOUT/runs/calibration_observation_ledger.jsonl"
+  ledger_pin="$SMOKE_CHECKOUT/configs/calibration/calibration_ledger_head.json"
+  if "$source_python" - "$ledger_path" "$ledger_pin" "$SMOKE_CHECKOUT" <<'PY'
+import sys
+from pathlib import Path
+
+from joulewise.calibration_ledger import load_calibration_ledger_snapshot
+
+snapshot = load_calibration_ledger_snapshot(
+    Path(sys.argv[1]),
+    Path(sys.argv[2]),
+    repo_root=Path(sys.argv[3]),
+    verify_custody=False,
+)
+if snapshot.refusal_reasons:
+    raise SystemExit(",".join(snapshot.refusal_reasons))
+PY
+  then
+    pass 'B10 calibration ledger head authenticates against the tracked pin'
+  else
+    fail 'B10 calibration ledger is missing, rolled back, stale, malformed, or not pinned by committed bytes'
+  fi
 fi
+
+# ARM-ABORT REHEARSAL — MANUAL ONLY; preflight never arms or consumes.
+# Use a separate earlier arm on the real frozen _v4 pack, with throwaway
+# attempt/session ids and the registry-governed 300 s arm-to-consume budget.
+# Let that arm expire/refuse without launch and verify that no bundle was
+# written. Never let this rehearsal arm straddle the later T-0 clean dwell.
 
 if [ ! -e "$SMOKE_ROOT" ]; then
   pass 'quarantine root does not exist (fresh pre-provisioning state)'
