@@ -14,7 +14,10 @@ file instead.
 (PIPELINE-SMOKE-LIVE-01) must reach the claim edge and answer for a DATA
 reason before the shakedown or any `_v4` window (Ed's bar: the next window
 is not wasted). Sequence: #209 → estate 11 → live run (quiet hour) →
-shakedown Sat 08-29 → transaction Sun 08-30.**
+shakedown Sat 08-29 → transaction Sun 08-30. Ed 2026-08-28: the ~1-hour live
+test window is AUTHORIZED at lead discretion as soon as the preparation
+streams (S14 lane, #209, estate 11, live runsheet) are finished and the
+machine is quiet; the three U11 freeze prompts reach Ed in-session.**
 
 **T26 (2026-08-27 ~12:45 PDT) — CHECKPOINT (Ed's usage-limit pause; streams
 LEFT RUNNING). Resume from
