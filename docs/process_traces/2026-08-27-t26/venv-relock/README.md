@@ -25,3 +25,16 @@ Version smoke: python 3.13.1, mlx 0.31.2, mlx_lm 0.31.3, transformers 5.12.1.
   by the magistrate's shell cwd and removed immediately (recorded here so the
   measurement tree's history is complete).
 Transcript: relock.log.
+
+## 2026-08-28 addendum — calibration observation ledger provisioned (B10)
+The Opus seat of the live-proof consult found that `runs/calibration_observation_ledger.jsonl`
+is gitignored while its pin `configs/calibration/calibration_ledger_head.json`
+(sequence 76, head `08456d50…`) is tracked; W-5's fast-forward therefore never
+carried the ledger into the measurement checkout, and the shakedown's first
+calibration bracket would have refused `calibration_ledger_missing`
+(`calibration_ledger.py:2019-2048`). Cure under custody: the dev ledger
+(76 entries, byte sha256 `aa806848…4e3f`) copied to
+`/Users/edr/JouleWise-measurement-20260813/runs/`; byte-identical; the
+measurement tree still reads clean (the path is ignored there too). The
+runbook §1.1 / W-5 checklist gains "provision the ledger and verify its
+head against the pin" (G2 runsheet + preflight, stream G1).

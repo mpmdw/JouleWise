@@ -24,8 +24,10 @@ gate named beside it.
        `auto`) for the transaction session; restore afterwards if you like.
    `gh pr merge` stays deleted from C11.1 until the fixation commit is pushed
    (the magistrate merges by hand outside the freeze span).
-   Item 1 (venv relock) is being run by the magistrate under custody — no
-   hands needed; result recorded below when the empty-diff gate returns.
+   Item 1 (venv relock) DONE under custody. 2026-08-28: the calibration
+   observation ledger (gitignored; pin tracked) was also missing from the
+   measurement checkout — provisioned under custody, byte-identical to dev
+   (`venv-relock/README.md` addendum). No hands needed.
 3. ~~Notification cadence~~ DECIDED under Ed's 2026-08-27 delegation ("handle everything but the ssh edit"): IMMEDIATE pings per desk event. Ed may reverse by a word.
 4. Transaction calendar — PROPOSED under the same delegation (veto by a word):
    (Slipped one day by the 2026-08-27 evening usage-limit stall.)
