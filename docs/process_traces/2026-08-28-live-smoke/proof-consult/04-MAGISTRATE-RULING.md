@@ -63,3 +63,31 @@ similar; read-only over a runs root + custody; prints PASS/FAIL per
 assertion) is the one small code deliverable; no production gate changes.
 R-4. The calendar stands: estate 11 + G1 Fri 08-28; shakedown + G2 Sat
 08-29; campaign from Sun 08-30 with G3 nightly.
+
+## Addendum (2026-08-28) — the Opus seat converges; three additions adopted
+
+The Opus seat independently reaches the same place (the real run is the
+proof; A is the weakest evidence at the highest cost — and F1 shows A would
+have to relax the claim-bearing validator itself: `planned_n_blocks` is
+pinned to 10 at `analysis_manifest_v3.py:34, :946, :2152-2159`). Adopted
+into G1/G2:
+- **G1 gains the ARM-ABORT REHEARSAL** on the real frozen pack:
+  `arm_to_consume_budget_ns = 300 s` means one arm with throwaway attempt/
+  session ids proves registry admission, successor chain, freeze receipt,
+  T-0 env keys and the prewindow check in five minutes with no bundle
+  written; it must be a separate, earlier arm (it cannot straddle the T-0
+  dwell). (The seat's B9 note: a pack whose predecessor is generation 3
+  skips `_gate_family_publication` — no admission exception was ever
+  needed.)
+- **B10 (fresh checkouts):** the calibration observation ledger
+  `runs/calibration_observation_ledger.jsonl` is untracked while its pin
+  `configs/calibration/calibration_ledger_head.json` (sequence 76) is
+  tracked; a fresh checkout refuses `calibration_ledger_missing` /
+  `_rollback`. The G2 runsheet copies the ledger into any fresh checkout
+  and the preflight checks it. Verify the measurement checkout carries it.
+- **The tracked ledger pin will advance** when the shakedown's brackets
+  run in the measurement checkout; the pin bump is a committed config
+  change on main — the G2 runsheet names the step and the changed-set
+  disposition (config path: check the 112-entry allowlist).
+- `analyze-claims` is copy-safe (reads `--runs-root`, writes only
+  `--output`, `cli.py:2010-2019`); finalize is not (writes into custody).
