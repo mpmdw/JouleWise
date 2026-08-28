@@ -107,6 +107,14 @@ The required options are `--arm-quiet-mode`, `--arm-countdown-s`,
 `--derive-neg8-drift-bound`, `--neg8-drift-bound-output`,
 `--whole-window-verdict`, and `--neg8-drift-bound`.
 
+For a finalized calibration-bracket pair, the whole-window verdict verb also
+takes `--bracket-binding` and `--whole-window-verdict-output`. Produce the
+binding first with `scripts/build_bracket_binding.py`, from the finalized ledger
+session and frozen plan, then run the verdict; see the real-transaction
+runbook's H5a/H6 for the ordered command block, four-root campaign layout, and
+single ruling-pending placement callout required by the merged evaluator/log
+paths.
+
 ### Decision on the three flags missing from the draft chain
 
 The merged CLI accepts all three. They are deliberately included in every
