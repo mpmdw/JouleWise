@@ -87,8 +87,9 @@ Gate unattended WINDOWS, not the `_v4` mint night.
 14. The supervised rehearsal sitting itself (kernel acceptance item 2).
 
 ## Optional but valuable
-7. **PIPELINE-SMOKE-LIVE-01 — now the ONLY end-to-end clean proof (D-160
-   R-2):** ~20 minutes at the machine the evening before the night — a
+7. **PIPELINE-SMOKE-LIVE-01 — a HARD GATE on the shakedown and every window
+   (Ed 2026-08-28: "as long as we're confident the next window run isn't
+   wasted"; D-158 addendum 2026-08-28):** ~20 minutes at the machine the evening before the night — a
    real, tiny, quarantined family generation (not smoke-scoped), real
    telemetry, its own two calibration brackets, `fixed_n = 1`, decode-only,
    one ABBA block, then finalize → analyze-claims at the desk. Zero new

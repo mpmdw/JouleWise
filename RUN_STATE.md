@@ -10,6 +10,12 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T27 (2026-08-28) — GATE ADDED: the 20-minute live mini-run
+(PIPELINE-SMOKE-LIVE-01) must reach the claim edge and answer for a DATA
+reason before the shakedown or any `_v4` window (Ed's bar: the next window
+is not wasted). Sequence: #209 → estate 11 → live run (quiet hour) →
+shakedown Sat 08-29 → transaction Sun 08-30.**
+
 **T26 (2026-08-27 ~12:45 PDT) — CHECKPOINT (Ed's usage-limit pause; streams
 LEFT RUNNING). Resume from
 `docs/process_traces/2026-08-27-t26/CHECKPOINT-2026-08-27-PM.md`. D-161

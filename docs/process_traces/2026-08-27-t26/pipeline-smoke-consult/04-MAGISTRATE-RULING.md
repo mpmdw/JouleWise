@@ -136,3 +136,19 @@ bound by the runbook and refused by the allowlist (S9-08a confirmed
 mechanically); cure is the T-0 parser unification row (S2 reports it is
 outside its footprint) — registered as T0-ENV-PARSER-UNIFY-01, gating
 later windows.
+
+## Addendum (2026-08-28) — the live run is a GATE, not a recommendation
+
+Ed: "as long as we're confident the next window run isn't wasted."
+RULING: PIPELINE-SMOKE-LIVE-01 becomes a hard precondition of the
+WINDOW-COUNCIL-GATE READY verdict for the shakedown and every `_v4`
+window. Pass = the live mini-run (real tiny quarantined family; real
+telemetry; two calibration brackets; one A/B/B/A block) proceeds through
+generate → freeze → arm → T-0 → collect → whole-window verdict →
+bracket binding → finalize → `analyze-claims`, and the claim edge answers
+for a DATA reason (partition of D-158 R-2) with S11's five estate-11
+assertions and D-160 F-5's joins all true. Sequence: #209 → estate 11 →
+live run (first quiet hour; no agent test sessions on the machine) →
+shakedown → transaction. Its bundles become the real corpus for
+PIPELINE-SMOKE-TIER2-01 (replay the live bytes at the desk), so the
+end-to-end clean leg is then permanent in CI.
