@@ -37,7 +37,9 @@
       }
     }
   },
-  "gamma": null,
+  "gamma": {
+    "claim_verdicts": "dominance-not-reproduced-gamma-claim-verdicts.json"
+  },
   "characterization": {
     "funded": false,
     "run": false,

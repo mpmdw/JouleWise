@@ -1,10 +1,39 @@
 {
   "schema_version": "joulewise.detection_floor_artifact.v2",
-  "artifact_id": "SYNTHETIC-REHEARSAL-2026-08-27-DOMINANCE-ALPHA-FLOOR-not-a-measurement",
+  "artifact_id": "SYNTHETIC-REHEARSAL-artifact_id-DOMINANCE-ALPHA",
+  "calibration_scope": "production_window",
+  "source_class": "synthetic",
+  "method": {
+    "method_id": "d054_false_effect_guard.v1"
+  },
+  "provenance": {
+    "calibration_plan": "SYNTHETIC-REHEARSAL-calibration_plan",
+    "mint_tool_version": "SYNTHETIC-REHEARSAL-mint_tool_version",
+    "implementation": "SYNTHETIC-REHEARSAL-implementation"
+  },
+  "idle_drift_guard": {
+    "calibration_status": "pending_calibration",
+    "method": "p2_015_prediction_guard_v1",
+    "guard_w": null,
+    "n_bundles": 0,
+    "bundle_sha256": [],
+    "cell_id": null,
+    "artifact_sha256": null
+  },
   "cells": [
     {
       "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-PROMPT",
+      "key": {
+        "backend": "mlx",
+        "metric": "phase_energy_j.prefill",
+        "window_class": "phase",
+        "condition_family_id": "SYNTHETIC-REHEARSAL-condition_family_id-ALPHA-PROMPT",
+        "condition_family_definition": {"fixture": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-PROMPT"},
+        "condition_family_sha256": "SYNTHETIC-REHEARSAL-condition_family_sha256"
+      },
       "eligibility": {
+        "use_role": "primary_claim_gate",
+        "minimum_claim_n": 10,
         "status": "claim_ready",
         "claim_usable": true,
         "reason_codes": []
@@ -12,22 +41,50 @@
       "floor_abs_j": 999001.5,
       "floor_cmp_j": 999002.5,
       "floor_gate_j": 999002.5,
+      "absolute": {"drift_widened_guarded_floor_j": 999001.5},
+      "comparative": {"drift_widened_guarded_floor_j": 999002.5},
+      "source_regime": {"fixture": "SYNTHETIC-REHEARSAL-source_regime"},
+      "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-PROMPT",
+      "provenance": {
+        "absolute": "SYNTHETIC-REHEARSAL-absolute-provenance",
+        "comparative": "SYNTHETIC-REHEARSAL-comparative-provenance"
+      },
       "floor_limit_class": "attribution_limited",
       "floor_source": "E_clock_anchor_shift_bound_j",
       "point_floor_diagnostics": {
         "absolute": {
-          "guarded_floor_j": 999.001,
+          "guarded_floor_j": 999001.001,
           "published_claim_floor": false
         },
         "comparative": {
-          "guarded_floor_j": 999.002,
+          "guarded_floor_j": 999002.002,
           "published_claim_floor": false
         }
+      },
+      "single_count_discipline": {
+        "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "floor_role": "calibration_false_effect_bound",
+        "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+        "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+        "both_terms_required": true,
+        "apparent_double_count_removal_forbidden": true,
+        "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
       }
     },
     {
       "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-DECODE",
+      "key": {
+        "backend": "mlx",
+        "metric": "phase_energy_j.decode",
+        "window_class": "phase",
+        "condition_family_id": "SYNTHETIC-REHEARSAL-condition_family_id-ALPHA-DECODE",
+        "condition_family_definition": {"fixture": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-DECODE"},
+        "condition_family_sha256": "SYNTHETIC-REHEARSAL-condition_family_sha256"
+      },
       "eligibility": {
+        "use_role": "primary_claim_gate",
+        "minimum_claim_n": 10,
         "status": "claim_ready",
         "claim_usable": true,
         "reason_codes": []
@@ -35,18 +92,40 @@
       "floor_abs_j": 999003.5,
       "floor_cmp_j": 999004.5,
       "floor_gate_j": 999004.5,
+      "absolute": {"drift_widened_guarded_floor_j": 999003.5},
+      "comparative": {"drift_widened_guarded_floor_j": 999004.5},
+      "source_regime": {"fixture": "SYNTHETIC-REHEARSAL-source_regime"},
+      "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-DECODE",
+      "provenance": {
+        "absolute": "SYNTHETIC-REHEARSAL-absolute-provenance",
+        "comparative": "SYNTHETIC-REHEARSAL-comparative-provenance"
+      },
       "floor_limit_class": "attribution_limited",
       "floor_source": "E_clock_anchor_shift_bound_j",
       "point_floor_diagnostics": {
         "absolute": {
-          "guarded_floor_j": 999.003,
+          "guarded_floor_j": 999003.003,
           "published_claim_floor": false
         },
         "comparative": {
-          "guarded_floor_j": 999.004,
+          "guarded_floor_j": 999004.004,
           "published_claim_floor": false
         }
+      },
+      "single_count_discipline": {
+        "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "floor_role": "calibration_false_effect_bound",
+        "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+        "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+        "both_terms_required": true,
+        "apparent_double_count_removal_forbidden": true,
+        "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
       }
     }
+  ],
+  "transport_groups": [
+    {"transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-PROMPT"},
+    {"transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-DECODE"}
   ]
 }
