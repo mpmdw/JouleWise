@@ -1,0 +1,46 @@
+{
+  "schema_version": "joulewise.results_fill_input.v1",
+  "fixture_label": "SYNTHETIC-REHEARSAL 2026-08-27 — not a measurement — dominance reproduced",
+  "campaigns": {
+    "alpha": {
+      "verdict": "pass-verdict.json",
+      "floor_artifact": "dominance-reproduced-alpha-floor.json",
+      "extraction": "dominance-reproduced-alpha-extraction.json",
+      "cells": {
+        "prompt": {
+          "floor_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-PROMPT",
+          "absolute_extraction_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-PROMPT-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-PROMPT-CMP"
+        },
+        "decode": {
+          "floor_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-DECODE",
+          "absolute_extraction_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-DECODE-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-DECODE-CMP"
+        }
+      }
+    },
+    "beta": {
+      "verdict": "pass-verdict.json",
+      "floor_artifact": "dominance-reproduced-beta-floor.json",
+      "extraction": "dominance-reproduced-beta-extraction.json",
+      "cells": {
+        "prompt": {
+          "floor_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "absolute_extraction_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT-CMP"
+        },
+        "decode": {
+          "floor_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "absolute_extraction_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE-ABS",
+          "comparative_extraction_cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE-CMP"
+        }
+      }
+    }
+  },
+  "gamma": null,
+  "characterization": {
+    "funded": false,
+    "run": false,
+    "verdict": null
+  }
+}

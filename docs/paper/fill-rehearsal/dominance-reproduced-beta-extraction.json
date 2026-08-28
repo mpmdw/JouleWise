@@ -1,0 +1,67 @@
+{
+  "schema_version": "joulewise.detection_floor_extraction.v1",
+  "manifest_id": "SYNTHETIC-REHEARSAL-2026-08-27-DOMINANCE-BETA-EXTRACTION-not-a-measurement",
+  "all_cells_extractable": true,
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT-ABS",
+      "kind": "absolute",
+      "extractable": true,
+      "refusal_reasons": [],
+      "floor": {"drift_widened_guarded_floor_j": 999005.5},
+      "operative_floor_j": 999005.5,
+      "floor_conditions": ["admissible_set_uncertainty_dominates_point_floor"],
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostic": {
+        "guarded_floor_j": 999.005,
+        "published_claim_floor": false
+      }
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT-CMP",
+      "kind": "comparative",
+      "extractable": true,
+      "refusal_reasons": [],
+      "floor": {"drift_widened_guarded_floor_j": 999006.5},
+      "operative_floor_j": 999006.5,
+      "floor_conditions": ["admissible_set_uncertainty_dominates_point_floor"],
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostic": {
+        "guarded_floor_j": 999.006,
+        "published_claim_floor": false
+      }
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE-ABS",
+      "kind": "absolute",
+      "extractable": true,
+      "refusal_reasons": [],
+      "floor": {"drift_widened_guarded_floor_j": 999007.5},
+      "operative_floor_j": 999007.5,
+      "floor_conditions": ["admissible_set_uncertainty_dominates_point_floor"],
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostic": {
+        "guarded_floor_j": 999.007,
+        "published_claim_floor": false
+      }
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE-CMP",
+      "kind": "comparative",
+      "extractable": true,
+      "refusal_reasons": [],
+      "floor": {"drift_widened_guarded_floor_j": 999008.5},
+      "operative_floor_j": 999008.5,
+      "floor_conditions": ["admissible_set_uncertainty_dominates_point_floor"],
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostic": {
+        "guarded_floor_j": 999.008,
+        "published_claim_floor": false
+      }
+    }
+  ]
+}

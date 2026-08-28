@@ -1,0 +1,52 @@
+{
+  "schema_version": "joulewise.detection_floor_artifact.v2",
+  "artifact_id": "SYNTHETIC-REHEARSAL-2026-08-27-DOMINANCE-ALPHA-FLOOR-not-a-measurement",
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-PROMPT",
+      "eligibility": {
+        "status": "claim_ready",
+        "claim_usable": true,
+        "reason_codes": []
+      },
+      "floor_abs_j": 999001.5,
+      "floor_cmp_j": 999002.5,
+      "floor_gate_j": 999002.5,
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {
+        "absolute": {
+          "guarded_floor_j": 999.001,
+          "published_claim_floor": false
+        },
+        "comparative": {
+          "guarded_floor_j": 999.002,
+          "published_claim_floor": false
+        }
+      }
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-ALPHA-DECODE",
+      "eligibility": {
+        "status": "claim_ready",
+        "claim_usable": true,
+        "reason_codes": []
+      },
+      "floor_abs_j": 999003.5,
+      "floor_cmp_j": 999004.5,
+      "floor_gate_j": 999004.5,
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {
+        "absolute": {
+          "guarded_floor_j": 999.003,
+          "published_claim_floor": false
+        },
+        "comparative": {
+          "guarded_floor_j": 999.004,
+          "published_claim_floor": false
+        }
+      }
+    }
+  ]
+}

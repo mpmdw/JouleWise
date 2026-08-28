@@ -1,0 +1,39 @@
+{
+  "schema_version": "joulewise.detection_floor_extraction.v1",
+  "manifest_id": "SYNTHETIC-REHEARSAL-2026-08-27-NO-DOMINANCE-ALPHA-EXTRACTION-not-a-measurement",
+  "all_cells_extractable": true,
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT-ABS",
+      "kind": "absolute",
+      "extractable": true,
+      "refusal_reasons": [],
+      "floor": {"drift_widened_guarded_floor_j": 999101.5},
+      "operative_floor_j": 999101.5
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT-CMP",
+      "kind": "comparative",
+      "extractable": true,
+      "refusal_reasons": [],
+      "floor": {"drift_widened_guarded_floor_j": 999102.5},
+      "operative_floor_j": 999102.5
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE-ABS",
+      "kind": "absolute",
+      "extractable": true,
+      "refusal_reasons": [],
+      "floor": {"drift_widened_guarded_floor_j": 999103.5},
+      "operative_floor_j": 999103.5
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE-CMP",
+      "kind": "comparative",
+      "extractable": true,
+      "refusal_reasons": [],
+      "floor": {"drift_widened_guarded_floor_j": 999104.5},
+      "operative_floor_j": 999104.5
+    }
+  ]
+}

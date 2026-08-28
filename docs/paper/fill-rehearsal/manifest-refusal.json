@@ -1,0 +1,18 @@
+{
+  "schema_version": "joulewise.results_fill_input.v1",
+  "fixture_label": "SYNTHETIC-REHEARSAL 2026-08-27 — not a measurement — both floor windows refused",
+  "campaigns": {
+    "alpha": {
+      "verdict": "refused-verdict.json"
+    },
+    "beta": {
+      "verdict": "refused-verdict.json"
+    }
+  },
+  "gamma": null,
+  "characterization": {
+    "funded": false,
+    "run": false,
+    "verdict": null
+  }
+}

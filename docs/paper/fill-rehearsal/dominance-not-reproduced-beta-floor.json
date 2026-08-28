@@ -1,0 +1,28 @@
+{
+  "schema_version": "joulewise.detection_floor_artifact.v2",
+  "artifact_id": "SYNTHETIC-REHEARSAL-2026-08-27-NO-DOMINANCE-BETA-FLOOR-not-a-measurement",
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-BETA-PROMPT",
+      "eligibility": {
+        "status": "claim_ready",
+        "claim_usable": true,
+        "reason_codes": []
+      },
+      "floor_abs_j": 999105.5,
+      "floor_cmp_j": 999106.5,
+      "floor_gate_j": 999106.5
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-BETA-DECODE",
+      "eligibility": {
+        "status": "claim_ready",
+        "claim_usable": true,
+        "reason_codes": []
+      },
+      "floor_abs_j": 999107.5,
+      "floor_cmp_j": 999108.5,
+      "floor_gate_j": 999108.5
+    }
+  ]
+}
