@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -774,41 +775,84 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
             workspace_parent = root / "workspaces"
             workspace_parent.mkdir()
             created: list[Path] = []
+            retained: list[tempfile.TemporaryDirectory[str]] = []
+            nonempty_before_failure: list[bool] = []
 
             class CleanupFailure:
                 def __init__(self, *args, **kwargs):
                     kwargs.setdefault("dir", workspace_parent)
                     self.inner = real_temporary_directory(*args, **kwargs)
+                    retained.append(self.inner)
                     created.append(Path(self.inner.name))
 
                 def __enter__(self):
                     return self.inner.__enter__()
 
                 def __exit__(self, exc_type, exc_value, traceback):
-                    self.inner.__exit__(exc_type, exc_value, traceback)
+                    scratch = Path(self.inner.name)
+                    nonempty_before_failure.append(any(scratch.iterdir()))
+                    # S13 refuter F1: a read-only child directory survives a
+                    # plain ``shutil.rmtree(ignore_errors=True)`` fallback, so
+                    # the leak regression plants one before failing.
+                    blocked = scratch / "blocked-readonly"
+                    blocked.mkdir()
+                    (blocked / "ordinary").write_bytes(b"residue")
+                    blocked.chmod(0o500)
                     raise OSError("simulated historical workspace cleanup failure")
 
-            with mock.patch.object(
-                readiness.tempfile, "TemporaryDirectory", CleanupFailure
-            ):
-                arm = generate_arm_receipt(
-                    REPRESENTATIVE_PACK, {}, root / "cleanup-custody"
-                )
-                freeze = generate_freeze_receipt(
-                    successor,
-                    measurement_checkout=root,
-                    predecessor_pack_root=REPRESENTATIVE_PACK,
-                )
+            try:
+                with mock.patch.object(
+                    readiness.tempfile, "TemporaryDirectory", CleanupFailure
+                ):
+                    arm = generate_arm_receipt(
+                        REPRESENTATIVE_PACK, {}, root / "cleanup-custody"
+                    )
+                    freeze = generate_freeze_receipt(
+                        successor,
+                        measurement_checkout=root,
+                        predecessor_pack_root=REPRESENTATIVE_PACK,
+                    )
 
-            self.assertEqual(len(created), 2)
-            self.assertTrue(all(not path.exists() for path in created))
-            self.assertEqual(list(workspace_parent.iterdir()), [])
+                self.assertEqual(len(created), 2)
+                self.assertEqual(nonempty_before_failure, [True, True])
+                self.assertTrue(all(not path.exists() for path in created))
+                self.assertEqual(list(workspace_parent.iterdir()), [])
+            finally:
+                for workspace in retained:
+                    workspace.cleanup()
         self.assertEqual(arm["status"], "REFUSE")
         self.assertEqual(arm["reason_codes"], ["histsem_history_unavailable"])
         self.assertIn("temporary workspace", arm["detail"])
         self.assertEqual(freeze["status"], "REFUSE")
         self.assertEqual(freeze["reason_codes"], ["histsem_history_unavailable"])
         self.assertIn("temporary workspace", freeze["detail"])
+
+
+class HistsemScratchTreeRemovalTests(unittest.TestCase):
+    """The fallback removal never reaches outside the scratch tree."""
+
+    def test_symlinked_root_is_unlinked_and_its_target_left_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            nested = outside / "nested"
+            nested.mkdir(parents=True)
+            (nested / "file").write_bytes(b"keep")
+            (nested / "file").chmod(0o400)
+            nested.chmod(0o500)
+            outside.chmod(0o500)
+            link = root / "scratch-link"
+            link.symlink_to(outside, target_is_directory=True)
+            try:
+                readiness._histsem_remove_scratch_tree(link)
+                self.assertFalse(link.is_symlink())
+                self.assertEqual((nested / "file").read_bytes(), b"keep")
+                self.assertEqual(stat.S_IMODE(outside.stat().st_mode), 0o500)
+                self.assertEqual(stat.S_IMODE(nested.stat().st_mode), 0o500)
+                self.assertEqual(stat.S_IMODE((nested / "file").stat().st_mode), 0o400)
+            finally:
+                outside.chmod(0o700)
+                nested.chmod(0o700)
 
 
 class SuccessorPinsetDigestConditionTests(unittest.TestCase):

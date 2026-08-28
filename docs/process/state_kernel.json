@@ -1869,45 +1869,6 @@
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md); no prior draft, written from the S3 delta re-audit 2 report (finding D4, verification V7: histsem PASS with missing_before 223 and missing_after 219 on a promisor clone). Soundness: the verifier's answer on an incomplete repository is currently a function of what the remote is willing to serve. The measurement checkout is a full clone, which is why this is a should-fix and not a mint gate.",
       "stop_card": null
     },
-    "HISTPACK-TEMP-CLEANUP-01": {
-      "acceptance": {
-        "evidence": [
-          "A bounded fallback removal runs when cleanup raises before removal, so both scratch trees are absent afterwards",
-          "A before-deletion failure regression (the d3_cleanup_leak_probe.py shape: exception injected before removal) requires both trees absent and both public boundaries still refusing with histsem_history_unavailable",
-          "The existing cleanup regression is corrected so it no longer removes the tree before raising"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/HISTPACK-TEMP-CLEANUP-01/acceptance",
-          "label": "HISTPACK-TEMP-CLEANUP-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A cleanup failure before removal cannot leave a scratch checkout on disk, and the regression would fail if it could."
-      },
-      "authority": {
-        "label": "S3 delta re-audit 2 finding D3 (cleanup test masks a real checkout leak; probe docs/process_traces/2026-08-26-t26-s3/delta2/d3_cleanup_leak_probe.py)",
-        "path": "docs/process_traces/2026-08-26-t26-s3/delta2/report.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "S3 delta re-audit 2 (D1 fixed: exact digest membership is the only flagless admission path)",
-            "path": "docs/process_traces/2026-08-26-t26-s3/delta2/report.md"
-          },
-          "rule": "Cleanup only: no change to the verifier's admission or refusal semantics, and no widening of the flagless-generator allowlist"
-        }
-      ],
-      "flags": [],
-      "goal": "Close the temp-checkout leak in the historical-semantics verifier: when a cleanup error occurs before removal, both nonempty scratch checkouts (tempfile.TemporaryDirectory prefix joulewise-histsem- in joulewise/arm_readiness.py) are left behind even though arm and freeze both govern-refuse with histsem_history_unavailable, and the committed regression in tests/test_receipt_histsem.py calls the real cleanup and then raises, so it cannot see the defect.",
-      "id": "HISTPACK-TEMP-CLEANUP-01",
-      "lane": "agent",
-      "priority": "p3_hardening_candidates",
-      "rank": 108,
-      "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md); no prior draft, written from the S3 delta re-audit 2 report (finding D3, verification V6: leaked_nonempty 2 after an injected pre-removal exception). Small.",
-      "stop_card": null
-    },
     "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01": {
       "acceptance": {
         "evidence": [
