@@ -30,7 +30,6 @@ EXPECTED_IDS = {
     "SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01",
     "T0-REHEARSAL-PRODUCERS-01",
     "COLLECTOR-MANIFEST-SHA-IDENTITY-01",
-    "BRACKET-BINDING-CLI-01",
     "T0-ENV-PARSER-UNIFY-01",
     "PIPELINE-SMOKE-TIER2-01",
     "PIPELINE-SMOKE-LIVE-01",
@@ -188,7 +187,9 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "PLANTEST-RGLOB-RACE-01",
                 # 2026-08-27 T26 S3 pack-authentication soundness wave (PR #214).
                 "FROZEN-RECEIPT-CONSTANT-STALE-01",
-                "PACKAUTH-PRESERVE-TAUTOLOGY-01"}
+                "PACKAUTH-PRESERVE-TAUTOLOGY-01",
+                # 2026-08-27 T26 S10 bracket-binding producer (PR #217).
+                "BRACKET-BINDING-CLI-01"}
 
 
 def load_kernel():
@@ -484,20 +485,22 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # successor-scoped field-wise arm pack comparisons with truthful
         # per-branch details):
         # 92 - 2 = 90;
-        # 90 + 18 = 108; the 2026-08-27 T26 end-of-sprint wave registers
+        # 90 + 18 = 108; the 2026-08-27 T26 end-of-sprint wave registered
         # the eighteen WAVE-ROWS.md ledger rows (GIT-FIXTURE-MAINTENANCE-SWEEP-01,
         # TRANSFER-FIDUCIAL-01, the two D-156 supersession residuals,
         # T0-REHEARSAL-PRODUCERS-01, COLLECTOR-MANIFEST-SHA-IDENTITY-01,
-        # BRACKET-BINDING-CLI-01 in flight on PR #217, T0-ENV-PARSER-UNIFY-01,
+        # BRACKET-BINDING-CLI-01 (subsequently closed via PR #217),
+        # T0-ENV-PARSER-UNIFY-01,
         # PIPELINE-SMOKE-TIER2-01, PIPELINE-SMOKE-LIVE-01, the two HISTPACK
         # rows from S3 delta2, and the six S9 should-fixes):
         # 90 + 18 = 108;
-        # 108 - 1 = 107; the 2026-08-27 T26 S13 stream closes
+        # 108 - 2 = 106: the 2026-08-27 T26 S13 stream closes
         # HISTPACK-TEMP-CLEANUP-01 (PR #222: the histsem scratch checkout
-        # is unwound when cleanup raises before removal):
-        # 108 - 1 = 107 exact live records.
+        # is unwound when cleanup raises before removal), and S10 closes
+        # BRACKET-BINDING-CLI-01 (PR #217, cfffce95; runbook delta in the
+        # docs PR that carries this count): 106 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 107)
+        self.assertEqual(len(self.tasks), 106)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

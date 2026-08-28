@@ -1,7 +1,7 @@
 # End-of-sprint kernel wave — rows and amendments owed (running ledger, T26)
 
-Registered in ONE kernel wave at sprint end (oracle recount once). Each
-entry names its draft text / authority; none is registered yet.
+Registered in one kernel wave by #220 (oracle recounted once). This running
+ledger now records the registered wave and subsequent status changes.
 
 ## New rows (drafts exist unless noted)
 - GIT-FIXTURE-MAINTENANCE-SWEEP-01 — S5, `docs/process_traces/2026-08-26-t26-ci-reliability/README.md`.
@@ -9,7 +9,7 @@ entry names its draft text / authority; none is registered yet.
 - SUPERSESSION-CHAINED-RECOVERY-01, SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01 — S6, `supersession-queued-rows-draft.md` (three consumers).
 - T0-REHEARSAL-PRODUCERS-01 — S2, `impl/t0-rehearsal-producer-row-draft.md`; starting material `t0-unattended/p14-…KILLED.diff`.
 - COLLECTOR-MANIFEST-SHA-IDENTITY-01 — S11, `s11-collector-manifest-id/queued-row-….md` (compatibility fence RULED).
-- BRACKET-BINDING-CLI-01 — D-160 R-3; IN FLIGHT (S10) — pre-close blocker.
+- BRACKET-BINDING-CLI-01 — CLOSED via #217 (`cfffce95`); producer-before-verdict lifecycle landed.
 - T0-ENV-PARSER-UNIFY-01 — D-158 A-5 / S9-08b; no draft yet (write from `test_window_env_allowlist.py`'s xfail text).
 - PIPELINE-SMOKE-TIER2-01 — D-160 R-4 (constraints in the ruling); post-`_v4`.
 - PIPELINE-SMOKE-LIVE-01 — D-158 R-3 / D-160 R-2; Ed's hands; runbook drafted by S10 after the bracket CLI.
@@ -37,3 +37,10 @@ entry names its draft text / authority; none is registered yet.
 ## Registered by the T26 wave (#220) — post-wave changes
 - HISTPACK-PROMISOR-NOFETCH-01 (A107): RETIRE unbuilt per the prune ruling R-2 (close with a superseded note in the next wave).
 - THREAT-MODEL-PRUNE-01: register post-`_v4`, p2, acceptance = prune ruling R-4 waves (a)–(f), authority `threat-model-prune/04-MAGISTRATE-RULING.md`.
+
+## Post-_v4 rows drafted after #217 (D-160 addendum)
+
+- BRACKET-EVALUATOR-PLAN-IDENTITY-01 — soundness-consistency; draft:
+  `bracket-binding/bracket-evaluator-plan-identity-01.md`.
+- CONSUMPTION-SESSION-IDENTITY-PARAM-01 — should-fix; draft:
+  `bracket-binding/consumption-session-identity-param-01.md`.

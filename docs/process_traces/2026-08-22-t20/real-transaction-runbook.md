@@ -1,13 +1,19 @@
 # The real `_v4` freeze transaction — operator runbook
 
-**Status: RULED, with two items still open — see §7.** D-155 (magistrate
+**Status: RULED, with three items still open — see §7.** D-155 (magistrate
 synthesis, 2026-08-26,
 `docs/process_traces/2026-08-22-t20/nr-synthesis-ruling.md`) rules eleven of
 the thirteen §7 questions and this document now carries those rulings inline.
 Still open: **NR-5** (whether the real lane re-runs the runsheet §4 probe
-battery), and the **notification cadence** half of NR-9, which is Ed's
-one-word question. Do not execute until both are closed **and** D-155 work
-order W-2 — the two ruled code cures — is on the reviewed head.
+battery), the **notification cadence** half of NR-9, which is Ed's
+one-word question, and **NR-14** (H5a, 2026-08-27: whether the bracket binding
+and the whole-window verdict row stay beneath `$RUNS_ROOT` as pre-seal custody
+records, as merged code requires, or the D-160 addendum's distinct-analysis-root
+placement is enforced by a code change; plus the aggregate floor artifact's
+path, bound by FLOOR-BIND-01). NR-14 blocks H5a/H6 only — days after the
+night — not the transaction. Do not execute until NR-5 and NR-9 are closed
+**and** D-155 work order W-2 — the two ruled code cures — is on the reviewed
+head.
 
 This is the procedure for the one session where Ed is at the machine and the
 `_v4` freeze transaction actually happens. It is the operator-facing companion
@@ -384,7 +390,26 @@ What *does* bind:
 
 ## 1.5 What the magistrate needs prepared, at the desk, before Ed arrives
 
-- [ ] Transaction custody root created outside the repository, empty.
+- [ ] Campaign root chosen outside the repository before bracket reservation;
+  its analysis, transaction, and claims directories are empty.
+
+  > **`ANALYSIS_ROOT`** names this one layout, chosen before bracket
+  > reservation: `CAMPAIGN_ROOT=<chosen before bracket reservation>`,
+  > `ANALYSIS_ROOT="$CAMPAIGN_ROOT/analysis"`,
+  > `CUSTODY_ROOT="$ANALYSIS_ROOT/transaction"`, and
+  > `CLAIMS_ROOT="$CAMPAIGN_ROOT/claims"`; `$RUNS_ROOT` is beneath
+  > `$CUSTODY_ROOT`. The bracket binding at
+  > `$RUNS_ROOT/calibration_bracket_binding.json`, the whole-window verdict row
+  > appended to `$RUNS_ROOT/campaign_log.jsonl`, and its exact-bytes copy at
+  > `$RUNS_ROOT/whole_window_verdict.json` are transaction-custody records and
+  > are written before H5 step 7 seals that custody
+  > (`scripts/run_campaign.py:4889-4915`, `:6364`). The finalized manifest is
+  > written directly under `$ANALYSIS_ROOT`; `claim_verdicts.json` is written
+  > under the sibling `$CLAIMS_ROOT`, never beside or beneath the finalized
+  > manifest, because the consumer refuses with “claim-verdict output must be
+  > outside the frozen manifest directory”
+  > (`joulewise/analysis_engine/__init__.py:150-156`).
+
 - [ ] The mechanical candidate manifest generated from committed bytes at the
   reviewed head (runsheet §1.3) and its digest recorded. **This step survives
   NR-4's ruling and is still required** — step C9 authenticates each executing
@@ -1272,11 +1297,13 @@ construction and is Ed's ruling, not the magistrate's.
 **The record, and its order is strict.** Getting this order wrong takes the
 fixation commit's ruled slot, which is the trap:
 
-1. **Declaration transcript** into transaction custody — no commit. The
-   canonical artifact is `campaign-close.json`, carrying the slot ledger, the
-   artifact digests, the predicate results and the times; its SHA-256 goes into
-   the transcript. This is the one appended record H1's continuation clause
-   reserves; it adds to custody and mutates nothing already sealed there.
+1. **Declaration transcript** into transaction custody — no commit. H5a has
+   already written the bracket binding and whole-window verdict row, so the
+   canonical `campaign-close.json` carries their digests along with the slot
+   ledger, the other artifact digests, the predicate results and the times;
+   its SHA-256 goes into the transcript. This is the one appended record H1's
+   continuation clause reserves; it adds to custody and mutates nothing
+   already sealed there.
 2. **Freeze close declared.**
 3. **D-150a notification:** campaign done, freeze OFF.
 4. **THE FIXATION COMMIT — first, before anything else.** It carries exactly
@@ -1293,6 +1320,99 @@ fixation commit's ruled slot, which is the trap:
 A `RUN_STATE` header update written before fixation would occupy the slot
 D-153 A1 reserves for the fixation commit. That is why step 5 is numbered
 after step 4 rather than left to judgement.
+
+### H5a — Build the bracket binding before the whole-window verdict (D-160 R-3′)
+
+This step runs **between the last window's collection and H5 step 1**. More
+exactly: finalize the last window's post slot, run H5a, and only then write the
+declaration transcript. A *bracket reservation* is the durable ledger record
+that fixes the pre/post slots and their identities; a *finalized ledger
+session* is that reservation after both slots have completed. A *bracket
+binding* is the immutable file that binds that finalized session, frozen plan,
+evidence identity, and exact runs root for the evaluator and finalizer. The
+producer takes nothing from a verdict, while the evaluator refuses
+`calibration_bracket_binding_missing`, so the binding must come first. H5a's
+outputs are then present when H5 step 1 creates `campaign-close.json`, and H5
+step 7 seals them with the rest of transaction custody.
+
+The following setup is the Gamma `_v4` example. Replace the dated component
+before bracket reservation, and stage the frozen pack files, completed ledger,
+head pin, NEG-8 artifact, and aggregate floor artifact at these custody paths
+before running H5a. Four of those names are defined here at first use. The
+*evidence identity* (`EVIDENCE_ROOT_ID`) is the id the frozen pack assigns to
+the directory holding its floor evidence; the ledger session records it and the
+binding repeats it. The *head pin* is the small JSON file that names the
+calibration ledger's last committed entry by hash, so a truncated or extended
+ledger is detected. The *NEG-8 artifact* is the drift-bound file produced by
+the NEG-8 bound run, which the verdict verb reads through `--neg8-drift-bound`.
+The *aggregate floor artifact* is the file that carries the campaign's floor
+cells from the two calibration brackets; its producing step (FLOOR-BIND-01,
+queued behind the `_v4` pinsets) has not yet bound its path, which is why that
+one assignment below is marked `TODO(ruling)` — every other path is exact. The
+plan and tree paths name the immutable copies produced by the frozen pack; the
+prospective manifest is the pack generator's precollection
+`analysis_manifest_v3.json`.
+
+```sh
+CAMPAIGN_ROOT=/Users/edr/JouleWise-window-custody/d117-gamma-YYYYMMDD/campaign
+ANALYSIS_ROOT="$CAMPAIGN_ROOT/analysis"
+CUSTODY_ROOT="$ANALYSIS_ROOT/transaction"
+CLAIMS_ROOT="$CAMPAIGN_ROOT/claims"
+RUNS_ROOT="$CUSTODY_ROOT/runs_d117_contrast_qwen25_1p5b_vs_7b_v4"
+BRACKET_SESSION_ID=d117-gamma-YYYYMMDD-calibration
+WINDOW_ID=plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v4
+PLAN_ID=plan-d117-contrast-qwen25-1p5b-vs-7b-decode-v4
+FROZEN_PLAN="$CUSTODY_ROOT/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/calibration_plan.json"
+PLAN_SHA256="$(shasum -a 256 "$FROZEN_PLAN" | cut -d' ' -f1)"
+EVIDENCE_ROOT_ID=evidence-d117-contrast-qwen25-1p5b-vs-7b-v4
+CALIBRATION_LEDGER="$CUSTODY_ROOT/calibration/calibration_observation_ledger.jsonl"
+LEDGER_HEAD_PIN="$CUSTODY_ROOT/calibration/calibration_ledger_head.json"
+CAMPAIGN_POLICY=/Users/edr/JouleWise-measurement-20260813/configs/campaign_policies/quiet_mac_p2_production.json
+NEG8_DRIFT_BOUND="$CUSTODY_ROOT/bound-runs/neg8-drift-bound.json"
+PROSPECTIVE_MANIFEST="$CUSTODY_ROOT/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/analysis_manifest_v3.json"
+PLAN_TREE="$CUSTODY_ROOT/configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v4/plan_tree.json"
+AGGREGATE_FLOOR_ARTIFACT="$CUSTODY_ROOT/floors/d117_v4_aggregate_floor_artifact.json" # TODO(ruling): path
+BRACKET_BINDING="$RUNS_ROOT/calibration_bracket_binding.json"
+WHOLE_WINDOW_VERDICT="$RUNS_ROOT/whole_window_verdict.json"
+
+.venv/bin/python3 scripts/build_bracket_binding.py \
+  --custody-root "$CUSTODY_ROOT" \
+  --session-id "$BRACKET_SESSION_ID" \
+  --window-id "$WINDOW_ID" \
+  --plan-id "$PLAN_ID" \
+  --plan-sha256 "$PLAN_SHA256" \
+  --frozen-plan "$FROZEN_PLAN" \
+  --evidence-root-id "$EVIDENCE_ROOT_ID" \
+  --runs-root "$RUNS_ROOT" \
+  --calibration-ledger "$CALIBRATION_LEDGER" \
+  --head-pin "$LEDGER_HEAD_PIN" \
+  --output "$BRACKET_BINDING"
+
+.venv/bin/python3 scripts/run_campaign.py \
+  --whole-window-verdict \
+  --runs-dir "$RUNS_ROOT" \
+  --log "$RUNS_ROOT/campaign_log.jsonl" \
+  --campaign-policy "$CAMPAIGN_POLICY" \
+  --neg8-drift-bound "$NEG8_DRIFT_BOUND" \
+  --bracket-binding "$BRACKET_BINDING" \
+  --whole-window-verdict-output "$WHOLE_WINDOW_VERDICT"
+```
+
+Here a *canonical path* means the resolved, non-symlink path accepted beneath
+the named custody root. The producer requires the frozen plan, ledger, runs
+root, and output to be canonical descendants of `$CUSTODY_ROOT`; the evaluator
+requires its binding input beneath the exact `$RUNS_ROOT`
+(`scripts/run_campaign.py:4889-4915`) and appends the verdict row to
+`$RUNS_ROOT/campaign_log.jsonl` (`scripts/run_campaign.py:6364`). Its
+`--whole-window-verdict-output` is the exact bytes of that appended row, so both
+records are beneath `$RUNS_ROOT` before H5 step 1 digests them and step 7 seals
+them.
+
+> **RULING PENDING (D-160 addendum, 2026-08-27).**
+> The addendum says analysis outputs go under a distinct analysis root, never beneath the sealed transaction root.
+> Merged code requires the evaluator's binding input and verdict row beneath `$RUNS_ROOT`, so this runbook places them there BEFORE the seal.
+> Only the finalized manifest is under `$ANALYSIS_ROOT`; claim verdicts go under sibling `$CLAIMS_ROOT` per the consumer boundary.
+> The magistrate either ratifies this placement or orders the code change: the evaluator's binding containment (`scripts/run_campaign.py:4884-4920`), the verdict publication (`:6364`), AND the finalizer's replay of the authoritative row from `$RUNS_ROOT/campaign_log.jsonl` (`joulewise/analysis_manifest_v3.py:3447-3458`, `:3481-3504`) — a verdict row outside `$RUNS_ROOT` finalizes as `analysis_finalization_attachment_invalid`.
 
 ### H6 — Finalization: the desk step between the fixation commit and any claim (registered 2026-08-26, S9-07)
 
@@ -1331,48 +1451,42 @@ fixation-commit reference, and no published head: **it does not verify that H5
 happened.** The ordering below is a procedural obligation on the magistrate,
 not a condition the tool enforces.
 
-**Where it sits.** After H5 step 4, the fixation commit, and before any claim
-consumption. Not earlier: the finalized manifest binds the campaign's complete
-postcollection custody, which does not exist until the last window is collected
-and the campaign is declared closed at H5. Not later than the first claim: the
-prospective refusal above means nothing can be claimed until this has run.
+**Where it sits.** H5a ran between the last window's collection and H5 step 1,
+so the bracket binding, verdict row, and verdict copy are sealed transaction
+inputs by the time H5 completes. H6 runs after H5 step 7 and before any claim
+consumption. It reads those sealed inputs without changing them and writes only
+the finalized manifest directly under `$ANALYSIS_ROOT`. Not later than the
+first claim: the prospective refusal above means nothing can be claimed until
+this has run.
 
-> **OPEN — needs a magistrate ruling before H6 is executed (registered
-> 2026-08-26, S9-07).** Two gaps in this section are not mine to close.
->
-> 1. **Which custody root.** The finalizer requires `--output-dir` to equal
->    `--custody-root` and requires the prospective manifest and plan tree to be
->    regular files beneath it, so it *writes into* that root. H5 step 7 says
->    the freeze transaction's custody "seals fully" and "nothing further is
->    ever added." Those two are compatible only if the analysis custody root is
->    a different tree from the transaction custody H5 seals — which is what the
->    inputs suggest, since the prospective manifest and plan tree are campaign
->    artifacts rather than transaction-session records. **This runbook has never
->    said so, and this section does not have the authority to declare it.** If
->    they are the same tree, H6 is a post-seal write and its slot must move.
-> 2. **The concrete paths.** The command below names its inputs by role. This
->    runbook binds none of them to a path, so H6 is not yet replicable from its
->    own text. Fixing that requires deciding item 1 first, since every path
->    hangs off the custody root.
+**The root ruling is installed.** The finalizer authenticates every supplied
+path against the `--custody-root` it is given and requires `--output-dir` to
+resolve to that same directory. Here that authentication/output root is
+`$ANALYSIS_ROOT`. Every input is a regular file beneath its sealed
+`$CUSTODY_ROOT` child; the finalizer only reads those inputs. The new finalized
+manifest is written directly under `$ANALYSIS_ROOT`, so no post-seal write
+enters `$CUSTODY_ROOT`.
 
 **The command.** Every argument is required. `--output-dir` must resolve to the
 same directory as `--custody-root`, or the finalizer refuses with
 `analysis_finalization_noncanonical` — consumer-relative lineage is only stable
-when the finalized manifest sits in the custody root it describes. The
-prospective manifest and the plan tree must each be a regular file beneath that
-same root.
+when the finalized manifest sits in the analysis root against which its lineage
+is authenticated. The prospective manifest and the plan tree must each be a
+regular file beneath that analysis root; they may sit in its sealed transaction
+child because finalization reads rather than rewrites them.
 
 ```sh
-.venv/bin/python3 scripts/finalize_analysis_manifest.py \
+FINALIZE_RESULT="$(.venv/bin/python3 scripts/finalize_analysis_manifest.py \
   --prospective-manifest "$PROSPECTIVE_MANIFEST" \
   --plan-tree "$PLAN_TREE" \
-  --custody-root "$CUSTODY_ROOT" \
+  --custody-root "$ANALYSIS_ROOT" \
   --runs-root "$RUNS_ROOT" \
   --whole-window-verdict "$WHOLE_WINDOW_VERDICT" \
   --bracket-binding "$BRACKET_BINDING" \
   --calibration-ledger "$CALIBRATION_LEDGER" \
   --aggregate-floor-artifact "$AGGREGATE_FLOOR_ARTIFACT" \
-  --output-dir "$CUSTODY_ROOT"
+  --output-dir "$ANALYSIS_ROOT"
+)"
 ```
 
 On refusal it prints `{"status": "REFUSE", "reason": …, "detail": …}` and exits
@@ -1390,11 +1504,12 @@ FINALIZED_MANIFEST="$(printf '%s' "$FINALIZE_RESULT" \
 Only then is the claim consumer admissible:
 
 ```sh
-python3 -m joulewise.cli analyze-claims \
+mkdir -p "$CLAIMS_ROOT"
+.venv/bin/python3 -m joulewise.cli analyze-claims \
   --analysis-manifest "$FINALIZED_MANIFEST" \
   --runs-root "$RUNS_ROOT" \
   --floor-artifact "$AGGREGATE_FLOOR_ARTIFACT" \
-  --output "$CUSTODY_ROOT/claim_verdicts.json"
+  --output "$CLAIMS_ROOT/claim_verdicts.json"
 ```
 
 `--evidence-root ID=PATH` maps a floor-evidence root id to the directory
@@ -1674,7 +1789,7 @@ do not.
 
 ---
 
-# 7. Ruling dispositions — eleven ruled, two still open
+# 7. Ruling dispositions — eleven ruled, two still open, one added after (NR-14)
 
 D-155 (magistrate synthesis, 2026-08-26,
 `docs/process_traces/2026-08-22-t20/nr-synthesis-ruling.md`, on two
@@ -1707,6 +1822,7 @@ Two remain open, and the session does not start until they are closed:
 | NR-11 | One commit message cannot carry the terminal review for three packs | **RULED** — code cure at **both** parsers: `PASS`/`Tree-Oid` exactly-once, `Pack-Sha256` non-empty, duplicate-free, membership. Lands as W-2 before Phase C1 | C11; window runbook §5C |
 | NR-12 | Where does the attestation commit sit, and is it the published head? | **RULED** — last commit before publication; `ATTESTATION_HEAD` is the published head, `PINSET_MINT_HEAD` stays the closure head; magistrate executes it | C11, Phase D, Phase F; r4-3 amended |
 | NR-13 | Is `WINDOW-STATUS-FREEZE-GUARD-01` a hard gate on opening the freeze span? | **RULED** — yes, and earlier than asked: a custody-external sentinel guard landing **before Phase C1**, because the binding gate is the changed-set window | §1.1, C11.1 |
+| NR-14 | H5a/H6 (added 2026-08-27, D-160 addendum): may the bracket binding and the authoritative whole-window verdict row live beneath `$RUNS_ROOT` as pre-seal custody records, or must the distinct-analysis-root placement be enforced by a code change? Also: the aggregate floor artifact's path. | **OPEN** — the runbook installs the executable pre-seal placement under a RULING PENDING callout; blocks H5a/H6 only, after the night | H5a callout, H6 |
 
 The full question statements are preserved below, unedited, each with its
 ruling attached. They are kept because a reader who only sees the answer
