@@ -1,4 +1,5 @@
 {
+  "_synthetic_scalars": "SYNTHETIC-REHEARSAL 2026-08-28: every probability-shaped number in this file is 0.000999001 or 0.999001; the 999001 digit pattern marks a synthetic value. Probabilities cannot leave [0,1], so the pattern, not the magnitude, is the marker.",
   "schema_version": "joulewise.claim_verdicts.v1",
   "claim_verdicts_id": "SYNTHETIC-REHEARSAL-claim_verdicts_id-NO-DOMINANCE",
   "engine": {
@@ -23,13 +24,18 @@
     },
     "runs_root_label": "SYNTHETIC-REHEARSAL-runs_root_label",
     "evidence_class": "current",
-    "limitations": ["SYNTHETIC-REHEARSAL-not-measurement-evidence"]
+    "limitations": [
+      "SYNTHETIC-REHEARSAL-not-measurement-evidence"
+    ]
   },
   "supersession_audit": [
     {
       "scope": "analysis_corpus",
       "evidence_root_id": "SYNTHETIC-REHEARSAL-evidence_root_id",
-      "authenticated_basis": {"kind": "analysis_manifest_file_sha256", "sha256": "SYNTHETIC-REHEARSAL-sha256"},
+      "authenticated_basis": {
+        "kind": "analysis_manifest_file_sha256",
+        "sha256": "SYNTHETIC-REHEARSAL-sha256"
+      },
       "raw_count": 0,
       "validated_count": 0,
       "status": "clean"
@@ -54,10 +60,16 @@
       "alpha": 0.999001,
       "q": null,
       "m": 1,
-      "contrast_ids": ["SYNTHETIC-REHEARSAL-contrast_id"],
+      "contrast_ids": [
+        "SYNTHETIC-REHEARSAL-contrast_id"
+      ],
       "finite_test_count": 1,
-      "raw_ordering": ["SYNTHETIC-REHEARSAL-contrast_id"],
-      "adjusted_p_values": {"SYNTHETIC-REHEARSAL-contrast_id": 0.000999001},
+      "raw_ordering": [
+        "SYNTHETIC-REHEARSAL-contrast_id"
+      ],
+      "adjusted_p_values": {
+        "SYNTHETIC-REHEARSAL-contrast_id": 0.000999001
+      },
       "missing_test_ids": [],
       "structural_status": "complete"
     }
@@ -68,7 +80,13 @@
       "plan_id": "SYNTHETIC-REHEARSAL-plan_id",
       "family_instance_id": "SYNTHETIC-REHEARSAL-family_instance_id",
       "claim_role": "primary",
-      "metric": {"name": "gross_energy_j", "metric_tag": "gross_request", "window_class": "request", "unit": "J", "ratio_estimand": null},
+      "metric": {
+        "name": "gross_energy_j",
+        "metric_tag": "gross_request",
+        "window_class": "request",
+        "unit": "J",
+        "ratio_estimand": null
+      },
       "conditions": {
         "condition_a_id": "SYNTHETIC-REHEARSAL-condition_a_id",
         "condition_b_id": "SYNTHETIC-REHEARSAL-condition_b_id",
@@ -79,8 +97,16 @@
       "hypothesized_direction": "positive",
       "equivalence": null,
       "mde": null,
-      "bundle_blocks": {"planned_block_ids": [], "included_bundle_ids": [], "blocks": []},
-      "sampling": {"confirmatory_status": "confirmatory", "planned_n": 0, "observed_complete_n": 0},
+      "bundle_blocks": {
+        "planned_block_ids": [],
+        "included_bundle_ids": [],
+        "blocks": []
+      },
+      "sampling": {
+        "confirmatory_status": "confirmatory",
+        "planned_n": 0,
+        "observed_complete_n": 0
+      },
       "estimator": {
         "name": "paired_block_mean_difference_t_v1",
         "n": 0,
@@ -91,29 +117,58 @@
         "SE_metrology": 999112.5,
         "SE_total": 999113.5,
         "t_critical_95": 999114.5,
-        "repeat_point_CI95": {"lower": 999115.5, "upper": 999116.5},
-        "metrology_aware_CI95": {"lower": 999117.5, "upper": 999118.5},
+        "repeat_point_CI95": {
+          "lower": 999115.5,
+          "upper": 999116.5
+        },
+        "metrology_aware_CI95": {
+          "lower": 999117.5,
+          "upper": 999118.5
+        },
         "variance_contributions": [],
         "excluded_stochastic_terms": [],
         "raw_p": 0.000999001
       },
       "deterministic_bounds": {
-        "terms": [{"name": "E_clock_anchor_shift_bound_j", "bound": 999119.5}],
+        "terms": [
+          {
+            "name": "E_clock_anchor_shift_bound_j",
+            "bound": 999119.5
+          }
+        ],
         "total": 999119.5,
-        "decision_interval": {"lower": 999120.5, "upper": 999121.5}
+        "decision_interval": {
+          "lower": 999120.5,
+          "upper": 999121.5
+        }
       },
       "floor": {
         "status": "resolved",
-        "floor_row_ids": ["SYNTHETIC-REHEARSAL-floor_row_id"],
+        "floor_row_ids": [
+          "SYNTHETIC-REHEARSAL-floor_row_id"
+        ],
         "floor_abs_j": 999103.5,
         "floor_cmp_j": 999104.5,
         "active_floor_j": 999104.5,
         "transport_verdict": "transported",
         "resolutions": []
       },
-      "multiplicity": {"raw_p": 0.000999001, "adjusted_p": 0.000999001, "rejected": true},
-      "randomization_check": {"status": "not_required", "reason": null, "n_blocks": 0, "exact_two_sided_p": null, "rejects": null},
-      "loo": {"status": "not_run", "rows": []},
+      "multiplicity": {
+        "raw_p": 0.000999001,
+        "adjusted_p": 0.000999001,
+        "rejected": true
+      },
+      "randomization_check": {
+        "status": "not_required",
+        "reason": null,
+        "n_blocks": 0,
+        "exact_two_sided_p": null,
+        "rejects": null
+      },
+      "loo": {
+        "status": "not_run",
+        "rows": []
+      },
       "sensitivity_status": "not_run",
       "claim_evaluation": {
         "outcome": "direction_supported",
