@@ -10,6 +10,14 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T27b (2026-08-28) — GATE CORRECTED (D-162): the "DATA reason" live gate
+was unachievable without 7–10 Sol-days of new mint-path code; replaced by
+three modular pieces — G1 desk pre-shakedown (estate 11 + W-11 tail +
+assertion script), G2 on the shakedown night (real pack, one block,
+verdict + binding on real bytes, finalize refusing for EXACTLY the expected
+incompleteness set), G3 the same desk script every campaign night.
+Calendar stands.**
+
 **T27 (2026-08-28) — GATE ADDED: the 20-minute live mini-run
 (PIPELINE-SMOKE-LIVE-01) must reach the claim edge and answer for a DATA
 reason before the shakedown or any `_v4` window (Ed's bar: the next window
