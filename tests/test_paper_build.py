@@ -11,6 +11,13 @@ import sys
 import tempfile
 import unittest
 
+try:  # the HTML build needs markdown-it-py; the lint does not
+    import markdown_it  # noqa: F401
+
+    HAVE_MARKDOWN_IT = True
+except ImportError:  # pragma: no cover - exercised on CI runners without the package
+    HAVE_MARKDOWN_IT = False
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_SCRIPT = ROOT / "docs" / "paper" / "build" / "build_paper.py"
@@ -53,6 +60,7 @@ class PaperBuildTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
 
+    @unittest.skipUnless(HAVE_MARKDOWN_IT, "markdown-it-py not installed; the build cannot run here")
     def test_build_succeeds_and_inlines_figures_and_headings(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(BUILD_SCRIPT)],
@@ -133,6 +141,7 @@ class PaperBuildTests(unittest.TestCase):
         self.assertTrue("Hard defects: 1" in completed.stdout)
 
 
+    @unittest.skipUnless(HAVE_MARKDOWN_IT, "markdown-it-py not installed; the build cannot run here")
     def test_no_mathjax_omits_external_script(self) -> None:
         output = Path(self._tmp.name) / "paper.html"
         completed = subprocess.run(
