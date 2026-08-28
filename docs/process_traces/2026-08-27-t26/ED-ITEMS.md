@@ -28,13 +28,13 @@ gate named beside it.
    hands needed; result recorded below when the empty-diff gate returns.
 3. ~~Notification cadence~~ DECIDED under Ed's 2026-08-27 delegation ("handle everything but the ssh edit"): IMMEDIATE pings per desk event. Ed may reverse by a word.
 4. Transaction calendar — PROPOSED under the same delegation (veto by a word):
-   Thu 08-27 (today): merge #209 + the last pre-mint code (S12/S13/#217),
-   run ESTATE 11 at the new reviewed head; evening: the 20-minute LIVE smoke
-   collection (finalize once the bracket-binding producer lands).
-   Fri 08-28 night: SHAKEDOWN (D-139 shakedown-first; instrument-verification
-   runs, no claims). Sat 08-29 night: the `_v4` transaction — mint, arm,
+   (Slipped one day by the 2026-08-27 evening usage-limit stall.)
+   Fri 08-28: merge #209 (after the S14 lane) + S12; run ESTATE 11 at the new
+   reviewed head; evening: the 20-minute LIVE smoke collection.
+   Sat 08-29 night: SHAKEDOWN (D-139 shakedown-first; instrument-verification
+   runs, no claims). Sun 08-30 night: the `_v4` transaction — mint, arm,
    first window; 168-hour campaign clock from the evidence commit → clean-
-   nightly ≈ Tue 09-01, full-weather ≈ Fri 09-04, campaign close ≈ Sat 09-05.
+   nightly ≈ Wed 09-02, full-weather ≈ Sat 09-05, campaign close ≈ Sun 09-06.
    All of it runs under lead custody (D-148 (4)); the six licensed prompts
    reach Ed in this session wherever he is.
 
