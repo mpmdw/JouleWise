@@ -3,7 +3,22 @@
   "artifact_id": "SYNTHETIC-REHEARSAL-artifact_id-NO-DOMINANCE-ALPHA",
   "calibration_scope": "production_window",
   "source_class": "synthetic",
-  "method": {"method_id": "d054_false_effect_guard.v1"},
+  "method": {
+    "method_id": "d054_false_effect_guard.v1",
+    "t_quantile": 0.975,
+    "t_critical_source": "joulewise.aggregate.student_t_critical_95.v1",
+    "absolute_formula": "max(max_abs_residual_j,t_critical*sample_stddev_j*sqrt(1+1/n))",
+    "comparative_formula": "max(max_abs_delta_j,abs(mean_delta_j)+t_critical*sample_stddev_j*sqrt(1+1/n))",
+    "abba_delta_formula": "(B1+B2-A1-A2)/2",
+    "small_sample_guard": {
+      "rule_id": "residual_df_ratio_to_n10.v1",
+      "formula": "max(1,sqrt((10-1)/(n-1)))",
+      "reference_n": 10,
+      "minimum_n": 5,
+      "maximum_guarded_n_exclusive": 10,
+      "frozen_before_calibration": true
+    }
+  },
   "provenance": {
     "calibration_plan": "SYNTHETIC-REHEARSAL-calibration_plan",
     "mint_tool_version": "SYNTHETIC-REHEARSAL-mint_tool_version",
@@ -26,7 +41,9 @@
         "metric": "phase_energy_j.prefill",
         "window_class": "phase",
         "condition_family_id": "SYNTHETIC-REHEARSAL-condition_family_id-ALPHA-PROMPT",
-        "condition_family_definition": {"fixture": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT"},
+        "condition_family_definition": {
+          "fixture": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT"
+        },
         "condition_family_sha256": "SYNTHETIC-REHEARSAL-condition_family_sha256"
       },
       "eligibility": {
@@ -39,13 +56,56 @@
       "floor_abs_j": 999101.5,
       "floor_cmp_j": 999102.5,
       "floor_gate_j": 999102.5,
-      "absolute": {"drift_widened_guarded_floor_j": 999101.5},
-      "comparative": {"drift_widened_guarded_floor_j": 999102.5},
-      "source_regime": {"fixture": "SYNTHETIC-REHEARSAL-source_regime"},
+      "absolute": {
+        "drift_widened_guarded_floor_j": 999101.5
+      },
+      "comparative": {
+        "drift_widened_guarded_floor_j": 999102.5
+      },
+      "source_regime": {
+        "stack_identity": {
+          "model": "SYNTHETIC-REHEARSAL-model-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT",
+          "runtime": "SYNTHETIC-REHEARSAL-runtime",
+          "device": "SYNTHETIC-REHEARSAL-device"
+        },
+        "stack_identity_sha256": "SYNTHETIC-REHEARSAL-stack_identity_sha256-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT",
+        "stress_observed": {
+          "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+          "power_policy": "SYNTHETIC-REHEARSAL-policy"
+        }
+      },
       "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-PROMPT",
       "provenance": {
-        "absolute": "SYNTHETIC-REHEARSAL-absolute-provenance",
-        "comparative": "SYNTHETIC-REHEARSAL-comparative-provenance"
+        "absolute": {
+          "source_regime": {
+            "stack_identity": {
+              "model": "SYNTHETIC-REHEARSAL-model-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT",
+              "runtime": "SYNTHETIC-REHEARSAL-runtime",
+              "device": "SYNTHETIC-REHEARSAL-device"
+            },
+            "stack_identity_sha256": "SYNTHETIC-REHEARSAL-stack_identity_sha256-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT",
+            "stress_observed": {
+              "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+              "power_policy": "SYNTHETIC-REHEARSAL-policy"
+            }
+          },
+          "report": "SYNTHETIC-REHEARSAL-absolute-report-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT"
+        },
+        "comparative": {
+          "source_regime": {
+            "stack_identity": {
+              "model": "SYNTHETIC-REHEARSAL-model-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT",
+              "runtime": "SYNTHETIC-REHEARSAL-runtime",
+              "device": "SYNTHETIC-REHEARSAL-device"
+            },
+            "stack_identity_sha256": "SYNTHETIC-REHEARSAL-stack_identity_sha256-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT",
+            "stress_observed": {
+              "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+              "power_policy": "SYNTHETIC-REHEARSAL-policy"
+            }
+          },
+          "report": "SYNTHETIC-REHEARSAL-comparative-report-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-PROMPT"
+        }
       }
     },
     {
@@ -55,7 +115,9 @@
         "metric": "phase_energy_j.decode",
         "window_class": "phase",
         "condition_family_id": "SYNTHETIC-REHEARSAL-condition_family_id-ALPHA-DECODE",
-        "condition_family_definition": {"fixture": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE"},
+        "condition_family_definition": {
+          "fixture": "SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE"
+        },
         "condition_family_sha256": "SYNTHETIC-REHEARSAL-condition_family_sha256"
       },
       "eligibility": {
@@ -68,18 +130,65 @@
       "floor_abs_j": 999103.5,
       "floor_cmp_j": 999104.5,
       "floor_gate_j": 999104.5,
-      "absolute": {"drift_widened_guarded_floor_j": 999103.5},
-      "comparative": {"drift_widened_guarded_floor_j": 999104.5},
-      "source_regime": {"fixture": "SYNTHETIC-REHEARSAL-source_regime"},
+      "absolute": {
+        "drift_widened_guarded_floor_j": 999103.5
+      },
+      "comparative": {
+        "drift_widened_guarded_floor_j": 999104.5
+      },
+      "source_regime": {
+        "stack_identity": {
+          "model": "SYNTHETIC-REHEARSAL-model-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE",
+          "runtime": "SYNTHETIC-REHEARSAL-runtime",
+          "device": "SYNTHETIC-REHEARSAL-device"
+        },
+        "stack_identity_sha256": "SYNTHETIC-REHEARSAL-stack_identity_sha256-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE",
+        "stress_observed": {
+          "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+          "power_policy": "SYNTHETIC-REHEARSAL-policy"
+        }
+      },
       "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-DECODE",
       "provenance": {
-        "absolute": "SYNTHETIC-REHEARSAL-absolute-provenance",
-        "comparative": "SYNTHETIC-REHEARSAL-comparative-provenance"
+        "absolute": {
+          "source_regime": {
+            "stack_identity": {
+              "model": "SYNTHETIC-REHEARSAL-model-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE",
+              "runtime": "SYNTHETIC-REHEARSAL-runtime",
+              "device": "SYNTHETIC-REHEARSAL-device"
+            },
+            "stack_identity_sha256": "SYNTHETIC-REHEARSAL-stack_identity_sha256-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE",
+            "stress_observed": {
+              "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+              "power_policy": "SYNTHETIC-REHEARSAL-policy"
+            }
+          },
+          "report": "SYNTHETIC-REHEARSAL-absolute-report-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE"
+        },
+        "comparative": {
+          "source_regime": {
+            "stack_identity": {
+              "model": "SYNTHETIC-REHEARSAL-model-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE",
+              "runtime": "SYNTHETIC-REHEARSAL-runtime",
+              "device": "SYNTHETIC-REHEARSAL-device"
+            },
+            "stack_identity_sha256": "SYNTHETIC-REHEARSAL-stack_identity_sha256-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE",
+            "stress_observed": {
+              "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+              "power_policy": "SYNTHETIC-REHEARSAL-policy"
+            }
+          },
+          "report": "SYNTHETIC-REHEARSAL-comparative-report-SYNTHETIC-REHEARSAL-NO-DOMINANCE-ALPHA-DECODE"
+        }
       }
     }
   ],
   "transport_groups": [
-    {"transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-PROMPT"},
-    {"transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-DECODE"}
+    {
+      "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-PROMPT"
+    },
+    {
+      "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-ALPHA-DECODE"
+    }
   ]
 }

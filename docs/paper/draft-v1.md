@@ -329,7 +329,7 @@ Hähnel et al. are the closest ancestor to this boundary problem. RAPL's update 
 
 *The Illusion of Power Capping in LLM Decode* is the closest methodological rival. It is phase-aware, repeats configurations, and independently checks sufficiently long sampled-power integrals against a hardware energy counter [20]. JouleWise lacks that independent cross-check. Its narrower advance is different: the power-capping study reports counter agreement, repetition, and timing regimes as separate diagnostics, whereas JouleWise carries uncertain phase-edge placement into the bound that decides whether a phase contrast may be reported.
 
-TokenPowerBench reports prefill and decode energy and groups measurements by context length [7]. Its disclosed method does not specify the boundary events, alignment rule, repetition and variance protocol, idle baseline, or external validation needed to reconstruct a phase-attribution error budget. Ruf and Detyniecki isolate prefill by generating one token and infer decode by subtraction, from one run per context length without error bars [19]. Broader efforts such as ML.ENERGY, Intelligence per Watt, and Apple-focused inference characterizations map energy across useful deployed configurations [8] [22] [13]. They answer system-selection questions; JouleWise instead asks whether one named software-counter boundary can support a phase claim at all.
+TokenPowerBench reports prefill and decode energy and groups measurements by context length [7]. Its disclosed method does not specify the boundary events, alignment rule, repetition and variance protocol, idle baseline, or external validation needed to reconstruct a phase-attribution error budget. Ruf and Detyniecki isolate prefill by generating one token and infer decode by subtraction, from one run per context length without error bars [19]. Broader efforts such as ML.ENERGY, Intelligence per Watt, and Apple-focused inference characterizations map energy across useful deployed configurations [8] [22], and Benazir and Lin characterize inference throughput on Apple silicon without energy measurement [13]. They answer system-selection questions; JouleWise instead asks whether one named software-counter boundary can support a phase claim at all.
 
 ### Benchmark and metrology lineage
 
@@ -610,9 +610,9 @@ The median absolute deviation (MAD) is the median of the absolute distances from
                d_on  ← argmin over d ∈ G(d_on,  s) of Loss(d, d_off)
                d_off ← argmin over d ∈ G(d_off, s) of Loss(d_on, d)
 
-    Eight one-dimensional searches in all — onset and offset at the coarse step, then the same pair at the fine step. The repository artifact guide states the tie-break rule. Write *Loss** for the loss at the pair (*d_on*, *d_off*) the procedure ends with — the fit's best loss. It is used in steps 7 and 8 and in the loss limit below.
+    Eight one-dimensional searches in all — onset and offset at the coarse step, then the same pair at the fine step. The repository artifact guide states the tie-break rule. Write *Loss\** for the loss at the pair (*d_on*, *d_off*) the procedure ends with — the fit's best loss. It is used in steps 7 and 8 and in the loss limit below.
 
-7. **Significance.** Let *Loss_flat* = Σ_{I_i ∈ L} ρ((*y_i* − *b*)/σ), the loss of a model with no pulse at all. Require *Loss** < 0.5·*Loss_flat*; otherwise → `model_fit_not_significant`.
+7. **Significance.** Let *Loss_flat* = Σ_{I_i ∈ L} ρ((*y_i* − *b*)/σ), the loss of a model with no pulse at all. Require *Loss\** < 0.5·*Loss_flat*; otherwise → `model_fit_not_significant`.
 8. **Shift limit.** Require |*d_on*| < 0.5 s and |*d_off*| < 0.5 s (`MAX_VALIDATED_EDGE_SHIFT_S`); a fitted shift of 0.5 s or more → `fitted_shift_exceeds_validation_limit`. The search range (±0.75 s) is deliberately wider than the acceptance range (±0.5 s) so that a true shift near the acceptance edge is found rather than pinned.
 
 **The accepted region.** The fitted point is not the output. Define the **loss limit**

@@ -51,13 +51,13 @@
       "plan_id": "SYNTHETIC-REHEARSAL-plan_id",
       "claim_role": "primary",
       "method": "holm",
-      "alpha": 0.05,
+      "alpha": 0.999001,
       "q": null,
       "m": 1,
       "contrast_ids": ["SYNTHETIC-REHEARSAL-contrast_id"],
       "finite_test_count": 1,
       "raw_ordering": ["SYNTHETIC-REHEARSAL-contrast_id"],
-      "adjusted_p_values": {"SYNTHETIC-REHEARSAL-contrast_id": 0.0},
+      "adjusted_p_values": {"SYNTHETIC-REHEARSAL-contrast_id": 0.000999001},
       "missing_test_ids": [],
       "structural_status": "complete"
     }
@@ -95,7 +95,7 @@
         "metrology_aware_CI95": {"lower": 999117.5, "upper": 999118.5},
         "variance_contributions": [],
         "excluded_stochastic_terms": [],
-        "raw_p": 0.0
+        "raw_p": 0.000999001
       },
       "deterministic_bounds": {
         "terms": [{"name": "E_clock_anchor_shift_bound_j", "bound": 999119.5}],
@@ -111,7 +111,7 @@
         "transport_verdict": "transported",
         "resolutions": []
       },
-      "multiplicity": {"raw_p": 0.0, "adjusted_p": 0.0, "rejected": true},
+      "multiplicity": {"raw_p": 0.000999001, "adjusted_p": 0.000999001, "rejected": true},
       "randomization_check": {"status": "not_required", "reason": null, "n_blocks": 0, "exact_two_sided_p": null, "rejects": null},
       "loo": {"status": "not_run", "rows": []},
       "sensitivity_status": "not_run",
