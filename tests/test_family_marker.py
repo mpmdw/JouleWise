@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import copy
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
@@ -16,9 +17,22 @@ from joulewise import scheduler_gates
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REFRESH_SCRIPT = ROOT / "scripts/refresh_receipt_histsem_pinset.py"
 SHA = "0" * 64
 OID = "a" * 40
 TREE = "b" * 40
+
+
+def refresh_lane_module():
+    spec = importlib.util.spec_from_file_location(
+        "joulewise_refresh_receipt_histsem_pinset_family_test",
+        REFRESH_SCRIPT,
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError("cannot load refresh lane")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def digest(label: str) -> str:
@@ -772,27 +786,43 @@ class FamilyMarkerMechanismTests(unittest.TestCase):
         S-5 lane is chosen by phase, and candidate mode authenticates against
         the reviewed $INPUT manifest, so nothing downstream reads these files.
         They exist because S-0 runsheet 1.3 runs `shasum -a 256 -c` on them.
-        This test is what stops them going stale: edit a tool without
-        regenerating its sidecar and the suite goes red.
+        This test is what stops them going stale: the reviewed refresh lane,
+        rather than a hand `shasum`, owns both the set and exact regeneration
+        format.
         """
 
-        for name in (
+        lane = refresh_lane_module()
+        ruled_names = {
             "build_family_marker.py",
             "verify_family_marker.py",
             "build_v4_histsem_pinset.py",
             "verify_receipt_histsem.py",
-        ):
+        }
+        self.assertTrue(ruled_names.issubset(set(lane.CUSTODY_TOOL_SIDECARS)))
+        self.assertEqual(
+            len(lane.CUSTODY_TOOL_SIDECARS),
+            len(set(lane.CUSTODY_TOOL_SIDECARS)),
+        )
+        for name in lane.CUSTODY_TOOL_SIDECARS:
             with self.subTest(tool=name):
                 tool = ROOT / "scripts" / name
                 sidecar = tool.with_name(f"{name}.sha256")
                 self.assertTrue(sidecar.is_file(), f"missing sidecar for {name}")
                 self.assertEqual(
                     sidecar.read_bytes(),
-                    readiness.gnu_sidecar(
-                        readiness.sha256_bytes(tool.read_bytes()), name
-                    ),
-                    f"{name}.sha256 is stale -- regenerate it",
+                    lane.render_tool_sidecar(tool.read_bytes(), name),
+                    f"{name}.sha256 is stale -- run the reviewed refresh lane",
                 )
+
+        # The lane's own sidecar uses the identical renderer but is not in the
+        # CLI-owned set: self-rewriting plus the dirty-path refusal would need
+        # two commits and could not be idempotent inside one reviewed change.
+        name = REFRESH_SCRIPT.name
+        self.assertNotIn(name, lane.CUSTODY_TOOL_SIDECARS)
+        self.assertEqual(
+            REFRESH_SCRIPT.with_name(f"{name}.sha256").read_bytes(),
+            lane.render_tool_sidecar(REFRESH_SCRIPT.read_bytes(), name),
+        )
 
 
 class FamilyMarkerLiveFixtureTests(unittest.TestCase):

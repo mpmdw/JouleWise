@@ -978,6 +978,7 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
                 "--repository-root",
                 "--pinset",
                 "--refresh-row",
+                "--refresh-tool-sidecars",
                 "--output",
                 "--print-pinset-sha256",
                 "--write-test-pin",
@@ -993,6 +994,205 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
             self.assertNotIn(forbidden, uncommented)
         for mutating_git_argument in ('"add"', '"commit"', '"update-ref"'):
             self.assertNotIn(mutating_git_argument, uncommented)
+
+    def _tool_repository(self) -> Path:
+        temporary = tempfile.TemporaryDirectory(
+            prefix="joulewise-histsem-tool-sidecars-"
+        )
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name) / "repository"
+        repository.mkdir()
+        git(repository, "init", "-q")
+        git(repository, "config", "user.email", "histsem-sidecars@invalid")
+        git(repository, "config", "user.name", "histsem sidecar test")
+        scripts = repository / "scripts"
+        scripts.mkdir()
+        lane = self._refresh_module()
+        for name in lane.CUSTODY_TOOL_SIDECARS:
+            shutil.copyfile(ROOT / "scripts" / name, scripts / name)
+            shutil.copyfile(
+                ROOT / "scripts" / f"{name}.sha256",
+                scripts / f"{name}.sha256",
+            )
+        git(repository, "add", "scripts")
+        git(repository, "commit", "-qm", "install custody tools and sidecars")
+        git(repository, "update-ref", "refs/remotes/origin/sidecar-test", "HEAD")
+        return repository
+
+    def test_tool_sidecar_refreshes_stale_committed_tool_and_is_idempotent(
+        self,
+    ) -> None:
+        repository = self._tool_repository()
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        tool = repository / "scripts" / name
+        sidecar = repository / "scripts" / f"{name}.sha256"
+        tool.write_bytes(tool.read_bytes() + b"\n# sidecar refresh regression\n")
+        git(repository, "add", tool.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", "edit one custody tool")
+        git(repository, "update-ref", "refs/remotes/origin/sidecar-test", "HEAD")
+
+        stale = sidecar.read_bytes()
+        expected = lane.render_tool_sidecar(tool.read_bytes(), name)
+        self.assertNotEqual(stale, expected)
+        committed_tool = git(
+            repository, "show", f"HEAD:scripts/{name}"
+        ).stdout.encode()
+        self.assertEqual(committed_tool, tool.read_bytes())
+
+        refreshed = self._run_refresh(repository, "--refresh-tool-sidecars")
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+        self.assertIn(f"--- scripts/{name}.sha256@old\n", refreshed.stdout)
+        self.assertIn(f"+++ scripts/{name}.sha256@new\n", refreshed.stdout)
+        self.assertIn(f"-{stale.decode().rstrip()}\n", refreshed.stdout)
+        self.assertIn(f"+{expected.decode().rstrip()}\n", refreshed.stdout)
+        self.assertEqual(sidecar.read_bytes(), expected)
+        self.assertEqual(tool.read_bytes(), committed_tool)
+
+        git(repository, "add", sidecar.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", "publish refreshed custody sidecar")
+        git(repository, "update-ref", "refs/remotes/origin/sidecar-test", "HEAD")
+        before = sidecar.read_bytes()
+        before_mtimes = {
+            member: (repository / "scripts" / f"{member}.sha256").stat().st_mtime_ns
+            for member in lane.CUSTODY_TOOL_SIDECARS
+        }
+        second = self._run_refresh(repository, "--refresh-tool-sidecars")
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertEqual(
+            second.stdout,
+            "".join(
+                f"sidecar {member} is already current\n"
+                for member in lane.CUSTODY_TOOL_SIDECARS
+            ),
+        )
+        self.assertEqual(sidecar.read_bytes(), before)
+        self.assertEqual(
+            {
+                member: (
+                    repository / "scripts" / f"{member}.sha256"
+                ).stat().st_mtime_ns
+                for member in lane.CUSTODY_TOOL_SIDECARS
+            },
+            before_mtimes,
+        )
+        self.assertEqual(git(repository, "status", "--porcelain").stdout, "")
+
+    def test_tool_sidecar_refresh_refuses_dirty_tool_or_sidecar(self) -> None:
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        for dirty_path in (f"scripts/{name}", f"scripts/{name}.sha256"):
+            with self.subTest(dirty_path=dirty_path):
+                repository = self._tool_repository()
+                path = repository / dirty_path
+                path.write_bytes(path.read_bytes() + b"# dirty sidecar regression\n")
+                originals = {
+                    member: (repository / "scripts" / f"{member}.sha256").read_bytes()
+                    for member in lane.CUSTODY_TOOL_SIDECARS
+                }
+                refused = self._run_refresh(
+                    repository, "--refresh-tool-sidecars"
+                )
+                self.assertEqual(refused.returncode, 2, refused.stdout)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(
+                    payload["reason_codes"], ["histsem_binding_mismatch"]
+                )
+                self.assertIn("not the HEAD blob", payload["detail"])
+                for member, original in originals.items():
+                    self.assertEqual(
+                        (repository / "scripts" / f"{member}.sha256").read_bytes(),
+                        original,
+                    )
+
+    def test_tool_sidecar_refresh_refuses_unpublished_head(self) -> None:
+        repository = self._tool_repository()
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        tool = repository / "scripts" / name
+        sidecar = repository / "scripts" / f"{name}.sha256"
+        tool.write_bytes(tool.read_bytes() + b"\n# unpublished sidecar regression\n")
+        git(repository, "add", tool.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", "local-only custody tool edit")
+        original = sidecar.read_bytes()
+
+        refused = self._run_refresh(repository, "--refresh-tool-sidecars")
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(
+            payload["reason_codes"], ["histsem_commit_unpublished"]
+        )
+        self.assertIn("current HEAD", payload["detail"])
+        self.assertEqual(sidecar.read_bytes(), original)
+
+    def test_tool_sidecar_mode_never_accepts_a_tool_as_a_pinset_output(
+        self,
+    ) -> None:
+        repository, _pack, _pinset = self._repository()
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        tool = repository / "scripts" / name
+        original = tool.read_bytes()
+        refused = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--refresh-tool-sidecars",
+            "--output",
+            f"scripts/{name}",
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+        self.assertIn("must not target", payload["detail"])
+        self.assertEqual(tool.read_bytes(), original)
+
+    def test_refresh_row_and_tool_sidecars_compose_in_one_invocation(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-composed.json")
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        tool = repository / "scripts" / name
+        sidecar = repository / "scripts" / f"{name}.sha256"
+        tool.write_bytes(tool.read_bytes() + b"\n# composed refresh regression\n")
+        git(repository, "add", tool.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", "edit custody tool for composed refresh")
+        git(repository, "update-ref", "refs/remotes/origin/refresh-test", "HEAD")
+        expected = lane.render_tool_sidecar(tool.read_bytes(), name)
+
+        refreshed = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--refresh-tool-sidecars",
+        )
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+        self.assertIn(f"#{REPRESENTATIVE_PACK.name}@old", refreshed.stdout)
+        self.assertIn(f"scripts/{name}.sha256@old", refreshed.stdout)
+        self.assertEqual(sidecar.read_bytes(), expected)
+        self.assertIn(
+            "arm_readiness.sources/refresh-composed.json",
+            self._row(pinset.read_bytes())["post_authoring_delta"]["added"],
+        )
+
+    def test_real_worktree_tool_sidecar_refresh_is_a_no_op(self) -> None:
+        lane = self._refresh_module()
+        completed = self._run_refresh(ROOT, "--refresh-tool-sidecars")
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(
+            completed.stdout,
+            "".join(
+                f"sidecar {name} is already current\n"
+                for name in lane.CUSTODY_TOOL_SIDECARS
+            ),
+        )
+        pathspecs = [
+            f"scripts/{name}.sha256" for name in lane.CUSTODY_TOOL_SIDECARS
+        ]
+        self.assertEqual(
+            git(ROOT, "status", "--porcelain", "--", *pathspecs).stdout,
+            "",
+        )
 
     def test_refresh_lane_turns_stale_row_refuse_into_pass(self) -> None:
         repository, pack, pinset = self._repository()

@@ -37,6 +37,19 @@ _TEST_PIN = re.compile(
     rb'(?m)^(PINSET_SHA256 = ")[0-9a-f]{64}("\r?)$'
 )
 
+# The CLI-owned set deliberately excludes this script.  Including a tool that
+# rewrites its own authenticator makes an honest one-change review cycle
+# impossible: before commit the dirty-tool guard must refuse, and after the
+# sidecar write the dirty-sidecar guard must refuse until a second commit.  The
+# script's own committed sidecar is instead pinned by the family-marker test
+# with the same public renderer below.
+CUSTODY_TOOL_SIDECARS = (
+    "build_family_marker.py",
+    "verify_family_marker.py",
+    "build_v4_histsem_pinset.py",
+    "verify_receipt_histsem.py",
+)
+
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -47,6 +60,7 @@ def _parser() -> argparse.ArgumentParser:
         default=readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[0],
     )
     parser.add_argument("--refresh-row", action="append", default=[], metavar="PACK_ID")
+    parser.add_argument("--refresh-tool-sidecars", action="store_true")
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--print-pinset-sha256", action="store_true")
     parser.add_argument("--write-test-pin", type=Path, default=None)
@@ -106,19 +120,30 @@ def _require_clean_pack(repository: Path, pack_path: str) -> None:
         )
 
 
-def _require_reviewable_heads(repository: Path, head_commit: str) -> None:
-    code, _stdout, _stderr = readiness._histsem_git(
+def _tool_paths(name: str) -> tuple[str, str]:
+    tool_path = f"scripts/{name}"
+    return tool_path, f"{tool_path}.sha256"
+
+
+def _require_clean_tool_sidecar(repository: Path, name: str) -> None:
+    tool_path, sidecar_path = _tool_paths(name)
+    dirty = _git(
         repository,
-        "merge-base",
-        "--is-ancestor",
-        head_commit,
-        "origin/main",
+        "status",
+        "--porcelain",
+        "--",
+        tool_path,
+        sidecar_path,
     )
-    if code != 0:
+    if dirty:
+        detail = dirty.decode("utf-8", errors="replace").strip()
         raise _refusal(
-            "histsem_commit_unpublished",
-            f"historical receipt commit {head_commit} is not an ancestor of origin/main",
+            "histsem_binding_mismatch",
+            f"custody tool {name!r} or its sidecar is not the HEAD blob: {detail}",
         )
+
+
+def _require_current_head_reviewable(repository: Path) -> None:
     remote_refs = _git(
         repository,
         "for-each-ref",
@@ -132,6 +157,110 @@ def _require_reviewable_heads(repository: Path, head_commit: str) -> None:
             "histsem_commit_unpublished",
             "current HEAD is not reachable from a remote-tracking ref",
         )
+
+
+def _require_reviewable_heads(repository: Path, head_commit: str) -> None:
+    code, _stdout, _stderr = readiness._histsem_git(
+        repository,
+        "merge-base",
+        "--is-ancestor",
+        head_commit,
+        "origin/main",
+    )
+    if code != 0:
+        raise _refusal(
+            "histsem_commit_unpublished",
+            f"historical receipt commit {head_commit} is not an ancestor of origin/main",
+        )
+    _require_current_head_reviewable(repository)
+
+
+def render_tool_sidecar(tool_bytes: bytes, name: str) -> bytes:
+    """Render the one governed GNU sidecar format for a custody tool."""
+
+    return readiness.gnu_sidecar(readiness.sha256_bytes(tool_bytes), name)
+
+
+def _sidecar_diff(relative_path: str, old: bytes, new: bytes) -> str:
+    before = old.decode("utf-8").splitlines(keepends=True)
+    after = new.decode("utf-8").splitlines(keepends=True)
+    return "".join(
+        difflib.unified_diff(
+            before,
+            after,
+            fromfile=f"{relative_path}@old",
+            tofile=f"{relative_path}@new",
+        )
+    )
+
+
+def _head_blob(repository: Path, relative_path: str) -> bytes:
+    code, raw, stderr = readiness._histsem_git(
+        repository,
+        "show",
+        f"HEAD:{relative_path}",
+    )
+    if code != 0:
+        detail = stderr.decode("utf-8", errors="replace").strip()
+        raise _refusal(
+            "histsem_history_unavailable",
+            f"cannot read committed custody tool {relative_path!r}"
+            f"{': ' + detail if detail else ''}",
+        )
+    return raw
+
+
+def _prepare_tool_sidecars(
+    repository: Path,
+) -> list[tuple[str, Path, bytes, bytes, str]]:
+    for name in CUSTODY_TOOL_SIDECARS:
+        _require_clean_tool_sidecar(repository, name)
+    _require_current_head_reviewable(repository)
+
+    prepared: list[tuple[str, Path, bytes, bytes, str]] = []
+    for name in CUSTODY_TOOL_SIDECARS:
+        tool_relative, sidecar_relative = _tool_paths(name)
+        tool_raw = _head_blob(repository, tool_relative)
+        sidecar_path = repository / sidecar_relative
+        try:
+            old = sidecar_path.read_bytes()
+        except OSError as exc:
+            raise _refusal(
+                "histsem_history_unavailable",
+                f"cannot read custody-tool sidecar {sidecar_relative!r}: {exc}",
+            ) from exc
+        new = render_tool_sidecar(tool_raw, name)
+        prepared.append(
+            (
+                name,
+                sidecar_path,
+                old,
+                new,
+                _sidecar_diff(sidecar_relative, old, new) if old != new else "",
+            )
+        )
+    return prepared
+
+
+def _write_tool_sidecars(
+    prepared: list[tuple[str, Path, bytes, bytes, str]],
+) -> tuple[list[str], list[str]]:
+    written: list[tuple[Path, bytes]] = []
+    try:
+        for _name, path, old, new, _diff in prepared:
+            if old != new:
+                written.append((path, old))
+                path.write_bytes(new)
+                if path.read_bytes() != new:
+                    raise OSError(f"written sidecar bytes differ from candidate: {path}")
+    except BaseException:
+        for path, old in reversed(written):
+            path.write_bytes(old)
+        raise
+    return (
+        [diff for _name, _path, _old, _new, diff in prepared if diff],
+        [name for name, _path, old, new, _diff in prepared if old == new],
+    )
 
 
 def _immutable_field_for(detail: str) -> str:
@@ -247,6 +376,50 @@ def _restore(path: Path, existed: bool, raw: bytes) -> None:
         path.unlink()
 
 
+def _refresh_write_backups(
+    repository: Path,
+    args: argparse.Namespace,
+) -> list[tuple[Path, bool, bytes]]:
+    pinset_path = _resolve_from(repository, args.pinset)
+    output_path = pinset_path if args.output is None else _resolve_from(repository, args.output)
+    paths = [output_path]
+    if args.write_test_pin is not None:
+        paths.append(_resolve_from(repository, args.write_test_pin))
+    backups: list[tuple[Path, bool, bytes]] = []
+    for path in dict.fromkeys(paths):
+        existed = path.exists()
+        backups.append((path, existed, path.read_bytes() if existed else b""))
+    return backups
+
+
+def _restore_backups(backups: list[tuple[Path, bool, bytes]]) -> None:
+    for path, existed, raw in reversed(backups):
+        _restore(path, existed, raw)
+
+
+def _require_sidecar_write_separation(
+    repository: Path,
+    args: argparse.Namespace,
+) -> None:
+    targets: list[Path] = []
+    if args.output is not None:
+        targets.append(_resolve_from(repository, args.output))
+    if args.write_test_pin is not None:
+        targets.append(_resolve_from(repository, args.write_test_pin))
+    governed_paths = {
+        (repository / relative).resolve(strict=False)
+        for name in CUSTODY_TOOL_SIDECARS
+        for relative in _tool_paths(name)
+    }
+    collisions = sorted(str(path) for path in targets if path in governed_paths)
+    if collisions:
+        raise _refusal(
+            "histsem_pinset_invalid",
+            "pinset outputs must not target governed custody tools or sidecars: "
+            + ", ".join(collisions),
+        )
+
+
 def refresh(args: argparse.Namespace) -> tuple[bytes, list[str], list[str]]:
     repository = args.repository_root.resolve(strict=True)
     pinset_path = _resolve_from(repository, args.pinset)
@@ -347,8 +520,40 @@ def _emit_refusal(exc: readiness.HistoricalSemanticsError) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    raw = b""
+    diffs: list[str] = []
+    current: list[str] = []
+    sidecar_diffs: list[str] = []
+    sidecar_current: list[str] = []
     try:
-        raw, diffs, current = refresh(args)
+        repository = args.repository_root.resolve(strict=True)
+        if args.refresh_tool_sidecars:
+            _require_sidecar_write_separation(repository, args)
+        prepared = (
+            _prepare_tool_sidecars(repository)
+            if args.refresh_tool_sidecars
+            else []
+        )
+        run_pinset_refresh = bool(
+            args.refresh_row
+            or args.print_pinset_sha256
+            or args.write_test_pin is not None
+            or args.output is not None
+            or not args.refresh_tool_sidecars
+        )
+        backups = (
+            _refresh_write_backups(repository, args)
+            if args.refresh_tool_sidecars and run_pinset_refresh
+            else []
+        )
+        try:
+            if run_pinset_refresh:
+                raw, diffs, current = refresh(args)
+            if args.refresh_tool_sidecars:
+                sidecar_diffs, sidecar_current = _write_tool_sidecars(prepared)
+        except BaseException:
+            _restore_backups(backups)
+            raise
     except readiness.HistoricalSemanticsError as exc:
         return _emit_refusal(exc)
     except readiness.ArmReadinessError as exc:
@@ -364,6 +569,10 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(diff)
     for pack_id in current:
         sys.stdout.write(f"row {pack_id} is already current\n")
+    for diff in sidecar_diffs:
+        sys.stdout.write(diff)
+    for name in sidecar_current:
+        sys.stdout.write(f"sidecar {name} is already current\n")
     if args.print_pinset_sha256:
         digest = readiness.sha256_bytes(raw)
         sys.stdout.write(f"pinset sha256: {digest}\n")

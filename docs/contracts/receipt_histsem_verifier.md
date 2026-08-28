@@ -56,6 +56,26 @@ and digest before constructing a candidate, then requires that candidate to
 pass the ordinary pack verifier before and after the canonical write; a
 post-write refusal restores the original bytes.
 
+The same lane's composable `--refresh-tool-sidecars` mode owns the exact GNU
+sidecar rendering and the ruled set `build_family_marker.py`,
+`verify_family_marker.py`, `build_v4_histsem_pinset.py`, and
+`verify_receipt_histsem.py`. It refuses `histsem_binding_mismatch` if a governed
+tool or its `.sha256` path is dirty and refuses `histsem_commit_unpublished` if
+current `HEAD` is not reachable from a remote-tracking ref. After those checks,
+it hashes each tool's committed `HEAD:scripts/<name>` blob (the clean-path check
+makes those bytes equal to the worktree tool), diffs the old and regenerated
+sidecar bytes, and writes only changed sidecars. It never writes a tool. The
+family-marker sidecar test imports this lane's tuple and renderer: that test is
+the staleness tripwire, and this mode is the reviewed regenerator.
+
+The refresh script's own committed sidecar uses the same exported renderer but
+is deliberately outside the CLI-owned tuple. A self-rewriting authenticator is
+incompatible with the required dirty-tool and dirty-sidecar refusals inside one
+reviewed change: the tool is dirty before its first commit, and its newly
+written sidecar is dirty until a second commit. Its separate exact-byte
+family-marker assertion therefore keeps it current in the same reviewed change
+without weakening the CLI's fail-closed rule.
+
 The lane refuses rather than changing `historical_pack_sha256`, `head_commit`,
 `freeze_receipt`, `plan_sha256`, `plan_tree_sha256`, `pack_id`, `pack_path`,
 `published_anchor`, `receipt_count`, or `receipts`. Dirty pack bytes,
