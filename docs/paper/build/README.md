@@ -35,3 +35,12 @@ pandoc docs/paper/draft-v1.md -o draft-v1.pdf
 The LaTeX-free alternative is to open
 `docs/paper/build/out/draft-v1.html` in a browser and choose **Print → Save as
 PDF**.
+
+## Known limitation (2026-08-28 review)
+
+Math spans are extracted before Markdown code-span parsing, so a literal
+`\[ ... \]` or `\( ... \)` written inside backticks would be treated as math
+rather than as code. The frozen draft contains no such span (verified by the
+review seat with a probe input), so the build is correct for the current
+draft; fix the ordering before relying on the builder for a draft that quotes
+math delimiters inside code.

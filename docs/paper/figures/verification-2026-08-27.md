@@ -272,3 +272,17 @@ git status --short --branch
 git diff --check -- docs/paper/figures docs/paper/figures-plan.md
 git diff --stat -- docs/paper/figures docs/paper/figures-plan.md
 ```
+
+## Director addendum (2026-08-28) — PNG export landed after this report
+
+The statement above that no PNG was created is superseded. The Sol seat could
+not run Quick Look inside its sandbox; the director ran the export lead-side.
+A plain `qlmanage -t` clips wide figures (verified: the direct thumbnail of
+Figure 3 lost the "refused" and "directional claim" boxes), so
+`png/export_png.sh` wraps each SVG in a white square canvas, renders at
+2400 px, and crops back to the figure's aspect ratio. Results, each opened
+and inspected by the director: `png/fig1.png` 2400×1482, `png/fig2.png`
+2400×1240, `png/fig3.png` 2400×1536 — every element named in the draft's
+figure paragraphs and captions is visible and nothing is clipped. A fresh
+read-only Sol check confirmed the aspect ratios match the SVG viewBoxes
+within 0.03%.
