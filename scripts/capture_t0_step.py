@@ -12,7 +12,6 @@ import argparse
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -27,6 +26,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from joulewise import arm_readiness as readiness  # noqa: E402
+from joulewise.arm_readiness_evidence_t0 import (  # noqa: E402
+    WINDOW_ENV_KEYS,
+    WindowEnvironmentParseError,
+    parse_window_environment,
+)
 
 
 COMMAND_CAPTURE_SCHEMA = "joulewise.arm_readiness_t0_command_capture.v1"
@@ -81,35 +85,9 @@ CAPTURE_REASON_CODES = frozenset(
     }
 )
 
-_ENV_KEYS = frozenset(
-    {
-        "MEASUREMENT_REPO",
-        "WINDOW_ID",
-        "BRACKET_SESSION_ID",
-        "FROZEN_PLAN",
-        "PACK_ROOT",
-        "PACK_ID",
-        "PLAN_ID",
-        "EVIDENCE_ROOT_ID",
-        "IDENTITY_EPOCH_JSON",
-        "T1_BINDINGS_JSON",
-        "PRE_ATTEMPT_ID",
-        "POST_ATTEMPT_ID",
-        "RUNS_ROOT",
-        "BOUND_RUNS_ROOT",
-        "CALIBRATION_LEDGER",
-        "LEDGER_HEAD_PIN",
-        "ARM_READINESS_CUSTODY_ROOT",
-        "CUSTODY_ROOT",
-        "WINDOW_CUSTODY_ROOT",
-        "QUARANTINE_ROOT",
-        "CLAIM_BACKUP_DEST",
-        "BOUND_BACKUP_DEST",
-        "WAIVER_PATH",
-        "POWER_POLICY",
-        "SETTLE_S",
-    }
-)
+# Compatibility name for the rehearsal builder; this is the shared contract
+# object, not a second key set.
+_ENV_KEYS = WINDOW_ENV_KEYS
 
 
 class CaptureT0Error(ValueError):
@@ -207,45 +185,12 @@ def _write_no_clobber(path: Path, raw: bytes, *, accept_identical: bool) -> bool
 
 def _parse_window_environment(raw: bytes) -> dict[str, str]:
     try:
-        text = raw.decode("utf-8", errors="strict")
-    except UnicodeDecodeError as exc:
+        return parse_window_environment(raw)
+    except WindowEnvironmentParseError as exc:
         raise _refuse(
             "evidence_author_t0_capture_environment_invalid",
-            "window.env is not UTF-8",
+            exc.detail,
         ) from exc
-    values: dict[str, str] = {}
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        match = re.fullmatch(r"([A-Z][A-Z0-9_]*)=(.*)", stripped)
-        if match is None:
-            raise _refuse(
-                "evidence_author_t0_capture_environment_invalid",
-                f"window.env contains a non-assignment line: {stripped!r}",
-            )
-        name, value_text = match.groups()
-        try:
-            parts = shlex.split(value_text, posix=True)
-        except ValueError as exc:
-            raise _refuse(
-                "evidence_author_t0_capture_environment_invalid",
-                f"window.env value for {name} is malformed",
-            ) from exc
-        if name in values or len(parts) != 1 or "$" in parts[0]:
-            raise _refuse(
-                "evidence_author_t0_capture_environment_invalid",
-                f"window.env value for {name} is ambiguous",
-            )
-        values[name] = parts[0]
-    missing = _ENV_KEYS - set(values)
-    unknown = set(values) - _ENV_KEYS
-    if missing or unknown:
-        raise _refuse(
-            "evidence_author_t0_capture_environment_invalid",
-            f"window.env exact keys differ; missing={sorted(missing)!r}, unknown={sorted(unknown)!r}",
-        )
-    return values
 
 
 def _current_boot_session_id() -> str:

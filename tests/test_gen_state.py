@@ -30,7 +30,6 @@ EXPECTED_IDS = {
     "SUPERSESSION-CROSS-CONSUMER-DIVERGENCE-01",
     "T0-REHEARSAL-PRODUCERS-01",
     "COLLECTOR-MANIFEST-SHA-IDENTITY-01",
-    "T0-ENV-PARSER-UNIFY-01",
     "PIPELINE-SMOKE-TIER2-01",
     "PIPELINE-SMOKE-LIVE-01",
     "HISTPACK-PROMISOR-NOFETCH-01",
@@ -496,11 +495,13 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # 90 + 18 = 108;
         # 108 - 2 = 106: the 2026-08-27 T26 S13 stream closes
         # HISTPACK-TEMP-CLEANUP-01 (PR #222: the histsem scratch checkout
-        # is unwound when cleanup raises before removal), and S10 closes
-        # BRACKET-BINDING-CLI-01 (PR #217, cfffce95; runbook delta in the
-        # docs PR that carries this count): 106 exact live records.
+        # is unwound before raising) and S10 closes BRACKET-BINDING-CLI-01
+        # (PR #217 producer + PR #223 runbook); the 2026-08-28 T27 S12
+        # stream closes T0-ENV-PARSER-UNIFY-01 (PR #221: one shared 25-key
+        # window.env contract at both T-0 boundaries):
+        # 106 - 1 = 105 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 106)
+        self.assertEqual(len(self.tasks), 105)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

@@ -2,7 +2,7 @@
 
 This is qualification choreography evidence, never claim evidence. The pack is the pre-publication ALPHA successor at the designated measurement checkout `/Users/edr/JouleWise-measurement-20260818`, which began from transaction commit `28a0daa22ca17d5c27df94879763e57c34665646`; Ed's terminal-review commit advances its HEAD. Pack bytes and the authenticated freeze-0002 receipt stay in that checkout. Every mutable custody, ledger, run, and backup namespace is below the literal scratch root below.
 
-`window.env` deliberately has the producer's enforced exact 25-key set, which excludes `ARM_RECEIPT` and `LAUNCH_MANIFEST`; this differs from the runbook chain wording. The paths are derived after ARM in this card; do not edit `window.env`.
+`window.env` deliberately has the producer's enforced exact 25-key set, which excludes `ARM_RECEIPT` and `LAUNCH_MANIFEST`; the runbook and this card derive those paths outside the file, so do not edit `window.env`.
 
 | Step | level |
 | --- | --- |
