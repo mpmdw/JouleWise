@@ -1,8 +1,9 @@
 # Run one diagnostic measurement window
 
 This tutorial takes a clean checkout — repository files with no local edits —
-through the smallest committed production-shaped campaign: a scheduled run
-that uses real components rather than substitutes. It runs the model with
+through the smallest committed production-shaped **shakedown** campaign: a
+deliberately small run that exercises the real machinery end to end to expose
+faults, not to produce a research number. It runs the model with
 MLX, Apple's machine-learning runtime, while macOS `powermetrics`, a program
 that records processor power, measures it. A **measurement window** is the
 uninterrupted period in which the Mac is prepared, left untouched, measured,
@@ -12,23 +13,32 @@ checks the resulting files. This window produces a real verdict, but it is
 **diagnostic**: it tests whether the instrument's collection plumbing works.
 It is not **claim-bearing**, meaning its result may not be used to support a
 capstone conclusion about model energy. A planned, roughly 20-minute
-end-to-end route is shorter, but it has no operator card yet, so it is not the
-route taught here.
+end-to-end route is shorter, but it has no **operator card** — a reviewed,
+checked-in procedure naming the exact commands, inputs, and stop conditions
+for one window — so it is not the route taught here.
 
 This tutorial is a procedure, not permission to collect. Before using it,
-confirm that the current project status and the reviewed run card both say the
-quiet-machine lane may proceed. If either says stop, do not arm or sample.
+confirm two things. First, read `RUN_STATE.md` and verify that its active stop
+conditions list quiet-machine collection as permitted. Second, verify that a
+current operator card names this exact campaign and has not been superseded. In this
+checkout, `RUN_STATE.md` blocks quiet-machine collection and no operator card
+authorizes the one-run route below, so do not **arm** — grant a single-use
+launch authorization — and do not sample. The
+historical card at `docs/process/window-run-cards/shakedown-v3-first-light.md`
+authorizes a calibration-only procedure, not this campaign.
 
-There is an important boundary in the current checkout. The committed
-one-member campaign and its verdict are driven by `scripts/run_campaign.py`.
+There is an important boundary in the current checkout. The committed one-run
+campaign and its verdict are driven by `scripts/run_campaign.py`.
 The newer `scripts/launch_window.py` accepts only a separately prepared,
 fixed window pack — a directory whose exact files and commands were recorded
 before measurement — plus an arm receipt recording that the pre-start checks
-passed, a retained arming directory, and a launch manifest containing the
-exact command to execute. The checked-in shakedown card describes a
+passed, a retained directory of arming records, and a launch manifest
+containing the exact command to execute. The checked-in historical operator
+card describes a
 known-workload timing capture and does not connect those launcher inputs to
-the one-member campaign below. Do not point the launcher at the campaign directory or invent
-the missing inputs. The final section shows the launcher's real command
+the one-run campaign below. Do not point the launcher at the campaign
+directory or invent the missing inputs. The final section shows the launcher's
+real command
 surface so that you can recognize the handoff when an operator card supplies
 those files.
 
@@ -39,6 +49,9 @@ configured model must already exist at the local path recorded in
 `configs/campaigns/p2_015_smoke/production_shakedown/p2038_production_shakedown.json`;
 do not silently substitute another model, because that would change the
 experiment.
+
+The `p2_015` and `p2038` fragments in that path are historical repository
+identifiers, not procedure steps.
 
 From the repository root, confirm that the checkout has no modified or
 untracked files, then create the local Python environment and install the Mac
@@ -65,6 +78,11 @@ sudo -n -l /usr/bin/powermetrics
 If that command refuses, stop. Do not begin a window and do not broaden the
 rule to unrelated commands.
 
+A correctly installed rule lists `/usr/bin/powermetrics` as the permitted
+command. If it prints `(ALL) NOPASSWD: ALL`, the rule is too broad — stop and
+have it narrowed. If it prints `sudo: a password is required`, the rule is
+absent — stop.
+
 ## Prepare a quiet Mac
 
 Power drawn by a browser tab, cloud synchronization, a backup, indexing, an
@@ -85,7 +103,22 @@ bash scripts/quiet_mac_prep.sh
 Read every line. Correct any `FAIL` before continuing. After this point, do
 not touch the keyboard, trackpad, or display until the runner finishes.
 
-## Understand the one-member configuration
+The script emits lines in these forms; the words after the em dashes below are
+annotations, not part of its output:
+
+```text
+OK: passwordless powermetrics works.
+    — the sampler permission check passed
+OK: display verification reports all online displays asleep.
+    — no online display still reports graphics capability
+FAIL: post-arm HID idle has reached the screensaver delay.
+    — the screensaver may have engaged, so stop and dismiss it before arming
+```
+
+Any line beginning `FAIL:` is a failed quietness check. An `OK:` line proves
+only the named condition; it does not cancel a different `FAIL:` line.
+
+## Understand the one-run configuration
 
 The configuration schedules one repetition. It asks for power samples at
 10 Hz — ten samples per second — records 30 seconds of idle power, and allows
@@ -110,9 +143,9 @@ The physical and file flow is:
 [run bundle: raw samples + event times + derived summary]
           |
           v
-[shakedown gate (automated pass/fail check): strict check (rebuild and compare) -> independent reduction
- (recompute the summary from stored evidence) -> strict check -> evidence
- checks -> backup]
+[shakedown gate (automated pass/fail check): strict check (rebuild and compare) -> fresh re-reduction
+ (recompute the summary from stored evidence in a temporary location) -> strict check -> evidence
+ checks (confirm required quiet-machine and reference records are present) -> backup]
           |
           v
 [campaign log: passed or failed verdict]
@@ -124,6 +157,7 @@ directory containing the configuration, event times, raw sampler records,
 parsed power trace, model
 output, metadata, and `summary_metrics.json`. The last file is the marker that
 the bundle finished.
+Inside a bracket, `->` marks substeps run in that order.
 
 ## Arm and run the window
 
@@ -137,7 +171,7 @@ period because help mode does not measure anything:
 The **arming step** is the final transition from an interactive computer to
 an untouched measurement machine. `--arm-quiet-mode` counts down, asks macOS
 to sleep the display, and re-checks power, display, screensaver, thermal, and
-background-load conditions before the member starts. The explicit 20-second
+background-load conditions before the measured run starts. The explicit 20-second
 countdown gives you time to step away. Run this as the operator, not from an
 agent session. `caffeinate -is` is the macOS utility that prevents idle system
 sleep while the command runs without forcing the display awake:
@@ -155,9 +189,16 @@ sleep while the command runs without forcing the display awake:
   --max-failures 1
 ```
 
-Do not invent successful output. The run needs the physical Mac, the local
-model, and administrator-authorized sampling, so this tutorial cannot predict
-what your machine will report. A refusal is also a valid diagnostic result:
+Two flags choose the standards applied to the result.
+`--shakedown-gate production_uncertainty_v1` selects the strict-check,
+fresh-re-reduction, evidence, and backup sequence shown above.
+`--campaign-policy configs/campaign_policies/quiet_mac_p2_production.json`
+selects the recorded ceilings for processor activity and power. Both are
+committed files; do not edit either after seeing a result.
+
+This tutorial cannot show the expected result: the run needs the physical Mac,
+the local model, and administrator-authorized sampling, so what the machine
+reports is what it reports. A refusal is also a valid diagnostic result:
 preserve it, read its reason, and do not rerun until the physical cause is
 understood and removed.
 
@@ -172,7 +213,7 @@ destination is `~/JouleWise-backup/runs/`.
 
 In the campaign log, find the JSON object — a set of named fields and values — whose `record_type` is
 `shakedown_gate` and whose `gate` is `production_uncertainty_v1`. `status:
-passed` means the bundle passed strict checking, an independent reduction,
+passed` means the bundle passed strict checking, a fresh re-reduction from the stored evidence,
 strict checking again, the production-evidence checks, and backup. `status:
 failed` means `code` and `detail` name the failed stage. Passing proves only
 that this diagnostic path worked for this run; it does not license an energy
@@ -187,10 +228,12 @@ and a decision about what the capstone may state, continue with
 When a reviewed operator card supplies a fixed pack and all retained inputs
 named below, the physical entry command has this parser-verified form, meaning
 the current software that checks command-line flags accepts every flag. The
-confirmation table records the independent human review of the prepared
-family, and the confirmation fingerprint is the previously retained SHA-256
-digest — a compact value that changes when the table's bytes change. It must
-come from that earlier review, not be recomputed from the file at launch time.
+**confirmation table** records one human's independent review of the prepared
+measurement conditions — which model, prompt length, and phase each condition
+A and B stands for. The `--expected-confirmation-digest` value is the SHA-256
+fingerprint of that table recorded at review time and stored in the operator
+card. Supplying a digest recomputed from the file at launch would check nothing,
+because it would match whatever the file now says.
 
 ```sh
 .venv/bin/python scripts/launch_window.py \
@@ -202,11 +245,14 @@ come from that earlier review, not be recomputed from the file at launch time.
   --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 ```
 
+In the exact flag name `--arm-readiness-custody-root`, `custody-root` means the
+retained arming-record directory described above.
+
 That launcher consumes a single-use authorization — a permission record that
 cannot be reused — and replaces itself with the exact command stored in the
 launch manifest. It is not a shortcut around the preparation above, and the
 current checkout does not supply these inputs
-for the one-member campaign. Use it only from the operator card that created
+for the one-run campaign. Use it only from the operator card that created
 and names every shell variable in that command.
 
 ## What you should now be able to do
@@ -214,6 +260,6 @@ and names every shell variable in that command.
 - Explain why the diagnostic result cannot support a capstone claim.
 - Verify Python, Mac dependencies, and non-interactive sampler permission.
 - Remove avoidable machine activity and recognize a failed quietness check.
-- Identify the arm step and run the committed one-member campaign.
+- Identify the arm step and run the committed one-run campaign.
 - Locate the run bundle, backup, and append-only verdict record.
 - Distinguish the campaign runner from the guarded fixed-pack launcher.

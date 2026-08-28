@@ -4,34 +4,15 @@
 what power and energy are, and roughly how a computer is put together —
 nothing else. It is deliberately more thorough than the paper's methodology
 section: the paper argues; this document teaches. Every mechanism is
-presented with the problem that forced it into existence, because almost
-nothing in this instrument was designed speculatively — nearly every
-automated refusal check exists because a specific failure happened, or was
-demonstrated to be about to happen.*
+presented with the problem that forced it into existence. The guide presents
+refusal checks together with the recorded failures or executed counterexamples
+that motivated them where that provenance is available.*
 
 *How to read it: every term of art is built or glossed where it first
 appears, in the body, in order. The glossary at the end is a reminder for
 someone coming back to the document, not the place definitions live. If you
 meet a word here that has not yet been explained, that is a defect in this
 guide, not something you were supposed to already know.*
-
-*Status note: revised 2026-08-27. This revision makes the measured boundary,
-the before-and-after known-workload timing calibration, the energy-resolution
-limit, the ordered collection session, the two claim gates (automated checks
-that may refuse a scientific statement), and a real verdict — a recorded
-pass-or-refuse decision — reproducible from the text.
-It also records three changes in the current checkout: code now builds and
-checks a record binding a session's fixed plan, its two known-workload timing
-checks, its run directory, and its verdict, although the current locked pack
-does not yet pass that record into its verdict stage; short desk tests now
-exercise refusal paths through the ordered software pipeline; and the operator
-**threat model** — the set of operator failures the design promises to handle —
-now protects against plausible mistakes rather than a deliberately dishonest
-operator. A proposed pre-start check for the complete two-comparison statistical
-plan is not yet connected to the code that makes plan bytes final,
-and the planned clean end-to-end window check has not yet been run. Every
-calibration number below was re-checked against
-`d079_calibration_acceptance_v2_n17_r6`.*
 
 ---
 
@@ -44,12 +25,12 @@ parameter model's decode energy distinguishable from the 1.5-billion one's"
 — on Apple Silicon, using only the machine's own telemetry: measurements that
 the operating system reports about the hardware while it runs.
 
-The defining commitment is that every number ships with a demonstrated
-error bound. Not an assumed bound, not a vendor specification, not a
-statistical formula applied on faith: a bound the instrument itself
-measured, on this machine, under the same conditions as the **claim** — a
-claim being any statement the project publishes as true of the world, the
-thing all the machinery below exists to permit or refuse. The
+JouleWise attaches a measured error bound where its calibration applies. The
+current paper explicitly treats transfer from light commanded GPU pulses to
+sustained inference as an untested assumption; the prospective campaign will
+not test that transfer. A **claim** is any statement the project publishes as
+true of the world, the thing all the machinery below exists to permit or
+refuse. The
 project's one-line philosophy: **a measurement without a demonstrated error
 bound is an anecdote.** Most published LLM-energy numbers on consumer
 hardware are, by that standard, anecdotes — the related-work section of the
@@ -57,9 +38,12 @@ paper documents peer-reviewed studies that integrate the same telemetry
 this project uses, with no calibration and no uncertainty treatment at all.
 
 That commitment has an unusual consequence: the *primary product* of the
-instrument is not the joule numbers. It is the **detection floor** — the
-smallest energy difference the whole measurement system can honestly claim
-to distinguish — plus the machinery that proves the floor is real. The
+instrument is not the joule numbers. It is the **detection floor** (the
+paper's Section 2 calls the same quantity the *cell resolution bound*, where a
+*cell* is one small rectangle in the timing search built in §4.4) — the
+largest energy difference the measurement system can report between two runs
+that were in fact identical — plus the machinery that proves the floor is
+real. The
 model-comparison numbers are then demonstrations of what a characterized
 instrument can resolve.
 
@@ -67,8 +51,10 @@ instrument can resolve.
 
 An **operation** is one unit of work with a start event and a stop event that
 the workload itself logs: "prefill of a 256-token prompt, begin … end,"
-"decode of 128 tokens, begin … end." The energy of an operation is whatever
-the machine drew between those two events. Everything downstream depends on
+"decode of 128 tokens, begin … end." The reported operation energy is the
+energy assigned between those events from three processor power channels —
+CPU, GPU, and Neural Engine; display, storage, fans, charging, conversion loss,
+and other loads are outside the sum. Everything downstream depends on
 those two timestamps being trustworthy, which is why sections 4 and 5 are as
 long as they are.
 
@@ -102,13 +88,18 @@ have not been given.
   workload's event log (one line per commanded pulse edge, timestamped), and
   the evidence tying those two timelines together. Everything in sections 4
   and 5 happens inside a single capture.
-- **Member** — one measured execution of one configuration during a science
-  run: "1.5-billion-parameter model, decode 128 tokens, repetition 3 of 4."
-  Members are what a published number is eventually computed from.
+- **Member** — one measured execution of one configuration during a **science
+  run**, meaning the part of an uninterrupted measurement sitting that
+  measures the models themselves
+  rather than the instrument: "1.5-billion-parameter model, decode 128 tokens,
+  repetition 3 of 4." Everything else in that sitting — calibration pulses
+  and reference workloads — measures the instrument. Members are what a published
+  number is eventually computed from.
 - **Bundle** — the directory a capture or a member leaves on disk: the raw
   sampler output, the event log, the derived energy numbers, a metadata
   record describing exactly how it was produced, and cryptographic
-  fingerprints of all of it. The bundle is the unit that gets stored,
+  **fingerprints** of all of it — fixed-length values computed from exact file
+  bytes to make byte changes practically detectable (§7). The bundle is the unit that gets stored,
   re-checked, and either allowed to support a published number or refused.
 - **Window** — one uninterrupted sitting at the machine: quiet conditions
   established, network time disabled, a calibration capture, then the science
@@ -131,6 +122,25 @@ authority to stop the pipeline, no human veto in the loop — and they are
 outputs, not errors: the instrument publishes them, counts them, and treats a
 night that produced only refusals as a successful night.
 
+*Status note: revised 2026-08-27. This revision makes the measured boundary,
+the before-and-after known-workload timing calibration, the detection floor,
+the ordered collection window, the two claim gates, and a recorded **verdict**
+— the final pass-or-refuse decision — reproducible from the text. It also records three changes in the current
+checkout: code now builds and checks a record binding a window's fixed pack,
+its two timing calibrations, its run directory, and its verdict, although the
+current pack does not yet pass that record into the verdict stage; short desk
+tests now exercise refusal paths through the ordered pipeline; and the operator
+**threat model** — the set of operator failures the design promises to handle —
+now protects against plausible mistakes rather than a deliberately dishonest
+operator. A proposed pre-start check for the complete two-comparison statistical
+plan is not yet connected to the code that makes plan bytes final, and the
+planned clean end-to-end window check has not yet been run. Every calibration
+number below was re-checked against the current **calibration acceptance
+artifact** — the issued file that pins which calibration recordings,
+numerical pass-or-refuse limits, and versions of the code that calculates each
+bound these numbers come from — named
+`d079_calibration_acceptance_v2_n17_r6` and built in §7.*
+
 ## 2. The measurement primitive, and why it cannot be trusted blindly
 
 Everything starts with `powermetrics`, Apple's built-in telemetry sampler.
@@ -152,13 +162,21 @@ the danger in section 3 enters: clipping is only right if you know where the
 boundary falls inside the sample, and knowing that requires the two clocks
 to agree.
 
+One warning about a second overloaded word. Everywhere above, a **boundary**
+is a moment in time — the instant a phase starts or stops. The next paragraph
+uses the word in an unrelated sense: the **measurement boundary** is a question
+of scope, meaning which physical quantities are inside the joule total at all.
+Each use below says which meaning it carries.
+
 This is the exact **measurement boundary**, meaning the physical quantities
 that enter the reported joule total. For each overlapping interval, the
-adapter reads the sampler's CPU, GPU, and Apple Neural Engine processor-rail
-power values, converts milliwatts to watts, and adds those three values. The
-reducer treats the resulting points as a piecewise-linear power curve —
-straight lines between neighbouring measured points — and integrates the
-portion between the workload's start and stop boundaries. The sampler's
+**sampler adapter** — the code that parses `powermetrics` output into
+timestamped samples — reads the sampler's CPU, GPU, and Apple Neural Engine
+processor-rail power values, converts milliwatts to watts, and adds them. The
+**reducer** — the code that turns those parsed samples into a joule number for
+one operation — treats the sum as a rectangular interval average and
+multiplies it by the interval's positive overlap with the operation window. It
+does not interpolate `powermetrics` endpoints. The sampler's
 thermal reading is retained as machine-state evidence but is not added to
 energy. Display, storage, fans, battery charging, power-conversion loss, and
 every other load not present in those three named processor rails are outside
@@ -256,8 +274,8 @@ what can be distinguished: the machine's background activity, its thermal
 state, and the sampler's **quantization** — the fact that it reports power
 in discrete steps, so two genuinely different power draws can come back as
 the same printed number. If two identical workloads, measured minutes
-apart under the best possible conditions, differ by up to X joules, then
-no claim of a difference smaller than X is honest — no matter what the
+apart under the best possible conditions, differ by some spread — call that
+spread *X* joules — then no claim of a difference smaller than *X* is honest — no matter what the
 point estimates say.
 
 Attribution is bounded by **calibration** (sections 4 and 5). Resolution
@@ -265,8 +283,8 @@ is bounded by **floors** (section 8). The composed claim carries both.
 
 A note on one overloaded word before it starts working. **Floor** always
 means "a limit below which something cannot go," but this document uses it
-of several different things: the *detection floor* (the smallest claimable
-energy difference), the *0.1 ms floor* on how finely the detector subdivides
+of several different things: the *detection floor* (the largest false energy
+difference reported between identical runs), the *0.1 ms floor* on how finely the detector subdivides
 its search, and the *floor* under the timing allowance of section 4.8. Each
 use below names what it is a floor of. The same goes for **bracket**, which always means
 "pin a quantity between two known values on either side of it" — used in
@@ -426,15 +444,22 @@ how much any one bad sample can distort the fit, without ignoring it.
 A guess that explains every sample perfectly scores near zero; a guess whose
 straddling-sample predictions are badly wrong piles up penalty fast.
 
+Concretely, the code uses the **Huber penalty** with crossover *k* = 1.345.
+For a miss of *m* noise-widths, the penalty is `m²/2` while `|m| ≤ k`, and
+`k × (|m| − k/2)` beyond it. A miss of 0.5 noise-width costs 0.125. A miss
+of 6 noise-widths costs 7.1654875 rather than the 18 that a square penalty
+would charge. The linear branch is what stops one stray interval from buying
+the fit.
+
 Two gates use that score.
 
 **The first asks whether there is a pulse at all.** Compute the score of the
 flat "nothing happened here — it was baseline the whole time" explanation,
 then compare it with the best guess's score. The best guess must come in
 below **half** the flat explanation's score, or the pulse is declared not
-detected and the capture is refused. This is a significance test in the
-plainest possible form: the pulse hypothesis must explain the data at least
-twice as well as no pulse at all. With a real pulse the margin is not close:
+detected and the capture is refused. This is a deterministic model-fit gate,
+not a calibrated statistical significance test: the pulse model's loss must
+be less than half the flat model's loss. With a real pulse the margin is not close:
 a flat explanation has to absorb the entire step — every plateau sample
 counted as a large miss — so it accumulates penalty on a different scale
 entirely. That is precisely why failing this gate means something went badly
@@ -447,10 +472,10 @@ absolute number. It is set relative to the best guess found:
 limit = best score + max( 1.0 , 5% of best score )
 ```
 
-A guess survives if its score is at or below that limit. In words: a guess
-survives if it explains the samples essentially as well as the best guess
-does — within one sample's worth of ordinary noise, or within 5% of the
-total score once the total is large.
+A guess survives if its summed Huber loss is no more than
+`max(1.0, 5% of best score)` above the best score. The `1.0` is one unit of
+total loss; it is not one sample or one noise-width. One normalized
+one-noise-width residual contributes 0.5 unit, for example.
 
 Both branches matter, so work them. If the best score is 38.0, then 5% of
 it is 1.9, which beats the 1.0 floor, and the limit is 39.9: with 38
@@ -458,7 +483,7 @@ noise-widths of unexplained miss already on the table, a guess that adds
 another 1.9 is not meaningfully worse. If instead the best score is 4.0 —
 an unusually clean pulse — then 5% is 0.2, the floor of 1.0 wins, and the
 limit is 5.0. That floor is what keeps the patch honest when the fit is
-nearly perfect: a guess whose penalty is within a single noise-width of the
+nearly perfect: a guess whose total penalty is within one loss unit of the
 best cannot be told apart from it *by this data*, and pretending otherwise
 would manufacture precision out of a good night.
 
@@ -489,10 +514,34 @@ The reason blocks work is a property of the fit itself. Sliding an edge
 changes a straddling sample's predicted height **monotonically** — in one
 direction only, never doubling back: push the start edge later and that
 sample's predicted average only ever falls. Because of that one-directional
-behaviour, the detector can compute *exactly*, in closed form, the best
-score any guess anywhere inside the block could possibly achieve — a
-guaranteed floor under the block. It does not sample the block; it bounds
-it. That single computation is one **evaluation**, and it is the unit in
+behaviour, the detector can compute a rigorous lower bound on the score of
+every guess in a block. It does not sample the block; it bounds it. For each
+recorded interval, the two opposite corners of the block give the smallest
+and largest predicted power. If the recorded power lies between those
+predictions, that interval's minimum possible miss is zero. Otherwise the
+minimum miss is the distance to the nearer prediction. The detector converts
+each minimum miss to noise-widths, applies the Huber penalty above, and sums
+the per-interval minima. This sum can be loose because different intervals'
+minima may require different guesses, but no single guess in the block can
+score below it.
+
+Work the straddling sample from §4.1. Its baseline is 2 W, plateau is 40 W,
+interval width is 112 ms, recorded average is 12.18 W, and the commanded
+overlap is 30 ms. Over a block of start shifts from −10 ms to +10 ms and
+stop shifts from −10 ms to +10 ms, the stop edge remains beyond this
+start-edge sample, so its possible overlap ranges from 40 ms down to 20 ms.
+Its predicted average
+therefore ranges from `2 + (20/112) × 38 = 8.79 W` to
+`2 + (40/112) × 38 = 15.57 W`. The recorded 12.18 W lies inside that range,
+so this interval contributes a zero lower-bound penalty for the block. For a
+block of start shifts from +30 ms to +60 ms and stop shifts from −10 ms to
++10 ms, its possible overlap is zero and the only prediction is 2 W; its
+smallest possible miss is therefore 10.18 W.
+The implementation divides that miss by the capture's measured scatter before
+applying the penalty, exactly as the score definition requires.
+
+That complete lower-bound computation for one rectangle is one
+**evaluation**, and it is the unit in
 which all search effort below is counted. Each evaluation licenses one of
 three moves:
 
@@ -502,19 +551,63 @@ three moves:
   infinite search finite: one evaluation can kill a quarter of the plane.
 - **Split the block.** If the block cannot be rejected, some guess inside it
   might survive, so cut it in half and evaluate each half. Blocks that
-  straddle the patch's boundary can be neither rejected (part of them fits)
-  nor accepted (part of them does not), so they keep splitting, closing in
+  straddle the patch's boundary cannot yet be rejected, so they keep splitting, closing in
   on the true edge of the patch from outside.
-- **Accept the block.** Once a surviving block is down to 0.1 ms on a side,
-  stop splitting and count its *entire extent* into the patch. This is the
-  conservative move: nothing inside it has been ruled out, so all of it is
-  counted in, which can only make the final bound larger, never smaller.
+- **Retain the unresolved block.** Once a block whose lower bound does not
+  exceed the waterline is down to 0.1 ms on a side, stop splitting and count
+  its *entire extent* into the enclosure. The block is unresolved, not proved
+  to survive point by point. Retaining all of it can only make the final bound
+  larger, never smaller.
 
-Run to completion, every point of the plane ends up either provably ruled
-out or counted in, with nothing unexamined. **That completed map is what
+Run to completion, every point in the configured `[-0.75 s, +0.75 s]²`
+search square ends up either provably ruled out or enclosed by a retained
+cell; the detector does not search an unbounded plane. **That completed map is what
 "converging on a pulse" means** — not "the search found a good answer," but
-"the map of what this data permits is finished, with no unexplored
-territory." The word is used in that exact sense everywhere below.
+"the configured search square has been completely classified without a gap."
+The word is used in that exact sense everywhere below.
+
+The following schematic names the spatial search. It is not measured data;
+the irregular patch and block locations only show the algorithm's roles.
+
+```text
+                  stop-edge shift (seconds)
+                           +0.75
+                             ^
+        configured square    |  R = block rejected in one evaluation
+       +---------------------+---------------------+
+       | RRRRRR              |              RRRRRR |
+       | RRRRRR        +-----S-----+         RRRRRR |
+       |               | ......... |                |
+       |               S . u u u . S                |
+       |               | . u x u . |                |
+ -0.75 +---------------|-. u u u .-|---------------> +0.75
+       |               S ......... S       start-edge shift (seconds)
+       |               +-----S-----+                |
+       |                    <----->                  |
+       |               worst-edge scalar            |
+       | RRRRRR              |              RRRRRR |
+       +---------------------+---------------------+
+                             v
+                           -0.75
+```
+
+Figure 4, the plane of edge hypotheses:
+
+- The horizontal arrow is start-edge shift; the vertical arrow is stop-edge
+  shift, both spanning the configured −0.75-second to +0.75-second square.
+- The axes' crossing is the origin: both edges at their commanded positions.
+- `x` is the lowest-score edge pair found before the enclosure search.
+- Dots form the surviving patch: point hypotheses whose score is at or below
+  the waterline.
+- `R` marks a large block rejected because its lower bound exceeds the
+  waterline.
+- `S` marks a block that overlaps the patch's edge and must be split.
+- `u` marks a retained unresolved cell at the 0.1-millisecond resolution;
+  its full area is included even though not every point was proved to survive.
+- The solid box around the dots and `u` cells is the final rectangular
+  enclosure of all retained cells.
+- The double-headed arrow from the enclosure toward the origin represents the
+  worst-edge scalar before the clock-anchor term is added.
 
 ### 4.5 From one pulse to one capture's b_fiducial
 
@@ -569,9 +662,10 @@ re-runs it — depends on how fast the machine happens to be and how patient
 the human happens to feel. Two people with the same bytes could then reach
 different **verdicts** — a verdict being the recorded accept-or-refuse
 decision, the thing the instrument actually publishes — which is not a
-property a measurement is allowed to have. A fixed allowance makes the
-outcome a property of the *data*: the same trace costs the same number of
-evaluations and earns the same verdict, on any machine, forever.
+property a measurement is allowed to have. The 165,000-evaluation cap makes
+the primary work count deterministic. A separate 120-second monotonic wall
+deadline can also refuse a trace, so sufficiently slow or pathological hosts
+are not guaranteed the same verdict.
 
 *Effort as diagnosis.* How much work the map needs is itself a measurement
 of trace quality. A clean pulse train has crisp steps, so most of the plane
@@ -664,8 +758,8 @@ operations the measurement account can run without a password; the
 authorization was installed and exercised as part of operator
 qualification — the scripted sessions in which the human running the
 instrument demonstrates each privileged step and leaves evidence of it).
-The anchoring machinery itself carries a 5 ms ceiling: an anchor that cannot
-be established to better than 5 ms refuses the capture outright. How that
+The anchoring machinery itself carries a 5 ms ceiling: an effective anchor
+bound greater than 5 ms refuses; exactly 5 ms is allowed. How that
 anchor is computed, and what happened when its model turned out to be wrong,
 is section 5.
 
@@ -688,6 +782,14 @@ for the worse endpoint; the second pays for movement across the window, while
 preventing accidental close agreement from buying an unjustifiably small
 allowance.
 
+Worked with the two endpoint bounds read later in §12:
+`b_pre = 0.028145704403191807 s` and
+`b_post = 0.029425288011457773 s`. Their difference is
+`0.001279583608265966 s`, below the `0.009724 s` screen, so the screen wins.
+The allowance is therefore
+`0.029425288011457773 + 0.009724 = 0.039149288011457773 s`, about 39 ms of
+permitted displacement at every phase edge for that historical window.
+
 That allowance is never permitted to fall below the bracket screen of
 9.724 ms. This screen is a floor under the allowance, and it exists because two brackets
 can agree closely by luck. Without the floor, a fortunate pair of captures
@@ -697,14 +799,19 @@ under the same calibration generation — sections 5 and 7 explain where the
 number comes from and why it changed.
 
 And if the brackets disagree by more than 10.164835 ms, the entire window is
-refused. That much movement means the instrument was not the same
+refused. The exact registered value is `0.010164834757777545 s`, the 99%
+two-draw prediction limit derived for the 17-capture acceptance corpus and
+stored in the issued acceptance artifact rather than copied into each
+consumer. That much movement means the instrument was not the same
 instrument at both ends of the night, and no single allowance honestly
 describes both halves.
 
 The current checkout contains a **bracket-binding record** builder and its
 checks. This record fingerprints the fixed plan, the finalized calibration
 ledger containing both endpoint captures, the exact run directory, and the
-evidence-root identity. When supplied, the whole-window verdict consumes that
+**evidence-root identity** — the fingerprint at the top of the retained-record
+chain for this window, which prevents a binding from being satisfied by a
+different night's evidence tree. When supplied, the whole-window verdict consumes that
 record, and analysis finalization compares the record evaluated into the
 verdict byte-for-byte with the supplied binding. This closes a whole-window
 substitution gap: individually valid plan, calibration, run, and verdict files
@@ -751,8 +858,8 @@ The method is sound *given* one assumption that was never stated as an
 assumption — that one second of wall time is exactly one second of the
 sampler's elapsed timeline. Rate = 1.
 
-**The falsification.** On this machine the wall clock runs about **7 parts
-per million** fast against the monotonic timeline. Parts per million is the
+**The falsification.** In that six-capture diagnostic sitting, the wall clock
+ran about **7 parts per million** fast against the monotonic timeline. Parts per million is the
 natural unit for a difference in clock *rate*: 1 ppm is one microsecond per
 second, so 7 ppm is seven microseconds gained every second. Over a
 197-second capture that accumulates roughly 1.4 ms of stretch, and the
@@ -785,12 +892,13 @@ fractions of whole numbers, carried exactly, never rounded to a
 floating-point approximation — so no rounding error can invent or destroy
 feasibility at the margin.
 
-The anchor interval is the width of the set; the fitted rate falls out as a
-by-product. On the afternoon diagnostic probe (the disciplined capture the
-science review examined) the rate came out as a window from +7.243 to
-+7.285 ppm — just 0.04 ppm wide, which is why a mid-capture change of rate
-cannot hide inside it: any real rate change would have to be smaller than
-four hundredths of a microsecond per second to go unnoticed. If no rate
+The anchor interval is the projection of the two-dimensional feasible
+`(rate, offset)` set onto anchor position; the fitted-rate interval is a
+separate projection. On the afternoon diagnostic probe (the disciplined
+capture the science review examined), the fitted constant-rate interval was
++7.243 to +7.285 ppm. Its width does not by itself bound arbitrary mid-capture
+rate changes; the model separately allows up to 250 µs of non-affine departure
+and relies on authenticated network-time-off evidence. If no rate
 reconciles the constraints, the capture is refused. The method never picks
 the least-bad rate.
 
@@ -821,7 +929,7 @@ error that accumulates with elapsed time are two different quantities.
 
 **Paying for the rate is what makes the bound honest.** Across the
 re-derived corpus the anchor term rose by 0.311 ms on average, against
-per-capture bounds in the 25–35 ms range. On the calibration fixture shared
+per-capture bounds in the 23–33 ms range (§4.5). On the calibration fixture shared
 by the whole test suite — a small stored input used by every test so they
 all judge the same bytes — the very same inputs now yield a bound 3.09
 microseconds wider. That figure already includes one numerical detail that
@@ -894,8 +1002,9 @@ is one generation of the capture pipeline — the particular combination of
 sampler handling and anchor method in force when the bytes were recorded. A
 stored bundle records its era in two inseparable halves: the anchor method
 that produced it, paired with a **schema label** naming the shape of the
-metadata record itself. One canonical table maps each generation's method
-to its label, and the *method* is the single key
+metadata record itself. One canonical table — `SCHEMA_FOR_ANCHOR_METHOD` in
+`joulewise/uncertainty_evidence.py` — has one row per generation, pairing an
+anchor-method name with the schema label emitted beside it. The *method* is the single key
 every piece of code chooses its behaviour from, so nothing anywhere decides
 what to do by reading the label alone.
 
@@ -955,9 +1064,10 @@ cryptographic fingerprint, so that any later change is detectable — by the
 **calibration acceptance artifact**, currently
 `d079_calibration_acceptance_v2_n17_r6`, whose own file hash begins
 `0227bca3`. (A hash, throughout this document, is a short fixed-length
-fingerprint computed from a file's exact bytes: change one byte anywhere and
-the fingerprint changes completely, and you cannot construct a different file
-with the same fingerprint. It is how every "these are the same bytes" claim
+fingerprint computed from a file's exact bytes: changing one byte normally
+produces an unrelated-looking fingerprint. Finding a different file with the same
+SHA-256 is considered computationally infeasible with current methods; it is
+not mathematically impossible. It is how every "these are the same bytes" claim
 below is checked.) The artifact records:
 
 - the 17-member derivation corpus (every member's b_fiducial, byte-exact),
@@ -1006,12 +1116,16 @@ the bracket screen was 0.010818 s under the 19-member generations and is
 0.009724 s under the 17-member ones. If any consumer held that number as a
 literal in its own source code, historical replays would silently start
 judging old data by new thresholds — the past re-tried under rules that did
-not exist when it happened. So no such literal exists anywhere in the mint lane — the code that
+not exist when it happened. So no such literal exists anywhere in the code that
 computes and validates floors: an automated **regression test** — a test
 whose only job is to fail if a specific past mistake ever reappears — names
 the three source files of that lane and forbids both digit strings from
-appearing in any of them. (The acceptance registry itself is not scanned;
-it is the one home where the registered values legitimately live.)
+appearing in any of them. (One table in
+`joulewise/calibration_bracketing.py`, the **acceptance registry**, lists every
+issued acceptance generation and its exact file fingerprint. A companion table
+in the same file maps each generation to the bracket screen and allowance rule
+it registered. This file is the one place those digits legitimately appear, so
+the scan deliberately skips it.)
 Every consumer instead *resolves* the screen and the allowance rule from the
 generation that the supplied artifact itself names. An artifact whose
 identity is not in the registry refuses; an artifact whose stated screen
@@ -1022,9 +1136,9 @@ judged by the rules of the past, by machinery rather than by memory.
 
 ## 8. Floors: what the instrument may claim to distinguish
 
-A **detection floor** is the empirically demonstrated smallest energy
-difference the complete measurement system can distinguish for a given
-operation family on this exact software stack. Two of those words are load-
+A **detection floor** is the empirically demonstrated largest false energy
+difference the complete measurement system reports between identical runs for
+a given operation family on this exact software stack. Two of those words are load-
 bearing. An **operation family** is a named kind of measured work — "decode,"
 or "prefill at a 256-token prompt" — not an individual run. A **stack**, as
 in section 1.2, is the full named set of software the measurement ran on,
@@ -1104,9 +1218,9 @@ edge calibration can lower such a floor; adding repetitions without changing
 the timing bound cannot make the boundary uncertainty disappear.
 
 **Per-phase, per-stack.** Floors do not transfer across phases, prompt
-lengths, or stacks. The 256-token prefill floor is its own separately
-measured artifact precisely because transporting a floor from a different
-prompt length would be an assumption wearing a measurement's clothes.
+lengths, or stacks. The plan requires a 256-token prefill floor dependency,
+but no 256-token floor artifact or transport rule is currently ratified; the
+committed fields remain `EMPTY`.
 
 ## 9. The quiet machine: protecting the signal
 
@@ -1141,10 +1255,12 @@ The defenses, each aimed at a plausible operating mistake:
 - **The agent quiesce rule.** To *quiesce* a system is to bring it to a
   quiet, settled state and hold it there. The project is developed largely
   by AI agents — and an agent session is background load like any other. No
-  measurement starts while any agent session is active. The overnight
-  first-light window — the first real collection window run with the
-  finished machinery — was run by a single fenced driver script with every
-  development agent shut down. The driver's own censuses enter the
+  measurement starts while any agent session is active. An overnight
+  non-claim first-light calibration **shakedown** — a deliberately small run
+  used to expose faults rather than produce a research number — ran under a fenced driver with
+  every development agent shut down. It did not exercise the full
+  author-to-arm-to-verify-to-consume lifecycle; the dress rehearsal remains
+  open. The driver's own censuses enter the
   **retained-artifact record**: the hash-linked account of where each file
   came from, what was true when it was written, and whether its bytes later
   changed. Section 11 uses that record as a gate input.
@@ -1180,9 +1296,14 @@ that described the receipts as still outstanding.
 has two planned contrasts. Because testing more than one contrast increases
 the chance that at least one looks positive by luck, the analysis proposal
 puts both in one **multiple-comparison family** — a set judged together — and
-uses the **Holm correction**, which orders their probability values and makes
-the first comparison clear a stricter boundary before the second can use the
-remaining boundary. That design is documented, but it is not yet an installed
+uses the **Holm correction**. A **p-value** is the probability, under the
+no-effect model the test assumes, of seeing a result at least as extreme as the
+observed one. Holm sorts the two p-values smallest first, multiplies the
+smaller by 2, leaves the larger as it is, then walks the list raising any value
+to the largest adjustment seen so far. It declares an effect only where the
+adjusted value is at or below 0.05. Worked: p = 0.02 and 0.04 become 0.04 and
+0.04, and both clear 0.05; p = 0.03 and 0.04 become 0.06 and 0.06, and neither
+does. That design is documented, but it is not yet an installed
 pre-start guarantee here: the current **analysis manifest** — the
 machine-readable file meant to name the analysis rule before collection —
 still has incomplete family fields, and the plan-locking implementation does not invoke the
@@ -1205,11 +1326,11 @@ operator cannot check a token, change an input, and reuse the token.
 A **window** is the uninterrupted physical interval in which the instrument
 establishes quiet conditions, measures its timing before the workload, runs
 the pre-ordered references and comparisons, measures timing again, and judges
-the complete record. The current machine-readable stage graph begins by
-reserving the bracket identity and splits the pre-science admission work into
-bound collection and bound derivation. Grouping those implementation steps by
-what the operator is physically doing, the current comparison window runs in
-this order:
+the complete record. The software records the window as an ordered list of
+stages and reserves the identity of the calibration pair before either
+calibration runs, so neither endpoint can later be swapped for a capture from
+another night. Grouped by what the operator is physically doing, the current
+comparison window runs in this order:
 
 1. **Pre-calibration.** Run the pulse train from section 4 and derive its
    timing bound under the clock anchor from section 5.
@@ -1239,7 +1360,9 @@ widths are illustrative, not to scale, and contain no measured data. On its
 white background, a horizontal session-time arrow
 runs above blue-outlined pre-calibration and post-calibration boxes, a gray
 admission box, an opening-reference box containing three narrow bars, a first
-science box containing eight alternating light and blue bars, a one-bar
+science box containing eight alternating light and blue bars — light for
+condition A and blue for condition B, in the A/B/B/A order the inset expands —
+followed by a one-bar
 midpoint-reference box, a second eight-bar science box, and a closing-reference
 box containing three bars. A blue bracket line spans from the pre-calibration
 to the post-calibration, with two lines of text explaining that the pair bounds
@@ -1341,8 +1464,11 @@ this order:
   the evidence rows, and `source_campaign_manifests` identifies the manifests
   from which those rows came.
 - `evaluation_scope` states what the gate evaluated. `evaluation_basis` binds
-  the occurrence fingerprints, policy fingerprint, membership fingerprint,
-  consumption rule, and `calibration_bracket_set`. In this record the pre-bound
+  five things whose change would change the verdict: a fingerprint per included
+  measurement, a fingerprint of the policy applied, a fingerprint of the
+  membership list itself, the rule stating how many times one measurement may
+  be consumed, and the identities of the two calibration captures bracketing
+  the night. In this record the pre-bound
   is
   `0.028145704403191807 s` and the post-bound is
   `0.029425288011457773 s`; those are inputs to the verdict, not a claim that
@@ -1360,9 +1486,9 @@ not yet wired the complete lifecycle.
 
 ## 13. Verification without overstating it
 
-Every gate is **fail-closed**: missing evidence, unreadable fingerprints, an
-unknown rule, or an unsatisfied constraint produces refusal rather than
-acceptance by silence. The current short pipeline checks exercise that property
+The implemented gates described here are designed to **fail closed**: when one
+of those gates sees missing or invalid evidence, it refuses rather than
+accepting by silence. The current short pipeline checks exercise that property
 at a desk in minutes: they cover refusal-tail behavior, reason-code separation,
 launcher arguments, and the window environment allowlist. They do not create a
 clean live measurement window and therefore do not prove that the full physical
@@ -1393,7 +1519,7 @@ number points there.*
   far a commanded pulse edge can appear displaced in the trace.
 - **Block / rectangle** (§4.4) — a range of start-edge shifts crossed with a
   range of stop-edge shifts; the unit the detector rejects, splits, or
-  accepts.
+  retains unresolved.
 - **Bracket** (§4.8, §5) — to pin a quantity between two known values either
   side of it: calibration captures before and after a window; system
   timestamps before and after an event.
@@ -1418,32 +1544,31 @@ number points there.*
   row's duration is reported; published as an interval. The current method
   solves for the two clocks' *rate* as well as their offset and refuses when
   no single rate fits.
-- **Condition family** (§10) — the written specification of what makes a
-  condition itself: model artifact, prompt length, phase, runtime settings.
+- **Condition definition** (§10, §8) — the written specification of what makes
+  condition A or B itself: model artifact, prompt length, phase, runtime
+  settings.
 - **Converged** (§4.4) — the map of surviving candidates for a pulse is
-  complete: every point of the plane provably ruled out or counted in.
-- **Retained-artifact record** (§9, §11) — the hash-linked account of where
-  each file came from, what was true when it was written, and whether its
-  bytes later changed.
+  complete: every point in the configured search square is provably ruled out
+  or enclosed by a retained unresolved cell.
 - **Detection budget** (§4.6) — the pre-registered cap of 165,000 evaluations
   on a capture's total search effort; exhaustion refuses the capture as
   non-convergent.
-- **Detection floor** (§8) — the demonstrated smallest energy difference the
-  complete system can distinguish for a named operation family and stack.
-- **Evaluation** (§4.4) — one exact computation of the best score achievable
-  anywhere inside one block; the unit of search effort.
+- **Detection floor** (§8) — the largest false energy difference the complete
+  system reports between identical runs for a named operation family and stack.
+- **Evaluation** (§4.4) — one computation of a rigorous, possibly loose lower
+  score bound for one block; the unit of search effort.
 - **Fail-closed** (§13) — when a check cannot be completed, the outcome is
   refusal, not acceptance.
 - **Fiducial pulse train** (§4) — the 59-pulse known workload used to measure
   attribution error.
-- **Freeze receipt** (§10) — the cryptographic attestation that a pack's bytes
-  are final at a named path; the receipt is the frozen state.
+- **Freeze receipt** (§10) — the authenticated fingerprint of a pack's exact
+  bytes at a named path, made before collection.
 - **Generation (of the acceptance artifact)** (§7) — one issued link in the
   artifact's lineage. Predecessors are kept byte-identical forever, and each
   consumer resolves its thresholds from the generation the supplied artifact
   names.
 - **Hash / digest** (§7) — a short fingerprint of a file's exact bytes;
-  change one byte and it changes completely.
+  a byte change normally produces an unrelated-looking value.
 - **Identity-pin projection** (§10) — the receipt pinning the actual model and
   runtime bytes a night will execute.
 - **Monotonic clock** (§5) — a counter that only ever advances at a steady
@@ -1468,6 +1593,9 @@ number points there.*
   energy numbers with bounds.
 - **Refusal** (§1.2) — a recorded decision not to admit evidence when a gate
   fails; the instrument's most common and most important output.
+- **Retained-artifact record** (§9, §11) — the hash-linked account of where
+  each file came from, what was true when it was written, and whether its
+  bytes later changed.
 - **Reissue (science-neutral)** (§7) — a new acceptance generation forced by
   an estimator byte change alone, whose neutrality is proven by replaying the
   whole corpus and diffing every derived quantity, not asserted.
