@@ -196,11 +196,7 @@ not evidence for a capstone statement.
 
 ## A retained close-out refusal
 
-A retained execution report from a deliberately discarded rehearsal run — one
-performed only to make the pipeline fail on purpose and record how it fails —
-has `L10` in its real filename; that fragment is an internal review-seat label
-with no instrument meaning. The report at
-`docs/process_traces/2026-08-15-readiness-council/seat-reports/L10-SACRIFICIAL-FULL-LIFECYCLE-report.md`
+A [retained execution report from a synthetic, non-claim rehearsal](../process_traces/2026-08-15-readiness-council/seat-reports/L10-SACRIFICIAL-FULL-LIFECYCLE-report.md)
 summarizes two earlier refusals from the duration-recorder script without their
 detail text:
 

@@ -40,10 +40,11 @@ this project uses, with no calibration and no uncertainty treatment at all.
 That commitment has an unusual consequence: the *primary product* of the
 instrument is not the joule numbers. It is the **detection floor** (the
 paper's Section 2 calls the same quantity the *cell resolution bound*, where a
-*cell* is one small rectangle in the timing search built in §4.4) — the
-largest energy difference the measurement system can report between two runs
-that were in fact identical — plus the machinery that proves the floor is
-real. The
+**measurement cell** is a group of like-for-like runs — the same phase,
+workload, model, hardware, software, and power definition; this is distinct
+from a timing-search rectangle in §4.4) — the largest false energy difference
+the measurement system can manufacture for that group — plus the machinery
+that proves the floor is real. The
 model-comparison numbers are then demonstrations of what a characterized
 instrument can resolve.
 
@@ -283,8 +284,8 @@ is bounded by **floors** (section 8). The composed claim carries both.
 
 A note on one overloaded word before it starts working. **Floor** always
 means "a limit below which something cannot go," but this document uses it
-of several different things: the *detection floor* (the largest false energy
-difference reported between identical runs), the *0.1 ms floor* on how finely the detector subdivides
+of several different things: the *detection floor* defined in §1, the *0.1 ms
+floor* on how finely the detector subdivides
 its search, and the *floor* under the timing allowance of section 4.8. Each
 use below names what it is a floor of. The same goes for **bracket**, which always means
 "pin a quantity between two known values on either side of it" — used in
@@ -474,8 +475,8 @@ limit = best score + max( 1.0 , 5% of best score )
 
 A guess survives if its summed Huber loss is no more than
 `max(1.0, 5% of best score)` above the best score. The `1.0` is one unit of
-total loss; it is not one sample or one noise-width. One normalized
-one-noise-width residual contributes 0.5 unit, for example.
+total loss; it is not one sample or one noise-width. One sample whose miss is
+exactly one noise-width contributes 0.5 unit, for example.
 
 Both branches matter, so work them. If the best score is 38.0, then 5% of
 it is 1.9, which beats the 1.0 floor, and the limit is 39.9: with 38
@@ -540,6 +541,12 @@ smallest possible miss is therefore 10.18 W.
 The implementation divides that miss by the capture's measured scatter before
 applying the penalty, exactly as the score definition requires.
 
+A warning about a second overloaded word: the search rectangles of §4.4 are
+also called *cells* in the code, which is where `cell_count` gets its name.
+That is an unrelated sense — a search cell is a rectangle of edge-shift
+hypotheses, while the *cell* in *cell resolution bound* is a group of
+like-for-like runs.
+
 That complete lower-bound computation for one rectangle is one
 **evaluation**, and it is the unit in
 which all search effort below is counted. Each evaluation licenses one of
@@ -576,15 +583,15 @@ the irregular patch and block locations only show the algorithm's roles.
         configured square    |  R = block rejected in one evaluation
        +---------------------+---------------------+
        | RRRRRR              |              RRRRRR |
-       | RRRRRR        +-----S-----+         RRRRRR |
-       |               | ......... |                |
-       |               S . u u u . S                |
-       |               | . u x u . |                |
- -0.75 +---------------|-. u u u .-|---------------> +0.75
+       | RRRRRR        +-----S-----+         RRRRRR|
+       |               | ......... |               |
+       |               S . u u u . S               |
+       |               | . u x u . |               |
+ -0.75 +---------------|-. u o----->|---------------> +0.75
        |               S ......... S       start-edge shift (seconds)
-       |               +-----S-----+                |
-       |                    <----->                  |
-       |               worst-edge scalar            |
+       |               +-----S-----+               |
+       |                                           |
+       |                                           |
        | RRRRRR              |              RRRRRR |
        +---------------------+---------------------+
                              v
@@ -595,7 +602,7 @@ Figure 4, the plane of edge hypotheses:
 
 - The horizontal arrow is start-edge shift; the vertical arrow is stop-edge
   shift, both spanning the configured −0.75-second to +0.75-second square.
-- The axes' crossing is the origin: both edges at their commanded positions.
+- `o` marks the origin: both edges at their commanded positions.
 - `x` is the lowest-score edge pair found before the enclosure search.
 - Dots form the surviving patch: point hypotheses whose score is at or below
   the waterline.
@@ -606,8 +613,9 @@ Figure 4, the plane of edge hypotheses:
   its full area is included even though not every point was proved to survive.
 - The solid box around the dots and `u` cells is the final rectangular
   enclosure of all retained cells.
-- The double-headed arrow from the enclosure toward the origin represents the
-  worst-edge scalar before the clock-anchor term is added.
+- The one-headed arrow runs from the origin to the enclosure's farthest edge
+  in this schematic. The arrow represents the maximum absolute value among the
+  four enclosure endpoints before the clock-anchor term is added.
 
 ### 4.5 From one pulse to one capture's b_fiducial
 
@@ -799,9 +807,10 @@ under the same calibration generation — sections 5 and 7 explain where the
 number comes from and why it changed.
 
 And if the brackets disagree by more than 10.164835 ms, the entire window is
-refused. The exact registered value is `0.010164834757777545 s`, the 99%
-two-draw prediction limit derived for the 17-capture acceptance corpus and
-stored in the issued acceptance artifact rather than copied into each
+refused. The exact registered value is `0.010164834757777545 s`, derived from
+the spread of the 17 acceptance-corpus bounds so that two fresh captures drawn
+from that same spread would differ by more than it less than 1% of the time,
+and stored in the issued acceptance artifact rather than copied into each
 consumer. That much movement means the instrument was not the same
 instrument at both ends of the night, and no single allowance honestly
 describes both halves.
@@ -897,8 +906,9 @@ The anchor interval is the projection of the two-dimensional feasible
 separate projection. On the afternoon diagnostic probe (the disciplined
 capture the science review examined), the fitted constant-rate interval was
 +7.243 to +7.285 ppm. Its width does not by itself bound arbitrary mid-capture
-rate changes; the model separately allows up to 250 µs of non-affine departure
-and relies on authenticated network-time-off evidence. If no rate
+rate changes; the model separately allows the relationship between the two
+clocks to depart from a straight line by up to 250 µs, and relies on
+authenticated network-time-off evidence. If no rate
 reconciles the constraints, the capture is refused. The method never picks
 the least-bad rate.
 
@@ -1118,9 +1128,10 @@ literal in its own source code, historical replays would silently start
 judging old data by new thresholds — the past re-tried under rules that did
 not exist when it happened. So no such literal exists anywhere in the code that
 computes and validates floors: an automated **regression test** — a test
-whose only job is to fail if a specific past mistake ever reappears — names
-the three source files of that lane and forbids both digit strings from
-appearing in any of them. (One table in
+whose only job is to fail if a specific past mistake ever reappears — scans
+every Python source under `joulewise/` and `scripts/`, except
+`joulewise/calibration_bracketing.py`, and forbids both digit strings in those
+scanned files. (One table in
 `joulewise/calibration_bracketing.py`, the **acceptance registry**, lists every
 issued acceptance generation and its exact file fingerprint. A companion table
 in the same file maps each generation to the bracket screen and allowance rule
@@ -1136,10 +1147,9 @@ judged by the rules of the past, by machinery rather than by memory.
 
 ## 8. Floors: what the instrument may claim to distinguish
 
-A **detection floor** is the empirically demonstrated largest false energy
-difference the complete measurement system reports between identical runs for
-a given operation family on this exact software stack. Two of those words are load-
-bearing. An **operation family** is a named kind of measured work — "decode,"
+The **detection floor** defined in §1 belongs to a given **operation family**
+on one exact **software stack**. Both phrases are load-bearing. An operation
+family is a named kind of measured work — "decode,"
 or "prefill at a 256-token prompt" — not an individual run. A **stack**, as
 in section 1.2, is the full named set of software the measurement ran on,
 and for a floor it is named exhaustively: exact model artifact hash, runtime
@@ -1553,8 +1563,8 @@ number points there.*
 - **Detection budget** (§4.6) — the pre-registered cap of 165,000 evaluations
   on a capture's total search effort; exhaustion refuses the capture as
   non-convergent.
-- **Detection floor** (§8) — the largest false energy difference the complete
-  system reports between identical runs for a named operation family and stack.
+- **Detection floor** (§1, §8) — the quantity defined in §1 and applied to one
+  operation family on one exact stack in §8.
 - **Evaluation** (§4.4) — one computation of a rigorous, possibly loose lower
   score bound for one block; the unit of search effort.
 - **Fail-closed** (§13) — when a check cannot be completed, the outcome is
@@ -1593,12 +1603,12 @@ number points there.*
   energy numbers with bounds.
 - **Refusal** (§1.2) — a recorded decision not to admit evidence when a gate
   fails; the instrument's most common and most important output.
-- **Retained-artifact record** (§9, §11) — the hash-linked account of where
-  each file came from, what was true when it was written, and whether its
-  bytes later changed.
 - **Reissue (science-neutral)** (§7) — a new acceptance generation forced by
   an estimator byte change alone, whose neutrality is proven by replaying the
   whole corpus and diffing every derived quantity, not asserted.
+- **Retained-artifact record** (§9, §11) — the hash-linked account of where
+  each file came from, what was true when it was written, and whether its
+  bytes later changed.
 - **Score** (§4.3) — the summed, noise-scaled, quadratic-then-linear penalty
   measuring how badly one candidate edge placement explains the samples.
 - **Straddling sample** (§4.1) — a sample whose interval contains a pulse

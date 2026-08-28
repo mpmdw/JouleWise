@@ -18,8 +18,10 @@ checked-in procedure naming the exact commands, inputs, and stop conditions
 for one window — so it is not the route taught here.
 
 This tutorial is a procedure, not permission to collect. Before using it,
-confirm two things. First, read `RUN_STATE.md` and verify that its active stop
-conditions list quiet-machine collection as permitted. Second, verify that a
+confirm two things. First, read the bolded status paragraphs at the top of
+`RUN_STATE.md`. They are the project's running record, written in project
+shorthand; the only thing you need from them is whether a quiet-machine
+collection night is currently permitted or blocked. Second, verify that a
 current operator card names this exact campaign and has not been superseded. In this
 checkout, `RUN_STATE.md` blocks quiet-machine collection and no operator card
 authorizes the one-run route below, so do not **arm** — grant a single-use
@@ -49,9 +51,6 @@ configured model must already exist at the local path recorded in
 `configs/campaigns/p2_015_smoke/production_shakedown/p2038_production_shakedown.json`;
 do not silently substitute another model, because that would change the
 experiment.
-
-The `p2_015` and `p2038` fragments in that path are historical repository
-identifiers, not procedure steps.
 
 From the repository root, confirm that the checkout has no modified or
 untracked files, then create the local Python environment and install the Mac
@@ -112,7 +111,9 @@ OK: passwordless powermetrics works.
 OK: display verification reports all online displays asleep.
     — no online display still reports graphics capability
 FAIL: post-arm HID idle has reached the screensaver delay.
-    — the screensaver may have engaged, so stop and dismiss it before arming
+    — HID means the keyboard, trackpad, and other input devices; the line
+      reports how long they have been idle, and the screensaver may have
+      engaged, so stop and dismiss it before arming
 ```
 
 Any line beginning `FAIL:` is a failed quietness check. An `OK:` line proves
@@ -193,8 +194,9 @@ Two flags choose the standards applied to the result.
 `--shakedown-gate production_uncertainty_v1` selects the strict-check,
 fresh-re-reduction, evidence, and backup sequence shown above.
 `--campaign-policy configs/campaign_policies/quiet_mac_p2_production.json`
-selects the recorded ceilings for processor activity and power. Both are
-committed files; do not edit either after seeing a result.
+selects the recorded ceilings for processor activity and power. The gate name
+selects a committed code path; the policy argument names a committed file. Do
+not alter either after seeing a result.
 
 This tutorial cannot show the expected result: the run needs the physical Mac,
 the local model, and administrator-authorized sampling, so what the machine
@@ -228,12 +230,15 @@ and a decision about what the capstone may state, continue with
 When a reviewed operator card supplies a fixed pack and all retained inputs
 named below, the physical entry command has this parser-verified form, meaning
 the current software that checks command-line flags accepts every flag. The
-**confirmation table** records one human's independent review of the prepared
-measurement conditions — which model, prompt length, and phase each condition
-A and B stands for. The `--expected-confirmation-digest` value is the SHA-256
-fingerprint of that table recorded at review time and stored in the operator
-card. Supplying a digest recomputed from the file at launch would check nothing,
-because it would match whatever the file now says.
+**confirmation table** records an authorized exact-byte `YES` over the three
+frozen family packs, their **publication marker** — the file that lists those
+packs and fixed values computed from their exact bytes — and the **successor
+pinset** — the later committed file identified by its path, required
+field-and-value structure, fixed value computed from its exact bytes, and
+counts. `--expected-confirmation-digest` is the out-of-band SHA-256 — a
+fixed-length value computed from exact bytes to make changes practically
+detectable — of those exact table bytes, supplied independently of repository
+paths; no repository path or operator card stores it.
 
 ```sh
 .venv/bin/python scripts/launch_window.py \
@@ -244,9 +249,6 @@ because it would match whatever the file now says.
   --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \
   --expected-confirmation-digest "$ED_STEP6_CONFIRMED_SHA256"
 ```
-
-In the exact flag name `--arm-readiness-custody-root`, `custody-root` means the
-retained arming-record directory described above.
 
 That launcher consumes a single-use authorization — a permission record that
 cannot be reused — and replaces itself with the exact command stored in the
@@ -260,6 +262,8 @@ and names every shell variable in that command.
 - Explain why the diagnostic result cannot support a capstone claim.
 - Verify Python, Mac dependencies, and non-interactive sampler permission.
 - Remove avoidable machine activity and recognize a failed quietness check.
-- Identify the arm step and run the committed one-run campaign.
+- Identify the arm step, state the exact command for the committed one-run
+  campaign, and name the two conditions that must both hold before it may be
+  run.
 - Locate the run bundle, backup, and append-only verdict record.
 - Distinguish the campaign runner from the guarded fixed-pack launcher.

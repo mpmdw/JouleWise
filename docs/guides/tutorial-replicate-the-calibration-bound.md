@@ -11,9 +11,10 @@ replay prints it under that name.
 The capture bound is not itself the smallest energy difference a measurement
 window can resolve. That energy quantity is the **detection floor** (the
 paper's Section 2 calls the same quantity the *cell resolution bound*, where a
-*cell* is one small rectangle in the edge-shift search explained below): the
-largest energy difference this measurement system can report between two runs
-that were in fact identical. The later energy calculation converts
+**measurement cell** is a group of like-for-like runs — the same phase,
+workload, model, hardware, software, and power definition; this is distinct
+from the edge-search rectangles explained below): the largest false energy
+difference this measurement system can manufacture for that group. The later energy calculation converts
 boundary-time uncertainty into energy by multiplying it by the power change
 across the boundary, then combines that result with run-to-run variation. This
 tutorial reproduces the paper's **diagnostic** capture bound: a value used to
@@ -54,7 +55,7 @@ The large raw recording is not in this documentation checkout. [Appendix A.6](..
 that stands between a stored number and its use, and refuses rather than warns.
 It reads the printed values from Section 2 of the paper, verifies the event log
 and raw power-record fingerprints against `instrument_evidence.json`, and then
-works from the original file bytes. It recomputes the **clock-placement bound**
+works from the original file bytes. It recomputes the **clock-anchor bound**
 — the upper limit on how far the two clocks' alignment may be wrong — while
 allowing the ordinary clock and the machine's always-advancing clock to run at
 slightly different rates. It also recomputes every **pulse fit** — the
@@ -72,6 +73,12 @@ guide's §§4.2–4.4 build the search that produces it.
 The comparison is exact for counts and for numbers represented in Python’s standard 64-bit floating-point format. Only the two signed best-fit lags—the on-and-off time shifts producing the closest fit—use the paper’s stated three-decimal rounding. The script also checks the paper’s displayed subtraction with exact decimal arithmetic, meaning base-ten subtraction without a binary approximation.
 
 The reported “43 of 43” means that all 43 comparison rows matched. The rows are two counts, thirteen exact floating-point values, two rounded best-fit lags, one pulse name, and five fields for each of five clock readings: \(2+13+2+1+(5\times5)=43\). It does not mean that 43 recordings were tested.
+
+A warning about a second overloaded word: the search rectangles below are also
+called *cells* in the code, which is where `cell_count` gets its name. That is
+an unrelated sense — a search cell is a rectangle of edge-shift hypotheses,
+meaning possible on/off edge shifts, while the *cell* in *cell resolution
+bound* is a group of like-for-like runs.
 
 `cell_count` is the number of search steps the edge-fitting calculation took
 for this recording. The instrument guide calls one such step an
@@ -93,10 +100,10 @@ The replay’s data flow is shown below. **Onset** means a switch-on edge; **off
     -- authenticates --> [recomputation of clock placement and pulse fits]
 [recomputation of clock placement and pulse fits]
     -- produces --> [allowed onset and offset intervals]
-    -- produces --> [clock-placement bound]
+    -- produces --> [clock-anchor bound]
 [allowed onset and offset intervals]
     -- reduce to --> [largest absolute edge displacement]
-[largest absolute edge displacement] + [clock-placement bound]
+[largest absolute edge displacement] + [clock-anchor bound]
     -- add once --> [final capture bound]
 [final capture bound]
     -- compare exactly --> [paper’s printed bound]
@@ -122,11 +129,6 @@ Here `/path/to/corpus` is the directory that contains
 `runs_window_a_20260722/`, not the recording directory itself.
 
 The run printed one `ok` row per match: `draft` is the value read from the paper and `derived` is the value recomputed from the retained files. Its exact output was:
-
-Some rows show the two columns in different notation — for example,
-`0.0000010000000000000002` and `1.0000000000000002e-06`. The `draft` column
-reproduces the paper's printed decimal rendering; the comparison is made on
-the parsed 64-bit values, which are identical.
 
 ```text
 ok   pulse_count: draft=59 derived=59
@@ -177,6 +179,11 @@ COMPARED 43
 MISMATCHES 0
 ```
 
+Some rows show the two columns in different notation — for example,
+`0.0000010000000000000002` and `1.0000000000000002e-06`. The `draft` column
+reproduces the paper's printed decimal rendering; the comparison is made on
+the parsed 64-bit values, which are identical.
+
 Thus the current result is 43 matches out of 43 comparisons, with no mismatch.
 
 ## Reproduce the arithmetic by hand
@@ -202,12 +209,14 @@ offset worst case = max(|-0.008607394549133255|, |-0.005308621075866744|)
 
 The onset value is larger. The replay checks every onset and offset from all 59 detected pulses—118 edge values—and confirms that this onset is the unique maximum.
 
-The second number is the **clock-placement bound**: the power record and pulse
-commands are stamped by two different clocks, and this scalar limits how far
-their alignment may be wrong. The instrument guide's §5
+The second number is the **clock-anchor bound**, which the replay prints as
+`anchor_bound_s`: the power record and pulse commands are stamped by two
+different clocks, and this scalar limits how far their alignment may be wrong.
+The instrument guide's §5
 derives it. The recomputed value is `0.0011349971959968978` seconds. It is
-added rather than combined in quadrature because it is a bound, not a standard
-deviation: the pulse-edge and clock-placement errors may both take their
+added rather than combined *in quadrature* — as the square root of the sum of the
+squares, the rule for independent random errors — because it is a bound, not a
+standard deviation: the pulse-edge and clock-anchor errors may both take their
 worst-case values at the same time. A sum smaller than that legal combination
 would not be a bound. Add it once to the maximum edge displacement, using the
 same 64-bit floating-point arithmetic as the implementation:
@@ -226,5 +235,5 @@ That is the capture bound. It exactly matches the value in [Section 2, “One di
 - Locate the five retained files and explain which three primary inputs the replay reads.
 - Use `--corpus-root` when the retained corpus is outside the documentation checkout.
 - Explain what each stage in the replay diagram computes.
-- Recalculate the maximum edge displacement and add the independent clock-placement bound.
+- Recalculate the maximum edge displacement and add the independent clock-anchor bound.
 - Interpret 43 matches as checked paper values, not recordings.
