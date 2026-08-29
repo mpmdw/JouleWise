@@ -3523,8 +3523,8 @@
       "acceptance": {
         "evidence": [
           "scripts/refresh_receipt_histsem_pinset.py --refresh-row re-derives only current_pack_sha256 (committed_pack_tree_sha256) and post_authoring_delta (_histsem_delta); every other field is immutable and the tool refuses with the existing histsem_* codes (canonical refusal JSON, exit 2) rather than change one, refuses a dirty pack directory (histsem_binding_mismatch) and an unpublished row head_commit or HEAD (histsem_commit_unpublished), prints a unified row diff, writes canonically and idempotently, and verifies the whole pinset before and after an in-place write (restore on refusal)",
-          "--refresh-tool-sidecars regenerates the four ruled custody-tool .sha256 sidecars from the committed HEAD blobs under the same refusals, and the family-marker tripwire asserts each sidecar equals the independent gnu_sidecar oracle and the lane's renderer",
-          "tests/test_receipt_histsem.py: the 'no update lane' test becomes test_pinset_is_byte_pinned_and_has_no_unreviewed_update_lane, and ReceiptHistsemRefreshLaneTests cover stale-to-PASS, dirty, unpublished, immutable fields, idempotence, --print-pinset-sha256 / --write-test-pin, post-write restore, the path fence, the in-place enumeration guard and the sidecar mode",
+          "--refresh-tool-sidecars regenerates the four ruled custody-tool .sha256 sidecars from the committed HEAD blobs under the same refusals, and the family-marker tripwire asserts each sidecar equals the tripwire's own independent sidecar renderer (gnu_sidecar) and the lane's renderer",
+          "tests/test_receipt_histsem.py: the 'no update lane' test becomes test_pinset_is_byte_pinned_and_has_no_unreviewed_update_lane, and ReceiptHistsemRefreshLaneTests cover stale-to-PASS, dirty, unpublished, immutable fields, idempotence, --print-pinset-sha256 / --write-test-pin, post-write restore, the path fence, the in-place enumeration guard (in-place mode requires an enumerated pinset member; --output outside the repository is a labelled PREVIEW) and the sidecar mode",
           "docs/contracts/receipt_histsem_verifier.md is amended for the reviewed lane; the lane PR itself leaves the pinset bytes, PINSET_SHA256 and the four sidecars unchanged (the real _v3 refresh is S8's, on #209, after the lane merges)"
         ],
         "pointer": {
@@ -3563,7 +3563,7 @@
       "priority": "p1_phase_gate",
       "rank": 118,
       "status": "partial",
-      "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) as PARTIAL: the lane is implemented and gauntlet-complete on PR #228 (stream S14, branch feat/pinset-refresh-row-lane, head 728fe5c6 at registration; Sol xhigh implement x2 -> Sol xhigh audit (7 findings) -> Opus contract-lens + Sol execution-lens refuters (F1/F3 split, F2/F4 narrowed, F5 a rebase artifact) -> FIX-1..6 -> Sol high delta re-audit; lead-verified scratch-copy proof twice, resulting row byte-equal to S8's independent derivation), OPEN and unmerged when this row was registered. Closes with a Completed line in a later wave once #228 merges; the D-161 index row and WAVE-ROWS.md name it CLOSED-on-merge.",
+      "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) as PARTIAL: the lane is implemented and gauntlet-complete on PR #228 (stream S14, branch feat/pinset-refresh-row-lane, head 0051e126 at registration, moved from 728fe5c6 during the wave's verification; Sol xhigh implement x2 -> Sol xhigh audit (7 findings) -> Opus contract-lens + Sol execution-lens refuters (F1/F3 split, F2/F4 narrowed, F5 a rebase artifact) -> FIX-1..6 -> Sol high delta re-audit; lead-verified scratch-copy proof twice, resulting row byte-equal to S8's independent derivation), OPEN and unmerged when this row was registered. Closes with a Completed line in a later wave once #228 merges; the D-161 index row and WAVE-ROWS.md name it CLOSED-on-merge.",
       "stop_card": null
     },
     "PIPELINE-SMOKE-LIVE-01": {
@@ -3598,6 +3598,13 @@
         },
         {
           "authority": {
+            "label": "D-158 ruling R-3 (license and hands; not superseded by D-162)",
+            "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Runs under D-139/D-142's diagnostic license; Ed's hands only for anything D-127/D-149 reserves (G2 is the shakedown night)"
+        },
+        {
+          "authority": {
             "label": "D-162, what the seats proved (B-3 shakedown runs root; custody copies are not relocatable)",
             "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
           },
@@ -3608,7 +3615,7 @@
             "label": "D-162 ruling R-4 (calendar)",
             "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
           },
-          "rule": "The calendar stands (R-4): estate 11 + G1 Fri 08-28; shakedown + G2 Sat 08-29; campaign from Sun 08-30 with G3 nightly; G2 is Ed's hands for anything D-127/D-149 reserves"
+          "rule": "The calendar stands (R-4): estate 11 + G1 Fri 08-28; shakedown + G2 Sat 08-29; campaign from Sun 08-30 with G3 nightly"
         }
       ],
       "flags": [
@@ -3620,7 +3627,7 @@
       "priority": "p1_phase_gate",
       "rank": 13,
       "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6 as the ~20-minute quarantined live family generation. RE-SCOPED 2026-08-28 in the T27 second kernel wave per D-162 (docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md): two seats proved from code that a partial run on the real _v4 pack can never answer for a DATA reason (insufficient_complete_blocks and fixed_n_plan_incomplete are CONTRACT-classed; the prospective finalizer requires ten blocks / 80 members) and that the diagnostic-family alternative costs 7-10 Sol-days of new admission code on the mint path days before the campaign, so the D-158 R-3 / D-160 R-2 scope is superseded by G1/G2/G3; the D-158 R-3 quarantine and license fences fall with it, and the runbook landed by #223 is re-cut to G2 (R-2). G1 and G3 are desk work; G2 runs on the shakedown night, which keeps the quiet_mac lane and Ed's hands. Nothing here changes the _v4 pack or the mint path.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6 as the ~20-minute quarantined live family generation. RE-SCOPED 2026-08-28 in the T27 second kernel wave per D-162 (docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md): two seats proved from code that a partial run on the real _v4 pack can never answer for a DATA reason (insufficient_complete_blocks and fixed_n_plan_incomplete are CONTRACT-classed; the prospective finalizer requires ten blocks / 80 members) and that the diagnostic-family alternative costs 7-10 Sol-days of new admission code on the mint path days before the campaign, so the D-158 R-3 / D-160 R-2 scope is superseded by G1/G2/G3; the D-158 R-3 quarantine fence (smoke pack id, own runs root, never marker-signed) falls with it while its license-and-hands clause stays, and the shakedown runsheet is re-cut from PR #225's phases to G2 (R-2). G1 and G3 are desk work; G2 runs on the shakedown night, which keeps the quiet_mac lane and Ed's hands. Nothing here changes the _v4 pack or the mint path.",
       "stop_card": null
     },
     "PIPELINE-SMOKE-TIER2-01": {
@@ -3630,7 +3637,7 @@
           "The fixture executable and prefix are hard-pinned, and a substituted executable or prefix is refused",
           "Every D-160 F-5 join is asserted by the replay leg",
           "No floor rule changes: the clean leg's floor comes from a real calibration present in the replayed trace, and inputs.py's refusal of calibration_scope == smoke as cell_not_claim_ready is unchanged",
-          "Path A (D-162 R-1): the diagnostic family is built here post-campaign as the permanent desk clean leg; every relaxation it needs (the planned_n_blocks pin at analysis_manifest_v3.py:34, :946, :2152-2159 among them) is gated on the authenticated generation_kind == pipeline_smoke and proven unreachable for any other generation kind, and none of it enters production before the _v4 transaction closes"
+          "Path A (D-162 R-1): the diagnostic family is built here post-campaign as the substrate of the permanent desk clean leg, and none of it enters production before the _v4 transaction closes; the D-162 addendum's F1 finding (Path A must relax the claim-bearing validator's planned_n_blocks pin at analysis_manifest_v3.py:34, :946, :2152-2159) is why it is not built pre-campaign, and any seam it adds is designed under this row's existing D-160 R-4 constraints"
         ],
         "pointer": {
           "json_pointer": "/tasks/PIPELINE-SMOKE-TIER2-01/acceptance",
@@ -4394,7 +4401,7 @@
         "evidence": [
           "Wave (a): the quiet-guard PID-custody and same-UID injection guards emit WARN-AND-RECORD instead of refusing (D-148 (6) already accepted them as limitations); the contamination census is unchanged and still fail-closed",
           "Wave (b): the authentication_io forbidden-key check, input_changed, and the AST direct-read lint are retired through DEAD_REASON_CODES in reason_kinds.py with the partition-totality, live-emitter and executed-witness meta-guards green",
-          "Wave (c): the exact live-ID oracle and the gen_state --check hard fail become a regenerate-and-diff step in CI that reports without blocking",
+          "Wave (c): the exact live-ID oracle (tests/test_gen_state.py's EXPECTED_IDS set and count) and the gen_state --check hard fail become a regenerate-and-diff step in CI that reports without blocking",
           "Wave (d): the per-file pack digest tables, FROZEN_GENERATOR_SHA256, the reducer source pin, the mint-core interface pin and the callable-source hashes are retired, citing the registry regeneration test as the surviving proof of the same fact",
           "Wave (e): CI timing and count pins are derived rather than pinned",
           "Wave (f): doc-to-code prose tripwires are retired while the launcher-argv regression (D-158 R-4) and the DATA/CONTRACT partition stay in force",
@@ -4415,7 +4422,7 @@
         {
           "evidence": null,
           "kind": "task",
-          "required": "registered post-_v4 by the prune ruling R-4/R-7: the frozen runbook C10/E4 and estate 11 consume PASS from guards this row prunes",
+          "required": "registered post-_v4 by the prune ruling R-4/R-7: the frozen real-transaction runbook's steps C10/E4 and estate 11 consume PASS from guards this row prunes",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
@@ -4447,7 +4454,7 @@
         }
       ],
       "flags": [],
-      "goal": "Post-_v4 prune of the custody refusals whose only defended-against actor is the trusted operator acting deliberately, in the six ruled waves of the threat-model prune ruling R-4, in order of cost saved: (a) quiet-guard PID-custody / same-UID injection guards to WARN-AND-RECORD (the contamination census itself stays); (b) authentication_io forbidden-key, input_changed and the AST direct-read lint retired; (c) the exact live-ID oracle and the gen_state --check hard fail become regenerate-and-diff in CI (keep the check, stop blocking); (d) per-file pack digest tables, FROZEN_GENERATOR_SHA256, the reducer source pin, the mint-core interface pin and callable-source hashes retired (the registry regeneration test proves the same fact); (e) CI timing/count pins derived; (f) doc-to-code prose tripwires retired, keeping the launcher-argv regression (D-158 R-4) and the DATA/CONTRACT partition.",
+      "goal": "Post-_v4 prune of the custody refusals whose only defended-against actor is the trusted operator acting deliberately, in the six ruled waves of the threat-model prune ruling R-4, in order of cost saved: (a) quiet-guard PID-custody / same-UID injection guards to WARN-AND-RECORD (the contamination census itself stays); (b) authentication_io forbidden-key, input_changed and the AST direct-read lint retired; (c) the exact live-ID oracle (tests/test_gen_state.py's EXPECTED_IDS set and count) and the gen_state --check hard fail become regenerate-and-diff in CI (keep the check, stop blocking); (d) per-file pack digest tables, FROZEN_GENERATOR_SHA256, the reducer source pin, the mint-core interface pin and callable-source hashes retired (the registry regeneration test proves the same fact); (e) CI timing/count pins derived; (f) doc-to-code prose tripwires retired, keeping the launcher-argv regression (D-158 R-4) and the DATA/CONTRACT partition.",
       "id": "THREAT-MODEL-PRUNE-01",
       "lane": "agent",
       "priority": "p2_next_slice",
