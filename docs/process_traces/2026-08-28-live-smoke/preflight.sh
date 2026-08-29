@@ -120,7 +120,9 @@ if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
 
   # B10: authenticate the physical calibration ledger against the committed
   # tracked pin with the production loader. This deliberately disables only
-  # custody-store replay; it does not weaken ledger parsing, chain, head-pin,
+  # custody-artifact replay (observation artifacts re-hashed at their custody
+  # locators; `_custody_reasons`, calibration_ledger.py:1773/:2073); it does not
+  # weaken ledger parsing, chain, head-pin,
   # rollback, stale-head, or committed-pin checks.
   ledger_path="$SMOKE_CHECKOUT/runs/calibration_observation_ledger.jsonl"
   ledger_pin="$SMOKE_CHECKOUT/configs/calibration/calibration_ledger_head.json"

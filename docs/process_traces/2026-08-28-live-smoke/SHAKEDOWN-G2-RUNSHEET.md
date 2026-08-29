@@ -20,7 +20,9 @@ and the calibration/reference/launch/verdict chain
 as `readiness_record_expired`, and writes no bundle; the consuming shakedown
 arm launches once; pre and post bracket slots finalize; exactly one complete
 A/B/B/A block is collected; the bracket binding is built before the one
-authoritative passed verdict row; the reusable G3 desk block reports no FAIL;
+authoritative passed verdict row; the reusable G3 desk block reports
+`PASS NR14-LAYOUT`, no FAIL, and either exercised `PASS S11-A4` or
+`SKIP S11-A4 present_stages=0 assertion_not_exercised`;
 and the scratch-copy refusal check observes exactly
 `analysis_finalization_member_cover_mismatch`. Any retry, second verdict,
 missing predecessor, unexpected refusal, CONTRACT mutation, or write beneath
@@ -28,7 +30,7 @@ the real custody by the refusal check is not PASS.
 
 ## BLOCKERS — resolve before any live command
 
-1. **B1 — the current `run_campaign.py` parser cannot select one A/B/B/A
+1. **OWN-B1 — the current `run_campaign.py` parser cannot select one A/B/B/A
    block from a frozen five-block `_v4` stage.** Its collection parser accepts
    a positional `config_dir` and campaign controls, but has no block/member
    selector (`scripts/run_campaign.py:648-719`); discovery consumes the JSON
@@ -38,9 +40,17 @@ the real custody by the refusal check is not PASS.
    (`:1402-1481`). Therefore the required one-block collection command is not
    rendered. Cure with a governed, prospective-manifest-authenticated
    one-block stage or a parser/selection artifact that production membership
-   authenticates; do not pass an invented flag.
+   authenticates; do not pass an invented flag. Note on the one flag whose
+   name invites confusion: `--shakedown-gate production_uncertainty_v1`
+   (`scripts/run_campaign.py:672`) is NOT a selector and has nothing to do
+   with the B-3 shakedown window. It is the P2-038 per-bundle gate — after
+   each successful bundle it runs strict validation, a scratch re-reduce,
+   strict post-reduce validation, the production-uncertainty assertion and
+   the backup command, and stops the campaign on the first
+   `SHAKEDOWN_GATE_FAILED[...]` (`:1990-2262`, `:8422-8436`, `:8727-8739`).
+   It bounds bundle quality, never bundle count.
 
-2. **B2 — the named measurement checkout does not yet contain the real `_v4`
+2. **B-SUPPLY — the named measurement checkout does not yet contain the real `_v4`
    supply.** The 2026-08-28 desk census found no
    `configs/campaigns/d117_{contrast,floor}_*_v4` directories and no real v4
    aggregate-floor artifact under
@@ -70,16 +80,42 @@ the real custody by the refusal check is not PASS.
    been provisioned in the named measurement checkout, but any later failure
    is an ABORT, never a copy-from-an-unknown-source retry.
 
-No live command below is authorized until B1–B3 are cured at a newly reviewed
+5. **B2/B9 — both `_v4` arms and the consuming launch require the step-6
+   confirmation pair.** The real gamma pack is in the registry's
+   `successor_pack_ids`, so `_gate_family_publication` engages for both the
+   rehearsal arm and the consuming arm (`joulewise/arm_readiness.py:11721-11752`;
+   arm call at `:8137-8142`). This is the real-pack re-cut of #225's B9
+   disclosure: unlike the discarded diagnostic pack, this pack is supposed to
+   traverse the publication gate; no admission exception is needed, and the
+   estate-11 transaction has produced the marker. A missing out-of-band digest
+   refuses `confirmation_missing` before table semantics are trusted
+   (`:11376-11416`). `generate_arm_readiness.py arm` and `verify` accept only
+   `--expected-confirmation-digest`; they resolve the table implicitly from
+   `<window-custody-root>/family_publication/d117_step6_confirmation_table_v4.json`
+   (`:8077-8087`; CLI forwarding `scripts/generate_arm_readiness.py:141-152`).
+   `launch_window.py` accepts both the explicit table path and digest
+   (`scripts/launch_window.py:38-60`). Phase A must therefore stage the marker,
+   marker sidecar, table, and table sidecar at the implicit custody location,
+   and the lead must carry `hC` from the real transaction's E3/E4 custody
+   transcript as a frozen input, never recompute it from table bytes
+   (`real-transaction-runbook.md:1746-1764`).
+
+No live command below is authorized until OWN-B1, B-SUPPLY, B2/B9, and B3 are cured at a newly reviewed
 head and B10 passes in the actual execution checkout.
 
 ## NEEDS-RULING
 
-1. **One-block authenticated selection.** Choose between a frozen one-block
-   stage emitted in the real pack and a production-authenticated selector.
-   Recommendation: an outcome-blind selector bound into the pack/arm plan, so
-   the shakedown stays on real bytes and the campaign manifest records the
-   exact selected occurrence. This blocks the launch-chain rendering.
+1. **NR-1 — one-block authenticated selection.** Exactly four options remain;
+   this runsheet does not choose among them:
+   (a) run the full frozen stage, which amends G2's literal “one block”;
+   (b) terminate after block one, whose clean-close/campaign-manifest semantics
+   are unruled and which leaves incomplete members/locks while aborting the
+   strict chain before post bracket and lifecycle completion;
+   (c) freeze a one-block stage/chain list into the real successor pack before
+   its reviewed freeze, which changes pack bytes before estate 11; or
+   (d) add an authenticated runtime selector, which is a production gate change
+   outside D-162 R-3. The science-block command below is consequently a
+   `BLOCKED-UNTIL-RULING` template, not an instruction.
 
 2. **Ledger-pin changed-set disposition.** The post-bracket pin bump changes
    `configs/calibration/calibration_ledger_head.json`, but that path is outside
@@ -132,11 +168,13 @@ straddle, borrow, or shorten the later T-0 clean dwell.
 
 ```sh
 export MEASUREMENT_CHECKOUT=/Users/edr/JouleWise-measurement-20260813
+export SMOKE_CHECKOUT=/Users/edr/JouleWise-smoke/checkout
 export PY=/Users/edr/code/JouleWise/.venv/bin/python
 export PYTHONPATH="$MEASUREMENT_CHECKOUT"
 export SHAKEDOWN_ROOT=/Users/edr/JouleWise-shakedown-g2/2026-08-29
 export CUSTODY_ROOT="$SHAKEDOWN_ROOT/custody"
 export RUNS_ROOT="$CUSTODY_ROOT/runs"
+export BOUND_RUNS_ROOT="$CUSTODY_ROOT/neg8-bound-runs"
 export ANALYSIS_ROOT="$SHAKEDOWN_ROOT/analysis"
 export CLAIMS_ROOT="$SHAKEDOWN_ROOT/claims"
 export SCRATCH_ROOT="$SHAKEDOWN_ROOT/scratch"
@@ -150,6 +188,20 @@ export POLICY="$MEASUREMENT_CHECKOUT/configs/campaign_policies/quiet_mac_p2_prod
 export CALIBRATION_LEDGER="$MEASUREMENT_CHECKOUT/runs/calibration_observation_ledger.jsonl"
 export LEDGER_HEAD_PIN="$MEASUREMENT_CHECKOUT/configs/calibration/calibration_ledger_head.json"
 export ARM_READINESS_CUSTODY_ROOT="$SHAKEDOWN_ROOT/arm-readiness"
+export FAMILY_PUBLICATION_SOURCE_ROOT='LEAD-SUPPLIED-FROZEN-INPUT'
+export FAMILY_PUBLICATION_ROOT="$ARM_READINESS_CUSTODY_ROOT/family_publication"
+export FAMILY_PUBLICATION_MARKER="$FAMILY_PUBLICATION_ROOT/d117_family_publication_v4.json"
+export STEP6_CONFIRMATION_TABLE="$FAMILY_PUBLICATION_ROOT/d117_step6_confirmation_table_v4.json"
+# Lead carries hC from the real-transaction E4 custody transcript; never hash C here.
+export EXPECTED_CONFIRMATION_DIGEST='LEAD-SUPPLIED-FROZEN-INPUT'
+export BOUND_CONFIG_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/neg8_reference_corpus"
+export BOUND_MANIFEST="$BOUND_CONFIG_ROOT/derivation/settled_corpus.json"
+export REF_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/window_references"
+export CLAIM_LOG="$RUNS_ROOT/campaign_log.jsonl"
+export BOUND_LOG="$BOUND_RUNS_ROOT/campaign_log.jsonl"
+export NEG8_DRIFT_BOUND="$RUNS_ROOT/neg8-drift-bound.json"
+export FINALIZED_MANIFEST=''
+export CHECK_FINALIZED_ARGS=''
 export WINDOW_ID=d117-g2-shakedown-20260829
 export BRACKET_SESSION_ID=d117-g2-shakedown-20260829-calibration
 export PRE_ATTEMPT_ID=d117-g2-shakedown-20260829-cal-pre
@@ -196,32 +248,66 @@ test -f "$FLOOR_7_PACK_ROOT/plan_tree.json"
 test -f "$AGGREGATE_FLOOR_ARTIFACT"
 test -f "$CALIBRATION_LEDGER"
 test -f "$LEDGER_HEAD_PIN"
+test -f "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_family_publication_v4.json"
+test -f "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_family_publication_v4.json.sha256"
+test -f "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_step6_confirmation_table_v4.json"
+test -f "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_step6_confirmation_table_v4.json.sha256"
+test "$EXPECTED_CONFIRMATION_DIGEST" != LEAD-SUPPLIED-FROZEN-INPUT
 ```
 
 Do not run `preflight.sh` until B3 is ruled. Once ruled, execute its unchanged
 checkout gates plus the new B10 production-loader gate; never cherry-pick only
 the PASS text.
 
-### A2 — stage exact pack copies in custody (MAGISTRATE)
+### A2 — stage the complete finalizer input tree in custody (MAGISTRATE)
 
-CWD: `$MEASUREMENT_CHECKOUT`. Timing: <1 min. Expected artifacts: exact
-prospective/tree/plan/floor copies and a pre-bracket ledger snapshot under
-custody. Expected refusal: any `cmp` mismatch. These copies make the later
-refusal mode copy-safe because every finalizer argument is beneath
-`$CUSTODY_ROOT`.
+CWD: `$MEASUREMENT_CHECKOUT`. Timing: <2 min before launch, then <1 min after
+the post bracket. Expected artifacts: a byte-identical complete pack subtree,
+floor, completed ledger, and adjacent head pin. Expected refusal: any recursive
+diff or `cmp` mismatch. The prospective validator resolves every binding
+relative to the manifest directory: calibration plan
+(`analysis_manifest_v3.py:1945-1952`), root order manifest (`:1964-1971`), four
+stage order manifests (`:1982-2008`), four condition-family definitions
+(`:2030-2088`), every non-null prompt artifact (`:2330-2348`), and all 80 member
+configs (`:2567-2574`). The finalizer runs that complete validator before its
+member-cover check (`:3775-3784` before `:2970-2980`), so partial staging is a
+staging defect, not a night result.
 
 ```sh
 /bin/mkdir -p "$CUSTODY_ROOT/prospective" "$CUSTODY_ROOT/calibration" \
-  "$CUSTODY_ROOT/floors" "$RUNS_ROOT" "$ANALYSIS_ROOT" "$CLAIMS_ROOT" \
+  "$CUSTODY_ROOT/floors" "$RUNS_ROOT" "$BOUND_RUNS_ROOT" "$ANALYSIS_ROOT" "$CLAIMS_ROOT" \
   "$SCRATCH_ROOT" "$TRANSCRIPT_ROOT" "$WINDOW_PLAN_ROOT" "$REHEARSAL_PLAN_ROOT"
-/bin/cp -p "$PACK_ROOT/analysis_manifest_v3.json" "$CUSTODY_ROOT/prospective/analysis_manifest_v3.json"
-/bin/cp -p "$PACK_ROOT/plan_tree.json" "$CUSTODY_ROOT/prospective/plan_tree.json"
-/bin/cp -p "$PACK_ROOT/calibration_plan.json" "$CUSTODY_ROOT/prospective/calibration_plan.json"
+/bin/cp -Rp "$PACK_ROOT/." "$CUSTODY_ROOT/prospective/"
 /bin/cp -p "$AGGREGATE_FLOOR_ARTIFACT" "$CUSTODY_ROOT/floors/d117-v4-aggregate-floor.json"
-/usr/bin/cmp -s "$PACK_ROOT/analysis_manifest_v3.json" "$CUSTODY_ROOT/prospective/analysis_manifest_v3.json"
-/usr/bin/cmp -s "$PACK_ROOT/plan_tree.json" "$CUSTODY_ROOT/prospective/plan_tree.json"
-/usr/bin/cmp -s "$PACK_ROOT/calibration_plan.json" "$CUSTODY_ROOT/prospective/calibration_plan.json"
+/usr/bin/diff -r "$PACK_ROOT" "$CUSTODY_ROOT/prospective"
 /usr/bin/cmp -s "$AGGREGATE_FLOOR_ARTIFACT" "$CUSTODY_ROOT/floors/d117-v4-aggregate-floor.json"
+```
+
+After D1 completes both bracket slots, complete the same staging unit before E1:
+
+```sh
+/bin/cp -p "$CALIBRATION_LEDGER" "$CUSTODY_ROOT/calibration/calibration_observation_ledger.jsonl"
+/bin/cp -p "$LEDGER_HEAD_PIN" "$CUSTODY_ROOT/calibration/calibration_ledger_head.json"
+/usr/bin/cmp -s "$CALIBRATION_LEDGER" "$CUSTODY_ROOT/calibration/calibration_observation_ledger.jsonl"
+/usr/bin/cmp -s "$LEDGER_HEAD_PIN" "$CUSTODY_ROOT/calibration/calibration_ledger_head.json"
+```
+
+### A3 — stage the publication marker and confirmation pair (MAGISTRATE)
+
+The source directory and `hC` are lead-produced frozen inputs from the real
+transaction. Copy all four published bytes into the arm API's implicit custody
+directory; do not rename, regenerate, or hash the table to obtain `hC`.
+
+```sh
+/bin/mkdir -p "$FAMILY_PUBLICATION_ROOT"
+/bin/cp -p "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_family_publication_v4.json" "$FAMILY_PUBLICATION_MARKER"
+/bin/cp -p "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_family_publication_v4.json.sha256" "$FAMILY_PUBLICATION_MARKER.sha256"
+/bin/cp -p "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_step6_confirmation_table_v4.json" "$STEP6_CONFIRMATION_TABLE"
+/bin/cp -p "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_step6_confirmation_table_v4.json.sha256" "$STEP6_CONFIRMATION_TABLE.sha256"
+/usr/bin/cmp -s "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_family_publication_v4.json" "$FAMILY_PUBLICATION_MARKER"
+/usr/bin/cmp -s "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_family_publication_v4.json.sha256" "$FAMILY_PUBLICATION_MARKER.sha256"
+/usr/bin/cmp -s "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_step6_confirmation_table_v4.json" "$STEP6_CONFIRMATION_TABLE"
+/usr/bin/cmp -s "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_step6_confirmation_table_v4.json.sha256" "$STEP6_CONFIRMATION_TABLE.sha256"
 ```
 
 ## Phase B — first live step: ARM-ABORT REHEARSAL
@@ -265,14 +351,17 @@ export REHEARSAL_ARM_CONTEXT_JSON="$(/usr/bin/jq -c . "$ARM_READINESS_CUSTODY_RO
   --pack-root "$PACK_ROOT" \
   --arm-context "$REHEARSAL_ARM_CONTEXT_JSON" \
   --window-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST" \
   > "$TRANSCRIPT_ROOT/rehearsal-arm.json"
 export REHEARSAL_ARM_RECEIPT="$(/usr/bin/jq -er '.receipt_path' "$TRANSCRIPT_ROOT/rehearsal-arm.json")"
 "$PY" scripts/generate_arm_readiness.py verify \
   --pack-root "$PACK_ROOT" --arm-receipt "$REHEARSAL_ARM_RECEIPT" \
+  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST" \
   > "$TRANSCRIPT_ROOT/rehearsal-arm-initial-verify.json"
 # ED waits until the receipt's valid_until_monotonic_ns has passed; never start C1 early.
 if "$PY" scripts/generate_arm_readiness.py verify \
   --pack-root "$PACK_ROOT" --arm-receipt "$REHEARSAL_ARM_RECEIPT" \
+  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST" \
   > "$TRANSCRIPT_ROOT/rehearsal-arm-expiry.json"; then exit 1; fi
 test "$(/usr/bin/find "$RUNS_ROOT" -mindepth 1 -maxdepth 1 -type d | /usr/bin/wc -l | tr -d ' ')" = 0
 ```
@@ -316,10 +405,12 @@ export ARM_CONTEXT_JSON="$(/usr/bin/jq -c . "$ARM_READINESS_CUSTODY_ROOT/$(basen
 "$PY" scripts/generate_arm_readiness.py arm \
   --pack-root "$PACK_ROOT" --arm-context "$ARM_CONTEXT_JSON" \
   --window-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST" \
   > "$TRANSCRIPT_ROOT/shakedown-arm.json"
 export ARM_RECEIPT="$(/usr/bin/jq -er '.receipt_path' "$TRANSCRIPT_ROOT/shakedown-arm.json")"
 "$PY" scripts/generate_arm_readiness.py verify \
   --pack-root "$PACK_ROOT" --arm-receipt "$ARM_RECEIPT" \
+  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST" \
   > "$TRANSCRIPT_ROOT/shakedown-arm-verify.json"
 export LAUNCH_MANIFEST="$ARM_READINESS_CUSTODY_ROOT/$(basename "$PACK_ROOT")/arm_readiness.t0.inputs/launch-manifest.json"
 ```
@@ -340,57 +431,96 @@ any collection nonzero. The current launcher flags are exact
   --pack-root "$PACK_ROOT" \
   --arm-receipt "$ARM_RECEIPT" \
   --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
-  --launch-manifest "$LAUNCH_MANIFEST"
+  --launch-manifest "$LAUNCH_MANIFEST" \
+  --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \
+  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST"
 ```
 
-The frozen chain invoked by D1, never by hand, has this strict order:
-
-1. `launch_window.py --lifecycle-event start`;
-2. pre bracket via the exact command below;
-3. the governed B1 cure’s one A/B/B/A block via `run_campaign.py`;
-4. post bracket via the same exact command with `post` ids;
-5. `launch_window.py --lifecycle-event completion`.
-
-The bracket command accepted by the current parser is:
+The launcher invokes the frozen chain; the following is its governed command
+template, not a second operator invocation. It follows the runbook's exact
+order: start lifecycle, settle, pre bracket, bound corpus and derivation, start
+triplet, before-midpoint science, midpoint, after-midpoint science, end triplet,
+post bracket, completion (`window_runbook.md:1663-1727`). Every flag below was
+confirmed from the current CLI `--help`.
 
 ```sh
+"$PY" scripts/launch_window.py \
+  --pack-root "$PACK_ROOT" --arm-receipt "$ARM_RECEIPT" \
+  --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+  --launch-manifest "$LAUNCH_MANIFEST" --lifecycle-event start \
+  --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \
+  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST"
+
+SLOT=pre ATTEMPT_ID="$PRE_ATTEMPT_ID" \
 "$PY" scripts/validate_powermetrics_fiducial.py --allow-live \
   --arm-countdown-s 20 --sleep-display-before-capture \
   --output-root "$RUNS_ROOT/instrument_validation" \
   --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
-  --session-id "$BRACKET_SESSION_ID" --slot "$SLOT" --attempt-id "$ATTEMPT_ID" \
+  --session-id "$BRACKET_SESSION_ID" --slot pre --attempt-id "$PRE_ATTEMPT_ID" \
   --power-policy "$POWER_POLICY"
-```
 
-`SLOT/PRE_ATTEMPT_ID` are used before the block and
-`SLOT/POST_ATTEMPT_ID` after it. The required one-block collection command is
-not rendered while B1 is open. The full-stage form below is shown only to name
-the flags the current parser actually accepts; **DO NOT EXECUTE IT**, because
-it would collect five blocks rather than one:
-
-```sh
-# NOT EXECUTABLE FOR G2 WHILE B1 IS OPEN
-"$PY" scripts/run_campaign.py "$PACK_ROOT/01_decode_contrast_blocks_01_05" \
-  --runs-dir "$RUNS_ROOT" --log "$RUNS_ROOT/campaign_log.jsonl" \
+"$PY" scripts/run_campaign.py "$BOUND_CONFIG_ROOT" \
+  --runs-dir "$BOUND_RUNS_ROOT" --log "$BOUND_LOG" \
   --campaign-policy "$POLICY" \
   --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
   --instrument-power-policy "$POWER_POLICY" \
   --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+"$PY" scripts/run_campaign.py \
+  --derive-neg8-drift-bound "$BOUND_MANIFEST" \
+  --neg8-drift-bound-output "$NEG8_DRIFT_BOUND" \
+  --runs-dir "$BOUND_RUNS_ROOT"
+
+"$PY" scripts/run_campaign.py "$REF_ROOT/start_triplet" \
+  --runs-dir "$RUNS_ROOT" --log "$CLAIM_LOG" --campaign-policy "$POLICY" \
+  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
+  --instrument-power-policy "$POWER_POLICY" \
+  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+
+# BLOCKED-UNTIL-RULING NR-1 — TEMPLATE ONLY; option (a) would run all five blocks.
+"$PY" scripts/run_campaign.py "$PACK_ROOT/01_decode_contrast_blocks_01_05" \
+  --runs-dir "$RUNS_ROOT" --log "$CLAIM_LOG" --campaign-policy "$POLICY" \
+  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
+  --instrument-power-policy "$POWER_POLICY" \
+  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+
+"$PY" scripts/run_campaign.py "$REF_ROOT/midpoint" \
+  --runs-dir "$RUNS_ROOT" --log "$CLAIM_LOG" --campaign-policy "$POLICY" \
+  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
+  --instrument-power-policy "$POWER_POLICY" \
+  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+"$PY" scripts/run_campaign.py "$REF_ROOT/end_triplet" \
+  --runs-dir "$RUNS_ROOT" --log "$CLAIM_LOG" --campaign-policy "$POLICY" \
+  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
+  --instrument-power-policy "$POWER_POLICY" \
+  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+
+SLOT=post ATTEMPT_ID="$POST_ATTEMPT_ID" \
+"$PY" scripts/validate_powermetrics_fiducial.py --allow-live \
+  --arm-countdown-s 20 --sleep-display-before-capture \
+  --output-root "$RUNS_ROOT/instrument_validation" \
+  --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
+  --session-id "$BRACKET_SESSION_ID" --slot post --attempt-id "$POST_ATTEMPT_ID" \
+  --power-policy "$POWER_POLICY"
+"$PY" scripts/launch_window.py \
+  --pack-root "$PACK_ROOT" --arm-receipt "$ARM_RECEIPT" \
+  --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+  --launch-manifest "$LAUNCH_MANIFEST" --lifecycle-event completion \
+  --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \
+  --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST"
 ```
 
 ## Phase E — postcollection binding before verdict
 
-### E1 — copy the completed ledger and build the binding (MAGISTRATE)
+### E1 — build the binding from the completed staged ledger pair (MAGISTRATE)
 
-CWD: `$MEASUREMENT_CHECKOUT`. Timing: <1 min. Expected artifacts:
-`$CUSTODY_ROOT/calibration/calibration_observation_ledger.jsonl` and
+CWD: `$MEASUREMENT_CHECKOUT`. Timing: <1 min. Expected artifacts: the completed
+ledger and adjacent head already byte-verified by A2, plus
 `$RUNS_ROOT/bracket-binding.json`. Expected refusal:
 `bracket_binding_session_not_finalized`, endpoint invalid, ledger rollback, or
 runs-root identity mismatch. The builder precedes the verdict by R-3′/H5a and
 accepts the exact flags at `scripts/build_bracket_binding.py:383-413`.
 
 ```sh
-/bin/cp -p "$CALIBRATION_LEDGER" "$CUSTODY_ROOT/calibration/calibration_observation_ledger.jsonl"
 "$PY" scripts/build_bracket_binding.py \
   --custody-root "$CUSTODY_ROOT" \
   --session-id "$BRACKET_SESSION_ID" \
@@ -400,8 +530,8 @@ accepts the exact flags at `scripts/build_bracket_binding.py:383-413`.
   --frozen-plan "$CUSTODY_ROOT/prospective/calibration_plan.json" \
   --evidence-root-id "$EVIDENCE_ROOT_ID" \
   --runs-root "$RUNS_ROOT" \
-  --calibration-ledger "$CALIBRATION_LEDGER" \
-  --head-pin "$LEDGER_HEAD_PIN" \
+  --calibration-ledger "$CUSTODY_ROOT/calibration/calibration_observation_ledger.jsonl" \
+  --head-pin "$CUSTODY_ROOT/calibration/calibration_ledger_head.json" \
   --output "$RUNS_ROOT/bracket-binding.json" \
   > "$TRANSCRIPT_ROOT/bracket-binding.json"
 ```
@@ -414,7 +544,14 @@ copy at `$RUNS_ROOT/whole-window-verdict.json`, both beneath the runs root as
 NR-14 requires. Expected refusal: bracket binding invalid/missing, window
 membership unresolved, or any whole-window condition. `run_campaign.py` has no
 `--calibration-ledger` or `--head-pin`; it reads the code-owned default paths,
-so B10 must already pass. Do not invent those flags.
+so B10 must already pass. Do not invent those flags. The producer loads the
+derived NEG-8 bound and reconstructs the reference membership at
+`scripts/run_campaign.py:6149-6165`; without the governed corpus/bound and
+start/midpoint/end references the production-policy verdict is `failed`, its
+endpoint protocol is `invalid`, and the conditions include
+`neg8_bracket_missing`, `neg8_bracket_reference_invalid`,
+`neg8_drift_bound_underived`, and
+`neg8_idle_sub_drift_bound_underived`.
 
 ```sh
 "$PY" scripts/run_campaign.py --whole-window-verdict \
@@ -466,7 +603,12 @@ manifest append-only into its custody output
   --output-dir "$CUSTODY_ROOT"
 ```
 
-The default expected set is derived from the real finalizer’s passed-verdict
+The default expected set is reachable **only** from A2's complete staged pack
+subtree and completed adjacent ledger/head pair. If the stage directories or
+any other manifest-relative binding are absent, the observed singleton is
+`analysis_finalization_prospective_invalid`; that is a custody staging error,
+not a night result, and it must remain nonzero because it differs from the
+default. With complete staging, the default expected set is derived from the real finalizer’s passed-verdict
 member-cover gate, not from the analysis engine’s later claim counts: a
 one-block basis does not cover all 80 frozen members and refuses
 `analysis_finalization_member_cover_mismatch`
@@ -518,9 +660,11 @@ extra bundle, second verdict, expired consuming arm, or process-census failure:
 
 1. stop the chain; do not issue another arm, session id, attempt id, bracket,
    bundle, binding, or verdict;
-2. preserve the arm receipt, all T-0 receipts, launch lifecycle, partial bundle
-   directories, campaign manifests/log, ledger and head pin, calibration
-   custody, binding/verdict if present, stdout/stderr, and `git status`;
+2. preserve the publication marker/table and sidecars, both arm receipts, all
+   T-0 receipts, every launch lifecycle receipt, bound-corpus bundles and bound,
+   start/midpoint/end reference bundles, partial science bundles, campaign
+   manifests/logs, ledger and head pin, pre/post calibration custody,
+   binding/verdict if present, stdout/stderr, and `git status`;
 3. write the refusal JSON/stdout/stderr under `$TRANSCRIPT_ROOT/refusals/` and
    record its SHA-256 in the operator handoff;
 4. label the run `ABORTED_NON_CLAIM_BEARING`; never move its bundles into a
@@ -543,11 +687,19 @@ or delete as part of this runsheet.
 Set `$RUNS_ROOT` to that night’s exact runs root. The pack/custody/binding/
 verdict/ledger variables must name artifacts for that same window. For G2,
 leave `FINALIZED_MANIFEST` empty; after a full campaign finalizes, set it so
-S11-A2 selects `lineage.collection_manifest_id`. Stages absent from a nightly
-root print `SKIP S11-A4 <stage> absent`; SKIP never changes the exit status.
+S11-A2 selects `lineage.collection_manifest_id`. The roster defaults to S11
+A4's committed calibration/reference/floor/metrology list. It may instead be
+passed explicitly from the frozen `before_midpoint_stages.txt` and
+`after_midpoint_stages.txt` files; the checker does not derive those lists.
+When none of the configured stages is present it prints exactly
+`SKIP S11-A4 present_stages=0 assertion_not_exercised`, never a vacuous PASS;
+SKIP does not change the exit status. Stage matching uses the campaign
+manifest's `config_dir`, written by `new_campaign_provenance`
+(`run_campaign.py:3436-3452`, caller `:8223-8229`).
 
-CWD: `$MEASUREMENT_CHECKOUT`. Timing: <1 min. Expected output: one PASS/FAIL
-line per assertion, optional S11-A4 SKIPs, and `SUMMARY ... fail=0`. Expected
+CWD: `$MEASUREMENT_CHECKOUT`. Timing: <1 min. Expected output:
+`PASS NR14-LAYOUT`, one PASS/FAIL line per exercised assertion, the S11-A4
+PASS-or-SKIP result above, and `SUMMARY ... fail=0`. Expected
 refusal: any FAIL or exception gives nonzero; the checker writes nothing.
 
 ```sh

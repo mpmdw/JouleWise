@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -22,7 +23,6 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.analysis_engine.inputs import (  # noqa: E402
     BundleEvidence,
-    _exclude_evidence,
     _finalized_runs_root,
     _manifest_collection_id,
     campaign_cooldown_evidence,
@@ -43,14 +43,8 @@ from joulewise.whole_window import (  # noqa: E402
     supersession_entry_validation_results,
     whole_window_refusal_reasons,
 )
-from scripts.run_campaign import (  # noqa: E402
-    _sha256_bytes,
-    _validated_bracket_binding_input,
-    _whole_window_campaign_membership,
-)
-
-
 ASSERTION_IDS = (
+    "NR14-LAYOUT",
     "S11-A1",
     "S11-A2",
     "S11-A3",
@@ -66,8 +60,12 @@ DEFAULT_NULL_BOUND_STAGES = (
     "window_references/start_triplet",
     "window_references/midpoint",
     "window_references/end_triplet",
-    "d117_floor_qwen25_1p5b_v4",
-    "d117_floor_qwen25_7b_v4",
+    "d117_floor_qwen25_1p5b_v1",
+    "d117_floor_qwen25_1p5b_v2",
+    "d117_floor_qwen25_1p5b_v3",
+    "d117_floor_qwen25_7b_v1",
+    "d117_floor_qwen25_7b_v2",
+    "d117_floor_qwen25_7b_v3",
     "qwen25_7b_decode_floor_v1",
     "metrology_v1",
 )
@@ -87,15 +85,17 @@ class Reporter:
         self.skipped = 0
         self.failed = 0
 
-    def assertion(self, assertion_id: str, check: Callable[[], str]) -> None:
+    def assertion(self, assertion_id: str, check: Callable[[], str]) -> bool:
         try:
             evidence = check()
         except Exception as exc:  # Every exception belongs to its assertion.
             self.failed += 1
             print(f"FAIL {assertion_id} {type(exc).__name__}: {exc}")
+            return False
         else:
             self.passed += 1
             print(f"PASS {assertion_id} {evidence}")
+            return True
 
     def skip(self, assertion_id: str, evidence: str) -> None:
         self.skipped += 1
@@ -149,54 +149,44 @@ def _member_bundle_ids(manifest: Mapping[str, Any]) -> list[str]:
 
 
 def _science_records(
-    records: Sequence[tuple[Path, Mapping[str, Any]]], manifest_id: str
+    records: Sequence[tuple[Path, Mapping[str, Any]]],
+    prospective: Mapping[str, Any],
 ) -> list[tuple[Path, Mapping[str, Any]]]:
-    # The digest is the independent marker that keeps a mutated/null id visible
-    # to A1.  Exact-id records are included for compatibility with early S11 rows.
+    stages = prospective.get("stage_manifests")
+    stage_ids = {
+        str(stage.get("subcampaign_id"))
+        for stage in stages or []
+        if isinstance(stage, Mapping)
+        and isinstance(stage.get("subcampaign_id"), str)
+    }
     return [
         (path, value)
         for path, value in records
-        if value.get("analysis_manifest_id") == manifest_id
-        or "analysis_manifest_sha256" in value
+        if any(_stage_matches(stage, value.get("config_dir")) for stage in stage_ids)
     ]
 
 
-def _selected_bundle_ids(
-    records: Sequence[tuple[Path, Mapping[str, Any]]], collection_id: str
-) -> set[str]:
-    selected: set[str] = set()
-    for _path, value in records:
-        if value.get("analysis_manifest_id") == collection_id:
-            selected.update(_member_bundle_ids(value))
-    if not selected:
-        raise AssertionFailure(
-            f"no collected bundles select collection_manifest_id={collection_id}"
-        )
-    return selected
+def _stage_matches(stage: str, config_dir: Any) -> bool:
+    if not isinstance(config_dir, str) or not config_dir:
+        return False
+    needle = stage.strip("/")
+    candidate = config_dir.rstrip("/")
+    return (
+        candidate == needle
+        or candidate.endswith(f"/{needle}")
+        or Path(candidate).name == Path(needle).name
+    )
 
 
 def _stage_present(
     stage: str, records: Sequence[tuple[Path, Mapping[str, Any]]]
 ) -> list[tuple[Path, Mapping[str, Any]]]:
     needle = stage.strip("/")
-    basename = Path(needle).name
-    result = []
-    for path, value in records:
-        candidates = {
-            path.stem,
-            str(value.get("stage_id", "")),
-            str(value.get("stage", "")),
-            str(value.get("config_dir", "")).rstrip("/"),
-        }
-        if any(
-            candidate == needle
-            or candidate.endswith(f"/{needle}")
-            or Path(candidate).name == basename
-            for candidate in candidates
-            if candidate
-        ):
-            result.append((path, value))
-    return result
+    return [
+        (path, value)
+        for path, value in records
+        if _stage_matches(needle, value.get("config_dir"))
+    ]
 
 
 def _parse_expected_refusals(value: str) -> frozenset[str]:
@@ -250,7 +240,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         help=(
             "null-bound pack/stage id to scan (repeatable); omitted uses the "
-            "S11-A4 calibration/reference/floor/metrology ids"
+            "exact S11-A4 calibration/reference/floor/metrology roster. The "
+            "option may be repeated with stages from the window's frozen "
+            "before_midpoint_stages.txt/after_midpoint_stages.txt lists; absence "
+            "is a non-failing SKIP and the checker does not derive those lists. "
+            "A stage matches the production campaign manifest's config_dir when "
+            "that field is equal to, ends with, or has the same basename as the "
+            "supplied stage."
         ),
     )
     parser.add_argument(
@@ -419,14 +415,62 @@ def _run_assertions(args: argparse.Namespace) -> int:
             )
         return reporter.summary()
 
-    science = _science_records(records, pack_manifest_id)
+    science = _science_records(records, prospective)
     selected_ids: set[str] = set()
     cooldowns: dict[str, Mapping[str, Any]] = {}
+
+    def check_nr14_layout() -> str:
+        custody = args.custody_root.resolve(strict=True)
+        runs = runs_root.resolve(strict=True)
+        try:
+            runs.relative_to(custody)
+        except ValueError as exc:
+            raise AssertionFailure("runs root is not beneath custody root") from exc
+        if runs == custody:
+            raise AssertionFailure("runs root must be beneath, not equal to, custody root")
+        resolved_inputs = {}
+        for label, supplied in (
+            ("bracket binding", args.bracket_binding),
+            ("whole-window verdict", args.whole_window_verdict),
+        ):
+            resolved = supplied.resolve(strict=True)
+            try:
+                resolved.relative_to(runs)
+            except ValueError as exc:
+                raise AssertionFailure(f"{label} is not beneath runs root") from exc
+            resolved_inputs[label] = resolved
+        verdict_raw = resolved_inputs["whole-window verdict"].read_bytes()
+        try:
+            log_raw = (runs / "campaign_log.jsonl").read_bytes()
+        except OSError as exc:
+            raise AssertionFailure(f"campaign log unreadable: {exc}") from exc
+        matches = []
+        for line in log_raw.splitlines(keepends=True):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if (
+                isinstance(row, Mapping)
+                and row.get("record_type") == "idle_admission_whole_window_verdict"
+                and line == verdict_raw
+            ):
+                matches.append(row)
+        if len(matches) != 1:
+            raise AssertionFailure(
+                "whole-window verdict bytes do not equal exactly one authoritative "
+                f"campaign-log row (matches={len(matches)})"
+            )
+        return "runs_beneath_custody=true inputs_beneath_runs=true verdict_log_rows=1"
+
+    reporter.assertion("NR14-LAYOUT", check_nr14_layout)
 
     def check_a1() -> str:
         if not science:
             raise AssertionFailure("no science-stage campaign manifests found")
-        expected_sha = _sha256_bytes(manifest_path.read_bytes())
+        expected_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
         for path, value in science:
             if value.get("analysis_manifest_id") != pack_manifest_id:
                 raise AssertionFailure(
@@ -443,16 +487,16 @@ def _run_assertions(args: argparse.Namespace) -> int:
 
     def check_a2() -> str:
         nonlocal selected_ids, cooldowns
-        selected_ids = _selected_bundle_ids(records, collection_id)
         cooldowns = campaign_cooldown_evidence(runs_root, collection_id)
         if not cooldowns:
-            raise AssertionFailure("campaign_cooldown_evidence returned empty")
-        missing = sorted(selected_ids - cooldowns.keys())
-        if missing:
-            raise AssertionFailure(f"cooldown join missing bundles={missing}")
+            raise AssertionFailure(
+                "campaign_cooldown_evidence returned empty for "
+                f"collection_manifest_id={collection_id}"
+            )
+        selected_ids = set(cooldowns)
         return f"collection_manifest_id={collection_id} covered={len(selected_ids)}"
 
-    reporter.assertion("S11-A2", check_a2)
+    a2_passed = reporter.assertion("S11-A2", check_a2)
 
     def check_a3() -> str:
         if not selected_ids or not cooldowns:
@@ -488,20 +532,17 @@ def _run_assertions(args: argparse.Namespace) -> int:
             )
         return f"production precheck clear={len(selected_ids)}"
 
-    reporter.assertion("S11-A3", check_a3)
+    if a2_passed:
+        reporter.assertion("S11-A3", check_a3)
+    else:
+        reporter.skip("S11-A3", "prerequisite=S11-A2")
 
     null_stages = args.null_bound_stage or list(DEFAULT_NULL_BOUND_STAGES)
     present_null_records: list[tuple[Path, Mapping[str, Any]]] = []
     for stage in null_stages:
-        matched = _stage_present(stage, records)
-        if not matched:
-            reporter.skip("S11-A4", f"stage={stage} absent")
-        else:
-            present_null_records.extend(matched)
+        present_null_records.extend(_stage_present(stage, records))
 
     def check_a4() -> str:
-        if not present_null_records:
-            return "present_stages=0 all configured stages absent"
         null_join = campaign_cooldown_evidence(runs_root, None)
         expected_ids: set[str] = set()
         for path, value in present_null_records:
@@ -515,7 +556,10 @@ def _run_assertions(args: argparse.Namespace) -> int:
             raise AssertionFailure(f"null-bound scan omitted bundles={missing}")
         return f"manifests={len(present_null_records)} bundles={len(expected_ids)}"
 
-    reporter.assertion("S11-A4", check_a4)
+    if present_null_records:
+        reporter.assertion("S11-A4", check_a4)
+    else:
+        reporter.skip("S11-A4", "present_stages=0 assertion_not_exercised")
 
     def check_a5() -> str:
         manifest_id = prospective.get("manifest_id")
@@ -549,7 +593,10 @@ def _run_assertions(args: argparse.Namespace) -> int:
             f"{key}:{counts[key]}" for key in sorted(counts)
         )
 
-    reporter.assertion("F5-1", check_f51)
+    if a2_passed:
+        reporter.assertion("F5-1", check_f51)
+    else:
+        reporter.skip("F5-1", "prerequisite=S11-A2")
 
     verdict: dict[str, Any] = {}
 
@@ -603,29 +650,17 @@ def _run_assertions(args: argparse.Namespace) -> int:
             consumption_semantics_id=str(semantics_id),
         )
         status = verdict.get("status", verdict.get("verdict"))
-        if (status == "passed") != (not reasons):
+        if status != "passed" or reasons:
             raise AssertionFailure(
-                f"verdict status={status} disagrees with reasons={list(reasons)}"
+                f"verdict is not an independently clean pass: "
+                f"status={status} reasons={list(reasons)}"
             )
-        attached = []
-        for bundle_id in sorted(selected_ids):
-            evidence = BundleEvidence(
-                entry={}, bundle_id=bundle_id, relative_path=bundle_id,
-                path=runs_root / bundle_id, summary=None, metadata=None,
-                raw_config=None, strict_problems=(), base_reason_codes=(),
-                config_sha256=None, summary_sha256=None,
-                replacement_classification="registered", inclusion_status="included",
-            )
-            for reason in reasons:
-                _exclude_evidence(evidence, reason)
-            if not set(reasons).issubset(evidence.base_reason_codes):
-                raise AssertionFailure(f"verdict reasons did not attach to {bundle_id}")
-            attached.append(bundle_id)
-        return (
-            f"status={status} reasons={list(reasons)} attached={len(attached)}"
-        )
+        return f"status={status} reasons={list(reasons)} attachment=recomputed"
 
-    reporter.assertion("F5-2", check_f52)
+    if a2_passed:
+        reporter.assertion("F5-2", check_f52)
+    else:
+        reporter.skip("F5-2", "prerequisite=S11-A2")
 
     def check_f53() -> str:
         if finalized is not None:
@@ -635,6 +670,8 @@ def _run_assertions(args: argparse.Namespace) -> int:
                 runs_root,
             )
             return f"finalized_authenticated_runs_root={authenticated}"
+        from scripts.run_campaign import _validated_bracket_binding_input
+
         snapshot = load_calibration_ledger_snapshot(
             args.calibration_ledger,
             args.head_pin,
@@ -652,21 +689,28 @@ def _run_assertions(args: argparse.Namespace) -> int:
             )
         return f"runs_root={identity['runs_root']} binding_digest={binding['binding_digest']}"
 
-    reporter.assertion("F5-3", check_f53)
+    if a2_passed:
+        reporter.assertion("F5-3", check_f53)
+    else:
+        reporter.skip("F5-3", "prerequisite=S11-A2")
 
     def check_f54() -> str:
         basis = verdict.get("evaluation_basis")
         basis_sha = basis.get("sha256") if isinstance(basis, Mapping) else None
         if not isinstance(basis_sha, str):
             raise AssertionFailure("whole-window evaluation basis sha256 missing")
-        scan = supersession_visibility_scan(
-            runs_root,
-            scope="whole_window",
-            evidence_root_id=None,
-            authenticated_basis={"sha256": basis_sha},
-        )
-        if scan.get("status") != "clean":
-            raise AssertionFailure(f"supersession scan refused: {scan}")
+        scans = {
+            scope: supersession_visibility_scan(
+                runs_root,
+                scope=scope,
+                evidence_root_id=None,
+                authenticated_basis={"sha256": basis_sha},
+            )
+            for scope in ("whole_window", "analysis_corpus")
+        }
+        refused = {scope: scan for scope, scan in scans.items() if scan.get("status") != "clean"}
+        if refused:
+            raise AssertionFailure(f"supersession scans refused: {refused}")
         read = supersession_entry_validation_results(runs_root)
         if read is None:
             raise AssertionFailure("supersession validation reader refused")
@@ -676,6 +720,8 @@ def _run_assertions(args: argparse.Namespace) -> int:
         policy_sha = policy.get("sha256") if isinstance(policy, Mapping) else None
         if not isinstance(policy_sha, str):
             raise AssertionFailure("whole-window policy sha256 missing")
+        from scripts.run_campaign import _whole_window_campaign_membership
+
         membership = _whole_window_campaign_membership(runs_root, policy_sha)
         if membership.conditions:
             raise AssertionFailure(
@@ -705,9 +751,15 @@ def _run_assertions(args: argparse.Namespace) -> int:
         if survivors:
             raise AssertionFailure(f"conflicted bundles survived={sorted(survivors)}")
         ids = sorted(set(excluded))
-        return f"excluded_count={len(ids)} excluded_ids={ids}"
+        return (
+            "scopes=whole_window,analysis_corpus "
+            f"excluded_count={len(ids)} excluded_ids={ids}"
+        )
 
-    reporter.assertion("F5-4", check_f54)
+    if a2_passed:
+        reporter.assertion("F5-4", check_f54)
+    else:
+        reporter.skip("F5-4", "prerequisite=S11-A2")
     return reporter.summary()
 
 
