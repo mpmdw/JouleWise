@@ -46,3 +46,19 @@ consequence.
 R-6. Executed-evidence rule (cold-gate verdict 4 shape): this ruling's
 "minted into the pack" claim is verified by the S15 clone-proof artifact
 before the addendum that says "done".
+
+## Addendum (cold gate, `06-COLD-GATE-RULING.md`) — D-165 BINDS as amended
+- R-1, R-4, R-5, R-6 ADOPTED. Read in: the quantifier — R ≥ 2 is required
+  per component, per cell, all must pass; scope is the comparative kind.
+- R-2 AMENDED: `R_cm ≤ 1` is unreachable (R ≥ 1 identically); the
+  withdrawal consequence is **R_cm < 2**. Shared and local widths are
+  composed into one scalar and destroyed before emission
+  (`floor_extraction.py:481-489, :1331-1332`), so S15 must choose PRE-MINT:
+  emit the split, register a replay rule from custodied block inputs, or
+  register "R_cm not derivable" with the C3 caveat verbatim.
+- R-3 AMENDED: the `dominance_criterion` sub-object is injected in the
+  `_v5` generator's CONTRAST dict, never inside
+  `two_shared_edge_common_mode_registration()` (whole-dict equality at
+  `detection_floor.py:530-536` would break six issued specs); and the
+  R-computing function reads the criterion back from the manifest (or a
+  golden asserts it) — declared bytes are not enforcement.
