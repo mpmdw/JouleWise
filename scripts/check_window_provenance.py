@@ -33,6 +33,8 @@ from joulewise.analysis_manifest_v3 import (  # noqa: E402
     AnalysisManifestFinalizationError,
     _directory_under_root,
     _path_under_root,
+    _read_strict_object,
+    _strict_json_bytes,
     calculate_manifest_id,
     canonical_json_bytes,
     finalize_prospective_analysis_manifest_v3,
@@ -443,6 +445,8 @@ def _run_assertions(args: argparse.Namespace) -> int:
     cooldowns: dict[str, Mapping[str, Any]] = {}
 
     def check_nr14_layout() -> str:
+        # Preserve the caller's lexical spelling just as the finalizer does at
+        # analysis_manifest_v3.py:3752-3768 and :3282-3284.
         custody_input = args.custody_root.absolute()
         custody = custody_input.resolve(strict=True)
         runs = _directory_under_root(runs_root_input, custody_input, "runs root")
@@ -453,29 +457,30 @@ def _run_assertions(args: argparse.Namespace) -> int:
             ("bracket binding", args.bracket_binding),
             ("whole-window verdict", args.whole_window_verdict),
         ):
-            resolved, _relative = _path_under_root(supplied, runs, label)
+            resolved, _relative = _path_under_root(supplied, runs_root_input, label)
             resolved_inputs[label] = resolved
-        verdict = _read_object(
+        # Mirror the finalizer's strict verdict/log admission at
+        # analysis_manifest_v3.py:3289 and :3447-3504.
+        verdict, _verdict_raw = _read_strict_object(
             resolved_inputs["whole-window verdict"], "whole-window verdict"
         )
         try:
-            log_raw = (runs / "campaign_log.jsonl").read_bytes()
-        except OSError as exc:
+            campaign_rows = [
+                _strict_json_bytes(line.encode("utf-8"), "campaign-log verdict")
+                for line in (runs / "campaign_log.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+                if line.strip()
+            ]
+        except (OSError, UnicodeDecodeError, AnalysisManifestFinalizationError) as exc:
             raise AssertionFailure(f"campaign log unreadable: {exc}") from exc
-        matches = []
-        for line in log_raw.splitlines(keepends=True):
-            if not line.strip():
-                continue
-            try:
-                row = json.loads(line)
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if (
-                isinstance(row, Mapping)
-                and row.get("record_type") == "idle_admission_whole_window_verdict"
-                and canonical_json_bytes(row) == canonical_json_bytes(verdict)
-            ):
-                matches.append(row)
+        matches = [
+            row
+            for row in campaign_rows
+            if isinstance(row, Mapping)
+            and row.get("record_type") == "idle_admission_whole_window_verdict"
+            and canonical_json_bytes(row) == canonical_json_bytes(verdict)
+        ]
         if len(matches) != 1:
             raise AssertionFailure(
                 "whole-window verdict object does not equal exactly one authoritative "

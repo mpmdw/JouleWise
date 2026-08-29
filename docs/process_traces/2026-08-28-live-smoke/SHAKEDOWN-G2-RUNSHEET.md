@@ -152,11 +152,11 @@ straddle, borrow, or shorten the later T-0 clean dwell.
 
 ## Tree and fixed variables
 
-Every root below must be a symlink-free real path: the finalizer authenticates
-custody containment lexically and rejects a symlinked component
+The finalizer authenticates custody containment lexically and rejects any
+symlinked component between each root as spelled and the file beneath it
 (`joulewise/analysis_manifest_v3.py:1479`, used at `:3282`), and the checker's
-`NR14-LAYOUT` mirrors that rule. `/Users/edr/...` satisfies this; anything under
-`/var` or `/tmp` on macOS does not.
+`NR14-LAYOUT` mirrors that rule. `/var` or `/tmp` can therefore be valid when
+used consistently as the lexical root; real paths remain the safest advice.
 
 ```text
 /Users/edr/JouleWise-shakedown-g2/2026-08-29/

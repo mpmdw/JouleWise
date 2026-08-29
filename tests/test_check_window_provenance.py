@@ -30,10 +30,11 @@ from scripts.check_window_provenance import (
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
 
 # The finalizer authenticates custody containment lexically and rejects symlinked
-# components (analysis_manifest_v3.py:1479); NR14-LAYOUT mirrors it. macOS's
-# default tempdir lives under /var -> /private/var, so anchor every fixture at
-# the real path or the layout assertion fails for an environmental reason.
-tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
+# components below the root as spelled (analysis_manifest_v3.py:1479);
+# NR14-LAYOUT mirrors it. macOS's default tempdir lives under /var ->
+# /private/var, so anchor fixtures at the real path without rewriting tempfile's
+# process-wide policy or risking mixed lexical spellings in helper-created paths.
+_REAL_TMP = os.path.realpath(tempfile.gettempdir())
 from tests.test_run_campaign import read_all_jsonl, run_campaign_module
 
 
@@ -294,7 +295,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         ]
 
     def test_clean_all_assertions_pass(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             code, output = _run(_normal_argv(fixture))
             self.assertEqual(code, 0, output)
@@ -415,7 +416,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertNotIn("custody-store replay", preflight)
 
     def test_null_id_and_missing_sha_science_record_isolated_to_s11_a1(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             source_path = fixture["runs_root"] / "campaign_manifests" / "synthetic.json"
             shadow_path = fixture["runs_root"] / "campaign_manifests" / "shadow.json"
@@ -433,7 +434,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["S11-A1"], output)
 
     def test_foreign_finalized_collection_id_isolated_to_s11_a2(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             finalized_path = fixture["root"] / "foreign-finalized.json"
             _write_json(
@@ -453,7 +454,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
     def test_partial_science_join_names_missing_bundle_isolated_to_s11_a2(self) -> None:
         """A partial consumer keyset fails A2; its dependent checks legitimately skip."""
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             import scripts.check_window_provenance as checker
 
@@ -470,9 +471,16 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
             self.assertIn(f"collection join omitted bundles=['{omitted}']", output)
+            for assertion_id in ("S11-A3", "F5-1", "F5-2", "F5-3", "F5-4"):
+                self.assertIn(
+                    f"SKIP {assertion_id} prerequisite=S11-A2", output
+                )
+            self.assertIn(
+                "SKIP S11-A4 present_stages=0 assertion_not_exercised", output
+            )
 
     def test_missing_cooldown_evidence_isolated_to_s11_a3(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             import scripts.check_window_provenance as checker
 
@@ -497,7 +505,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["S11-A3"], output)
 
     def test_empty_null_stage_roster_skips_s11_a4_without_failure(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             code, output = _run(
                 _normal_argv(fixture) + ["--null-bound-stage", "absent-stage"]
@@ -509,7 +517,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertNotIn("PASS S11-A4 ", output)
 
     def test_present_null_stage_with_non_null_id_fails_s11_a4(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             source = fixture["runs_root"] / "campaign_manifests" / "synthetic.json"
             null_stage = json.loads(source.read_text())
@@ -527,7 +535,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["S11-A4"], output)
 
     def test_manifest_id_key_altered_isolated_to_s11_a5(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             prospective = json.loads(fixture["prospective_path"].read_text())
             prospective["manifest_id"] = "am-" + "f" * 64
@@ -546,7 +554,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["S11-A5"], output)
 
     def test_recorded_disposition_altered_isolated_to_f5_1(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             import scripts.check_window_provenance as checker
 
@@ -565,7 +573,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["F5-1"], output)
 
     def test_verdict_status_flipped_isolated_to_f5_2(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             verdict = json.loads(fixture["verdict_path"].read_text())
             verdict["status"] = "failed"
@@ -577,7 +585,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["F5-2"], output)
 
     def test_binding_runs_root_alias_isolated_to_f5_3(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             alias = fixture["root"] / "runs-alias"
             os.symlink(fixture["runs_root"], alias)
@@ -593,7 +601,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["F5-3"], output)
 
     def test_conflicted_supersession_isolated_to_f5_4(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             verdict = json.loads(fixture["verdict_path"].read_text())
             conflict = {
@@ -638,7 +646,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             DEFAULT_EXPECTED_REFUSALS,
             frozenset({"analysis_finalization_member_cover_mismatch"}),
         )
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             root = Path(tmp)
             fixture = install_synthetic_finalization_fixture(
                 root / "fixture", shared_family=True
@@ -666,7 +674,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertIn("expected={analysis_finalization_member_cover_mismatch}", output)
 
     def test_stripped_stage_custody_refuses_as_prospective_invalid(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             root = Path(tmp)
             fixture = install_synthetic_finalization_fixture(
                 root / "fixture", shared_family=True
@@ -698,7 +706,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertIn("expected={analysis_finalization_member_cover_mismatch}", output)
 
     def test_real_verdict_producer_refuses_one_block_without_governed_references(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = install_synthetic_finalization_fixture(Path(tmp))
             bundle_ids = [
                 member["run_id"]
@@ -717,7 +725,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertIn("neg8_bracket_reference_invalid", conditions)
 
     def test_clean_run_does_not_write_runs_or_custody(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp) / "fixture")
             before = _tree_digest(fixture["root"])
             parent_before = _tree_digest(fixture["root"].parent)
@@ -729,7 +737,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(parent_after, parent_before)
 
     def test_verdict_outside_runs_root_isolated_to_nr14_layout(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             outside = fixture["root"] / "whole-window-verdict-outside-runs.json"
             outside.write_bytes(fixture["verdict_path"].read_bytes())
@@ -740,7 +748,7 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(self._fail_ids(output), ["NR14-LAYOUT"], output)
 
     def test_object_equal_pretty_verdict_passes_nr14_layout(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             verdict = json.loads(fixture["verdict_path"].read_text())
             fixture["verdict_path"].write_text(
@@ -750,8 +758,31 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertEqual(code, 0, output)
             self.assertIn("PASS NR14-LAYOUT ", output)
 
-    def test_runs_root_symlink_isolated_to_nr14_layout(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+    def test_runs_root_spelled_through_symlinked_parent_passes_nr14_layout(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            root = Path(tmp)
+            real_parent = root / "real-parent"
+            real_parent.mkdir()
+            alias_parent = root / "alias-parent"
+            os.symlink(real_parent, alias_parent)
+            fixture = _install_s11_checker_fixture(alias_parent / "fixture")
+            _code, output = _run(_normal_argv(fixture))
+            self.assertIn("PASS NR14-LAYOUT ", output)
+            self.assertNotIn("FAIL NR14-LAYOUT ", output)
+
+    def test_duplicate_key_verdict_isolated_to_nr14_layout(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            verdict = json.loads(fixture["verdict_path"].read_text())
+            raw = fixture["verdict_path"].read_text()
+            duplicate = '"record_type":' + json.dumps(verdict["record_type"]) + ","
+            fixture["verdict_path"].write_text("{" + duplicate + raw[1:])
+            code, output = _run(_normal_argv(fixture))
+            self.assertNotEqual(code, 0, output)
+            self.assertEqual(self._fail_ids(output), ["NR14-LAYOUT"], output)
+
+    def test_symlink_inside_custody_tree_isolated_to_nr14_layout(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             alias = fixture["root"] / "runs-alias"
             os.symlink(fixture["runs_root"], alias)
