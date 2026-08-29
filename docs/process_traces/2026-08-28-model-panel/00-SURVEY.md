@@ -27,6 +27,17 @@ How every fact in this file was obtained, so the reader can redo it:
   (plus `allenai/OLMo-1B-0724-hf` and `allenai/OLMoE-1B-7B-0924`, not MLX
   4-bit). Everything else must be fetched and pinned (D-016 criterion 4).
 
+Three words used throughout, in plain terms. A **floor** is the smallest
+energy difference the instrument can tell from zero for one model in one
+phase; it is minted by running that model's 512-token decode fifty times
+under a fixed schedule (a "floor pack") and measuring how much the
+readings scatter and mis-attribute. A **contrast** is a pre-registered
+difference between two models measured in interleaved A/B/B/A blocks,
+each block being four runs; a contrast's difference is only reported if
+it exceeds both models' floors plus the ~5 J claim-side bar (D-078
+cl.11). A **member** is one such run. Night times below are the wall
+time to collect a floor pack or a contrast pack.
+
 Two facts about the instrument that decide most of what follows:
 
 1. **The harness forces the decode length.** `joulewise/adapters/
