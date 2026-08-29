@@ -670,6 +670,66 @@
       "status": "queued",
       "stop_card": null
     },
+    "BRACKET-EVALUATOR-PLAN-IDENTITY-01": {
+      "acceptance": {
+        "evidence": [
+          "The evaluator takes an independently authenticated prospective-manifest and plan-tree identity input and validates the bracket binding against it",
+          "Producer plus evaluator success implies that the finalizer accepts the same plan identity; no later split verdict remains possible on unchanged bytes",
+          "A divergence regression lands in both tests/test_run_campaign.py and tests/test_analysis_finalizer.py, preserving the executed alternate-plan counterexample and proving the cure",
+          "The unique-finalized-ledger-session check for the exact runs_root is unchanged; prospective identity is an additional authenticated constraint, not a replacement for ledger-session soundness"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/BRACKET-EVALUATOR-PLAN-IDENTITY-01/acceptance",
+          "label": "BRACKET-EVALUATOR-PLAN-IDENTITY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Producer plus evaluator success implies finalizer identity acceptance; no later split verdict remains possible on unchanged bytes."
+      },
+      "authority": {
+        "anchor": "addendum-2026-08-27-217-merged--split-verdicts-ruled",
+        "label": "D-160 addendum (2026-08-27, #217 merged), split verdict F2: not fixed pre-night; registered post-_v4",
+        "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "sequenced after _v4 by the D-160 addendum F2 ruling; a claim/evaluation identity change must not couple into the frozen campaign",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V4-TRANSACTION-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "anchor": "addendum-2026-08-27-217-merged--split-verdicts-ruled",
+            "label": "D-160 addendum F2 (consistency gap, not a hole)",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Preserve the ledger-session and exact-runs_root checks byte-for-byte in meaning; this row closes only the evaluator/finalizer authority split"
+        },
+        {
+          "authority": {
+            "anchor": "addendum-2026-08-27-217-merged--split-verdicts-ruled",
+            "label": "D-160 addendum F2 (post-_v4)",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Sequence after _v4; do not couple this claim/evaluation identity change into the frozen campaign"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the evaluator/finalizer authority split on the bracket binding: the whole-window evaluator validates --bracket-binding against the identity selected from the unique finalized calibration-ledger session for the exact runs_root, while the finalizer validates the same binding against the prospective manifest and plan tree (joulewise/analysis_manifest_v3.py, _authenticate_finalization_inputs, approximately line 3330); refuter A executed the divergence (a valid rechained ledger plus an alternate exact-byte frozen plan: producer BUILT, evaluator passed, finalizer refused analysis_finalization_bracket_binding_mismatch). Fail-closed overall, so a consistency gap, not an authorization hole.",
+      "id": "BRACKET-EVALUATOR-PLAN-IDENTITY-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 116,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) from the draft docs/process_traces/2026-08-27-t26/bracket-binding/bracket-evaluator-plan-identity-01.md (written on #223 from #217's split verdict F2). Soundness-consistency: the chain is fail-closed today, so this is not a pre-night blocker. Priority p1_phase_gate and lane agent per the draft.",
+      "stop_card": null
+    },
     "C3-RECOGNIZER-EXACT-01": {
       "acceptance": {
         "evidence": [
@@ -971,6 +1031,66 @@
       "rank": 103,
       "status": "blocked",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S11 stream's draft. Origin: S11 contract-lens refuter finding F4, raised by one lens only and not corroborated by the execution-lens audit, so recorded rather than applied. Producer side is already in place (PR #213, S9-01 / D-158 F-2(c)); the cure lives in joulewise/analysis_engine/ (S10's territory, outside the S11 fence). The one remaining implementation question is the authorship discriminator's carrier; the policy is settled. 142 pre-existing manifests on disk carry analysis_manifest_id null.",
+      "stop_card": null
+    },
+    "CONSUMPTION-SESSION-IDENTITY-PARAM-01": {
+      "acceptance": {
+        "evidence": [
+          "AuthenticatedConsumptionSession receives an explicit, independently-authenticated bracket identity parameter; no identity field is extracted from the binding to authorize that same binding",
+          "scripts/run_campaign.py authenticates and threads the explicit identity for whole-window evaluation, and the finalizer replay threads its independently authenticated prospective-manifest/plan-tree identity through the same API",
+          "Identity extraction from bracket_binding is prohibited at the consumption call site and pinned by a source- or mutation-level regression",
+          "A regression preserves refuter A's recomputed-digest mutation and proves that the explicit identity parameter, not a binding-owned field, determines the refusal"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CONSUMPTION-SESSION-IDENTITY-PARAM-01/acceptance",
+          "label": "CONSUMPTION-SESSION-IDENTITY-PARAM-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "No identity field is extracted from the binding to authorize that same binding, and a regression proves the explicit parameter, not a binding-owned field, determines the refusal."
+      },
+      "authority": {
+        "anchor": "addendum-2026-08-27-217-merged--split-verdicts-ruled",
+        "label": "D-160 addendum (2026-08-27, #217 merged), split verdict F3: refuter A's refutation adopted; explicit identity parameter is a post-_v4 should-fix",
+        "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "sequenced after _v4 by the D-160 addendum F3 ruling; a should-fix API change to whole_window.py does not enter the frozen campaign",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V4-TRANSACTION-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "anchor": "addendum-2026-08-27-217-merged--split-verdicts-ruled",
+            "label": "D-160 addendum F3 (refutation adopted: redundant, not self-authorizing)",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Do not weaken or remove the authenticated-ledger comparison that made refuter A's mutation fail closed"
+        },
+        {
+          "authority": {
+            "anchor": "addendum-2026-08-27-217-merged--split-verdicts-ruled",
+            "label": "D-160 addendum F3 (post-_v4 should-fix)",
+            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Sequence after _v4; this is a should-fix API clarity and consistency row, not a pre-night blocker"
+        }
+      ],
+      "flags": [],
+      "goal": "Give AuthenticatedConsumptionSession (joulewise/whole_window.py, approximately line 661) an explicit, independently authenticated bracket identity parameter instead of reading bracket_window_id, bracket_plan_id, bracket_plan_sha256 and bracket_evidence_root_id out of the binding it is checking. Refuter A proved the current shape redundant rather than self-authorizing (a mutated plan_id with a recomputed binding digest is still refused against the authenticated ledger), so this is an API clarity and consistency should-fix, not a hole.",
+      "id": "CONSUMPTION-SESSION-IDENTITY-PARAM-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 117,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) from the draft docs/process_traces/2026-08-27-t26/bracket-binding/consumption-session-identity-param-01.md (written on #223 from #217's split verdict F3). Should-fix; touches joulewise/whole_window.py. Priority p2_next_slice and lane agent per the draft.",
       "stop_card": null
     },
     "CUSTODY-HARDEN-01": {
@@ -1772,52 +1892,6 @@
       "rank": 99,
       "status": "queued",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the S5 stream's proposal. S5 deliberately did not register it mid-wave because the sweep touches test modules owned by other T26 streams; the S5 record enumerates the still-unhygienic git init sites (test_d117_decode_contrast_plan, test_arm_readiness_pack_digest, test_calibration_bracketing, test_calibration_live_three_window, test_arm_readiness_evidence, test_bridge, test_family_marker, and others). Fourth member of one failure family: a detached git maintenance child still holding the fixture repository when the temporary directory is removed.",
-      "stop_card": null
-    },
-    "HISTPACK-PROMISOR-NOFETCH-01": {
-      "acceptance": {
-        "evidence": [
-          "A promisor or partial clone is rejected outright, or lazy fetch is disabled for the derivation and every missing object maps to a registered histsem refusal; the chosen disposition is recorded in docs/contracts/receipt_histsem_verifier.md",
-          "A regression in the shape of partial_history_probe.py (promisor clone, missing historical blobs) refuses at both public boundaries (arm and freeze) and proves the missing-object count is unchanged afterwards, so nothing was fetched",
-          "The complete-history path is unchanged: the 99 committed receipts still PASS and the three real _v3 generators still regenerate"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/HISTPACK-PROMISOR-NOFETCH-01/acceptance",
-          "label": "HISTPACK-PROMISOR-NOFETCH-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A repository whose history is incomplete is refused by the historical-semantics verifier; it is never completed on the fly."
-      },
-      "authority": {
-        "label": "S3 delta re-audit 2 finding D4 (partial history lazy-fetches and passes; probe docs/process_traces/2026-08-26-t26-s3/delta2/partial_history_probe.py)",
-        "path": "docs/process_traces/2026-08-26-t26-s3/delta2/report.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "receipt histsem verifier contract (no-fetch and incomplete-history refusal)",
-            "path": "docs/contracts/receipt_histsem_verifier.md"
-          },
-          "rule": "No-fetch is the contract: the verifier reads history it already has and never contacts a remote; a derivation that fetches has violated the contract even when the digest it returns is correct"
-        },
-        {
-          "authority": {
-            "label": "D-159 frozen-receipt constant ruling (bounded Git subprocesses)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Subprocess time bounds from the A93 ruling (D-159) stay in force; the cure adds refusals, it does not add an unbounded subprocess"
-        }
-      ],
-      "flags": [],
-      "goal": "Make the historical-pack tree derivation in joulewise/arm_readiness.py (_historical_pack_tree) fail closed on a blobless or promisor clone: the S3 delta re-audit's partial-clone probe began with 223 missing historical blobs, the derivation lazily fetched the four it needed through the promisor remote, returned the expected digest and PASSED, with 219 blobs still missing, contradicting the receipt-histsem contract's no-fetch and incomplete-history-refusal rules.",
-      "id": "HISTPACK-PROMISOR-NOFETCH-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 107,
-      "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md); no prior draft, written from the S3 delta re-audit 2 report (finding D4, verification V7: histsem PASS with missing_before 223 and missing_after 219 on a promisor clone). Soundness: the verifier's answer on an incomplete repository is currently a function of what the remote is willing to serve. The measurement checkout is a full clone, which is why this is a should-fix and not a mint gate.",
       "stop_card": null
     },
     "L10-SACRIFICIAL-REHEARSAL-SCHEDULE-01": {
@@ -3445,61 +3519,108 @@
       "status_note": "REGISTRATION ANOMALY CURED: the refuter envelope that was nowhere in the repository record at registration was recovered POST-HOC on 2026-08-24 from the T23 session record - PR #182 merged while the refuter (agent task-id afa98fc4eaa4512e1, adjudicated verdict SOUND FOR MERGE) was still running - and is custodied verbatim at docs/process_traces/2026-08-24-pinset-refuter/refuter-envelope.md. The goal is now restated from the envelope's own wording, satisfying the first acceptance clause; what remains is the fix or recorded waiver.",
       "stop_card": null
     },
-    "PIPELINE-SMOKE-LIVE-01": {
+    "PINSET-REFRESH-LANE-01": {
       "acceptance": {
         "evidence": [
-          "A runbook for the live variant exists, drafted by S10 after BRACKET-BINDING-CLI-01 lands, naming every operator step from generation through finalize_analysis_manifest and analyze-claims",
-          "The run executes the real chain with zero production seams: real telemetry, its own real floor cells from two calibration brackets, fixed_n = 1, decode-only, one ABBA block, under a smoke pack id with its own runs root outside the measurement checkout, never marker-signed",
-          "The hardware seams are proven in the record: powermetrics binary binding, the FD-198 handoff across execve, the window.env allowlist against the real chain, and boot-session/clock at T-0",
-          "Every D-160 F-5 join and S11's five estate-11 assertions are asserted against the run's artifacts, and the claim edge answers every contrast for a DATA reason"
+          "scripts/refresh_receipt_histsem_pinset.py --refresh-row re-derives only current_pack_sha256 (committed_pack_tree_sha256) and post_authoring_delta (_histsem_delta); every other field is immutable and the tool refuses with the existing histsem_* codes (canonical refusal JSON, exit 2) rather than change one, refuses a dirty pack directory (histsem_binding_mismatch) and an unpublished row head_commit or HEAD (histsem_commit_unpublished), prints a unified row diff, writes canonically and idempotently, and verifies the whole pinset before and after an in-place write (restore on refusal)",
+          "--refresh-tool-sidecars regenerates the four ruled custody-tool .sha256 sidecars from the committed HEAD blobs under the same refusals, and the family-marker tripwire asserts each sidecar equals the independent gnu_sidecar oracle and the lane's renderer",
+          "tests/test_receipt_histsem.py: the 'no update lane' test becomes test_pinset_is_byte_pinned_and_has_no_unreviewed_update_lane, and ReceiptHistsemRefreshLaneTests cover stale-to-PASS, dirty, unpublished, immutable fields, idempotence, --print-pinset-sha256 / --write-test-pin, post-write restore, the path fence, the in-place enumeration guard and the sidecar mode",
+          "docs/contracts/receipt_histsem_verifier.md is amended for the reviewed lane; the lane PR itself leaves the pinset bytes, PINSET_SHA256 and the four sidecars unchanged (the real _v3 refresh is S8's, on #209, after the lane merges)"
         ],
         "pointer": {
-          "json_pointer": "/tasks/PIPELINE-SMOKE-LIVE-01/acceptance",
-          "label": "PIPELINE-SMOKE-LIVE-01 acceptance",
+          "json_pointer": "/tasks/PINSET-REFRESH-LANE-01/acceptance",
+          "label": "PINSET-REFRESH-LANE-01 acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The hardware seams the replay cannot exercise are proven once, end to end, on a quarantined real generation that can never reach a claim."
+        "summary": "A stale pinset row is refreshed by the verifier's own derivation under review, never by hand, and every other pinset field and the historical-side equality remain immutable."
       },
       "authority": {
-        "label": "D-158 ruling R-3 (PIPELINE-SMOKE-LIVE-01, ~20 min, Ed's machine) and D-160 ruling R-2 (the end-to-end clean proof is the LIVE run on a real tiny quarantined generation)",
-        "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+        "label": "D-161 THREAT-MODEL PRUNE (1) (index row) and the prune ruling R-1 (histsem pinset asymmetric; the refresh lane is the only pre-night change; the sidecar tripwire folds into the lane)",
+        "path": "docs/process_traces/2026-08-27-t26/threat-model-prune/04-MAGISTRATE-RULING.md"
       },
       "dependencies": [],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "anchor": "rulings",
-            "label": "D-160 ruling R-2 (the evening-before item on ED-ITEMS)",
-            "path": "docs/process_traces/2026-08-27-t26/smoke-corpus-consult/04-MAGISTRATE-RULING.md"
+            "label": "D-161 (1) (the 'no update lane' test becomes 'no UNREVIEWED update')",
+            "path": "docs/decision_log.md"
           },
-          "rule": "Not a gate on the _v4 night unless Ed schedules it the evening before; it is the evening-before item on ED-ITEMS"
+          "rule": "Reviewed, never unreviewed: every refresh lands as an ordinary PR carrying the printed row diff, and the lane refuses an unpublished row head_commit or an unpublished HEAD"
         },
         {
           "authority": {
-            "label": "D-158 ruling R-3 (quarantine terms)",
-            "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+            "label": "prune ruling R-1 (asymmetric cure)",
+            "path": "docs/process_traces/2026-08-27-t26/threat-model-prune/04-MAGISTRATE-RULING.md"
           },
-          "rule": "Quarantined and claim-ineligible by construction: smoke pack id, own runs root outside the measurement checkout, never marker-signed; nothing from this run enters any claim or floor"
+          "rule": "The historical-side equality (historical_pack_tree_sha256 at head_commit; histsem_historical_digest_mismatch, histsem_historical_digest_not_pre_authoring) stays fail-closed; the lane refreshes only the current-side fields"
+        }
+      ],
+      "flags": [],
+      "goal": "Give the receipt-histsem pinset the REVIEWED refresh lane D-161 (1) rules: scripts/refresh_receipt_histsem_pinset.py --refresh-row PACK_ID re-derives only current_pack_sha256 and post_authoring_delta from the committed tree by the verifier's own code paths, prints the row diff, and lands as an ordinary PR; the 'no update lane' test becomes 'no UNREVIEWED update'; the four ruled custody-tool .sha256 sidecars fold into the same lane (--refresh-tool-sidecars). Unblocks the _v4 mint: #209 regenerated the _v3 gamma generator, so the contrast row's post_authoring_delta is stale and verify_receipt_histsem.py --require-published refuses histsem_post_authoring_delta_unexpected.",
+      "id": "PINSET-REFRESH-LANE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 118,
+      "status": "partial",
+      "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) as PARTIAL: the lane is implemented and gauntlet-complete on PR #228 (stream S14, branch feat/pinset-refresh-row-lane, head 728fe5c6 at registration; Sol xhigh implement x2 -> Sol xhigh audit (7 findings) -> Opus contract-lens + Sol execution-lens refuters (F1/F3 split, F2/F4 narrowed, F5 a rebase artifact) -> FIX-1..6 -> Sol high delta re-audit; lead-verified scratch-copy proof twice, resulting row byte-equal to S8's independent derivation), OPEN and unmerged when this row was registered. Closes with a Completed line in a later wave once #228 merges; the D-161 index row and WAVE-ROWS.md name it CLOSED-on-merge.",
+      "stop_card": null
+    },
+    "PIPELINE-SMOKE-LIVE-01": {
+      "acceptance": {
+        "evidence": [
+          "G1: estate 11 is green at the reviewed head; the W-11 desk tail on the REGENERATED _v4 manifest refuses only for the expected count reasons and the D-157 mutation refuses for a contract reason; the arm-abort rehearsal on the real frozen pack (arm_to_consume_budget_ns = 300 s, throwaway attempt/session ids, a separate earlier arm that does not straddle the T-0 dwell) proves registry admission, successor chain, freeze receipt, T-0 env keys and the prewindow check with no bundle written",
+          "The desk script (scripts/check_window_provenance.py or similar; read-only over a runs root plus custody; PASS/FAIL per assertion) packages the S11 five estate-11 assertions and every D-160 F-5 join: manifest id/sha non-null and equal to the pack's, cooldown join non-empty, no campaign_cooldown_evidence_missing, null-bound stages null, the gamma manifest_id present",
+          "G2: on the shakedown night one A/B/B/A block on the shakedown's own non-claim runs root reaches the whole-window verdict and builds the bracket binding on real bytes; the desk script passes over the shakedown bundles; finalize_analysis_manifest.py's refusal set equals EXACTLY the expected incompleteness set (fixed_n_plan_incomplete / member-count codes / insufficient_complete_blocks) and nothing else, and any other code halts the transaction before the campaign",
+          "G3: the runbook carries the per-night desk step (the same script over that night's real bundles before the next night arms), and the shakedown runsheet is re-cut from PR #225's phases to G2 with preflight.sh standing; the G2 runsheet names the calibration-observation-ledger copy for fresh checkouts and the tracked ledger-pin bump as a committed config change",
+          "No production gate changes and no new admission lane: Path A (the diagnostic family) is not built pre-campaign and its design moves to PIPELINE-SMOKE-TIER2-01"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/PIPELINE-SMOKE-LIVE-01/acceptance",
+          "label": "PIPELINE-SMOKE-LIVE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every contract check between launch and the claim edge has executed on real bytes before the campaign, and re-executes at the desk after every campaign night."
+      },
+      "authority": {
+        "label": "D-162 THE LIVE-PROOF GATE, CORRECTED (magistrate 2026-08-28 over Sol high + Fable, Opus seat converged in the addendum): G1/G2/G3 replace the DATA-reason live gate; R-1 Path A deferred to PIPELINE-SMOKE-TIER2-01; R-2 runsheet re-cut to G2; R-3 the desk script; R-4 calendar stands",
+        "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-162 rulings R-1 and R-3",
+            "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "No separate live family and no diagnostic generation kind before the campaign: Path A is deferred to PIPELINE-SMOKE-TIER2-01 (R-1); the desk script is the one small code deliverable and changes no production gate (R-3)"
         },
         {
           "authority": {
-            "label": "D-158 ruling R-3 (license and hands)",
-            "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
+            "label": "D-162, what the seats proved (B-3 shakedown runs root; custody copies are not relocatable)",
+            "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
           },
-          "rule": "Runs under D-139/D-142's diagnostic license; Ed's hands only for anything D-127/D-149 reserves"
+          "rule": "The G2 block runs on the shakedown's own non-claim runs root (B-3): nothing from it enters any claim or floor, and a custody copy is not relocated (inputs.py:736-784)"
+        },
+        {
+          "authority": {
+            "label": "D-162 ruling R-4 (calendar)",
+            "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "The calendar stands (R-4): estate 11 + G1 Fri 08-28; shakedown + G2 Sat 08-29; campaign from Sun 08-30 with G3 nightly; G2 is Ed's hands for anything D-127/D-149 reserves"
         }
       ],
       "flags": [
         "lead_only"
       ],
-      "goal": "The live ~20-minute end-to-end clean proof on Ed's machine: a real, tiny, quarantined family generation (decode contrast only, fixed_n = 1, one ABBA block of 2 runs x 2 conditions, two full protocol-v3 calibration brackets, real MLX / powermetrics / prewindow_check.sh / launch_window.py execve), its own runs root outside the measurement checkout, never marker-signed, zero production seams, run through launch, collection, finalization and the claim edge.",
+      "goal": "The live-proof gate as corrected by D-162: prove that no CONTRACT defect lies between launch and the claim edge in three modular pieces that spend no window and add no production gate. G1 pre-shakedown at the desk (estate 11 green at the reviewed head; the W-11 desk tail on the REGENERATED _v4 manifest; the S11 five assertions plus the D-160 F-5 joins as one runnable read-only script over a runs root; the arm-abort rehearsal on the real frozen pack). G2 on the shakedown night (real pack, real telemetry, one A/B/B/A block on the shakedown's own non-claim runs root; the whole-window verdict and the bracket binding on real bytes; the G1 script over the shakedown bundles; finalize_analysis_manifest.py refusing for EXACTLY the expected incompleteness set and nothing else). G3 every campaign night (the same desk script over that night's bundles before the next arm). No separate live family and no diagnostic generation kind.",
       "id": "PIPELINE-SMOKE-LIVE-01",
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 13,
       "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6. Ed's hands (quiet_mac lane): D-158 R-4 deferred the live variant past the night unless Ed schedules the 20 minutes the evening before ('it is worth it if he does'). The producer, evaluator, and finalizer code blocker closed via #217 (cfffce95); this PR installs the ordered producer-before-verdict runbook. One placement item remains RULING PENDING before execution: merged code requires the binding and verdict row beneath RUNS_ROOT before the transaction seal, although the D-160 addendum described analysis outputs as outside that sealed root. The live run remains Ed-scheduled [QUIET-MAC] work.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6 as the ~20-minute quarantined live family generation. RE-SCOPED 2026-08-28 in the T27 second kernel wave per D-162 (docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md): two seats proved from code that a partial run on the real _v4 pack can never answer for a DATA reason (insufficient_complete_blocks and fixed_n_plan_incomplete are CONTRACT-classed; the prospective finalizer requires ten blocks / 80 members) and that the diagnostic-family alternative costs 7-10 Sol-days of new admission code on the mint path days before the campaign, so the D-158 R-3 / D-160 R-2 scope is superseded by G1/G2/G3; the D-158 R-3 quarantine and license fences fall with it, and the runbook landed by #223 is re-cut to G2 (R-2). G1 and G3 are desk work; G2 runs on the shakedown night, which keeps the quiet_mac lane and Ed's hands. Nothing here changes the _v4 pack or the mint path.",
       "stop_card": null
     },
     "PIPELINE-SMOKE-TIER2-01": {
@@ -3508,7 +3629,8 @@
           "Both new seams are gated on an authenticated plan-tree generation_kind == pipeline_smoke and are unreachable for any other generation kind, proven by regression",
           "The fixture executable and prefix are hard-pinned, and a substituted executable or prefix is refused",
           "Every D-160 F-5 join is asserted by the replay leg",
-          "No floor rule changes: the clean leg's floor comes from a real calibration present in the replayed trace, and inputs.py's refusal of calibration_scope == smoke as cell_not_claim_ready is unchanged"
+          "No floor rule changes: the clean leg's floor comes from a real calibration present in the replayed trace, and inputs.py's refusal of calibration_scope == smoke as cell_not_claim_ready is unchanged",
+          "Path A (D-162 R-1): the diagnostic family is built here post-campaign as the permanent desk clean leg; every relaxation it needs (the planned_n_blocks pin at analysis_manifest_v3.py:34, :946, :2152-2159 among them) is gated on the authenticated generation_kind == pipeline_smoke and proven unreachable for any other generation kind, and none of it enters production before the _v4 transaction closes"
         ],
         "pointer": {
           "json_pointer": "/tasks/PIPELINE-SMOKE-TIER2-01/acceptance",
@@ -3553,6 +3675,13 @@
         },
         {
           "authority": {
+            "label": "D-162 ruling R-1 (Path A deferred to PIPELINE-SMOKE-TIER2-01)",
+            "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Path A is NOT built pre-campaign; it lands only here, post-campaign, as the substrate of the permanent desk clean leg"
+        },
+        {
+          "authority": {
             "label": "D-158 addendum A-1 / A-2 (the mock-telemetry lock withdrawn; the clean leg's corpus must be produced by the real collector)",
             "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
           },
@@ -3560,13 +3689,13 @@
         }
       ],
       "flags": [],
-      "goal": "Post-_v4 tier-2 replay leg of the pipeline smoke, under the D-160 R-4 design constraints: the two production seams gated on an authenticated plan-tree generation_kind == pipeline_smoke, a hard-pinned fixture executable and prefix, every D-160 F-5 join asserted, no floor-rule change, and the clean leg's floor coming from a real calibration in the replayed trace rather than a smoke-scoped mint.",
+      "goal": "Post-_v4 tier-2 replay leg of the pipeline smoke, under the D-160 R-4 design constraints: the two production seams gated on an authenticated plan-tree generation_kind == pipeline_smoke, a hard-pinned fixture executable and prefix, every D-160 F-5 join asserted, no floor-rule change, and the clean leg's floor coming from a real calibration in the replayed trace rather than a smoke-scoped mint. Also the post-campaign home of D-162's Path A, the diagnostic family: a generation_kind == pipeline_smoke family admitted through the three generators, freeze/arm admission, T-0/launch, the finalizer, the engine, the reason partition and the floor mint, built where its bypass risk cannot reach the _v4 claims.",
       "id": "PIPELINE-SMOKE-TIER2-01",
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 106,
       "status": "blocked",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-160 R-4 with its constraints carried into the acceptance verbatim in substance. Sequenced post-_v4 by ruling. The desk smoke and its mutation legs (PR #211) are W-11 as landed; PIPELINE-SMOKE-01 proper (the real collector producing the clean leg's corpus on the smoke pack via the fake-collector seam) is the next S10 deliverable per the D-158 addendum A-2 and is not this row.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-160 R-4 with its constraints carried into the acceptance verbatim in substance. Sequenced post-_v4 by ruling. The desk smoke and its mutation legs (PR #211) are W-11 as landed; PIPELINE-SMOKE-01 proper (the real collector producing the clean leg's corpus on the smoke pack via the fake-collector seam) is the next S10 deliverable per the D-158 addendum A-2 and is not this row. AMENDED 2026-08-28 in the T27 second kernel wave per D-162 R-1: the diagnostic-family path (Path A) that the corrected live-proof gate declined to build pre-campaign moves into this row's acceptance; PIPELINE-SMOKE-LIVE-01 is re-scoped to G1/G2/G3 and carries no family design.",
       "stop_card": null
     },
     "PREWINDOW-REGEX-01": {
@@ -4260,6 +4389,73 @@
       "status_note": "Lever 1 (reduce memo) + lever 2 (crash-matrix parallelization, hosted-verified 23.1->6.5 min worst shard) + the ack backstop LANDED via PR #172; the exclusive crash-matrix job is no longer the CI critical path. Remaining to the <=12 min target: ordinary test shard 4 (~18 min worst) and calibration-exits-exclusive (~16.6 min); scripts/test_timings.json shard split needs re-declaration (unbalanced the other way).",
       "stop_card": null
     },
+    "THREAT-MODEL-PRUNE-01": {
+      "acceptance": {
+        "evidence": [
+          "Wave (a): the quiet-guard PID-custody and same-UID injection guards emit WARN-AND-RECORD instead of refusing (D-148 (6) already accepted them as limitations); the contamination census is unchanged and still fail-closed",
+          "Wave (b): the authentication_io forbidden-key check, input_changed, and the AST direct-read lint are retired through DEAD_REASON_CODES in reason_kinds.py with the partition-totality, live-emitter and executed-witness meta-guards green",
+          "Wave (c): the exact live-ID oracle and the gen_state --check hard fail become a regenerate-and-diff step in CI that reports without blocking",
+          "Wave (d): the per-file pack digest tables, FROZEN_GENERATOR_SHA256, the reducer source pin, the mint-core interface pin and the callable-source hashes are retired, citing the registry regeneration test as the surviving proof of the same fact",
+          "Wave (e): CI timing and count pins are derived rather than pinned",
+          "Wave (f): doc-to-code prose tripwires are retired while the launcher-argv regression (D-158 R-4) and the DATA/CONTRACT partition stay in force",
+          "Each wave lands as one PR with a Sol audit; no wave touches a class A (physics/evidence) or class B (pre-registration) refusal, and the histsem historical-side equality stays fail-closed (R-1)"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/THREAT-MODEL-PRUNE-01/acceptance",
+          "label": "THREAT-MODEL-PRUNE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Every deliberate-only guard the three seats enumerated is downgraded or retired, one PR per wave with a Sol audit, and no physics/evidence, pre-registration or operator-mistake refusal changes."
+      },
+      "authority": {
+        "label": "D-161 THREAT-MODEL PRUNE (2); prune ruling R-4 (the six post-transaction waves) and R-7 (registered post-_v4, p2, with R-4's waves as acceptance)",
+        "path": "docs/process_traces/2026-08-27-t26/threat-model-prune/04-MAGISTRATE-RULING.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "registered post-_v4 by the prune ruling R-4/R-7: the frozen runbook C10/E4 and estate 11 consume PASS from guards this row prunes",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V4-TRANSACTION-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "prune ruling, the operative test (mistake vs deliberate; adopted from the Opus seat)",
+            "path": "docs/process_traces/2026-08-27-t26/threat-model-prune/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Fail-closed STAYS for physics/evidence (A), pre-registration (B) and operator-mistake (C-mistake) refusals; only deliberate-only guards (C-deliberate) are pruned, by the mistake-vs-deliberate test"
+        },
+        {
+          "authority": {
+            "label": "prune ruling R-3 (landing mechanism)",
+            "path": "docs/process_traces/2026-08-27-t26/threat-model-prune/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Retirement goes through DEAD_REASON_CODES in reason_kinds.py under the three meta-guards, so a prune is a real change and not a deletion; RETIRE is preferred to WARN wherever the finding has no consumer (R-3)"
+        },
+        {
+          "authority": {
+            "label": "prune ruling R-4 (nothing else changes before the _v4 night)",
+            "path": "docs/process_traces/2026-08-27-t26/threat-model-prune/04-MAGISTRATE-RULING.md"
+          },
+          "rule": "Sequenced after the _v4 transaction closes: nothing else changes on the pre-night code surface, which stays at the reviewed head plus the refresh lane (R-4)"
+        }
+      ],
+      "flags": [],
+      "goal": "Post-_v4 prune of the custody refusals whose only defended-against actor is the trusted operator acting deliberately, in the six ruled waves of the threat-model prune ruling R-4, in order of cost saved: (a) quiet-guard PID-custody / same-UID injection guards to WARN-AND-RECORD (the contamination census itself stays); (b) authentication_io forbidden-key, input_changed and the AST direct-read lint retired; (c) the exact live-ID oracle and the gen_state --check hard fail become regenerate-and-diff in CI (keep the check, stop blocking); (d) per-file pack digest tables, FROZEN_GENERATOR_SHA256, the reducer source pin, the mint-core interface pin and callable-source hashes retired (the registry regeneration test proves the same fact); (e) CI timing/count pins derived; (f) doc-to-code prose tripwires retired, keeping the launcher-argv regression (D-158 R-4) and the DATA/CONTRACT partition.",
+      "id": "THREAT-MODEL-PRUNE-01",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 115,
+      "status": "blocked",
+      "status_note": "Registered 2026-08-28 in the T27 second kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md, the post-#220 sections) per the prune ruling R-7 (D-161 (2)). The three-seat enumeration (Sol xhigh, Opus 5, Fable 5) is custodied beside the ruling (00-brief, 01-sol-seat, 02-opus-seat, 03-fable-seat). Its sibling HISTPACK-PROMISOR-NOFETCH-01 (A107) was retired unbuilt by R-2 in this same wave; the pre-night piece of D-161, the reviewed refresh lane, is PINSET-REFRESH-LANE-01. R-5 directs the freed enforcement budget at the unenforced ruled clauses (S9), which this row does not itself spend.",
+      "stop_card": null
+    },
     "TOOL-01": {
       "acceptance": {
         "evidence": [
@@ -4783,5 +4979,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-27"
+  "updated": "2026-08-28"
 }

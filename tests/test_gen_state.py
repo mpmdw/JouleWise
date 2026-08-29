@@ -32,7 +32,12 @@ EXPECTED_IDS = {
     "COLLECTOR-MANIFEST-SHA-IDENTITY-01",
     "PIPELINE-SMOKE-TIER2-01",
     "PIPELINE-SMOKE-LIVE-01",
-    "HISTPACK-PROMISOR-NOFETCH-01",
+    # 2026-08-28 T27 second kernel wave (WAVE-ROWS.md post-#220 sections:
+    # prune ruling R-7, D-160 addendum F2/F3 drafts, D-161 (1) lane on PR #228).
+    "THREAT-MODEL-PRUNE-01",
+    "BRACKET-EVALUATOR-PLAN-IDENTITY-01",
+    "CONSUMPTION-SESSION-IDENTITY-PARAM-01",
+    "PINSET-REFRESH-LANE-01",
     "GAMMA-UNIT-ROSTER-GUARD-01",
     "AUTHENTICATOR-ALLOWLIST-GUARD-01",
     "TRANSACTION-RULED-ARTIFACTS-01",
@@ -188,7 +193,10 @@ TERMINAL_IDS = {"CAL-REBRACKET-01", "P2-015-PREP", "P2-029", "P2-030", "P2-031",
                 "FROZEN-RECEIPT-CONSTANT-STALE-01",
                 "PACKAUTH-PRESERVE-TAUTOLOGY-01",
                 # 2026-08-27 T26 S10 bracket-binding producer (PR #217).
-                "BRACKET-BINDING-CLI-01"}
+                "BRACKET-BINDING-CLI-01",
+                # 2026-08-28 T27 second kernel wave: retired unbuilt by the
+                # threat-model prune ruling R-2 (D-161).
+                "HISTPACK-PROMISOR-NOFETCH-01"}
 
 
 def load_kernel():
@@ -499,9 +507,17 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # (PR #217 producer + PR #223 runbook); the 2026-08-28 T27 S12
         # stream closes T0-ENV-PARSER-UNIFY-01 (PR #221: one shared 25-key
         # window.env contract at both T-0 boundaries):
-        # 106 - 1 = 105 exact live records.
+        # 106 - 1 = 105;
+        # 105 - 1 + 4 = 108: the 2026-08-28 T27 second kernel wave retires
+        # HISTPACK-PROMISOR-NOFETCH-01 unbuilt (threat-model prune ruling
+        # R-2) and registers THREAT-MODEL-PRUNE-01 (prune ruling R-7),
+        # BRACKET-EVALUATOR-PLAN-IDENTITY-01 and
+        # CONSUMPTION-SESSION-IDENTITY-PARAM-01 (D-160 addendum F2/F3
+        # drafts), and PINSET-REFRESH-LANE-01 as partial on PR #228
+        # (D-161 (1)); PIPELINE-SMOKE-LIVE-01 re-scoped to D-162 G1/G2/G3:
+        # 105 - 1 + 4 = 108 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 105)
+        self.assertEqual(len(self.tasks), 108)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
