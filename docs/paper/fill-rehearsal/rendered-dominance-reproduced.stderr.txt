@@ -1,0 +1,1 @@
+STOP_FILL {"label": "SUPPLIER_UNKNOWN", "reason": "the registry freezes this token but defines no producing artifact field", "registry_row": "[B_decode_claim_J]"}
