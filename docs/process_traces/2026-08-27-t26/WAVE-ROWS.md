@@ -54,3 +54,4 @@ ledger now records the registered wave and subsequent status changes.
 - `docs/paper/figures/fig3_decision_gates.svg` carries an internal term; paper round 7 nit.
 - Ratified: `tutorial-run-a-window.md` teaches the one-member production-shakedown route labelled diagnostic / not claim-bearing until the G2 runsheet lands; then it points at the G2 runsheet.
 - S14 PINSET-REFRESH-LANE landed (#228, 1f046cd9): kernel row missing — register in kernel wave 3 as completed with the #228 evidence.
+- RQ coverage map (#237) and paper round-7 prep (#236): kernel rows missing — register in kernel wave 3.

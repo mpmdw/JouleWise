@@ -10349,3 +10349,32 @@ first post-campaign window, and the 3-point decode-only ladder
 are the target: the ladder answers C5-1.1 in its permitted pairwise form;
 a coverage map of every registered RQ against `_v4` / fiducial / `_v5` is
 produced alongside.
+
+## D-164: newer models in the campaign (Ed, 2026-08-28)
+
+Index row carries the operative detail. Survey trace:
+`docs/process_traces/2026-08-28-model-panel/` (lands via PR #233).
+
+Ed's ruling, then Ed's pick the same evening ("do qwen 3"):
+`mlx-community/Qwen3-1.7B-4bit` / `mlx-community/Qwen3-8B-4bit`,
+tokenizer.json byte-identical across the pair. The swapped pack is
+generation `_v5` of the same frozen design; `_v4` is never collected.
+
+## D-165: the falsifier (magistrate + cold gate, 2026-08-28)
+
+Index row carries the operative detail. Consult and cold-gate trace:
+`docs/process_traces/2026-08-28-falsifier-consult/` (lands via PR #234;
+cold-gate ruling `06-COLD-GATE-RULING.md`). Reverses paper-goal item 34
+and amends item 28: the dominance RATIO **R ≥ 2** (per component, per
+cell) is pre-registered into the `_v5` pack; the coded predicate survives
+only as the cell label; common-mode R_cm is mandatory disclosure and
+R_cm < 2 withdraws the dominance sentence.
+
+## D-166: the workload (magistrate, 2026-08-28)
+
+Index row carries the operative detail. Consult trace:
+`docs/process_traces/2026-08-28-workload-consult/` (lands via PR #235).
+`_v5` decode arm = real pinned prompts through the Qwen3 chat template,
+thinking off, greedy, forced 512; prefill length fixed from the G2
+shakedown record; Ed's scored GSM8K leg is `_v6`, built at the desk
+during the `_v5` campaign (stream WORKLOAD-SCORED-01).
