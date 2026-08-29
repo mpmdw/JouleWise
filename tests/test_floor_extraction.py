@@ -6411,5 +6411,29 @@ class LaunchLineageExtractionTests(unittest.TestCase):
         self.assertIn("launch_lifecycle_incomplete", member.reasons)
 
 
+class TransferFiducialFloorExtractionTests(unittest.TestCase):
+    def test_transfer_bundle_refused_by_floor_extraction(self) -> None:
+        from joulewise.floor_extraction import _transfer_bundle_reason_codes
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "transfer"
+            bundle.mkdir()
+            (bundle / "config.json").write_text(
+                json.dumps(
+                    {"workload_profile": {"transfer_fiducial_gap_s": 0.5}}
+                )
+                + "\n"
+            )
+            (bundle / "events.jsonl").write_text("")
+            reasons = _transfer_bundle_reason_codes(bundle)
+        self.assertEqual(
+            reasons,
+            (
+                "transfer_fiducial_claim_ineligible",
+                "transfer_fiducial_class_inconsistent",
+            ),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

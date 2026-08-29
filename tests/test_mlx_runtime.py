@@ -31,6 +31,8 @@ from joulewise.provenance import (
     suite_prompt_rollup,
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason, SchemaError
+from joulewise.powermetrics_fiducial import MAX_EVENT_CLOCK_SKEW_S
+from joulewise.uncertainty_evidence import stamp_from_mapping, valid_clock_stamp
 from joulewise.suite import (
     ITEM_END,
     ITEM_START,
@@ -76,6 +78,8 @@ def make_config(
     }
     if workload_profile is not None:
         data["workload_profile"] = {**data["workload_profile"], **workload_profile}
+        if workload_profile.get("transfer_fiducial_gap_s") is not None:
+            data["hardware_target"]["telemetry_backend"] = "powermetrics"
     if model is not None:
         data["model"] = {**data["model"], **model}
     if run_id is not None:
@@ -278,6 +282,126 @@ class MlxRuntimeTests(unittest.TestCase):
         adapter._model = object()
         adapter._tokenizer = FakeTokenizer()
         return adapter, fake_mlx
+
+    @staticmethod
+    def _ledger_adapter(
+        pieces: list[str], ledger: list[tuple[str, float | None]]
+    ) -> tuple[MlxRuntimeAdapter, FakeMlxLm]:
+        class LedgerClock(FakeClock):
+            def now(self):
+                ledger.append(("now", None))
+                return super().now()
+
+            def stamp(self):
+                ledger.append(("stamp", None))
+                return super().stamp()
+
+            def sleep(self, seconds):
+                ledger.append(("sleep", seconds))
+                return super().sleep(seconds)
+
+        adapter = MlxRuntimeAdapter(LedgerClock(start=1000.0))
+        fake_mlx = FakeMlxLm(pieces)
+        adapter._mlx_lm = fake_mlx
+        adapter._model = object()
+        adapter._tokenizer = FakeTokenizer()
+        return adapter, fake_mlx
+
+    def test_transfer_gap_disabled_is_byte_identical_to_legacy_golden(self) -> None:
+        ledgers: list[list[tuple[str, float | None]]] = [[], []]
+        configs = [
+            make_config(),
+            make_config(workload_profile={"transfer_fiducial_gap_s": None}),
+        ]
+        results = []
+        config_bytes = []
+        for config, ledger in zip(configs, ledgers, strict=True):
+            adapter, _ = self._ledger_adapter(["A", "B", "C"], ledger)
+            results.append(adapter.run_workload(config))
+            config_bytes.append(
+                (json.dumps(config.to_dict(), sort_keys=True) + "\n").encode()
+            )
+        event_bytes = [
+            (json.dumps([asdict(event) for event in result.events], sort_keys=True) + "\n").encode()
+            for result in results
+        ]
+        self.assertEqual(event_bytes[0], event_bytes[1])
+        self.assertEqual(config_bytes[0], config_bytes[1])
+        self.assertEqual(sha256_hex(config_bytes[0]), sha256_hex(config_bytes[1]))
+        self.assertEqual(ledgers[0], ledgers[1])
+        self.assertNotIn("boundary_semantics", event_bytes[0].decode())
+
+    def _flagged_result(self):
+        ledger: list[tuple[str, float | None]] = []
+        adapter, _ = self._ledger_adapter(["A", "B", "C"], ledger)
+        sync_calls: list[str] = []
+        core = SimpleNamespace(synchronize=lambda: sync_calls.append("synchronize"))
+        with patch.object(mlx_runtime, "_resolve_mlx_core", return_value=core):
+            result = adapter.run_workload(
+                make_config(workload_profile={"transfer_fiducial_gap_s": 0.5})
+            )
+        return result, ledger, sync_calls
+
+    def test_transfer_gap_emits_paired_authenticated_events_and_one_sleep(self) -> None:
+        result, ledger, sync_calls = self._flagged_result()
+        gaps = [event for event in result.events if event.event_type.startswith("fiducial_gap_")]
+        self.assertEqual([event.event_type for event in gaps], ["fiducial_gap_start", "fiducial_gap_end"])
+        for event in gaps:
+            stamp = stamp_from_mapping(event.metadata["clock_stamp"])
+            self.assertTrue(valid_clock_stamp(stamp))
+            self.assertLessEqual(abs(event.timestamp_s - stamp.epoch_s), MAX_EVENT_CLOCK_SKEW_S)
+        self.assertEqual([call for call in ledger if call[0] == "sleep"], [("sleep", 0.5)])
+        self.assertEqual(sync_calls, ["synchronize"])
+
+    def test_gap_excluded_from_prefill_and_decode_phase_spans(self) -> None:
+        result, _, _ = self._flagged_result()
+        kinds = [(event.event_type, event.phase) for event in result.events]
+        relevant = [
+            pair for pair in kinds
+            if pair in {
+                ("phase_start", "prefill"), ("phase_end", "prefill"),
+                ("fiducial_gap_start", "fiducial_gap"),
+                ("fiducial_gap_end", "fiducial_gap"),
+                ("phase_start", "decode"), ("phase_end", "decode"),
+            }
+        ]
+        self.assertEqual(
+            relevant,
+            [
+                ("phase_start", "prefill"),
+                ("phase_end", "prefill"),
+                ("fiducial_gap_start", "fiducial_gap"),
+                ("fiducial_gap_end", "fiducial_gap"),
+                ("phase_start", "decode"),
+                ("phase_end", "decode"),
+            ],
+        )
+        by_kind = {(event.event_type, event.phase): event for event in result.events}
+        self.assertEqual(
+            by_kind[("phase_end", "prefill")].timestamp_s,
+            by_kind[("fiducial_gap_start", "fiducial_gap")].timestamp_s,
+        )
+        self.assertEqual(
+            by_kind[("fiducial_gap_end", "fiducial_gap")].timestamp_s,
+            by_kind[("phase_start", "decode")].timestamp_s,
+        )
+
+    def test_transfer_gap_records_queued_decode_drain_semantics(self) -> None:
+        result, _, _ = self._flagged_result()
+        relevant = [
+            event for event in result.events
+            if event.event_type.startswith("fiducial_gap_")
+        ]
+        self.assertTrue(relevant)
+        for event in relevant:
+            self.assertEqual(
+                event.metadata["boundary_semantics"],
+                "first_yield_one_step_queued",
+            )
+            self.assertEqual(
+                event.metadata["synchronization"],
+                "mlx.core.synchronize_after_gap_start_stamp",
+            )
 
     def test_prepare_import_failure_is_structured_runtime_unavailable(self) -> None:
         adapter = MlxRuntimeAdapter(FakeClock())

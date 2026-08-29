@@ -4627,7 +4627,7 @@
       "priority": "p2_next_slice",
       "rank": 12,
       "status": "blocked",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the paper director's draft (docs/paper/TRANSFER-FIDUCIAL-01-kernel-row-draft.md). Ruled Future Work #1 by the T26 paper-goal ruling item 16; queued for the first post-campaign diagnostic window. Ed-hands (hardware window), hence the quiet_mac lane. Priority p2_next_slice per the draft's enumeration (p3_research_expansion is the defensible alternative). The draft's fence anchors were dropped at registration because the ruling file has no 'rulings' heading; the labels name item 16 directly.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the paper director's draft (docs/paper/TRANSFER-FIDUCIAL-01-kernel-row-draft.md). Ruled Future Work #1 by the T26 paper-goal ruling item 16; queued for the first post-campaign diagnostic window. Ed-hands (hardware window), hence the quiet_mac lane. Priority p2_next_slice per the draft's enumeration (p3_research_expansion is the defensible alternative). The draft's fence anchors were dropped at registration because the ruling file has no 'rulings' heading; the labels name item 16 directly. Implementation landed as a parked PR (branch feat/transfer-fiducial-01; merge held until V4-TRANSACTION-01 closes per D-153): runtime gap + fit script + claim-path LOCK; live capture is the remaining acceptance evidence.",
       "stop_card": null
     },
     "UNATTENDED-LAUNCH-01": {

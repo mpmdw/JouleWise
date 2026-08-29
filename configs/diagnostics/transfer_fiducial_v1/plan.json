@@ -1,0 +1,91 @@
+{
+  "schema_version": "joulewise.transfer_fiducial_plan.v1",
+  "diagnostic": true,
+  "claim_bearing": false,
+  "diagnostic_kind": "transfer_fiducial_v1",
+  "pooling": "forbidden",
+  "strata": [
+    {
+      "stratum_id": "qwen25_1p5b_p4096_o512_m3max",
+      "model": {
+        "name": "Qwen2.5-1.5B-Instruct-4bit",
+        "family": "qwen2.5",
+        "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+        "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+        "weight_format": "mlx",
+        "context_window": 32768
+      },
+      "quantization": {
+        "name": "int4",
+        "bits": 4
+      },
+      "hardware_target": {
+        "id": "macbook_m3_max",
+        "transport": "local",
+        "runtime_backend": "mlx",
+        "telemetry_backend": "powermetrics",
+        "device_kind": "apple_silicon_unified_memory"
+      },
+      "prompt_tokens": 4096,
+      "output_tokens": 512,
+      "repetitions": 1,
+      "transfer_fiducial_gap_s": 0.5,
+      "minimum_prefill_s": 0.8,
+      "minimum_decode_s": 0.8,
+      "post_window_sampling_dwell_s": 6,
+      "planned_runs": 10,
+      "configs": [
+        {
+          "bundle_id": "tf-q15-p4096-o512-r01",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r01.json",
+          "config_sha256": "5b337e91974defff8bd9fd1b2897dc854c0d6fc90508a4b5ce266cd3e6c2554e"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r02",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r02.json",
+          "config_sha256": "7cf20f642b3532fda4be939a5e6206505ad176bce1367b6111b9f908f1551624"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r03",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r03.json",
+          "config_sha256": "23698674f9510eb564d14c81a0e58cef62ee86143c5b51a806f11a6f63432319"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r04",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r04.json",
+          "config_sha256": "4bf2454b541d9754f2862321d32235718245254936f96126f12e663b4d7937e5"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r05",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r05.json",
+          "config_sha256": "55cb92dcd75ebf13ac5141bfe82738d814761c2ba4a18833a121f23d9689d9db"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r06",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r06.json",
+          "config_sha256": "038530c055dd087e9cdcadbd1e89cb9aa04b0bdea5189e4f544afc13a519dd20"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r07",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r07.json",
+          "config_sha256": "613c228c3a4245603a55af90549cc540d67ff73db1ac98f317704b0b2a1579fa"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r08",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r08.json",
+          "config_sha256": "3f655d5976897a821aabaa00e567d031b3b472cbb57fd47b2e9c0d3fc680d18f"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r09",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r09.json",
+          "config_sha256": "8c9315e783942062ecc913b15d0be4d6b8feabf99ff829659c8be3e48d938795"
+        },
+        {
+          "bundle_id": "tf-q15-p4096-o512-r10",
+          "config_path": "configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r10.json",
+          "config_sha256": "ef5e70eb0e6d26b99b77265dee7c88d5bc702f3dadfcce27aa10d74e3fbec741"
+        }
+      ]
+    }
+  ]
+}

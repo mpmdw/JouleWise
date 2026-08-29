@@ -1631,6 +1631,51 @@ class SuiteReduceTests(ReduceTestCase):
         )
 
 
+class TransferFiducialReducerTests(ReduceTestCase):
+    def test_transfer_bundle_reduces_without_reducer_barrier_and_is_classified_downstream(
+        self,
+    ) -> None:
+        from joulewise.bundle_read import BundleReader
+
+        builder = self.builder(
+            hardware_target={
+                "id": "mock_target",
+                "transport": "local",
+                "runtime_backend": "mlx",
+                "telemetry_backend": "powermetrics",
+                "device_kind": "test",
+            },
+            workload_profile={
+                "name": "mock_smoke",
+                "prompt_tokens": 32,
+                "output_tokens": 8,
+                "repetitions": 1,
+                "warmup_runs": 1,
+                "transfer_fiducial_gap_s": 0.5,
+            }
+        )
+        builder.measured_window(0.0, 10.0)
+        builder.add_phase("prefill", 1.0, 4.0)
+        builder.add_event("fiducial_gap_start", "fiducial_gap", 4.0)
+        builder.add_event("fiducial_gap_end", "fiducial_gap", 4.5)
+        builder.add_phase("decode", 4.5, 9.0)
+        builder.add_token(0, 5.0)
+        builder.write_trace(
+            constant_samples(0.0, 10.0, hz=1.0, power_w=7.5)
+        )
+        builder.write_metadata(rail_manifest=["mock"])
+
+        summary = reduce_module.reduce_bundle(builder.path)
+        classified = BundleReader(builder.path).transfer_fiducial_class()
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNotNone(summary.phase_energy_j)
+        self.assertTrue(classified.is_diagnostic)
+        self.assertTrue(classified.by_config)
+        self.assertTrue(classified.by_events)
+        self.assertFalse(classified.inconsistent)
+
+
 if __name__ == "__main__":
     unittest.main()
 

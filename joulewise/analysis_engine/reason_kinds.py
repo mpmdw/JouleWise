@@ -61,11 +61,14 @@ DEAD_REASON_CODES = frozenset(
 
 # A lock is neither a scientific answer nor a malformed-input diagnosis.  The
 # smoke predicate requires it once in each declared contrast evaluation.
-LOCK_REASON_CODES = frozenset({"mock_telemetry_claim_ineligible"})
+LOCK_REASON_CODES = frozenset(
+    {"mock_telemetry_claim_ineligible", "transfer_fiducial_claim_ineligible"}
+)
 
 CONTRACT_REASON_CODES = frozenset(
     REASON_CODES - DATA_REASON_CODES - DEAD_REASON_CODES - LOCK_REASON_CODES
 )
+assert "transfer_fiducial_class_inconsistent" in CONTRACT_REASON_CODES
 
 
 def assert_data_reason_only(
