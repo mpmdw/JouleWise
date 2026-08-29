@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import io
 import json
+import re
 import shutil
 import stat
 import subprocess
@@ -42,6 +44,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"
 PINSET_SHA256 = "d81515505d677c2ca045238e721c87eae8f38439a89a5377e58fa9064eaf2f21"
 REPRESENTATIVE_PACK = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
+SECOND_REPRESENTATIVE_PACK = ROOT / "configs/campaigns/d117_floor_qwen25_7b_v3"
+REFRESH_SCRIPT = ROOT / "scripts/refresh_receipt_histsem_pinset.py"
 
 # The versioned successor member of the code-enumerated chain.  It does not
 # exist until S-0 mints it, and the chain loader treats an absent enumerated
@@ -193,13 +197,36 @@ class ReceiptHistoricalSemanticsTests(unittest.TestCase):
         for forbidden in ("fetch", "unshallow", "--update", "checkout"):
             self.assertNotIn(forbidden, uncommented)
 
-    def test_pinset_is_byte_pinned_and_has_no_update_lane(self) -> None:
+    def test_pinset_is_byte_pinned_and_has_no_unreviewed_update_lane(self) -> None:
         self.assertEqual(hashlib.sha256(PINSET.read_bytes()).hexdigest(), PINSET_SHA256)
         script = (ROOT / "scripts/verify_receipt_histsem.py").read_text(encoding="utf-8")
         self.assertNotIn("--update", script)
         value = json.loads(PINSET.read_bytes())
         self.assertEqual(len(value["packs"]), 9)
         self.assertEqual(sum(row["receipt_count"] for row in value["packs"]), 99)
+
+        pinset_writers = []
+        for path in (ROOT / "scripts").glob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            uncommented = "".join(
+                token.string
+                for token in tokenize.generate_tokens(io.StringIO(source).readline)
+                if token.type != tokenize.COMMENT
+            )
+            names_v1 = (
+                "legacy_receipt_histsem_pinset" in uncommented
+                or "RECEIPT_HISTSEM_PINSET_RELATIVE_PATH" in uncommented
+            )
+            writes_file = (
+                "write_bytes" in uncommented
+                or "write_text" in uncommented
+                or re.search(r"\bopen\([^)]*,[\"']w", uncommented) is not None
+            )
+            if names_v1 and writes_file:
+                pinset_writers.append(path.name)
+        # The v4 builder writes its explicit OUTPUT, but never names or writes
+        # the v1 chain member, so it is outside this grep-shaped class.
+        self.assertEqual(pinset_writers, ["refresh_receipt_histsem_pinset.py"])
 
     def test_successor_member_shape_when_present(self) -> None:
         """Presence-conditional shape check on the versioned successor member.
@@ -853,6 +880,794 @@ class HistsemScratchTreeRemovalTests(unittest.TestCase):
             finally:
                 outside.chmod(0o700)
                 nested.chmod(0o700)
+
+
+class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
+    def _repository(self) -> tuple[Path, Path, Path]:
+        temporary = tempfile.TemporaryDirectory(prefix="joulewise-histsem-refresh-")
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name) / "repository"
+        subprocess.run(
+            ("git", "clone", "-q", "--shared", str(ROOT), str(repository)),
+            check=True,
+            capture_output=True,
+        )
+        git(repository, "config", "user.email", "histsem-refresh@invalid")
+        git(repository, "config", "user.name", "histsem refresh test")
+        git(repository, "config", "gc.auto", "0")
+        git(repository, "config", "maintenance.auto", "false")
+        # Published state, set the way the other histsem tests set it: a PR
+        # checkout (CI) has no origin/main of its own to inherit via --shared.
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+        pack = repository / REPRESENTATIVE_PACK.relative_to(ROOT)
+        pinset = repository / PINSET.relative_to(ROOT)
+        return repository, pack, pinset
+
+    def _run_refresh(
+        self, repository: Path, *arguments: str
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            (
+                sys.executable,
+                str(REFRESH_SCRIPT),
+                "--repository-root",
+                str(repository),
+                *arguments,
+            ),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def _run_verifier(
+        self, repository: Path, pack: Path
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            (
+                sys.executable,
+                str(ROOT / "scripts/verify_receipt_histsem.py"),
+                "--repository-root",
+                str(repository),
+                "--pack-root",
+                str(pack),
+            ),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def _commit_custody(self, repository: Path, pack: Path, name: str) -> None:
+        relative = pack.relative_to(repository).as_posix()
+        path = pack / "arm_readiness.sources" / name
+        path.write_bytes(render_json({"refresh_regression": name}))
+        git(repository, "add", path.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", f"add {name}")
+        git(repository, "update-ref", "refs/remotes/origin/refresh-test", "HEAD")
+        self.assertEqual(git(repository, "status", "--porcelain", "--", relative).stdout, "")
+
+    @staticmethod
+    def _row(raw: bytes) -> dict[str, object]:
+        value = json.loads(raw)
+        return next(
+            row
+            for row in value["packs"]
+            if row["pack_id"] == REPRESENTATIVE_PACK.name
+        )
+
+    @staticmethod
+    def _refresh_module():
+        spec = importlib.util.spec_from_file_location(
+            "joulewise_refresh_receipt_histsem_pinset_test", REFRESH_SCRIPT
+        )
+        if spec is None or spec.loader is None:
+            raise AssertionError("cannot load refresh lane")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_refresh_lane_interface_is_exact_and_has_no_network_or_git_writes(
+        self,
+    ) -> None:
+        completed = subprocess.run(
+            (sys.executable, str(REFRESH_SCRIPT), "--help"),
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            set(re.findall(r"--[a-z][a-z0-9-]+", completed.stdout)),
+            {
+                "--help",
+                "--repository-root",
+                "--pinset",
+                "--refresh-row",
+                "--refresh-tool-sidecars",
+                "--output",
+                "--print-pinset-sha256",
+                "--write-test-pin",
+            },
+        )
+        source = REFRESH_SCRIPT.read_text(encoding="utf-8")
+        uncommented = "".join(
+            token.string
+            for token in tokenize.generate_tokens(io.StringIO(source).readline)
+            if token.type != tokenize.COMMENT
+        )
+        for forbidden in ("fetch", "unshallow", "checkout", "--update", "danger"):
+            self.assertNotIn(forbidden, uncommented)
+        for mutating_git_argument in ('"add"', '"commit"', '"update-ref"'):
+            self.assertNotIn(mutating_git_argument, uncommented)
+
+    def _tool_repository(self) -> Path:
+        temporary = tempfile.TemporaryDirectory(
+            prefix="joulewise-histsem-tool-sidecars-"
+        )
+        self.addCleanup(temporary.cleanup)
+        repository = Path(temporary.name) / "repository"
+        repository.mkdir()
+        git(repository, "init", "-q")
+        git(repository, "config", "user.email", "histsem-sidecars@invalid")
+        git(repository, "config", "user.name", "histsem sidecar test")
+        scripts = repository / "scripts"
+        scripts.mkdir()
+        lane = self._refresh_module()
+        for name in lane.CUSTODY_TOOL_SIDECARS:
+            shutil.copyfile(ROOT / "scripts" / name, scripts / name)
+            shutil.copyfile(
+                ROOT / "scripts" / f"{name}.sha256",
+                scripts / f"{name}.sha256",
+            )
+        git(repository, "add", "scripts")
+        git(repository, "commit", "-qm", "install custody tools and sidecars")
+        git(repository, "update-ref", "refs/remotes/origin/sidecar-test", "HEAD")
+        return repository
+
+    def test_tool_sidecar_refreshes_stale_committed_tool_and_is_idempotent(
+        self,
+    ) -> None:
+        repository = self._tool_repository()
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        tool = repository / "scripts" / name
+        sidecar = repository / "scripts" / f"{name}.sha256"
+        tool.write_bytes(tool.read_bytes() + b"\n# sidecar refresh regression\n")
+        git(repository, "add", tool.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", "edit one custody tool")
+        git(repository, "update-ref", "refs/remotes/origin/sidecar-test", "HEAD")
+
+        stale = sidecar.read_bytes()
+        expected = lane.render_tool_sidecar(tool.read_bytes(), name)
+        self.assertNotEqual(stale, expected)
+        committed_tool = git(
+            repository, "show", f"HEAD:scripts/{name}"
+        ).stdout.encode()
+        self.assertEqual(committed_tool, tool.read_bytes())
+
+        refreshed = self._run_refresh(repository, "--refresh-tool-sidecars")
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+        self.assertIn(f"--- scripts/{name}.sha256@old\n", refreshed.stdout)
+        self.assertIn(f"+++ scripts/{name}.sha256@new\n", refreshed.stdout)
+        self.assertIn(f"-{stale.decode().rstrip()}\n", refreshed.stdout)
+        self.assertIn(f"+{expected.decode().rstrip()}\n", refreshed.stdout)
+        self.assertEqual(sidecar.read_bytes(), expected)
+        self.assertEqual(tool.read_bytes(), committed_tool)
+
+        git(repository, "add", sidecar.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", "publish refreshed custody sidecar")
+        git(repository, "update-ref", "refs/remotes/origin/sidecar-test", "HEAD")
+        before = sidecar.read_bytes()
+        before_mtimes = {
+            member: (repository / "scripts" / f"{member}.sha256").stat().st_mtime_ns
+            for member in lane.CUSTODY_TOOL_SIDECARS
+        }
+        second = self._run_refresh(repository, "--refresh-tool-sidecars")
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertEqual(
+            second.stdout,
+            "".join(
+                f"sidecar {member} is already current\n"
+                for member in lane.CUSTODY_TOOL_SIDECARS
+            ),
+        )
+        self.assertEqual(sidecar.read_bytes(), before)
+        self.assertEqual(
+            {
+                member: (
+                    repository / "scripts" / f"{member}.sha256"
+                ).stat().st_mtime_ns
+                for member in lane.CUSTODY_TOOL_SIDECARS
+            },
+            before_mtimes,
+        )
+        self.assertEqual(git(repository, "status", "--porcelain").stdout, "")
+
+    def test_tool_sidecar_refresh_refuses_dirty_tool_or_sidecar(self) -> None:
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        for dirty_path in (f"scripts/{name}", f"scripts/{name}.sha256"):
+            with self.subTest(dirty_path=dirty_path):
+                repository = self._tool_repository()
+                path = repository / dirty_path
+                path.write_bytes(path.read_bytes() + b"# dirty sidecar regression\n")
+                originals = {
+                    member: (repository / "scripts" / f"{member}.sha256").read_bytes()
+                    for member in lane.CUSTODY_TOOL_SIDECARS
+                }
+                refused = self._run_refresh(
+                    repository, "--refresh-tool-sidecars"
+                )
+                self.assertEqual(refused.returncode, 2, refused.stdout)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(
+                    payload["reason_codes"], ["histsem_binding_mismatch"]
+                )
+                self.assertIn("not the HEAD blob", payload["detail"])
+                for member, original in originals.items():
+                    self.assertEqual(
+                        (repository / "scripts" / f"{member}.sha256").read_bytes(),
+                        original,
+                    )
+
+    def test_tool_sidecar_mode_never_accepts_a_tool_as_a_pinset_output(
+        self,
+    ) -> None:
+        repository, _pack, _pinset = self._repository()
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        tool = repository / "scripts" / name
+        original = tool.read_bytes()
+        refused = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--refresh-tool-sidecars",
+            "--output",
+            f"scripts/{name}",
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+        self.assertIn("must not target", payload["detail"])
+        self.assertEqual(tool.read_bytes(), original)
+
+    def test_refresh_lane_universal_write_fence_normalizes_scripts_output(
+        self,
+    ) -> None:
+        for sidecars in (False, True):
+            with self.subTest(refresh_tool_sidecars=sidecars):
+                repository, _pack, _pinset = self._repository()
+                tool = repository / "scripts/build_family_marker.py"
+                original = tool.read_bytes()
+                arguments = [
+                    "--refresh-row",
+                    REPRESENTATIVE_PACK.name,
+                    "--output",
+                    "scripts/../scripts/build_family_marker.py",
+                ]
+                if sidecars:
+                    arguments.append("--refresh-tool-sidecars")
+                refused = self._run_refresh(repository, *arguments)
+                self.assertEqual(refused.returncode, 2, refused.stdout)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+                self.assertIn("must not target", payload["detail"])
+                self.assertEqual(tool.read_bytes(), original)
+
+    def test_refresh_lane_refuses_relative_output_equal_to_test_pin(self) -> None:
+        repository, _pack, _pinset = self._repository()
+        collision = repository.parent / "same-preview-and-test-pin.json"
+        refused = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--output",
+            "../same-preview-and-test-pin.json",
+            "--write-test-pin",
+            "../same-preview-and-test-pin.json",
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+        self.assertIn("must differ", payload["detail"])
+        self.assertFalse(collision.exists())
+
+    def test_refresh_lane_refuses_preview_output_inside_repository(self) -> None:
+        repository, _pack, _pinset = self._repository()
+        preview = repository / "preview.json"
+        refused = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--output",
+            "preview.json",
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+        self.assertIn("outside the repository root", payload["detail"])
+        self.assertFalse(preview.exists())
+
+    def test_refresh_lane_write_fence_uses_filesystem_identity(self) -> None:
+        """S14-F1 cure: the fence compares filesystem identity, not spelling.
+
+        Three aliases of a governed tool must all refuse and leave the tool
+        bytes untouched: the relative ``..`` alias, the case alias that a
+        case-insensitive filesystem accepts (skipped where the filesystem is
+        case-sensitive), and a symlink alias into ``scripts/``.
+        """
+
+        repository, _pack, _pinset = self._repository()
+        tool = repository / "scripts/build_family_marker.py"
+        original = tool.read_bytes()
+        link = repository.parent / "scripts-alias"
+        link.symlink_to(repository / "scripts", target_is_directory=True)
+        swapped = Path(str(tool).swapcase())
+        aliases = [
+            ("relative", "scripts/../scripts/build_family_marker.py"),
+            ("symlink", str(link / "build_family_marker.py")),
+        ]
+        if swapped.exists() and swapped != tool:
+            # Case-insensitive filesystem (macOS default): the case alias is real.
+            aliases.append(("case", str(swapped)))
+        for label, alias in aliases:
+            with self.subTest(alias=label):
+                refused = self._run_refresh(
+                    repository,
+                    "--refresh-row",
+                    REPRESENTATIVE_PACK.name,
+                    "--output",
+                    alias,
+                )
+                self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+                self.assertIn("must not target", payload["detail"])
+                self.assertEqual(tool.read_bytes(), original)
+
+    def test_refresh_lane_print_only_on_scratch_pinset_is_read_only(self) -> None:
+        """S14-F2 cure: the in-place guard is gated on write intent."""
+
+        repository, _pack, pinset = self._repository()
+        scratch_pinset = repository.parent / "scratch-print-only.json"
+        scratch_pinset.write_bytes(pinset.read_bytes())
+        original = scratch_pinset.read_bytes()
+        printed = self._run_refresh(
+            repository, "--pinset", str(scratch_pinset), "--print-pinset-sha256"
+        )
+        self.assertEqual(printed.returncode, 0, printed.stdout + printed.stderr)
+        self.assertIn(
+            f'PINSET_SHA256 = "{hashlib.sha256(original).hexdigest()}"', printed.stdout
+        )
+        self.assertEqual(scratch_pinset.read_bytes(), original)
+
+    def test_refresh_lane_refuses_other_enumerated_member_as_output_or_test_pin(
+        self,
+    ) -> None:
+        repository, _pack, _pinset = self._repository()
+        other = readiness.RECEIPT_HISTSEM_PINSET_RELATIVE_PATH[1].as_posix()
+        for option in ("--output", "--write-test-pin"):
+            with self.subTest(option=option):
+                arguments = [
+                    "--refresh-row",
+                    REPRESENTATIVE_PACK.name,
+                    option,
+                    other,
+                ]
+                if option == "--write-test-pin":
+                    arguments.extend(
+                        ["--output", str(repository.parent / "allowed-preview.json")]
+                    )
+                refused = self._run_refresh(repository, *arguments)
+                self.assertEqual(refused.returncode, 2, refused.stdout)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+                self.assertIn("other than --pinset", payload["detail"])
+
+    def test_refresh_row_and_tool_sidecars_compose_in_one_invocation(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-composed.json")
+        lane = self._refresh_module()
+        name = lane.CUSTODY_TOOL_SIDECARS[0]
+        tool = repository / "scripts" / name
+        sidecar = repository / "scripts" / f"{name}.sha256"
+        tool.write_bytes(tool.read_bytes() + b"\n# composed refresh regression\n")
+        git(repository, "add", tool.relative_to(repository).as_posix())
+        git(repository, "commit", "-qm", "edit custody tool for composed refresh")
+        git(repository, "update-ref", "refs/remotes/origin/refresh-test", "HEAD")
+        expected = lane.render_tool_sidecar(tool.read_bytes(), name)
+
+        refreshed = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--refresh-tool-sidecars",
+        )
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+        self.assertIn(f"#{REPRESENTATIVE_PACK.name}@old", refreshed.stdout)
+        self.assertIn(f"scripts/{name}.sha256@old", refreshed.stdout)
+        self.assertEqual(sidecar.read_bytes(), expected)
+        self.assertIn(
+            "arm_readiness.sources/refresh-composed.json",
+            self._row(pinset.read_bytes())["post_authoring_delta"]["added"],
+        )
+
+    def test_real_worktree_tool_sidecar_refresh_is_a_no_op(self) -> None:
+        lane = self._refresh_module()
+        completed = self._run_refresh(ROOT, "--refresh-tool-sidecars")
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        self.assertEqual(
+            completed.stdout,
+            "".join(
+                f"sidecar {name} is already current\n"
+                for name in lane.CUSTODY_TOOL_SIDECARS
+            ),
+        )
+        pathspecs = [
+            f"scripts/{name}.sha256" for name in lane.CUSTODY_TOOL_SIDECARS
+        ]
+        self.assertEqual(
+            git(ROOT, "status", "--porcelain", "--", *pathspecs).stdout,
+            "",
+        )
+
+    def test_refresh_lane_turns_stale_row_refuse_into_pass(self) -> None:
+        repository, pack, pinset = self._repository()
+        original = pinset.read_bytes()
+        self._commit_custody(repository, pack, "refresh-pass.json")
+
+        before = self._run_verifier(repository, pack)
+        self.assertEqual(before.returncode, 2, before.stdout)
+        self.assertEqual(
+            json.loads(before.stdout)["reason_codes"], ["histsem_pinset_mismatch"]
+        )
+        refreshed = self._run_refresh(
+            repository, "--refresh-row", REPRESENTATIVE_PACK.name
+        )
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+        old_row = self._row(original)
+        new_row = self._row(pinset.read_bytes())
+        self.assertEqual(
+            {key for key in old_row if old_row[key] != new_row[key]},
+            {"current_pack_sha256", "post_authoring_delta"},
+        )
+        self.assertIn(f"#{REPRESENTATIVE_PACK.name}@old", refreshed.stdout)
+        self.assertIn(f"#{REPRESENTATIVE_PACK.name}@new", refreshed.stdout)
+        self.assertIn('-  "current_pack_sha256"', refreshed.stdout)
+        self.assertIn('+  "current_pack_sha256"', refreshed.stdout)
+        self.assertIn('+      "arm_readiness.sources/refresh-pass.json"', refreshed.stdout)
+        after = self._run_verifier(repository, pack)
+        self.assertEqual(after.returncode, 0, after.stdout + after.stderr)
+        self.assertEqual(json.loads(after.stdout)["status"], "PASS")
+
+    def test_refresh_lane_refuses_dirty_pack_directory(self) -> None:
+        cases = ("untracked", "modified")
+        for case in cases:
+            with self.subTest(case=case):
+                repository, pack, pinset = self._repository()
+                original = pinset.read_bytes()
+                if case == "untracked":
+                    (pack / "untracked-refresh-regression.json").write_text(
+                        "{}\n", encoding="utf-8"
+                    )
+                else:
+                    producer = pack / "producer_contract.json"
+                    producer.write_bytes(producer.read_bytes() + b"\n")
+                refused = self._run_refresh(
+                    repository, "--refresh-row", REPRESENTATIVE_PACK.name
+                )
+                self.assertEqual(refused.returncode, 2, refused.stdout)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(payload["reason_codes"], ["histsem_binding_mismatch"])
+                self.assertIn("not the HEAD blob", payload["detail"])
+                self.assertEqual(pinset.read_bytes(), original)
+
+    def test_refresh_lane_refuses_ignored_pack_entry_as_binding_mismatch(self) -> None:
+        repository, pack, pinset = self._repository()
+        original = pinset.read_bytes()
+        ignored = pack / "__pycache__/refresh_ignored.pyc"
+        ignored.parent.mkdir()
+        ignored.write_bytes(b"ignored bytecode regression")
+        self.assertEqual(
+            git(repository, "check-ignore", ignored.relative_to(repository).as_posix()).stdout.strip(),
+            ignored.relative_to(repository).as_posix(),
+        )
+        refused = self._run_refresh(
+            repository, "--refresh-row", REPRESENTATIVE_PACK.name
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_binding_mismatch"])
+        self.assertIn("!!", payload["detail"])
+        self.assertEqual(pinset.read_bytes(), original)
+
+    def test_refresh_lane_refuses_unpublished_head(self) -> None:
+        with self.subTest(check="historical-head-vs-origin-main"):
+            repository, _pack, pinset = self._repository()
+            original = pinset.read_bytes()
+            empty_tree = subprocess.run(
+                ("git", "mktree"),
+                cwd=repository,
+                check=True,
+                input="",
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            unrelated = git(
+                repository, "commit-tree", empty_tree, "-m", "unrelated main"
+            ).stdout.strip()
+            git(repository, "update-ref", "refs/remotes/origin/main", unrelated)
+            refused = self._run_refresh(
+                repository, "--refresh-row", REPRESENTATIVE_PACK.name
+            )
+            self.assertEqual(refused.returncode, 2, refused.stdout)
+            payload = json.loads(refused.stdout)
+            self.assertEqual(payload["reason_codes"], ["histsem_commit_unpublished"])
+            self.assertIn("historical receipt commit", payload["detail"])
+            self.assertEqual(pinset.read_bytes(), original)
+
+
+    def test_refresh_lane_refuses_to_move_historical_fields(self) -> None:
+        with self.subTest(field="historical_pack_sha256"):
+            repository, _pack, pinset = self._repository()
+            value = json.loads(pinset.read_bytes())
+            row = next(
+                item
+                for item in value["packs"]
+                if item["pack_id"] == REPRESENTATIVE_PACK.name
+            )
+            row["historical_pack_sha256"] = "0" * 64
+            pinset.write_bytes(render_json(value))
+            original = pinset.read_bytes()
+            refused = self._run_refresh(
+                repository, "--refresh-row", REPRESENTATIVE_PACK.name
+            )
+            self.assertEqual(refused.returncode, 2, refused.stdout)
+            payload = json.loads(refused.stdout)
+            self.assertEqual(
+                payload["reason_codes"], ["histsem_historical_digest_mismatch"]
+            )
+            self.assertIn("historical_pack_sha256", payload["detail"])
+            self.assertEqual(pinset.read_bytes(), original)
+
+        with self.subTest(field="plan_tree_sha256"):
+            repository, pack, pinset = self._repository()
+            original = pinset.read_bytes()
+            tree_path = pack / "plan_tree.json"
+            tree = json.loads(tree_path.read_bytes())
+            tree["refresh_regression_marker"] = "immutable"
+            tree_raw = readiness._render_plan_tree(tree)
+            tree_path.write_bytes(tree_raw)
+            (pack / "plan_tree.sha256").write_bytes(
+                gnu_sidecar(hashlib.sha256(tree_raw).hexdigest(), "plan_tree.json")
+            )
+            git(repository, "add", pack.relative_to(repository).as_posix())
+            git(repository, "commit", "-qm", "mutate bound plan tree")
+            git(repository, "update-ref", "refs/remotes/origin/refresh-test", "HEAD")
+            refused = self._run_refresh(
+                repository, "--refresh-row", REPRESENTATIVE_PACK.name
+            )
+            self.assertEqual(refused.returncode, 2, refused.stdout)
+            payload = json.loads(refused.stdout)
+            self.assertEqual(payload["reason_codes"], ["histsem_binding_mismatch"])
+            self.assertIn("plan_tree_sha256", payload["detail"])
+            self.assertEqual(pinset.read_bytes(), original)
+
+    def test_refresh_lane_is_idempotent_and_canonical(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-idempotent.json")
+        first = self._run_refresh(
+            repository, "--refresh-row", REPRESENTATIVE_PACK.name
+        )
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        first_bytes = pinset.read_bytes()
+        second = self._run_refresh(
+            repository, "--refresh-row", REPRESENTATIVE_PACK.name
+        )
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertEqual(
+            second.stdout, f"row {REPRESENTATIVE_PACK.name} is already current\n"
+        )
+        self.assertEqual(pinset.read_bytes(), first_bytes)
+        parsed = readiness.parse_json_bytes(first_bytes, require_canonical=True)
+        self.assertEqual(first_bytes, render_json(parsed))
+
+    def test_refresh_lane_print_and_write_test_pin(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-print.json")
+        test_copy = repository.parent / "test_receipt_histsem_copy.py"
+        test_copy.write_text(
+            'before = True\nPINSET_SHA256 = "' + ("0" * 64) + '"\nafter = True\n',
+            encoding="utf-8",
+        )
+        refreshed = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--print-pinset-sha256",
+            "--write-test-pin",
+            str(test_copy),
+        )
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+        digest = hashlib.sha256(pinset.read_bytes()).hexdigest()
+        literal = f'PINSET_SHA256 = "{digest}"'
+        self.assertIn(f"pinset sha256: {digest}\n", refreshed.stdout)
+        self.assertIn(f"{literal}\n", refreshed.stdout)
+        updated = test_copy.read_text(encoding="utf-8")
+        self.assertEqual(updated.count("PINSET_SHA256 ="), 1)
+        self.assertIn(literal, updated)
+        self.assertIn("before = True\n", updated)
+        self.assertIn("after = True\n", updated)
+
+    def test_refresh_lane_in_place_requires_enumerated_pinset_member(self) -> None:
+        repository, _pack, pinset = self._repository()
+        scratch_pinset = repository.parent / "nonmember-pinset.json"
+        scratch_pinset.write_bytes(pinset.read_bytes())
+        original = scratch_pinset.read_bytes()
+        refused = self._run_refresh(
+            repository,
+            "--pinset",
+            str(scratch_pinset),
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+        self.assertIn("in-place refresh requires an enumerated pinset member", payload["detail"])
+        self.assertEqual(scratch_pinset.read_bytes(), original)
+
+    def test_refresh_lane_labels_preview_but_not_in_place_output(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-preview-label.json")
+        original = pinset.read_bytes()
+        preview = repository.parent / "labelled-preview.json"
+        previewed = self._run_refresh(
+            repository,
+            "--refresh-row",
+            REPRESENTATIVE_PACK.name,
+            "--output",
+            str(preview),
+        )
+        self.assertEqual(previewed.returncode, 0, previewed.stdout + previewed.stderr)
+        self.assertIn(f"preview: {preview.resolve()}", previewed.stdout)
+        self.assertIn("cannot be loaded by scripts/verify_receipt_histsem.py", previewed.stdout)
+        self.assertLess(
+            previewed.stdout.index(f"#{REPRESENTATIVE_PACK.name}@new"),
+            previewed.stdout.index("preview:"),
+        )
+        self.assertEqual(pinset.read_bytes(), original)
+
+        in_place = self._run_refresh(
+            repository, "--refresh-row", REPRESENTATIVE_PACK.name
+        )
+        self.assertEqual(in_place.returncode, 0, in_place.stdout + in_place.stderr)
+        self.assertNotIn("preview:", in_place.stdout)
+
+    def test_refresh_lane_whole_candidate_requires_every_stale_row(self) -> None:
+        repository, first_pack, pinset = self._repository()
+        second_pack = repository / SECOND_REPRESENTATIVE_PACK.relative_to(ROOT)
+        self._commit_custody(repository, first_pack, "whole-candidate-first.json")
+        self._commit_custody(repository, second_pack, "whole-candidate-second.json")
+        original = pinset.read_bytes()
+
+        refused = self._run_refresh(
+            repository, "--refresh-row", first_pack.name
+        )
+        self.assertEqual(refused.returncode, 2, refused.stdout)
+        payload = json.loads(refused.stdout)
+        self.assertEqual(payload["reason_codes"], ["histsem_pinset_mismatch"])
+        self.assertIn("whole-candidate verification refused", payload["detail"])
+        self.assertIn(second_pack.name, payload["detail"])
+        self.assertEqual(pinset.read_bytes(), original)
+
+        refreshed = self._run_refresh(
+            repository,
+            "--refresh-row",
+            first_pack.name,
+            "--refresh-row",
+            second_pack.name,
+        )
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+        self.assertNotEqual(pinset.read_bytes(), original)
+        result = readiness.verify_all_receipt_histsem(
+            repository, require_published=False
+        )
+        self.assertEqual(result["status"], "PASS")
+
+    def test_refresh_lane_never_leaves_a_pinset_the_verifier_rejects(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-rollback.json")
+        original = pinset.read_bytes()
+        module = self._refresh_module()
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(
+                module,
+                "_verify_whole_candidate",
+            ),
+            mock.patch.object(
+                module.readiness,
+                "verify_all_receipt_histsem",
+                side_effect=HistoricalSemanticsError(
+                    "histsem_binding_mismatch", "injected post-write refusal"
+                ),
+            ) as whole_pinset,
+            mock.patch.object(sys, "stdout", stdout),
+        ):
+            exit_code = module.main(
+                [
+                    "--repository-root",
+                    str(repository),
+                    "--refresh-row",
+                    REPRESENTATIVE_PACK.name,
+                ]
+            )
+        self.assertEqual(exit_code, 2)
+        whole_pinset.assert_called_once_with(
+            repository.resolve(), require_published=False
+        )
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["reason_codes"], ["histsem_binding_mismatch"])
+        self.assertIn(
+            "post-write whole-pinset verification refused: injected post-write refusal",
+            payload["detail"],
+        )
+        self.assertEqual(pinset.read_bytes(), original)
+
+    def test_refresh_lane_writes_pinset_before_test_pin_and_restores_both(self) -> None:
+        repository, pack, pinset = self._repository()
+        self._commit_custody(repository, pack, "refresh-write-order.json")
+        original_pinset = pinset.read_bytes()
+        test_pin = repository.parent / "write-order-test-pin.py"
+        test_pin.write_text(
+            'PINSET_SHA256 = "' + ("0" * 64) + '"\n', encoding="utf-8"
+        )
+        original_test_pin = test_pin.read_bytes()
+        module = self._refresh_module()
+        real_write_bytes = Path.write_bytes
+        writes: list[str] = []
+        injected = False
+
+        def write_then_fail(path: Path, raw: bytes) -> int:
+            nonlocal injected
+            resolved = path.resolve(strict=False)
+            if resolved == pinset.resolve():
+                writes.append("pinset")
+            elif resolved == test_pin.resolve():
+                writes.append("test-pin")
+            result = real_write_bytes(path, raw)
+            if resolved == test_pin.resolve() and not injected:
+                injected = True
+                raise OSError("injected failure after pinset write")
+            return result
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(module, "_verify_whole_candidate"),
+            mock.patch.object(
+                module.readiness,
+                "verify_all_receipt_histsem",
+                return_value={"status": "PASS"},
+            ),
+            mock.patch.object(Path, "write_bytes", autospec=True, side_effect=write_then_fail),
+            mock.patch.object(sys, "stdout", stdout),
+        ):
+            exit_code = module.main(
+                [
+                    "--repository-root",
+                    str(repository),
+                    "--refresh-row",
+                    pack.name,
+                    "--write-test-pin",
+                    str(test_pin),
+                ]
+            )
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(writes[:2], ["pinset", "test-pin"])
+        self.assertIn("injected failure after pinset write", stdout.getvalue())
+        self.assertEqual(pinset.read_bytes(), original_pinset)
+        self.assertEqual(test_pin.read_bytes(), original_test_pin)
 
 
 class SuccessorPinsetDigestConditionTests(unittest.TestCase):

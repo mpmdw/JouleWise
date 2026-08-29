@@ -111,3 +111,7 @@ Gate unattended WINDOWS, not the `_v4` mint night.
 ## Strategic (no deadline)
 9. The +2–5-week model-ladder horizon (see the 2026-08-27 chat answer):
    say the horizon and the `_v5` ladder design consult launches.
+
+## Cold-gate Ed items (2026-08-28, PR #231)
+- E1: enable branch protection on `main` with the `gate-ledger` job as a required check (main currently has NONE — verified 404). Hands: GitHub settings.
+- E2: does D-118 gain an `N/A`/docs-only tier? Ed's twelve items are Ed's; the gate could not add a tier.
