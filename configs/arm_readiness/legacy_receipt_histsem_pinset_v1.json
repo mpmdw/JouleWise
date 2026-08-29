@@ -326,7 +326,7 @@
       ]
     },
     {
-      "current_pack_sha256": "6986bb496aed2b2b0329f79e1c2877ff4cb0ab537ca1be26ff7b7d65bb121d0a",
+      "current_pack_sha256": "0d07194143702b266267f0faa7b051695ffb5e1c56dc7a69d0b2dca8aaa883ef",
       "freeze_receipt": {
         "path": "arm_readiness.freeze.receipts/freeze-0003.json",
         "sha256": "f32bd3a8e4dbd04bc5b1635818ba34394984d1d201d16f02efc21f0b01f31c73"

@@ -42,7 +42,7 @@ from tests.test_arm_readiness_lifecycle import commit_u11_projection
 
 ROOT = Path(__file__).resolve().parents[1]
 PINSET = ROOT / "configs/arm_readiness/legacy_receipt_histsem_pinset_v1.json"
-PINSET_SHA256 = "a9de4ce60c8691ea49ff502f93f61bf6ffcb9d79ef59d1798ab07b50c4368329"
+PINSET_SHA256 = "d81515505d677c2ca045238e721c87eae8f38439a89a5377e58fa9064eaf2f21"
 REPRESENTATIVE_PACK = ROOT / "configs/campaigns/d117_floor_qwen25_1p5b_v3"
 SECOND_REPRESENTATIVE_PACK = ROOT / "configs/campaigns/d117_floor_qwen25_7b_v3"
 REFRESH_SCRIPT = ROOT / "scripts/refresh_receipt_histsem_pinset.py"
