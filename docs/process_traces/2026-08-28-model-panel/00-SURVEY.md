@@ -189,3 +189,124 @@ academic benchmarking (D-016 criterion 4) but is not Apache.
   (`a8506e71…`, verified via API), zero novelty risk, but "newer" was the
   brief; they remain the cheapest ladder rungs (§2).
 
+## §1 Candidate panel (0.5–14B, 4-bit, mlx-community, verified 2026-08-28)
+
+How the last two columns were estimated, so they can be redone or
+replaced by measurement:
+
+- **Decode rate (tok/s).** At 4-bit on Apple silicon, generating one token
+  means reading every weight byte once from memory, so tokens per second
+  is roughly (memory bandwidth) ÷ (weight bytes). The one JouleWise
+  measurement is Qwen2.5-1.5B-Instruct-4bit at 257 tok/s
+  (`runs/example-mac-mlx-local__r1/summary_metrics.json`,
+  `throughput_tokens_s`; 265.8 in D-016) with 0.87 GB of weights. Every
+  other rate here is 257 × 0.87 ÷ (that model's GB): a first-order
+  estimate for a dense decoder, off by up to ~1.5× for models whose
+  attention/KV work is unusually large (long sliding windows, big
+  vocabularies) — treat as a planning number only.
+- **Decode-only floor time (hours).** A floor pack has 50 decode members
+  (10 absolute + ten A/B/B/A blocks of 4: `d117_floor_qwen25_7b_v3/
+  README.md:7`), each 512 tokens. The 7B pack's decode-only time is 3.1 h
+  (D-163 ruling, converged), i.e. 223 s per member, of which 512 tokens
+  at ~52 tok/s is only ~10 s. The remaining ~213 s per member is settle,
+  idle and window overhead that does not depend on the model. So floor
+  hours = 50 × (213 s + 512 ÷ tok/s) ÷ 3600. **The conclusion is that a
+  floor night costs the same for every model in this range: 2.97 h for
+  0.6B up to 3.22 h for 14B.** Model choice moves the night by minutes,
+  not hours; the night count is set by how many floors and contrasts the
+  design needs, not by which models it uses.
+
+| Model (repo under `mlx-community/`) | Params | 4-bit GB | Revision (`sha`, 12 chars) | Modified | `model_type` / vocab | `tokenizer.json` sha (8) | Architecture notes for the instrument | Determinism-gate risk | est. tok/s | est. floor h |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Qwen3-0.6B-4bit | 0.6B | 0.34 | `73e3e38d9813` | 2025-04-28 | qwen3 / 151936 | `aeb13307` | dense; tied embeddings; hybrid-thinking (moot: forced 512, no template) | low — same class as pair | 658 | 2.97 |
+| Qwen3-1.7B-4bit | 1.7B | 0.97 | `3b1b1768f8f8` | 2025-04-28 | qwen3 / 151936 | `aeb13307` | dense; tied embeddings | low (§0) | 231 | 2.99 |
+| Qwen3-4B-Instruct-2507-4bit | 4B | 2.26 | `50d427756c6b` | 2026-01-02 | qwen3 / 151936 | `aeb13307` | dense; the only non-thinking Qwen3 build at these sizes; `Qwen3-4B-4bit` (`4dcb3d101c2a`) is the mirrored April build | low; note it is a different fine-tune generation from 1.7B/8B | 99 | 3.03 |
+| Qwen3-8B-4bit | 8B | 4.61 | `545dc4251c05` | 2025-04-28 | qwen3 / 151936 | `aeb13307` | dense; untied embeddings | low (§0) | 49 | 3.10 |
+| Qwen3-14B-4bit | 14B | 8.31 | `a4d9b2df59d2` | 2025-04-29 | qwen3 / 151936 | `aeb13307` | dense; 40 layers | low; largest same-family rung | 27 | 3.22 |
+| Qwen3.5-4B-4bit | 4B | 3.03 | `0e7ffd5c629e` | 2026-03-02 | qwen3_5 / 248320 | `87a7830d` | **hybrid**: `layer_types` full + linear attention; **MTP head** (1); affine quant; thinking default | HIGH — new attention kernel path and an MTP head the harness has never pinned; vocab 248k | 74 | 3.05 |
+| Qwen3.5-9B-4bit | 9B | 5.95 | `8b2b98c00a6b` | 2026-03-02 | qwen3_5 / 248320 | `87a7830d` | as above | HIGH (same) | 38 | 3.15 |
+| Llama-3.2-3B-Instruct-4bit | 3B | 1.81 | `7f0dc925e0d0` | 2025-03-05 | llama / 128256 | `6b9e4e7f` | dense; tied | low; tokenizer bytes differ from 3.1-8B | 124 | 3.02 |
+| Meta-Llama-3.1-8B-Instruct-4bit | 8B | 4.52 | `241a666dad6c` | 2024-11-26 | llama / 128256 | `bbc1904d` | dense; the literature's reference 8B | low; Llama community licence | 49 | 3.10 |
+| gemma-3-4b-it-qat-4bit | 4B | 3.00 | `3d9ef2891114` | 2025-04-21 | gemma3 / 262208 | `4667f208` | multimodal wrapper; **sliding window 1024** on local layers; 262k vocab (large output head) | MEDIUM — multimodal seam (D-074 rejection), Gemma licence | 75 | 3.05 |
+| gemma-4-12B-it-4bit | 12B | 6.74 | `73bcf09092aa` | 2026-06-08 | gemma4_unified / 262144 | `cc8d3a0c` | `layer_types` full + sliding (1024); unified multimodal | MEDIUM-HIGH — newest loader class; licence tag absent on the repo | 33 | 3.17 |
+| Ministral-3-8B-Instruct-2512-4bit | 8B | 5.60 | `182f003f01da` | 2025-12-06 | mistral3 / 131072 | `286acad9` | dense text decoder inside the Mistral-3 multimodal class; non-thinking | MEDIUM — text-only load must be shown | 40 | 3.14 |
+| Mistral-7B-Instruct-v0.3-4bit | 7B | 4.08 | `a4b8f870474b` | 2024-06-18 | mistral / 32768 | `e553af6f` | dense; **32k vocab** (smallest head; tokens are ~1.3× more numerous per word than Qwen's) | low; old | 55 | 3.09 |
+| phi-4-4bit | 14B | 8.25 | `fc0f8f23d369` | 2025-01-12 | phi3 / 100352 | `c612e57b` | dense; MIT | low | 27 | 3.22 |
+| Phi-4-mini-instruct-4bit | 3.8B | 2.16 | `ac1c269cb422` | 2025-03-05 | phi3 / 200064 | `382cc235` | dense; 200k vocab; tied | low | 104 | 3.03 |
+| SmolLM3-3B-4bit | 3B | 1.73 | `d3a7e0594d66` | 2025-07-08 | smollm3 / 128256 | `7b6a500b` | dense; NoPE layers; dual-mode think/no-think (moot here) | low-medium — `smollm3` loader | 129 | 3.01 |
+| DeepSeek-R1-0528-Qwen3-8B-4bit | 8B | 4.61 | `b9b5af4fa18f` | 2025-05-30 | qwen3 / 151936 | `93d5fd6d` | same architecture as Qwen3-8B, reasoning fine-tune; **tokenizer.json differs from Qwen3's** | low arch / MEDIUM tokenizer | 49 | 3.10 |
+| Olmo-3-7B-Instruct-4bit | 7B | 4.11 | `d732c91ae02e` | 2025-11-20 | olmo3 / 100278 | `7738a25c` | `layer_types` full + sliding (4096); fully open data/training | MEDIUM — sliding path | 54 | 3.09 |
+| NVIDIA-Nemotron-3-Nano-4B-4bit | 4B | 2.24 | `c4d79ba1901d` | 2026-03-20 | nemotron_h / 131072 | `623c3456` | **Mamba-2 / attention hybrid** (`nemotron_h`) | HIGH — state-space layers, no attention-only baseline | 100 | 3.03 |
+| granite-4.1-8b-4bit | 8B | 5.24 | `08fb1e272f7b` | 2026-05-03 | granite / 100352 | `24665f28` | dense; **group_size 32** (different quant recipe from every other row) | MEDIUM — quant recipe mismatch | 43 | 3.12 |
+| Qwen2.5-3B-Instruct-4bit | 3B | 1.74 | `4f83f8f146fd` | 2024-09-18 | qwen2 / 151936 | **`a8506e71`** | today's family; rung between 1.5B and 7B | none new; licence tag `other` (Qwen research licence for 3B) | 128 | 3.01 |
+| Qwen2.5-14B-Instruct-4bit | 14B | 8.31 | `dad510143ae5` | 2024-09-18 | qwen2 / 152064 | **`a8506e71`** | today's family; top rung | none new | 27 | 3.22 |
+
+Not tabled: Llama-4 (Scout is 109B-A17B MoE, 4-bit ~60 GB — fits the
+128 GB machine but is far outside the 0.5–14B brief and is MoE);
+Llama-3.3 exists only at 70B; Qwen3-30B-A3B / Qwen3.5-35B-A3B /
+gemma-4-26B-A4B are MoE (north-star C5-1.9 material, D-041-fenced);
+"OptiQ"/"DWQ" variants are alternative quantizers, not the group-64
+affine recipe the current floors were minted under.
+
+Cross-family tokenizer rule (what the manifest must pin when the pair's
+byte-identical-tokenizer assumption is dropped): one `tokenizer.json`
+SHA-256 **per model**, the reported `vocab_size` per model, the tokenizer
+class per model, the p256 prompt text hash **and its measured token count
+per tokenizer**, and an explicit statement in the claim sentence that
+"per token" means per decoded token of that model's tokenizer — the
+forced 512-token decode makes the decode phase comparable across
+tokenizers in tokens, but 512 Mistral tokens and 512 Qwen tokens are not
+the same amount of text.
+
+## §2 Three panel shapes with night arithmetic
+
+Night arithmetic used throughout (D-163 converged figures): a floor is
+≈ 3.1 h decode-only, a contrast ≈ 2.8 h decode-only, and each night pays
+≈ 75 min of fixed overhead that never amortises. An overnight window of
+≈ 8 h therefore holds two floors (75 + 2 × 186 = 447 min ≈ 7.5 h) or two
+contrasts (75 + 2 × 168 = 411 min ≈ 6.9 h) or one of each (≈ 7.2 h).
+"Reused" means the production `_v5` pair (§0) already minted it.
+
+### A — same-family newer ladder: Qwen3 0.6B / 1.7B / 4B / 8B
+
+Floors: 4 (1.7B, 8B reused from production → 2 new: 0.6B, 4B = 1 night).
+Contrasts, adjacent decode-only: 0.6–1.7, 1.7–4, 4–8 (1.7–8 is the
+production contrast and stays in) = 3 new = 2 nights (2 + 1). **Total 3
+nights**, 2 if 1.7–4 is dropped. Figure: 512-token decode energy against
+parameter count, one family, one tokenizer, four points — C5-1.1 in its
+permitted pairwise form (registry row 64), every adjacent step resolved
+(expected steps: Qwen2.5 measured 0.098 → 0.376 J/token over 1.5→7B; the
+Qwen3 rungs sit at similar byte ratios). Caveat: the only non-thinking
+4B is the `-2507` fine-tune generation; use the April `Qwen3-4B-4bit`
+(already mirrored) for generation-consistency, since thinking is moot
+here.
+
+### B — cross-family same-size (~8B): Qwen3-8B / Llama-3.1-8B / Ministral-3-8B / Olmo-3-7B
+
+Floors: 4 (Qwen3-8B reused → 3 new = 2 nights, one slot spare).
+Contrasts: each family against Qwen3-8B as the fixed reference = 3 = 2
+nights. **Total 4 nights** (3 if the spare floor slot takes a contrast).
+Figure: "joules per 512 decoded tokens at ~8B, by family" — the figure a
+practitioner wants. Costs: four tokenizers, so four p256 prompt
+re-derivations and per-model tokenizer pins (§1 rule); Olmo-3's sliding
+attention and Ministral's multimodal class each need a D-074 battery
+pass before the night. Swap Mistral-7B-v0.3 (`a4b8f870474b`, plain
+dense, Apache) for Ministral-3 if the `mistral3` text-only load fails.
+
+### C — hybrid: production pair + one rung down + one cross-family peer
+
+Models: Qwen3-1.7B / 8B (production), Qwen3-0.6B, Llama-3.1-8B.
+Floors: 2 new (0.6B, Llama-8B) = 1 night. Contrasts: 0.6–1.7 (ladder
+bottom) and Llama-8B vs Qwen3-8B (cross-family) = 1 night. **Total 2
+nights.** Yields a 3-point same-family ladder (0.6/1.7/8) AND one
+cross-family 8B contrast against the most-cited open model, with a
+single extra tokenizer to pin.
+
+## §3 Recommendation
+
+Shape **C** for the week after `_v4`, with **A** as the follow-on if a
+third and fourth night open up (its two extra floors/contrasts slot in
+without re-planning). B is the most attractive figure but the most
+instrument work (three new loader classes, four tokenizers) for a week
+whose priority is the paper; run B only after A, or if Ed rules the
+practitioner figure outranks the ladder.
