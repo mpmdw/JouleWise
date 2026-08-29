@@ -1,5 +1,9 @@
 # Round-7 retensing plan (prepared while draft-v1.md is frozen)
 
+> **STATUS (2026-08-29): HELD at the standing escalation trigger — NOT yet usable for mechanical substitution.**
+> Two consecutive pedagogy audits (`docs/process_traces/2026-08-27-t26/paper-round7-prep/01-…`, `02-…`) failed with the same signature: technical vocabulary shipped into A/B/C prose that the frozen draft does not build before the insertion line, debuting in the Abstract (round 1: "TERM A/B", "whole-window gate", "gamma"; round 2 after the fix: "floor window", "claim-anchored limit", "separately admitted", "exact conservative outcome", "claim gate"); the Sol fidelity seat (`03-…`) independently found the same class (`1.5B`/`7B`/`§3` at draft lines 11/31/243). No third editing round was run. The remaining findings in `02-…` (7 blockers, 14 should-fixes, 4 nits) and `03-…` F1/F2 await the magistrate's ruling on the structural cure.
+> Verified and standing: all 35 frozen quotes are byte-exact on their named draft lines; all 24 tokens and 20 row ids exist in the registry; Item 60 byte-matches Addendum 8; TERM semantics match `joulewise/detection_floor.py`.
+
 This file is the round-7 substitution sheet; it does not edit the frozen draft.
 Round 7 selects one ready sentence at each hazard after the issued artifacts and replay fence fix the outcome.
 Outcome A means the code's per-component timing-widened term exceeds its guarded point-only term in both phases; B means admitted evidence produces at least one non-exceeding phase; C means a required window or contrast is refused before that predicate can be evaluated; D means the characterization campaign was not run.
@@ -38,7 +42,7 @@ The published component quantity is the corner-widened floor, which is at least 
 
 **Frozen quote (verbatim):** "**[RESULT PENDING ISSUED ARTIFACTS — tables below are structural placeholders; no energy value from superseded artifacts is carried into these tables, and none appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3, 6, and 7.]**"
 
-**Fails:** The current fill machinery cannot produce a complete paper-facing lead-in for every admitted or refused outcome.
+**Fails:** A, B, and partial C: the current fill machinery cannot produce a complete paper-facing lead-in for every admitted or refused outcome.
 
 **A — dominance reproduced:** Both model floor windows were admitted; the tables below report the issued cells and the registered contrast decisions.
 
@@ -286,7 +290,7 @@ The published component quantity is the corner-widened floor, which is at least 
 
 **Frozen quote (verbatim):** "A gross cell will contain the issued phase-energy estimate and composed lower and upper endpoints."
 
-**Fails:** Refusal issues no claim-bearing cell, and the admitted branches still have no issued reported-mean fields or composed endpoints.
+**Fails:** C and currently A/B: refusal issues no claim-bearing cell, and the admitted branches still have no issued reported-mean fields or composed endpoints.
 
 **A = B — issued artifacts:** No gross phase-energy value is reported: the issued artifacts define no reported-mean field or composed endpoints for these cells, and no floor component is substituted for one.
 
