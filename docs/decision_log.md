@@ -10337,3 +10337,12 @@ Index row carries the operative detail. Trace:
 
 Index row carries the operative detail. Trace:
 `docs/process_traces/2026-08-28-ladder-consult/`.
+
+**Ed 2026-08-28 evening: GO on both** — the inserted-gap fiducial owns the
+first post-campaign window, and the 3-point decode-only ladder
+(0.5B / 1.5B / 7B) is prepared at the desk during `_v4` (stream S15). Ed:
+"keep in mind i had a list of research questions" — the registered RQs
+(`docs/research_question_registry.md`, `docs/research_question_bank.md`)
+are the target: the ladder answers C5-1.1 in its permitted pairwise form;
+a coverage map of every registered RQ against `_v4` / fiducial / `_v5` is
+produced alongside.
