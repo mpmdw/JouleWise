@@ -217,7 +217,9 @@ replaced by measurement:
   is roughly (memory bandwidth) ÷ (weight bytes). The one JouleWise
   measurement is Qwen2.5-1.5B-Instruct-4bit at 257 tok/s
   (`runs/example-mac-mlx-local__r1/summary_metrics.json`,
-  `throughput_tokens_s`; 265.8 in D-016) with 0.87 GB of weights. Every
+  `throughput_tokens_s` — an untracked local file on Ed's machine, so from a
+  clone use the tracked 265.8 tok/s in D-016, `docs/decision_log.md:942`)
+  with 0.87 GB of weights. Every
   other rate here is 257 × 0.87 ÷ (that model's GB): a first-order
   estimate for a dense decoder, off by up to ~1.5× for models whose
   attention/KV work is unusually large (long sliding windows, big
@@ -328,3 +330,11 @@ without re-planning). B is the most attractive figure but the most
 instrument work (three new loader classes, four tokenizers) for a week
 whose priority is the paper; run B only after A, or if Ed rules the
 practitioner figure outranks the ladder.
+
+## Fidelity pass
+
+Sol (gpt-5.6-sol, high, read-only, 2026-08-28): all 25 repos re-queried
+against the HF API — revision, `model_type`, `vocab_size`, weight bytes
+(±0.02 GB), last-modified, and all 25 `tokenizer.json` hashes verified;
+all ten in-repo citations verified. Mismatches: 0. One advisory (the
+257 tok/s summary file is untracked) folded into §1.
