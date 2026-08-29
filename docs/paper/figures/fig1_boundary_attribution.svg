@@ -131,10 +131,10 @@
     <text x="145" y="578">sampler interval average power</text>
 
     <line x1="380" y1="574" x2="402" y2="574" stroke="#444444" stroke-width="2" stroke-dasharray="9 5"/>
-    <text x="410" y="578">idealised underlying power</text>
+    <text x="410" y="578">idealized underlying power</text>
 
     <line x1="620" y1="566" x2="620" y2="582" stroke="#1b1b1b" stroke-width="2.5"/>
-    <text x="630" y="578">phase boundary recorded by the runtime</text>
+    <text x="630" y="578">runtime-recorded boundary</text>
 
     <rect x="115" y="595" width="22" height="14" fill="#1b6ca8" fill-opacity="0.13" stroke="#1b6ca8" stroke-width="1.5" stroke-dasharray="5 4"/>
     <text x="145" y="606">calibrated timing bound (illustrative &#177;30 ms)</text>

@@ -422,3 +422,22 @@ the last before `_v4` fills:
     anyone; it assumes a single trusted operator, so every gate defends
     against error and post-hoc choice, never against an adversary." Replaces the TOCTOU/operator-trust paragraph's
     defensive framing; no other change while frozen.
+
+## Addendum 9 (2026-08-28) — paper-readiness rulings (PR #226)
+
+61. **R1 fill-rehearsal residuals:** bench-fix (issuer-shaped p-value/alpha
+    scalars and floor provenance sub-objects; the two `...` placeholders;
+    gloss "registry / pinset / replay fence" at first use in the rehearsal
+    doc). The rehearsal doc is a working record, not paper prose.
+62. **R2 §11 orphans ([4] [9] [11] [14] [16] [17] [18] [21] [24] [25]):**
+    KEEP until round 7, then remove and renumber in one pass (renumbering
+    twice invites citation drift).
+63. **R3 frozen-draft defects:** the `*Loss**` markup (lines 613/615) and
+    the [13]-as-energy-source miscitation at line 332 are FIDELITY/typography
+    fixes and may land now despite the freeze (two lines); the 29 tense
+    hazards are round 7's rewrite, not now.
+64. **R4 renderer coverage:** round 7 is a hand-fill under the fence for
+    the sites the renderer cannot reach; the renderer's input v1 covers only
+    the §6/§7 template variants. The fill rehearsal's per-row STOP/route
+    table is round 7's checklist. `B_decode_claim_J` stays STOP_FILL until
+    its supplier exists (item 33).

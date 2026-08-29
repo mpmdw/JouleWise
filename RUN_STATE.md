@@ -10,6 +10,13 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T27c (2026-08-28 18:30 PDT) — Ed: the advisor meeting is pushed a week.
+Campaign calendar unchanged (shakedown Sat 08-29, transaction Sun 08-30,
+close ≈ Sun 09-06); round 7 fills and the advisor brief refresh follow the
+close; the extra week re-opens the ladder question (decide after the
+shakedown). Docs landed: advisor brief, instrument guide, three tutorials,
+the ten-day retrospective, paper readiness (#224 #226 #227).**
+
 **T27b (2026-08-28) — GATE CORRECTED (D-162): the "DATA reason" live gate
 was unachievable without 7–10 Sol-days of new mint-path code; replaced by
 three modular pieces — G1 desk pre-shakedown (estate 11 + W-11 tail +

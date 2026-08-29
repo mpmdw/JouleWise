@@ -44,8 +44,57 @@ The in-library gate runs before custody output in both entry points:
 The pinset carries each pack's explicit historical and current digests,
 historical commit, post-authoring delta, freeze binding, plan bindings, and
 complete legacy-receipt inventory. Its bytes are SHA-256-pinned by
-`tests/test_receipt_histsem.py`. There is no update, regenerate, repair, or
-auto-reseal lane; a new governed value requires an explicit versioned change.
+`tests/test_receipt_histsem.py`. D-161 permits one reviewed refresh lane for
+the two **current-coordinate** fields only:
+`scripts/refresh_receipt_histsem_pinset.py --refresh-row PACK_ID` re-derives
+`current_pack_sha256` with `committed_pack_tree_sha256` and
+`post_authoring_delta` with `_histsem_delta`, using the same code paths as the
+verifier. It requires a clean pack directory and requires the row's historical
+commit to be published on `origin/main` -- the verifier's own
+`histsem_commit_unpublished` decision, reused exactly; the current `HEAD` carries
+no publication predicate, because the lane runs on PR branches and in PR
+checkouts where `HEAD` is never published. It also reproduces the historical tree
+and digest before constructing a candidate, then requires every row in the
+complete candidate to pass the ordinary pack verifier before any write. The
+candidate is verified through `verify_receipt_histsem_pack` itself with pinset
+membership supplied in-band; a pinset written to a non-enumerated `--output` is
+a preview and is deliberately not loadable by
+`scripts/verify_receipt_histsem.py`. After a governed in-place write, the CLI
+verifier's whole-pinset entry point verifies the complete enumerated chain; a
+post-write refusal restores the original pinset and test-pin bytes.
+
+The same lane's composable `--refresh-tool-sidecars` mode owns the exact GNU
+sidecar rendering and the ruled set `build_family_marker.py`,
+`verify_family_marker.py`, `build_v4_histsem_pinset.py`, and
+`verify_receipt_histsem.py`. It refuses `histsem_binding_mismatch` if a governed
+tool or its `.sha256` path is dirty. After that check,
+it hashes each tool's committed `HEAD:scripts/<name>` blob (the clean-path check
+makes those bytes equal to the worktree tool), diffs the old and regenerated
+sidecar bytes, and writes only changed sidecars. It never writes a tool. The
+family-marker sidecar test imports this lane's tuple and renderer: that test is
+the staleness tripwire, and this mode is the reviewed regenerator.
+
+The refresh script's own committed sidecar uses the same exported renderer but
+is deliberately outside the CLI-owned tuple. A self-rewriting authenticator is
+incompatible with the required dirty-tool and dirty-sidecar refusals inside one
+reviewed change: the tool is dirty before its first commit, and its newly
+written sidecar is dirty until a second commit. Its separate exact-byte
+family-marker assertion therefore keeps it current in the same reviewed change
+without weakening the CLI's fail-closed rule.
+
+The lane refuses rather than changing `historical_pack_sha256`, `head_commit`,
+`freeze_receipt`, `plan_sha256`, `plan_tree_sha256`, `pack_id`, `pack_path`,
+`published_anchor`, `receipt_count`, or `receipts`. Dirty pack bytes,
+unpublished coordinates, a noncanonical or absent pinset/row, a historical
+digest mismatch, a historical tree that is not pre-authoring, an out-of-envelope
+delta, or any current freeze/plan/receipt/predecessor binding mismatch is a
+refusal with the verifier's closed `histsem_*` vocabulary; there is no override
+flag and no partial write. `PINSET_SHA256` in
+`tests/test_receipt_histsem.py` remains the exact-byte authenticator that the
+reviewed refresh PR moves (optionally through `--write-test-pin`) alongside the
+reviewable row diff. Historical-coordinate values remain immutable: changing
+one still requires an explicit versioned governed change, and no refresh,
+repair, or auto-reseal lane exists for them.
 
 Eligibility loops over the enumerated chain using successful `git ls-tree HEAD
 -- <member>` presence checks followed by `git show HEAD:<member>` reads. After

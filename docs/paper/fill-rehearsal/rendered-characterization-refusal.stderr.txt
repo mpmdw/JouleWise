@@ -1,0 +1,1 @@
+STOP_FILL {"label": "VALUE_UNISSUED", "reason": "the registry binds this token to a producing field, but no issued artifact carries a value for it yet", "registry_row": "[D_C_linearity_diagnostic_J_per_token]"}

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-labelledby="fig2title fig2desc">
-  <title id="fig2title">Structure of one measurement window, and how counterbalanced order cancels steady drift</title>
-  <desc id="fig2desc">Schematic session timeline. A calibration pulse train runs before and after the science work, forming a bracket. Inside the bracket, an admission gate is followed by reference runs, science stages built from A-B-B-A blocks, a midpoint reference run, more science stages, and closing reference runs. An inset expands one A-B-B-A block: four runs sit at slots one to four on a slanted drift line, and the two A runs and the two B runs share the same average position in time. No measured data is shown.</desc>
+  <title id="fig2title">Structure of one measurement window, and how A/B/B/A counterbalanced order cancels steady drift</title>
+  <desc id="fig2desc">Schematic session timeline. A calibration pulse train runs before and after the science work, forming a bracket. Inside the bracket, an admission gate is followed by reference runs, science stages built from A/B/B/A blocks, a midpoint reference run, more science stages, and closing reference runs. An inset expands one A/B/B/A block: four runs sit at slots one to four on a slanted drift line, and the two A runs and the two B runs share the same average position in time. No measured data is shown.</desc>
 
   <defs>
     <marker id="f2aEnd" markerWidth="9" markerHeight="9" refX="8.5" refY="4" orient="auto" markerUnits="userSpaceOnUse">
@@ -49,7 +49,7 @@
     <rect x="538" y="126" width="12" height="26"/>
     <rect x="557" y="126" width="12" height="26"/>
   </g>
-  <text x="501" y="170" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">science stages (ABBA blocks)</text>
+  <text x="501" y="170" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">science stages (A/B/B/A blocks)</text>
 
   <!-- midpoint reference -->
   <rect x="604" y="116" width="92" height="62" fill="#f7f7f7" stroke="#777777" stroke-width="1.8"/>
@@ -69,7 +69,7 @@
     <rect x="836" y="126" width="12" height="26"/>
     <rect x="855" y="126" width="12" height="26"/>
   </g>
-  <text x="799" y="170" font-family="sans-serif" font-size="12" fill="#1b1b1b" text-anchor="middle">science stages (ABBA blocks)</text>
+  <text x="799" y="170" font-family="sans-serif" font-size="11.5" fill="#1b1b1b" text-anchor="middle">science stages (A/B/B/A blocks)</text>
 
   <!-- end reference runs -->
   <rect x="902" y="116" width="98" height="62" fill="#f7f7f7" stroke="#777777" stroke-width="1.8"/>
@@ -100,7 +100,7 @@
 
   <!-- inset panel -->
   <rect x="80" y="330" width="580" height="250" fill="#fafafa" stroke="#cccccc" stroke-width="1.8"/>
-  <text x="100" y="356" font-family="sans-serif" font-size="13.5" font-weight="bold" fill="#1b1b1b">One ABBA block, expanded</text>
+  <text x="100" y="356" font-family="sans-serif" font-size="13.5" font-weight="bold" fill="#1b1b1b">One A/B/B/A block, expanded</text>
 
   <!-- inset axes -->
   <line x1="140" y1="376" x2="140" y2="490" stroke="#333333" stroke-width="1.8"/>

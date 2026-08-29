@@ -1,0 +1,286 @@
+{
+  "schema_version": "joulewise.detection_floor_artifact.v2",
+  "artifact_id": "SYNTHETIC-REHEARSAL-artifact_id-DOMINANCE-BETA",
+  "calibration_scope": "production_window",
+  "source_class": "synthetic",
+  "method": {
+    "method_id": "d054_false_effect_guard.v1",
+    "t_quantile": 0.975,
+    "t_critical_source": "joulewise.aggregate.student_t_critical_95.v1",
+    "absolute_formula": "max(max_abs_residual_j,t_critical*sample_stddev_j*sqrt(1+1/n))",
+    "comparative_formula": "max(max_abs_delta_j,abs(mean_delta_j)+t_critical*sample_stddev_j*sqrt(1+1/n))",
+    "abba_delta_formula": "(B1+B2-A1-A2)/2",
+    "small_sample_guard": {
+      "rule_id": "residual_df_ratio_to_n10.v1",
+      "formula": "max(1,sqrt((10-1)/(n-1)))",
+      "reference_n": 10,
+      "minimum_n": 5,
+      "maximum_guarded_n_exclusive": 10,
+      "frozen_before_calibration": true
+    }
+  },
+  "provenance": {
+    "calibration_plan": "SYNTHETIC-REHEARSAL-calibration_plan",
+    "mint_tool_version": "SYNTHETIC-REHEARSAL-mint_tool_version",
+    "implementation": "SYNTHETIC-REHEARSAL-implementation"
+  },
+  "idle_drift_guard": {
+    "calibration_status": "pending_calibration",
+    "method": "p2_015_prediction_guard_v1",
+    "guard_w": null,
+    "n_bundles": 0,
+    "bundle_sha256": [],
+    "cell_id": null,
+    "artifact_sha256": null
+  },
+  "cells": [
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+      "key": {
+        "backend": "mlx",
+        "metric": "phase_energy_j.prefill",
+        "window_class": "phase",
+        "condition_family_id": "SYNTHETIC-REHEARSAL-condition_family_id-BETA-PROMPT",
+        "condition_family_definition": {
+          "fixture": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT"
+        },
+        "condition_family_sha256": "SYNTHETIC-REHEARSAL-condition_family_sha256"
+      },
+      "eligibility": {
+        "use_role": "primary_claim_gate",
+        "minimum_claim_n": 10,
+        "status": "claim_ready",
+        "claim_usable": true,
+        "reason_codes": []
+      },
+      "floor_abs_j": 999005.5,
+      "floor_cmp_j": 999006.5,
+      "floor_gate_j": 999006.5,
+      "absolute": {
+        "drift_widened_guarded_floor_j": 999005.5
+      },
+      "comparative": {
+        "drift_widened_guarded_floor_j": 999006.5
+      },
+      "source_regime": {
+        "stack_identity": {
+          "hardware_unit": "SYNTHETIC-REHEARSAL-hardware_unit-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "os_version": "SYNTHETIC-REHEARSAL-os_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "runtime_version": "SYNTHETIC-REHEARSAL-runtime_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "kernel_library": "SYNTHETIC-REHEARSAL-kernel_library-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "model_artifact_sha256": "SYNTHETIC-REHEARSAL-model_artifact_sha256-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "quantization": "SYNTHETIC-REHEARSAL-quantization-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "tokenizer_identity": "SYNTHETIC-REHEARSAL-tokenizer_identity-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "sampler_output_policy": "SYNTHETIC-REHEARSAL-sampler_output_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "batching_concurrency_policy": "SYNTHETIC-REHEARSAL-batching_concurrency_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "measurement_boundary_label": "SYNTHETIC-REHEARSAL-measurement_boundary_label-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+          "telemetry_backend": "SYNTHETIC-REHEARSAL-telemetry_backend-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT"
+        },
+        "stack_identity_sha256": "6112e605cd1dabfd713eb5695a8a34cf5f0c242e0bdcd82f0747464851485662",
+        "stress_observed": {
+          "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+          "power_policy": "SYNTHETIC-REHEARSAL-policy"
+        }
+      },
+      "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-BETA-PROMPT",
+      "provenance": {
+        "absolute": {
+          "source_regime": {
+            "stack_identity": {
+              "hardware_unit": "SYNTHETIC-REHEARSAL-hardware_unit-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "os_version": "SYNTHETIC-REHEARSAL-os_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "runtime_version": "SYNTHETIC-REHEARSAL-runtime_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "kernel_library": "SYNTHETIC-REHEARSAL-kernel_library-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "model_artifact_sha256": "SYNTHETIC-REHEARSAL-model_artifact_sha256-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "quantization": "SYNTHETIC-REHEARSAL-quantization-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "tokenizer_identity": "SYNTHETIC-REHEARSAL-tokenizer_identity-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "sampler_output_policy": "SYNTHETIC-REHEARSAL-sampler_output_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "batching_concurrency_policy": "SYNTHETIC-REHEARSAL-batching_concurrency_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "measurement_boundary_label": "SYNTHETIC-REHEARSAL-measurement_boundary_label-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "telemetry_backend": "SYNTHETIC-REHEARSAL-telemetry_backend-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT"
+            },
+            "stack_identity_sha256": "6112e605cd1dabfd713eb5695a8a34cf5f0c242e0bdcd82f0747464851485662",
+            "stress_observed": {
+              "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+              "power_policy": "SYNTHETIC-REHEARSAL-policy"
+            }
+          },
+          "report": "SYNTHETIC-REHEARSAL-absolute-report-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT"
+        },
+        "comparative": {
+          "source_regime": {
+            "stack_identity": {
+              "hardware_unit": "SYNTHETIC-REHEARSAL-hardware_unit-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "os_version": "SYNTHETIC-REHEARSAL-os_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "runtime_version": "SYNTHETIC-REHEARSAL-runtime_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "kernel_library": "SYNTHETIC-REHEARSAL-kernel_library-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "model_artifact_sha256": "SYNTHETIC-REHEARSAL-model_artifact_sha256-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "quantization": "SYNTHETIC-REHEARSAL-quantization-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "tokenizer_identity": "SYNTHETIC-REHEARSAL-tokenizer_identity-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "sampler_output_policy": "SYNTHETIC-REHEARSAL-sampler_output_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "batching_concurrency_policy": "SYNTHETIC-REHEARSAL-batching_concurrency_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "measurement_boundary_label": "SYNTHETIC-REHEARSAL-measurement_boundary_label-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT",
+              "telemetry_backend": "SYNTHETIC-REHEARSAL-telemetry_backend-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT"
+            },
+            "stack_identity_sha256": "6112e605cd1dabfd713eb5695a8a34cf5f0c242e0bdcd82f0747464851485662",
+            "stress_observed": {
+              "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+              "power_policy": "SYNTHETIC-REHEARSAL-policy"
+            }
+          },
+          "report": "SYNTHETIC-REHEARSAL-comparative-report-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-PROMPT"
+        }
+      },
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {
+        "absolute": {
+          "guarded_floor_j": 999005.005,
+          "published_claim_floor": false
+        },
+        "comparative": {
+          "guarded_floor_j": 999006.006,
+          "published_claim_floor": false
+        }
+      },
+      "single_count_discipline": {
+        "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "floor_role": "calibration_false_effect_bound",
+        "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+        "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+        "both_terms_required": true,
+        "apparent_double_count_removal_forbidden": true,
+        "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
+      }
+    },
+    {
+      "cell_id": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+      "key": {
+        "backend": "mlx",
+        "metric": "phase_energy_j.decode",
+        "window_class": "phase",
+        "condition_family_id": "SYNTHETIC-REHEARSAL-condition_family_id-BETA-DECODE",
+        "condition_family_definition": {
+          "fixture": "SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE"
+        },
+        "condition_family_sha256": "SYNTHETIC-REHEARSAL-condition_family_sha256"
+      },
+      "eligibility": {
+        "use_role": "primary_claim_gate",
+        "minimum_claim_n": 10,
+        "status": "claim_ready",
+        "claim_usable": true,
+        "reason_codes": []
+      },
+      "floor_abs_j": 999007.5,
+      "floor_cmp_j": 999008.5,
+      "floor_gate_j": 999008.5,
+      "absolute": {
+        "drift_widened_guarded_floor_j": 999007.5
+      },
+      "comparative": {
+        "drift_widened_guarded_floor_j": 999008.5
+      },
+      "source_regime": {
+        "stack_identity": {
+          "hardware_unit": "SYNTHETIC-REHEARSAL-hardware_unit-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "os_version": "SYNTHETIC-REHEARSAL-os_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "runtime_version": "SYNTHETIC-REHEARSAL-runtime_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "kernel_library": "SYNTHETIC-REHEARSAL-kernel_library-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "model_artifact_sha256": "SYNTHETIC-REHEARSAL-model_artifact_sha256-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "quantization": "SYNTHETIC-REHEARSAL-quantization-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "tokenizer_identity": "SYNTHETIC-REHEARSAL-tokenizer_identity-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "sampler_output_policy": "SYNTHETIC-REHEARSAL-sampler_output_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "batching_concurrency_policy": "SYNTHETIC-REHEARSAL-batching_concurrency_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "measurement_boundary_label": "SYNTHETIC-REHEARSAL-measurement_boundary_label-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+          "telemetry_backend": "SYNTHETIC-REHEARSAL-telemetry_backend-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE"
+        },
+        "stack_identity_sha256": "6e7b7ee4f38bee65afe11809c71eb887f726b52bfdb5f3ef34f62a2f71f0d514",
+        "stress_observed": {
+          "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+          "power_policy": "SYNTHETIC-REHEARSAL-policy"
+        }
+      },
+      "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-BETA-DECODE",
+      "provenance": {
+        "absolute": {
+          "source_regime": {
+            "stack_identity": {
+              "hardware_unit": "SYNTHETIC-REHEARSAL-hardware_unit-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "os_version": "SYNTHETIC-REHEARSAL-os_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "runtime_version": "SYNTHETIC-REHEARSAL-runtime_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "kernel_library": "SYNTHETIC-REHEARSAL-kernel_library-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "model_artifact_sha256": "SYNTHETIC-REHEARSAL-model_artifact_sha256-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "quantization": "SYNTHETIC-REHEARSAL-quantization-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "tokenizer_identity": "SYNTHETIC-REHEARSAL-tokenizer_identity-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "sampler_output_policy": "SYNTHETIC-REHEARSAL-sampler_output_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "batching_concurrency_policy": "SYNTHETIC-REHEARSAL-batching_concurrency_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "measurement_boundary_label": "SYNTHETIC-REHEARSAL-measurement_boundary_label-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "telemetry_backend": "SYNTHETIC-REHEARSAL-telemetry_backend-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE"
+            },
+            "stack_identity_sha256": "6e7b7ee4f38bee65afe11809c71eb887f726b52bfdb5f3ef34f62a2f71f0d514",
+            "stress_observed": {
+              "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+              "power_policy": "SYNTHETIC-REHEARSAL-policy"
+            }
+          },
+          "report": "SYNTHETIC-REHEARSAL-absolute-report-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE"
+        },
+        "comparative": {
+          "source_regime": {
+            "stack_identity": {
+              "hardware_unit": "SYNTHETIC-REHEARSAL-hardware_unit-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "os_version": "SYNTHETIC-REHEARSAL-os_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "runtime_version": "SYNTHETIC-REHEARSAL-runtime_version-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "kernel_library": "SYNTHETIC-REHEARSAL-kernel_library-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "model_artifact_sha256": "SYNTHETIC-REHEARSAL-model_artifact_sha256-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "quantization": "SYNTHETIC-REHEARSAL-quantization-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "tokenizer_identity": "SYNTHETIC-REHEARSAL-tokenizer_identity-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "sampler_output_policy": "SYNTHETIC-REHEARSAL-sampler_output_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "batching_concurrency_policy": "SYNTHETIC-REHEARSAL-batching_concurrency_policy-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "measurement_boundary_label": "SYNTHETIC-REHEARSAL-measurement_boundary_label-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE",
+              "telemetry_backend": "SYNTHETIC-REHEARSAL-telemetry_backend-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE"
+            },
+            "stack_identity_sha256": "6e7b7ee4f38bee65afe11809c71eb887f726b52bfdb5f3ef34f62a2f71f0d514",
+            "stress_observed": {
+              "thermal_pressure": "SYNTHETIC-REHEARSAL-nominal",
+              "power_policy": "SYNTHETIC-REHEARSAL-policy"
+            }
+          },
+          "report": "SYNTHETIC-REHEARSAL-comparative-report-SYNTHETIC-REHEARSAL-DOMINANCE-BETA-DECODE"
+        }
+      },
+      "floor_limit_class": "attribution_limited",
+      "floor_source": "E_clock_anchor_shift_bound_j",
+      "point_floor_diagnostics": {
+        "absolute": {
+          "guarded_floor_j": 999007.007,
+          "published_claim_floor": false
+        },
+        "comparative": {
+          "guarded_floor_j": 999008.008,
+          "published_claim_floor": false
+        }
+      },
+      "single_count_discipline": {
+        "rule_id": "attribution_floor_plus_claim_side_bound.v1",
+        "effective_clearable_effect_formula": "floor_j + claim_side_bound_j",
+        "floor_role": "calibration_false_effect_bound",
+        "claim_side_bound_role": "claim_measurement_uncertainty_bound",
+        "claim_side_bound_source": "E_clock_anchor_shift_bound_j",
+        "both_terms_required": true,
+        "apparent_double_count_removal_forbidden": true,
+        "statement": "effective clearable effect = floor + claim-side bound; neither term may be removed as an apparent double count"
+      }
+    }
+  ],
+  "transport_groups": [
+    {
+      "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-BETA-PROMPT"
+    },
+    {
+      "transport_group_id": "SYNTHETIC-REHEARSAL-transport_group_id-BETA-DECODE"
+    }
+  ]
+}
