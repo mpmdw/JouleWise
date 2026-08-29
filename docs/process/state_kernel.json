@@ -3598,13 +3598,6 @@
         },
         {
           "authority": {
-            "label": "D-158 ruling R-3 (license and hands; not superseded by D-162)",
-            "path": "docs/process_traces/2026-08-27-t26/pipeline-smoke-consult/04-MAGISTRATE-RULING.md"
-          },
-          "rule": "Runs under D-139/D-142's diagnostic license; Ed's hands only for anything D-127/D-149 reserves (G2 is the shakedown night)"
-        },
-        {
-          "authority": {
             "label": "D-162, what the seats proved (B-3 shakedown runs root; custody copies are not relocatable)",
             "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
           },
@@ -3627,7 +3620,7 @@
       "priority": "p1_phase_gate",
       "rank": 13,
       "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6 as the ~20-minute quarantined live family generation. RE-SCOPED 2026-08-28 in the T27 second kernel wave per D-162 (docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md): two seats proved from code that a partial run on the real _v4 pack can never answer for a DATA reason (insufficient_complete_blocks and fixed_n_plan_incomplete are CONTRACT-classed; the prospective finalizer requires ten blocks / 80 members) and that the diagnostic-family alternative costs 7-10 Sol-days of new admission code on the mint path days before the campaign, so the D-158 R-3 / D-160 R-2 scope is superseded by G1/G2/G3; the D-158 R-3 quarantine fence (smoke pack id, own runs root, never marker-signed) falls with it while its license-and-hands clause stays, and the shakedown runsheet is re-cut from PR #225's phases to G2 (R-2). G1 and G3 are desk work; G2 runs on the shakedown night, which keeps the quiet_mac lane and Ed's hands. Nothing here changes the _v4 pack or the mint path.",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6 as the ~20-minute quarantined live family generation. RE-SCOPED 2026-08-28 in the T27 second kernel wave per D-162 (docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md): two seats proved from code that a partial run on the real _v4 pack can never answer for a DATA reason (insufficient_complete_blocks and fixed_n_plan_incomplete are CONTRACT-classed; the prospective finalizer requires ten blocks / 80 members) and that the diagnostic-family alternative costs 7-10 Sol-days of new admission code on the mint path days before the campaign, so the D-158 R-3 / D-160 R-2 scope is superseded by G1/G2/G3; the D-158 R-3 fences fall with it (the license G2 runs under is not ruled by D-162 and is left to the magistrate), and the shakedown runsheet is re-cut from PR #225's phases to G2 (R-2). G1 and G3 are desk work; G2 runs on the shakedown night, which keeps the quiet_mac lane and Ed's hands. Nothing here changes the _v4 pack or the mint path.",
       "stop_card": null
     },
     "PIPELINE-SMOKE-TIER2-01": {
@@ -3637,7 +3630,7 @@
           "The fixture executable and prefix are hard-pinned, and a substituted executable or prefix is refused",
           "Every D-160 F-5 join is asserted by the replay leg",
           "No floor rule changes: the clean leg's floor comes from a real calibration present in the replayed trace, and inputs.py's refusal of calibration_scope == smoke as cell_not_claim_ready is unchanged",
-          "Path A (D-162 R-1): the diagnostic family is built here post-campaign as the substrate of the permanent desk clean leg, and none of it enters production before the _v4 transaction closes; the D-162 addendum's F1 finding (Path A must relax the claim-bearing validator's planned_n_blocks pin at analysis_manifest_v3.py:34, :946, :2152-2159) is why it is not built pre-campaign, and any seam it adds is designed under this row's existing D-160 R-4 constraints"
+          "Path A (D-162 R-1): the diagnostic family is built here post-campaign as the substrate of the permanent desk clean leg, and none of it enters production before the _v4 transaction closes; the D-162 addendum's F1 finding (Path A must relax the claim-bearing validator's planned_n_blocks pin at analysis_manifest_v3.py:34, :946, :2152-2159) is why it is not built pre-campaign"
         ],
         "pointer": {
           "json_pointer": "/tasks/PIPELINE-SMOKE-TIER2-01/acceptance",
