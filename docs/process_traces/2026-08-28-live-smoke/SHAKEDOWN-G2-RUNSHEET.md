@@ -48,7 +48,10 @@ the real custody by the refusal check is not PASS.
    strict post-reduce validation, the production-uncertainty assertion and
    the backup command, and stops the campaign on the first
    `SHAKEDOWN_GATE_FAILED[...]` (`:1990-2262`, `:8422-8436`, `:8727-8739`).
-   It bounds bundle quality, never bundle count.
+   The flag requires `--backup` and refuses unless the invocation consists of
+   exactly one single-repetition config (`scripts/run_campaign.py:8108-8117`),
+   so it constrains an invocation to one bundle but cannot select that bundle
+   from a larger frozen stage.
 
 2. **B-SUPPLY — the named measurement checkout does not yet contain the real `_v4`
    supply.** The 2026-08-28 desk census found no
@@ -148,6 +151,12 @@ The rehearsal arm must expire completely before Phase C begins. It must never
 straddle, borrow, or shorten the later T-0 clean dwell.
 
 ## Tree and fixed variables
+
+Every root below must be a symlink-free real path: the finalizer authenticates
+custody containment lexically and rejects a symlinked component
+(`joulewise/analysis_manifest_v3.py:1479`, used at `:3282`), and the checker's
+`NR14-LAYOUT` mirrors that rule. `/Users/edr/...` satisfies this; anything under
+`/var` or `/tmp` on macOS does not.
 
 ```text
 /Users/edr/JouleWise-shakedown-g2/2026-08-29/

@@ -31,7 +31,10 @@ from joulewise.analysis_engine.inputs import (  # noqa: E402
 )
 from joulewise.analysis_manifest_v3 import (  # noqa: E402
     AnalysisManifestFinalizationError,
+    _directory_under_root,
+    _path_under_root,
     calculate_manifest_id,
+    canonical_json_bytes,
     finalize_prospective_analysis_manifest_v3,
 )
 from joulewise.calibration_ledger import load_calibration_ledger_snapshot  # noqa: E402
@@ -145,6 +148,25 @@ def _member_bundle_ids(manifest: Mapping[str, Any]) -> list[str]:
         ):
             raise AssertionFailure("campaign member has invalid bundle_ids")
         result.extend(bundle_ids)
+    return result
+
+
+def _member_run_ids(manifest: Mapping[str, Any]) -> list[str]:
+    """Enumerate collected run ids without consulting the cooldown join."""
+
+    result: list[str] = []
+    members = manifest.get("members")
+    if not isinstance(members, list):
+        raise AssertionFailure("campaign manifest members is not a list")
+    for member in members:
+        if not isinstance(member, Mapping):
+            raise AssertionFailure("campaign manifest member is not an object")
+        if member.get("execution") == "blocked_before_invoke":
+            continue
+        run_id = member.get("run_id")
+        if not isinstance(run_id, str) or not run_id:
+            raise AssertionFailure("campaign member has invalid run_id")
+        result.append(run_id)
     return result
 
 
@@ -389,9 +411,10 @@ def _run_assertions(args: argparse.Namespace) -> int:
     if not _require_args(args, required):
         return 2
     reporter = Reporter()
-    runs_root = args.runs_root
+    runs_root_input = args.runs_root
     manifest_path = args.pack_root / "analysis_manifest_v3.json"
     try:
+        runs_root = runs_root_input.resolve(strict=True)
         prospective = _read_object(manifest_path, "prospective analysis manifest")
         pack_manifest_id = prospective.get("manifest_id")
         records = _campaign_records(runs_root)
@@ -420,12 +443,9 @@ def _run_assertions(args: argparse.Namespace) -> int:
     cooldowns: dict[str, Mapping[str, Any]] = {}
 
     def check_nr14_layout() -> str:
-        custody = args.custody_root.resolve(strict=True)
-        runs = runs_root.resolve(strict=True)
-        try:
-            runs.relative_to(custody)
-        except ValueError as exc:
-            raise AssertionFailure("runs root is not beneath custody root") from exc
+        custody_input = args.custody_root.absolute()
+        custody = custody_input.resolve(strict=True)
+        runs = _directory_under_root(runs_root_input, custody_input, "runs root")
         if runs == custody:
             raise AssertionFailure("runs root must be beneath, not equal to, custody root")
         resolved_inputs = {}
@@ -433,13 +453,11 @@ def _run_assertions(args: argparse.Namespace) -> int:
             ("bracket binding", args.bracket_binding),
             ("whole-window verdict", args.whole_window_verdict),
         ):
-            resolved = supplied.resolve(strict=True)
-            try:
-                resolved.relative_to(runs)
-            except ValueError as exc:
-                raise AssertionFailure(f"{label} is not beneath runs root") from exc
+            resolved, _relative = _path_under_root(supplied, runs, label)
             resolved_inputs[label] = resolved
-        verdict_raw = resolved_inputs["whole-window verdict"].read_bytes()
+        verdict = _read_object(
+            resolved_inputs["whole-window verdict"], "whole-window verdict"
+        )
         try:
             log_raw = (runs / "campaign_log.jsonl").read_bytes()
         except OSError as exc:
@@ -455,12 +473,12 @@ def _run_assertions(args: argparse.Namespace) -> int:
             if (
                 isinstance(row, Mapping)
                 and row.get("record_type") == "idle_admission_whole_window_verdict"
-                and line == verdict_raw
+                and canonical_json_bytes(row) == canonical_json_bytes(verdict)
             ):
                 matches.append(row)
         if len(matches) != 1:
             raise AssertionFailure(
-                "whole-window verdict bytes do not equal exactly one authoritative "
+                "whole-window verdict object does not equal exactly one authoritative "
                 f"campaign-log row (matches={len(matches)})"
             )
         return "runs_beneath_custody=true inputs_beneath_runs=true verdict_log_rows=1"
@@ -487,14 +505,27 @@ def _run_assertions(args: argparse.Namespace) -> int:
 
     def check_a2() -> str:
         nonlocal selected_ids, cooldowns
+        expected_ids = {
+            run_id
+            for _path, manifest in science
+            for run_id in _member_run_ids(manifest)
+        }
+        if not expected_ids:
+            raise AssertionFailure("science campaign manifests record no collected bundles")
         cooldowns = campaign_cooldown_evidence(runs_root, collection_id)
         if not cooldowns:
             raise AssertionFailure(
                 "campaign_cooldown_evidence returned empty for "
                 f"collection_manifest_id={collection_id}"
             )
+        missing = sorted(expected_ids - cooldowns.keys())
+        if missing:
+            raise AssertionFailure(f"collection join omitted bundles={missing}")
         selected_ids = set(cooldowns)
-        return f"collection_manifest_id={collection_id} covered={len(selected_ids)}"
+        return (
+            f"collection_manifest_id={collection_id} "
+            f"expected={len(expected_ids)} covered={len(selected_ids)}"
+        )
 
     a2_passed = reporter.assertion("S11-A2", check_a2)
 

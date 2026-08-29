@@ -28,6 +28,12 @@ from scripts.check_window_provenance import (
     main as check_main,
 )
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
+
+# The finalizer authenticates custody containment lexically and rejects symlinked
+# components (analysis_manifest_v3.py:1479); NR14-LAYOUT mirrors it. macOS's
+# default tempdir lives under /var -> /private/var, so anchor every fixture at
+# the real path or the layout assertion fails for an environmental reason.
+tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
 from tests.test_run_campaign import read_all_jsonl, run_campaign_module
 
 
@@ -385,6 +391,19 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         ):
             self.assertIn(option, runsheet)
 
+    def test_runsheet_shakedown_gate_note_matches_cli_cardinality(self) -> None:
+        runsheet = (
+            Path(__file__).resolve().parents[1]
+            / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
+        ).read_text()
+        self.assertIn("requires `--backup`", runsheet)
+        self.assertIn("exactly one single-repetition config", runsheet)
+        self.assertIn("constrains an invocation to one bundle", runsheet)
+        self.assertIn("cannot select that bundle", runsheet)
+        self.assertIn("from a larger frozen stage", runsheet)
+        self.assertIn("`scripts/run_campaign.py:8108-8117`", runsheet)
+        self.assertNotIn("It bounds bundle quality, never bundle count.", runsheet)
+
     def test_preflight_comment_names_custody_artifact_replay(self) -> None:
         preflight = (
             Path(__file__).resolve().parents[1]
@@ -430,6 +449,27 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             )
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
+
+    def test_partial_science_join_names_missing_bundle_isolated_to_s11_a2(self) -> None:
+        """A partial consumer keyset fails A2; its dependent checks legitimately skip."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            import scripts.check_window_provenance as checker
+
+            complete = checker.campaign_cooldown_evidence(
+                fixture["runs_root"], fixture["prospective"]["manifest_id"]
+            )
+            self.assertGreater(len(complete), 1)
+            omitted = sorted(complete)[-1]
+            partial = {key: value for key, value in complete.items() if key != omitted}
+            with mock.patch.object(
+                checker, "campaign_cooldown_evidence", return_value=partial
+            ):
+                code, output = _run(_normal_argv(fixture))
+            self.assertNotEqual(code, 0, output)
+            self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
+            self.assertIn(f"collection join omitted bundles=['{omitted}']", output)
 
     def test_missing_cooldown_evidence_isolated_to_s11_a3(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -695,6 +735,28 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             outside.write_bytes(fixture["verdict_path"].read_bytes())
             argv = _normal_argv(fixture)
             argv[argv.index("--whole-window-verdict") + 1] = str(outside)
+            code, output = _run(argv)
+            self.assertNotEqual(code, 0, output)
+            self.assertEqual(self._fail_ids(output), ["NR14-LAYOUT"], output)
+
+    def test_object_equal_pretty_verdict_passes_nr14_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            verdict = json.loads(fixture["verdict_path"].read_text())
+            fixture["verdict_path"].write_text(
+                json.dumps(verdict, indent=4, sort_keys=True) + "\n"
+            )
+            code, output = _run(_normal_argv(fixture))
+            self.assertEqual(code, 0, output)
+            self.assertIn("PASS NR14-LAYOUT ", output)
+
+    def test_runs_root_symlink_isolated_to_nr14_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            alias = fixture["root"] / "runs-alias"
+            os.symlink(fixture["runs_root"], alias)
+            argv = _normal_argv(fixture)
+            argv[argv.index("--runs-root") + 1] = str(alias)
             code, output = _run(argv)
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["NR14-LAYOUT"], output)
