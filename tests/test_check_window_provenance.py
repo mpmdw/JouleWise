@@ -770,7 +770,26 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertIn("PASS NR14-LAYOUT ", output)
             self.assertNotIn("FAIL NR14-LAYOUT ", output)
 
-    def test_duplicate_key_verdict_isolated_to_nr14_layout(self) -> None:
+    def test_relative_runs_root_anchors_under_custody_not_cwd(self) -> None:
+        """A relative --runs-root is custody-relative (finalizer semantics),
+        so the checker's result must not depend on the process CWD."""
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp, tempfile.TemporaryDirectory(
+            dir=_REAL_TMP
+        ) as elsewhere:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            argv = _normal_argv(fixture)
+            index = argv.index("--runs-root")
+            argv[index + 1] = str(fixture["runs_root"].relative_to(fixture["root"]))
+            previous = os.getcwd()
+            os.chdir(elsewhere)
+            try:
+                code, output = _run(argv)
+            finally:
+                os.chdir(previous)
+            self.assertEqual(code, 0, output)
+            self.assertIn("PASS NR14-LAYOUT ", output)
+            self.assertNotIn("FAIL ", output)
+
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
             fixture = _install_s11_checker_fixture(Path(tmp))
             verdict = json.loads(fixture["verdict_path"].read_text())

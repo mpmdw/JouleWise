@@ -413,7 +413,12 @@ def _run_assertions(args: argparse.Namespace) -> int:
     if not _require_args(args, required):
         return 2
     reporter = Reporter()
+    # A relative --runs-root is anchored under --custody-root, exactly as the
+    # finalizer anchors relative paths under its custody root
+    # (analysis_manifest_v3.py:1428-1436, :1482-1490), never under the CWD.
     runs_root_input = args.runs_root
+    if not runs_root_input.is_absolute() and args.custody_root is not None:
+        runs_root_input = args.custody_root.absolute() / runs_root_input
     manifest_path = args.pack_root / "analysis_manifest_v3.json"
     try:
         runs_root = runs_root_input.resolve(strict=True)
