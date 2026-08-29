@@ -4,6 +4,8 @@ import hashlib
 import re
 import subprocess
 import sys
+import tempfile
+import unittest
 from pathlib import Path
 
 
@@ -89,61 +91,65 @@ def _parse_report(stdout: str) -> tuple[set[int], dict[int, int]]:
     return orphans, mapping
 
 
-def test_fixture_dry_run_apply_exclusions_and_idempotence(tmp_path: Path) -> None:
-    draft = tmp_path / "fixture.md"
-    draft.write_text(FIXTURE, encoding="utf-8")
-    original = draft.read_bytes()
+class PaperRenumberRefsTests(unittest.TestCase):
+    def test_fixture_dry_run_apply_exclusions_and_idempotence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            draft = Path(tmp_dir) / "fixture.md"
+            draft.write_text(FIXTURE, encoding="utf-8")
+            original = draft.read_bytes()
 
-    dry_run = _run(draft)
-    assert dry_run.returncode == 0, dry_run.stderr
-    assert "MODE: dry-run" in dry_run.stdout
-    assert _parse_report(dry_run.stdout) == ({2}, {1: 1, 3: 2})
-    assert draft.read_bytes() == original
+            dry_run = _run(draft)
+            self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+            self.assertIn("MODE: dry-run", dry_run.stdout)
+            self.assertEqual(_parse_report(dry_run.stdout), ({2}, {1: 1, 3: 2}))
+            self.assertEqual(draft.read_bytes(), original)
 
-    applied = _run(draft, "--apply")
-    assert applied.returncode == 0, applied.stderr
-    rewritten = draft.read_text(encoding="utf-8")
-    assert "Citations [1] [2] and a comma group [1, 2]." in rewritten
-    assert "The suffix can cite [2]." in rewritten
-    assert "2. C. Charlie. “Kept three.”" in rewritten
-    assert "B. Baker" not in rewritten
-    for protected in (
-        "[PENDING]",
-        "[PENDING, PENDING]",
-        "[RESULT PENDING NOW]",
-        "[REPOSITORY AND ARCHIVE LOCATORS PENDING]",
-        "[[NEEDS-VALUE: fixture]]",
-        "[TERM_A_FIXTURE]",
-        "[2](https://example.invalid)",
-        "[1, 4]",
-        "Inline code `[2]`",
-        "\\[\n[2]\n\\]",
-        "```text\n[2]\n```",
-    ):
-        assert protected in rewritten
+            applied = _run(draft, "--apply")
+            self.assertEqual(applied.returncode, 0, applied.stderr)
+            rewritten = draft.read_text(encoding="utf-8")
+            self.assertIn("Citations [1] [2] and a comma group [1, 2].", rewritten)
+            self.assertIn("The suffix can cite [2].", rewritten)
+            self.assertIn("2. C. Charlie. “Kept three.”", rewritten)
+            self.assertNotIn("B. Baker", rewritten)
+            for protected in (
+                "[PENDING]",
+                "[PENDING, PENDING]",
+                "[RESULT PENDING NOW]",
+                "[REPOSITORY AND ARCHIVE LOCATORS PENDING]",
+                "[[NEEDS-VALUE: fixture]]",
+                "[TERM_A_FIXTURE]",
+                "[2](https://example.invalid)",
+                "[1, 4]",
+                "Inline code `[2]`",
+                "\\[\n[2]\n\\]",
+                "```text\n[2]\n```",
+            ):
+                self.assertIn(protected, rewritten)
 
-    first_application = draft.read_bytes()
-    second = _run(draft, "--apply")
-    assert second.returncode == 3
-    assert "ALREADY RENUMBERED" in second.stderr
-    assert draft.read_bytes() == first_application
+            first_application = draft.read_bytes()
+            second = _run(draft, "--apply")
+            self.assertEqual(second.returncode, 3)
+            self.assertIn("ALREADY RENUMBERED", second.stderr)
+            self.assertEqual(draft.read_bytes(), first_application)
+
+    def test_real_draft_default_dry_run_has_ruled_orphans_and_map(self) -> None:
+        self.assertEqual(_sha256(REAL_DRAFT), REAL_DRAFT_SHA256)
+        result = _run(REAL_DRAFT)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("MODE: dry-run", result.stdout)
+        self.assertEqual(_parse_report(result.stdout), (EXPECTED_ORPHANS, EXPECTED_MAP))
+        self.assertEqual(_sha256(REAL_DRAFT), REAL_DRAFT_SHA256)
+
+    def test_real_draft_apply_requires_round_7_guard_and_preserves_bytes(self) -> None:
+        before = REAL_DRAFT.read_bytes()
+        self.assertEqual(hashlib.sha256(before).hexdigest(), REAL_DRAFT_SHA256)
+        result = _run(REAL_DRAFT, "--apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires --i-am-round-7", result.stderr)
+        after = REAL_DRAFT.read_bytes()
+        self.assertEqual(after, before)
+        self.assertEqual(hashlib.sha256(after).hexdigest(), REAL_DRAFT_SHA256)
 
 
-def test_real_draft_default_dry_run_has_ruled_orphans_and_map() -> None:
-    assert _sha256(REAL_DRAFT) == REAL_DRAFT_SHA256
-    result = _run(REAL_DRAFT)
-    assert result.returncode == 0, result.stderr
-    assert "MODE: dry-run" in result.stdout
-    assert _parse_report(result.stdout) == (EXPECTED_ORPHANS, EXPECTED_MAP)
-    assert _sha256(REAL_DRAFT) == REAL_DRAFT_SHA256
-
-
-def test_real_draft_apply_requires_round_7_guard_and_preserves_bytes() -> None:
-    before = REAL_DRAFT.read_bytes()
-    assert hashlib.sha256(before).hexdigest() == REAL_DRAFT_SHA256
-    result = _run(REAL_DRAFT, "--apply")
-    assert result.returncode != 0
-    assert "requires --i-am-round-7" in result.stderr
-    after = REAL_DRAFT.read_bytes()
-    assert after == before
-    assert hashlib.sha256(after).hexdigest() == REAL_DRAFT_SHA256
+if __name__ == "__main__":
+    unittest.main()
