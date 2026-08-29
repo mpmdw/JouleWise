@@ -93,10 +93,17 @@ Determinism-gate concerns (`joulewise/determinism_gate.py:88` compares
 tokenizer `backend, identifier, revision, class, vocab_size`;
 `analysis_manifest_v3.py:98,150` hard-codes `vocab_size: 151643`):
 
-- The reported tokenizer `vocab_size` for Qwen3 will differ from the
-  151643 the v3 manifest pins (Qwen3 adds think-delimiter tokens). The
-  `_v5` manifest sibling must read the value at pin time from the mirrored
-  tokenizer and freeze that, not inherit 151643.
+- The pinned tokenizer `vocab_size` (151643) does NOT change: it is the
+  base BPE vocabulary (`vocab.json` has 151643 entries in both the
+  mirrored Qwen2.5-1.5B and Qwen3-4B), and both report tokenizer class
+  `Qwen2Tokenizer`. What differs is the added-token list (22 entries for
+  Qwen2.5, 26 for Qwen3 — the four think/tool delimiters). Consequence:
+  the gate's five identity keys (`backend, identifier, revision, class,
+  vocab_size`) cannot tell a Qwen2.5 tokenizer from a Qwen3 one; only the
+  `tokenizer.json` SHA-256 and the `identifier`/`revision` pin do. The
+  `_v5` manifest sibling must therefore carry the Qwen3 file hash
+  (`aeb13307…`) as the shared-tokenizer regression value, and the
+  0.5B/Qwen2.5 regression (`a8506e71…`) must not be inherited.
 - Thinking mode: the two Qwen3 April-2025 models are "hybrid thinking"
   models. Under this harness (raw prompt, no chat template,
   `suppress_eos=True`, 512 forced tokens) the toggle is never consulted,
