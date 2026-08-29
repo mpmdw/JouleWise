@@ -3586,9 +3586,26 @@
         "label": "D-162 THE LIVE-PROOF GATE, CORRECTED (magistrate 2026-08-28 over Sol high + Fable, Opus seat converged in the addendum): G1/G2/G3 replace the DATA-reason live gate; R-1 Path A deferred to PIPELINE-SMOKE-TIER2-01; R-2 runsheet re-cut to G2; R-3 the desk script; R-4 calendar stands",
         "path": "docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "D-164: the real pack is now the _v5 Qwen3 pack, so G2 waits on the S15 generator producing and freezing it; G1's desk pieces do not wait",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-QWEN3-PACK-GENERATED-S15"
+        }
+      ],
       "fallback": null,
       "fences": [
+        {
+          "authority": {
+            "label": "RUN_STATE T27 (2026-08-28): Ed's ~1-hour live test window AUTHORIZED at lead discretion once the preparation streams finish and the machine is quiet; scoped by D-162 G2",
+            "path": "RUN_STATE.md"
+          },
+          "rule": "License: Ed T27 live-window authorization, scoped by D-162 G2 (one block, real pack, verdict + binding, finalize refuses for exactly the expected set); the D-158 R-3 diagnostic license is NOT carried over"
+        },
         {
           "authority": {
             "label": "D-162 rulings R-1 and R-3",
@@ -3619,8 +3636,8 @@
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 13,
-      "status": "queued",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6 as the ~20-minute quarantined live family generation. RE-SCOPED 2026-08-28 in the T27 second kernel wave per D-162 (docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md): two seats proved from code that a partial run on the real _v4 pack can never answer for a DATA reason (insufficient_complete_blocks and fixed_n_plan_incomplete are CONTRACT-classed; the prospective finalizer requires ten blocks / 80 members) and that the diagnostic-family alternative costs 7-10 Sol-days of new admission code on the mint path days before the campaign, so the D-158 R-3 / D-160 R-2 scope is superseded by G1/G2/G3; the D-158 R-3 fences fall with it (the license G2 runs under is not ruled by D-162 and is left to the magistrate), and the shakedown runsheet is re-cut from PR #225's phases to G2 (R-2). G1 and G3 are desk work; G2 runs on the shakedown night, which keeps the quiet_mac lane and Ed's hands. Nothing here changes the _v4 pack or the mint path.",
+      "status": "blocked",
+      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) per D-158 R-6 as the ~20-minute quarantined live family generation. RE-SCOPED 2026-08-28 in the T27 second kernel wave per D-162 (docs/process_traces/2026-08-28-live-smoke/proof-consult/04-MAGISTRATE-RULING.md): two seats proved from code that a partial run on the real _v4 pack can never answer for a DATA reason (insufficient_complete_blocks and fixed_n_plan_incomplete are CONTRACT-classed; the prospective finalizer requires ten blocks / 80 members) and that the diagnostic-family alternative costs 7-10 Sol-days of new admission code on the mint path days before the campaign, so the D-158 R-3 / D-160 R-2 scope is superseded by G1/G2/G3; the D-158 R-3 fences fall with it (magistrate ruling 2026-08-28 on this wave: G2 runs under Ed's T27 live-window authorization as scoped by D-162 G2; the D-158 R-3 diagnostic license is not carried over). D-164 moves the real pack to the _v5 Qwen3 pack, so G2 now starts only after the S15 generator delivers it (event dependency), and the shakedown runsheet is re-cut from PR #225's phases to G2 (R-2). G1 and G3 are desk work; G2 runs on the shakedown night, which keeps the quiet_mac lane and Ed's hands. Nothing here changes the _v4 pack or the mint path.",
       "stop_card": null
     },
     "PIPELINE-SMOKE-TIER2-01": {
