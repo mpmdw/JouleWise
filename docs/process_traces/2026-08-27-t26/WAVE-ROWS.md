@@ -53,3 +53,4 @@ ledger now records the registered wave and subsequent status changes.
 - Confirmation-digest contract (`docs/contracts/d117_step6_confirmation_table.md:76`) forbids repository storage of the REAL transaction's digest; the six tracked digests are the S-0 clone-proof estates' `hC` values (throwaway clones). Add one sentence to the contract distinguishing estate digests from the transaction digest (docs PR, post-night).
 - `docs/paper/figures/fig3_decision_gates.svg` carries an internal term; paper round 7 nit.
 - Ratified: `tutorial-run-a-window.md` teaches the one-member production-shakedown route labelled diagnostic / not claim-bearing until the G2 runsheet lands; then it points at the G2 runsheet.
+- S14 PINSET-REFRESH-LANE landed (#228, 1f046cd9): kernel row missing — register in kernel wave 3 as completed with the #228 evidence.
