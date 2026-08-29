@@ -896,6 +896,9 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         git(repository, "config", "user.name", "histsem refresh test")
         git(repository, "config", "gc.auto", "0")
         git(repository, "config", "maintenance.auto", "false")
+        # Published state, set the way the other histsem tests set it: a PR
+        # checkout (CI) has no origin/main of its own to inherit via --shared.
+        git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
         pack = repository / REPRESENTATIVE_PACK.relative_to(ROOT)
         pinset = repository / PINSET.relative_to(ROOT)
         return repository, pack, pinset
@@ -1106,26 +1109,6 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
                         original,
                     )
 
-    def test_tool_sidecar_refresh_refuses_unpublished_head(self) -> None:
-        repository = self._tool_repository()
-        lane = self._refresh_module()
-        name = lane.CUSTODY_TOOL_SIDECARS[0]
-        tool = repository / "scripts" / name
-        sidecar = repository / "scripts" / f"{name}.sha256"
-        tool.write_bytes(tool.read_bytes() + b"\n# unpublished sidecar regression\n")
-        git(repository, "add", tool.relative_to(repository).as_posix())
-        git(repository, "commit", "-qm", "local-only custody tool edit")
-        original = sidecar.read_bytes()
-
-        refused = self._run_refresh(repository, "--refresh-tool-sidecars")
-        self.assertEqual(refused.returncode, 2, refused.stdout)
-        payload = json.loads(refused.stdout)
-        self.assertEqual(
-            payload["reason_codes"], ["histsem_commit_unpublished"]
-        )
-        self.assertIn("current HEAD", payload["detail"])
-        self.assertEqual(sidecar.read_bytes(), original)
-
     def test_tool_sidecar_mode_never_accepts_a_tool_as_a_pinset_output(
         self,
     ) -> None:
@@ -1204,6 +1187,59 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
         self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
         self.assertIn("outside the repository root", payload["detail"])
         self.assertFalse(preview.exists())
+
+    def test_refresh_lane_write_fence_uses_filesystem_identity(self) -> None:
+        """S14-F1 cure: the fence compares filesystem identity, not spelling.
+
+        Three aliases of a governed tool must all refuse and leave the tool
+        bytes untouched: the relative ``..`` alias, the case alias that a
+        case-insensitive filesystem accepts (skipped where the filesystem is
+        case-sensitive), and a symlink alias into ``scripts/``.
+        """
+
+        repository, _pack, _pinset = self._repository()
+        tool = repository / "scripts/build_family_marker.py"
+        original = tool.read_bytes()
+        link = repository.parent / "scripts-alias"
+        link.symlink_to(repository / "scripts", target_is_directory=True)
+        swapped = Path(str(tool).swapcase())
+        aliases = [
+            ("relative", "scripts/../scripts/build_family_marker.py"),
+            ("symlink", str(link / "build_family_marker.py")),
+        ]
+        if swapped.exists() and swapped != tool:
+            # Case-insensitive filesystem (macOS default): the case alias is real.
+            aliases.append(("case", str(swapped)))
+        for label, alias in aliases:
+            with self.subTest(alias=label):
+                refused = self._run_refresh(
+                    repository,
+                    "--refresh-row",
+                    REPRESENTATIVE_PACK.name,
+                    "--output",
+                    alias,
+                )
+                self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+                payload = json.loads(refused.stdout)
+                self.assertEqual(payload["reason_codes"], ["histsem_pinset_invalid"])
+                self.assertIn("must not target", payload["detail"])
+                self.assertEqual(tool.read_bytes(), original)
+
+    def test_refresh_lane_print_only_on_scratch_pinset_is_read_only(self) -> None:
+        """S14-F2 cure: the in-place guard is gated on write intent."""
+
+        repository, _pack, pinset = self._repository()
+        scratch_pinset = repository.parent / "scratch-print-only.json"
+        scratch_pinset.write_bytes(pinset.read_bytes())
+        original = scratch_pinset.read_bytes()
+        printed = self._run_refresh(
+            repository, "--pinset", str(scratch_pinset), "--print-pinset-sha256"
+        )
+        self.assertEqual(printed.returncode, 0, printed.stdout + printed.stderr)
+        self.assertIn(
+            f'PINSET_SHA256 = "{hashlib.sha256(original).hexdigest()}"', printed.stdout
+        )
+        self.assertEqual(scratch_pinset.read_bytes(), original)
 
     def test_refresh_lane_refuses_other_enumerated_member_as_output_or_test_pin(
         self,
@@ -1370,21 +1406,6 @@ class ReceiptHistsemRefreshLaneTests(unittest.TestCase):
             self.assertIn("historical receipt commit", payload["detail"])
             self.assertEqual(pinset.read_bytes(), original)
 
-        with self.subTest(check="current-head-vs-remote-refs"):
-            repository, pack, pinset = self._repository()
-            original = pinset.read_bytes()
-            path = pack / "arm_readiness.sources/unpublished-refresh.json"
-            path.write_bytes(render_json({"refresh_regression": "unpublished"}))
-            git(repository, "add", path.relative_to(repository).as_posix())
-            git(repository, "commit", "-qm", "local-only refresh head")
-            refused = self._run_refresh(
-                repository, "--refresh-row", REPRESENTATIVE_PACK.name
-            )
-            self.assertEqual(refused.returncode, 2, refused.stdout)
-            payload = json.loads(refused.stdout)
-            self.assertEqual(payload["reason_codes"], ["histsem_commit_unpublished"])
-            self.assertIn("current HEAD", payload["detail"])
-            self.assertEqual(pinset.read_bytes(), original)
 
     def test_refresh_lane_refuses_to_move_historical_fields(self) -> None:
         with self.subTest(field="historical_pack_sha256"):

@@ -49,9 +49,11 @@ the two **current-coordinate** fields only:
 `scripts/refresh_receipt_histsem_pinset.py --refresh-row PACK_ID` re-derives
 `current_pack_sha256` with `committed_pack_tree_sha256` and
 `post_authoring_delta` with `_histsem_delta`, using the same code paths as the
-verifier. It requires a clean pack directory, requires the row's historical
-commit to be published on `origin/main`, and requires current `HEAD` to be
-reachable from a remote-tracking ref. It also reproduces the historical tree
+verifier. It requires a clean pack directory and requires the row's historical
+commit to be published on `origin/main` -- the verifier's own
+`histsem_commit_unpublished` decision, reused exactly; the current `HEAD` carries
+no publication predicate, because the lane runs on PR branches and in PR
+checkouts where `HEAD` is never published. It also reproduces the historical tree
 and digest before constructing a candidate, then requires every row in the
 complete candidate to pass the ordinary pack verifier before any write. The
 candidate is verified through `verify_receipt_histsem_pack` itself with pinset
@@ -65,8 +67,7 @@ The same lane's composable `--refresh-tool-sidecars` mode owns the exact GNU
 sidecar rendering and the ruled set `build_family_marker.py`,
 `verify_family_marker.py`, `build_v4_histsem_pinset.py`, and
 `verify_receipt_histsem.py`. It refuses `histsem_binding_mismatch` if a governed
-tool or its `.sha256` path is dirty and refuses `histsem_commit_unpublished` if
-current `HEAD` is not reachable from a remote-tracking ref. After those checks,
+tool or its `.sha256` path is dirty. After that check,
 it hashes each tool's committed `HEAD:scripts/<name>` blob (the clean-path check
 makes those bytes equal to the worktree tool), diffs the old and regenerated
 sidecar bytes, and writes only changed sidecars. It never writes a tool. The

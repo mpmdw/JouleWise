@@ -6,10 +6,11 @@ from __future__ import annotations
 import argparse
 import copy
 import difflib
+import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -88,12 +89,47 @@ def _enumerated_pinset_paths(repository: Path) -> tuple[Path, ...]:
     )
 
 
+def _identity(path: Path) -> str:
+    """Filesystem identity of a path: realpath (symlinks, `..`) + normcase.
+
+    Spelling-based containment is not identity: on a case-insensitive
+    filesystem ``/PRIVATE/x`` and ``/private/x`` are the same file yet differ
+    after ``Path.resolve()``.  Every fence comparison goes through this.
+    """
+
+    return os.path.normcase(os.path.realpath(os.fspath(path)))
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    """True when both names denote one filesystem object (or would)."""
+
+    if left.exists() and right.exists():
+        try:
+            return os.path.samefile(left, right)
+        except OSError:
+            pass
+    return _identity(left) == _identity(right)
+
+
 def _is_within(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
+    """Ancestor check by walking the realpath'd parents of ``path``."""
+
+    root_identity = _identity(root)
+    current = Path(os.path.realpath(os.fspath(path)))
+    for candidate in (current, *current.parents):
+        if _identity(candidate) == root_identity:
+            return True
+        if root.exists() and candidate.exists():
+            try:
+                if os.path.samefile(candidate, root):
+                    return True
+            except OSError:
+                pass
+    return False
+
+
+def _is_member(path: Path, members: Iterable[Path]) -> bool:
+    return any(_same_path(path, member) for member in members)
 
 
 def _load_pinset(path: Path) -> tuple[dict[str, Any], bytes]:
@@ -165,23 +201,12 @@ def _require_clean_tool_sidecar(repository: Path, name: str) -> None:
         )
 
 
-def _require_current_head_reviewable(repository: Path) -> None:
-    remote_refs = _git(
-        repository,
-        "for-each-ref",
-        "--format=%(refname)",
-        "--contains",
-        "HEAD",
-        "refs/remotes",
-    )
-    if not remote_refs.strip():
-        raise _refusal(
-            "histsem_commit_unpublished",
-            "current HEAD is not reachable from a remote-tracking ref",
-        )
-
-
 def _require_reviewable_heads(repository: Path, head_commit: str) -> None:
+    """The verifier's exact ``histsem_commit_unpublished`` decision (arm_readiness
+    verify_receipt_histsem_pack): the row's historical commit must be an ancestor
+    of ``origin/main``.  The current HEAD carries no publication predicate -- the
+    lane runs on PR branches and in PR checkouts, where HEAD is never published.
+    """
     code, _stdout, _stderr = readiness._histsem_git(
         repository,
         "merge-base",
@@ -194,7 +219,6 @@ def _require_reviewable_heads(repository: Path, head_commit: str) -> None:
             "histsem_commit_unpublished",
             f"historical receipt commit {head_commit} is not an ancestor of origin/main",
         )
-    _require_current_head_reviewable(repository)
 
 
 def render_tool_sidecar(tool_bytes: bytes, name: str) -> bytes:
@@ -237,7 +261,6 @@ def _prepare_tool_sidecars(
 ) -> list[tuple[str, Path, bytes, bytes, str]]:
     for name in CUSTODY_TOOL_SIDECARS:
         _require_clean_tool_sidecar(repository, name)
-    _require_current_head_reviewable(repository)
 
     prepared: list[tuple[str, Path, bytes, bytes, str]] = []
     for name in CUSTODY_TOOL_SIDECARS:
@@ -459,13 +482,14 @@ def _require_sidecar_write_separation(
     targets = [("pinset output", output_path)]
     if test_pin_path is not None:
         targets.append(("test pin", test_pin_path))
-        if test_pin_path == output_path:
+        if _same_path(test_pin_path, output_path):
             raise _refusal(
                 "histsem_pinset_invalid", "test pin file and pinset output must differ"
             )
 
     enumerated = _enumerated_pinset_paths(repository)
-    if args.output is None and pinset_path not in enumerated:
+    write_intent = bool(args.refresh_row) or bool(args.refresh_tool_sidecars)
+    if args.output is None and write_intent and not _is_member(pinset_path, enumerated):
         raise _refusal(
             "histsem_pinset_invalid",
             "in-place refresh requires an enumerated pinset member; use --output for a preview",
@@ -476,7 +500,9 @@ def _require_sidecar_write_separation(
         for name in CUSTODY_TOOL_SIDECARS
         for relative in _tool_paths(name)
     }
-    collisions = sorted(str(path) for _label, path in targets if path in governed_paths)
+    collisions = sorted(
+        str(path) for _label, path in targets if _is_member(path, governed_paths)
+    )
     if collisions:
         raise _refusal(
             "histsem_pinset_invalid",
@@ -498,7 +524,7 @@ def _require_sidecar_write_separation(
     other_members = sorted(
         f"{label}: {path}"
         for label, path in targets
-        if path in enumerated and path != pinset_path
+        if _is_member(path, enumerated) and not _same_path(path, pinset_path)
     )
     if other_members:
         raise _refusal(
@@ -509,7 +535,7 @@ def _require_sidecar_write_separation(
 
     if (
         args.output is not None
-        and output_path not in enumerated
+        and not _is_member(output_path, enumerated)
         and _is_within(output_path, repository)
     ):
         raise _refusal(
@@ -675,7 +701,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(diff)
     if args.output is not None:
         output_path = _resolve_from(repository, args.output)
-        if output_path not in _enumerated_pinset_paths(repository):
+        if not _is_member(output_path, _enumerated_pinset_paths(repository)):
             sys.stdout.write(
                 f"preview: {output_path} is not an enumerated pinset member and cannot be "
                 "loaded by scripts/verify_receipt_histsem.py\n"
