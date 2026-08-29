@@ -205,7 +205,7 @@ def _require_reviewable_heads(repository: Path, head_commit: str) -> None:
     """The verifier's exact ``histsem_commit_unpublished`` decision (arm_readiness
     verify_receipt_histsem_pack): the row's historical commit must be an ancestor
     of ``origin/main``.  The current HEAD carries no publication predicate -- the
-    lane runs on PR branches and in PR checkouts, where HEAD is never published.
+    lane runs on PR branches and in CI PR working trees, where HEAD is never published.
     """
     code, _stdout, _stderr = readiness._histsem_git(
         repository,
@@ -605,7 +605,7 @@ def refresh(args: argparse.Namespace) -> tuple[bytes, list[str], list[str]]:
 
     wrote_output = False
     wrote_test = False
-    preview = output_path not in _enumerated_pinset_paths(repository)
+    preview = not _is_member(output_path, _enumerated_pinset_paths(repository))
     try:
         if changed:
             wrote_output = True
