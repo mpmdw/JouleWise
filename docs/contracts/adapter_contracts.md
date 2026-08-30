@@ -687,9 +687,11 @@ Adapters should report failures with stable reason codes:
 
 - `did_not_fit`
 - `runtime_unavailable`
+- `model_identity_mismatch`
 - `telemetry_unavailable`
 - `format_unavailable`
 - `permission_denied`
 - `transport_unavailable`
 - `unsupported_workload`
+- `cleanup_failed`
 - `unknown_error`

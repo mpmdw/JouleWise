@@ -7,6 +7,7 @@ mapping and event shape with fakes, while real runs use the same adapter path.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.machinery
 import inspect
@@ -71,6 +72,81 @@ _MLX_CORE_MODULE: Any | None = None
 # ``sys.modules["mlx.core"] = None`` is Python's blocked-import sentinel: an
 # import must raise ImportError, and so must this adapter's probe.
 _MODULE_KEY_ABSENT = object()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _model_identity_pin_refusal(config: BenchmarkConfig) -> AdapterResult | None:
+    """Verify pack-carried tokenizer identity against the local mirror."""
+
+    tokenizer_pin = config.model.tokenizer_json_sha256
+    template_pin = config.model.chat_template_sha256
+    if tokenizer_pin is None and template_pin is None:
+        return None
+
+    source = Path(config.model.source or "").expanduser()
+    if tokenizer_pin is not None:
+        tokenizer_path = source / "tokenizer.json"
+        try:
+            observed = _sha256_file(tokenizer_path)
+        except OSError as exc:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.MODEL_IDENTITY_MISMATCH,
+                message=(
+                    "mlx_model_tokenizer_json_pin_unavailable: could not read "
+                    f"{tokenizer_path}: {type(exc).__name__}: {exc}"
+                ),
+            )
+        if observed != tokenizer_pin:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.MODEL_IDENTITY_MISMATCH,
+                message=(
+                    "mlx_model_tokenizer_json_sha256_mismatch: local tokenizer.json "
+                    f"at {tokenizer_path} has sha256 {observed}; expected {tokenizer_pin}"
+                ),
+            )
+
+    if template_pin is not None:
+        tokenizer_config_path = source / "tokenizer_config.json"
+        try:
+            tokenizer_config = json.loads(
+                tokenizer_config_path.read_text(encoding="utf-8")
+            )
+            if not isinstance(tokenizer_config, dict):
+                raise ValueError("top level must be an object")
+            chat_template = tokenizer_config.get("chat_template")
+            if not isinstance(chat_template, str):
+                raise ValueError("chat_template must be a string")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.MODEL_IDENTITY_MISMATCH,
+                message=(
+                    "mlx_model_chat_template_pin_unavailable: could not read exact "
+                    f"chat_template bytes from {tokenizer_config_path}: "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+            )
+        observed = sha256_hex(chat_template.encode("utf-8"))
+        if observed != template_pin:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.MODEL_IDENTITY_MISMATCH,
+                message=(
+                    "mlx_model_chat_template_sha256_mismatch: local chat_template "
+                    f"at {tokenizer_config_path} has sha256 {observed}; "
+                    f"expected {template_pin}"
+                ),
+            )
+    return None
 
 
 def _is_loaded_extension(module: Any) -> bool:
@@ -165,6 +241,10 @@ class MlxRuntimeAdapter:
                     "local mirror to avoid network downloads"
                 ),
             )
+
+        identity_refusal = _model_identity_pin_refusal(config)
+        if identity_refusal is not None:
+            return identity_refusal
 
         try:
             mlx_lm = self._import_mlx_lm()

@@ -12,11 +12,13 @@ import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from joulewise import floor_mint_estimator
+import joulewise.controller as controller_module
 from joulewise.analysis_engine import AnalysisInputError, analyze_claims
 from joulewise.analysis_engine.artifact import render_claim_verdicts
 from joulewise.analysis_engine.artifact import (
@@ -58,6 +60,7 @@ from joulewise.analysis_engine.inputs import (
     window_evidence_precheck,
 )
 from joulewise.idle_admission import ADAPTER_CONTINUITY_SCHEMA, NEG8_BRACKET_SCHEMA
+from joulewise.schemas import BenchmarkConfig
 from joulewise.calibration_ledger import (
     GENESIS_DIGEST,
     LEDGER_SCHEMA,
@@ -1579,6 +1582,182 @@ class AnalysisIntegrationTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls._temporary.cleanup()
+
+    @staticmethod
+    def _canonical_model_bytes(model: dict) -> bytes:
+        return json.dumps(
+            model,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+    def test_real_controller_unpinned_model_is_included_by_loader(self):
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = manifest["entries"][0]
+
+        with mock.patch(
+            "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+            return_value=PRODUCTION_TELEMETRY_IDENTITY,
+        ):
+            loaded = load_analysis_inputs(
+                self.manifest_path,
+                self.runs_root,
+                self.floor_path,
+                strict_validator=validate_bundle,
+            )
+
+        evidence = loaded.registered[target["entry_id"]]
+        self.assertEqual(
+            set(evidence.raw_config["model"]),
+            {
+                "name",
+                "family",
+                "source",
+                "revision",
+                "weight_format",
+                "context_window",
+            },
+        )
+        self.assertEqual(evidence.inclusion_status, "included")
+        self.assertNotIn("config_hash_mismatch", evidence.base_reason_codes)
+
+    def test_real_controller_pinned_model_matches_canonical_bytes_and_is_included(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+            base["model"].update(
+                tokenizer_json_sha256="a" * 64,
+                chat_template_sha256="b" * 64,
+            )
+            base_path = root / "pinned-base.json"
+            base_path.write_text(
+                json.dumps(base, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            config_dir = root / "configs"
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code = generate_matrix(
+                    [
+                        "--base",
+                        str(base_path),
+                        "--model-tag",
+                        "mock-model",
+                        "--out-dir",
+                        str(config_dir),
+                    ]
+                )
+            self.assertEqual(code, 0)
+
+            runs_root = root / "runs"
+            for config_path in sorted(config_dir.glob("*.json")):
+                if config_path.name in SIDECARS:
+                    continue
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code = main(
+                        ["run", str(config_path), "--runs-dir", str(runs_root)]
+                    )
+                self.assertEqual(code, 0, config_path.name)
+                run_id = json.loads(config_path.read_text(encoding="utf-8"))[
+                    "run_id"
+                ]
+                install_explicit_mock_sampler(runs_root / run_id)
+
+            manifest_path = config_dir / "analysis_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            bundle_ids = sorted(entry["run_id"] for entry in manifest["entries"])
+            install_passing_analysis_whole_window(
+                runs_root,
+                bundle_ids,
+                source_name="pinned-controller-loader-source",
+            )
+            with mock.patch(
+                "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+                return_value=PRODUCTION_TELEMETRY_IDENTITY,
+            ):
+                loaded = load_analysis_inputs(
+                    manifest_path,
+                    runs_root,
+                    self.floor_path,
+                    strict_validator=validate_bundle,
+                )
+
+            target = manifest["entries"][0]
+            evidence = loaded.registered[target["entry_id"]]
+            config_model = evidence.raw_config["model"]
+            metadata_model = evidence.metadata["model"]
+            self.assertEqual(
+                self._canonical_model_bytes(metadata_model),
+                self._canonical_model_bytes(config_model),
+            )
+            self.assertEqual(config_model["tokenizer_json_sha256"], "a" * 64)
+            self.assertEqual(config_model["chat_template_sha256"], "b" * 64)
+            self.assertEqual(evidence.inclusion_status, "included")
+            self.assertNotIn("config_hash_mismatch", evidence.base_reason_codes)
+
+    def test_old_asdict_model_emission_is_rejected_at_controller_loader_seam(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_dir = root / "configs"
+            runs_root = root / "runs"
+            shutil.copytree(self.config_dir, config_dir)
+            shutil.copytree(self.runs_root, runs_root)
+            manifest_path = config_dir / "analysis_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            target = manifest["entries"][0]
+            shutil.rmtree(runs_root / target["run_id"])
+
+            canonical_to_dict = BenchmarkConfig.to_dict
+            canonical_write_metadata = controller_module._Execution._write_metadata
+
+            def old_asdict_write_metadata(execution):
+                def metadata_only_asdict(config):
+                    data = canonical_to_dict(config)
+                    data["model"] = asdict(config.model)
+                    return data
+
+                with mock.patch.object(
+                    BenchmarkConfig,
+                    "to_dict",
+                    metadata_only_asdict,
+                ):
+                    return canonical_write_metadata(execution)
+
+            with mock.patch.object(
+                controller_module._Execution,
+                "_write_metadata",
+                old_asdict_write_metadata,
+            ):
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code = main(
+                        [
+                            "run",
+                            str(config_dir / target["config"]),
+                            "--runs-dir",
+                            str(runs_root),
+                        ]
+                    )
+            self.assertEqual(code, 0)
+            install_explicit_mock_sampler(runs_root / target["run_id"])
+
+            with mock.patch(
+                "joulewise.analysis_engine.inputs.custody_telemetry_identity",
+                return_value=PRODUCTION_TELEMETRY_IDENTITY,
+            ):
+                loaded = load_analysis_inputs(
+                    manifest_path,
+                    runs_root,
+                    self.floor_path,
+                    strict_validator=validate_bundle,
+                )
+
+            evidence = loaded.registered[target["entry_id"]]
+            self.assertNotIn("tokenizer_json_sha256", evidence.raw_config["model"])
+            self.assertNotIn("chat_template_sha256", evidence.raw_config["model"])
+            self.assertIsNone(evidence.metadata["model"]["tokenizer_json_sha256"])
+            self.assertIsNone(evidence.metadata["model"]["chat_template_sha256"])
+            self.assertEqual(evidence.inclusion_status, "excluded")
+            self.assertIn("config_hash_mismatch", evidence.base_reason_codes)
 
     def test_complete_strict_current_bundle_set_derives_deterministic_fail_closed_artifact(self):
         first = analyze_claims(

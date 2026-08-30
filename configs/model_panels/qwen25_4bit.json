@@ -1,0 +1,103 @@
+{
+  "schema_version": "joulewise.model_panel.v1",
+  "entries": [
+    {
+      "model_id": "qwen25_0p5b",
+      "name": "Qwen2.5-0.5B-Instruct-4bit",
+      "family": "qwen2.5",
+      "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+      "revision": "a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3",
+      "weight_format": "mlx",
+      "quantization": {
+        "name": "int4",
+        "bits": 4,
+        "group_size": 64
+      },
+      "context_window": 32768,
+      "tokenizer_json_sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+      "vocab_size": 151936,
+      "license": "Apache-2.0",
+      "model_type": "qwen2",
+      "num_hidden_layers": 24,
+      "hidden_size": 896,
+      "chat_template_applied": true,
+      "enable_thinking": "not_applicable",
+      "chat_template_sha256": "d5495a1e5db0611132a97e46a65dbb64a642a499421228b9c8b93229097fa9a4",
+      "rendering_pinset_id": null,
+      "admission": {
+        "status": "admitted",
+        "decision": "D-016/D-164",
+        "evidence": [
+          "docs/decision_log.md#d-016-benchmark-model-selection",
+          "docs/process_traces/2026-08-28-ladder-consult/04-MAGISTRATE-RULING.md"
+        ]
+      },
+      "tag": "qwen25-0p5b-mlx"
+    },
+    {
+      "model_id": "qwen25_1p5b",
+      "name": "Qwen2.5-1.5B-Instruct-4bit",
+      "family": "qwen2.5",
+      "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+      "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+      "weight_format": "mlx",
+      "quantization": {
+        "name": "int4",
+        "bits": 4,
+        "group_size": 64
+      },
+      "context_window": 32768,
+      "tokenizer_json_sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+      "vocab_size": 151936,
+      "license": "Apache-2.0",
+      "model_type": "qwen2",
+      "num_hidden_layers": 28,
+      "hidden_size": 1536,
+      "chat_template_applied": true,
+      "enable_thinking": "not_applicable",
+      "chat_template_sha256": "d5495a1e5db0611132a97e46a65dbb64a642a499421228b9c8b93229097fa9a4",
+      "rendering_pinset_id": null,
+      "admission": {
+        "status": "admitted",
+        "decision": "D-016",
+        "evidence": [
+          "docs/decision_log.md#d-016-benchmark-model-selection"
+        ]
+      },
+      "tag": "qwen25-1p5b-mlx"
+    },
+    {
+      "model_id": "qwen25_7b",
+      "name": "Qwen2.5-7B-Instruct-4bit",
+      "family": "qwen2.5",
+      "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+      "weight_format": "mlx",
+      "quantization": {
+        "name": "int4",
+        "bits": 4,
+        "group_size": 64
+      },
+      "context_window": 32768,
+      "tokenizer_json_sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf",
+      "vocab_size": 152064,
+      "license": "Apache-2.0",
+      "model_type": "qwen2",
+      "num_hidden_layers": 28,
+      "hidden_size": 3584,
+      "chat_template_applied": true,
+      "enable_thinking": "not_applicable",
+      "chat_template_sha256": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+      "rendering_pinset_id": null,
+      "admission": {
+        "status": "admitted",
+        "decision": "D-016",
+        "evidence": [
+          "docs/decision_log.md#d-016-benchmark-model-selection"
+        ]
+      },
+      "tag": "qwen25-7b-mlx"
+    }
+  ],
+  "rendering_pinsets": []
+}

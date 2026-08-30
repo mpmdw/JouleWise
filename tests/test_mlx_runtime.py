@@ -30,7 +30,7 @@ from joulewise.provenance import (
     sha256_hex,
     suite_prompt_rollup,
 )
-from joulewise.schemas import BenchmarkConfig, FailureReason
+from joulewise.schemas import BenchmarkConfig, FailureReason, SchemaError
 from joulewise.suite import (
     ITEM_END,
     ITEM_START,
@@ -48,6 +48,7 @@ def make_config(
     *,
     workload_profile: dict[str, Any] | None = None,
     run_id: str | None = None,
+    model: dict[str, Any] | None = None,
 ) -> BenchmarkConfig:
     data: dict[str, Any] = {
         "schema_version": "0.1",
@@ -75,6 +76,8 @@ def make_config(
     }
     if workload_profile is not None:
         data["workload_profile"] = {**data["workload_profile"], **workload_profile}
+    if model is not None:
+        data["model"] = {**data["model"], **model}
     if run_id is not None:
         data["run_id"] = run_id
     return BenchmarkConfig.from_mapping(data)
@@ -288,6 +291,155 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual(result.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
         self.assertIn("[mac]", result.message)
         self.assertIn("not installed", result.message)
+
+    def test_prepare_verifies_model_identity_pins_before_load(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="mlx-model-pin-") as temporary:
+            mirror = Path(temporary)
+            tokenizer_bytes = b'{"version":"fixture"}\n'
+            chat_template = "{{ fixture_template }}"
+            (mirror / "tokenizer.json").write_bytes(tokenizer_bytes)
+            (mirror / "tokenizer_config.json").write_text(
+                json.dumps({"chat_template": chat_template}),
+                encoding="utf-8",
+            )
+            config = make_config(
+                model={
+                    "source": str(mirror),
+                    "tokenizer_json_sha256": sha256_hex(tokenizer_bytes),
+                    "chat_template_sha256": sha256_hex(chat_template.encode("utf-8")),
+                }
+            )
+            adapter = MlxRuntimeAdapter(FakeClock())
+            fake_mlx = FakeMlxLm([])
+            load_calls: list[str] = []
+
+            def fake_load(source, revision=None, return_config=True):
+                load_calls.append(source)
+                return object(), FakeTokenizer(), {"model_type": "fake"}
+
+            fake_mlx.load = fake_load  # type: ignore[attr-defined]
+            adapter._import_mlx_lm = lambda: fake_mlx  # type: ignore[method-assign]
+
+            result = adapter.prepare(config)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(load_calls, [str(mirror)])
+
+    def test_prepare_paired_pins_execute_both_hash_checks(self) -> None:
+        class HashProbeCalled(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory(prefix="mlx-model-pin-") as temporary:
+            mirror = Path(temporary)
+            tokenizer_bytes = b'{"version":"fixture"}\n'
+            chat_template = "{{ fixture_template }}"
+            (mirror / "tokenizer.json").write_bytes(tokenizer_bytes)
+            (mirror / "tokenizer_config.json").write_text(
+                json.dumps({"chat_template": chat_template}),
+                encoding="utf-8",
+            )
+            config = make_config(
+                model={
+                    "source": str(mirror),
+                    "tokenizer_json_sha256": sha256_hex(tokenizer_bytes),
+                    "chat_template_sha256": sha256_hex(chat_template.encode("utf-8")),
+                }
+            )
+            adapter = MlxRuntimeAdapter(FakeClock())
+            for function_name, label in (
+                ("_sha256_file", "tokenizer hash check called"),
+                ("sha256_hex", "template hash check called"),
+            ):
+                with self.subTest(function_name=function_name):
+                    with patch.object(
+                        mlx_runtime,
+                        function_name,
+                        side_effect=HashProbeCalled(label),
+                    ):
+                        with self.assertRaisesRegex(HashProbeCalled, label):
+                            adapter.prepare(config)
+
+    def test_prepare_refuses_tokenizer_pin_mismatch_before_backend_import(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="mlx-model-pin-") as temporary:
+            mirror = Path(temporary)
+            (mirror / "tokenizer.json").write_bytes(b"different")
+            config = make_config(
+                model={
+                    "source": str(mirror),
+                    "tokenizer_json_sha256": "a" * 64,
+                    "chat_template_sha256": sha256_hex(b"actual"),
+                }
+            )
+            adapter = MlxRuntimeAdapter(FakeClock())
+            adapter._import_mlx_lm = (  # type: ignore[method-assign]
+                lambda: self.fail("backend import occurred before tokenizer pin refusal")
+            )
+
+            result = adapter.prepare(config)
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_reason, FailureReason.MODEL_IDENTITY_MISMATCH)
+        self.assertIn("mlx_model_tokenizer_json_sha256_mismatch", result.message)
+
+    def test_model_config_refuses_template_only_identity_pin(self) -> None:
+        with self.assertRaisesRegex(
+            SchemaError,
+            "model_identity_sha256_pins_incomplete",
+        ):
+            make_config(model={"chat_template_sha256": "b" * 64})
+
+    def test_prepare_refuses_chat_template_pin_mismatch_before_backend_import(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="mlx-model-pin-") as temporary:
+            mirror = Path(temporary)
+            tokenizer_bytes = b'{"version":"fixture"}\n'
+            (mirror / "tokenizer.json").write_bytes(tokenizer_bytes)
+            (mirror / "tokenizer_config.json").write_text(
+                json.dumps({"chat_template": "actual"}),
+                encoding="utf-8",
+            )
+            config = make_config(
+                model={
+                    "source": str(mirror),
+                    "tokenizer_json_sha256": sha256_hex(tokenizer_bytes),
+                    "chat_template_sha256": "b" * 64,
+                }
+            )
+            adapter = MlxRuntimeAdapter(FakeClock())
+            adapter._import_mlx_lm = (  # type: ignore[method-assign]
+                lambda: self.fail("backend import occurred before template pin refusal")
+            )
+
+            result = adapter.prepare(config)
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_reason, FailureReason.MODEL_IDENTITY_MISMATCH)
+        self.assertIn("mlx_model_chat_template_sha256_mismatch", result.message)
+
+    def test_prepare_missing_pinned_files_are_identity_mismatches(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="mlx-model-pin-") as temporary:
+            mirror = Path(temporary)
+            paired_pins = {
+                "source": str(mirror),
+                "tokenizer_json_sha256": "a" * 64,
+                "chat_template_sha256": "b" * 64,
+            }
+            adapter = MlxRuntimeAdapter(FakeClock())
+            result = adapter.prepare(make_config(model=paired_pins))
+            self.assertEqual(
+                result.failure_reason,
+                FailureReason.MODEL_IDENTITY_MISMATCH,
+            )
+            self.assertIn("mlx_model_tokenizer_json_pin_unavailable", result.message)
+
+            tokenizer_bytes = b'{"version":"fixture"}\n'
+            (mirror / "tokenizer.json").write_bytes(tokenizer_bytes)
+            paired_pins["tokenizer_json_sha256"] = sha256_hex(tokenizer_bytes)
+            result = adapter.prepare(make_config(model=paired_pins))
+            self.assertEqual(
+                result.failure_reason,
+                FailureReason.MODEL_IDENTITY_MISMATCH,
+            )
+            self.assertIn("mlx_model_chat_template_pin_unavailable", result.message)
 
     def test_identity_projection_metadata_uses_loaded_tokenizer_and_sampler_probe(self) -> None:
         adapter, fake_mlx = self.prepared_adapter(["A"])

@@ -445,7 +445,40 @@
       "type": "object"
     },
     "model": {
+      "oneOf": [
+        {
+          "properties": {
+            "chat_template_sha256": {
+              "type": "string"
+            },
+            "tokenizer_json_sha256": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "tokenizer_json_sha256",
+            "chat_template_sha256"
+          ]
+        },
+        {
+          "properties": {
+            "chat_template_sha256": {
+              "type": "null"
+            },
+            "tokenizer_json_sha256": {
+              "type": "null"
+            }
+          }
+        }
+      ],
       "properties": {
+        "chat_template_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "context_window": {
           "minimum": 1,
           "type": [
@@ -477,6 +510,13 @@
         "source": {
           "minLength": 1,
           "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tokenizer_json_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
           "type": [
             "string",
             "null"

@@ -1107,6 +1107,7 @@ class StatusByReasonTests(unittest.TestCase):
                 FailureReason.UNSUPPORTED_WORKLOAD: RunStatus.UNSUPPORTED,
                 FailureReason.RUNTIME_UNAVAILABLE: RunStatus.UNSUPPORTED,
                 FailureReason.TELEMETRY_UNAVAILABLE: RunStatus.UNSUPPORTED,
+                FailureReason.MODEL_IDENTITY_MISMATCH: RunStatus.FAILED,
                 FailureReason.PERMISSION_DENIED: RunStatus.FAILED,
                 FailureReason.TRANSPORT_UNAVAILABLE: RunStatus.FAILED,
                 FailureReason.CLEANUP_FAILED: RunStatus.FAILED,
