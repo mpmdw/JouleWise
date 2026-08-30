@@ -10,12 +10,18 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+from joulewise.reduce import MIN_PHASE_SAMPLES
+
 
 SCHEMA_VERSION = "joulewise.g2a_prefill_selection.v1"
 LADDER = (512, 1024, 2048, 4096)
 MIN_SMALL_MEMBERS = 5
 MIN_OVERLAPPING_POWER_INTERVAL_COUNT = 5
-REDUCER_MIN_PHASE_SAMPLES = 3
+# The pre-registration pinned the reducer floor at 3; the live constant is
+# the authority, and a drifted reducer refuses rather than silently rebasing
+# the pre-registered rule.
+PREREGISTERED_MIN_PHASE_SAMPLES = 3
+REDUCER_MIN_PHASE_SAMPLES = MIN_PHASE_SAMPLES
 
 
 class SummaryError(ValueError):
@@ -60,11 +66,27 @@ def _normalized_rows(value: Any) -> list[dict[str, Any]]:
             raise SummaryError("small_members_not_integer")
         if not isinstance(all_small, bool):
             raise SummaryError("all_small_count_ge_5_not_boolean")
+        minimum = item.get("small_minimum_count")
+        if small_members > 0:
+            if isinstance(minimum, bool) or not isinstance(minimum, int):
+                raise SummaryError("small_minimum_count_not_integer")
+            # The summary's derived fields must agree with each other; a
+            # contradictory record never authorizes a selection.
+            if all_small != (
+                minimum >= MIN_OVERLAPPING_POWER_INTERVAL_COUNT
+            ):
+                raise SummaryError("summary_internally_contradictory")
+        else:
+            if minimum is not None:
+                raise SummaryError("summary_internally_contradictory")
+            if all_small:
+                raise SummaryError("summary_internally_contradictory")
         rows.append(
             {
                 "all_small_count_ge_5": all_small,
                 "length": length,
                 "small_members": small_members,
+                "small_minimum_count": minimum,
             }
         )
     rows.sort(key=lambda row: row["length"])
@@ -74,6 +96,8 @@ def _normalized_rows(value: Any) -> list[dict[str, Any]]:
 
 
 def select(summary: Any, *, summary_sha256: str) -> dict[str, Any]:
+    if REDUCER_MIN_PHASE_SAMPLES != PREREGISTERED_MIN_PHASE_SAMPLES:
+        raise SummaryError("reducer_floor_drift")
     rows = _normalized_rows(summary)
     qualifying = [
         row["length"]
