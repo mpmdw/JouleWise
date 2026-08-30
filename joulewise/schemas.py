@@ -1130,10 +1130,28 @@ class BenchmarkConfig:
                 "model": {
                     "type": "object",
                     "required": ["name"],
-                    "dependentRequired": {
-                        "tokenizer_json_sha256": ["chat_template_sha256"],
-                        "chat_template_sha256": ["tokenizer_json_sha256"],
-                    },
+                    # Both identity pins or neither: an explicit null is not
+                    # a pin, so presence-based dependentRequired is not
+                    # enough — these branches reject one-string-one-null
+                    # exactly as ModelConfig.__post_init__ does.
+                    "oneOf": [
+                        {
+                            "properties": {
+                                "tokenizer_json_sha256": {"type": "string"},
+                                "chat_template_sha256": {"type": "string"},
+                            },
+                            "required": [
+                                "tokenizer_json_sha256",
+                                "chat_template_sha256",
+                            ],
+                        },
+                        {
+                            "properties": {
+                                "tokenizer_json_sha256": {"type": "null"},
+                                "chat_template_sha256": {"type": "null"},
+                            },
+                        },
+                    ],
                     "properties": {
                         "name": non_empty_string,
                         "family": nullable_string,
