@@ -299,6 +299,67 @@ def _stage_present(
     ]
 
 
+def _assert_exact_member_set(
+    label: str, expected: set[str], observed: set[str]
+) -> None:
+    missing = sorted(expected - observed)
+    extra = sorted(observed - expected)
+    if missing or extra:
+        raise AssertionFailure(
+            f"{label} member set mismatch missing={missing} extra={extra}"
+        )
+
+
+def _ratified_g2_boundary_snapshot(
+    args: argparse.Namespace,
+    binding: Mapping[str, Any],
+) -> tuple[Any, Mapping[str, Any]]:
+    """Authenticate the R-6 physical-ahead stop without advancing its pin."""
+
+    record = _read_object(
+        args.terminal_boundary_record, "post-bracket terminal boundary record"
+    )
+    snapshot = load_calibration_ledger_snapshot(
+        args.calibration_ledger,
+        args.head_pin,
+        require_committed_pin=False,
+        verify_custody=False,
+    )
+    if snapshot.refusal_reasons:
+        raise AssertionFailure(
+            "reviewed-refresh ledger snapshot is not exact "
+            f"reasons={list(snapshot.refusal_reasons)}"
+        )
+    session_id = binding.get("session_id")
+    if not isinstance(session_id, str) or not session_id:
+        raise AssertionFailure("bracket binding session_id is absent or malformed")
+    candidate = record.get("terminal_head_pin_candidate")
+    if (
+        record.get("session_id") != session_id
+        or record.get("session_state") != "finalized"
+        or record.get("pin_relation") != "physical_ahead"
+        or record.get("refusal_code") != "calibration_ledger_head_mismatch"
+        or not isinstance(candidate, Mapping)
+    ):
+        raise AssertionFailure(
+            "ratified post-bracket boundary record is not the expected mismatch shape "
+            f"session_state={record.get('session_state')} "
+            f"pin_relation={record.get('pin_relation')} "
+            f"refusal_code={record.get('refusal_code')} candidate={candidate}"
+        )
+    expected_candidate = {
+        "sequence": snapshot.head_sequence,
+        "head_digest": snapshot.head_digest,
+        "ledger_schema": snapshot.ledger_schema,
+    }
+    if dict(candidate) != expected_candidate:
+        raise AssertionFailure(
+            "terminal head candidate disagrees with physical head "
+            f"candidate={dict(candidate)} expected={expected_candidate}"
+        )
+    return snapshot, dict(candidate)
+
+
 def _parse_expected_refusals(value: str) -> frozenset[str]:
     result = frozenset(item.strip() for item in value.split(",") if item.strip())
     if not result:
@@ -336,6 +397,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--whole-window-verdict", required=True, type=Path)
     parser.add_argument("--calibration-ledger", required=True, type=Path)
     parser.add_argument("--head-pin", type=Path)
+    parser.add_argument(
+        "--terminal-boundary-record",
+        type=Path,
+        help=(
+            "required for non-finalized G2 checks; the preserved session-status "
+            "record captured before the desk reviewed-refresh pin advance"
+        ),
+    )
     parser.add_argument(
         "--finalized-manifest",
         type=Path,
@@ -498,6 +567,10 @@ def _run_assertions(args: argparse.Namespace) -> int:
     )
     if not _require_args(args, required):
         return 2
+    if args.finalized_manifest is None and not _require_args(
+        args, ("terminal_boundary_record",)
+    ):
+        return 2
     reporter = Reporter()
     # A relative --runs-root is anchored under --custody-root, exactly as the
     # finalizer anchors relative paths under its custody root
@@ -621,9 +694,9 @@ def _run_assertions(args: argparse.Namespace) -> int:
                 "campaign_cooldown_evidence returned empty for "
                 f"collection_manifest_id={collection_id}"
             )
-        missing = sorted(expected_ids - cooldowns.keys())
-        if missing:
-            raise AssertionFailure(f"collection join omitted bundles={missing}")
+        _assert_exact_member_set(
+            "S11-A2 collection join", expected_ids, set(cooldowns)
+        )
         missing_bundles = sorted(
             run_id
             for run_id in expected_ids
@@ -721,6 +794,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
         if not selected_ids:
             raise AssertionFailure("S11-A2 did not identify collected bundles")
         joined = campaign_cooldown_evidence(runs_root, collection_id)
+        _assert_exact_member_set("F5-1 cooldown join", selected_ids, set(joined))
         bad = {
             bundle_id: joined.get(bundle_id)
             for bundle_id in sorted(selected_ids)
@@ -749,9 +823,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
         verdict_ids = {
             item for item in verdict.get("bundle_ids", []) if isinstance(item, str)
         }
-        missing = sorted(selected_ids - verdict_ids)
-        if missing:
-            raise AssertionFailure(f"verdict omits collected bundles={missing}")
+        _assert_exact_member_set("F5-2 verdict", selected_ids, verdict_ids)
         basis = verdict.get("evaluation_basis")
         basis_sha = basis.get("sha256") if isinstance(basis, Mapping) else None
         semantics_id = (
@@ -768,12 +840,17 @@ def _run_assertions(args: argparse.Namespace) -> int:
         registered_policy = _registered_policy(policy_sha)
         if not isinstance(registered_policy, Mapping):
             raise AssertionFailure("whole-window campaign policy is not registered")
-        snapshot = load_calibration_ledger_snapshot(
-            args.calibration_ledger,
-            args.head_pin,
-            require_committed_pin=False,
-            verify_custody=False,
-        )
+        candidate: Mapping[str, Any] | None = None
+        if finalized is None:
+            binding = _read_object(args.bracket_binding, "bracket binding")
+            snapshot, candidate = _ratified_g2_boundary_snapshot(args, binding)
+        else:
+            snapshot = load_calibration_ledger_snapshot(
+                args.calibration_ledger,
+                args.head_pin,
+                require_committed_pin=False,
+                verify_custody=False,
+            )
         session = AuthenticatedConsumptionSession(
             runs_root,
             selected_ids,
@@ -798,7 +875,14 @@ def _run_assertions(args: argparse.Namespace) -> int:
                 f"verdict is not an independently clean pass: "
                 f"status={status} reasons={list(reasons)}"
             )
-        return f"status={status} reasons={list(reasons)} attachment=recomputed"
+        boundary = (
+            f" boundary=physical_ahead candidate_sequence={candidate['sequence']}"
+            if candidate is not None
+            else ""
+        )
+        return (
+            f"status={status} reasons={list(reasons)} attachment=recomputed{boundary}"
+        )
 
     if a2_passed:
         reporter.assertion("F5-2", check_f52)
@@ -806,6 +890,14 @@ def _run_assertions(args: argparse.Namespace) -> int:
         reporter.skip("F5-2", "prerequisite=S11-A2")
 
     def check_f53() -> str:
+        collected_ids = {
+            run_id
+            for _path, record in science
+            for run_id in _member_run_ids(record)
+        }
+        _assert_exact_member_set(
+            "F5-3 science campaign records", selected_ids, collected_ids
+        )
         if finalized is not None:
             authenticated = _finalized_runs_root(
                 finalized,
@@ -815,12 +907,8 @@ def _run_assertions(args: argparse.Namespace) -> int:
             return f"finalized_authenticated_runs_root={authenticated}"
         from scripts.run_campaign import _validated_bracket_binding_input
 
-        snapshot = load_calibration_ledger_snapshot(
-            args.calibration_ledger,
-            args.head_pin,
-            require_committed_pin=False,
-            verify_custody=False,
-        )
+        binding_input = _read_object(args.bracket_binding, "bracket binding")
+        snapshot, candidate = _ratified_g2_boundary_snapshot(args, binding_input)
         binding, identity = _validated_bracket_binding_input(
             args.bracket_binding,
             snapshot=snapshot,
@@ -830,7 +918,10 @@ def _run_assertions(args: argparse.Namespace) -> int:
             raise AssertionFailure(
                 "production bracket-binding loader refused runs_root identity"
             )
-        return f"runs_root={identity['runs_root']} binding_digest={binding['binding_digest']}"
+        return (
+            f"runs_root={identity['runs_root']} binding_digest={binding['binding_digest']} "
+            f"boundary=physical_ahead candidate_sequence={candidate['sequence']}"
+        )
 
     if a2_passed:
         reporter.assertion("F5-3", check_f53)
@@ -876,6 +967,9 @@ def _run_assertions(args: argparse.Namespace) -> int:
             )
             for source in membership.sources
         }
+        _assert_exact_member_set(
+            "F5-4 whole-window membership", selected_ids, set(selected_by_id)
+        )
         excluded: list[str] = []
         survivors: list[str] = []
         for entry in valid:

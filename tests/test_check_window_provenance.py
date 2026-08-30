@@ -5,7 +5,6 @@ import hashlib
 import io
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -27,6 +26,12 @@ from joulewise.whole_window import build_row_provenance, canonical_sha256
 from scripts.check_window_provenance import (
     DEFAULT_EXPECTED_REFUSALS,
     main as check_main,
+)
+from scripts.gen_g2_phase_d import (
+    BEGIN_MARKER as PHASE_D_BEGIN_MARKER,
+    END_MARKER as PHASE_D_END_MARKER,
+    render_generated_region,
+    validate_pinned_anchors,
 )
 from tests.test_analysis_finalizer import install_synthetic_finalization_fixture
 
@@ -68,6 +73,8 @@ def _normal_argv(fixture: dict) -> list[str]:
         str(fixture["ledger_path"]),
         "--head-pin",
         str(fixture["root"] / "calibration_ledger_head.json"),
+        "--terminal-boundary-record",
+        str(fixture["terminal_boundary_record"]),
     ]
 
 
@@ -114,6 +121,48 @@ def _install_s11_checker_fixture(root: Path) -> dict:
     manifest["config_dir"] = str(
         fixture["prospective_path"].parent / "01_decode_contrast_blocks_01_05"
     )
+    first_stage = fixture["prospective"]["stage_manifests"][0]
+    order = json.loads(
+        (fixture["prospective_path"].parent / first_stage["manifest_path"]).read_text()
+    )
+    expected_ids = {
+        row["run_id"] for row in order["executed_order"] if row["block_index"] == 1
+    }
+    manifest["members"] = [
+        member for member in manifest["members"] if member["run_id"] in expected_ids
+    ]
+    for index, member in enumerate(manifest["members"]):
+        member["role"] = (
+            run_campaign_module.NEG8_REFERENCE_ROLE
+            if index in {0, len(manifest["members"]) - 1}
+            else None
+        )
+        member["sentinel_position"] = (
+            "start"
+            if index == 0
+            else "end"
+            if index == len(manifest["members"]) - 1
+            else None
+        )
+        member["scientific_config_sha256"] = "8" * 64
+        member["canonical_neg8_workload"] = member["role"] is not None
+        if member["role"] is not None:
+            gross = 8.0 if index == 0 else 8.001
+            idle = 7.0 if index == 0 else 7.001
+            summary_path = runs_root / member["run_id"] / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text())
+            summary.update(
+                gross_energy_j=gross,
+                idle_subtracted_energy_j=idle,
+                energy_anchor_shift_envelopes={
+                    "/gross_energy_j": {
+                        "point_j": gross,
+                        "lower_j": gross - 0.001,
+                        "upper_j": gross + 0.001,
+                    }
+                },
+            )
+            _write_json(summary_path, summary)
     manifest["session_id"] = "synthetic-science-session"
     manifest["first_physical_run_id"] = manifest["members"][0]["run_id"]
     cooldown_dir = manifest_path.parent / "cooldown"
@@ -154,6 +203,21 @@ def _install_s11_checker_fixture(root: Path) -> dict:
     in_runs_binding = runs_root / "bracket_binding.json"
     in_runs_binding.write_bytes(fixture["bracket_path"].read_bytes())
     fixture["bracket_path"] = in_runs_binding
+    head_pin = fixture["root"] / "calibration_ledger_head.json"
+    fixture["terminal_head_pin"] = json.loads(head_pin.read_text())
+    boundary_record = fixture["root"] / "post-bracket-terminal-boundary.json"
+    _write_json(
+        boundary_record,
+        {
+            "status": "session_status",
+            "session_id": "synthetic-session",
+            "session_state": "finalized",
+            "pin_relation": "physical_ahead",
+            "refusal_code": "calibration_ledger_head_mismatch",
+            "terminal_head_pin_candidate": fixture["terminal_head_pin"],
+        },
+    )
+    fixture["terminal_boundary_record"] = boundary_record
     return fixture
 
 
@@ -350,11 +414,11 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             runsheet.count(
                 '--expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST"'
             ),
-            8,
+            7,
         )
         self.assertEqual(
             runsheet.count('--step6-confirmation-table "$STEP6_CONFIRMATION_TABLE"'),
-            3,
+            2,
         )
         for artifact in (
             "d117_family_publication_v4.json",
@@ -371,81 +435,33 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             repo
             / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
         ).read_text()
-        phase_d = runsheet.split("## Phase D", 1)[1].split("## Phase E", 1)[0]
+        validate_pinned_anchors(runbook)
+        expected = render_generated_region(runbook)
+        start = runsheet.index(PHASE_D_BEGIN_MARKER)
+        end = runsheet.index(PHASE_D_END_MARKER, start) + len(PHASE_D_END_MARKER) + 1
+        self.assertEqual(runsheet[start:end].encode(), expected.encode())
 
-        def line_of(text: str, token: str, start: int = 0) -> int:
-            return text[: text.index(token, start)].count("\n") + 1
-
-        actual_anchors = {
-            "start": line_of(runbook, "# First executable action:"),
-            "bound_path": line_of(
-                runbook, 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"'
-            ),
-            "stage_settle": line_of(runbook, "  settle\n  quarantine_stale_lock"),
-            "stage_list": line_of(runbook, "run_stage_list() {"),
-            "chain_start": line_of(
-                runbook, 'cd "$REPO"', runbook.index("run_stage_list() {")
-            ),
-        }
-        self.assertEqual(
-            actual_anchors,
-            {
-                "start": 1516,
-                "bound_path": 1541,
-                "stage_settle": 1636,
-                "stage_list": 1653,
-                "chain_start": 1663,
-            },
-            f"runbook anchors drifted: {actual_anchors}",
+    def test_phase_d_generation_rejects_runbook_settle_mutation(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        runbook = (repo / "docs/phase_2/window_runbook.md").read_text()
+        mutated = runbook.replace(
+            '  /bin/sleep "$SETTLE_S"', "  /bin/sleep 999", 1
         )
+        with self.assertRaisesRegex(ValueError, "pinned anchor 1556 drifted"):
+            render_generated_region(mutated)
 
-        def function_body(text: str, name: str) -> list[str]:
-            match = re.search(rf"(?ms)^{re.escape(name)}\(\) \{{\n(.*?)^\}}", text)
-            self.assertIsNotNone(match, f"missing {name} at anchors {actual_anchors}")
-            return [line.strip() for line in match.group(1).splitlines() if line.strip()]
-
-        for function, required_lines in {
-            "run_stage": (
-                "settle",
-                'quarantine_stale_lock "$root"',
-                '"$PY" "$REPO/scripts/run_campaign.py" "$config_dir" \\',
-                '--runs-dir "$root" \\',
-                '--log "$log" \\',
-                '--max-failures 1',
-            ),
-            "run_stage_list": (
-                'local list="$1"',
-                'while IFS= read -r stage; do',
-                'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REPO/$stage" "$PRE_CAL_CUSTODY" "$stage"',
-                'done < "$list"',
-            ),
-        }.items():
-            source = function_body(runbook, function)
-            rendered = function_body(phase_d, function)
-            self.assertEqual(
-                [line for line in source if line in required_lines],
-                list(required_lines),
-                f"runbook {function} extraction failed at {actual_anchors}",
-            )
-            self.assertEqual(
-                [line for line in rendered if line in required_lines],
-                list(required_lines),
-                f"runsheet {function} drifted from runbook at {actual_anchors}",
-            )
-
-        bound_assignment = 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"'
-        self.assertIn(bound_assignment, runbook)
-        self.assertIn(bound_assignment, runsheet)
-        self.assertNotIn('NEG8_DRIFT_BOUND="$RUNS_ROOT/', runsheet)
-        for exact_step in (
-            'screen_pre_calibration "$PRE_CAL_CUSTODY"',
-            'run_stage "$BOUND_RUNS_ROOT" "$BOUND_LOG" "$BOUND_CONFIG_ROOT" "$PRE_CAL_CUSTODY" \\',
-            '--neg8-drift-bound-output "$NEG8_DRIFT_BOUND" \\',
-            '--runs-dir "$BOUND_RUNS_ROOT"',
-            'run_stage_list "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"',
-        ):
-            self.assertIn(exact_step, runbook)
-            self.assertIn(exact_step, phase_d)
+    def test_phase_d_byte_comparison_rejects_runsheet_settle_mutation(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        runbook = (repo / "docs/phase_2/window_runbook.md").read_text()
+        runsheet = (
+            repo
+            / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
+        ).read_text()
+        start = runsheet.index(PHASE_D_BEGIN_MARKER)
+        end = runsheet.index(PHASE_D_END_MARKER, start) + len(PHASE_D_END_MARKER) + 1
+        actual = runsheet[start:end]
+        mutated = actual.replace('  /bin/sleep "$SETTLE_S"', "  /bin/sleep 999", 1)
+        self.assertNotEqual(mutated.encode(), render_generated_region(runbook).encode())
 
     def test_runsheet_pins_ruled_termination_and_governed_chain(self) -> None:
         runsheet = (
@@ -456,19 +472,19 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             '--lifecycle-event start',
             '# Final settle is chain-owned',
             '--lifecycle-event settle',
-            'SLOT=pre ATTEMPT_ID="$PRE_ATTEMPT_ID"',
             'screen_pre_calibration "$PRE_CAL_CUSTODY"',
             'run_stage "$BOUND_RUNS_ROOT"',
             '--derive-neg8-drift-bound "$BOUND_MANIFEST"',
             'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/start_triplet"',
-            "# R-1: authenticate the first frozen stage through the runbook's stage list.",
+            "# G2-b delta: stop the authentic first stage after block 1",
             'test "$SCIENCE_RC" = 130',
             'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/midpoint"',
             'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/end_triplet"',
-            'SLOT=post ATTEMPT_ID="$POST_ATTEMPT_ID"',
-            '--lifecycle-event completion',
+            'POST_CAL_CUSTODY="$(calibrate_slot post "$POST_ATTEMPT_ID")"',
+            'post-bracket-terminal-boundary.json',
         )
-        positions = [runsheet.index(token, 10000) for token in ordered_tokens]
+        start = runsheet.index(PHASE_D_BEGIN_MARKER)
+        positions = [runsheet.index(token, start) for token in ordered_tokens]
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn('SLOT="$SLOT"', runsheet)
         self.assertNotIn('ATTEMPT_ID="$ATTEMPT_ID"', runsheet)
@@ -477,6 +493,8 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertIn("four block-1 bundle", runsheet)
         self.assertIn("diagnostic and non-claim by construction", runsheet)
         self.assertIn("exact refusal-set equality", runsheet)
+        self.assertNotIn('--lifecycle-event completion\n', runsheet[start:runsheet.index(PHASE_D_END_MARKER)])
+        self.assertIn("tracked pin unchanged", runsheet)
 
     def test_runsheet_shakedown_gate_note_matches_cli_cardinality(self) -> None:
         runsheet = (
@@ -516,12 +534,22 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             Path(__file__).resolve().parents[1]
             / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
         ).read_text()
-        self.assertIn("mechanically re-cut to the exact `_v5` paths and digests", runsheet)
-        self.assertIn("for length in 512 1024 2048", runsheet)
+        self.assertIn("## G2-a — first machine evening", runsheet)
+        self.assertIn("## Desk day — reviewed pin, pack generation, estate 12", runsheet)
+        self.assertIn("## G2-b — evening before the transaction", runsheet)
+        self.assertIn("for length in 512 1024 2048 4096", runsheet)
         self.assertIn("Qwen3", runsheet)
         self.assertIn("in_window_sample_count", runsheet)
         self.assertIn("overlap_margin_above_three", runsheet)
-        self.assertIn("all_margin_ge_5", runsheet)
+        # Ratified selection (cold gate 2026-08-30): small-model count >= 5
+        # gates; the discarded margin-≥-5 reading (count >= 8) must be gone.
+        self.assertIn("all_small_count_ge_5", runsheet)
+        self.assertIn("all(.small_members >= 5)", runsheet)
+        self.assertNotIn("all_margin_ge_5", runsheet)
+        g2a = runsheet.split("## G2-a", 1)[1].split("## Desk day", 1)[0]
+        self.assertNotIn('test -f "$PACK_ROOT', g2a)
+        g2b = runsheet.split("## G2-b — evening before the transaction", 1)[1]
+        self.assertIn('test -f "$PACK_ROOT/analysis_manifest_v3.json"', g2b)
 
     def test_null_id_and_missing_sha_science_record_isolated_to_s11_a1(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
@@ -586,7 +614,10 @@ class CheckWindowProvenanceTests(unittest.TestCase):
                 code, output = _run(_normal_argv(fixture))
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
-            self.assertIn(f"collection join omitted bundles=['{omitted}']", output)
+            self.assertIn(
+                f"S11-A2 collection join member set mismatch missing=['{omitted}'] extra=[]",
+                output,
+            )
             for assertion_id in ("S11-A3", "F5-1", "F5-2", "F5-3", "F5-4"):
                 self.assertIn(
                     f"SKIP {assertion_id} prerequisite=S11-A2", output
@@ -612,6 +643,28 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
             self.assertIn(f"frozen roster bundles missing=['{deleted}']", output)
+
+    def test_added_science_member_isolated_to_s11_a2(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            manifest_path = fixture["runs_root"] / "campaign_manifests" / "synthetic.json"
+            manifest = json.loads(manifest_path.read_text())
+            added = "unexpected-block-2-member"
+            source = manifest["members"][-1]
+            member = copy.deepcopy(source)
+            member["run_id"] = added
+            member["bundle_ids"] = [added]
+            member["preceding_campaign_cooldown"]["following_run_id"] = added
+            manifest["members"].append(member)
+            _write_json(manifest_path, manifest)
+            shutil.copytree(fixture["runs_root"] / source["run_id"], fixture["runs_root"] / added)
+            code, output = _run(_normal_argv(fixture))
+            self.assertNotEqual(code, 0, output)
+            self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
+            self.assertIn(
+                f"S11-A2 collection join member set mismatch missing=[] extra=['{added}']",
+                output,
+            )
 
     def test_missing_cooldown_evidence_isolated_to_s11_a3(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
@@ -717,6 +770,29 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             code, output = _run(_normal_argv(fixture))
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["F5-2"], output)
+
+    def test_premature_pin_advance_fails_f5_2_and_f5_3(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            record = json.loads(fixture["terminal_boundary_record"].read_text())
+            record["pin_relation"] = "exact"
+            record["refusal_code"] = None
+            _write_json(fixture["terminal_boundary_record"], record)
+            code, output = _run(_normal_argv(fixture))
+            self.assertNotEqual(code, 0, output)
+            self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
+            self.assertIn("not the expected mismatch shape", output)
+
+    def test_missing_terminal_candidate_fails_f5_2_and_f5_3(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            record = json.loads(fixture["terminal_boundary_record"].read_text())
+            record["terminal_head_pin_candidate"] = None
+            _write_json(fixture["terminal_boundary_record"], record)
+            code, output = _run(_normal_argv(fixture))
+            self.assertNotEqual(code, 0, output)
+            self.assertEqual(self._fail_ids(output), ["F5-2", "F5-3"], output)
+            self.assertIn("candidate=None", output)
 
     def test_binding_runs_root_alias_isolated_to_f5_3(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
