@@ -162,10 +162,19 @@ class SelectG2APrefillLengthTests(unittest.TestCase):
         self.assertEqual(record["refusal"]["reason"], "reducer_floor_drift")
 
     def test_reducer_constant_is_imported_not_restated(self) -> None:
-        from joulewise.reduce import MIN_PHASE_SAMPLES
+        # Identity/equality oracles are vacuous here (small-int interning), so
+        # inspect the module source: the binding must come from the
+        # joulewise.reduce import, never from a literal.
+        import inspect
+        import re as _re
         import scripts.select_g2a_prefill_length as module
 
-        self.assertIs(module.REDUCER_MIN_PHASE_SAMPLES, MIN_PHASE_SAMPLES)
+        source = inspect.getsource(module)
+        self.assertIn("from joulewise.reduce import MIN_PHASE_SAMPLES", source)
+        bindings = _re.findall(
+            r"^REDUCER_MIN_PHASE_SAMPLES = (.+)$", source, flags=_re.MULTILINE
+        )
+        self.assertEqual(bindings, ["MIN_PHASE_SAMPLES"])
 
 
 if __name__ == "__main__":
