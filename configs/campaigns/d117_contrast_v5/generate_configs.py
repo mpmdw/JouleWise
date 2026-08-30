@@ -687,7 +687,7 @@ def replay_common_mode_dominance(
                 not isinstance(window, list)
                 or len(window) != 2
                 or not _common_mode_window_is_strictly_noncollapsed(
-                    window[0], window[1], bound
+                    window[0], window[1], authenticated_bound
                 )
                 for window in windows
             )

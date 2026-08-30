@@ -445,6 +445,14 @@
       "type": "object"
     },
     "model": {
+      "dependentRequired": {
+        "chat_template_sha256": [
+          "tokenizer_json_sha256"
+        ],
+        "tokenizer_json_sha256": [
+          "chat_template_sha256"
+        ]
+      },
       "properties": {
         "chat_template_sha256": {
           "pattern": "^[0-9a-f]{64}$",

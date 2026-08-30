@@ -17,6 +17,7 @@ from joulewise.schemas import (
     EnergyEvidence,
     FailureReason,
     IdleBaseline,
+    ModelConfig,
     PromptTokenEvidencePolicy,
     RunStatus,
     SchemaError,
@@ -122,6 +123,11 @@ def _fragment_matches(
         ):
             return False
     if isinstance(instance, dict):
+        for trigger, dependencies in fragment.get("dependentRequired", {}).items():
+            if trigger in instance and any(
+                dependency not in instance for dependency in dependencies
+            ):
+                return False
         for key, child in fragment.get("properties", {}).items():
             if key in instance and not _fragment_matches(instance[key], child, root):
                 return False
@@ -377,19 +383,34 @@ class BenchmarkConfigTests(unittest.TestCase):
                 ):
                     BenchmarkConfig.from_mapping(data)
 
-    def test_model_identity_sha256_pins_reject_incomplete_pair(self) -> None:
+    def test_model_identity_sha256_pins_reject_incomplete_pair_on_every_construction_path(
+        self,
+    ) -> None:
         base = json.loads(
             (ROOT / "configs" / "examples" / "mock_local.json").read_text()
         )
         for field in ("tokenizer_json_sha256", "chat_template_sha256"):
-            with self.subTest(field=field):
-                data = copy.deepcopy(base)
-                data["model"][field] = "a" * 64
+            data = copy.deepcopy(base)
+            data["model"][field] = "a" * 64
+            with self.subTest(path="dict_loader", field=field):
                 with self.assertRaisesRegex(
                     SchemaError,
                     "model_identity_sha256_pins_incomplete",
                 ):
                     BenchmarkConfig.from_mapping(data)
+            with self.subTest(path="direct_dataclass", field=field):
+                with self.assertRaisesRegex(
+                    SchemaError,
+                    "model_identity_sha256_pins_incomplete",
+                ):
+                    ModelConfig(name="direct-model", **{field: "a" * 64})
+            with self.subTest(path="exported_json_schema", field=field):
+                self.assertFalse(exported_config_semantics_accept(data))
+                if HAS_JSONSCHEMA:
+                    import jsonschema
+
+                    with self.assertRaises(jsonschema.ValidationError):
+                        jsonschema.validate(data, BenchmarkConfig.json_schema())
 
     def test_config_validate_and_exported_schema_semantic_parity_matrix(self) -> None:
         base = json.loads(
@@ -499,6 +520,87 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertIn(
             "model_identity_mismatch",
             schema["properties"]["failure_reason"]["anyOf"][0]["enum"],
+        )
+
+    def test_failure_reason_tracked_vocabularies_and_d012_mapping_match_enum(
+        self,
+    ) -> None:
+        from joulewise.controller import STATUS_BY_REASON
+
+        expected = [reason.value for reason in FailureReason]
+        live_schema = SummaryMetrics.json_schema()
+        golden_schema = json.loads(
+            (ROOT / "tests" / "goldens" / "output_schema.json").read_text()
+        )
+        contract = (
+            ROOT / "docs" / "contracts" / "adapter_contracts.md"
+        ).read_text(encoding="utf-8")
+        contract_section = contract.split("## Structured Failure Reasons", 1)[1]
+        contract_section = contract_section.split("\n## ", 1)[0]
+        contract_vocabulary = re.findall(
+            r"^- `([^`]+)`$", contract_section, flags=re.MULTILINE
+        )
+        decision_log = (ROOT / "docs" / "decision_log.md").read_text(
+            encoding="utf-8"
+        )
+        d012 = decision_log.split(
+            "## D-012: Failure-reason to run-status mapping", 1
+        )[1].split("\n---", 1)[0]
+        original_table = d012.split(
+            "2. A fixed mapping table owned by the controller:", 1
+        )[1].split("\n\nDecision:", 1)[0]
+        documented_status_by_reason: dict[str, str] = {}
+        for status in (RunStatus.UNSUPPORTED.value, RunStatus.FAILED.value):
+            status_row = re.search(
+                rf"^   - `{status}`:(.*?)(?=^   - `|\Z)",
+                original_table,
+                flags=re.MULTILINE | re.DOTALL,
+            )
+            if status_row is None:
+                self.fail(f"D-012 lacks its {status} row")
+            for reason in re.findall(r"`([a-z][a-z0-9_]*)`", status_row.group(1)):
+                documented_status_by_reason[reason] = status
+        amendment = re.search(
+            r"vocabulary is now (?P<count>[a-z]+) members\. "
+            r"`(?P<first>[a-z0-9_]+)`.*? and "
+            r"`(?P<second>[a-z0-9_]+)`.*?both map to "
+            r"`(?P<status>failed|unsupported)`",
+            d012,
+            flags=re.DOTALL,
+        )
+        if amendment is None:
+            self.fail("D-012 lacks its vocabulary amendment")
+        for group in ("first", "second"):
+            documented_status_by_reason[amendment.group(group)] = amendment.group(
+                "status"
+            )
+        self.assertEqual({"ten": 10}.get(amendment.group("count")), len(expected))
+
+        tracked_schema_vocabularies = {
+            "live_property": live_schema["properties"]["failure_reason"]["anyOf"][
+                0
+            ]["enum"],
+            "live_failed_status": live_schema["allOf"][1]["then"]["properties"][
+                "failure_reason"
+            ]["enum"],
+            "golden_property": golden_schema["properties"]["failure_reason"][
+                "anyOf"
+            ][0]["enum"],
+            "golden_failed_status": golden_schema["allOf"][1]["then"][
+                "properties"
+            ]["failure_reason"]["enum"],
+            "adapter_contract": contract_vocabulary,
+        }
+        for surface, vocabulary in tracked_schema_vocabularies.items():
+            with self.subTest(surface=surface):
+                self.assertEqual(vocabulary, expected)
+        self.assertEqual(set(documented_status_by_reason), set(expected))
+        self.assertEqual(
+            documented_status_by_reason,
+            {
+                reason.value: status.value
+                for reason, status in STATUS_BY_REASON.items()
+            },
         )
 
     def test_writer_schema_and_bundle_reader_summary_parity_matrix(self) -> None:

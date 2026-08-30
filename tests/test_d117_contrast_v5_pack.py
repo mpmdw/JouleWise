@@ -434,6 +434,37 @@ class D117ContrastV5PackTests(unittest.TestCase):
         self.assertEqual(replay["point_unguarded_floor_j"], point)
         self.assertEqual(replay["ratio"], independent / point)
 
+    def test_common_mode_replay_last_ulp_caller_bound_does_not_govern(self) -> None:
+        fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
+        authenticated_bound = float(fixture["operative_bound_s"])
+        caller_bound = math.nextafter(authenticated_bound, -math.inf)
+        distinguishing_end = math.nextafter(
+            math.nextafter(2.0 * caller_bound, math.inf),
+            math.inf,
+        )
+        self.assertTrue(
+            self.generator._common_mode_window_is_strictly_noncollapsed(
+                0.0, distinguishing_end, caller_bound
+            )
+        )
+        self.assertFalse(
+            self.generator._common_mode_window_is_strictly_noncollapsed(
+                0.0, distinguishing_end, authenticated_bound
+            )
+        )
+
+        blocks = copy.deepcopy(fixture["blocks"])
+        blocks[0]["member_window_bounds_s"][0] = [0.0, distinguishing_end]
+        with self.assertRaisesRegex(
+            ValueError,
+            "common_mode_replay_window_domain_invalid",
+        ):
+            self.generator.replay_common_mode_dominance(
+                blocks,
+                calibration_bracket=authenticated_bracket(authenticated_bound),
+                shared_edge_bound_s=caller_bound,
+            )
+
     def test_common_mode_replay_refuses_unauthenticated_or_invalid_inputs(self) -> None:
         fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
         blocks = fixture["blocks"]

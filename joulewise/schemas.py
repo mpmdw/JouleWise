@@ -736,6 +736,16 @@ class ModelConfig:
     tokenizer_json_sha256: str | None = None
     chat_template_sha256: str | None = None
 
+    def __post_init__(self) -> None:
+        if (self.tokenizer_json_sha256 is None) != (
+            self.chat_template_sha256 is None
+        ):
+            raise SchemaError(
+                "model_identity_sha256_pins_incomplete: "
+                "model.tokenizer_json_sha256 and model.chat_template_sha256 "
+                "must both be provided or both omitted"
+            )
+
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "ModelConfig":
         data = _require_mapping(data, "model")
@@ -750,12 +760,6 @@ class ModelConfig:
             data.get("chat_template_sha256"),
             "model.chat_template_sha256",
         )
-        if (tokenizer_json_sha256 is None) != (chat_template_sha256 is None):
-            raise SchemaError(
-                "model_identity_sha256_pins_incomplete: "
-                "model.tokenizer_json_sha256 and model.chat_template_sha256 "
-                "must both be provided or both omitted"
-            )
         return cls(
             name=_require_string(data.get("name"), "model.name"),
             family=_optional_string(data.get("family"), "model.family"),
@@ -1126,6 +1130,10 @@ class BenchmarkConfig:
                 "model": {
                     "type": "object",
                     "required": ["name"],
+                    "dependentRequired": {
+                        "tokenizer_json_sha256": ["chat_template_sha256"],
+                        "chat_template_sha256": ["tokenizer_json_sha256"],
+                    },
                     "properties": {
                         "name": non_empty_string,
                         "family": nullable_string,
