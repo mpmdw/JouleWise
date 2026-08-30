@@ -457,6 +457,58 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 shared_edge_bound_s=fixture["operative_bound_s"],
             )
 
+        for invalid_bound in (True, str(fixture["operative_bound_s"])):
+            with self.subTest(invalid_bound=invalid_bound):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "common_mode_replay_authenticated_operative_bound_invalid",
+                ):
+                    self.generator.replay_common_mode_dominance(
+                        blocks,
+                        calibration_bracket=bracket,
+                        shared_edge_bound_s=invalid_bound,
+                    )
+
+        collapsed = copy.deepcopy(blocks)
+        bound = fixture["operative_bound_s"]
+        collapsed[0]["member_window_bounds_s"][0] = [
+            0.0,
+            math.nextafter(2.0 * bound, math.inf),
+        ]
+        with self.assertRaisesRegex(
+            ValueError,
+            "common_mode_replay_window_domain_invalid",
+        ):
+            self.generator.replay_common_mode_dominance(
+                collapsed,
+                calibration_bracket=bracket,
+                shared_edge_bound_s=bound,
+            )
+
+        nonnumeric_window = copy.deepcopy(blocks)
+        nonnumeric_window[0]["member_window_bounds_s"][0][0] = "0.0"
+        with self.assertRaisesRegex(
+            ValueError,
+            "common_mode_replay_window_domain_invalid",
+        ):
+            self.generator.replay_common_mode_dominance(
+                nonnumeric_window,
+                calibration_bracket=bracket,
+                shared_edge_bound_s=bound,
+            )
+
+        nonnumeric_energy = copy.deepcopy(blocks)
+        nonnumeric_energy[0]["delta_j"] = str(nonnumeric_energy[0]["delta_j"])
+        with self.assertRaisesRegex(
+            ValueError,
+            "common_mode_replay_input_invalid",
+        ):
+            self.generator.replay_common_mode_dominance(
+                nonnumeric_energy,
+                calibration_bracket=bracket,
+                shared_edge_bound_s=bound,
+            )
+
         absent = copy.deepcopy(blocks)
         absent[0]["zero_point_contrast_j"] = 999.0
         with self.assertRaisesRegex(

@@ -9,6 +9,7 @@ import json
 import math
 import sys
 import tempfile
+from collections.abc import Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
@@ -32,6 +33,7 @@ from joulewise.detection_floor import (  # noqa: E402
 )
 from joulewise.provenance import prompt_token_ids_sha256  # noqa: E402
 from joulewise.floor_extraction import (  # noqa: E402
+    _common_mode_window_is_strictly_noncollapsed,
     validate_condition_family_definition,
 )
 from joulewise.identity_pins import (  # noqa: E402
@@ -580,17 +582,37 @@ def _outward_four(value: float, direction: float) -> float:
     return value
 
 
+def _common_mode_replay_finite(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("common_mode_replay_input_invalid")
+    converted = float(value)
+    if not math.isfinite(converted):
+        raise ValueError("common_mode_replay_input_invalid")
+    return converted
+
+
+def _common_mode_replay_values(values: object) -> tuple[float, ...]:
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise ValueError("common_mode_replay_input_invalid")
+    return tuple(_common_mode_replay_finite(value) for value in values)
+
+
 def _common_mode_split(block: dict[str, Any]) -> tuple[float, float]:
     """Replay the registered block-width split before its lossy final sum."""
 
-    delta = float(block["delta_j"])
-    onset = tuple(float(value) for value in block["onset_sweep_j"])
-    offset = tuple(float(value) for value in block["offset_sweep_j"])
-    zero_point = float(block["zero_point_contrast_j"])
-    residuals = tuple(
-        float(value) for value in block["bundle_residual_half_widths_j"]
-    )
-    envelope = float(block["member_envelope_integral_sum_j"])
+    try:
+        delta = _common_mode_replay_finite(block["delta_j"])
+        onset = _common_mode_replay_values(block["onset_sweep_j"])
+        offset = _common_mode_replay_values(block["offset_sweep_j"])
+        zero_point = _common_mode_replay_finite(block["zero_point_contrast_j"])
+        residuals = _common_mode_replay_values(
+            block["bundle_residual_half_widths_j"]
+        )
+        envelope = _common_mode_replay_finite(
+            block["member_envelope_integral_sum_j"]
+        )
+    except (KeyError, TypeError) as exc:
+        raise ValueError("common_mode_replay_input_invalid") from exc
     values = (delta, zero_point, envelope, *onset, *offset, *residuals)
     if (
         not onset
@@ -630,6 +652,10 @@ def replay_common_mode_dominance(
 
     if not blocks or len(blocks) > 20:
         raise ValueError("common_mode_replay_block_count_invalid")
+    if isinstance(shared_edge_bound_s, bool) or not isinstance(
+        shared_edge_bound_s, (int, float)
+    ):
+        raise ValueError("common_mode_replay_authenticated_operative_bound_invalid")
     bound = float(shared_edge_bound_s)
     try:
         authenticated_bound = registered_common_mode_operative_bound(
@@ -650,6 +676,8 @@ def replay_common_mode_dominance(
         )
     ):
         raise ValueError("common_mode_replay_authenticated_operative_bound_invalid")
+    deltas: list[float] = []
+    splits: list[tuple[float, float]] = []
     for block in blocks:
         windows = block.get("member_window_bounds_s")
         if (
@@ -658,29 +686,26 @@ def replay_common_mode_dominance(
             or any(
                 not isinstance(window, list)
                 or len(window) != 2
-                or any(
-                    isinstance(value, bool)
-                    or not isinstance(value, (int, float))
-                    or not math.isfinite(float(value))
-                    for value in window
+                or not _common_mode_window_is_strictly_noncollapsed(
+                    window[0], window[1], bound
                 )
-                or float(window[1]) - float(window[0]) <= 2.0 * bound
                 for window in windows
             )
         ):
             raise ValueError("common_mode_replay_window_domain_invalid")
-        delta = float(block["delta_j"])
-        zero_point = float(block["zero_point_contrast_j"])
-        onset = tuple(float(value) for value in block["onset_sweep_j"])
-        offset = tuple(float(value) for value in block["offset_sweep_j"])
+        split = _common_mode_split(block)
+        delta = _common_mode_replay_finite(block["delta_j"])
+        zero_point = _common_mode_replay_finite(block["zero_point_contrast_j"])
+        onset = _common_mode_replay_values(block["onset_sweep_j"])
+        offset = _common_mode_replay_values(block["offset_sweep_j"])
         if zero_point not in onset or zero_point not in offset:
             raise ValueError("common_mode_replay_zero_point_membership_invalid")
         if not math.isclose(zero_point, delta, rel_tol=1e-9, abs_tol=1e-12):
             raise ValueError(
                 "common_mode_replay_zero_point_divergence_out_of_domain"
             )
-    deltas = [float(block["delta_j"]) for block in blocks]
-    splits = [_common_mode_split(block) for block in blocks]
+        deltas.append(delta)
+        splits.append(split)
     point_floor = comparative_false_effect_floor(
         deltas, admissible_half_widths_j=[0.0] * len(deltas)
     ).unguarded_floor_j

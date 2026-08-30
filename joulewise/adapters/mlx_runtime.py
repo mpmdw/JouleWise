@@ -98,7 +98,7 @@ def _model_identity_pin_refusal(config: BenchmarkConfig) -> AdapterResult | None
         except OSError as exc:
             return AdapterResult(
                 ok=False,
-                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                failure_reason=FailureReason.MODEL_IDENTITY_MISMATCH,
                 message=(
                     "mlx_model_tokenizer_json_pin_unavailable: could not read "
                     f"{tokenizer_path}: {type(exc).__name__}: {exc}"
@@ -107,7 +107,7 @@ def _model_identity_pin_refusal(config: BenchmarkConfig) -> AdapterResult | None
         if observed != tokenizer_pin:
             return AdapterResult(
                 ok=False,
-                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                failure_reason=FailureReason.MODEL_IDENTITY_MISMATCH,
                 message=(
                     "mlx_model_tokenizer_json_sha256_mismatch: local tokenizer.json "
                     f"at {tokenizer_path} has sha256 {observed}; expected {tokenizer_pin}"
@@ -128,7 +128,7 @@ def _model_identity_pin_refusal(config: BenchmarkConfig) -> AdapterResult | None
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             return AdapterResult(
                 ok=False,
-                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                failure_reason=FailureReason.MODEL_IDENTITY_MISMATCH,
                 message=(
                     "mlx_model_chat_template_pin_unavailable: could not read exact "
                     f"chat_template bytes from {tokenizer_config_path}: "
@@ -139,7 +139,7 @@ def _model_identity_pin_refusal(config: BenchmarkConfig) -> AdapterResult | None
         if observed != template_pin:
             return AdapterResult(
                 ok=False,
-                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                failure_reason=FailureReason.MODEL_IDENTITY_MISMATCH,
                 message=(
                     "mlx_model_chat_template_sha256_mismatch: local chat_template "
                     f"at {tokenizer_config_path} has sha256 {observed}; "

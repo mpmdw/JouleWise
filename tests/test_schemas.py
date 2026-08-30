@@ -377,6 +377,20 @@ class BenchmarkConfigTests(unittest.TestCase):
                 ):
                     BenchmarkConfig.from_mapping(data)
 
+    def test_model_identity_sha256_pins_reject_incomplete_pair(self) -> None:
+        base = json.loads(
+            (ROOT / "configs" / "examples" / "mock_local.json").read_text()
+        )
+        for field in ("tokenizer_json_sha256", "chat_template_sha256"):
+            with self.subTest(field=field):
+                data = copy.deepcopy(base)
+                data["model"][field] = "a" * 64
+                with self.assertRaisesRegex(
+                    SchemaError,
+                    "model_identity_sha256_pins_incomplete",
+                ):
+                    BenchmarkConfig.from_mapping(data)
+
     def test_config_validate_and_exported_schema_semantic_parity_matrix(self) -> None:
         base = json.loads(
             (ROOT / "configs" / "examples" / "mock_local.json").read_text()
@@ -482,6 +496,10 @@ class SummaryMetricsTests(unittest.TestCase):
         schema = SummaryMetrics.json_schema()
         self.assertIn("status", schema["required"])
         self.assertIn("failure_reason", schema["properties"])
+        self.assertIn(
+            "model_identity_mismatch",
+            schema["properties"]["failure_reason"]["anyOf"][0]["enum"],
+        )
 
     def test_writer_schema_and_bundle_reader_summary_parity_matrix(self) -> None:
         available = valid_succeeded_summary().to_dict()

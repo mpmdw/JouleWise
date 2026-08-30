@@ -261,6 +261,7 @@ class EnergyEvidence(str, Enum):
 class FailureReason(str, Enum):
     DID_NOT_FIT = "did_not_fit"
     RUNTIME_UNAVAILABLE = "runtime_unavailable"
+    MODEL_IDENTITY_MISMATCH = "model_identity_mismatch"
     TELEMETRY_UNAVAILABLE = "telemetry_unavailable"
     FORMAT_UNAVAILABLE = "format_unavailable"
     PERMISSION_DENIED = "permission_denied"
@@ -741,6 +742,20 @@ class ModelConfig:
         context_window = data.get("context_window")
         if context_window is not None:
             context_window = _positive_int(context_window, "model.context_window")
+        tokenizer_json_sha256 = _optional_sha256(
+            data.get("tokenizer_json_sha256"),
+            "model.tokenizer_json_sha256",
+        )
+        chat_template_sha256 = _optional_sha256(
+            data.get("chat_template_sha256"),
+            "model.chat_template_sha256",
+        )
+        if (tokenizer_json_sha256 is None) != (chat_template_sha256 is None):
+            raise SchemaError(
+                "model_identity_sha256_pins_incomplete: "
+                "model.tokenizer_json_sha256 and model.chat_template_sha256 "
+                "must both be provided or both omitted"
+            )
         return cls(
             name=_require_string(data.get("name"), "model.name"),
             family=_optional_string(data.get("family"), "model.family"),
@@ -748,14 +763,8 @@ class ModelConfig:
             revision=_optional_string(data.get("revision"), "model.revision"),
             weight_format=_optional_string(data.get("weight_format"), "model.weight_format"),
             context_window=context_window,
-            tokenizer_json_sha256=_optional_sha256(
-                data.get("tokenizer_json_sha256"),
-                "model.tokenizer_json_sha256",
-            ),
-            chat_template_sha256=_optional_sha256(
-                data.get("chat_template_sha256"),
-                "model.chat_template_sha256",
-            ),
+            tokenizer_json_sha256=tokenizer_json_sha256,
+            chat_template_sha256=chat_template_sha256,
         )
 
 

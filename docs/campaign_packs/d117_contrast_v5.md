@@ -46,6 +46,9 @@ refuses the member with a named reason. The measurement-machine preflight tool
 `scripts/admit_model_panel_entry.py` separately applies the same panel-versus-
 mirror checks as an operational belt.
 
+Known limitation: a single operator's accidental mirror mutation between the
+identity hash checks and `mlx_lm.load` remains a check-to-load TOCTOU risk.
+
 ## Decode workload
 
 The *decode arm* measures energy while the model generates output. Its eight
