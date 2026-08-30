@@ -19363,7 +19363,7 @@
     ],
     "overlap_predicate_source": "joulewise/reduce.py:196-206 (_in_window_sample_count)",
     "phase_boundary_source": "events.jsonl phase_start / phase_end records with phase == 'prefill'",
-    "repo_root": "/Users/edr/code/JouleWise-wt-projection",
+    "repo_root": "/Users/edr/code/JouleWise",
     "rule_source": "docs/process_traces/2026-08-28-workload-consult/04-MAGISTRATE-RULING.md R-2; docs/decision_log.md D-166"
   },
   "measured_evidence": [
@@ -50248,7 +50248,7 @@
       "transfer_multiplier": 3.0
     }
   ],
-  "purpose": "Desk pre-registration of prefill-arm resolvability expectations at 512 / 1024 / 2048 prompt tokens for the D-162 G2 shakedown (D-166 R-2; reviewer-panel item D1). It states projections under a named transfer assumption, and what each G2 outcome selects. It does not predict the G2 outcome.",
+  "purpose": "Historical evidence record of prefill-arm resolvability at 512 / 1024 / 2048 prompt tokens (D-166 R-2 as originally worded; reviewer-panel item D1). It states projections under a named transfer assumption. It does not predict the G2 outcome.",
   "recorded_label_agreement": {
     "bundles_with_recorded_label": 1127,
     "disagreement_count": 0,
@@ -50363,6 +50363,7 @@
       "slowdown_needed_on_shortest_member": 0.9135119979618251
     }
   ],
+  "standing": "SUPERSEDED AS A RULE by the cold gate of 2026-08-30 (see docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the amended D-166 index row): the binding reading is overlapping-record count >= 5 per small-model member (the count->=8 reading evaluated here is DISCARDED), the ladder is 512/1024/2048/4096, and selection executes via scripts/select_g2a_prefill_length.py over the G2-a record. The rule_readings block below is evidence, not a live rule.",
   "transfer_assumption": {
     "multipliers_swept": [
       1.0,

@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
 """Project prefill-arm resolvability at 512 / 1024 / 2048 prompt tokens.
 
-Desk pre-registration for the D-162 G2 shakedown, answering reviewer-panel
-item D1 ("the paper never states the projected overlap count ... and never
-states the contingency") as re-scoped by D-166 R-2.
+HISTORICAL EVIDENCE — SUPERSEDED AS A RULE (cold gate 2026-08-30). This
+analysis forced the cold-gate ruling that AMENDED D-166: "margin >= 5" is
+now ruled to mean overlapping-record count >= 5 (the count->=8 reading below
+is DISCARDED), and the ladder is 512/1024/2048/4096 with a split refusal
+branch. See docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the
+amended D-166 index row. The dual-reading evaluation below is retained as
+the evidence record, not a live rule.
+
+Originally: desk pre-registration input for the D-162 G2 shakedown,
+answering reviewer-panel item D1 ("the paper never states the projected
+overlap count ... and never states the contingency") as re-scoped by
+D-166 R-2.
 
 The script is a reader, not a re-runner.  It walks the retained bundle
 corpora, pulls the prompt-processing ("prefill") phase boundaries out of each
@@ -700,11 +709,20 @@ def build(corpus_root: Path, repo_root: Path) -> dict[str, Any]:
         "schema": "joulewise.prefill_resolvability_projection.v1",
         "script_version": "prefill-resolvability-projection/v1",
         "purpose": (
-            "Desk pre-registration of prefill-arm resolvability expectations at "
-            "512 / 1024 / 2048 prompt tokens for the D-162 G2 shakedown "
-            "(D-166 R-2; reviewer-panel item D1). It states projections under a "
-            "named transfer assumption, and what each G2 outcome selects. It "
-            "does not predict the G2 outcome."
+            "Historical evidence record of prefill-arm resolvability at "
+            "512 / 1024 / 2048 prompt tokens (D-166 R-2 as originally worded; "
+            "reviewer-panel item D1). It states projections under a named "
+            "transfer assumption. It does not predict the G2 outcome."
+        ),
+        "standing": (
+            "SUPERSEDED AS A RULE by the cold gate of 2026-08-30 (see "
+            "docs/process_traces/2026-08-30-prefill-margin-coldgate/ and the "
+            "amended D-166 index row): the binding reading is "
+            "overlapping-record count >= 5 per small-model member (the "
+            "count->=8 reading evaluated here is DISCARDED), the ladder is "
+            "512/1024/2048/4096, and selection executes via "
+            "scripts/select_g2a_prefill_length.py over the G2-a record. The "
+            "rule_readings block below is evidence, not a live rule."
         ),
         "inputs": {
             "corpus_root": str(corpus_root),
