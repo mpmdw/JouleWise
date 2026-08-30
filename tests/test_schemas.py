@@ -53,6 +53,10 @@ PINNED_CONFIG_SHA256 = {
 }
 
 OMITTED_OPTIONAL_KEYS = {
+    "model": {
+        "tokenizer_json_sha256",
+        "chat_template_sha256",
+    },
     "workload_profile": {
         "suite_manifest_ref",
         "suite_manifest_sha256",
@@ -330,6 +334,48 @@ class BenchmarkConfigTests(unittest.TestCase):
         self.assertIn("hardware_target", schema["required"])
         self.assertIn("workload_profile", schema["required"])
         self.assertIn("mlx", schema["$defs"]["hardware_target"]["properties"]["runtime_backend"]["enum"])
+
+    def test_model_identity_sha256_pins_validate_export_and_schema(self) -> None:
+        data = json.loads(
+            (ROOT / "configs" / "examples" / "mock_local.json").read_text()
+        )
+        data["model"]["tokenizer_json_sha256"] = "a" * 64
+        data["model"]["chat_template_sha256"] = "b" * 64
+
+        config = BenchmarkConfig.from_mapping(data)
+
+        self.assertEqual(config.model.tokenizer_json_sha256, "a" * 64)
+        self.assertEqual(config.model.chat_template_sha256, "b" * 64)
+        self.assertEqual(config.to_dict()["model"]["tokenizer_json_sha256"], "a" * 64)
+        self.assertEqual(config.to_dict()["model"]["chat_template_sha256"], "b" * 64)
+        model_properties = BenchmarkConfig.json_schema()["$defs"]["model"][
+            "properties"
+        ]
+        self.assertEqual(
+            model_properties["tokenizer_json_sha256"]["pattern"],
+            r"^[0-9a-f]{64}$",
+        )
+        self.assertEqual(
+            model_properties["chat_template_sha256"]["pattern"],
+            r"^[0-9a-f]{64}$",
+        )
+
+    def test_model_identity_sha256_pins_reject_noncanonical_values(self) -> None:
+        base = json.loads(
+            (ROOT / "configs" / "examples" / "mock_local.json").read_text()
+        )
+        for field, value in (
+            ("tokenizer_json_sha256", "a" * 63),
+            ("chat_template_sha256", "B" * 64),
+        ):
+            with self.subTest(field=field):
+                data = copy.deepcopy(base)
+                data["model"][field] = value
+                with self.assertRaisesRegex(
+                    SchemaError,
+                    rf"model\.{field} must be 64 lowercase hexadecimal characters",
+                ):
+                    BenchmarkConfig.from_mapping(data)
 
     def test_config_validate_and_exported_schema_semantic_parity_matrix(self) -> None:
         base = json.loads(
@@ -793,10 +839,14 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                         set(section_schema["properties"]),
                     )
 
-    def test_workload_to_dict_omits_suite_fields_only_when_none(self) -> None:
+    def test_to_dict_omits_identity_and_suite_fields_only_when_none(self) -> None:
         self.assertEqual(
             OMITTED_OPTIONAL_KEYS,
             {
+                "model": {
+                    "tokenizer_json_sha256",
+                    "chat_template_sha256",
+                },
                 "workload_profile": {
                     "suite_manifest_ref",
                     "suite_manifest_sha256",
@@ -821,6 +871,11 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                     }
                     if suite_ref is None and suite_sha is None:
                         expected.update({"suite_manifest_ref", "suite_manifest_sha256"})
+                elif section_key == "model":
+                    expected = {
+                        "tokenizer_json_sha256",
+                        "chat_template_sha256",
+                    }
                 else:
                     expected = set()
                 with self.subTest(config=name, section=section_key):

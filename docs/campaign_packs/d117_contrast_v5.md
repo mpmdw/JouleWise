@@ -8,6 +8,28 @@ ABBA contrasts, ten blocks per contrast, four members per block, and 80 science
 members in total. ABBA means the within-block execution order alternates model
 A and model B as A1, B1, B2, A2.
 
+## DRAFT AP Row
+
+| Field | Value |
+|---|---|
+| Plan ID / RQ consumer | DRAFT-AP-D117-V5 / D-117 CONTRAST `_v5` D-165 dominance preparation. |
+| family_id | FAM-D117-CONTRAST-V5-DOMINANCE |
+| claim_role | exploratory |
+| selection_scope | Two frozen Qwen3 model arms, decode and the G2-selected prefill arm, with ten predeclared ABBA blocks per contrast. |
+| multiplicity_rule | Exploratory with no-confirmatory-inference until the final pack and analysis plan are frozen. |
+| Metric + exact window class | Comparative and absolute gross-energy false-effect floors on the registered decode and prefill phase windows. |
+| Unit of analysis + dependence structure | ABBA block deltas for comparative components and authenticated member energies for absolute components; members within one block are dependent. |
+| Estimator/formula | D-165 independent-corner R and comparative common-mode R_cm registrations described below. |
+| Inclusion/exclusion + quality-flag waiver rules | Only strict-valid authenticated campaign members; no new quality waiver is introduced by this preparation pack. |
+| Order/blocking/covariates | Frozen ABBA order with ten blocks per contrast; model arm, block, and phase are fixed before collection. |
+| Floor gate | pending-P2-015 until the final `_v5` floor cells and pack receipt are frozen. |
+| MDE/n sizing + predeclared top-up rule | Ten frozen ABBA blocks per contrast under D-062; outcome-dependent top-up is forbidden, and any changed n permanently demotes the result to exploratory. |
+| Denominator provenance requirement | Authenticated point and corner-widened floor records, model-panel pins, prompt pins, and retained common-mode replay inputs. |
+| Holdout cells (L3 only) | Not applicable to this pre-mint preparation row; no L3 claim is registered here. |
+| Claim ceiling + exact forbidden upgrade | L0 preparation only. Forbidden upgrade: no dominance sentence before the frozen analysis consumes every ruled gate. |
+| Disqualifiers + not-resolvable conditions | Unresolved G2 prefill selection, missing pack receipt, model-byte pin mismatch, invalid replay authentication, zero denominator, or any component below its ruled gate. |
+| Linked manifests/bundle hashes | Pending final generation and D-134 freeze; no collected bundles are linked by this preparation document. |
+
 The production pair is `mlx-community/Qwen3-1.7B-4bit` at revision
 `3b1b1768f8f8cf8351c712464f906e86c2b8269e` and
 `mlx-community/Qwen3-8B-4bit` at revision
@@ -16,7 +38,13 @@ The production pair is `mlx-community/Qwen3-1.7B-4bit` at revision
 `aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4`.
 The generator reads these identities and all rendering pins from
 `configs/model_panels/qwen3_4bit.json`; it does not inspect a local model mirror
-or load a tokenizer or model.
+or load a tokenizer or model. Every emitted member carries both hashes. At the
+existing MLX member-prepare boundary, before `mlx_lm.load`, the runtime hashes
+the local mirror's literal `tokenizer.json` and the UTF-8 bytes of the
+`chat_template` string in `tokenizer_config.json`; a missing or mismatched pin
+refuses the member with a named reason. The measurement-machine preflight tool
+`scripts/admit_model_panel_entry.py` separately applies the same panel-versus-
+mirror checks as an operational belt.
 
 ## Decode workload
 
@@ -71,7 +99,18 @@ local terms from the custodied onset sweep, offset sweep, zero-point contrast,
 four residual half-widths, member-window bounds, operative shared-edge bound,
 member envelope sum, and block delta before the mint path's final
 shared-plus-local sum loses that split. It then enumerates both shared signs
-and every local corner. If `R_cm < 2.0`, the dominance sentence is withdrawn.
+and every local corner. The replay refuses unless the authenticated operative
+bound is finite and positive, every zero point appears exactly in both sweeps,
+and every zero point approximately agrees with its block delta under the
+production tolerance. If `R_cm < 2.0`, the dominance sentence is withdrawn.
+
+The component dispositions are explicit. Absolute independent-corner R is
+reportable and participates in the R >= 2 gate. Absolute R_cm is not applicable:
+the absolute estimator operates on deviations from the mean, so a uniform
+shared fiducial shift cancels exactly, while this replay is registered only for
+comparative ABBA inputs. Comparative R_cm is mandatory and retains the `< 2`
+withdrawal. No absolute local-only diagnostic is registered for `_v5`; such a
+quantity is deferred because it requires a distinct versioned name.
 
 The contrast dictionaries carry this `dominance_criterion` beside the
 canonical common-mode estimator registration. Producer floor plans and the

@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import statistics
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,7 +18,7 @@ from joulewise.analysis_manifest_v3 import (
     analysis_semantics_sha256_v1,
     validate_prospective_analysis_manifest_v3,
 )
-from joulewise.detection_floor import comparative_false_effect_floor
+from joulewise.aggregate import student_t_critical_95
 from joulewise.provenance import prompt_token_ids_sha256
 
 
@@ -27,6 +28,46 @@ PANEL = ROOT / "configs/model_panels/qwen3_4bit.json"
 WORKLOAD = ROOT / "configs/workloads/real_prompts_v1.json"
 PACK_ID = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
 REAL_BLOCK_FIXTURE = ROOT / "tests/fixtures/fcm_r4_real_blocks/measured_pair.json"
+PINNED_DOMINANCE_CRITERION_BYTES = (
+    b'{"all_must_pass":true,"common_mode":{"applies_to":"comparative_abba",'
+    b'"disclosure":"mandatory","ratio_id":"attribution_dominance_ratio_common_'
+    b'mode.v1","replay_rule":{"formula":"split each registered block width into '
+    b'its shared excursion and local residual terms; enumerate one common shared '
+    b'sign across all blocks and every independent local sign; take the maximum '
+    b'comparative unguarded floor","formula_reference":["joulewise.floor_'
+    b'extraction._common_mode_block_half_width.v1","joulewise.detection_floor.'
+    b'comparative_false_effect_floor.v1"],"input_fields":["delta_j","onset_sweep_'
+    b'j","offset_sweep_j","zero_point_contrast_j","bundle_residual_half_widths_'
+    b'j","member_window_bounds_s","member_envelope_integral_sum_j","calibration_'
+    b'bracket","shared_edge_bound_s"],"replay_fence":"authenticated_custodied_'
+    b'block_inputs_only",'
+    b'"rule_id":"d165_shared_sign_local_corner_replay.v1"},"threshold":2.0,'
+    b'"withdrawal_comparison":"R_cm < 2.0","withdrawal_consequence":"withdraw_'
+    b'dominance_sentence"},"comparison":"greater_than_or_equal","component_'
+    b'dispositions":{"absolute_common_mode":{"reason":"the absolute estimator '
+    b'uses deviations from the mean, so a uniform shared fiducial shift cancels '
+    b'exactly; the replay is registered only for comparative ABBA block inputs",'
+    b'"status":"not_applicable"},"absolute_independent_corner":{"part_of_ratio_'
+    b'gate":true,"status":"reportable"},"absolute_local_only_diagnostic":{'
+    b'"reason":"deferred; requires a distinct versioned name","status":"not_'
+    b'registered"},"comparative_common_mode":{"status":"mandatory","withdrawal_'
+    b'comparison":"R_cm < 2.0","withdrawal_consequence":"withdraw_dominance_'
+    b'sentence"}},"denominator":"point_unguarded_floor_j","exact_equality_policy"'
+    b':"R == 2.0 passes","kind":"comparative","mixed_outcome_policy":"report_'
+    b'per_component_and_use_null_framing","numerator":"corner_widened_unguarded_'
+    b'floor_j","per_component":true,"ratio_id":"attribution_dominance_ratio.v1"'
+    b',"threshold":2.0,"zero_denominator_policy":{"action":"refuse","never_emit"'
+    b':["Infinity","NaN"],"reason":"dominance_ratio_zero_denominator"}}'
+)
+
+
+def frozen_json_bytes(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 def load_generator():
@@ -51,6 +92,24 @@ def calibration_basis() -> dict:
         "allowance_rule": "max(observed_drift_s,0.010818)",
         "allowance_embedding_count": 1,
         "component_composition": "componentwise_max_never_sum.v1",
+    }
+
+
+def authenticated_bracket(operative_bound_s: float) -> dict:
+    allowance_s = 0.010818
+    return {
+        "status": "passed",
+        "endpoint_max_b_fiducial_s": operative_bound_s - allowance_s,
+        "calibration_drift_allowance_s": allowance_s,
+        "b_fiducial_s": operative_bound_s,
+        "acceptance": {
+            "allowance": {
+                "rule": "max(observed_drift_s,bracket_screen_s)",
+                "value_s": str(allowance_s),
+                "embedding_count": 1,
+                "embedded_in": "b_fiducial_s",
+            }
+        },
     }
 
 
@@ -85,6 +144,19 @@ def independent_split(block: dict) -> tuple[float, float]:
     return shared, math.fsum(residuals) / 2.0
 
 
+def independent_comparative_floor(values: list[float]) -> float:
+    n = len(values)
+    mean = math.fsum(values) / n
+    sample_stddev = statistics.stdev(values, xbar=mean) if n > 1 else 0.0
+    prediction = (
+        abs(mean)
+        + student_t_critical_95(n - 1)
+        * sample_stddev
+        * math.sqrt(1.0 + 1.0 / n)
+    )
+    return max(max(abs(value) for value in values), prediction)
+
+
 def independent_common_mode_floor(blocks: list[dict]) -> float:
     maximum = 0.0
     for shared_sign in (-1.0, 1.0):
@@ -98,12 +170,7 @@ def independent_common_mode_floor(blocks: list[dict]) -> float:
                     + shared_sign * shared
                     + local_sign * local
                 )
-            maximum = max(
-                maximum,
-                comparative_false_effect_floor(
-                    corner, admissible_half_widths_j=[0.0] * len(corner)
-                ).unguarded_floor_j,
-            )
+            maximum = max(maximum, independent_comparative_floor(corner))
     return maximum
 
 
@@ -216,6 +283,11 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 and path.name != "order_manifest.json"
             ]
             self.assertEqual(len(configs), 80)
+            for config_path in configs:
+                model = json.loads(config_path.read_text(encoding="utf-8"))["model"]
+                with self.subTest(config=config_path.name):
+                    self.assertRegex(model["tokenizer_json_sha256"], r"^[0-9a-f]{64}$")
+                    self.assertRegex(model["chat_template_sha256"], r"^[0-9a-f]{64}$")
             refusals = validate_prospective_analysis_manifest_v3(
                 manifest,
                 manifest_dir=pack,
@@ -230,7 +302,7 @@ class D117ContrastV5PackTests(unittest.TestCase):
             ]
 
         self.assertEqual(len(registrations), 4)
-        expected = self.generator.dominance_criterion_registration()
+        expected = json.loads(PINNED_DOMINANCE_CRITERION_BYTES)
         self.assertTrue(
             all(registration["dominance_criterion"] == expected for registration in registrations)
         )
@@ -260,6 +332,20 @@ class D117ContrastV5PackTests(unittest.TestCase):
             }
             self.assertEqual(second, first)
             self.assertEqual(list(root.glob(".d117-v5-stage-*")), [])
+
+    def test_member_model_config_refuses_missing_runtime_identity_pin(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-pin-") as temporary:
+            self.configure(self.write_prefill_pin(Path(temporary)))
+            entry = dict(self.generator.MODEL_ENTRIES["A"])
+            for field in ("tokenizer_json_sha256", "chat_template_sha256"):
+                with self.subTest(field=field):
+                    missing = dict(entry)
+                    missing.pop(field)
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"v5_member_model_identity_pin_missing: {field}",
+                    ):
+                        self.generator._model_config(missing)
 
     def test_composed_registration_preserves_floor_and_mint_validator_boundary(self) -> None:
         composed = self.generator.contrast_floor_estimator_registration()
@@ -298,10 +384,8 @@ class D117ContrastV5PackTests(unittest.TestCase):
     def test_golden_readback_ratio_predicate_and_zero_denominator_refusal(self) -> None:
         criterion = self.generator.dominance_criterion_registration()
         self.assertEqual(
-            criterion,
-            self.generator.contrast_floor_estimator_registration()[
-                "dominance_criterion"
-            ],
+            frozen_json_bytes(criterion),
+            PINNED_DOMINANCE_CRITERION_BYTES,
         )
         self.assertTrue(
             self.generator.dominance_ratio(
@@ -315,22 +399,90 @@ class D117ContrastV5PackTests(unittest.TestCase):
                 point_unguarded_floor_j=0.0,
             )
 
+    def test_golden_readback_detects_all_must_pass_mutation(self) -> None:
+        mutated = copy.deepcopy(self.generator.dominance_criterion_registration())
+        mutated["all_must_pass"] = False
+        self.assertNotEqual(
+            frozen_json_bytes(mutated),
+            PINNED_DOMINANCE_CRITERION_BYTES,
+        )
+
+    def test_golden_readback_detects_threshold_mutation(self) -> None:
+        mutated = copy.deepcopy(self.generator.dominance_criterion_registration())
+        mutated["threshold"] = 1.9
+        mutated["common_mode"]["threshold"] = 1.9
+        self.assertNotEqual(
+            frozen_json_bytes(mutated),
+            PINNED_DOMINANCE_CRITERION_BYTES,
+        )
+
     def test_common_mode_replay_matches_independent_retained_fixture_calculation(self) -> None:
         fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
         blocks = fixture["blocks"]
         replay = self.generator.replay_common_mode_dominance(
-            blocks, shared_edge_bound_s=fixture["operative_bound_s"]
+            blocks,
+            calibration_bracket=authenticated_bracket(fixture["operative_bound_s"]),
+            shared_edge_bound_s=fixture["operative_bound_s"],
         )
         independent = independent_common_mode_floor(blocks)
         self.assertEqual(
             replay["common_mode_corner_widened_unguarded_floor_j"], independent
         )
-        point = comparative_false_effect_floor(
-            [float(block["delta_j"]) for block in blocks],
-            admissible_half_widths_j=[0.0] * len(blocks),
-        ).unguarded_floor_j
+        point = independent_comparative_floor(
+            [float(block["delta_j"]) for block in blocks]
+        )
         self.assertEqual(replay["point_unguarded_floor_j"], point)
         self.assertEqual(replay["ratio"], independent / point)
+
+    def test_common_mode_replay_refuses_unauthenticated_or_invalid_inputs(self) -> None:
+        fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
+        blocks = fixture["blocks"]
+        bracket = authenticated_bracket(fixture["operative_bound_s"])
+        with self.assertRaisesRegex(
+            ValueError,
+            "common_mode_replay_authenticated_operative_bound_invalid",
+        ):
+            self.generator.replay_common_mode_dominance(
+                blocks,
+                calibration_bracket=bracket,
+                shared_edge_bound_s=0.0,
+            )
+        with self.assertRaisesRegex(
+            ValueError,
+            "common_mode_replay_authenticated_operative_bound_invalid",
+        ):
+            self.generator.replay_common_mode_dominance(
+                blocks,
+                calibration_bracket={},
+                shared_edge_bound_s=fixture["operative_bound_s"],
+            )
+
+        absent = copy.deepcopy(blocks)
+        absent[0]["zero_point_contrast_j"] = 999.0
+        with self.assertRaisesRegex(
+            ValueError,
+            "common_mode_replay_zero_point_membership_invalid",
+        ):
+            self.generator.replay_common_mode_dominance(
+                absent,
+                calibration_bracket=bracket,
+                shared_edge_bound_s=fixture["operative_bound_s"],
+            )
+
+        divergent = copy.deepcopy(blocks)
+        changed_zero = divergent[0]["delta_j"] + 1e-6
+        divergent[0]["zero_point_contrast_j"] = changed_zero
+        divergent[0]["onset_sweep_j"].append(changed_zero)
+        divergent[0]["offset_sweep_j"].append(changed_zero)
+        with self.assertRaisesRegex(
+            ValueError,
+            "common_mode_replay_zero_point_divergence_out_of_domain",
+        ):
+            self.generator.replay_common_mode_dominance(
+                divergent,
+                calibration_bracket=bracket,
+                shared_edge_bound_s=fixture["operative_bound_s"],
+            )
 
 
 if __name__ == "__main__":

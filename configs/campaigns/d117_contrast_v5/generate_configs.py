@@ -24,8 +24,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
+    CommonModeEstimatorRefusal,
     canonical_domain_sha256,
     comparative_false_effect_floor,
+    registered_common_mode_operative_bound,
     two_shared_edge_common_mode_registration,
 )
 from joulewise.provenance import prompt_token_ids_sha256  # noqa: E402
@@ -466,6 +468,7 @@ COMMON_MODE_INPUT_FIELDS = (
     "bundle_residual_half_widths_j",
     "member_window_bounds_s",
     "member_envelope_integral_sum_j",
+    "calibration_bracket",
     "shared_edge_bound_s",
 )
 
@@ -489,8 +492,32 @@ def dominance_criterion_registration() -> dict[str, Any]:
             "reason": DOMINANCE_ZERO_DENOMINATOR_REASON,
             "never_emit": ["Infinity", "NaN"],
         },
+        "component_dispositions": {
+            "absolute_independent_corner": {
+                "status": "reportable",
+                "part_of_ratio_gate": True,
+            },
+            "absolute_common_mode": {
+                "status": "not_applicable",
+                "reason": (
+                    "the absolute estimator uses deviations from the mean, so a "
+                    "uniform shared fiducial shift cancels exactly; the replay is "
+                    "registered only for comparative ABBA block inputs"
+                ),
+            },
+            "comparative_common_mode": {
+                "status": "mandatory",
+                "withdrawal_comparison": "R_cm < 2.0",
+                "withdrawal_consequence": "withdraw_dominance_sentence",
+            },
+            "absolute_local_only_diagnostic": {
+                "status": "not_registered",
+                "reason": "deferred; requires a distinct versioned name",
+            },
+        },
         "common_mode": {
             "disclosure": "mandatory",
+            "applies_to": "comparative_abba",
             "ratio_id": "attribution_dominance_ratio_common_mode.v1",
             "threshold": DOMINANCE_THRESHOLD,
             "withdrawal_comparison": "R_cm < 2.0",
@@ -596,15 +623,33 @@ def _common_mode_split(block: dict[str, Any]) -> tuple[float, float]:
 
 
 def replay_common_mode_dominance(
-    blocks: list[dict[str, Any]], *, shared_edge_bound_s: float
+    blocks: list[dict[str, Any]], *, calibration_bracket: object,
+    shared_edge_bound_s: float
 ) -> dict[str, Any]:
     """Compute R_cm from retained pre-mint inputs under the registered fence."""
 
     if not blocks or len(blocks) > 20:
         raise ValueError("common_mode_replay_block_count_invalid")
     bound = float(shared_edge_bound_s)
-    if not math.isfinite(bound) or bound < 0.0:
-        raise ValueError("common_mode_replay_shared_edge_bound_invalid")
+    try:
+        authenticated_bound = registered_common_mode_operative_bound(
+            calibration_bracket
+        )
+    except CommonModeEstimatorRefusal as exc:
+        raise ValueError(
+            "common_mode_replay_authenticated_operative_bound_invalid"
+        ) from exc
+    if (
+        not math.isfinite(bound)
+        or bound <= 0.0
+        or not math.isclose(
+            bound,
+            authenticated_bound,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+    ):
+        raise ValueError("common_mode_replay_authenticated_operative_bound_invalid")
     for block in blocks:
         windows = block.get("member_window_bounds_s")
         if (
@@ -624,6 +669,16 @@ def replay_common_mode_dominance(
             )
         ):
             raise ValueError("common_mode_replay_window_domain_invalid")
+        delta = float(block["delta_j"])
+        zero_point = float(block["zero_point_contrast_j"])
+        onset = tuple(float(value) for value in block["onset_sweep_j"])
+        offset = tuple(float(value) for value in block["offset_sweep_j"])
+        if zero_point not in onset or zero_point not in offset:
+            raise ValueError("common_mode_replay_zero_point_membership_invalid")
+        if not math.isclose(zero_point, delta, rel_tol=1e-9, abs_tol=1e-12):
+            raise ValueError(
+                "common_mode_replay_zero_point_divergence_out_of_domain"
+            )
     deltas = [float(block["delta_j"]) for block in blocks]
     splits = [_common_mode_split(block) for block in blocks]
     point_floor = comparative_false_effect_floor(
@@ -664,6 +719,16 @@ def _identifier_token(model_id: str) -> str:
 
 
 def _model_config(entry: dict[str, Any]) -> dict[str, Any]:
+    for key in ("tokenizer_json_sha256", "chat_template_sha256"):
+        if key not in entry or entry[key] is None:
+            raise ValueError(f"v5_member_model_identity_pin_missing: {key}")
+        value = entry[key]
+        if (
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(character not in "0123456789abcdef" for character in value)
+        ):
+            raise ValueError(f"v5_member_model_identity_pin_invalid: {key}")
     return {
         key: entry[key]
         for key in (
@@ -673,6 +738,8 @@ def _model_config(entry: dict[str, Any]) -> dict[str, Any]:
             "revision",
             "weight_format",
             "context_window",
+            "tokenizer_json_sha256",
+            "chat_template_sha256",
         )
     }
 

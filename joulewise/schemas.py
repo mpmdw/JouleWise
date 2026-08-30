@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
@@ -34,6 +35,7 @@ CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
 SUMMARY_REDUCER_VERSION = "0.5.2"
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 
 # Validation-time dispatch vocabulary.  This intentionally is not an enum in
 # the exported wire schema: historical summaries keep their exact bytes and
@@ -148,6 +150,8 @@ _CONFIG_KEYS_BY_PATH: dict[str, frozenset[str]] = {
             "revision",
             "weight_format",
             "context_window",
+            "tokenizer_json_sha256",
+            "chat_template_sha256",
         }
     ),
     "quantization": frozenset({"name", "bits", "group_size"}),
@@ -342,6 +346,16 @@ def _optional_string(value: Any, field_name: str) -> str | None:
     if value is None:
         return None
     return _require_string(value, field_name)
+
+
+def _optional_sha256(value: Any, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or _SHA256_HEX_RE.fullmatch(value) is None:
+        raise SchemaError(
+            f"{field_name} must be 64 lowercase hexadecimal characters"
+        )
+    return value
 
 
 def _optional_float(value: Any, field_name: str, *, minimum: float | None = None) -> float | None:
@@ -718,6 +732,8 @@ class ModelConfig:
     revision: str | None = None
     weight_format: str | None = None
     context_window: int | None = None
+    tokenizer_json_sha256: str | None = None
+    chat_template_sha256: str | None = None
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "ModelConfig":
@@ -732,6 +748,14 @@ class ModelConfig:
             revision=_optional_string(data.get("revision"), "model.revision"),
             weight_format=_optional_string(data.get("weight_format"), "model.weight_format"),
             context_window=context_window,
+            tokenizer_json_sha256=_optional_sha256(
+                data.get("tokenizer_json_sha256"),
+                "model.tokenizer_json_sha256",
+            ),
+            chat_template_sha256=_optional_sha256(
+                data.get("chat_template_sha256"),
+                "model.chat_template_sha256",
+            ),
         )
 
 
@@ -1021,6 +1045,11 @@ class BenchmarkConfig:
             del workload["generator_sidecar_ref"]
         if workload.get("prompt_token_evidence_policy") is None:
             del workload["prompt_token_evidence_policy"]
+        model = data["model"]
+        if model.get("tokenizer_json_sha256") is None:
+            del model["tokenizer_json_sha256"]
+        if model.get("chat_template_sha256") is None:
+            del model["chat_template_sha256"]
         if self.schema_extensions is None:
             data.pop("schema_extensions")
             data.pop("batch_policy")
@@ -1044,6 +1073,10 @@ class BenchmarkConfig:
             "pattern": r"\S",
         }
         nullable_positive_int = {"type": ["integer", "null"], "minimum": 1}
+        nullable_sha256 = {
+            "type": ["string", "null"],
+            "pattern": r"^[0-9a-f]{64}$",
+        }
         schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "JouleWise BenchmarkConfig",
@@ -1091,6 +1124,8 @@ class BenchmarkConfig:
                         "revision": nullable_string,
                         "weight_format": nullable_string,
                         "context_window": nullable_positive_int,
+                        "tokenizer_json_sha256": nullable_sha256,
+                        "chat_template_sha256": nullable_sha256,
                     },
                 },
                 "quantization": {
