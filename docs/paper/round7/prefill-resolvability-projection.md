@@ -1,6 +1,17 @@
 # Prefill-arm resolvability at 512, 1024 and 2048 prompt tokens
 
-**Desk pre-registration for the G2 shakedown (D-166 R-2).**
+> **ANSWERED (cold gate, 2026-08-30 — read this first).** The two questions
+> this document flags as NEEDS-RULING are RULED:
+> `docs/process_traces/2026-08-30-prefill-margin-coldgate/` (ruling, refuter,
+> ratification) and the AMENDED D-166 index row. "Margin ≥ 5" =
+> overlapping-record **count ≥ 5** per small-model member (the count-≥-8
+> field-convention reading is DISCARDED); the ladder is now
+> **512/1024/2048/4096** with an explicit split refusal branch and a ≥5
+> small-model-members-per-rung precondition measured by G2-a. This document's
+> three-rung tables and dual-reading analysis remain valid as the EVIDENCE
+> that forced the ruling; they are not the binding rule.
+
+**Desk pre-registration input for the G2 shakedown (D-166 R-2, as amended).**
 Supporting material for reviewer-panel item D1.
 
 Every number in this document comes from
