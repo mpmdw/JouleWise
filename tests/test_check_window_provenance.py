@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -363,20 +364,107 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         ):
             self.assertIn(artifact, runsheet)
 
-    def test_runsheet_pins_governed_chain_and_four_open_rulings(self) -> None:
+    def test_runsheet_phase_d_chain_is_mechanically_bound_to_runbook(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        runbook = (repo / "docs/phase_2/window_runbook.md").read_text()
+        runsheet = (
+            repo
+            / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
+        ).read_text()
+        phase_d = runsheet.split("## Phase D", 1)[1].split("## Phase E", 1)[0]
+
+        def line_of(text: str, token: str, start: int = 0) -> int:
+            return text[: text.index(token, start)].count("\n") + 1
+
+        actual_anchors = {
+            "start": line_of(runbook, "# First executable action:"),
+            "bound_path": line_of(
+                runbook, 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"'
+            ),
+            "stage_settle": line_of(runbook, "  settle\n  quarantine_stale_lock"),
+            "stage_list": line_of(runbook, "run_stage_list() {"),
+            "chain_start": line_of(
+                runbook, 'cd "$REPO"', runbook.index("run_stage_list() {")
+            ),
+        }
+        self.assertEqual(
+            actual_anchors,
+            {
+                "start": 1516,
+                "bound_path": 1541,
+                "stage_settle": 1636,
+                "stage_list": 1653,
+                "chain_start": 1663,
+            },
+            f"runbook anchors drifted: {actual_anchors}",
+        )
+
+        def function_body(text: str, name: str) -> list[str]:
+            match = re.search(rf"(?ms)^{re.escape(name)}\(\) \{{\n(.*?)^\}}", text)
+            self.assertIsNotNone(match, f"missing {name} at anchors {actual_anchors}")
+            return [line.strip() for line in match.group(1).splitlines() if line.strip()]
+
+        for function, required_lines in {
+            "run_stage": (
+                "settle",
+                'quarantine_stale_lock "$root"',
+                '"$PY" "$REPO/scripts/run_campaign.py" "$config_dir" \\',
+                '--runs-dir "$root" \\',
+                '--log "$log" \\',
+                '--max-failures 1',
+            ),
+            "run_stage_list": (
+                'local list="$1"',
+                'while IFS= read -r stage; do',
+                'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REPO/$stage" "$PRE_CAL_CUSTODY" "$stage"',
+                'done < "$list"',
+            ),
+        }.items():
+            source = function_body(runbook, function)
+            rendered = function_body(phase_d, function)
+            self.assertEqual(
+                [line for line in source if line in required_lines],
+                list(required_lines),
+                f"runbook {function} extraction failed at {actual_anchors}",
+            )
+            self.assertEqual(
+                [line for line in rendered if line in required_lines],
+                list(required_lines),
+                f"runsheet {function} drifted from runbook at {actual_anchors}",
+            )
+
+        bound_assignment = 'NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"'
+        self.assertIn(bound_assignment, runbook)
+        self.assertIn(bound_assignment, runsheet)
+        self.assertNotIn('NEG8_DRIFT_BOUND="$RUNS_ROOT/', runsheet)
+        for exact_step in (
+            'screen_pre_calibration "$PRE_CAL_CUSTODY"',
+            'run_stage "$BOUND_RUNS_ROOT" "$BOUND_LOG" "$BOUND_CONFIG_ROOT" "$PRE_CAL_CUSTODY" \\',
+            '--neg8-drift-bound-output "$NEG8_DRIFT_BOUND" \\',
+            '--runs-dir "$BOUND_RUNS_ROOT"',
+            'run_stage_list "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"',
+        ):
+            self.assertIn(exact_step, runbook)
+            self.assertIn(exact_step, phase_d)
+
+    def test_runsheet_pins_ruled_termination_and_governed_chain(self) -> None:
         runsheet = (
             Path(__file__).resolve().parents[1]
             / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
         ).read_text()
         ordered_tokens = (
             '--lifecycle-event start',
+            '# Final settle is chain-owned',
+            '--lifecycle-event settle',
             'SLOT=pre ATTEMPT_ID="$PRE_ATTEMPT_ID"',
-            '"$BOUND_CONFIG_ROOT"',
+            'screen_pre_calibration "$PRE_CAL_CUSTODY"',
+            'run_stage "$BOUND_RUNS_ROOT"',
             '--derive-neg8-drift-bound "$BOUND_MANIFEST"',
-            '"$REF_ROOT/start_triplet"',
-            'BLOCKED-UNTIL-RULING NR-1',
-            '"$REF_ROOT/midpoint"',
-            '"$REF_ROOT/end_triplet"',
+            'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/start_triplet"',
+            "# R-1: authenticate the first frozen stage through the runbook's stage list.",
+            'test "$SCIENCE_RC" = 130',
+            'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/midpoint"',
+            'run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/end_triplet"',
             'SLOT=post ATTEMPT_ID="$POST_ATTEMPT_ID"',
             '--lifecycle-event completion',
         )
@@ -384,13 +472,11 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn('SLOT="$SLOT"', runsheet)
         self.assertNotIn('ATTEMPT_ID="$ATTEMPT_ID"', runsheet)
-        for option in (
-            "(a) run the full frozen stage",
-            "(b) terminate after block one",
-            "(c) freeze a one-block stage/chain list",
-            "(d) add an authenticated runtime selector",
-        ):
-            self.assertIn(option, runsheet)
+        self.assertIn("TERMINATE HERE", runsheet)
+        self.assertIn('/bin/kill -INT "$SCIENCE_PID"', runsheet)
+        self.assertIn("four block-1 bundle", runsheet)
+        self.assertIn("diagnostic and non-claim by construction", runsheet)
+        self.assertIn("exact refusal-set equality", runsheet)
 
     def test_runsheet_shakedown_gate_note_matches_cli_cardinality(self) -> None:
         runsheet = (
@@ -414,6 +500,28 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertIn("observation artifacts re-hashed at their custody", preflight)
         self.assertIn("_custody_reasons", preflight)
         self.assertNotIn("custody-store replay", preflight)
+
+    def test_preflight_requires_documented_measurement_checkout_argument(self) -> None:
+        preflight = (
+            Path(__file__).resolve().parents[1]
+            / "docs/process_traces/2026-08-28-live-smoke/preflight.sh"
+        ).read_text()
+        self.assertIn('if [ "$#" -ne 1 ]', preflight)
+        self.assertIn("/Users/edr/JouleWise-measurement-20260813", preflight)
+        self.assertIn('SMOKE_CHECKOUT="$1"', preflight)
+        self.assertNotIn("/Users/edr/JouleWise-smoke/checkout", preflight)
+
+    def test_runsheet_records_d166_prefill_resolvability_measurement(self) -> None:
+        runsheet = (
+            Path(__file__).resolve().parents[1]
+            / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
+        ).read_text()
+        self.assertIn("mechanically re-cut to the exact `_v5` paths and digests", runsheet)
+        self.assertIn("for length in 512 1024 2048", runsheet)
+        self.assertIn("Qwen3", runsheet)
+        self.assertIn("in_window_sample_count", runsheet)
+        self.assertIn("overlap_margin_above_three", runsheet)
+        self.assertIn("all_margin_ge_5", runsheet)
 
     def test_null_id_and_missing_sha_science_record_isolated_to_s11_a1(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
@@ -462,7 +570,15 @@ class CheckWindowProvenanceTests(unittest.TestCase):
                 fixture["runs_root"], fixture["prospective"]["manifest_id"]
             )
             self.assertGreater(len(complete), 1)
-            omitted = sorted(complete)[-1]
+            stage = fixture["prospective"]["stage_manifests"][0]
+            order = json.loads(
+                (fixture["prospective_path"].parent / stage["manifest_path"]).read_text()
+            )
+            omitted = next(
+                row["run_id"]
+                for row in order["executed_order"]
+                if row["block_index"] == 1
+            )
             partial = {key: value for key, value in complete.items() if key != omitted}
             with mock.patch.object(
                 checker, "campaign_cooldown_evidence", return_value=partial
@@ -478,6 +594,24 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertIn(
                 "SKIP S11-A4 present_stages=0 assertion_not_exercised", output
             )
+
+    def test_deleted_frozen_roster_bundle_isolated_to_s11_a2(self) -> None:
+        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
+            fixture = _install_s11_checker_fixture(Path(tmp))
+            stage = fixture["prospective"]["stage_manifests"][0]
+            order = json.loads(
+                (fixture["prospective_path"].parent / stage["manifest_path"]).read_text()
+            )
+            deleted = next(
+                row["run_id"]
+                for row in order["executed_order"]
+                if row["block_index"] == 1
+            )
+            shutil.rmtree(fixture["runs_root"] / deleted)
+            code, output = _run(_normal_argv(fixture))
+            self.assertNotEqual(code, 0, output)
+            self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
+            self.assertIn(f"frozen roster bundles missing=['{deleted}']", output)
 
     def test_missing_cooldown_evidence_isolated_to_s11_a3(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:

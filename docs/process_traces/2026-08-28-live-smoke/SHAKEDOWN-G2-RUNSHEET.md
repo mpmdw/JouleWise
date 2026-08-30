@@ -1,4 +1,4 @@
-# D-162 G2 — real `_v4` shakedown operator runsheet
+# D-162 G2 — real `_v5` shakedown operator runsheet
 
 **Purpose.** Execute the claim family’s first consuming launch as a one-block,
 non-claim shakedown on its own runs root, then replay S11 A1..A5 and all four
@@ -6,6 +6,16 @@ F-5 joins at the desk and prove that outcome-blind finalization refuses the
 partial collection. This is the R-2 re-cut of `RUNSHEET.md`; none of the old
 `_v9` diagnostic-family generation, admission, marker, or floor-supply steps
 apply. No command in a live section may run while an agent session is active.
+
+G2 is **diagnostic and non-claim by construction**: `$RUNS_ROOT` is its own
+shakedown root, never the campaign runs root, and no mint or claim artifact may
+consume it. G2 PASS means exact refusal-set equality from
+`--expect-finalize-refusal`; it does not mean that any downstream artifact was
+produced or licensed. D-164 supersedes every `_v4` collection reference below
+with `_v5`. The still-visible `_v4` pack paths, publication filenames, and
+digests are staging coordinates only; once estate 12 cuts the `_v5` pack they
+are mechanically re-cut to the exact `_v5` paths and digests before review or
+execution, without changing the steps or semantics in this runsheet.
 
 **Authority.** D-162 R-2/R-3 and the 2026-08-28 ARM-ABORT/B10/copy-safety
 addendum (`proof-consult/04-MAGISTRATE-RULING.md:55-91`); estate-11 S11 A1..A5
@@ -30,8 +40,8 @@ the real custody by the refusal check is not PASS.
 
 ## BLOCKERS — resolve before any live command
 
-1. **OWN-B1 — the current `run_campaign.py` parser cannot select one A/B/B/A
-   block from a frozen five-block `_v4` stage.** Its collection parser accepts
+1. **OWN-B1 — RESOLVED by G2 ruling R-1.** The current `run_campaign.py` parser cannot select one A/B/B/A
+   block from a frozen five-block successor stage.** Its collection parser accepts
    a positional `config_dir` and campaign controls, but has no block/member
    selector (`scripts/run_campaign.py:648-719`); discovery consumes the JSON
    members named by that directory and its complete order manifest
@@ -51,25 +61,22 @@ the real custody by the refusal check is not PASS.
    The flag requires `--backup` and refuses unless the invocation consists of
    exactly one single-repetition config (`scripts/run_campaign.py:8108-8117`),
    so it constrains an invocation to one bundle but cannot select that bundle
-   from a larger frozen stage.
+   from a larger frozen stage. G2 therefore starts the authentic frozen stage
+   and terminates that campaign process immediately after block 1's last
+   member; Phase D gives the exact signal and post-signal on-disk assertions.
 
-2. **B-SUPPLY — the named measurement checkout does not yet contain the real `_v4`
-   supply.** The 2026-08-28 desk census found no
+2. **B-SUPPLY — the named measurement checkout does not yet contain the real `_v5`
+   supply.** The 2026-08-28 desk census found no successor
    `configs/campaigns/d117_{contrast,floor}_*_v4` directories and no real v4
    aggregate-floor artifact under
-   `/Users/edr/JouleWise-measurement-20260813`. Do not substitute `_v3`, `_v9`,
+   `/Users/edr/JouleWise-measurement-20260813`. Do not substitute `_v3`, `_v4`, `_v9`,
    the historical `df-ph-decode-floor-mint1.json`, or guessed bytes. The live
-   gate reopens only at a reviewed head containing all three real `_v4` packs,
+   gate reopens only at a reviewed head containing all three real `_v5` packs,
    their real freeze/mint supply, and the exact aggregate floor path.
 
-3. **B3 — the retained `preflight.sh` still admits only the old dedicated
-   smoke checkout path.** It requires `$SMOKE_CHECKOUT` to equal
-   `/Users/edr/JouleWise-smoke/checkout`
-   (`preflight.sh:35-58`). D-162 names the established measurement checkout.
-   Because the amendment was limited to B10 and all other preflight bytes had
-   to remain unchanged, no invocation is rendered here. The lead must either
-   rule that checkout as the G2 execution checkout or authorize a separate
-   real-pack preflight re-cut.
+3. **B3 — RESOLVED by G2 ruling R-5.** `preflight.sh` takes the checkout as its
+   one required argument. The documented and only accepted value for this G2
+   run is `/Users/edr/JouleWise-measurement-20260813`.
 
 4. **B10 — physical ledger/pin continuity is a hard gate on every fresh
    checkout.** `runs/calibration_observation_ledger.jsonl` must exist and the
@@ -83,7 +90,7 @@ the real custody by the refusal check is not PASS.
    been provisioned in the named measurement checkout, but any later failure
    is an ABORT, never a copy-from-an-unknown-source retry.
 
-5. **B2/B9 — both `_v4` arms and the consuming launch require the step-6
+5. **B2/B9 — both `_v5` arms and the consuming launch require the step-6
    confirmation pair.** The real gamma pack is in the registry's
    `successor_pack_ids`, so `_gate_family_publication` engages for both the
    rehearsal arm and the consuming arm (`joulewise/arm_readiness.py:11721-11752`;
@@ -103,24 +110,12 @@ the real custody by the refusal check is not PASS.
    transcript as a frozen input, never recompute it from table bytes
    (`real-transaction-runbook.md:1746-1764`).
 
-No live command below is authorized until OWN-B1, B-SUPPLY, B2/B9, and B3 are cured at a newly reviewed
-head and B10 passes in the actual execution checkout.
+No live command below is authorized until B-SUPPLY and B2/B9 are cured at a
+newly reviewed `_v5` head and B10 passes in the actual execution checkout.
 
 ## NEEDS-RULING
 
-1. **NR-1 — one-block authenticated selection.** Exactly four options remain;
-   this runsheet does not choose among them:
-   (a) run the full frozen stage, which amends G2's literal “one block”;
-   (b) terminate after block one, whose clean-close/campaign-manifest semantics
-   are unruled and which leaves incomplete members/locks while aborting the
-   strict chain before post bracket and lifecycle completion;
-   (c) freeze a one-block stage/chain list into the real successor pack before
-   its reviewed freeze, which changes pack bytes before estate 11; or
-   (d) add an authenticated runtime selector, which is a production gate change
-   outside D-162 R-3. The science-block command below is consequently a
-   `BLOCKED-UNTIL-RULING` template, not an instruction.
-
-2. **Ledger-pin changed-set disposition.** The post-bracket pin bump changes
+1. **Ledger-pin changed-set disposition.** The post-bracket pin bump changes
    `configs/calibration/calibration_ledger_head.json`, but that path is outside
    the registry’s 112-entry `irrelevant_path_allowlist`; the allowlist occupies
    `configs/arm_readiness/d117_row_registry_v2.json:212-324` and the pinset
@@ -130,10 +125,9 @@ head and B10 passes in the actual execution checkout.
    whether an explicit registry amendment is required. Do not silently commit
    it as irrelevant.
 
-3. **Exact v4 floor artifact and checkout preflight.** Name the real mint’s
-   aggregate-floor path and rule the B3 checkout mismatch. Until both are
-   supplied, finalizer/refusal commands below are templates with exact parser
-   flags but are not executable.
+2. **Exact `_v5` floor artifact.** Name the real mint’s aggregate-floor path.
+   Until supplied, finalizer/refusal commands below are templates with exact
+   parser flags but are not executable.
 
 ## Timeline
 
@@ -177,7 +171,7 @@ used consistently as the lexical root; real paths remain the safest advice.
 
 ```sh
 export MEASUREMENT_CHECKOUT=/Users/edr/JouleWise-measurement-20260813
-export SMOKE_CHECKOUT=/Users/edr/JouleWise-smoke/checkout
+export REPO="$MEASUREMENT_CHECKOUT"
 export PY=/Users/edr/code/JouleWise/.venv/bin/python
 export PYTHONPATH="$MEASUREMENT_CHECKOUT"
 export SHAKEDOWN_ROOT=/Users/edr/JouleWise-shakedown-g2/2026-08-29
@@ -187,6 +181,7 @@ export BOUND_RUNS_ROOT="$CUSTODY_ROOT/neg8-bound-runs"
 export ANALYSIS_ROOT="$SHAKEDOWN_ROOT/analysis"
 export CLAIMS_ROOT="$SHAKEDOWN_ROOT/claims"
 export SCRATCH_ROOT="$SHAKEDOWN_ROOT/scratch"
+export QUARANTINE_ROOT="$SHAKEDOWN_ROOT/quarantine"
 export TRANSCRIPT_ROOT="$SHAKEDOWN_ROOT/transcript"
 export WINDOW_PLAN_ROOT="$SHAKEDOWN_ROOT/window-plan"
 export REHEARSAL_PLAN_ROOT="$SHAKEDOWN_ROOT/rehearsal-window-plan"
@@ -208,7 +203,7 @@ export BOUND_MANIFEST="$BOUND_CONFIG_ROOT/derivation/settled_corpus.json"
 export REF_ROOT="$MEASUREMENT_CHECKOUT/configs/campaigns/window_references"
 export CLAIM_LOG="$RUNS_ROOT/campaign_log.jsonl"
 export BOUND_LOG="$BOUND_RUNS_ROOT/campaign_log.jsonl"
-export NEG8_DRIFT_BOUND="$RUNS_ROOT/neg8-drift-bound.json"
+export NEG8_DRIFT_BOUND="$BOUND_RUNS_ROOT/neg8-drift-bound.json"
 export FINALIZED_MANIFEST=''
 export CHECK_FINALIZED_ARGS=''
 export WINDOW_ID=d117-g2-shakedown-20260829
@@ -220,6 +215,8 @@ export REHEARSAL_SESSION_ID=d117-g2-arm-abort-throwaway-20260829
 export REHEARSAL_PRE_ATTEMPT_ID=d117-g2-arm-abort-pre-throwaway-20260829
 export REHEARSAL_POST_ATTEMPT_ID=d117-g2-arm-abort-post-throwaway-20260829
 export POWER_POLICY=ac_high_power
+export SETTLE_S=600
+export PRE_CAL_FIDUCIAL_MAX_S=0.032898493715362
 export PLAN_ID="$(/usr/bin/jq -er '.plan.plan_id' "$PACK_ROOT/analysis_manifest_v3.json")"
 export PLAN_SHA256="$(/usr/bin/jq -er '.plan.sha256' "$PACK_ROOT/analysis_manifest_v3.json")"
 export EVIDENCE_ROOT_ID="$(/usr/bin/jq -er '.evidence_root_id' "$PACK_ROOT/analysis_manifest_v3.json")"
@@ -264,9 +261,13 @@ test -f "$FAMILY_PUBLICATION_SOURCE_ROOT/d117_step6_confirmation_table_v4.json.s
 test "$EXPECTED_CONFIRMATION_DIGEST" != LEAD-SUPPLIED-FROZEN-INPUT
 ```
 
-Do not run `preflight.sh` until B3 is ruled. Once ruled, execute its unchanged
-checkout gates plus the new B10 production-loader gate; never cherry-pick only
-the PASS text.
+Execute the required-argument preflight and preserve its complete output; never
+cherry-pick only the PASS text:
+
+```sh
+"$MEASUREMENT_CHECKOUT/docs/process_traces/2026-08-28-live-smoke/preflight.sh" \
+  /Users/edr/JouleWise-measurement-20260813
+```
 
 ### A2 — stage the complete finalizer input tree in custody (MAGISTRATE)
 
@@ -330,7 +331,7 @@ min. Expected artifacts: the six ordered T-0 receipts, `arm-context.json`, and
 `joulewise/arm_readiness_evidence_t0.py:63-91`; the rehearsal values must use
 the throwaway window/session/attempt ids above. The environment authoring
 command is intentionally not rendered: it is lead-produced frozen input and
-B1/B3 must be cured before it can be made exact.
+   the `_v5` supply must be cut before it can be made exact.
 
 ```sh
 for step in clock-reference clock-disable quiet-mac-prep prewindow-check ledger-readiness ledger-reservation; do
@@ -446,11 +447,17 @@ any collection nonzero. The current launcher flags are exact
 ```
 
 The launcher invokes the frozen chain; the following is its governed command
-template, not a second operator invocation. It follows the runbook's exact
-order: start lifecycle, settle, pre bracket, bound corpus and derivation, start
-triplet, before-midpoint science, midpoint, after-midpoint science, end triplet,
-post bracket, completion (`window_runbook.md:1663-1727`). Every flag below was
-confirmed from the current CLI `--help`.
+template, not a second operator invocation. The unchanged portions are
+mechanically checked against the runbook chain: start lifecycle, settle, pre
+bracket, D-079 screening, bound corpus and derivation on
+`$BOUND_RUNS_ROOT`, stage-list semantics, start triplet, the ruled termination
+inside the first before-midpoint stage, midpoint, end triplet, post bracket,
+completion. The source anchors at this head are `window_runbook.md:1516`
+(start), `:1541` (bound path), `:1636` (per-stage settle), `:1653`
+(stage-list function), `:1663` (chain start), and `:1693-1727` (screen through
+completion). `tests/test_check_window_provenance.py` extracts those source
+steps and compares their commands, ordering, and runs-root arguments to this
+Phase D. Every flag below was confirmed from the current CLI `--help`.
 
 ```sh
 "$PY" scripts/launch_window.py \
@@ -460,6 +467,90 @@ confirmed from the current CLI `--help`.
   --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \
   --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST"
 
+OPERATOR_LOG_ROOT="$CUSTODY_ROOT/operator_logs"
+/bin/mkdir -p "$OPERATOR_LOG_ROOT" "$RUNS_ROOT/instrument_validation" \
+  "$BOUND_RUNS_ROOT" "$QUARANTINE_ROOT"
+
+timestamp() {
+  TZ=UTC date '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+quarantine_stale_lock() {
+  local root="$1"
+  local lock="$root/campaign.lock"
+  [ ! -e "$lock" ] && return 0
+  local pid
+  pid="$(/usr/bin/sed -n 's/^pid=\([0-9][0-9]*\).*/\1/p' "$lock")"
+  if [ -z "$pid" ] || /bin/kill -0 "$pid" 2>/dev/null; then
+    return 1
+  fi
+  /bin/mv "$lock" \
+    "$QUARANTINE_ROOT/$(basename "$root").campaign.lock.$(TZ=UTC date '+%Y%m%dT%H%M%SZ')"
+}
+
+settle() {
+  /bin/sleep "$SETTLE_S"
+}
+
+screen_pre_calibration() {
+  local dir="$1"
+  local b
+  b="$(/usr/bin/jq -r '.b_fiducial_s // empty' \
+    "$dir/instrument_evidence.json")"
+  if [ -z "$b" ]; then
+    echo "pre-calibration has no fiducial bound: $dir" >&2
+    return 1
+  fi
+  if (( b > PRE_CAL_FIDUCIAL_MAX_S )); then
+    echo "pre-calibration fiducial $b exceeds D-079 screen $PRE_CAL_FIDUCIAL_MAX_S" >&2
+    return 1
+  fi
+}
+
+run_stage() {
+  local root="$1"
+  local log="$2"
+  local config_dir="$3"
+  local calibration_dir="$4"
+  local label="$5"
+  settle
+  quarantine_stale_lock "$root"
+  echo "$(timestamp) stage_start=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+  "$PY" "$REPO/scripts/run_campaign.py" "$config_dir" \
+    --runs-dir "$root" \
+    --log "$log" \
+    --campaign-policy "$POLICY" \
+    --instrument-calibration-dir "$calibration_dir" \
+    --instrument-power-policy "$POWER_POLICY" \
+    --arm-quiet-mode \
+    --arm-countdown-s 20 \
+    --max-failures 1
+  local stage_rc=$?
+  if [ "$stage_rc" -ne 0 ]; then
+    return "$stage_rc"
+  fi
+  echo "$(timestamp) stage_end=$label" >> "$OPERATOR_LOG_ROOT/window-chain.log"
+}
+
+run_stage_list() {
+  local list="$1"
+  local stage
+  while IFS= read -r stage; do
+    [ -z "$stage" ] && continue
+    [[ "$stage" = \#* ]] && continue
+    run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REPO/$stage" "$PRE_CAL_CUSTODY" "$stage"
+    local stage_rc=$?
+    [ "$stage_rc" -eq 0 ] || return "$stage_rc"
+  done < "$list"
+}
+
+# Final settle is chain-owned, before pre-calibration.
+settle
+"$PY" "$REPO/scripts/launch_window.py" \
+  --pack-root "$PACK_ROOT" --arm-receipt "$ARM_RECEIPT" \
+  --arm-readiness-custody-root "$ARM_READINESS_CUSTODY_ROOT" \
+  --launch-manifest "$LAUNCH_MANIFEST" --lifecycle-event settle
+
 SLOT=pre ATTEMPT_ID="$PRE_ATTEMPT_ID" \
 "$PY" scripts/validate_powermetrics_fiducial.py --allow-live \
   --arm-countdown-s 20 --sleep-display-before-capture \
@@ -467,41 +558,41 @@ SLOT=pre ATTEMPT_ID="$PRE_ATTEMPT_ID" \
   --ledger "$CALIBRATION_LEDGER" --head-pin "$LEDGER_HEAD_PIN" \
   --session-id "$BRACKET_SESSION_ID" --slot pre --attempt-id "$PRE_ATTEMPT_ID" \
   --power-policy "$POWER_POLICY"
+PRE_CAL_CUSTODY="$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID"
+screen_pre_calibration "$PRE_CAL_CUSTODY"
 
-"$PY" scripts/run_campaign.py "$BOUND_CONFIG_ROOT" \
-  --runs-dir "$BOUND_RUNS_ROOT" --log "$BOUND_LOG" \
-  --campaign-policy "$POLICY" \
-  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
-  --instrument-power-policy "$POWER_POLICY" \
-  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+run_stage "$BOUND_RUNS_ROOT" "$BOUND_LOG" "$BOUND_CONFIG_ROOT" "$PRE_CAL_CUSTODY" \
+  neg8-bound-corpus
 "$PY" scripts/run_campaign.py \
   --derive-neg8-drift-bound "$BOUND_MANIFEST" \
   --neg8-drift-bound-output "$NEG8_DRIFT_BOUND" \
   --runs-dir "$BOUND_RUNS_ROOT"
 
-"$PY" scripts/run_campaign.py "$REF_ROOT/start_triplet" \
-  --runs-dir "$RUNS_ROOT" --log "$CLAIM_LOG" --campaign-policy "$POLICY" \
-  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
-  --instrument-power-policy "$POWER_POLICY" \
-  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/start_triplet" "$PRE_CAL_CUSTODY" \
+  start-reference-triplet
 
-# BLOCKED-UNTIL-RULING NR-1 — TEMPLATE ONLY; option (a) would run all five blocks.
-"$PY" scripts/run_campaign.py "$PACK_ROOT/01_decode_contrast_blocks_01_05" \
-  --runs-dir "$RUNS_ROOT" --log "$CLAIM_LOG" --campaign-policy "$POLICY" \
-  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
-  --instrument-power-policy "$POWER_POLICY" \
-  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+# R-1: authenticate the first frozen stage through the runbook's stage list.
+# In a second local terminal, execute the TERMINATE-HERE command below
+# immediately after the b01 A2 bundle reports a succeeded summary. set +e lets
+# the governed chain inspect exactly rc=130 and stops the stage list there.
+FIRST_LISTED_STAGE="$(/usr/bin/sed -n '/^[[:space:]]*#/d;/^[[:space:]]*$/d;1p' \
+  "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt")"
+FROZEN_FIRST_STAGE="$(/usr/bin/jq -er \
+  '.stage_manifests[] | select(.index == 1) | .subcampaign_id' \
+  "$PACK_ROOT/analysis_manifest_v3.json")"
+test "$REPO/$FIRST_LISTED_STAGE" = "$PACK_ROOT/$FROZEN_FIRST_STAGE"
+set +e
+run_stage_list "$WINDOW_PLAN_ROOT/before_midpoint_stages.txt"
+SCIENCE_RC=$?
+set -e
+test "$SCIENCE_RC" = 130
 
-"$PY" scripts/run_campaign.py "$REF_ROOT/midpoint" \
-  --runs-dir "$RUNS_ROOT" --log "$CLAIM_LOG" --campaign-policy "$POLICY" \
-  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
-  --instrument-power-policy "$POWER_POLICY" \
-  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
-"$PY" scripts/run_campaign.py "$REF_ROOT/end_triplet" \
-  --runs-dir "$RUNS_ROOT" --log "$CLAIM_LOG" --campaign-policy "$POLICY" \
-  --instrument-calibration-dir "$RUNS_ROOT/instrument_validation/$PRE_ATTEMPT_ID" \
-  --instrument-power-policy "$POWER_POLICY" \
-  --arm-quiet-mode --arm-countdown-s 20 --max-failures 1
+# Execute the D2 card below here, before midpoint and the post bracket.
+
+run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/midpoint" "$PRE_CAL_CUSTODY" \
+  midpoint-reference
+run_stage "$RUNS_ROOT" "$CLAIM_LOG" "$REF_ROOT/end_triplet" "$PRE_CAL_CUSTODY" \
+  end-reference-triplet
 
 SLOT=post ATTEMPT_ID="$POST_ATTEMPT_ID" \
 "$PY" scripts/validate_powermetrics_fiducial.py --allow-live \
@@ -517,6 +608,80 @@ SLOT=post ATTEMPT_ID="$POST_ATTEMPT_ID" \
   --step6-confirmation-table "$STEP6_CONFIRMATION_TABLE" \
   --expected-confirmation-digest "$EXPECTED_CONFIRMATION_DIGEST"
 ```
+
+**TERMINATE HERE — second local terminal, after block 1 A2 succeeds:**
+
+```sh
+SCIENCE_PID="$(/usr/bin/sed -n 's/^pid=\([0-9][0-9]*\).*/\1/p' "$RUNS_ROOT/campaign.lock")"
+test -n "$SCIENCE_PID"
+/bin/kill -INT "$SCIENCE_PID"
+```
+
+The expected state when the signal completes is exact: the four block-1 bundle
+directories named by the SHA-bound index-1 stage order manifest each contain
+`summary_metrics.json`; no other frozen science-member directory exists;
+`campaign.lock` is absent because Python unwound through its `finally`; the
+partial campaign manifest retains the four completed members; and no midpoint,
+post-calibration, completion, binding, verdict, finalized manifest, or claim
+artifact exists yet. The primary chain checks `SCIENCE_RC=130`, then continues
+with midpoint, end reference, post bracket, and completion. Any fifth science
+bundle, partial bundle, retained lock, different rc, or absent member is ABORT.
+
+### D2 — D-166 prefill resolvability record (ED PROMPT)
+
+This G2 run is the source of record for `_v5` prefill length. The estate-12
+mechanical re-cut supplies three frozen diagnostic stage paths under
+`$PACK_ROOT/g2_prefill_resolvability/`: `p512`, `p1024`, and `p2048`. Each stage
+contains only the small Qwen3 model and preserves every member named by its
+SHA-bound order manifest. Run all three after the ruled block-1 termination and
+before the post bracket, using the same `$PRE_CAL_CUSTODY`:
+
+```sh
+export PREFILL_RESOLVABILITY_ROOT="$PACK_ROOT/g2_prefill_resolvability"
+for length in 512 1024 2048; do
+  run_stage "$RUNS_ROOT" "$CLAIM_LOG" \
+    "$PREFILL_RESOLVABILITY_ROOT/p$length" "$PRE_CAL_CUSTODY" \
+    "g2-prefill-resolvability-p$length"
+done
+```
+
+Record every member's authenticated reducer overlap count, not only the
+minimum. The field is the reducer's
+`window_evidence_precheck.phase.prefill.windows[0].in_window_sample_count`.
+The command below writes the G2 record consumed by the `_v5` prefill-length
+re-cut:
+
+```sh
+: > "$TRANSCRIPT_ROOT/d166-prefill-overlap-counts.jsonl"
+for length in 512 1024 2048; do
+  order="$PREFILL_RESOLVABILITY_ROOT/p$length/order_manifest.json"
+  /usr/bin/jq -er '.executed_order[].run_id' "$order" | while IFS= read -r run_id; do
+    count="$(/usr/bin/jq -er \
+      '.window_evidence_precheck.phase.prefill.windows[0].in_window_sample_count' \
+      "$RUNS_ROOT/$run_id/summary_metrics.json")"
+    /usr/bin/jq -nc --argjson prefill_tokens "$length" --arg run_id "$run_id" \
+      --argjson overlapping_power_interval_count "$count" \
+      '{prefill_tokens:$prefill_tokens,run_id:$run_id,
+        overlapping_power_interval_count:$overlapping_power_interval_count,
+        overlap_margin_above_three:($overlapping_power_interval_count-3)}' \
+      >> "$TRANSCRIPT_ROOT/d166-prefill-overlap-counts.jsonl"
+  done
+done
+/usr/bin/jq -se '
+  group_by(.prefill_tokens)
+  | map({length:.[0].prefill_tokens, members:length,
+         minimum:(map(.overlapping_power_interval_count)|min),
+         all_margin_ge_5:all(.[]; .overlap_margin_above_three >= 5)})
+' "$TRANSCRIPT_ROOT/d166-prefill-overlap-counts.jsonl" \
+  > "$TRANSCRIPT_ROOT/d166-prefill-resolvability-summary.json"
+/usr/bin/jq -e 'length == 3 and all(.members > 0)' \
+  "$TRANSCRIPT_ROOT/d166-prefill-resolvability-summary.json"
+```
+
+The `_v5` prefill length is the shortest of 512/1024/2048 whose row has
+`all_margin_ge_5 == true`; if no row qualifies, G2 records refusal and the
+`_v5` pack is not cut with a guessed length. Preserve both overlap-count files
+with the pack digest and G2 transcript.
 
 ## Phase E — postcollection binding before verdict
 

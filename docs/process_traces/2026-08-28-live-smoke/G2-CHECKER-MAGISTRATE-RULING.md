@@ -100,3 +100,15 @@ Fix round: one Sol high session on this branch implementing R-1, R-2, R-3,
 R-5, R-8 and investigating R-6, followed by the ruled delta re-audit
 (fix rounds introduce defects), then merge on green CI. The two escalations
 are closed by rulings R-2 and R-3, not by further same-shape rounds.
+
+## R-6 RATIFIED (magistrate, 2026-08-30, post fix-round investigation)
+
+The fix-round investigation (custodied in the PR record) is adopted: the
+calibration-ledger head pin stays OUT of the irrelevant-path allowlist; on the
+night, the post-bracket finalization emits its terminal head candidate and the
+transaction continuation STOPS at that boundary; the desk lane then runs the
+existing guarded advancement — review, commit the new pin, regenerate
+readiness evidence, re-freeze, re-attest from the refreshed reviewed head —
+and later arms consume only that refreshed freeze. This is the runbook's own
+physical-ahead route (`window_runbook.md:1900`), not a new mechanism. The
+runsheet carries the stop boundary explicitly.

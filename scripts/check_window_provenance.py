@@ -172,6 +172,92 @@ def _member_run_ids(manifest: Mapping[str, Any]) -> list[str]:
     return result
 
 
+def _authenticated_order_rows(
+    pack_root: Path,
+    binding: Mapping[str, Any],
+    *,
+    path_key: str,
+    sha_key: str,
+    label: str,
+) -> tuple[list[Mapping[str, Any]], str]:
+    relative = binding.get(path_key)
+    expected_sha = binding.get(sha_key)
+    if not isinstance(relative, str) or not relative:
+        raise AssertionFailure(f"{label} path is absent or malformed")
+    if not isinstance(expected_sha, str) or re.fullmatch(r"[0-9a-f]{64}", expected_sha) is None:
+        raise AssertionFailure(f"{label} sha256 is absent or malformed")
+    root = pack_root.resolve(strict=True)
+    path = (root / relative).resolve(strict=True)
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise AssertionFailure(f"{label} resolves outside the pack root") from exc
+    raw = path.read_bytes()
+    observed_sha = hashlib.sha256(raw).hexdigest()
+    if observed_sha != expected_sha:
+        raise AssertionFailure(
+            f"{label} sha256 mismatch observed={observed_sha} expected={expected_sha}"
+        )
+    value = _read_object(path, label)
+    rows = value.get("executed_order")
+    if not isinstance(rows, list) or not rows or any(
+        not isinstance(row, Mapping) for row in rows
+    ):
+        raise AssertionFailure(f"{label} executed_order is absent or malformed")
+    manifest_id = binding.get("manifest_id")
+    if not isinstance(manifest_id, str) or value.get("manifest_id") != manifest_id:
+        raise AssertionFailure(f"{label} manifest_id disagrees with the pack binding")
+    return rows, observed_sha
+
+
+def _frozen_expected_roster(
+    pack_root: Path,
+    prospective: Mapping[str, Any],
+    *,
+    one_block: bool,
+) -> tuple[list[str], str, str]:
+    if one_block:
+        stages = prospective.get("stage_manifests")
+        if not isinstance(stages, list):
+            raise AssertionFailure("pack stage_manifests is absent or malformed")
+        first = [
+            stage
+            for stage in stages
+            if isinstance(stage, Mapping) and stage.get("index") == 1
+        ]
+        if len(first) != 1:
+            raise AssertionFailure("pack must bind exactly one index-1 stage manifest")
+        rows, digest = _authenticated_order_rows(
+            pack_root,
+            first[0],
+            path_key="manifest_path",
+            sha_key="manifest_sha256",
+            label="frozen index-1 stage order manifest",
+        )
+        rows = [row for row in rows if row.get("block_index") == 1]
+        if not rows:
+            raise AssertionFailure("frozen index-1 stage has no block-1 members")
+        source = "stage_index=1 block_index=1"
+    else:
+        root_order = prospective.get("root_order_manifest")
+        if not isinstance(root_order, Mapping):
+            raise AssertionFailure("pack root_order_manifest is absent or malformed")
+        rows, digest = _authenticated_order_rows(
+            pack_root,
+            root_order,
+            path_key="path",
+            sha_key="sha256",
+            label="frozen root order manifest",
+        )
+        source = "root_order_manifest"
+    roster = [row.get("run_id") for row in rows]
+    if any(not isinstance(run_id, str) or not run_id for run_id in roster):
+        raise AssertionFailure(f"{source} contains an invalid run_id")
+    if len(roster) != len(set(roster)):
+        raise AssertionFailure(f"{source} contains duplicate run_ids")
+    return roster, source, digest
+
+
 def _science_records(
     records: Sequence[tuple[Path, Mapping[str, Any]]],
     prospective: Mapping[str, Any],
@@ -241,7 +327,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--pack-root",
         type=Path,
         help=(
-            "gamma _v4 pack directory containing analysis_manifest_v3.json "
+            "gamma successor pack directory containing analysis_manifest_v3.json "
             "(required outside refusal mode)"
         ),
     )
@@ -515,13 +601,20 @@ def _run_assertions(args: argparse.Namespace) -> int:
 
     def check_a2() -> str:
         nonlocal selected_ids, cooldowns
-        expected_ids = {
-            run_id
+        pack_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        if not any(
+            manifest.get("analysis_manifest_sha256") == pack_sha
             for _path, manifest in science
-            for run_id in _member_run_ids(manifest)
-        }
-        if not expected_ids:
-            raise AssertionFailure("science campaign manifests record no collected bundles")
+        ):
+            raise AssertionFailure(
+                "science campaign records do not authenticate the selected pack digest"
+            )
+        roster, roster_source, roster_sha = _frozen_expected_roster(
+            args.pack_root,
+            prospective,
+            one_block=finalized is None,
+        )
+        expected_ids = set(roster)
         cooldowns = campaign_cooldown_evidence(runs_root, collection_id)
         if not cooldowns:
             raise AssertionFailure(
@@ -531,10 +624,19 @@ def _run_assertions(args: argparse.Namespace) -> int:
         missing = sorted(expected_ids - cooldowns.keys())
         if missing:
             raise AssertionFailure(f"collection join omitted bundles={missing}")
-        selected_ids = set(cooldowns)
+        missing_bundles = sorted(
+            run_id
+            for run_id in expected_ids
+            if not (runs_root / run_id / "summary_metrics.json").is_file()
+        )
+        if missing_bundles:
+            raise AssertionFailure(f"frozen roster bundles missing={missing_bundles}")
+        selected_ids = expected_ids
         return (
             f"collection_manifest_id={collection_id} "
-            f"expected={len(expected_ids)} covered={len(selected_ids)}"
+            f"pack_sha256={pack_sha} roster_source={roster_source} "
+            f"roster_sha256={roster_sha} expected={len(expected_ids)} "
+            f"covered={len(selected_ids)}"
         )
 
     a2_passed = reporter.assertion("S11-A2", check_a2)
