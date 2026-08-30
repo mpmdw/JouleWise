@@ -55,3 +55,12 @@ ledger now records the registered wave and subsequent status changes.
 - Ratified: `tutorial-run-a-window.md` teaches the one-member production-shakedown route labelled diagnostic / not claim-bearing until the G2 runsheet lands; then it points at the G2 runsheet.
 - S14 PINSET-REFRESH-LANE landed (#228, 1f046cd9): kernel row missing — register in kernel wave 3 as completed with the #228 evidence.
 - RQ coverage map (#237) and paper round-7 prep (#236): kernel rows missing — register in kernel wave 3.
+
+## T28 (2026-08-29/30) — post-stall drain
+- Kernel wave 2 MERGED (#232). Merged custody: #233 #234 #235 #237 #238.
+- Round-7 prep (#236): lexicon+lint cure landed with the magistrate ruling; rewrite deferred to the `_v5` vocabulary pin — kernel row for the round-7 prep stream gains that ruling as authority (register in wave 3).
+- NEW ROW OWED: PAPER-EXCURSION-DECOMPOSITION-01 — PR #240 (reviewer item 3/C4+C5+D4); register completed-on-merge with the magistrate audit as evidence.
+- PR #229: G2-checker magistrate ruling landed on the branch; fix round + delta re-audit owed before merge (R-6 ledger-pin consult rides the fix round).
+- `_v5` prep: S15 continuation running; D-165 dominance_criterion + R_cm route verdict land with it (kernel rows follow its report).
+- T28 triage of stall-orphaned worktrees: `tmp/s1-fixtures` DISCARDED (zero own commits; its fixture repairs landed independently via #203, byte-identical on main). `feat/pipeline-smoke-tier1` (pushed, 9b3dab83) HELD without PR — it is D-158 A-1's arm/freeze refusal half, pre-empted by D-160 R-4's post-`_v4` PIPELINE-SMOKE-TIER2-01 row, which should cross-reference 9b3dab83 as prior art when registered. RQ coverage map `_v5` re-base recovered from the #237 worktree → PR #243.
+- Cold gate 2026-08-30 (prefill rule): D-166 amended (count ≥ 5; ladder +4096; split refusal branch; G2-a precondition ≥5 members/rung). A3 IMPLEMENTATION CHECKLIST open (decided≠done): _PROSPECTIVE_PREFILL_ARMS +prefill_p4096; generator guard :869 + argparse :3256 +4096; prefill_prompt_pin.v2 (ladder/floor/consistency/selection/G2-a hash); two pinning tests; #229 §D2 jq superseded by G2-a rewrite. Owner: _v5 stream (PR #241 follow-up round) + #229 fix round 2.

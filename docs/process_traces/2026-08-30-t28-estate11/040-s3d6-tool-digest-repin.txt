@@ -1,0 +1,24 @@
+=== S3 D6 re-pin: four custody tools at BASE 0438566b ===
+build_family_marker          actual=e51617f9cdbbcac2e8e5558c5422c701e3091476c267d11427189bfc3a82f50b  sidecar=e51617f9cdbbcac2e8e5558c5422c701e3091476c267d11427189bfc3a82f50b
+verify_family_marker         actual=68be9c6e76eaa17fec49d1b72597189f89c5f80587fa2b5a1e270e1b48e49b19  sidecar=68be9c6e76eaa17fec49d1b72597189f89c5f80587fa2b5a1e270e1b48e49b19
+build_v4_histsem_pinset      actual=d72c156030d9dc477671924677bff70624aaf878868fb0b5ec3ac4035990b23a  sidecar=d72c156030d9dc477671924677bff70624aaf878868fb0b5ec3ac4035990b23a
+verify_receipt_histsem       actual=394ed1992c26cff150c8a9bfe026ba787e99a37428e3ee4010fe381a29b0d860  sidecar=394ed1992c26cff150c8a9bfe026ba787e99a37428e3ee4010fe381a29b0d860
+
+=== pinned S-1 MANIFEST.md tool-digest block (NOT edited) ===
+## 6. Tool digests
+
+SHA-256, GNU coreutils form (`<64 hex><two spaces><basename>`), **recomputed at
+the fix-round head on 2026-08-23** and superseding the values this section
+carried at `b1c6bee`. Those earlier values had gone stale for three artifacts
+that later rounds edited — a hand-transcribed digest block does not update
+itself, which is precisely the drift the `.sha256` sidecar regression exists to
+catch for the tools. Digests marked **(changed)** moved after `b1c6bee`:
+
+```
+e51617f9cdbbcac2e8e5558c5422c701e3091476c267d11427189bfc3a82f50b  build_family_marker.py
+68be9c6e76eaa17fec49d1b72597189f89c5f80587fa2b5a1e270e1b48e49b19  verify_family_marker.py   (changed)
+29335e6fcfe8e97a78212f44e44a96e869d3179afb3411cda74f2a8070b978fa  build_v4_histsem_pinset.py
+394ed1992c26cff150c8a9bfe026ba787e99a37428e3ee4010fe381a29b0d860  verify_receipt_histsem.py
+```
+
+`verify_family_marker.py` changed because the fix round gave it the
