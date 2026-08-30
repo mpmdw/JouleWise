@@ -10,6 +10,25 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T28 (2026-08-29/30) — RESUMED from the T27 usage-limit stall; queue drained,
+`_v5` prep relaunched.** Main was RED (D-164/165/166 index rows landed without
+bodies — cured, `1e763b15`). Merged: #232 (kernel wave 2), #233 (model-panel
+survey), #234 (falsifier consult + cold gate), #235 (workload consult), #237
+(RQ coverage map), #238 (cold-gate refuter custody). Rulings: round-7
+retensing-plan cure ADOPTED / rewrite DEFERRED to the `_v5` vocabulary pin
+(`docs/process_traces/2026-08-27-t26/paper-round7-prep/04-MAGISTRATE-RULING.md`,
+on #236 with the lexicon+lint landed); PR #229's five NEEDS-RULINGs + two
+escalations ruled
+(`docs/process_traces/2026-08-28-live-smoke/G2-CHECKER-MAGISTRATE-RULING.md`;
+fix round owed). NEW: PR #240 — the 118-excursion decomposition (reviewer item
+3; bound = 13.000 bias + 14.000 worst-pulse excess + 1.933 reach + 1.135
+anchor ms, magistrate-audited). IN FLIGHT: Sol xhigh S15 continuation in
+`JouleWise-wt-s15` finishing the `_v5` pack prep (D-164/165/166 +
+cold-gate-amended dominance_criterion; inherited generator's triage found four
+defects, folded into the brief). #209's local-only pinset-refresh commit was
+found unpushed — rebased and being re-verified. Machine sleep killed the first
+background wave overnight; delegated runs now launch under `caffeinate -i`.**
+
 **T27c (2026-08-28 18:30 PDT) — Ed: the advisor meeting is pushed a week.
 Campaign calendar unchanged (shakedown Sat 08-29, transaction Sun 08-30,
 close ≈ Sun 09-06); round 7 fills and the advisor brief refresh follow the

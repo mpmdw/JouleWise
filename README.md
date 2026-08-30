@@ -22,29 +22,31 @@ Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-08-27)
+## Current activity (refreshed each work block; last: 2026-08-30)
 
-**Just completed (2026-08-27): a one-day verification sprint.** Before
-running the week-long measurement campaign, we checked every rule the
-project had decided on against the code that is supposed to enforce it.
-One in four had never been installed. The most important one — the
-statistical plan for the two model comparisons — had been agreed on
-2026-08-17 but never written into the plan the campaign would freeze, so
-the campaign would have run for a week and then refused to report. That
-is now fixed, and the freeze step checks for it. We also built a
-minutes-long end-to-end check of the pipeline so this class of defect
-fails loudly at the desk instead of after a campaign, and rewrote the
-paper around its actual scientific finding (where the phase boundary
-lands, not run-to-run noise, sets the smallest energy difference the
-instrument can resolve), cutting it from 30k to 10k words.
+**Just completed (2026-08-28/30): the campaign switched to newer models,
+and the paper's pass/fail rule got teeth.** Ed chose to run the
+measurement campaign on the newer Qwen3 model pair rather than the
+Qwen2.5 pair the previous plan froze; the design is unchanged, so this
+is a regeneration of the frozen plan, not a new experiment. Three blind
+reviewers of the paper draft then converged on a real weakness: the
+registered pass/fail rule was written so that almost any measurement
+would pass it. A fresh-eyes review board ruled the fix before any data
+exists: the paper's headline now requires the timing-aware uncertainty
+floor to be at least TWICE the naive floor, per component, pre-registered
+into the regenerated plan. Also landed: a desk analysis that splits the
+worked example's 30 ms calibration bound into its four physical parts
+(13 ms repeatable onset bias + 14 ms worst-pulse scatter + ~2 ms
+placement limit + ~1 ms clock term) — the paper's first plotted
+measured data.
 
-**Now:** one small operator edit remains before the campaign can freeze
-(a reviewed digest that only human hands may change), then a ten-minute
-clone rehearsal, then the campaign night — earliest 2026-08-29/30.
+**Now:** finishing the regenerated campaign plan (the new pass/fail
+rule wired in, the new model pair pinned, real prompts instead of a
+synthetic one), then its clone rehearsal.
 
-**Next:** the campaign (about a week of nights), the paper's results
-section from its output, and a 20-minute live end-to-end check the
-evening before.
+**Next:** the campaign transaction night (earliest ≈ 2026-09-01/02),
+about a week of collection, then the paper's results fill from its
+output.
 
 ## Current State
 
