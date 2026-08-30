@@ -238,13 +238,13 @@ These are drawings, not renderings of artifacts. They live in
 
 - `docs/paper/figures/fig1_boundary_attribution.svg` — phase-boundary timing
   uncertainty and the energy that migrates between prompt processing and token
-  generation (belongs to Section 3).
+  generation (belongs to Section 2).
 - `docs/paper/figures/fig2_window_timeline.svg` — measurement-window structure,
-  the calibration bracket, and how ABBA order cancels steady drift (belongs to
-  Section 2).
+  the calibration bracket, and how A/B/B/A order cancels steady drift (belongs
+  to Section 2).
 - `docs/paper/figures/fig3_decision_gates.svg` — the floor gate and the
   interval-direction gate as separate checks, with the four outcomes (belongs
-  to Section 3).
+  to Section 4).
 
 Rules for this class:
 
@@ -259,8 +259,9 @@ Rules for this class:
   for legibility, not measured.
 - Captions in the paper must not use internal decision-log identifiers,
   registry row keys, campaign codenames, or window labels. They stay in plain
-  language, name the figure as schematic, and repeat that its values are
-  illustrative.
+  language, name the figure as schematic, state that any values or widths are
+  illustrative or not to scale, and state that no measured data or numeric
+  threshold is encoded by the layout.
 - The D-119 disclosure lines above are not required for these figures, because
   they make no empirical claim; a schematic figure must not be used to imply
   one.

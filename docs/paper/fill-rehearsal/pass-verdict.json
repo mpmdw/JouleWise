@@ -1,0 +1,11 @@
+{
+  "schema_version": "joulewise.idle_admission_whole_window_verdict.v1",
+  "record_type": "idle_admission_whole_window_verdict",
+  "status": "passed",
+  "claim_licensing": true,
+  "runs_dir": "SYNTHETIC-REHEARSAL-2026-08-27-not-a-measurement",
+  "idle_admission_core": {
+    "conditions": []
+  },
+  "member_failures": []
+}

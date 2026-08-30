@@ -88,6 +88,12 @@ Gate unattended WINDOWS, not the `_v4` mint night.
     forever; the constant is one line.
 14. The supervised rehearsal sitting itself (kernel acceptance item 2).
 
+## Ed's answers 2026-08-28 evening
+- Item 2 (permission JSON via SSH): Ed does it later tonight, before Sunday's mint.
+- Reachability: Ed is reachable all night IN THIS SESSION provided the magistrate sends a push notification before each prompt (estate 11's three freezes tonight; the mint's six on Sunday).
+- Ladder go/no-go: DECIDED 2026-08-28 evening — Ed: "ill go with your rec on both counts" → fiducial first, 3-point ladder desk prep GO (D-163).
+- Dissents (RQ count; appendix length): "go with what you and Sol agree on" — Sol agrees with 1+1+1 and with reproduction material outside the main text; both rulings stand.
+
 ## Optional but valuable
 7. **PIPELINE-SMOKE-LIVE-01 — a HARD GATE on the shakedown and every window
    (Ed 2026-08-28: "as long as we're confident the next window run isn't
@@ -105,3 +111,7 @@ Gate unattended WINDOWS, not the `_v4` mint night.
 ## Strategic (no deadline)
 9. The +2–5-week model-ladder horizon (see the 2026-08-27 chat answer):
    say the horizon and the `_v5` ladder design consult launches.
+
+## Cold-gate Ed items (2026-08-28, PR #231)
+- E1: enable branch protection on `main` with the `gate-ledger` job as a required check (main currently has NONE — verified 404). Hands: GitHub settings.
+- E2: does D-118 gain an `N/A`/docs-only tier? Ed's twelve items are Ed's; the gate could not add a tier.

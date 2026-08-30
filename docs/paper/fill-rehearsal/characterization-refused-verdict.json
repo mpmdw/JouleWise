@@ -1,0 +1,13 @@
+{
+  "schema_version": "joulewise.idle_admission_whole_window_verdict.v1",
+  "record_type": "idle_admission_whole_window_verdict",
+  "status": "failed",
+  "claim_licensing": false,
+  "runs_dir": "SYNTHETIC-REHEARSAL-2026-08-27-characterization-not-a-measurement",
+  "idle_admission_core": {
+    "conditions": [
+      "synthetic_rehearsal_characterization_refusal"
+    ]
+  },
+  "member_failures": []
+}

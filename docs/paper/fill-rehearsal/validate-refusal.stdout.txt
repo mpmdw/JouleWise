@@ -1,0 +1,1 @@
+results prose rendered lint: PASS (§7 7_C3; §6 0; zero fill tokens)
