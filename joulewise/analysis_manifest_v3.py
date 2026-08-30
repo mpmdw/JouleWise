@@ -319,6 +319,15 @@ PROSPECTIVE_REFUSAL_CODES = frozenset(
         "analysis_prospective_unresolved_slot",
     }
 )
+_PROSPECTIVE_PREFILL_ARMS = frozenset(
+    {
+        "prefill_p256",
+        "prefill_p512",
+        "prefill_p1024",
+        "prefill_p2048",
+        "prefill_p4096",
+    }
+)
 FINALIZED_REFUSAL_CODES = frozenset(
     {
         FINALIZED_MALFORMED_VALUE_CODE,
@@ -2066,12 +2075,7 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
     condition_ids: set[str] = set()
     condition_id_by_slot: dict[tuple[str, str], str] = {}
     condition_sha_by_id: dict[str, str] = {}
-    expected_condition_slots = {
-        ("decode", "A"),
-        ("decode", "B"),
-        ("prefill_p256", "A"),
-        ("prefill_p256", "B"),
-    }
+    prefill_arm: str | None = None
     observed_condition_slots: set[tuple[Any, Any]] = set()
     if not isinstance(conditions, list) or len(conditions) != 4:
         _refusal(
@@ -2153,11 +2157,33 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                 )
             elif isinstance(condition_id, str):
                 condition_sha_by_id[condition_id] = str(expected_domain_sha)
+        non_decode_arms = {
+            measurement_arm
+            for measurement_arm, _arm in observed_condition_slots
+            if measurement_arm != "decode"
+        }
+        candidate_prefill_arm = (
+            next(iter(non_decode_arms)) if len(non_decode_arms) == 1 else None
+        )
+        if candidate_prefill_arm in _PROSPECTIVE_PREFILL_ARMS:
+            prefill_arm = candidate_prefill_arm
+        expected_condition_slots = (
+            {
+                ("decode", "A"),
+                ("decode", "B"),
+                (prefill_arm, "A"),
+                (prefill_arm, "B"),
+            }
+            if prefill_arm is not None
+            else set()
+        )
         if observed_condition_slots != expected_condition_slots:
             _refusal(
                 refusals,
                 "analysis_prospective_contrast_cover_mismatch",
-                "condition-family bindings must cover decode/prefill_p256 A/B exactly",
+                "condition-family bindings must cover decode A/B and exactly one "
+                "supported prefill arm A/B (prefill_p256, prefill_p512, "
+                "prefill_p1024, prefill_p2048, or prefill_p4096)",
             )
 
     _exact_refusal_keys(
@@ -2308,7 +2334,9 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                 )
 
     contrasts = value.get("contrasts")
-    expected_arms = {"decode", "prefill_p256"}
+    expected_arms = (
+        {"decode", prefill_arm} if prefill_arm is not None else {"decode"}
+    )
     contrast_ids: list[str] = []
     all_run_ids: list[str] = []
     all_order_indexes: list[int] = []
@@ -2317,7 +2345,8 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
         _refusal(
             refusals,
             "analysis_prospective_contrast_cover_mismatch",
-            "manifest.contrasts must contain exactly decode and prefill_p256",
+            "manifest.contrasts must contain decode and the same single supported "
+            "prefill arm",
         )
     else:
         for index, contrast in enumerate(contrasts):
@@ -2640,11 +2669,12 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
             for contrast in contrasts
             if isinstance(contrast, Mapping)
         }
-        if observed_arms != expected_arms:
+        if prefill_arm is None or observed_arms != expected_arms:
             _refusal(
                 refusals,
                 "analysis_prospective_contrast_cover_mismatch",
-                "manifest.contrasts must cover decode and prefill_p256 exactly",
+                "manifest.contrasts must cover decode and the condition-family "
+                "prefill arm exactly",
             )
     if (
         len(all_run_ids) != 80

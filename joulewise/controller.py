@@ -174,6 +174,7 @@ STATUS_BY_REASON: dict[FailureReason, RunStatus] = {
     FailureReason.UNSUPPORTED_WORKLOAD: RunStatus.UNSUPPORTED,
     FailureReason.RUNTIME_UNAVAILABLE: RunStatus.UNSUPPORTED,
     FailureReason.TELEMETRY_UNAVAILABLE: RunStatus.UNSUPPORTED,
+    FailureReason.MODEL_IDENTITY_MISMATCH: RunStatus.FAILED,
     FailureReason.PERMISSION_DENIED: RunStatus.FAILED,
     FailureReason.TRANSPORT_UNAVAILABLE: RunStatus.FAILED,
     FailureReason.CLEANUP_FAILED: RunStatus.FAILED,
@@ -2107,7 +2108,10 @@ class _Execution:
                     ),
                 }
         extra["config_warnings"] = [dict(item) for item in self._config.config_warnings]
-        extra["model"] = asdict(self._config.model)
+        # The canonical serializer omits the identity pins when both are
+        # null; metadata must match it byte-for-byte or the analysis loader's
+        # realized-identity equality refuses every unpinned bundle.
+        extra["model"] = dict(self._config.to_dict()["model"])
         extra["quantization"] = asdict(self._config.quantization)
         if self._device_metadata is not None:
             # Preserve adapter values verbatim for the bundle writer's single

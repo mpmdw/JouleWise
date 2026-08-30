@@ -61,7 +61,16 @@ _CONFIG_KEYS: dict[str, frozenset[str]] = {
         }
     ),
     "model": frozenset(
-        {"name", "family", "source", "revision", "weight_format", "context_window"}
+        {
+            "name",
+            "family",
+            "source",
+            "revision",
+            "weight_format",
+            "context_window",
+            "tokenizer_json_sha256",
+            "chat_template_sha256",
+        }
     ),
     "quantization": frozenset({"name", "bits", "group_size"}),
     "hardware_target": frozenset(

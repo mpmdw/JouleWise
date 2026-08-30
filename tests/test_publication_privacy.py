@@ -352,6 +352,24 @@ class PublicationPrivacyTests(unittest.TestCase):
             },
         )
 
+    def test_model_identity_pins_are_classified_and_retained(self) -> None:
+        source = self.make_secret_bundle("model-identity-pins")
+        config_path = source / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        config["model"]["tokenizer_json_sha256"] = "a" * 64
+        config["model"]["chat_template_sha256"] = "b" * 64
+        _write_json(config_path, config)
+        destination = self.tmp / "public-model-identity-pins"
+
+        publication_privacy.audit_private_bundle(source)
+        publication_privacy.transform_public_bundle(source, destination)
+
+        public_config = json.loads(
+            (destination / "config.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(public_config["model"]["tokenizer_json_sha256"], "a" * 64)
+        self.assertEqual(public_config["model"]["chat_template_sha256"], "b" * 64)
+
     def test_custody_acknowledgement_is_named_and_omitted_from_public_bundle(self) -> None:
         source = self.make_secret_bundle("custody-acknowledgement")
         acknowledgement_path = (

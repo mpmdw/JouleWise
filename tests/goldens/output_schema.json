@@ -605,6 +605,7 @@
             "enum": [
               "did_not_fit",
               "runtime_unavailable",
+              "model_identity_mismatch",
               "telemetry_unavailable",
               "format_unavailable",
               "permission_denied",
@@ -626,6 +627,12 @@
     "decode_latency_s": {
       "type": [
         "number",
+        "null"
+      ]
+    },
+    "energy_anchor_shift_envelopes": {
+      "type": [
+        "object",
         "null"
       ]
     },
@@ -683,6 +690,7 @@
           "enum": [
             "did_not_fit",
             "runtime_unavailable",
+            "model_identity_mismatch",
             "telemetry_unavailable",
             "format_unavailable",
             "permission_denied",
