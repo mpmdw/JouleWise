@@ -80,7 +80,7 @@ digest comes from transaction custody independently of the repository path
 being checked, rather than from `C` or its sidecar. A consumer that is not
 given `hC` refuses: it performs no changed-set subtraction and authorizes no
 publication. The standing source of `hC` is transaction custody, out of band, for
-the life of the evidence; no repository path ever holds `hC`. The D-151
+the life of the evidence; no repository path ever holds `hC`. The confirmation digests that ARE tracked in this repository (run-state, task queue, state kernel, process traces, run reports) are the `hC` values of the S-0 clone-proof ESTATES, throwaway clones whose confirmations are rehearsal evidence; the digest of the REAL transaction's confirmation is the one this rule governs, and it is never among them. The D-151
 fixation commit pins `hS` — the successor pinset's own digest — which is
 a durable archival byte pin, not a source of `hC` and not the
 authenticator the C→S edge consults (amended per D-153 A5; the prior
