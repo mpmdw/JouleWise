@@ -205,6 +205,13 @@ def _optional_float(value: Any, field_name: str) -> float | None:
     return float(value)
 
 
+def _require_hex_digest(value: Any, field_name: str, length: int) -> str:
+    value = _require_string(value, field_name)
+    if len(value) != length or any(ch not in "0123456789abcdefABCDEF" for ch in value):
+        raise SchemaError(f"{field_name} must be {length}-hex")
+    return value.lower()
+
+
 def _reject_unknown(
     data: dict[str, Any],
     allowed: set[str],
@@ -496,6 +503,193 @@ class SourceManifest:
 
 
 @dataclass(frozen=True)
+class BenchmarkRenderedWith:
+    library: str
+    version: str
+
+    @classmethod
+    def from_mapping(cls, data: Any) -> "BenchmarkRenderedWith":
+        data = _require_mapping(data, "benchmark_import.rendered_with")
+        _reject_unknown(
+            data,
+            {"library", "version"},
+            "benchmark_import.rendered_with",
+        )
+        return cls(
+            library=_require_string(
+                data.get("library"), "benchmark_import.rendered_with.library"
+            ),
+            version=_require_string(
+                data.get("version"), "benchmark_import.rendered_with.version"
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return _plain_dataclass_dict(asdict(self))
+
+
+@dataclass(frozen=True)
+class BenchmarkImport:
+    dataset: str
+    split: str
+    repo_url: str
+    commit: str
+    file_path: str
+    file_sha256: str
+    file_git_blob_sha1: str
+    license_spdx: str
+    license_blob_sha1: str
+    selection_rule: str
+    selection_domain: str
+    k: int
+    selected_item_ids: list[str]
+    selected_item_ids_sha256: str
+    canonical_subset_json_sha256: str
+    prompt_template_id: str
+    prompt_template_sha256: str
+    chat_template_sha256: str
+    enable_thinking: bool
+    tokenizer_json_sha256: str
+    tokenizer_id: str
+    rendered_with: BenchmarkRenderedWith
+
+    @classmethod
+    def from_mapping(cls, data: Any) -> "BenchmarkImport":
+        data = _require_mapping(data, "benchmark_import")
+        allowed = {
+            "dataset",
+            "split",
+            "repo_url",
+            "commit",
+            "file_path",
+            "file_sha256",
+            "file_git_blob_sha1",
+            "license_spdx",
+            "license_blob_sha1",
+            "selection_rule",
+            "selection_domain",
+            "k",
+            "selected_item_ids",
+            "selected_item_ids_sha256",
+            "canonical_subset_json_sha256",
+            "prompt_template_id",
+            "prompt_template_sha256",
+            "chat_template_sha256",
+            "enable_thinking",
+            "tokenizer_json_sha256",
+            "tokenizer_id",
+            "rendered_with",
+        }
+        _reject_unknown(data, allowed, "benchmark_import")
+        selected_item_ids = _require_list(
+            data.get("selected_item_ids"), "benchmark_import.selected_item_ids"
+        )
+        if not selected_item_ids:
+            raise SchemaError("benchmark_import.selected_item_ids must not be empty")
+        selected_item_ids = [
+            _require_string(value, "benchmark_import.selected_item_ids[]")
+            for value in selected_item_ids
+        ]
+        if len(set(selected_item_ids)) != len(selected_item_ids):
+            raise SchemaError("benchmark_import.selected_item_ids must be unique")
+        k = _positive_int(data.get("k"), "benchmark_import.k")
+        if len(selected_item_ids) != k:
+            raise SchemaError(
+                "benchmark_import.selected_item_ids length must equal benchmark_import.k"
+            )
+        selected_ids_digest = hashlib.sha256(
+            json.dumps(
+                selected_item_ids, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
+        declared_selected_ids_digest = _require_hex_digest(
+            data.get("selected_item_ids_sha256"),
+            "benchmark_import.selected_item_ids_sha256",
+            64,
+        )
+        if declared_selected_ids_digest != selected_ids_digest:
+            raise SchemaError(
+                "benchmark_import.selected_item_ids_sha256 does not match "
+                "benchmark_import.selected_item_ids"
+            )
+        enable_thinking = data.get("enable_thinking")
+        if not isinstance(enable_thinking, bool):
+            raise SchemaError("benchmark_import.enable_thinking must be a boolean")
+        return cls(
+            dataset=_require_string(data.get("dataset"), "benchmark_import.dataset"),
+            split=_require_string(data.get("split"), "benchmark_import.split"),
+            repo_url=_require_string(
+                data.get("repo_url"), "benchmark_import.repo_url"
+            ),
+            commit=_require_hex_digest(
+                data.get("commit"), "benchmark_import.commit", 40
+            ),
+            file_path=_require_string(
+                data.get("file_path"), "benchmark_import.file_path"
+            ),
+            file_sha256=_require_hex_digest(
+                data.get("file_sha256"), "benchmark_import.file_sha256", 64
+            ),
+            file_git_blob_sha1=_require_hex_digest(
+                data.get("file_git_blob_sha1"),
+                "benchmark_import.file_git_blob_sha1",
+                40,
+            ),
+            license_spdx=_require_string(
+                data.get("license_spdx"), "benchmark_import.license_spdx"
+            ),
+            license_blob_sha1=_require_hex_digest(
+                data.get("license_blob_sha1"),
+                "benchmark_import.license_blob_sha1",
+                40,
+            ),
+            selection_rule=_require_string(
+                data.get("selection_rule"), "benchmark_import.selection_rule"
+            ),
+            selection_domain=_require_string(
+                data.get("selection_domain"), "benchmark_import.selection_domain"
+            ),
+            k=k,
+            selected_item_ids=selected_item_ids,
+            selected_item_ids_sha256=declared_selected_ids_digest,
+            canonical_subset_json_sha256=_require_hex_digest(
+                data.get("canonical_subset_json_sha256"),
+                "benchmark_import.canonical_subset_json_sha256",
+                64,
+            ),
+            prompt_template_id=_require_string(
+                data.get("prompt_template_id"),
+                "benchmark_import.prompt_template_id",
+            ),
+            prompt_template_sha256=_require_hex_digest(
+                data.get("prompt_template_sha256"),
+                "benchmark_import.prompt_template_sha256",
+                64,
+            ),
+            chat_template_sha256=_require_hex_digest(
+                data.get("chat_template_sha256"),
+                "benchmark_import.chat_template_sha256",
+                64,
+            ),
+            enable_thinking=enable_thinking,
+            tokenizer_json_sha256=_require_hex_digest(
+                data.get("tokenizer_json_sha256"),
+                "benchmark_import.tokenizer_json_sha256",
+                64,
+            ),
+            tokenizer_id=_require_string(
+                data.get("tokenizer_id"), "benchmark_import.tokenizer_id"
+            ),
+            rendered_with=BenchmarkRenderedWith.from_mapping(
+                data.get("rendered_with")
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return _plain_dataclass_dict(asdict(self))
+
+
+@dataclass(frozen=True)
 class ItemDifficulty:
     axis: str
     value: float
@@ -594,7 +788,7 @@ class ItemSource:
                 "prompt_token_ids",
             },
             "items[].source",
-            deferred={"benchmark_import", "import_fields"},
+            deferred={"import_fields"},
         )
         token_ids = data.get("prompt_token_ids")
         if token_ids is not None:
@@ -660,6 +854,39 @@ class ItemGrouping:
 
 
 @dataclass(frozen=True)
+class ItemScoring:
+    scorer_id: str
+    expected_answer_hash: str
+    correctness_quarantine: str
+
+    @classmethod
+    def from_mapping(cls, data: Any) -> "ItemScoring":
+        data = _require_mapping(data, "items[].scoring")
+        _reject_unknown(
+            data,
+            {"scorer_id", "expected_answer_hash", "correctness_quarantine"},
+            "items[].scoring",
+        )
+        return cls(
+            scorer_id=_require_string(
+                data.get("scorer_id"), "items[].scoring.scorer_id"
+            ),
+            expected_answer_hash=_require_hex_digest(
+                data.get("expected_answer_hash"),
+                "items[].scoring.expected_answer_hash",
+                64,
+            ),
+            correctness_quarantine=_require_string(
+                data.get("correctness_quarantine"),
+                "items[].scoring.correctness_quarantine",
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return _plain_dataclass_dict(asdict(self))
+
+
+@dataclass(frozen=True)
 class SuiteItem:
     item_id: str
     item_type: str
@@ -670,6 +897,7 @@ class SuiteItem:
     grouping: ItemGrouping
     output_policy: str
     tags: list[str] = field(default_factory=list)
+    scoring: ItemScoring | None = None
 
     @classmethod
     def from_mapping(cls, data: Any, *, schema_version: str) -> "SuiteItem":
@@ -687,29 +915,28 @@ class SuiteItem:
                 "items[].status_policy was removed in suite_manifest.v2; omit it "
                 "(legacy suite_manifest.v1 permits only 'none')"
             )
+        allowed = {
+            "item_id",
+            "item_type",
+            "category",
+            "difficulty",
+            "shape",
+            "source",
+            "grouping",
+            "output_policy",
+            "tags",
+        }
+        if schema_version == SUITE_SCHEMA_VERSION:
+            allowed.add("scoring")
         _reject_unknown(
             data,
-            {
-                "item_id",
-                "item_type",
-                "category",
-                "difficulty",
-                "shape",
-                "source",
-                "grouping",
-                "output_policy",
-                "tags",
-            }
+            allowed
             | ({"status_policy"} if schema_version == LEGACY_SUITE_SCHEMA_VERSION else set()),
             "items[]",
             deferred={
                 "scoring",
-                "scoring.scorer_id",
-                "scoring.expected_answer_hash",
-                "scoring.correctness_quarantine",
                 "pair_id",
                 "holdout_role",
-                "benchmark_import",
             },
         )
         tags = data.get("tags", [])
@@ -730,11 +957,16 @@ class SuiteItem:
                 OUTPUT_POLICIES,
             ),
             tags=list(tags),
+            scoring=(
+                ItemScoring.from_mapping(data.get("scoring"))
+                if data.get("scoring") is not None
+                else None
+            ),
         )
-        item.validate()
+        item.validate(schema_version=schema_version)
         return item
 
-    def validate(self) -> None:
+    def validate(self, *, schema_version: str) -> None:
         explicit_sources = [
             name
             for name, value in (
@@ -743,7 +975,7 @@ class SuiteItem:
             )
             if value is not None
         ]
-        if len(explicit_sources) > 1:
+        if len(explicit_sources) > 1 and schema_version == LEGACY_SUITE_SCHEMA_VERSION:
             raise SchemaError(
                 "suite item prompt sources are mutually exclusive: "
                 + ", ".join(explicit_sources)
@@ -759,14 +991,18 @@ class SuiteItem:
                 )
 
     def prompt_source_kind(self) -> str:
-        if self.source.prompt_text is not None:
-            return "prompt_text"
         if self.source.prompt_token_ids is not None:
             return "prompt_token_ids"
+        if self.source.prompt_text is not None:
+            return "prompt_text"
         return "synthetic"
 
     def to_dict(self, *, schema_version: str) -> dict[str, Any]:
+        if schema_version == LEGACY_SUITE_SCHEMA_VERSION and self.scoring is not None:
+            raise SchemaError("items[].scoring requires suite_manifest.v2")
         data = _plain_dataclass_dict(asdict(self))
+        if self.scoring is None:
+            data.pop("scoring")
         if schema_version == LEGACY_SUITE_SCHEMA_VERSION:
             data["status_policy"] = LEGACY_STATUS_POLICY
         return data
@@ -789,6 +1025,7 @@ class SuiteManifest:
     execution_policy: ExecutionPolicy
     source_manifest: SourceManifest
     items: list[SuiteItem]
+    benchmark_import: BenchmarkImport | None = None
     markers: dict[str, str] = field(default_factory=lambda: dict(MARKER_DEFAULTS))
     outputs: dict[str, str] = field(default_factory=lambda: dict(OUTPUT_DEFAULTS))
     # Read-side provenance only. It names fields supplied by compatibility
@@ -801,23 +1038,33 @@ class SuiteManifest:
     @classmethod
     def from_mapping(cls, data: Any) -> "SuiteManifest":
         data = _require_mapping(data, "suite_manifest")
+        schema_version = _require_string(data.get("schema_version"), "schema_version")
+        if schema_version not in SUPPORTED_SUITE_SCHEMA_VERSIONS:
+            expected = ", ".join(sorted(SUPPORTED_SUITE_SCHEMA_VERSIONS))
+            raise SchemaError(
+                f"schema_version expected one of: {expected}; got {schema_version!r}"
+            )
+        allowed = {
+            "schema_version",
+            "suite_id",
+            "suite_profile",
+            "suite_revision",
+            "suite_seed",
+            "generator",
+            "analysis_contract",
+            "execution_policy",
+            "source_manifest",
+            "items",
+            "markers",
+            "outputs",
+        }
+        if schema_version == SUITE_SCHEMA_VERSION:
+            allowed.add("benchmark_import")
         _reject_unknown(
             data,
-            {
-                "schema_version",
-                "suite_id",
-                "suite_profile",
-                "suite_revision",
-                "suite_seed",
-                "generator",
-                "analysis_contract",
-                "execution_policy",
-                "source_manifest",
-                "items",
-                "markers",
-                "outputs",
-            },
+            allowed,
             "suite_manifest",
+            deferred={"benchmark_import"},
         )
         raw_items = _require_list(data.get("items"), "items")
         if not raw_items:
@@ -840,12 +1087,6 @@ class SuiteManifest:
                 "outputs",
             )
         )
-        schema_version = _require_string(data.get("schema_version"), "schema_version")
-        if schema_version not in SUPPORTED_SUITE_SCHEMA_VERSIONS:
-            expected = ", ".join(sorted(SUPPORTED_SUITE_SCHEMA_VERSIONS))
-            raise SchemaError(
-                f"schema_version expected one of: {expected}; got {schema_version!r}"
-            )
         manifest = cls(
             schema_version=schema_version,
             suite_id=_require_string(data.get("suite_id"), "suite_id"),
@@ -862,6 +1103,11 @@ class SuiteManifest:
                 SuiteItem.from_mapping(item, schema_version=schema_version)
                 for item in raw_items
             ],
+            benchmark_import=(
+                BenchmarkImport.from_mapping(data.get("benchmark_import"))
+                if data.get("benchmark_import") is not None
+                else None
+            ),
             markers=markers,
             outputs=outputs,
             synthesized_fields=(
@@ -914,6 +1160,43 @@ class SuiteManifest:
                     "duplicate item_id entries are reserved for sentinel items: "
                     f"{item_id}"
                 )
+        if self.benchmark_import is not None:
+            selected_item_ids = [
+                item.source.source_item_id for item in self.items
+            ]
+            if selected_item_ids != self.benchmark_import.selected_item_ids:
+                raise SchemaError(
+                    "benchmark_import.selected_item_ids must match items[].source."
+                    "source_item_id in manifest order"
+                )
+            if (
+                self.source_manifest.subset_sha256
+                != self.benchmark_import.canonical_subset_json_sha256
+            ):
+                raise SchemaError(
+                    "source_manifest.subset_sha256 must match benchmark_import."
+                    "canonical_subset_json_sha256"
+                )
+            missing_scoring = [
+                item.item_id for item in self.items if item.scoring is None
+            ]
+            if missing_scoring:
+                raise SchemaError(
+                    "benchmark_import requires items[].scoring for every item: "
+                    + ", ".join(missing_scoring)
+                )
+            mismatched_templates = [
+                item.item_id
+                for item in self.items
+                if item.source.prompt_template_id
+                != self.benchmark_import.prompt_template_id
+            ]
+            if mismatched_templates:
+                raise SchemaError(
+                    "benchmark_import.prompt_template_id must match every "
+                    "items[].source.prompt_template_id: "
+                    + ", ".join(mismatched_templates)
+                )
         if self.execution_policy.reserved_within_bundle_repeats != 1:
             field_name = (
                 "execution_policy.within_bundle_repeats"
@@ -928,7 +1211,12 @@ class SuiteManifest:
         target_version = self.schema_version if schema_version is None else schema_version
         if target_version not in SUPPORTED_SUITE_SCHEMA_VERSIONS:
             raise SchemaError(f"unsupported suite manifest target version: {target_version!r}")
-        return {
+        if (
+            target_version == LEGACY_SUITE_SCHEMA_VERSION
+            and self.benchmark_import is not None
+        ):
+            raise SchemaError("benchmark_import requires suite_manifest.v2")
+        data = {
             "schema_version": target_version,
             "suite_id": self.suite_id,
             "suite_profile": self.suite_profile,
@@ -946,6 +1234,9 @@ class SuiteManifest:
             "markers": dict(self.markers),
             "outputs": dict(self.outputs),
         }
+        if self.benchmark_import is not None:
+            data["benchmark_import"] = self.benchmark_import.to_dict()
+        return data
 
 
 @dataclass(frozen=True)

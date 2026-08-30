@@ -123,6 +123,8 @@ __all__ = [
     "EXTRACTION_SCHEMA_VERSION",
     "EXTRACTION_SPEC_SCHEMA_VERSION",
     "CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION",
+    "CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1",
+    "CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V2",
     "CAP_HIT_POLICY_EXCLUDE_SAME_SLOT",
     "ANCHOR_FALLBACK_MEMBER_REFUSAL",
     "CELL_REFUSAL_CODES",
@@ -145,9 +147,20 @@ __all__ = [
 
 EXTRACTION_SCHEMA_VERSION = "joulewise.detection_floor_extraction.v1"
 EXTRACTION_SPEC_SCHEMA_VERSION = "joulewise.detection_floor_extraction_spec.v1"
-CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION = (
+CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1 = (
     "joulewise.condition_family_definition.v1"
 )
+CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V2 = (
+    "joulewise.condition_family_definition.v2"
+)
+# Compatibility name retained for every existing v1 producer and digest pin.
+CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION = (
+    CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1
+)
+_CONDITION_FAMILY_DEFINITION_SCHEMA_VERSIONS = {
+    CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1,
+    CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V2,
+}
 
 # The only implemented cap-hit disposition.  A governed drift-term retention
 # path exists on paper (docs/phase_2/detection_floor.md) but has no governed
@@ -708,12 +721,25 @@ _CONDITION_FAMILY_DEFINITION_KEYS = {
     "comparison_policy",
     "abba_alias_relation",
 }
-_CONDITION_FAMILY_WORKLOAD_KEYS = {
+_CONDITION_FAMILY_V1_WORKLOAD_KEYS = {
     "name",
     "prompt_tokens",
     "output_tokens",
     "repetitions",
     "warmup_runs",
+}
+_CONDITION_FAMILY_V2_WORKLOAD_KEYS = {
+    "name",
+    "suite_manifest_sha256",
+    "suite_item_count",
+    "output_cap_tokens",
+    "output_policy",
+    "repetitions",
+    "warmup_runs",
+}
+_CONDITION_FAMILY_SUITE_OUTPUT_POLICIES = {
+    "fixed_budget_exact",
+    "natural_eos",
 }
 _CONDITION_FAMILY_TARGET_KEYS = {"metric", "window_class"}
 _CONDITION_FAMILY_BINDING_KEYS = {
@@ -766,10 +792,11 @@ def _validate_condition_family_definition(
     ):
         return
     assert isinstance(value, Mapping)
-    if value["schema_version"] != CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION:
+    schema_version = value["schema_version"]
+    if schema_version not in _CONDITION_FAMILY_DEFINITION_SCHEMA_VERSIONS:
         errors.append(
-            f"{where}.schema_version: must be "
-            f"{CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION!r}"
+            f"{where}.schema_version: unsupported condition-family definition "
+            f"version {schema_version!r}"
         )
     family_id = value["condition_family_id"]
     if not isinstance(family_id, str) or not family_id:
@@ -784,9 +811,16 @@ def _validate_condition_family_definition(
         )
 
     workload = value["workload_profile"]
-    if _exact_mapping_keys(
+    workload_keys = (
+        _CONDITION_FAMILY_V1_WORKLOAD_KEYS
+        if schema_version == CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1
+        else _CONDITION_FAMILY_V2_WORKLOAD_KEYS
+        if schema_version == CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V2
+        else None
+    )
+    if workload_keys is not None and _exact_mapping_keys(
         workload,
-        _CONDITION_FAMILY_WORKLOAD_KEYS,
+        workload_keys,
         f"{where}.workload_profile",
         errors,
     ):
@@ -795,12 +829,17 @@ def _validate_condition_family_definition(
             errors.append(
                 f"{where}.workload_profile.name: must be a nonempty string"
             )
-        for key in (
-            "prompt_tokens",
-            "output_tokens",
-            "repetitions",
-            "warmup_runs",
-        ):
+        numeric_keys = (
+            ("prompt_tokens", "output_tokens", "repetitions", "warmup_runs")
+            if schema_version == CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1
+            else (
+                "suite_item_count",
+                "output_cap_tokens",
+                "repetitions",
+                "warmup_runs",
+            )
+        )
+        for key in numeric_keys:
             number = workload[key]
             if (
                 not isinstance(number, int)
@@ -810,6 +849,19 @@ def _validate_condition_family_definition(
                 errors.append(
                     f"{where}.workload_profile.{key}: "
                     "must be a positive integer"
+                )
+        if schema_version == CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V2:
+            if not _is_sha256(workload["suite_manifest_sha256"]):
+                errors.append(
+                    f"{where}.workload_profile.suite_manifest_sha256: "
+                    "must be 64 lowercase hex chars"
+                )
+            if workload["output_policy"] not in (
+                _CONDITION_FAMILY_SUITE_OUTPUT_POLICIES
+            ):
+                errors.append(
+                    f"{where}.workload_profile.output_policy: must be one of "
+                    "'fixed_budget_exact', 'natural_eos'"
                 )
 
     target = value["measurement_target"]
