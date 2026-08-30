@@ -718,6 +718,16 @@ flagged in run reports when it occurs.
 Revisit when: a reason code appears that the table misclassifies in practice;
 amend the table and this entry rather than special-casing in adapters.
 
+**AMENDED (magistrate, 2026-08-30, per this entry's own revisit clause):** the
+vocabulary is now ten members. `cleanup_failed` (added after this entry was
+written) and `model_identity_mismatch` (added by the `_v5` model-identity pin
+enforcement, PR #241: the local model's tokenizer/template bytes fail the
+pack-carried pin) both map to `failed` — an identity mismatch is an
+environment/configuration problem to fix before the run counts, not an
+applicability finding. The dividing principle is unchanged. The exact
+ten-member table is pinned by the controller tests and the schemas
+exact-agreement regression.
+
 ---
 
 ## D-013: Controller-as-DUT mitigation for Mac-local runs
