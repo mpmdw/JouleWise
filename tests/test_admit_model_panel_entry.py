@@ -38,7 +38,19 @@ class AdmitModelPanelEntryTests(unittest.TestCase):
             text=True,
         )
 
+    def _skip_unless_mirrors(self, panel_path) -> None:
+        import json as _json
+        panel = _json.loads(Path(panel_path).read_text(encoding="utf-8"))
+        missing = [
+            entry["model_id"]
+            for entry in panel["entries"]
+            if not Path(entry["source"]).joinpath("model.safetensors").is_file()
+        ]
+        if missing:
+            self.skipTest(f"local model mirrors absent (CI environment): {missing}")
+
     def test_all_three_real_mirrors_pass_and_receipts_bind_entries(self) -> None:
+        self._skip_unless_mirrors(PANEL_PATH)
         with tempfile.TemporaryDirectory(prefix="model-admission-") as temporary:
             temporary_path = Path(temporary)
             receipts = {}
@@ -74,6 +86,7 @@ class AdmitModelPanelEntryTests(unittest.TestCase):
         )
 
     def test_tampered_tokenizer_pin_refuses_with_closed_reason(self) -> None:
+        self._skip_unless_mirrors(PANEL_PATH)
         panel = json.loads(PANEL_PATH.read_text(encoding="utf-8"))
         candidate = copy.deepcopy(panel)
         candidate["entries"][1]["tokenizer_json_sha256"] = "0" * 64
@@ -91,6 +104,7 @@ class AdmitModelPanelEntryTests(unittest.TestCase):
         self.assertIn("tokenizer_sha256_mismatch", result.stderr)
 
     def test_tampered_chat_template_pin_refuses_with_closed_reason(self) -> None:
+        self._skip_unless_mirrors(PANEL_PATH)
         panel = json.loads(PANEL_PATH.read_text(encoding="utf-8"))
         candidate = copy.deepcopy(panel)
         candidate["entries"][1]["chat_template_sha256"] = "0" * 64
