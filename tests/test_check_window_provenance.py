@@ -30,6 +30,9 @@ from scripts.check_window_provenance import (
 from scripts.gen_g2_phase_d import (
     BEGIN_MARKER as PHASE_D_BEGIN_MARKER,
     END_MARKER as PHASE_D_END_MARKER,
+    G2A_BEGIN_MARKER,
+    G2A_END_MARKER,
+    render_g2a_generated_region,
     render_generated_region,
     validate_pinned_anchors,
 )
@@ -336,6 +339,119 @@ def _make_sliced_one_block_verdict(fixture: dict) -> None:
     (fixture["runs_root"] / "campaign_log.jsonl").write_bytes(raw)
 
 
+def _mutate_real_membership(fixture: dict, *, operation: str) -> str:
+    """Add/delete one member across every real checker membership surface."""
+
+    runs_root = fixture["runs_root"]
+    manifest_path = runs_root / "campaign_manifests" / "synthetic.json"
+    manifest = json.loads(manifest_path.read_text())
+    verdict = json.loads(fixture["verdict_path"].read_text())
+    if operation == "delete":
+        target = next(
+            member["run_id"]
+            for member in manifest["members"]
+            if member.get("role") is None
+        )
+        manifest["members"] = [
+            member for member in manifest["members"] if member["run_id"] != target
+        ]
+    elif operation == "add":
+        stage = fixture["prospective"]["stage_manifests"][0]
+        order = json.loads(
+            (fixture["prospective_path"].parent / stage["manifest_path"]).read_text()
+        )
+        target = next(
+            row["run_id"] for row in order["executed_order"] if row["block_index"] == 2
+        )
+        source = next(
+            member for member in manifest["members"] if member.get("role") is None
+        )
+        member = copy.deepcopy(source)
+        member.update(
+            bundle_ids=[target],
+            canonical_neg8_workload=False,
+            config=f"{target}.json",
+            role=None,
+            run_id=target,
+            sentinel_position=None,
+        )
+        payload = b'{"release":true,"release_criteria_met_late":false}\n'
+        raw_path = runs_root / "campaign_manifests" / "cooldown" / f"{target}.jsonl"
+        raw_path.write_bytes(payload)
+        member["preceding_campaign_cooldown"] = {
+            "following_run_id": target,
+            "raw_artifact": {
+                "path": f"cooldown/{target}.jsonl",
+                "records": 1,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            },
+            "result": "recovered",
+            "session_id": manifest["session_id"],
+        }
+        manifest["members"].append(member)
+    else:
+        raise ValueError(f"unknown membership mutation {operation!r}")
+    _write_json(manifest_path, manifest)
+
+    if operation == "delete":
+        verdict["bundle_ids"] = [
+            bundle_id for bundle_id in verdict["bundle_ids"] if bundle_id != target
+        ]
+        verdict["evaluation_basis"]["member_occurrences"] = [
+            row
+            for row in verdict["evaluation_basis"]["member_occurrences"]
+            if row["bundle_id"] != target
+        ]
+        verdict["idle_admission_core"]["members"] = [
+            row
+            for row in verdict["idle_admission_core"].get("members", [])
+            if row["bundle_id"] != target
+        ]
+    else:
+        verdict["bundle_ids"].append(target)
+        bundle = runs_root / target
+        verdict["evaluation_basis"]["member_occurrences"].append(
+            {
+                "bundle_id": target,
+                "bundle_path": target,
+                "config_sha256": hashlib.sha256(
+                    (bundle / "config.json").read_bytes()
+                ).hexdigest(),
+                "metadata_sha256": hashlib.sha256(
+                    (bundle / "metadata.json").read_bytes()
+                ).hexdigest(),
+                "summary_sha256": hashlib.sha256(
+                    (bundle / "summary_metrics.json").read_bytes()
+                ).hexdigest(),
+            }
+        )
+        core_member = copy.deepcopy(verdict["idle_admission_core"]["members"][0])
+        core_member["bundle_id"] = target
+        verdict["idle_admission_core"]["members"].append(core_member)
+    verdict["bundle_ids"] = sorted(verdict["bundle_ids"])
+    basis = verdict["evaluation_basis"]
+    basis["member_occurrences"] = sorted(
+        basis["member_occurrences"], key=lambda row: row["bundle_id"]
+    )
+    basis["sha256"] = canonical_sha256(
+        {key: value for key, value in basis.items() if key != "sha256"}
+    )
+    verdict["member_failures"] = [
+        row
+        for row in verdict.get("member_failures", [])
+        if row.get("bundle_id") in verdict["bundle_ids"]
+    ]
+    verdict["row_provenance"] = build_row_provenance(
+        policy_sha256=verdict["campaign_policy"]["sha256"],
+        bundle_ids=verdict["bundle_ids"],
+        source_manifests=verdict["source_campaign_manifests"],
+    )
+    raw = (json.dumps(verdict, sort_keys=True) + "\n").encode()
+    fixture["verdict_path"].write_bytes(raw)
+    (runs_root / "campaign_log.jsonl").write_bytes(raw)
+    return target
+
+
 def _mutate_d157_contract(fixture: dict) -> None:
     prospective = copy.deepcopy(fixture["prospective"])
     prospective["families"][0]["multiplicity"]["m"] = 1
@@ -440,6 +556,29 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         start = runsheet.index(PHASE_D_BEGIN_MARKER)
         end = runsheet.index(PHASE_D_END_MARKER, start) + len(PHASE_D_END_MARKER) + 1
         self.assertEqual(runsheet[start:end].encode(), expected.encode())
+
+    def test_runsheet_g2a_bracket_is_mechanically_bound_to_runbook(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        runbook = (repo / "docs/phase_2/window_runbook.md").read_text()
+        runsheet = (
+            repo
+            / "docs/process_traces/2026-08-28-live-smoke/SHAKEDOWN-G2-RUNSHEET.md"
+        ).read_text()
+        expected = render_g2a_generated_region(runbook)
+        start = runsheet.index(G2A_BEGIN_MARKER)
+        end = runsheet.index(G2A_END_MARKER, start) + len(G2A_END_MARKER) + 1
+        self.assertEqual(runsheet[start:end].encode(), expected.encode())
+        g2a = runsheet[start:end]
+        for token in (
+            'readiness \\\n  --phase pre-reserve',
+            'reserve_calibration_window_bracket.py" \\',
+            'G2A_PRE_CAL_CUSTODY="$(calibrate_slot pre',
+            'screen_pre_calibration "$G2A_PRE_CAL_CUSTODY"',
+            'G2A_POST_CAL_CUSTODY="$(calibrate_slot post',
+            "g2a-post-bracket-terminal-boundary.json",
+            '.terminal_head_pin_candidate != null',
+        ):
+            self.assertIn(token, g2a)
 
     def test_phase_d_generation_rejects_runbook_settle_mutation(self) -> None:
         repo = Path(__file__).resolve().parents[1]
@@ -546,8 +685,14 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertIn("all_small_count_ge_5", runsheet)
         self.assertIn("all(.small_members >= 5)", runsheet)
         self.assertNotIn("all_margin_ge_5", runsheet)
+        self.assertIn("select_g2a_prefill_length.py", runsheet)
+        self.assertIn("G2A_SELECTION_RECORD_SHA256", runsheet)
+        self.assertIn('> "$G2A_SELECTION_RECORD.sha256"', runsheet)
+        self.assertIn('and .collection_prefill_tokens == 4096', runsheet)
         g2a = runsheet.split("## G2-a", 1)[1].split("## Desk day", 1)[0]
         self.assertNotIn('test -f "$PACK_ROOT', g2a)
+        self.assertIn('G2A_PRE_CAL_CUSTODY="$(calibrate_slot pre', g2a)
+        self.assertIn('G2A_POST_CAL_CUSTODY="$(calibrate_slot post', g2a)
         g2b = runsheet.split("## G2-b — evening before the transaction", 1)[1]
         self.assertIn('test -f "$PACK_ROOT/analysis_manifest_v3.json"', g2b)
 
@@ -587,44 +732,24 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
 
-    def test_partial_science_join_names_missing_bundle_isolated_to_s11_a2(self) -> None:
-        """A partial consumer keyset fails A2; its dependent checks legitimately skip."""
-
-        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
-            fixture = _install_s11_checker_fixture(Path(tmp))
-            import scripts.check_window_provenance as checker
-
-            complete = checker.campaign_cooldown_evidence(
-                fixture["runs_root"], fixture["prospective"]["manifest_id"]
-            )
-            self.assertGreater(len(complete), 1)
-            stage = fixture["prospective"]["stage_manifests"][0]
-            order = json.loads(
-                (fixture["prospective_path"].parent / stage["manifest_path"]).read_text()
-            )
-            omitted = next(
-                row["run_id"]
-                for row in order["executed_order"]
-                if row["block_index"] == 1
-            )
-            partial = {key: value for key, value in complete.items() if key != omitted}
-            with mock.patch.object(
-                checker, "campaign_cooldown_evidence", return_value=partial
-            ):
+    def test_real_add_delete_membership_reaches_s11_a2_and_all_f5_assertions(self) -> None:
+        for operation, direction in (("add", "extra"), ("delete", "missing")):
+            with self.subTest(operation=operation), tempfile.TemporaryDirectory(
+                dir=_REAL_TMP
+            ) as tmp:
+                fixture = _install_s11_checker_fixture(Path(tmp))
+                target = _mutate_real_membership(fixture, operation=operation)
                 code, output = _run(_normal_argv(fixture))
-            self.assertNotEqual(code, 0, output)
-            self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
-            self.assertIn(
-                f"S11-A2 collection join member set mismatch missing=['{omitted}'] extra=[]",
-                output,
-            )
-            for assertion_id in ("S11-A3", "F5-1", "F5-2", "F5-3", "F5-4"):
-                self.assertIn(
-                    f"SKIP {assertion_id} prerequisite=S11-A2", output
+                self.assertNotEqual(code, 0, output)
+                self.assertEqual(
+                    self._fail_ids(output),
+                    ["S11-A2", "F5-1", "F5-2", "F5-3", "F5-4"],
+                    output,
                 )
-            self.assertIn(
-                "SKIP S11-A4 present_stages=0 assertion_not_exercised", output
-            )
+                for assertion_id in ("S11-A2", "F5-1", "F5-2", "F5-3", "F5-4"):
+                    self.assertIn(f"FAIL {assertion_id} ", output)
+                self.assertIn(f"{direction}=['{target}']", output)
+                self.assertNotIn("SKIP F5-", output)
 
     def test_deleted_frozen_roster_bundle_isolated_to_s11_a2(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
@@ -643,28 +768,6 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             self.assertNotEqual(code, 0, output)
             self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
             self.assertIn(f"frozen roster bundles missing=['{deleted}']", output)
-
-    def test_added_science_member_isolated_to_s11_a2(self) -> None:
-        with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:
-            fixture = _install_s11_checker_fixture(Path(tmp))
-            manifest_path = fixture["runs_root"] / "campaign_manifests" / "synthetic.json"
-            manifest = json.loads(manifest_path.read_text())
-            added = "unexpected-block-2-member"
-            source = manifest["members"][-1]
-            member = copy.deepcopy(source)
-            member["run_id"] = added
-            member["bundle_ids"] = [added]
-            member["preceding_campaign_cooldown"]["following_run_id"] = added
-            manifest["members"].append(member)
-            _write_json(manifest_path, manifest)
-            shutil.copytree(fixture["runs_root"] / source["run_id"], fixture["runs_root"] / added)
-            code, output = _run(_normal_argv(fixture))
-            self.assertNotEqual(code, 0, output)
-            self.assertEqual(self._fail_ids(output), ["S11-A2"], output)
-            self.assertIn(
-                f"S11-A2 collection join member set mismatch missing=[] extra=['{added}']",
-                output,
-            )
 
     def test_missing_cooldown_evidence_isolated_to_s11_a3(self) -> None:
         with tempfile.TemporaryDirectory(dir=_REAL_TMP) as tmp:

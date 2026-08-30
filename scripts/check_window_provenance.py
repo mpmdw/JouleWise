@@ -607,6 +607,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
     science = _science_records(records, prospective)
     selected_ids: set[str] = set()
     cooldowns: dict[str, Mapping[str, Any]] = {}
+    f5_membership_probe_ready = False
 
     def check_nr14_layout() -> str:
         # Preserve the caller's lexical spelling just as the finalizer does at
@@ -673,7 +674,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
     reporter.assertion("S11-A1", check_a1)
 
     def check_a2() -> str:
-        nonlocal selected_ids, cooldowns
+        nonlocal selected_ids, cooldowns, f5_membership_probe_ready
         pack_sha = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
         if not any(
             manifest.get("analysis_manifest_sha256") == pack_sha
@@ -688,6 +689,17 @@ def _run_assertions(args: argparse.Namespace) -> int:
             one_block=finalized is None,
         )
         expected_ids = set(roster)
+        # Preserve the authenticated frozen roster as the downstream comparison
+        # basis even when the first real consumer join is add/delete divergent.
+        # F5-1..4 are independent exact-set assertions, not aliases that may be
+        # skipped after S11-A2 finds the first mismatch.
+        selected_ids = expected_ids
+        missing_bundles = sorted(
+            run_id
+            for run_id in expected_ids
+            if not (runs_root / run_id / "summary_metrics.json").is_file()
+        )
+        f5_membership_probe_ready = finalized is None and not missing_bundles
         cooldowns = campaign_cooldown_evidence(runs_root, collection_id)
         if not cooldowns:
             raise AssertionFailure(
@@ -697,14 +709,8 @@ def _run_assertions(args: argparse.Namespace) -> int:
         _assert_exact_member_set(
             "S11-A2 collection join", expected_ids, set(cooldowns)
         )
-        missing_bundles = sorted(
-            run_id
-            for run_id in expected_ids
-            if not (runs_root / run_id / "summary_metrics.json").is_file()
-        )
         if missing_bundles:
             raise AssertionFailure(f"frozen roster bundles missing={missing_bundles}")
-        selected_ids = expected_ids
         return (
             f"collection_manifest_id={collection_id} "
             f"pack_sha256={pack_sha} roster_source={roster_source} "
@@ -810,7 +816,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
             f"{key}:{counts[key]}" for key in sorted(counts)
         )
 
-    if a2_passed:
+    if a2_passed or f5_membership_probe_ready:
         reporter.assertion("F5-1", check_f51)
     else:
         reporter.skip("F5-1", "prerequisite=S11-A2")
@@ -884,7 +890,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
             f"status={status} reasons={list(reasons)} attachment=recomputed{boundary}"
         )
 
-    if a2_passed:
+    if a2_passed or f5_membership_probe_ready:
         reporter.assertion("F5-2", check_f52)
     else:
         reporter.skip("F5-2", "prerequisite=S11-A2")
@@ -923,7 +929,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
             f"boundary=physical_ahead candidate_sequence={candidate['sequence']}"
         )
 
-    if a2_passed:
+    if a2_passed or f5_membership_probe_ready:
         reporter.assertion("F5-3", check_f53)
     else:
         reporter.skip("F5-3", "prerequisite=S11-A2")
@@ -993,7 +999,7 @@ def _run_assertions(args: argparse.Namespace) -> int:
             f"excluded_count={len(ids)} excluded_ids={ids}"
         )
 
-    if a2_passed:
+    if a2_passed or f5_membership_probe_ready:
         reporter.assertion("F5-4", check_f54)
     else:
         reporter.skip("F5-4", "prerequisite=S11-A2")
