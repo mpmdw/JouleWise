@@ -1179,6 +1179,41 @@ _WHOLE_WINDOW_OCCURRENCE_KEYS = {
 _BRACKET_BINDING_SCHEMA = "joulewise.calibration_bracket_binding.v1"
 _LEDGER_SCHEMA = "joulewise.calibration_observation_ledger.v1"
 _FLOOR_SCHEMA = "joulewise.detection_floor_artifact.v2"
+DETECTION_FLOOR_ARTIFACT_SCHEMA = _FLOOR_SCHEMA
+"""Public name for the floor-artifact schema a contrast must require.
+
+A pack generator names this schema in every contrast's
+``floor_dependency.required_artifact_schema``.  The generator it emits is
+committed into a frozen pack and must stay runnable for the life of the
+evidence, so it binds this supported name rather than the private constant.
+"""
+
+
+_REQUIRED_ATTACHMENT_SCHEMA_VERSIONS = {
+    "whole_window_verdict": _WHOLE_WINDOW_SCHEMA,
+    "bracket_binding": _BRACKET_BINDING_SCHEMA,
+    "calibration_ledger": _LEDGER_SCHEMA,
+    "aggregate_floor_artifact": _FLOOR_SCHEMA,
+}
+
+
+def prospective_finalization_required_attachments() -> list[dict[str, str]]:
+    """Return fresh declaration rows for the governed finalization contract.
+
+    The returned list has the exact JSON shape required at
+    ``finalization_contract.required_attachments``.  Roles and schema versions
+    are derived from the validator's existing private contract constants so a
+    generator need not import private implementation names.
+    """
+
+    if set(_REQUIRED_ATTACHMENT_SCHEMA_VERSIONS) != _REQUIRED_ATTACHMENT_ROLES:
+        raise AnalysisManifestV3Error(
+            "finalization attachment role/schema constants disagree"
+        )
+    return [
+        {"role": role, "schema_version": schema_version}
+        for role, schema_version in _REQUIRED_ATTACHMENT_SCHEMA_VERSIONS.items()
+    ]
 
 
 def is_abba_v3_consumable_schema(value: object) -> bool:
@@ -2335,7 +2370,12 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                     "analysis_prospective_schema_invalid",
                     f"{where}.difference_orientation must be B-minus-A",
                 )
-            if contrast.get("test") not in {"two_sided", "greater", "less"}:
+            test = contrast.get("test")
+            if not isinstance(test, str) or test not in {
+                "two_sided",
+                "greater",
+                "less",
+            }:
                 _refusal(
                     refusals,
                     "analysis_prospective_schema_invalid",
@@ -2434,12 +2474,14 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                 continue
             assert isinstance(selector, Mapping)
             transport = floor_dependency.get("transport")
+            backend = selector.get("backend")
             if (
                 floor_dependency.get("required_artifact_schema") != _FLOOR_SCHEMA
                 or selector.get("metric") != contrast.get("metric")
                 or selector.get("condition_family_ids")
                 != [contrast.get("condition_a_id"), contrast.get("condition_b_id")]
-                or selector.get("backend") not in {"from_bundle", "powermetrics"}
+                or not isinstance(backend, str)
+                or backend not in {"from_bundle", "powermetrics"}
                 or selector.get("floor_field") != "floor_gate_j"
                 or selector.get("claim_floor_rule") != FLOOR_RULE_ID
             ):
@@ -2690,12 +2732,9 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                             "analysis_prospective_schema_invalid",
                             "attachment schema versions must be nonempty strings",
                         )
-        expected_attachment_schemas = {
-            "whole_window_verdict": _WHOLE_WINDOW_SCHEMA,
-            "bracket_binding": _BRACKET_BINDING_SCHEMA,
-            "calibration_ledger": _LEDGER_SCHEMA,
-            "aggregate_floor_artifact": _FLOOR_SCHEMA,
-        }
+        expected_attachment_schemas = dict(
+            _REQUIRED_ATTACHMENT_SCHEMA_VERSIONS
+        )
         observed_attachment_schemas = {
             attachment.get("role"): attachment.get("schema_version")
             for attachment in attachments
@@ -4212,6 +4251,7 @@ __all__ = [
     "frozen_family_block_strata",
     "is_abba_v3_consumable_schema",
     "normalized_realized_stack_identity",
+    "prospective_finalization_required_attachments",
     "render_manifest",
     "validate_analysis_manifest_v3",
     "validate_finalized_analysis_manifest_v3",

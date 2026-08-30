@@ -66,6 +66,48 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
   separate families unless a frozen campaign explicitly searches across
   them.
 
+### `freeze_status` — what "frozen" means on a prospective analysis manifest (D-157 A-2)
+
+A **prospective analysis manifest** is the machine-readable form of the frozen
+registry described above: one JSON artifact, written by a campaign pack's
+generator, naming every claim-bearing contrast, its family, its multiplicity
+denominator `m`, its test and pre-registered direction, and its floor
+dependency — everything that could change a result — before a single
+measurement is taken. Its schema version is
+`joulewise.analysis_manifest.v3.prospective`, and the key set it must carry is
+specified in `joulewise/analysis_manifest_v3.py`
+(`_PROSPECTIVE_TOP_KEYS`, `FAMILY_KEYS`, `MULTIPLICITY_KEYS`,
+`_PROSPECTIVE_CONTRAST_KEYS`), which remains the ONE home for the exact field
+list; this section defines only the one term whose meaning is not obvious from
+that list.
+
+Its `freeze_status` field accepts exactly one value, `"frozen"`, and that word
+means: **the analysis semantics are pre-registered and byte-pinned at
+generation.** Read that as two concrete facts about the moment the generator
+writes the file, both checkable:
+
+1. *Pre-registered* — every field that could change an estimand or a family
+   result is already filled in with a ruled value. No slot is left as a
+   placeholder for a later decision, which is why the validator refuses any
+   `EMPTY`/`TODO` marker anywhere in the artifact.
+2. *Byte-pinned* — the manifest's own SHA-256 is recorded in the pack's
+   `plan_tree.json`, and a second digest, `frozen_semantics_sha256`, covers the
+   projection of just the result-bearing fields. Changing any of them afterwards
+   changes a digest that something else already authenticates, so the change
+   cannot be silent.
+
+**This is not the pack freeze event, and the two must not be conflated.** The
+pack freeze is a later, separate act: a D-134 freeze receipt is minted over the
+whole pack tree, and from that point the pack's bytes are never repaired
+(D-140). A prospective manifest is born with `freeze_status: "frozen"` at
+generation time — at `_v4`, that is runbook step C1 — hours or days before the
+receipt at step C8 exists. There is no contradiction, because the two words
+describe different objects: `freeze_status` describes the *analysis contract*
+inside the file, and the receipt describes the *pack* the file sits in. A reader
+who takes `freeze_status` as a claim about the pack's receipt state will read it
+as false at C1, which is exactly the misreading this paragraph exists to
+prevent.
+
 ## Standing reporting rules
 
 - Unpaired MDE reference arithmetic at n=5 is pinned by C-014: for

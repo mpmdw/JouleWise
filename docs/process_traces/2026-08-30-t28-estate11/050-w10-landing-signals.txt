@@ -1,0 +1,13 @@
+=== W-10 (PR #209) landing signals at BASE 0438566b ===
+tests/test_mint_analysis_admission.py          PRESENT
+tests/test_d117_gamma_d139a2_families.py       PRESENT
+def _admit_bound_analysis_manifest(            line 5271
+call site(s) in generate_freeze_receipt:
+5271:def _admit_bound_analysis_manifest(
+7584:    _admit_bound_analysis_manifest(root, tree)
+
+=== manifest_id presence in committed analysis_manifest_v3.json files ===
+configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v1/analysis_manifest_v3.json <NO manifest_id KEY>
+configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v2/analysis_manifest_v3.json <NO manifest_id KEY>
+configs/campaigns/d117_contrast_qwen25_1p5b_vs_7b_v3/analysis_manifest_v3.json <NO manifest_id KEY>
+configs/campaigns/splitwise_decode_v1/analysis_manifest_v3.json am-5e97ee9823b2441858b7670811c15e4d3a40564716399692cc8605787e349bc3

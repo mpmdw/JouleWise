@@ -28,11 +28,18 @@ from joulewise.analysis_manifest_v3 import (
     PROSPECTIVE_MALFORMED_VALUE_CODE,
     PROSPECTIVE_REFUSAL_CODES,
     SEMANTICS_PROJECTION_RULE_ID,
+    _ATTACHMENT_DECLARATION_KEYS,
+    _BRACKET_BINDING_SCHEMA,
+    _FLOOR_SCHEMA,
+    _LEDGER_SCHEMA,
+    _REQUIRED_ATTACHMENT_ROLES,
+    _WHOLE_WINDOW_SCHEMA,
     analysis_semantics_sha256_v1,
     build_analysis_manifest_v3,
     build_prospective_analysis_manifest_v3,
     calculate_manifest_id,
     normalized_realized_stack_identity,
+    prospective_finalization_required_attachments,
     render_manifest,
     validate_analysis_manifest_v3,
     validate_prospective_analysis_manifest_v3,
@@ -864,6 +871,73 @@ class AnalysisManifestV3Tests(unittest.TestCase):
                     )
                     self.assertIn(exception_type.__name__, refusals[0].detail)
                     self.assertIs(refusals[0].cause, injected)
+
+    def test_whole_object_empty_slots_are_classified_as_unresolved(self) -> None:
+        empty_slot = {
+            "status": "EMPTY",
+            "value": "",
+            "todo": "restore the ruled prospective value",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path, plan_tree_path, prospective = (
+                install_synthetic_prospective_fixture(Path(tmp))
+            )
+            candidates = {}
+            test_slot = copy.deepcopy(prospective)
+            test_slot["contrasts"][0]["test"] = copy.deepcopy(empty_slot)
+            candidates["test"] = test_slot
+            floor_slot = copy.deepcopy(prospective)
+            floor_slot["contrasts"][0]["floor_dependency"][
+                "floor_selector"
+            ]["backend"] = copy.deepcopy(empty_slot)
+            candidates["floor_dependency_child"] = floor_slot
+
+            for label, candidate in candidates.items():
+                with self.subTest(label=label):
+                    refusals = validate_prospective_analysis_manifest_v3(
+                        candidate,
+                        manifest_dir=manifest_path.parent,
+                        plan_tree_path=plan_tree_path,
+                    )
+                    self.assertTrue(refusals)
+                    self.assertEqual(
+                        refusals[0].reason_code,
+                        "analysis_prospective_unresolved_slot",
+                    )
+                    self.assertNotIn(
+                        PROSPECTIVE_INTERNAL_ERROR_CODE,
+                        {item.reason_code for item in refusals},
+                    )
+
+    def test_prospective_finalization_attachment_accessor_matches_contract(
+        self,
+    ) -> None:
+        declarations = prospective_finalization_required_attachments()
+        expected_schemas = {
+            "whole_window_verdict": _WHOLE_WINDOW_SCHEMA,
+            "bracket_binding": _BRACKET_BINDING_SCHEMA,
+            "calibration_ledger": _LEDGER_SCHEMA,
+            "aggregate_floor_artifact": _FLOOR_SCHEMA,
+        }
+        self.assertEqual(len(declarations), 4)
+        self.assertEqual(
+            {frozenset(item) for item in declarations},
+            {frozenset(_ATTACHMENT_DECLARATION_KEYS)},
+        )
+        self.assertEqual(
+            {item["role"] for item in declarations},
+            _REQUIRED_ATTACHMENT_ROLES,
+        )
+        self.assertEqual(
+            {
+                item["role"]: item["schema_version"]
+                for item in declarations
+            },
+            expected_schemas,
+        )
+        self.assertIsNot(
+            prospective_finalization_required_attachments(), declarations
+        )
 
     def test_checked_in_placeholder_manifest_is_not_a_frozen_prospective(self) -> None:
         draft = json.loads((GAMMA_DIR / "analysis_manifest_v3.json").read_text())
