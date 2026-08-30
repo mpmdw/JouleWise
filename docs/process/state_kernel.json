@@ -4841,7 +4841,7 @@
       "priority": "p1_phase_gate",
       "rank": 2,
       "status": "partial",
-      "status_note": "Code MERGED #155 (d54db78). D-139 rules delivered: Holm m=2 family (decode+prefill, alpha=0.05, two-sided) adopted; p256 floor = dedicated artifact (cells already frozen, #138). Remaining before close: the production freeze (rides Phase 2) + the same-head production-pack L10 replay",
+      "status_note": "Code MERGED #155 (d54db78). D-139 rules delivered: Holm m=2 family (decode+prefill, alpha=0.05, two-sided) adopted; p256 floor = dedicated artifact (cells already frozen, #138). 2026-08-27 D-157 W-10 (S8): the ruling is now EXECUTED IN CODE - the gamma generator emits a real prospective manifest (full 15-key top set, freeze_status frozen, one primary holm family alpha=0.05 m=2 over both contrasts, family_instance_id stamped on both, two_sided/positive, dedicated p256 floor in exact_stack_only mode, every TODO slot gone) and the emitted _v4 validates with ZERO refusals where it previously drew four; the primary freeze mint now runs that validator pre-write and REFUSES an inadmissible manifest (D-157 R-2, closing the no-producer-check class). Remaining before close: the production freeze (rides Phase 2) + the same-head production-pack L10 replay",
       "stop_card": null
     },
     "WO-DETECT-PULSES-BUDGET": {

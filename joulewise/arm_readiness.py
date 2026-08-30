@@ -5268,6 +5268,133 @@ def _pack_identity(pack_root: Path, tree: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _admit_bound_analysis_manifest(
+    pack_root: Path, tree: Mapping[str, Any]
+) -> None:
+    """Refuse a new freeze whose root prospective manifest is not admitted.
+
+    A root-local v3 manifest makes this check applicable even when a regressed
+    plan tree omits its binding.  Floor packs carry only an extraction
+    specification, so they remain exempt when neither the artifact nor either
+    binding field is present.
+    """
+
+    # Import locally so ordinary arm-readiness imports do not load the analysis
+    # stack.  MANIFEST_NAME is the generator/builder's production locator for
+    # the root-local prospective artifact; it is not inferred from pack names.
+    from joulewise.analysis_manifest_v3 import (
+        MANIFEST_NAME,
+        validate_prospective_analysis_manifest_v3,
+    )
+
+    prospective_path = pack_root / MANIFEST_NAME
+    try:
+        prospective_path.lstat()
+    except FileNotFoundError:
+        prospective_present = False
+    except OSError as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable",
+            f"cannot inspect prospective analysis manifest: {MANIFEST_NAME}",
+        ) from exc
+    else:
+        prospective_present = True
+
+    downstream = tree.get("downstream_contract")
+    if not isinstance(downstream, Mapping):
+        if prospective_present:
+            raise ArmReadinessError(
+                "readiness_schema_invalid",
+                f"pack root contains {MANIFEST_NAME} but plan tree omits its "
+                "mandatory downstream binding",
+            )
+        return
+    raw_path = downstream.get("analysis_manifest_path")
+    raw_sha256 = downstream.get("analysis_manifest_sha256")
+    if raw_path is None and raw_sha256 is None:
+        if prospective_present:
+            raise ArmReadinessError(
+                "readiness_schema_invalid",
+                f"pack root contains {MANIFEST_NAME} but downstream_contract "
+                "omits its mandatory path/SHA-256 binding",
+            )
+        return
+
+    relative = _require_relative_path(
+        raw_path, "downstream_contract.analysis_manifest_path"
+    )
+    expected_sha256 = _require_lower_sha256(
+        raw_sha256, "downstream_contract.analysis_manifest_sha256"
+    )
+    if prospective_present and relative != MANIFEST_NAME:
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"downstream_contract must bind the root-local {MANIFEST_NAME}",
+        )
+    candidate = pack_root.joinpath(*PurePosixPath(relative).parts)
+    try:
+        current = pack_root
+        for component in PurePosixPath(relative).parts:
+            current = current / component
+            mode = current.lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise ArmReadinessError(
+                    "readiness_pack_namespace_anomalous",
+                    "analysis-manifest binding traverses a symlink: "
+                    f"{relative}",
+                )
+        if not stat.S_ISREG(candidate.lstat().st_mode):
+            raise ArmReadinessError(
+                "readiness_pack_namespace_anomalous",
+                f"analysis-manifest binding is not a regular file: {relative}",
+            )
+        candidate.resolve(strict=True).relative_to(pack_root)
+        raw = candidate.read_bytes()
+    except ArmReadinessError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise ArmReadinessError(
+            "readiness_pack_unreadable",
+            "plan-bound analysis manifest is missing, unreadable, or outside "
+            f"the pack: {relative}",
+        ) from exc
+
+    if sha256_bytes(raw) != expected_sha256:
+        raise ArmReadinessError(
+            "readiness_pack_digest_mismatch",
+            "plan tree does not authenticate the exact prospective analysis "
+            "manifest bytes",
+        )
+    try:
+        value = parse_json_bytes(raw)
+    except ArmReadinessError as exc:
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"prospective analysis manifest is not strict JSON: {exc}",
+        ) from exc
+    if not isinstance(value, Mapping):
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            "prospective analysis manifest must contain an object",
+        )
+
+    # The validator itself exercises every family's production multiplicity
+    # method with {contrast_id: None}, including len(p_values) == m.
+    refusals = validate_prospective_analysis_manifest_v3(
+        value,
+        manifest_dir=pack_root,
+        plan_tree_path=pack_root / "plan_tree.json",
+    )
+    if refusals:
+        detail = "; ".join(
+            f"{refusal.reason_code}: {refusal.detail}" for refusal in refusals
+        )
+        raise ArmReadinessError(
+            "readiness_schema_invalid",
+            f"prospective analysis manifest admission refused: {detail}",
+        )
+
+
 def resolve_frozen_plan(
     pack_root: Path | str,
     tree: Mapping[str, Any] | None = None,
@@ -7454,6 +7581,7 @@ def generate_freeze_receipt(
             successor_receipt_id=f"freeze-{number:04d}",
             successor_profile=str(registry_reference["plan_profile"]),
         )
+    _admit_bound_analysis_manifest(root, tree)
     # The pre-freeze pack must be an exact committed tree.  The writes below
     # intentionally make it dirty until the lead commits the final frozen pack.
     pre_freeze_pack_sha = committed_pack_tree_sha256(root)
