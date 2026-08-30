@@ -364,6 +364,36 @@ def install_synthetic_prospective_fixture(
     return manifest_path, plan_tree_path, prospective
 
 
+def authenticate_prospective_fixture(
+    manifest_path: Path, plan_tree_path: Path, prospective: dict
+) -> None:
+    prospective["frozen_semantics_sha256"] = independent_semantics_sha256(
+        prospective
+    )
+    reidentify(prospective)
+    manifest_path.write_bytes(render_manifest(prospective))
+    plan_tree = json.loads(plan_tree_path.read_text())
+    plan_tree["downstream_contract"]["analysis_manifest_sha256"] = hashlib.sha256(
+        manifest_path.read_bytes()
+    ).hexdigest()
+    plan_tree_path.write_text(json.dumps(plan_tree, indent=2) + "\n")
+
+
+def retarget_prospective_prefill_arm(prospective: dict, prefill_arm: str) -> None:
+    for condition in prospective["condition_families"]:
+        if condition["measurement_arm"] != "decode":
+            condition["measurement_arm"] = prefill_arm
+    prefill_contrast_id = None
+    for contrast in prospective["contrasts"]:
+        if contrast["measurement_arm"] != "decode":
+            contrast["measurement_arm"] = prefill_arm
+            contrast["metric_tag"] = f"phase_{prefill_arm}_energy"
+            prefill_contrast_id = contrast["contrast_id"]
+    for family in prospective["families"]:
+        if prefill_contrast_id in family["contrast_ids"]:
+            family["metric_tag"] = f"phase_{prefill_arm}_energy"
+
+
 class AnalysisManifestV3Tests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -535,6 +565,72 @@ class AnalysisManifestV3Tests(unittest.TestCase):
                 ),
                 first,
             )
+
+    def test_prospective_accepts_legacy_and_each_ruled_prefill_arm(self) -> None:
+        for prefill_arm in (
+            "prefill_p256",
+            "prefill_p512",
+            "prefill_p1024",
+            "prefill_p2048",
+        ):
+            with self.subTest(prefill_arm=prefill_arm), tempfile.TemporaryDirectory() as tmp:
+                manifest_path, plan_tree_path, prospective = (
+                    install_synthetic_prospective_fixture(Path(tmp))
+                )
+                retarget_prospective_prefill_arm(prospective, prefill_arm)
+                authenticate_prospective_fixture(
+                    manifest_path, plan_tree_path, prospective
+                )
+                self.assertEqual(
+                    validate_prospective_analysis_manifest_v3(
+                        prospective,
+                        manifest_dir=manifest_path.parent,
+                        plan_tree_path=plan_tree_path,
+                    ),
+                    (),
+                )
+
+    def test_prospective_refuses_mixed_or_unsupported_prefill_arms(self) -> None:
+        cases = ("mixed_condition_slots", "contrast_disagrees", "unsupported")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
+                manifest_path, plan_tree_path, prospective = (
+                    install_synthetic_prospective_fixture(Path(tmp))
+                )
+                prefill_conditions = [
+                    condition
+                    for condition in prospective["condition_families"]
+                    if condition["measurement_arm"] != "decode"
+                ]
+                prefill_contrast = next(
+                    contrast
+                    for contrast in prospective["contrasts"]
+                    if contrast["measurement_arm"] != "decode"
+                )
+                if case == "mixed_condition_slots":
+                    prefill_conditions[0]["measurement_arm"] = "prefill_p512"
+                    prefill_conditions[1]["measurement_arm"] = "prefill_p1024"
+                elif case == "contrast_disagrees":
+                    for condition in prefill_conditions:
+                        condition["measurement_arm"] = "prefill_p512"
+                    prefill_contrast["measurement_arm"] = "prefill_p1024"
+                else:
+                    for condition in prefill_conditions:
+                        condition["measurement_arm"] = "prefill_p768"
+                    prefill_contrast["measurement_arm"] = "prefill_p768"
+                authenticate_prospective_fixture(
+                    manifest_path, plan_tree_path, prospective
+                )
+                refusals = validate_prospective_analysis_manifest_v3(
+                    prospective,
+                    manifest_dir=manifest_path.parent,
+                    plan_tree_path=plan_tree_path,
+                )
+                self.assertTrue(refusals)
+                self.assertIn(
+                    "analysis_prospective_contrast_cover_mismatch",
+                    {refusal.reason_code for refusal in refusals},
+                )
 
     def test_prospective_transport_and_multiplicity_boundaries_are_total(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

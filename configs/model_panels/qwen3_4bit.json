@@ -1,0 +1,142 @@
+{
+  "schema_version": "joulewise.model_panel.v1",
+  "entries": [
+    {
+      "model_id": "qwen3-1p7b",
+      "name": "Qwen3-1.7B-4bit",
+      "family": "qwen3",
+      "source": "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit",
+      "revision": "3b1b1768f8f8cf8351c712464f906e86c2b8269e",
+      "weight_format": "mlx",
+      "quantization": {
+        "name": "int4",
+        "bits": 4,
+        "group_size": 64
+      },
+      "context_window": 40960,
+      "tokenizer_json_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "vocab_size": 151936,
+      "license": "Apache-2.0",
+      "model_type": "qwen3",
+      "num_hidden_layers": 28,
+      "hidden_size": 2048,
+      "chat_template_applied": true,
+      "enable_thinking": "false",
+      "chat_template_sha256": "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5",
+      "rendering_pinset_id": "qwen3-real-prompts-v1-thinking-off",
+      "admission": {
+        "status": "admitted",
+        "decision": "D-016/D-074/D-164",
+        "evidence": [
+          "docs/decision_log.md#d-164-newer-models-in-the-campaign",
+          "docs/process_traces/2026-08-28-model-panel/00-SURVEY.md"
+        ]
+      },
+      "tag": "qwen3-1p7b-mlx"
+    },
+    {
+      "model_id": "qwen3-8b",
+      "name": "Qwen3-8B-4bit",
+      "family": "qwen3",
+      "source": "/Users/edr/jw_models/mlx-community/Qwen3-8B-4bit",
+      "revision": "545dc4251c05440727734bcd94334791f6ab0192",
+      "weight_format": "mlx",
+      "quantization": {
+        "name": "int4",
+        "bits": 4,
+        "group_size": 64
+      },
+      "context_window": 40960,
+      "tokenizer_json_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "vocab_size": 151936,
+      "license": "Apache-2.0",
+      "model_type": "qwen3",
+      "num_hidden_layers": 36,
+      "hidden_size": 4096,
+      "chat_template_applied": true,
+      "enable_thinking": "false",
+      "chat_template_sha256": "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5",
+      "rendering_pinset_id": "qwen3-real-prompts-v1-thinking-off",
+      "admission": {
+        "status": "admitted",
+        "decision": "D-016/D-074/D-164",
+        "evidence": [
+          "docs/decision_log.md#d-164-newer-models-in-the-campaign",
+          "docs/process_traces/2026-08-28-model-panel/00-SURVEY.md"
+        ]
+      },
+      "tag": "qwen3-8b-mlx"
+    }
+  ],
+  "rendering_pinsets": [
+    {
+      "pinset_id": "qwen3-real-prompts-v1-thinking-off",
+      "workload_profile_id": "real_prompts_v1",
+      "prompt_set_sha256": "20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474",
+      "tokenizer_json_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "chat_template_sha256": "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5",
+      "chat_template_applied": true,
+      "enable_thinking": "false",
+      "rendering_rule": "qwen_chat_template_user_message_add_generation_prompt_v1",
+      "generation_time_computation": "apply_chat_template(tokenize=true,add_generation_prompt=true,enable_thinking=false)",
+      "prompts": [
+        {
+          "prompt_id": "sky_color",
+          "text_utf8_sha256": "887dd1128ee9265102abf106624546278e7781bf97f7cb475f286bd18240a2d2",
+          "prompt_token_ids": [151644, 872, 198, 10234, 1558, 279, 12884, 1401, 6303, 389, 264, 2797, 1899, 30, 81917, 279, 1887, 6961, 16953, 448, 825, 17778, 55103, 369, 264, 22208, 48948, 11, 1667, 14396, 4128, 26753, 13, 151645, 198, 151644, 77091, 198, 151667, 271, 151668, 271],
+          "prompt_token_ids_sha256": "4f88c0ffcf82e23308e2e27e66259ba89cff865b3fc74d23778a0ab2531115c8",
+          "prompt_tokens": 42
+        },
+        {
+          "prompt_id": "weather_climate",
+          "text_utf8_sha256": "267c64df472d09c77b5004ec4bd785cd770543e64bab7acae6f8db1d54073277",
+          "prompt_token_ids": [151644, 872, 198, 4340, 525, 9104, 323, 9977, 2155, 30, 20678, 825, 3110, 429, 4933, 3170, 264, 3175, 9255, 1899, 1558, 537, 24729, 279, 3405, 369, 264, 22208, 48948, 304, 14396, 4128, 13, 151645, 198, 151644, 77091, 198, 151667, 271, 151668, 271],
+          "prompt_token_ids_sha256": "5b0504d368f99d33d449e585383358764083422a3cef9166f420424c798d9733",
+          "prompt_tokens": 42
+        },
+        {
+          "prompt_id": "kyoto_itinerary",
+          "text_utf8_sha256": "ac252d390faa4b9542e6fac3cc4d6d95740fda63e4ab78819d032160bdde4282",
+          "prompt_token_ids": [151644, 872, 198, 20485, 264, 23831, 2326, 11228, 3947, 311, 81022, 369, 4325, 879, 31738, 3840, 11, 35436, 11, 323, 2205, 3607, 13, 13655, 5821, 1948, 17933, 14976, 369, 264, 22208, 48948, 13, 151645, 198, 151644, 77091, 198, 151667, 271, 151668, 271],
+          "prompt_token_ids_sha256": "2026dbcf76de3bcc3b1dad70f730ee4f0aa5f5979df797cfc3ce4be013288050",
+          "prompt_tokens": 42
+        },
+        {
+          "prompt_id": "interest_math",
+          "text_utf8_sha256": "7775680dc34a4e772f7129c3d53ff0543b4a8cdef153c4ec8cb8ed38a89fd32a",
+          "prompt_token_ids": [151644, 872, 198, 3838, 374, 279, 6672, 1948, 4285, 323, 23628, 2734, 30, 6928, 279, 56251, 448, 264, 2613, 34776, 3110, 448, 14976, 3565, 369, 264, 22208, 48948, 11, 3019, 553, 3019, 13, 151645, 198, 151644, 77091, 198, 151667, 271, 151668, 271],
+          "prompt_token_ids_sha256": "ca142ba0ab05399e517154d107f775fb35558b3641699984c05630fe5bf59328",
+          "prompt_tokens": 42
+        },
+        {
+          "prompt_id": "plant_diagnosis",
+          "text_utf8_sha256": "4bacef0acb791d13322db8d947b2c37ac3ac0254bfd5bc034a484b69408d87e4",
+          "prompt_token_ids": [151644, 872, 198, 10234, 2578, 279, 10901, 315, 264, 1632, 53951, 291, 3753, 20827, 2484, 13753, 30, 1759, 279, 1429, 4363, 11137, 323, 264, 37661, 1973, 369, 13295, 1105, 448, 14976, 3565, 13, 151645, 198, 151644, 77091, 198, 151667, 271, 151668, 271],
+          "prompt_token_ids_sha256": "911526000f80b38c9e376dc13ab1dcce39107029ab917df6b7f2b1073918d2ac",
+          "prompt_tokens": 42
+        },
+        {
+          "prompt_id": "web_request",
+          "text_utf8_sha256": "50882b3f20e60afb7aebeb5976bd791f7b8464f5ad64e3236e268e68cc019ac9",
+          "prompt_token_ids": [151644, 872, 198, 3838, 8573, 1283, 358, 3725, 264, 3482, 2621, 323, 3493, 3411, 30, 60785, 279, 1887, 7354, 504, 27598, 18615, 1526, 279, 2150, 25377, 1667, 14396, 4128, 323, 14976, 3565, 13, 151645, 198, 151644, 77091, 198, 151667, 271, 151668, 271],
+          "prompt_token_ids_sha256": "ab568a879417fbc4985119357a8a22bbc96f574134fb8b3f2ba9185c163d09b4",
+          "prompt_tokens": 42
+        },
+        {
+          "prompt_id": "falsifiability",
+          "text_utf8_sha256": "e39a7d0e3a783b2d1f964b7c745ff15a16e742cc0db2e60bf31c3e7aa736541c",
+          "prompt_token_ids": [151644, 872, 198, 3838, 3643, 264, 12344, 3717, 31932, 22619, 30, 81917, 279, 4522, 323, 2968, 825, 1273, 480, 323, 825, 2477, 16839, 480, 3110, 304, 264, 2421, 2797, 7354, 11, 9355, 13, 151645, 198, 151644, 77091, 198, 151667, 271, 151668, 271],
+          "prompt_token_ids_sha256": "1a7cc96456b90c792a133ce9b90c6ba85976fc0124155017d77dc900a6b08723",
+          "prompt_tokens": 42
+        },
+        {
+          "prompt_id": "pantry_dinner",
+          "text_utf8_sha256": "db7db057918464eaeecdb93dfd01c8eda69bf0b1362b3e2cd1087569e9b08f1e",
+          "prompt_token_ids": [151644, 872, 198, 40, 614, 30763, 375, 300, 11, 40513, 11, 67698, 11, 19653, 11, 323, 4185, 48559, 13, 328, 3799, 264, 4285, 13856, 323, 21101, 279, 17233, 1973, 448, 14976, 3565, 13, 151645, 198, 151644, 77091, 198, 151667, 271, 151668, 271],
+          "prompt_token_ids_sha256": "8b24d410df307abc7921d5c4546d65823c37217cfda4c6ae454e41c203e240d8",
+          "prompt_tokens": 42
+        }
+      ]
+    }
+  ]
+}
