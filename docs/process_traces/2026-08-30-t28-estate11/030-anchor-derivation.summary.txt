@@ -1,0 +1,15 @@
+
+UNRESOLVED: 2
+DRIFTED FROM DELTA CLAIM: 10
+  joulewise/arm_readiness.py:1050 -> 1060 (+10) [EvidenceLifecycleError]
+  joulewise/arm_readiness.py:2025 -> 2035 (+10) [validate_registry]
+  joulewise/arm_readiness.py:3753 -> 4026 (+273) [_gate_receipt_histsem]
+  joulewise/arm_readiness.py:4229 -> 4534 (+305) [_r1_changed_paths]
+  joulewise/arm_readiness.py:4426 -> 4731 (+305) [validate_r1_evidence_lifecycle]
+  joulewise/arm_readiness.py:5504 -> 5714 (+210) [_authenticate_generic_evidence_item]
+  joulewise/arm_readiness.py:6570 -> 6986 (+416) [_load_freeze_reference]
+  joulewise/arm_readiness.py:6844 -> 7263 (+419) [generate_freeze_receipt]
+  joulewise/arm_readiness.py:6885 -> 7312 (+427) [generate_freeze_receipt]
+  tests/test_receipt_histsem.py:220 -> 283 (+63) [test_verifier_cli_refusal_is_canonical_and_exit_two]
+  UNRESOLVED joulewise/arm_readiness.py [_admit_bound_analysis_manifest]: NO definition named _admit_bound_analysis_manifest in joulewise/arm_readiness.py at 7294cb8fe04b728263919e4ac668194e0db2df9a
+  UNRESOLVED tests/test_receipt_histsem.py [test_pinset_is_byte_pinned_and_has_no_update_lane]: NO definition named test_pinset_is_byte_pinned_and_has_no_update_lane in tests/test_receipt_histsem.py at 7294cb8fe04b728263919e4ac668194e0db2df9a

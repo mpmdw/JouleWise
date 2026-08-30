@@ -1,0 +1,14 @@
+=== 020-base-gate ===
+block: /private/tmp/claude-501/-Users-edr-code-JouleWise/540125d5-d8ee-49d1-8e6e-17050e77212d/scratchpad/estate11/estate-evidence/blocks/b020-base-gate.zsh
+started: 2026-08-30T19:57:53Z
+--- output ---
+head=7294cb8fe04b728263919e4ac668194e0db2df9a
+ci_run_id=33326533519
+provenance=merged candidate on main, green CI, conclusion-field verified
+delta_sha256=a85a0bcef84a798ed62844ea1f368d8e82092081d317c6f9ce40f148666acf48
+tools=4/4 present
+registry_v2=present
+v4_output=absent
+--- end ---
+rc: 0
+finished: 2026-08-30T19:57:53Z
