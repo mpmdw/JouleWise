@@ -81,8 +81,9 @@ PREFILL_SAMPLE_COUNT_MARGIN_FLOOR = 2
 PREFILL_SELECTION_EXPRESSION = (
     "first r in ladder_prompt_tokens where small_model_member_count[r] >= "
     "min_small_model_members_per_rung and min(reducer_written_summary_metrics[r]"
-    "[*].overlapping_power_interval_count) >= "
-    "min_overlapping_power_interval_count; otherwise 4096"
+    "[small_model_members].overlapping_power_interval_count) >= "
+    "min_overlapping_power_interval_count; large-model probes recorded, "
+    "non-gating; otherwise 4096"
 )
 PREFILL_RULING_TRACE_PATH = (
     "docs/process_traces/2026-08-30-prefill-margin-coldgate/"
