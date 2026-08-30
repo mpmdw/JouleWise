@@ -320,7 +320,13 @@ PROSPECTIVE_REFUSAL_CODES = frozenset(
     }
 )
 _PROSPECTIVE_PREFILL_ARMS = frozenset(
-    {"prefill_p256", "prefill_p512", "prefill_p1024", "prefill_p2048"}
+    {
+        "prefill_p256",
+        "prefill_p512",
+        "prefill_p1024",
+        "prefill_p2048",
+        "prefill_p4096",
+    }
 )
 FINALIZED_REFUSAL_CODES = frozenset(
     {
@@ -2177,7 +2183,7 @@ def _validate_prospective_analysis_manifest_v3_unchecked(
                 "analysis_prospective_contrast_cover_mismatch",
                 "condition-family bindings must cover decode A/B and exactly one "
                 "supported prefill arm A/B (prefill_p256, prefill_p512, "
-                "prefill_p1024, or prefill_p2048)",
+                "prefill_p1024, prefill_p2048, or prefill_p4096)",
             )
 
     _exact_refusal_keys(

@@ -72,14 +72,40 @@ exact forced budget of 512 output tokens.
 ## Prefill remains deliberately unresolved
 
 The *prefill arm* measures processing of the input tokens before output
-generation. D-166 requires its length to be the shortest of 512, 1024, or 2048
-tokens that passes the G2 shakedown resolvability rule. That result does not yet
-exist. Consequently the command-line length defaults to no value, and the
-generator refuses with `prefill_length_unresolved`. Once G2 rules the length,
-the generator also requires an explicit `joulewise.prefill_prompt_pin.v1`
-artifact binding the selected length, prompt text, tokenizer hash, token IDs,
-token-ID hash, generation method, and G2 selection authority. There is no
-512-token fallback.
+generation. A separate G2-a diagnostic sweep, meaning a pre-campaign probe that
+cannot support a paper claim, runs at 512, 1024, 2048, and 4096 prompt tokens.
+Each rung must contain at least five small-model probe members. A *member* is
+one independently collected campaign run. Large-model probes are retained as
+supporting observations but do not select the length.
+
+The production reducer writes each member's
+`overlapping_power_interval_count`, the number of power records that overlap
+the prefill phase, into `summary_metrics.json`. The reducer's physical minimum,
+`MIN_PHASE_SAMPLES`, is 3. The pre-registration adds a declared two-record
+safety factor, so a rung clears only when every small-model member has a count
+of at least 5. The selected prefill length is the first, and therefore shortest,
+rung that clears. Counts are read from the reducer output and are not recomputed
+for selection.
+
+If no rung clears 5, the prefill arm is still collected at 4096 and the Holm
+multiple-testing family remains fixed at two contrasts. The reported outcome
+then separates two cases. A reducer count below 3 emits
+`not_resolvable_sample_count`, and that reducer refusal is printed as itself. A
+reducer count of 3 or 4 is physically resolvable but below the pre-registered
+floor; the paper instead prints "below the pre-registered count floor of 5"
+and discloses the reducer's resolvable result alongside it. It never prints a
+reducer refusal code that the reducer did not emit.
+
+The selection result does not yet exist. Consequently the command-line length
+defaults to no value, and the generator refuses with
+`prefill_length_unresolved`. Once G2-a selects the length, the generator also
+requires an explicit `joulewise.prefill_prompt_pin.v2` artifact. Its closed
+schema binds the ordered ladder, the five-member minimum, count floor 5,
+reducer floor 3, the derived safety factor 2, the selection expression, the
+split refusal rule, the selected G2-a record's SHA-256 hash, the ruling trace,
+the selected length, prompt text, tokenizer hash, token IDs, token-ID hash, and
+generation method. An absent G2-a record hash refuses just as an absent length
+does; there is no 512-token fallback.
 
 ## Dominance criterion
 
@@ -125,8 +151,8 @@ analysis manifest's `frozen_semantics_sha256`.
 
 The pack is not ready to mint or collect. The remaining sequence is:
 
-1. Run the lead-controlled G2 shakedown and record the shortest resolvable
-   prefill length.
+1. Run the lead-controlled four-rung G2-a sweep and record the shortest rung
+   that clears the pre-registered count floor.
 2. Create and review the hash-bound prefill prompt pin for that ruled length.
 3. Run estate 12, the full clone proof that the new pack follows the established
    mint path without changing frozen modules.

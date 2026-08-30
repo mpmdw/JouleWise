@@ -579,6 +579,7 @@ class AnalysisManifestV3Tests(unittest.TestCase):
             "prefill_p512",
             "prefill_p1024",
             "prefill_p2048",
+            "prefill_p4096",
         ):
             with self.subTest(prefill_arm=prefill_arm), tempfile.TemporaryDirectory() as tmp:
                 manifest_path, plan_tree_path, prospective = (
@@ -615,11 +616,11 @@ class AnalysisManifestV3Tests(unittest.TestCase):
                     if contrast["measurement_arm"] != "decode"
                 )
                 if case == "mixed_condition_slots":
-                    prefill_conditions[0]["measurement_arm"] = "prefill_p512"
+                    prefill_conditions[0]["measurement_arm"] = "prefill_p4096"
                     prefill_conditions[1]["measurement_arm"] = "prefill_p1024"
                 elif case == "contrast_disagrees":
                     for condition in prefill_conditions:
-                        condition["measurement_arm"] = "prefill_p512"
+                        condition["measurement_arm"] = "prefill_p4096"
                     prefill_contrast["measurement_arm"] = "prefill_p1024"
                 else:
                     for condition in prefill_conditions:

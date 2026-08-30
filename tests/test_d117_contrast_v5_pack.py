@@ -27,6 +27,35 @@ GENERATOR = ROOT / "configs/campaigns/d117_contrast_v5/generate_configs.py"
 PANEL = ROOT / "configs/model_panels/qwen3_4bit.json"
 WORKLOAD = ROOT / "configs/workloads/real_prompts_v1.json"
 PACK_ID = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+PREFILL_RULING_TRACE_PATH = (
+    "docs/process_traces/2026-08-30-prefill-margin-coldgate/"
+    "03-MAGISTRATE-RATIFICATION.md"
+)
+PREFILL_SELECTION_EXPRESSION = (
+    "first r in ladder_prompt_tokens where small_model_member_count[r] >= "
+    "min_small_model_members_per_rung and min(reducer_written_summary_metrics[r]"
+    "[*].overlapping_power_interval_count) >= "
+    "min_overlapping_power_interval_count; otherwise 4096"
+)
+PREFILL_EXHAUSTED_LADDER_BRANCH = {
+    "condition": "no_rung_clears_pre_registered_count_floor",
+    "collection_prompt_tokens": 4096,
+    "holm_family_m": 2,
+    "reducer_refusal": {
+        "condition": "overlapping_power_interval_count < min_phase_samples_pinned",
+        "reason_code": "not_resolvable_sample_count",
+        "printed_result": "reducer_refusal_as_emitted",
+    },
+    "pre_registration_refusal": {
+        "condition": (
+            "min_phase_samples_pinned <= overlapping_power_interval_count < "
+            "min_overlapping_power_interval_count"
+        ),
+        "printed_result": "below the pre-registered count floor of 5",
+        "disclose_reducer_resolvable_result": True,
+        "print_reducer_refusal_code": False,
+    },
+}
 REAL_BLOCK_FIXTURE = ROOT / "tests/fixtures/fcm_r4_real_blocks/measured_pair.json"
 PINNED_DOMINANCE_CRITERION_BYTES = (
     b'{"all_must_pass":true,"common_mode":{"applies_to":"comparative_abba",'
@@ -184,8 +213,22 @@ class D117ContrastV5PackTests(unittest.TestCase):
         token_ids = [7] * length
         text = "TEST FIXTURE ONLY: post-G2 prompt-pin plumbing."
         value = {
-            "schema_version": "joulewise.prefill_prompt_pin.v1",
-            "selection_authority": "test_fixture_only_not_production_evidence",
+            "schema_version": "joulewise.prefill_prompt_pin.v2",
+            "selection_authority": {
+                "g2a_record": {
+                    "record_id": "test_fixture_only_not_production_evidence",
+                    "path": "test-fixtures/g2a-record.json",
+                },
+                "ruling_trace_path": PREFILL_RULING_TRACE_PATH,
+            },
+            "ladder_prompt_tokens": [512, 1024, 2048, 4096],
+            "min_small_model_members_per_rung": 5,
+            "min_overlapping_power_interval_count": 5,
+            "min_phase_samples_pinned": 3,
+            "sample_count_margin_floor": 2,
+            "selection_expression": PREFILL_SELECTION_EXPRESSION,
+            "g2a_record_sha256": "b" * 64,
+            "exhausted_ladder_branch": copy.deepcopy(PREFILL_EXHAUSTED_LADDER_BRANCH),
             "prefill_length": length,
             "tokenizer_json_sha256": (
                 "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
@@ -201,6 +244,11 @@ class D117ContrastV5PackTests(unittest.TestCase):
         path = root / "prefill-pin.json"
         path.write_text(json.dumps(value), encoding="utf-8")
         return path
+
+    def rewrite_prefill_pin(self, path: Path, **updates: object) -> None:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value.update(updates)
+        path.write_text(json.dumps(value), encoding="utf-8")
 
     def configure(self, pin_path: Path, length: int = 512) -> None:
         self.generator.configure_model_pair(
@@ -240,6 +288,91 @@ class D117ContrastV5PackTests(unittest.TestCase):
                     decode_workload_path=WORKLOAD,
                     prefill_length=None,
                 )
+
+    def test_all_ruled_prefill_lengths_are_cli_and_generator_candidates(self) -> None:
+        for length in (512, 1024, 2048, 4096):
+            with self.subTest(length=length), tempfile.TemporaryDirectory(
+                prefix="d117-v5-ladder-"
+            ) as temporary:
+                args = self.generator.parse_args(
+                    [
+                        "--panel",
+                        str(PANEL),
+                        "--model-a",
+                        "qwen3-1p7b",
+                        "--model-b",
+                        "qwen3-8b",
+                        "--prefill-length",
+                        str(length),
+                    ]
+                )
+                self.assertEqual(args.prefill_length, length)
+                pin = self.write_prefill_pin(Path(temporary), length)
+                self.configure(pin, length)
+                self.assertEqual(self.generator.PREFILL_ARM, f"prefill_p{length}")
+
+    def test_prefill_prompt_pin_v2_preregistration_is_constant_bound(self) -> None:
+        self.assertEqual(
+            self.generator.PREFILL_SELECTION_EXPRESSION,
+            PREFILL_SELECTION_EXPRESSION,
+        )
+        self.assertEqual(
+            self.generator.PREFILL_EXHAUSTED_LADDER_BRANCH,
+            PREFILL_EXHAUSTED_LADDER_BRANCH,
+        )
+        cases = (
+            (
+                "min_phase_samples_pinned",
+                4,
+                "min_phase_samples_pinned",
+            ),
+            (
+                "sample_count_margin_floor",
+                3,
+                "sample_count_margin_floor",
+            ),
+            (
+                "selection_expression",
+                "post_hoc_choice",
+                "selection_expression",
+            ),
+            (
+                "exhausted_ladder_branch",
+                {},
+                "exhausted_ladder_branch",
+            ),
+        )
+        for field, replacement, reason in cases:
+            with self.subTest(field=field), tempfile.TemporaryDirectory(
+                prefix="d117-v5-pin-v2-"
+            ) as temporary:
+                pin = self.write_prefill_pin(Path(temporary))
+                self.rewrite_prefill_pin(pin, **{field: replacement})
+                with self.assertRaisesRegex(ValueError, reason):
+                    self.configure(pin)
+
+        with tempfile.TemporaryDirectory(prefix="d117-v5-pin-v2-") as temporary:
+            pin = self.write_prefill_pin(Path(temporary))
+            with mock.patch.object(self.generator, "REDUCER_MIN_PHASE_SAMPLES", 4):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "prefill_prompt_pin_reducer_min_phase_samples_mismatch",
+                ):
+                    self.configure(pin)
+
+    def test_prefill_prompt_pin_v2_schema_is_closed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-pin-v2-") as temporary:
+            pin = self.write_prefill_pin(Path(temporary))
+            self.rewrite_prefill_pin(pin, post_hoc_override=True)
+            with self.assertRaisesRegex(ValueError, "closed schema mismatch"):
+                self.configure(pin)
+
+    def test_prefill_prompt_pin_refuses_unresolved_g2a_record_hash(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-pin-v2-") as temporary:
+            pin = self.write_prefill_pin(Path(temporary))
+            self.rewrite_prefill_pin(pin, g2a_record_sha256=None)
+            with self.assertRaisesRegex(ValueError, "prefill_g2a_record_hash_unresolved"):
+                self.configure(pin)
 
     def test_configuration_uses_panel_pins_without_model_mirror_reads(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-pin-") as temporary:

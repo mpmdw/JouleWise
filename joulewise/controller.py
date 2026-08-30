@@ -2108,7 +2108,10 @@ class _Execution:
                     ),
                 }
         extra["config_warnings"] = [dict(item) for item in self._config.config_warnings]
-        extra["model"] = asdict(self._config.model)
+        # The canonical serializer omits the identity pins when both are
+        # null; metadata must match it byte-for-byte or the analysis loader's
+        # realized-identity equality refuses every unpinned bundle.
+        extra["model"] = dict(self._config.to_dict()["model"])
         extra["quantization"] = asdict(self._config.quantization)
         if self._device_metadata is not None:
             # Preserve adapter values verbatim for the bundle writer's single

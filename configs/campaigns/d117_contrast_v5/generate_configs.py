@@ -32,6 +32,7 @@ from joulewise.detection_floor import (  # noqa: E402
     two_shared_edge_common_mode_registration,
 )
 from joulewise.provenance import prompt_token_ids_sha256  # noqa: E402
+from joulewise.reduce import MIN_PHASE_SAMPLES as REDUCER_MIN_PHASE_SAMPLES  # noqa: E402
 from joulewise.floor_extraction import (  # noqa: E402
     _common_mode_window_is_strictly_noncollapsed,
     validate_condition_family_definition,
@@ -72,6 +73,40 @@ from joulewise.receipt_oracle import (  # noqa: E402
 
 
 DETECTION_FLOOR_ARTIFACT_SCHEMA = "joulewise.detection_floor_artifact.v2"
+PREFILL_LADDER_PROMPT_TOKENS = [512, 1024, 2048, 4096]
+PREFILL_MIN_SMALL_MODEL_MEMBERS_PER_RUNG = 5
+PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT = 5
+PREFILL_MIN_PHASE_SAMPLES_PINNED = 3
+PREFILL_SAMPLE_COUNT_MARGIN_FLOOR = 2
+PREFILL_SELECTION_EXPRESSION = (
+    "first r in ladder_prompt_tokens where small_model_member_count[r] >= "
+    "min_small_model_members_per_rung and min(reducer_written_summary_metrics[r]"
+    "[*].overlapping_power_interval_count) >= "
+    "min_overlapping_power_interval_count; otherwise 4096"
+)
+PREFILL_RULING_TRACE_PATH = (
+    "docs/process_traces/2026-08-30-prefill-margin-coldgate/"
+    "03-MAGISTRATE-RATIFICATION.md"
+)
+PREFILL_EXHAUSTED_LADDER_BRANCH = {
+    "condition": "no_rung_clears_pre_registered_count_floor",
+    "collection_prompt_tokens": 4096,
+    "holm_family_m": 2,
+    "reducer_refusal": {
+        "condition": "overlapping_power_interval_count < min_phase_samples_pinned",
+        "reason_code": "not_resolvable_sample_count",
+        "printed_result": "reducer_refusal_as_emitted",
+    },
+    "pre_registration_refusal": {
+        "condition": (
+            "min_phase_samples_pinned <= overlapping_power_interval_count < "
+            "min_overlapping_power_interval_count"
+        ),
+        "printed_result": "below the pre-registered count floor of 5",
+        "disclose_reducer_resolvable_result": True,
+        "print_reducer_refusal_code": False,
+    },
+}
 
 
 def prospective_finalization_required_attachments() -> list[dict[str, str]]:
@@ -426,7 +461,7 @@ PREFILL_PIN_FILE_ARGUMENT = ""
 PREFILL_PROMPT_TEXT = ""
 PREFILL_PROMPT_SHA256 = ""
 PREFILL_REPEAT_COUNT = 0
-PREFILL_SELECTION_AUTHORITY = ""
+PREFILL_SELECTION_AUTHORITY: dict[str, Any] = {}
 PREFILL_GENERATION_METHOD = ""
 PREFILL_TOKEN_IDS: dict[str, list[int]] = {}
 PREFILL_TOKEN_IDS_SHA256: dict[str, str] = {}
@@ -797,6 +832,14 @@ def _load_prefill_prompt_pin(
     keys = {
         "schema_version",
         "selection_authority",
+        "ladder_prompt_tokens",
+        "min_small_model_members_per_rung",
+        "min_overlapping_power_interval_count",
+        "min_phase_samples_pinned",
+        "sample_count_margin_floor",
+        "selection_expression",
+        "g2a_record_sha256",
+        "exhausted_ladder_branch",
         "prefill_length",
         "tokenizer_json_sha256",
         "prompt_text",
@@ -809,31 +852,100 @@ def _load_prefill_prompt_pin(
     }
     if not isinstance(value, dict) or set(value) != keys:
         raise ValueError("prefill_prompt_pin_invalid: closed schema mismatch")
-    if value["schema_version"] != "joulewise.prefill_prompt_pin.v1":
+    if value["schema_version"] != "joulewise.prefill_prompt_pin.v2":
         raise ValueError("prefill_prompt_pin_invalid: unknown schema_version")
-    if value["prefill_length"] != prefill_length or value["prompt_tokens"] != prefill_length:
+    if value["ladder_prompt_tokens"] != PREFILL_LADDER_PROMPT_TOKENS:
+        raise ValueError("prefill_prompt_pin_invalid: ladder_prompt_tokens")
+    if (
+        value["min_small_model_members_per_rung"]
+        != PREFILL_MIN_SMALL_MODEL_MEMBERS_PER_RUNG
+    ):
+        raise ValueError(
+            "prefill_prompt_pin_invalid: min_small_model_members_per_rung"
+        )
+    if (
+        value["min_overlapping_power_interval_count"]
+        != PREFILL_MIN_OVERLAPPING_POWER_INTERVAL_COUNT
+    ):
+        raise ValueError(
+            "prefill_prompt_pin_invalid: min_overlapping_power_interval_count"
+        )
+    if value["min_phase_samples_pinned"] != PREFILL_MIN_PHASE_SAMPLES_PINNED:
+        raise ValueError("prefill_prompt_pin_invalid: min_phase_samples_pinned")
+    if value["min_phase_samples_pinned"] != REDUCER_MIN_PHASE_SAMPLES:
+        raise ValueError("prefill_prompt_pin_reducer_min_phase_samples_mismatch")
+    if value["sample_count_margin_floor"] != PREFILL_SAMPLE_COUNT_MARGIN_FLOOR:
+        raise ValueError("prefill_prompt_pin_invalid: sample_count_margin_floor")
+    if (
+        value["min_overlapping_power_interval_count"]
+        - value["min_phase_samples_pinned"]
+        != value["sample_count_margin_floor"]
+    ):
+        raise ValueError("prefill_prompt_pin_count_floor_inconsistent")
+    if value["selection_expression"] != PREFILL_SELECTION_EXPRESSION:
+        raise ValueError("prefill_prompt_pin_invalid: selection_expression")
+    if value["exhausted_ladder_branch"] != PREFILL_EXHAUSTED_LADDER_BRANCH:
+        raise ValueError("prefill_prompt_pin_invalid: exhausted_ladder_branch")
+    selection_authority = value["selection_authority"]
+    if (
+        not isinstance(selection_authority, dict)
+        or set(selection_authority) != {"g2a_record", "ruling_trace_path"}
+        or not isinstance(selection_authority["g2a_record"], dict)
+        or set(selection_authority["g2a_record"]) != {"record_id", "path"}
+        or any(
+            not isinstance(selection_authority["g2a_record"][key], str)
+            or not selection_authority["g2a_record"][key].strip()
+            for key in ("record_id", "path")
+        )
+        or selection_authority["ruling_trace_path"] != PREFILL_RULING_TRACE_PATH
+    ):
+        raise ValueError("prefill_prompt_pin_invalid: selection_authority")
+    if not isinstance(value["g2a_record_sha256"], str) or not value[
+        "g2a_record_sha256"
+    ].strip():
+        raise ValueError(
+            "prefill_g2a_record_hash_unresolved: D-166 requires the selected "
+            "G2-a record hash; no default or placeholder hash is permitted"
+        )
+    if len(value["g2a_record_sha256"]) != 64 or any(
+        character not in "0123456789abcdef"
+        for character in value["g2a_record_sha256"]
+    ):
+        raise ValueError("prefill_prompt_pin_invalid: g2a_record_sha256")
+    if (
+        value["prefill_length"] != prefill_length
+        or value["prompt_tokens"] != prefill_length
+    ):
         raise ValueError("prefill_prompt_pin_length_mismatch")
     if value["tokenizer_json_sha256"] != tokenizer_json_sha256:
         raise ValueError("prefill_prompt_pin_tokenizer_sha256_mismatch")
     text = value["prompt_text"]
     if not isinstance(text, str) or not text:
         raise ValueError("prefill_prompt_pin_invalid: prompt_text")
-    if hashlib.sha256(text.encode("utf-8")).hexdigest() != value["prompt_text_utf8_sha256"]:
+    if (
+        hashlib.sha256(text.encode("utf-8")).hexdigest()
+        != value["prompt_text_utf8_sha256"]
+    ):
         raise ValueError("prefill_prompt_pin_text_sha256_mismatch")
     ids = value["prompt_token_ids"]
     if (
         not isinstance(ids, list)
         or len(ids) != prefill_length
-        or any(isinstance(item, bool) or not isinstance(item, int) or item < 0 for item in ids)
+        or any(
+            isinstance(item, bool) or not isinstance(item, int) or item < 0
+            for item in ids
+        )
     ):
         raise ValueError("prefill_prompt_pin_token_ids_invalid")
     if prompt_token_ids_sha256(ids) != value["prompt_token_ids_sha256"]:
         raise ValueError("prefill_prompt_pin_token_ids_sha256_mismatch")
     if not isinstance(value["repeat_count"], int) or value["repeat_count"] <= 0:
         raise ValueError("prefill_prompt_pin_invalid: repeat_count")
-    for key in ("selection_authority", "generation_method"):
-        if not isinstance(value[key], str) or not value[key].strip():
-            raise ValueError(f"prefill_prompt_pin_invalid: {key}")
+    if (
+        not isinstance(value["generation_method"], str)
+        or not value["generation_method"].strip()
+    ):
+        raise ValueError("prefill_prompt_pin_invalid: generation_method")
     return value
 
 
@@ -863,14 +975,16 @@ def configure_model_pair(
 
     if prefill_length is None:
         raise ValueError(
-            "prefill_length_unresolved: D-166 requires the G2 shakedown result; "
-            "no default or placeholder length is permitted"
+            "prefill_length_unresolved: D-166 as amended requires the G2-a "
+            "prefill sweep result; no default or placeholder length is permitted"
         )
-    if prefill_length not in {512, 1024, 2048}:
-        raise ValueError("prefill_length_unknown: expected one of 512, 1024, 2048")
+    if prefill_length not in set(PREFILL_LADDER_PROMPT_TOKENS):
+        raise ValueError(
+            "prefill_length_unknown: expected one of 512, 1024, 2048, 4096"
+        )
     if prefill_prompt_pin_path is None:
         raise ValueError(
-            "prefill_prompt_pin_unresolved: the selected G2 length needs an "
+            "prefill_prompt_pin_unresolved: the selected G2-a length needs an "
             "explicit hash-bound prompt pin"
         )
     try:
@@ -1522,7 +1636,7 @@ def prompt_candidate() -> dict[str, Any]:
         "prompt_text_utf8_sha256": PREFILL_PROMPT_SHA256,
         "planned_token_count": PREFILL_LENGTH,
         "token_count_basis": {
-            "status": "PANEL-AND-G2-PIN-VERIFIED-CANDIDATE",
+            "status": "PANEL-AND-G2A-PIN-VERIFIED-CANDIDATE",
             "shared_tokenizer_json_sha256": SHARED_TOKENIZER_JSON_SHA256,
             "repeat_count": PREFILL_REPEAT_COUNT,
             "repeated_sentence": PROMPT_SENTENCE,
@@ -2722,7 +2836,9 @@ def build_tree(
                 "core_minutes_before_margin": None,
                 "minutes_with_20_percent_margin": None,
                 "budget_status": "EMPTY-PENDING-D162-G2-SHAKEDOWN",
-                "authority": "D-166 R-2 selects length and budget from the G2 record",
+                "authority": (
+                    "D-166 as amended selects length and budget from the G2-a record"
+                ),
             },
             "interior_reference_augmentation": {
                 "additional_references": 2,
@@ -2737,7 +2853,7 @@ def build_tree(
             },
             "combined_minutes_with_margin": None,
             "combined_derivation": (
-                "EMPTY until the D-162 G2 shakedown supplies the selected prefill budget"
+                "EMPTY until the D-166 G2-a sweep supplies the selected prefill budget"
             ),
             "member_replacement_authority": False,
         },
@@ -3253,7 +3369,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--prefill-length",
         type=int,
-        choices=(512, 1024, 2048),
+        choices=(512, 1024, 2048, 4096),
     )
     parser.add_argument("--prefill-prompt-pin", type=Path)
     return parser.parse_args(argv)
