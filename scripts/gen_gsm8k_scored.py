@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Generate the pinned GSM8K scored-v6 suite manifest and sidecar.
 
-This is the canonical producer. ``scripts/gsm8k_import.py`` is a deprecated
-stall-era duplicate retained only for lead-owned deletion; do not add consumers.
+This is the canonical producer for the authenticated scored-v6 import chain.
 """
 
 from __future__ import annotations

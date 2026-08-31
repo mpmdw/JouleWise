@@ -739,9 +739,12 @@ def build_gsm8k_scored_annotations(
 ) -> dict[str, Any]:
     """Build the correctness-quarantined scorer sidecar for a manifest."""
 
+    authenticated_records = _require_authenticated_source(records)
     manifest_dict = dict(manifest)
     validated = SuiteManifest.from_mapping(manifest_dict)
-    records_by_id = {record["source_item_id"]: record for record in records}
+    records_by_id = {
+        record["source_item_id"]: record for record in authenticated_records
+    }
     annotations: list[dict[str, Any]] = []
     for execution_index, item in enumerate(validated.items):
         record = records_by_id.get(item.source.source_item_id)
@@ -908,13 +911,13 @@ def parse_response_answer(response_text: str) -> str | None:
         return None
 
 
-def score_gsm8k_response(
+def _score_gsm8k_response(
     response_text: str,
     annotation: Mapping[str, Any],
     *,
     runtime_status: str,
 ) -> GSM8KScoreResult:
-    """Apply D-166's pinned four-way outcome rule to one response."""
+    """Apply the four-way rule after the public exact-set gate has passed."""
 
     if runtime_status not in _SCORABLE_RUNTIME_STATUSES:
         raise ValueError(f"unsupported GSM8K runtime status: {runtime_status!r}")
@@ -1035,7 +1038,7 @@ def score_gsm8k_outcome_table(
         if not isinstance(runtime_status, str):
             raise ValueError(f"GSM8K response row {index} status must be a string")
         results.append(
-            score_gsm8k_response(
+            _score_gsm8k_response(
                 response_text,
                 annotation,
                 runtime_status=runtime_status,

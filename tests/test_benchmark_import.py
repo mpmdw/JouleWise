@@ -1,5 +1,7 @@
+import copy
 import hashlib
 import importlib.util
+import io
 import json
 import subprocess
 import sys
@@ -31,12 +33,12 @@ from joulewise.benchmark_import import (
     parse_response_answer,
     render_prompts,
     score_gsm8k_outcome_table,
-    score_gsm8k_response,
     select_items,
     selected_item_ids_sha256,
     validate_gsm8k_annotations,
 )
 from joulewise.suite import SuiteManifest, suite_manifest_sha256
+from scripts import gen_gsm8k_scored
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +134,35 @@ def _rendered_records(records):
     }
 
 
+def _synthetic_product() -> tuple[dict, dict]:
+    with _loaded_synthetic_records() as records:
+        manifest = build_gsm8k_scored_manifest(records, _rendered_records(records))
+        return manifest, build_gsm8k_scored_annotations(manifest, records)
+
+
+def _score_first_pinned_response(
+    response_text: str,
+    runtime_status: str,
+    *,
+    annotation_mutation: dict | None = None,
+) -> dict:
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    sidecar = json.loads(ANNOTATIONS_PATH.read_text(encoding="utf-8"))
+    if annotation_mutation is not None:
+        sidecar["annotations"][0].update(annotation_mutation)
+    rows = [
+        {
+            "item_id": annotation["item_id"],
+            "response_text": f"#### {annotation['expected_answer']}",
+            "status": "succeeded",
+        }
+        for annotation in sidecar["annotations"]
+    ]
+    rows[0]["response_text"] = response_text
+    rows[0]["status"] = runtime_status
+    return score_gsm8k_outcome_table(rows, manifest, sidecar)["items"][0]
+
+
 class BenchmarkImportTests(unittest.TestCase):
     def test_module_import_does_not_load_transformers(self) -> None:
         self.assertFalse(
@@ -170,6 +201,30 @@ class BenchmarkImportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "sha256 mismatch"):
                 load_gsm8k_test(path)
 
+    def test_pinned_source_loader_authenticates_sha_bytes_blob_and_lines(self) -> None:
+        payload = (
+            '{"question":"q1","answer":"work\\n#### 1"}\n'
+            '{"question":"q2","answer":"work\\n#### 2"}\n'
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "test.jsonl"
+            path.write_bytes(payload)
+            blob = hashlib.sha1(
+                f"blob {len(payload)}\0".encode("ascii") + payload
+            ).hexdigest()
+            with mock.patch.multiple(
+                benchmark_import,
+                GSM8K_TEST_SHA256=hashlib.sha256(payload).hexdigest(),
+                GSM8K_TEST_GIT_BLOB_SHA1=blob,
+                GSM8K_TEST_BYTES=len(payload),
+                GSM8K_TEST_LINE_COUNT=2,
+            ):
+                records = load_gsm8k_test(path)
+            self.assertEqual([row["line_index"] for row in records], [0, 1])
+            path.write_bytes(payload + b"\n")
+            with self.assertRaisesRegex(ValueError, "sha256 mismatch"):
+                load_gsm8k_test(path)
+
     def test_gold_answer_uses_last_marker_and_canonical_fraction(self) -> None:
         cases = [
             ("steps\n#### 1,250", "1250"),
@@ -179,6 +234,17 @@ class BenchmarkImportTests(unittest.TestCase):
         for raw, canonical in cases:
             with self.subTest(raw=raw):
                 self.assertEqual(gold_answer({"answer": raw}), canonical)
+
+    def test_selection_refuses_duplicate_key_and_invalid_k(self) -> None:
+        duplicate = [_record(0, "a" * 64), _record(1, "a" * 64)]
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            select_items(duplicate, 1)
+        for value in (True, 0, -1):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    select_items([_record(0, "b" * 64)], value)
+        with self.assertRaisesRegex(ValueError, "exceeds"):
+            select_items([_record(0, "b" * 64)], 2)
 
     def test_gold_answer_refuses_unparsable_value(self) -> None:
         with self.assertRaisesRegex(ValueError, "unparsable numeric answer"):
@@ -292,29 +358,37 @@ class BenchmarkImportTests(unittest.TestCase):
                 self.assertIsNone(parse_response_answer(response))
 
     def test_scorer_pins_all_four_outcomes_and_cap_semantics(self) -> None:
-        annotation = {
-            "item_id": "gsm8k_test_0001",
-            "expected_answer": "3/4",
-            "expected_answer_sha256": expected_answer_sha256(
-                "gsm8k_test_0001", "3/4"
-            ),
-            "scorer_id": SCORER_ID,
-        }
+        sidecar = json.loads(ANNOTATIONS_PATH.read_text(encoding="utf-8"))
+        expected_answer = sidecar["annotations"][0]["expected_answer"]
         cases = (
-            ("reason\n#### 0.75", "succeeded", OUTCOME_CORRECT),
-            ("reason\n#### 2", "succeeded", OUTCOME_INCORRECT),
+            (f"reason\n#### {expected_answer}", "succeeded", OUTCOME_CORRECT),
+            ("reason\n#### 999999999999999999", "succeeded", OUTCOME_INCORRECT),
             ("unfinished", "capped", OUTCOME_TRUNCATED),
             ("not formatted", "succeeded", OUTCOME_MALFORMED),
-            ("#### 0.75", "capped", OUTCOME_CORRECT),
+            (f"#### {expected_answer}", "capped", OUTCOME_CORRECT),
+            ("#### 999999999999999999", "capped", OUTCOME_INCORRECT),
         )
         for response, status, expected in cases:
             with self.subTest(expected=expected, status=status):
-                result = score_gsm8k_response(
-                    response, annotation, runtime_status=status
-                )
-                self.assertEqual(result.outcome, expected)
-                self.assertEqual(result.correct, expected == OUTCOME_CORRECT)
+                result = _score_first_pinned_response(response, status)
+                self.assertEqual(result["outcome"], expected)
+                self.assertEqual(result["correct"], expected == OUTCOME_CORRECT)
         self.assertEqual(set(OUTCOME_CLASSES), set(case[2] for case in cases[:4]))
+
+    def test_scorer_refuses_hash_scorer_and_status_drift(self) -> None:
+        for mutation, expected in (
+            ({"expected_answer_sha256": "0" * 64}, "answer hash mismatch"),
+            ({"scorer_id": "other"}, "scorer_id mismatch"),
+        ):
+            with self.subTest(expected=expected):
+                with self.assertRaisesRegex(ValueError, expected):
+                    _score_first_pinned_response(
+                        "#### 0.75",
+                        "succeeded",
+                        annotation_mutation=mutation,
+                    )
+        with self.assertRaisesRegex(ValueError, "unsupported.*status"):
+            _score_first_pinned_response("#### 0.75", "below_floor")
 
     def test_four_way_outcome_table_requires_the_exact_pinned_set(self) -> None:
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -355,6 +429,85 @@ class BenchmarkImportTests(unittest.TestCase):
             sidecar = build_gsm8k_scored_annotations(manifest, records)
         validate_gsm8k_annotations(manifest, sidecar)
 
+    def test_canonical_generator_is_deterministic_and_self_validating(self) -> None:
+        payload = "".join(
+            json.dumps(
+                {
+                    "question": f"question {index}",
+                    "answer": f"work\n#### {index + 1}",
+                },
+                separators=(",", ":"),
+            )
+            + "\n"
+            for index in range(12)
+        ).encode("utf-8")
+        blob_sha1 = hashlib.sha1(
+            f"blob {len(payload)}\0".encode("ascii") + payload
+        ).hexdigest()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "test.jsonl"
+            source.write_bytes(payload)
+            outputs: list[tuple[dict, dict]] = []
+            with mock.patch.multiple(
+                benchmark_import,
+                GSM8K_TEST_SHA256=hashlib.sha256(payload).hexdigest(),
+                GSM8K_TEST_GIT_BLOB_SHA1=blob_sha1,
+                GSM8K_TEST_BYTES=len(payload),
+                GSM8K_TEST_LINE_COUNT=12,
+            ), mock.patch.object(
+                gen_gsm8k_scored,
+                "render_prompts",
+                side_effect=lambda records, _directories: _rendered_records(records),
+            ), mock.patch("sys.stdout", new=io.StringIO()):
+                for run in range(2):
+                    manifest_path = root / f"manifest-{run}.json"
+                    annotations_path = root / f"annotations-{run}.json"
+                    self.assertEqual(
+                        gen_gsm8k_scored.main(
+                            [
+                                "--test-jsonl",
+                                str(source),
+                                "--tokenizer-dir",
+                                str(root),
+                                "--out-manifest",
+                                str(manifest_path),
+                                "--out-annotations",
+                                str(annotations_path),
+                            ]
+                        ),
+                        0,
+                    )
+                    outputs.append(
+                        (
+                            json.loads(manifest_path.read_text(encoding="utf-8")),
+                            json.loads(annotations_path.read_text(encoding="utf-8")),
+                        )
+                    )
+            self.assertEqual(outputs[0], outputs[1])
+            validate_gsm8k_annotations(*outputs[0])
+            self.assertEqual(
+                SuiteManifest.from_mapping(outputs[0][0]).to_dict(), outputs[0][0]
+            )
+
+    def test_producer_refuses_rendered_selection_order_drift(self) -> None:
+        with _loaded_synthetic_records() as records:
+            rendered = _rendered_records(records)
+            rendered["items"].reverse()
+            with self.assertRaisesRegex(ValueError, "selected GSM8K order"):
+                build_gsm8k_scored_manifest(records, rendered)
+
+    def test_annotation_validator_refuses_manifest_and_answer_tampering(self) -> None:
+        manifest, sidecar = _synthetic_product()
+        tampered_manifest = copy.deepcopy(sidecar)
+        tampered_manifest["manifest_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "manifest_sha256"):
+            validate_gsm8k_annotations(manifest, tampered_manifest)
+        tampered_answer = copy.deepcopy(sidecar)
+        tampered_answer["annotations"][0]["expected_answer"] = "999"
+        with self.assertRaisesRegex(ValueError, "answer hash mismatch"):
+            validate_gsm8k_annotations(manifest, tampered_answer)
+
     def test_manifest_builder_refuses_unauthenticated_records(self) -> None:
         records = [
             _record(index, hashlib.sha256(f"source-{index}".encode()).hexdigest())
@@ -362,6 +515,34 @@ class BenchmarkImportTests(unittest.TestCase):
         ]
         with self.assertRaisesRegex(ValueError, "gsm8k_source_authentication_required"):
             build_gsm8k_scored_manifest(records, _rendered_records(records))
+
+    def test_annotation_builder_refuses_forged_line_index_records(self) -> None:
+        with _loaded_synthetic_records() as records:
+            manifest = build_gsm8k_scored_manifest(
+                records, _rendered_records(records)
+            )
+            forged = [dict(record) for record in records]
+            forged[0]["line_index"] = 999999
+            with self.assertRaisesRegex(
+                ValueError, "gsm8k_source_authentication_required"
+            ):
+                build_gsm8k_scored_annotations(manifest, forged)
+
+    def test_public_scoring_surface_refuses_a_foreign_item(self) -> None:
+        self.assertFalse(hasattr(benchmark_import, "score_gsm8k_response"))
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        sidecar = json.loads(ANNOTATIONS_PATH.read_text(encoding="utf-8"))
+        rows = [
+            {
+                "item_id": annotation["item_id"],
+                "response_text": f"#### {annotation['expected_answer']}",
+                "status": "succeeded",
+            }
+            for annotation in sidecar["annotations"]
+        ]
+        rows[0]["item_id"] = "gsm8k_test_foreign"
+        with self.assertRaisesRegex(ValueError, "gsm8k_pinned_set_foreign"):
+            score_gsm8k_outcome_table(rows, manifest, sidecar)
 
     def test_manifest_builder_refuses_drifted_reviewed_panel_copy(self) -> None:
         with _loaded_synthetic_records() as records:
@@ -443,6 +624,56 @@ print(json.dumps({
             if name == "transformers" or name.startswith("transformers.")
         }
         self.assertEqual(imported_after, imported_before)
+
+    def test_local_qwen3_mirrors_match_every_committed_prompt_token_id(self) -> None:
+        if not all(path.is_dir() for path in MIRROR_DIRS):
+            self.skipTest("local Qwen3 tokenizer mirrors are absent")
+        if importlib.util.find_spec("transformers") is None:
+            self.skipTest("transformers is absent")
+
+        code = """
+import hashlib
+import json
+from pathlib import Path
+from transformers import AutoTokenizer
+from joulewise import benchmark_import
+from joulewise.benchmark_import import EMPTY_THINK_PREFIX
+from joulewise.gensuite import tokenizer_id_for
+
+root = Path(__import__("sys").argv[1])
+manifest = json.loads((root / "configs/suite_manifests/gsm8k_scored_v6_qwen3.json").read_text(encoding="utf-8"))
+benchmark = manifest["benchmark_import"]
+checked = 0
+for raw_mirror in __import__("sys").argv[2:]:
+    mirror = Path(raw_mirror)
+    config = json.loads((mirror / "tokenizer_config.json").read_text(encoding="utf-8"))
+    assert hashlib.sha256(config["chat_template"].encode()).hexdigest() == benchmark["chat_template_sha256"]
+    assert hashlib.sha256((mirror / "tokenizer.json").read_bytes()).hexdigest() == benchmark["tokenizer_json_sha256"]
+    assert tokenizer_id_for(tokenizer_manifest=benchmark_import._tokenizer_manifest(mirror)) == benchmark["tokenizer_id"]
+    tokenizer = AutoTokenizer.from_pretrained(str(mirror), local_files_only=True)
+    for item in manifest["items"]:
+        prompt_text = item["source"]["prompt_text"]
+        assert prompt_text.endswith(EMPTY_THINK_PREFIX)
+        assert tokenizer.encode(prompt_text, add_special_tokens=True) == item["source"]["prompt_token_ids"]
+        checked += 1
+print(json.dumps({"checked": checked}))
+"""
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                code,
+                str(ROOT),
+                *(str(path) for path in MIRROR_DIRS),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout.splitlines()[-1]), {"checked": 16})
 
 
 if __name__ == "__main__":
