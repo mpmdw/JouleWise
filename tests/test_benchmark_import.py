@@ -5,8 +5,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
+from joulewise import benchmark_import
 from joulewise.benchmark_import import (
     ANSWER_HASH_DOMAIN,
     EMPTY_THINK_PREFIX,
@@ -17,6 +20,7 @@ from joulewise.benchmark_import import (
     OUTCOME_TRUNCATED,
     PROMPT_TEMPLATE,
     PROMPT_TEMPLATE_SHA256,
+    PINNED_QWEN3_TOKENIZER_ID,
     SCORER_ID,
     build_gsm8k_scored_annotations,
     build_gsm8k_scored_manifest,
@@ -70,6 +74,62 @@ def _record(index: int, source_sha256: str) -> dict:
 def _canonical_sha256(value: object) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+@contextmanager
+def _loaded_synthetic_records(count: int = 12):
+    payload = "".join(
+        json.dumps(
+            {
+                "question": f"question {index}",
+                "answer": f"work\n#### {index + 1}",
+            },
+            separators=(",", ":"),
+        )
+        + "\n"
+        for index in range(count)
+    ).encode("utf-8")
+    blob_sha1 = hashlib.sha1(
+        f"blob {len(payload)}\0".encode("ascii") + payload
+    ).hexdigest()
+    with tempfile.TemporaryDirectory() as temporary:
+        source = Path(temporary) / "test.jsonl"
+        source.write_bytes(payload)
+        with mock.patch.multiple(
+            benchmark_import,
+            GSM8K_TEST_SHA256=hashlib.sha256(payload).hexdigest(),
+            GSM8K_TEST_GIT_BLOB_SHA1=blob_sha1,
+            GSM8K_TEST_BYTES=len(payload),
+            GSM8K_TEST_LINE_COUNT=count,
+        ):
+            yield load_gsm8k_test(source)
+
+
+def _rendered_records(records):
+    selected = select_items(records, 8)
+    panel = json.loads(
+        (ROOT / "configs/model_panels/qwen3_4bit.json").read_text(encoding="utf-8")
+    )
+    pinset = panel["rendering_pinsets"][0]
+    return {
+        "items": [
+            {
+                "source_item_id": record["source_item_id"],
+                "prompt_token_ids": [100 + index, 200 + index],
+                "rendered_prompt_text": (
+                    "<|im_start|>user\n"
+                    + PROMPT_TEMPLATE.format(question=record["question"])
+                    + "<|im_end|>\n<|im_start|>assistant\n"
+                    + EMPTY_THINK_PREFIX
+                ),
+            }
+            for index, record in enumerate(selected)
+        ],
+        "chat_template_sha256": pinset["chat_template_sha256"],
+        "tokenizer_json_sha256": pinset["tokenizer_json_sha256"],
+        "tokenizer_id": PINNED_QWEN3_TOKENIZER_ID,
+        "rendered_with": {"library": "test", "version": "1"},
+    }
 
 
 class BenchmarkImportTests(unittest.TestCase):
@@ -256,75 +316,74 @@ class BenchmarkImportTests(unittest.TestCase):
                 self.assertEqual(result.correct, expected == OUTCOME_CORRECT)
         self.assertEqual(set(OUTCOME_CLASSES), set(case[2] for case in cases[:4]))
 
-    def test_four_way_outcome_table_is_exact_and_quarantined(self) -> None:
-        annotations = []
-        rows = []
-        cases = (
-            ("#### 1", "succeeded"),
-            ("#### 9", "succeeded"),
-            ("unfinished", "capped"),
-            ("bad", "succeeded"),
-        )
-        for index, (response, status) in enumerate(cases):
-            item_id = f"item-{index}"
-            expected = str(index + 1)
-            annotations.append(
-                {
-                    "item_id": item_id,
-                    "expected_answer": expected,
-                    "expected_answer_sha256": expected_answer_sha256(
-                        item_id, expected
-                    ),
-                    "scorer_id": SCORER_ID,
-                }
-            )
-            rows.append(
-                {"item_id": item_id, "response_text": response, "status": status}
-            )
-        table = score_gsm8k_outcome_table(rows, {"annotations": annotations})
-        self.assertEqual(
-            table["outcome_counts"],
-            {outcome: 1 for outcome in OUTCOME_CLASSES},
-        )
-        self.assertEqual(table["accuracy"], 0.25)
+    def test_four_way_outcome_table_requires_the_exact_pinned_set(self) -> None:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        sidecar = json.loads(ANNOTATIONS_PATH.read_text(encoding="utf-8"))
+        rows = [
+            {
+                "item_id": annotation["item_id"],
+                "response_text": f"#### {annotation['expected_answer']}",
+                "status": "succeeded",
+            }
+            for annotation in sidecar["annotations"]
+        ]
+        table = score_gsm8k_outcome_table(rows, manifest, sidecar)
+        self.assertEqual(table["item_count"], 8)
+        self.assertEqual(table["accuracy"], 1.0)
         self.assertIn("pinned set", table["quarantine"])
 
+        cases = (
+            ([], "gsm8k_pinned_set_empty"),
+            (rows[:-1], "gsm8k_pinned_set_subset"),
+            (rows + [{"item_id": "foreign"}], "gsm8k_pinned_set_superset"),
+            ([{**rows[0], "item_id": "foreign"}] + rows[1:], "gsm8k_pinned_set_foreign"),
+        )
+        for candidate, reason in cases:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(ValueError, reason):
+                    score_gsm8k_outcome_table(candidate, manifest, sidecar)
+
+        drifted = json.loads(json.dumps(manifest))
+        drifted["benchmark_import"]["canonical_subset_json_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "gsm8k_pinned_subset_hash_mismatch"):
+            score_gsm8k_outcome_table(rows, drifted, sidecar)
+
     def test_annotation_builder_self_validates(self) -> None:
-        records = []
-        for index in range(12):
-            question = f"question {index}"
-            answer = f"work\n#### {index + 1}"
-            records.append(
-                _record(
-                    index,
-                    _canonical_sha256(
-                        {"question": question, "answer": answer}
-                    ),
+        with _loaded_synthetic_records() as records:
+            rendered = _rendered_records(records)
+            manifest = build_gsm8k_scored_manifest(records, rendered)
+            sidecar = build_gsm8k_scored_annotations(manifest, records)
+        validate_gsm8k_annotations(manifest, sidecar)
+
+    def test_manifest_builder_refuses_unauthenticated_records(self) -> None:
+        records = [
+            _record(index, hashlib.sha256(f"source-{index}".encode()).hexdigest())
+            for index in range(12)
+        ]
+        with self.assertRaisesRegex(ValueError, "gsm8k_source_authentication_required"):
+            build_gsm8k_scored_manifest(records, _rendered_records(records))
+
+    def test_manifest_builder_refuses_drifted_reviewed_panel_copy(self) -> None:
+        with _loaded_synthetic_records() as records:
+            rendered = _rendered_records(records)
+            panel = json.loads(
+                (ROOT / "configs/model_panels/qwen3_4bit.json").read_text(
+                    encoding="utf-8"
                 )
             )
-        selected = select_items(records, 8)
-        rendered = {
-            "items": [
-                {
-                    "source_item_id": record["source_item_id"],
-                    "prompt_token_ids": [100 + index, 200 + index],
-                    "rendered_prompt_text": (
-                        "<|im_start|>user\n"
-                        + PROMPT_TEMPLATE.format(question=record["question"])
-                        + "<|im_end|>\n<|im_start|>assistant\n"
-                        + EMPTY_THINK_PREFIX
-                    ),
-                }
-                for index, record in enumerate(selected)
-            ],
-            "chat_template_sha256": "a" * 64,
-            "tokenizer_json_sha256": "b" * 64,
-            "tokenizer_id": "tokfiles_test",
-            "rendered_with": {"library": "test", "version": "1"},
-        }
-        manifest = build_gsm8k_scored_manifest(records, rendered)
-        sidecar = build_gsm8k_scored_annotations(manifest, records)
-        validate_gsm8k_annotations(manifest, sidecar)
+            for entry in panel["entries"]:
+                entry["tokenizer_json_sha256"] = "0" * 64
+            panel["rendering_pinsets"][0]["tokenizer_json_sha256"] = "0" * 64
+            with tempfile.TemporaryDirectory() as temporary:
+                drifted_panel = Path(temporary) / "qwen3_4bit.json"
+                drifted_panel.write_text(json.dumps(panel), encoding="utf-8")
+                with self.assertRaisesRegex(
+                    ValueError, "gsm8k_reviewed_panel_pin_drift"
+                ):
+                    with mock.patch.object(
+                        benchmark_import, "QWEN3_PANEL_PATH", drifted_panel
+                    ):
+                        build_gsm8k_scored_manifest(records, rendered)
 
     def test_render_prompts_asserts_two_mirror_equality_and_empty_think_tail(
         self,

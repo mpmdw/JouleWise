@@ -10,12 +10,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from fractions import Fraction
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from joulewise.gensuite import tokenizer_id_for
+from joulewise.model_panel import load_model_panel
 from joulewise.suite import (
     CACHE_POLICY_VERIFICATION_DECLARED_NOT_VERIFIED,
     MARKER_DEFAULTS,
@@ -51,6 +54,23 @@ OUTPUT_CAP = 384
 OUTPUT_POLICY = "natural_eos"
 GENERATOR_NAME = "gsm8k_scored_v6"
 GENERATOR_VERSION = "1.0.0"
+PINNED_CANONICAL_SUBSET_JSON_SHA256 = (
+    "fcfc8ab8e8ce5ba2550d156d7a3242132b5216a89c7404053dae50105249231c"
+)
+PINNED_QWEN3_TOKENIZER_ID = (
+    "tokfiles_3a482ed2a45359223fba1740c869449d91c0c5d6f82f5151a2514b5f0f2a7569"
+)
+REVIEWED_QWEN3_CHAT_TEMPLATE_SHA256 = (
+    "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5"
+)
+REVIEWED_QWEN3_TOKENIZER_JSON_SHA256 = (
+    "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+)
+QWEN3_MODEL_IDS = ("qwen3-1p7b", "qwen3-8b")
+QWEN3_RENDERING_PINSET_ID = "qwen3-real-prompts-v1-thinking-off"
+QWEN3_PANEL_PATH = (
+    Path(__file__).resolve().parents[1] / "configs" / "model_panels" / "qwen3_4bit.json"
+)
 
 PROMPT_TEMPLATE_SHA256 = hashlib.sha256(PROMPT_TEMPLATE.encode("utf-8")).hexdigest()
 prompt_template_sha256 = PROMPT_TEMPLATE_SHA256
@@ -113,6 +133,31 @@ class GSM8KScoreResult:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class AuthenticatedGSM8KRecords(Sequence[Mapping[str, Any]]):
+    """Immutable records plus the loader-verified source authentication chain."""
+
+    records: tuple[Mapping[str, Any], ...]
+    file_sha256: str
+    file_bytes: int
+    file_git_blob_sha1: str
+    line_count: int
+    source_payload: bytes
+
+    def __getitem__(self, index: int) -> Mapping[str, Any]:
+        return self.records[index]
+
+    def __len__(self) -> int:
+        return len(self.records)
+
+    def __iter__(self) -> Iterator[Mapping[str, Any]]:
+        return iter(self.records)
+
+
+def _refuse(reason: str, detail: str) -> None:
+    raise ValueError(f"{reason}: {detail}")
+
+
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
@@ -121,7 +166,7 @@ def _canonical_json_sha256(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
-def load_gsm8k_test(path: str | Path) -> list[dict[str, Any]]:
+def load_gsm8k_test(path: str | Path) -> AuthenticatedGSM8KRecords:
     """Load and authenticate the pinned GSM8K test JSONL."""
 
     source_path = Path(path)
@@ -182,7 +227,14 @@ def load_gsm8k_test(path: str | Path) -> list[dict[str, Any]]:
                 ),
             }
         )
-    return records
+    return AuthenticatedGSM8KRecords(
+        records=tuple(MappingProxyType(record) for record in records),
+        file_sha256=digest,
+        file_bytes=len(payload),
+        file_git_blob_sha1=git_blob_sha1,
+        line_count=len(lines),
+        source_payload=payload,
+    )
 
 
 def canonical_answer(raw_answer: str) -> str:
@@ -276,8 +328,127 @@ def _tokenizer_manifest(tokenizer_dir: Path) -> list[dict[str, str]]:
     return rows
 
 
+def _require_authenticated_source(
+    records: Sequence[Mapping[str, Any]],
+) -> AuthenticatedGSM8KRecords:
+    if not isinstance(records, AuthenticatedGSM8KRecords):
+        _refuse(
+            "gsm8k_source_authentication_required",
+            "records must come directly from load_gsm8k_test",
+        )
+    expected_receipt = (
+        GSM8K_TEST_SHA256,
+        GSM8K_TEST_BYTES,
+        GSM8K_TEST_GIT_BLOB_SHA1,
+        GSM8K_TEST_LINE_COUNT,
+    )
+    observed_receipt = (
+        records.file_sha256,
+        records.file_bytes,
+        records.file_git_blob_sha1,
+        records.line_count,
+    )
+    if observed_receipt != expected_receipt:
+        _refuse(
+            "gsm8k_source_authentication_receipt_mismatch",
+            "loader receipt no longer matches the pinned source identity",
+        )
+    payload = records.source_payload
+    payload_blob_sha1 = hashlib.sha1(
+        f"blob {len(payload)}\0".encode("ascii") + payload
+    ).hexdigest()
+    if (
+        hashlib.sha256(payload).hexdigest() != records.file_sha256
+        or len(payload) != records.file_bytes
+        or payload_blob_sha1 != records.file_git_blob_sha1
+    ):
+        _refuse(
+            "gsm8k_source_authentication_receipt_mismatch",
+            "receipt does not authenticate its retained source bytes",
+        )
+    lines = payload.decode("utf-8").splitlines()
+    if len(lines) != records.line_count or len(lines) != len(records):
+        _refuse(
+            "gsm8k_source_authentication_records_mismatch",
+            "authenticated line count does not match the retained records",
+        )
+    for line_index, (line, record) in enumerate(zip(lines, records, strict=True)):
+        raw = json.loads(line)
+        expected_record = {
+            "line_index": line_index,
+            "question": raw.get("question") if isinstance(raw, dict) else None,
+            "answer": raw.get("answer") if isinstance(raw, dict) else None,
+            "source_item_id": f"gsm8k_test_{line_index:04d}",
+        }
+        expected_record["source_sha256"] = _canonical_json_sha256(
+            {
+                "question": expected_record["question"],
+                "answer": expected_record["answer"],
+            }
+        )
+        if dict(record) != expected_record:
+            _refuse(
+                "gsm8k_source_authentication_records_mismatch",
+                f"record {line_index} is not derived from the authenticated source bytes",
+            )
+    return records
+
+
+def _reviewed_qwen3_pins(
+    panel_path: str | Path | None = None,
+) -> tuple[str, str]:
+    panel = load_model_panel(QWEN3_PANEL_PATH if panel_path is None else panel_path)
+    entries = [panel.get(model_id) for model_id in QWEN3_MODEL_IDS]
+    if any(entry["admission"]["status"] != "admitted" for entry in entries):
+        _refuse(
+            "gsm8k_reviewed_panel_entry_not_admitted",
+            "every D-166 Qwen3 panel entry must remain admitted",
+        )
+    if any(
+        entry["rendering_pinset_id"] != QWEN3_RENDERING_PINSET_ID
+        for entry in entries
+    ):
+        _refuse(
+            "gsm8k_reviewed_panel_pinset_mismatch",
+            "Qwen3 entries must bind the reviewed thinking-off rendering pinset",
+        )
+    pinset = panel.get_rendering_pinset(QWEN3_RENDERING_PINSET_ID)
+    if (
+        pinset["chat_template_sha256"] != REVIEWED_QWEN3_CHAT_TEMPLATE_SHA256
+        or pinset["tokenizer_json_sha256"]
+        != REVIEWED_QWEN3_TOKENIZER_JSON_SHA256
+    ):
+        _refuse(
+            "gsm8k_reviewed_panel_pin_drift",
+            "Qwen3 panel prompt/tokenizer pins differ from the reviewed D-166 pinset",
+        )
+    return pinset["chat_template_sha256"], pinset["tokenizer_json_sha256"]
+
+
+def _require_reviewed_qwen3_binding(
+    rendered: Mapping[str, Any], *, panel_path: str | Path | None = None
+) -> None:
+    chat_template_sha256, tokenizer_json_sha256 = _reviewed_qwen3_pins(panel_path)
+    if rendered.get("chat_template_sha256") != chat_template_sha256:
+        _refuse(
+            "gsm8k_reviewed_chat_template_mismatch",
+            "rendered chat_template_sha256 does not match the reviewed Qwen3 panel",
+        )
+    if rendered.get("tokenizer_json_sha256") != tokenizer_json_sha256:
+        _refuse(
+            "gsm8k_reviewed_tokenizer_json_mismatch",
+            "rendered tokenizer_json_sha256 does not match the reviewed Qwen3 panel",
+        )
+    if rendered.get("tokenizer_id") != PINNED_QWEN3_TOKENIZER_ID:
+        _refuse(
+            "gsm8k_reviewed_tokenizer_identity_mismatch",
+            "rendered tokenizer file-manifest identity is not the reviewed Qwen3 identity",
+        )
+
+
 def render_prompts(
-    records: Sequence[Mapping[str, Any]], tokenizer_dirs: Sequence[Path]
+    records: Sequence[Mapping[str, Any]],
+    tokenizer_dirs: Sequence[Path],
 ) -> dict[str, Any]:
     """Render selected records through every supplied local Qwen3 tokenizer."""
 
@@ -389,7 +560,7 @@ def render_prompts(
             }
         )
 
-    return {
+    rendered = {
         "items": rendered_items,
         "chat_template_sha256": chat_template_hashes[0],
         "tokenizer_json_sha256": tokenizer_json_hashes[0],
@@ -399,6 +570,8 @@ def render_prompts(
             "version": transformers_version,
         },
     }
+    _require_reviewed_qwen3_binding(rendered)
+    return rendered
 
 
 def build_gsm8k_scored_manifest(
@@ -412,7 +585,9 @@ def build_gsm8k_scored_manifest(
 
     if isinstance(output_cap, bool) or not isinstance(output_cap, int) or output_cap <= 0:
         raise ValueError("output_cap must be a positive integer")
-    selected = select_items(records, k)
+    authenticated_records = _require_authenticated_source(records)
+    _require_reviewed_qwen3_binding(rendered)
+    selected = select_items(authenticated_records, k)
     rendered_items = rendered.get("items")
     if not isinstance(rendered_items, list):
         raise ValueError("rendered.items must be a list")
@@ -781,15 +956,68 @@ def score_gsm8k_response(
 
 def score_gsm8k_outcome_table(
     response_rows: Sequence[Mapping[str, Any]],
+    manifest: Mapping[str, Any],
     sidecar: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Score an exact k-item response set and emit the fixed four-way table."""
 
+    manifest_dict = dict(manifest)
+    raw_benchmark_import = manifest_dict.get("benchmark_import")
+    if not isinstance(raw_benchmark_import, Mapping):
+        _refuse("gsm8k_pinned_manifest_missing", "benchmark_import is required")
+    raw_items = manifest_dict.get("items")
+    if (
+        raw_benchmark_import.get("k") != K_ITEMS
+        or not isinstance(raw_items, list)
+        or len(raw_items) != K_ITEMS
+    ):
+        _refuse(
+            "gsm8k_pinned_set_count_mismatch",
+            f"D-166 requires exactly k={K_ITEMS} items per member",
+        )
+    if (
+        raw_benchmark_import.get("canonical_subset_json_sha256")
+        != PINNED_CANONICAL_SUBSET_JSON_SHA256
+    ):
+        _refuse(
+            "gsm8k_pinned_subset_hash_mismatch",
+            "manifest canonical_subset_json_sha256 is not the D-166 pinned set",
+        )
+    validated = SuiteManifest.from_mapping(manifest_dict)
+    validate_gsm8k_annotations(manifest_dict, sidecar)
     annotations = sidecar.get("annotations")
-    if not isinstance(annotations, list):
-        raise ValueError("GSM8K sidecar annotations must be a list")
-    if len(response_rows) != len(annotations):
-        raise ValueError("GSM8K response set must match the annotation count")
+    assert isinstance(annotations, list)
+    expected_ids = [item.item_id for item in validated.items]
+    observed_ids = [
+        row.get("item_id") if isinstance(row, Mapping) else None
+        for row in response_rows
+    ]
+    if not observed_ids:
+        _refuse("gsm8k_pinned_set_empty", "a member must contain all eight items")
+    if len(observed_ids) < K_ITEMS:
+        reason = (
+            "gsm8k_pinned_set_subset"
+            if set(observed_ids).issubset(expected_ids)
+            else "gsm8k_pinned_set_foreign"
+        )
+        _refuse(reason, f"received {len(observed_ids)} of {K_ITEMS} required items")
+    if len(observed_ids) > K_ITEMS:
+        reason = (
+            "gsm8k_pinned_set_superset"
+            if set(expected_ids).issubset(observed_ids)
+            else "gsm8k_pinned_set_foreign"
+        )
+        _refuse(reason, f"received {len(observed_ids)} items; exactly {K_ITEMS} are required")
+    if set(observed_ids) != set(expected_ids):
+        _refuse(
+            "gsm8k_pinned_set_foreign",
+            "response items do not equal the D-166 pinned item set",
+        )
+    if observed_ids != expected_ids:
+        _refuse(
+            "gsm8k_pinned_set_order_mismatch",
+            "response items must follow the pinned manifest order",
+        )
     results: list[GSM8KScoreResult] = []
     for index, (row, annotation) in enumerate(
         zip(response_rows, annotations, strict=True)

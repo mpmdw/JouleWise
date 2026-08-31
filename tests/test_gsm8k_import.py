@@ -5,13 +5,12 @@ import hashlib
 import json
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
-from joulewise.gensuite import tokenizer_id_for
-from joulewise.suite import SuiteManifest, suite_manifest_sha256
-from scripts import gsm8k_import
-from scripts.gsm8k_import import (
+from joulewise import benchmark_import as gsm8k_import
+from joulewise.benchmark_import import (
     ANSWER_HASH_DOMAIN,
     EMPTY_THINK_PREFIX,
     OUTCOME_CLASSES,
@@ -19,6 +18,7 @@ from scripts.gsm8k_import import (
     OUTCOME_INCORRECT,
     OUTCOME_MALFORMED,
     OUTCOME_TRUNCATED,
+    PINNED_QWEN3_TOKENIZER_ID,
     PROMPT_TEMPLATE,
     PROMPT_TEMPLATE_SHA256,
     SCORER_ID,
@@ -35,6 +35,8 @@ from scripts.gsm8k_import import (
     selected_item_ids_sha256,
     validate_gsm8k_annotations,
 )
+from joulewise.gensuite import tokenizer_id_for
+from joulewise.suite import SuiteManifest, suite_manifest_sha256
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,9 +89,41 @@ def _annotation(item_id: str = "gsm8k_test_0001", answer: str = "3/4") -> dict:
     }
 
 
-def _synthetic_product() -> tuple[dict, dict]:
-    records = [_record(index) for index in range(12)]
+@contextmanager
+def _loaded_synthetic_records(count: int = 12):
+    payload = "".join(
+        json.dumps(
+            {
+                "question": f"question {index}",
+                "answer": f"work\n#### {index + 1}",
+            },
+            separators=(",", ":"),
+        )
+        + "\n"
+        for index in range(count)
+    ).encode("utf-8")
+    blob_sha1 = hashlib.sha1(
+        f"blob {len(payload)}\0".encode("ascii") + payload
+    ).hexdigest()
+    with tempfile.TemporaryDirectory() as temporary:
+        source = Path(temporary) / "test.jsonl"
+        source.write_bytes(payload)
+        with mock.patch.multiple(
+            gsm8k_import,
+            GSM8K_TEST_SHA256=hashlib.sha256(payload).hexdigest(),
+            GSM8K_TEST_GIT_BLOB_SHA1=blob_sha1,
+            GSM8K_TEST_BYTES=len(payload),
+            GSM8K_TEST_LINE_COUNT=count,
+        ):
+            yield load_gsm8k_test(source)
+
+
+def _rendered_records(records) -> dict:
     selected = select_items(records, 8)
+    panel = json.loads(
+        (ROOT / "configs/model_panels/qwen3_4bit.json").read_text(encoding="utf-8")
+    )
+    pinset = panel["rendering_pinsets"][0]
     rendered = {
         "items": [
             {
@@ -112,13 +146,18 @@ def _synthetic_product() -> tuple[dict, dict]:
             }
             for index, record in enumerate(selected)
         ],
-        "chat_template_sha256": "a" * 64,
-        "tokenizer_json_sha256": "b" * 64,
-        "tokenizer_id": "tokfiles_test",
+        "chat_template_sha256": pinset["chat_template_sha256"],
+        "tokenizer_json_sha256": pinset["tokenizer_json_sha256"],
+        "tokenizer_id": PINNED_QWEN3_TOKENIZER_ID,
         "rendered_with": {"library": "test", "version": "1"},
     }
-    manifest = build_gsm8k_scored_manifest(records, rendered)
-    return manifest, build_gsm8k_scored_annotations(manifest, records)
+    return rendered
+
+
+def _synthetic_product() -> tuple[dict, dict]:
+    with _loaded_synthetic_records() as records:
+        manifest = build_gsm8k_scored_manifest(records, _rendered_records(records))
+        return manifest, build_gsm8k_scored_annotations(manifest, records)
 
 
 class GSM8KImportTests(unittest.TestCase):
@@ -247,24 +286,20 @@ class GSM8KImportTests(unittest.TestCase):
             )
 
     def test_four_way_table_is_exact_set_level_output(self) -> None:
-        annotations = []
-        rows = []
-        cases = (
-            ("#### 1", "succeeded"),
-            ("#### 9", "succeeded"),
-            ("unfinished", "capped"),
-            ("bad", "succeeded"),
-        )
-        for index, (response, status) in enumerate(cases):
-            item_id = f"item-{index}"
-            annotations.append(_annotation(item_id, str(index + 1)))
-            rows.append(
-                {"item_id": item_id, "response_text": response, "status": status}
-            )
-        table = score_gsm8k_outcome_table(rows, {"annotations": annotations})
-        self.assertEqual(table["outcome_counts"], {outcome: 1 for outcome in OUTCOME_CLASSES})
-        self.assertEqual(table["correct_count"], 1)
-        self.assertEqual(table["accuracy"], 0.25)
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        sidecar = json.loads(ANNOTATIONS_PATH.read_text(encoding="utf-8"))
+        rows = [
+            {
+                "item_id": annotation["item_id"],
+                "response_text": f"#### {annotation['expected_answer']}",
+                "status": "succeeded",
+            }
+            for annotation in sidecar["annotations"]
+        ]
+        table = score_gsm8k_outcome_table(rows, manifest, sidecar)
+        self.assertEqual(table["item_count"], 8)
+        self.assertEqual(table["correct_count"], 8)
+        self.assertEqual(table["accuracy"], 1.0)
         self.assertIn("pinned set", table["quarantine"])
 
     def test_synthetic_producer_is_deterministic_and_self_validating(self) -> None:
@@ -278,20 +313,11 @@ class GSM8KImportTests(unittest.TestCase):
         validate_gsm8k_annotations(first_manifest, first_sidecar)
 
     def test_producer_refuses_rendered_selection_order_drift(self) -> None:
-        manifest, _ = _synthetic_product()
-        records = [_record(index) for index in range(12)]
-        rendered = {
-            "items": [
-                {
-                    "source_item_id": item["source"]["source_item_id"],
-                    "prompt_token_ids": item["source"]["prompt_token_ids"],
-                    "rendered_prompt_text": item["source"]["prompt_text"],
-                }
-                for item in reversed(manifest["items"])
-            ]
-        }
-        with self.assertRaisesRegex(ValueError, "selected GSM8K order"):
-            build_gsm8k_scored_manifest(records, rendered)
+        with _loaded_synthetic_records() as records:
+            rendered = _rendered_records(records)
+            rendered["items"].reverse()
+            with self.assertRaisesRegex(ValueError, "selected GSM8K order"):
+                build_gsm8k_scored_manifest(records, rendered)
 
     def test_annotation_validator_refuses_manifest_and_answer_tampering(self) -> None:
         manifest, sidecar = _synthetic_product()
