@@ -172,6 +172,15 @@ class BenchmarkImportTests(unittest.TestCase):
             )
         )
 
+    def test_forged_line_index_annotation_refuses(self) -> None:
+        # Audit-2 F1: a sidecar whose only change is a forged line_index must
+        # refuse; provenance fields are bound, not decorative.
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        sidecar = json.loads(ANNOTATIONS_PATH.read_text())
+        sidecar["annotations"][0]["line_index"] = 999999
+        with self.assertRaisesRegex(ValueError, "line_index mismatch"):
+            validate_gsm8k_annotations(manifest, sidecar)
+
     def test_prompt_template_hash_is_pinned(self) -> None:
         self.assertEqual(
             PROMPT_TEMPLATE_SHA256,
@@ -192,6 +201,14 @@ class BenchmarkImportTests(unittest.TestCase):
         self.assertEqual(
             selected_item_ids_sha256(forward),
             selected_item_ids_sha256(reverse),
+        )
+        # Restored from the deleted deprecated test (audit-2 F2): the FULL
+        # selected records and the canonical subset-content hash must also be
+        # input-order invariant, not just the ID projection.
+        self.assertEqual(forward, reverse)
+        self.assertEqual(
+            canonical_subset_json_sha256(forward),
+            canonical_subset_json_sha256(reverse),
         )
 
     def test_load_refuses_non_pinned_sha256(self) -> None:

@@ -847,6 +847,17 @@ def validate_gsm8k_annotations(
             raise ValueError(f"GSM8K annotation {index} source_item_id mismatch")
         if annotation.get("source_sha256") != item.source.source_sha256:
             raise ValueError(f"GSM8K annotation {index} source_sha256 mismatch")
+        source_item_id = item.source.source_item_id
+        expected_line_index = (
+            int(source_item_id[len("gsm8k_test_"):])
+            if source_item_id.startswith("gsm8k_test_")
+            else None
+        )
+        if (
+            expected_line_index is None
+            or annotation.get("line_index") != expected_line_index
+        ):
+            raise ValueError(f"GSM8K annotation {index} line_index mismatch")
         expected_answer = annotation.get("expected_answer")
         if not isinstance(expected_answer, str):
             raise ValueError(f"GSM8K annotation {index} expected_answer malformed")
