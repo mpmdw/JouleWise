@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import math
 import os
+import pkgutil
 import plistlib
 import subprocess
 import sys
@@ -30,6 +32,7 @@ from joulewise.powermetrics_fiducial import (
 from joulewise.schemas import BenchmarkConfig
 from joulewise.transfer_fiducial import (
     RECEIPT_SOURCE_MODULES,
+    RECEIPT_TRACE_BLIND_MODULES,
     TRANSFER_FIDUCIAL_ESTIMATOR_SHA256,
     TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND_V2,
     TRANSFER_FIDUCIAL_PLAN_SCHEMA_V2,
@@ -405,6 +408,27 @@ def _fixture_fit_run(bundle_path: Path) -> TransferFiducialRunFit:
     )
 
 
+def _preimport_joulewise_package() -> list[str]:
+    """Import every joulewise module except ``__main__`` before tracing.
+
+    Module bodies then never execute inside the trace, so the executed set
+    cannot depend on what the process imported earlier (cold process: 22
+    files; after this helper: the same set on every run and interpreter).
+    ``joulewise/__main__.py`` is skipped because importing it runs the CLI
+    against the test's argv and raises SystemExit.
+    """
+
+    import joulewise
+
+    imported: list[str] = []
+    for module_info in pkgutil.walk_packages(joulewise.__path__, "joulewise."):
+        if module_info.name.rsplit(".", 1)[-1] == "__main__":
+            continue
+        importlib.import_module(module_info.name)
+        imported.append(module_info.name)
+    return imported
+
+
 @contextmanager
 def _trace_joulewise_execution():
     """Collect joulewise files that execute a line during one fixture fit."""
@@ -575,23 +599,32 @@ class TransferFiducialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             plan, runs, calibration = make_synthetic_capture_fixture(Path(tmp))
             real_fit_run = transfer_fiducial.fit_run
-            with _trace_joulewise_execution() as executed:
-                traced_fit = real_fit_run(runs / "synthetic-transfer-r01")
-            self.assertEqual(traced_fit.verdict, "fitted")
+            imported = _preimport_joulewise_package()
+            self.assertGreater(len(imported), 50)
+            self.assertNotIn("joulewise.__main__", imported)
+            missing_imports = sorted(
+                name for name in imported if name not in sys.modules
+            )
+            self.assertEqual(missing_imports, [])
 
             def one_real_fixture_fit(bundle_path: Path) -> TransferFiducialRunFit:
                 if Path(bundle_path).name == "synthetic-transfer-r01":
                     return traced_fit
                 return _fixture_fit_run(bundle_path)
 
-            with patch.object(
-                transfer_fiducial, "fit_run", side_effect=one_real_fixture_fit
-            ):
-                capture = build_capture(
-                    plan_path=plan,
-                    runs_root=runs,
-                    pulse_calibration_dir=calibration,
-                )
+            # The trace encloses BOTH the real fixture fit and build_capture
+            # (the verdict producer): schemas.py executes only in the latter.
+            with _trace_joulewise_execution() as executed:
+                traced_fit = real_fit_run(runs / "synthetic-transfer-r01")
+                with patch.object(
+                    transfer_fiducial, "fit_run", side_effect=one_real_fixture_fit
+                ):
+                    capture = build_capture(
+                        plan_path=plan,
+                        runs_root=runs,
+                        pulse_calibration_dir=calibration,
+                    )
+            self.assertEqual(traced_fit.verdict, "fitted")
             self.assertEqual(
                 len(RECEIPT_SOURCE_MODULES), len(set(RECEIPT_SOURCE_MODULES))
             )
@@ -601,14 +634,29 @@ class TransferFiducialTests(unittest.TestCase):
                 if not (ROOT / relative).is_file()
             ]
             self.assertEqual(missing_paths, [])
-            missing_from_inventory = sorted(
-                set(executed).difference(RECEIPT_SOURCE_MODULES)
+            # Closure, both directions: nothing the fit runs escapes the
+            # receipt, and nothing the fit does not run is frozen by it.
+            self.assertTrue(
+                set(RECEIPT_TRACE_BLIND_MODULES) <= set(RECEIPT_SOURCE_MODULES)
             )
             self.assertEqual(
-                missing_from_inventory,
+                sorted(set(executed) & set(RECEIPT_TRACE_BLIND_MODULES)),
+                [],
+                "a trace-blind inventory member was observed executing; "
+                "remove it from RECEIPT_TRACE_BLIND_MODULES",
+            )
+            closed = set(executed) | set(RECEIPT_TRACE_BLIND_MODULES)
+            self.assertEqual(
+                sorted(closed.difference(RECEIPT_SOURCE_MODULES)),
                 [],
                 "fixture fit executed joulewise modules outside the closed "
-                f"receipt inventory: {missing_from_inventory}",
+                "receipt inventory",
+            )
+            self.assertEqual(
+                sorted(set(RECEIPT_SOURCE_MODULES).difference(closed)),
+                [],
+                "receipt inventory freezes joulewise modules the fixture fit "
+                "never executed",
             )
             self.assertEqual(capture["estimator_revision"], RESIDUAL_REGION_METHOD)
             self.assertEqual(capture["b_pulse_s"], 0.2)

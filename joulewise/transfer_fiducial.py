@@ -51,10 +51,16 @@ TRANSFER_FIDUCIAL_BOUNDARY_SEMANTICS = "first_yield_one_step_queued"
 TRANSFER_FIDUCIAL_ESTIMATOR_SHA256 = (
     "386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92"
 )
-# This is a hand-curated, closed receipt fence.  The first eight paths are the
-# ruled starting set; the remaining paths were observed executing during the
-# one-bundle fixture fit and are retained so the execution drift test is
-# authoritative without freezing the entire joulewise import closure.
+# The receipt source inventory: a hand-curated, closed fence over the joulewise
+# modules whose code the fit executes.  It is closed by EXECUTION under a
+# defined procedure (docs/contracts/transfer_fiducial.md, "closed by
+# execution"): with every joulewise module pre-imported so no module body runs
+# inside the trace, the drift test records every joulewise file that receives
+# a call while fit_run and build_capture run over the synthetic fixture, and
+# asserts executed | RECEIPT_TRACE_BLIND_MODULES == set(RECEIPT_SOURCE_MODULES)
+# in BOTH directions.  Import-closure modules (mock adapters, bundle.py, ...)
+# are deliberately absent: freezing a file the fit never runs lets an unrelated
+# edit invalidate a receipt that is never reissued.
 RECEIPT_SOURCE_MODULES: tuple[str, ...] = (
     "joulewise/transfer_fiducial.py",
     "joulewise/powermetrics_fiducial.py",
@@ -64,23 +70,14 @@ RECEIPT_SOURCE_MODULES: tuple[str, ...] = (
     "joulewise/validation.py",
     "joulewise/adapters/powermetrics.py",
     "joulewise/bundle_read.py",
-    "joulewise/adapters/__init__.py",
-    "joulewise/adapters/local_transport.py",
-    "joulewise/adapters/mock_runtime.py",
-    "joulewise/adapters/mock_spec_runtime.py",
-    "joulewise/adapters/mock_telemetry.py",
-    "joulewise/adapters/suite_control.py",
-    "joulewise/arm_readiness.py",
     "joulewise/authentication_io.py",
-    "joulewise/axi_decode_config.py",
-    "joulewise/bundle.py",
-    "joulewise/clock_reference.py",
-    "joulewise/cooldown_anchor.py",
-    "joulewise/identity_pins.py",
-    "joulewise/interfaces.py",
-    "joulewise/provenance.py",
-    "joulewise/suite.py",
 )
+# Inventory members the fit executes but no tracer can attribute to the file:
+# joulewise/clock.py contributes ClockStamp, a frozen dataclass constructed by
+# stamp_from_mapping; dataclass-generated methods carry co_filename "<string>",
+# so neither sys.monitoring nor sys.settrace ever reports clock.py.  Each entry
+# here must also be in RECEIPT_SOURCE_MODULES and must NOT appear in the trace.
+RECEIPT_TRACE_BLIND_MODULES: tuple[str, ...] = ("joulewise/clock.py",)
 
 _GAP_EVENT_TYPES = frozenset({"fiducial_gap_start", "fiducial_gap_end"})
 _FIT_SUCCESS = "fitted"
