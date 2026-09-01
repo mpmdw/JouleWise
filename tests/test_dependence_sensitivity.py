@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import hashlib
+import io
 import json
 import math
 import re
+import shlex
 import subprocess
 import sys
 import unittest
@@ -29,6 +32,7 @@ from scripts import dependence_sensitivity
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "dependence_sensitivity.py"
 DOCUMENT = REPO_ROOT / "docs" / "paper" / "round7" / "dependence-sensitivity.md"
+TEMPLATE = REPO_ROOT / "docs" / "paper" / "round7" / "dependence-sensitivity.md.in"
 EXAMPLE_ARGS = (
     "--block-deltas",
     json.dumps(dependence_sensitivity.EXAMPLE_BLOCK_DELTAS_J, separators=(",", ":")),
@@ -219,50 +223,20 @@ REFUSAL_CASES = (
 )
 
 
-# The sheet is the fixture.  These digests deliberately bind the exact prose
-# command lines and numeric-token inventory without copying either command
-# into a second executable form.  Commands are always extracted from the
-# sheet before they are run below.
-DOCUMENTED_COMMAND_OUTCOMES = {
-    "79fe7297abe7285c0aa0a92c3349c38c2d3faed824cdffeaef6713931cceb00d": '"direction_gate_outcomes_agree": true',
-    "1663202b0c19f77e7c932ae66004537276cd45c2d407c158fdd643ba1d08228e": '"direction_gate_outcomes_agree": false',
-}
-SHEET_NUMERIC_TOKEN_SHA256 = "c1eea3dbc33eed4f73a1f3a8588b8564e4e6945403335113b461e2afd01ec08d"
-PLACEMENT_ANCHORS = (
-    ("DS-SENS-01", 285, "Table 3. Prospective contrast decisions."),
-    ("DS-SENS-02", 294, "**Limitation 1 is an untested load-regime transfer.**"),
-    ("PG-SENS-01", 285, "Table 3. Prospective contrast decisions."),
-    ("PG-SENS-02", 294, "**Limitation 1 is an untested load-regime transfer.**"),
-)
-# These are not calculator quantities: they are frozen identifier, line-anchor,
-# source-location, digest-width, or ratified-H30 count tokens in the sheet.
-SHEET_SOURCE_LOCATION_OR_IDENTIFIER_NUMBERS = frozenset(
-    {
-        "01",
-        "02",
-        "07",
-        "26",
-        "30",
-        "31",
-        "36",
-        "49",
-        "59",
-        "64",
-        "115",
-        "117",
-        "118",
-        "131",
-        "166",
-        "194",
-        "226",
-        "256",
-        "285",
-        "294",
-        "362",
-        "375",
-        "652",
-        "9595",
-    }
+TEMPLATE_DIGIT_ALLOWLIST = (
+    r"DS-SENS-0\d",
+    r"PG-SENS-0\d",
+    r"DS-\d\d",
+    r"PG-\d\d",
+    r"_v5",
+    r"SHA-256",
+    r"UTF-8",
+    r"H30",
+    r"95%",
+    r"95/95",
+    r"A/B/B/A",
+    r"AR\(1\)",
+    r"Table \d",
 )
 MANDATED_REFUSAL_ROW_NAMES = frozenset(
     {
@@ -301,38 +275,38 @@ MANDATED_REFUSAL_ROW_NAMES = frozenset(
     }
 )
 REFUSAL_SOURCE_SITES = {
-    "finite_boolean": "_finite_number",
+    "finite_boolean": "main",
     "finite_string": "_finite_number",
-    "dict_deltas": "_validated_deltas",
+    "dict_deltas": "main",
     "string_deltas": "_validated_deltas",
-    "four_blocks": "_validated_deltas",
-    "eleven_blocks": "_validated_deltas",
-    "invalid_json": "_json_list_from_text",
+    "four_blocks": "main",
+    "eleven_blocks": "main",
+    "invalid_json": "main",
     "missing_deltas_file": "main",
-    "nonfinite_delta": "_finite_number",
-    "constant_sequence": "estimate_ar1_rho",
-    "perfect_alternation": "estimate_ar1_rho",
+    "nonfinite_delta": "main",
+    "constant_sequence": "main",
+    "perfect_alternation": "main",
     "ar1_one_block": "_ar1_variance_terms",
-    "ar1_nonfinite_rho": "_ar1_variance_terms",
+    "ar1_nonfinite_rho": "_finite_number",
     "ar1_out_of_range": "_ar1_variance_terms",
     "estimated_rho_constant": "estimate_ar1_rho",
     "estimated_rho_out_of_range": "estimate_ar1_rho",
-    "five_blocks": "_validated_deltas",
-    "negative_floor": "_nonnegative_number",
-    "nonfinite_metrology_se": "_finite_number",
-    "negative_metrology_se": "_nonnegative_number",
-    "negative_deterministic_total": "_nonnegative_number",
-    "infinite_interval": "_interval",
-    "infinite_decision_interval": "_model_result",
+    "five_blocks": "main",
+    "negative_floor": "main",
+    "nonfinite_metrology_se": "main",
+    "negative_metrology_se": "main",
+    "negative_deterministic_total": "main",
+    "infinite_interval": "main",
+    "infinite_decision_interval": "main",
     "effective_n_not_finite": "_degrees_of_freedom",
     "too_few_effective_blocks": "_degrees_of_freedom",
     "sample_stddev_not_finite": "analyze_deltas",
     "zero_total_standard_error": "_model_result",
     "example_with_floor": "main",
-    "caller_alpha": "_parser",
+    "caller_alpha": "main",
     "missing_source": "main",
     "missing_metrology": "main",
-    "overflow": "analyze_deltas",
+    "overflow": "main",
 }
 PLACEMENT_ANCHOR_PATTERN = re.compile(
     r"^\| (?P<site>(?:DS|PG)-SENS-\d+) .*?`docs/paper/draft-v1\.md` line "
@@ -345,6 +319,10 @@ BRACKETED_TEN_NUMBER_LIST_PATTERN = re.compile(
 SHEET_COMMAND_BLOCK_PATTERN = re.compile(
     r"^```[^\n]*\n(?P<fenced>.*?)^```|^ {4}(?P<indented>\S[^\n]*)$",
     re.MULTILINE | re.DOTALL,
+)
+TEMPLATE_SLOT_PATTERN = re.compile(r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)\}")
+MATH_SPAN_PATTERN = re.compile(
+    r"\\\((?P<inline>.*?)\\\)|\\\[(?P<display>.*?)\\\]", re.DOTALL
 )
 
 
@@ -362,73 +340,29 @@ def _extract_sheet_commands(document: str) -> list[str]:
     return commands
 
 
-def _sheet_numeric_token_digest(document: str) -> str:
-    """Fingerprint every numeric token, including source anchors and IDs."""
-
-    tokens = re.findall(r"\d+(?:\.\d+)?", document)
-    return hashlib.sha256("\n".join(tokens).encode("utf-8")).hexdigest()
-
-
-def _number_renderings(value: int | float) -> set[str]:
-    """Return every precision the sheet is allowed to render for one source."""
-
-    number = abs(float(value))
-    return {str(number), *(f"{number:.{precision}f}" for precision in range(16))}
-
-
-def _source_bound_sheet_numbers(payload: dict[str, Any]) -> set[str]:
-    """Return all calculator renderings and declared non-calculator constants."""
-
-    values: set[str] = set(SHEET_SOURCE_LOCATION_OR_IDENTIFIER_NUMBERS)
-
-    def collect(value: object) -> None:
-        if isinstance(value, dict):
-            for nested in value.values():
-                collect(nested)
-        elif isinstance(value, list):
-            for nested in value:
-                collect(nested)
-        elif isinstance(value, (int, float)) and not isinstance(value, bool):
-            values.update(_number_renderings(value))
-
-    collect(payload)
-    values.update(
-        _number_renderings(math.fsum(row["term"] for row in payload["ar1_variance_terms"]))
-    )
-    for rho in (0.5, 0.9):
-        multiplier = dependence_sensitivity.ar1_variance_inflation_factor(10, rho)
-        values.update(_number_renderings(rho))
-        values.update(_number_renderings(multiplier))
-        values.update(_number_renderings(10 / multiplier))
-    for declared in (
-        dependence_sensitivity.REGISTERED_ALPHA / 2.0,
-        dependence_sensitivity.REGISTERED_ALPHA,
-        1.0 - dependence_sensitivity.REGISTERED_ALPHA / 2.0,
-        dependence_sensitivity.REGISTERED_N_BLOCKS,
-        2,
-        95,
-    ):
-        values.update(_number_renderings(declared))
-    return values
-
-
 def _assert_documented_command_fixture(test: unittest.TestCase, document: str) -> None:
+    matches = tuple(SHEET_COMMAND_BLOCK_PATTERN.finditer(document))
     commands = _extract_sheet_commands(document)
-    command_hashes = tuple(
-        hashlib.sha256(command.encode("utf-8")).hexdigest() for command in commands
-    )
-    test.assertEqual(command_hashes, tuple(DOCUMENTED_COMMAND_OUTCOMES))
-    for command, command_hash in zip(commands, command_hashes, strict=True):
+    test.assertEqual(len(matches), len(commands))
+    for command, match in zip(commands, matches, strict=True):
+        following = document[match.end() :]
+        paragraph_match = re.match(
+            r"\n\n(?P<paragraph>\S[^\n]*(?:\n(?!\n)[^\n]*)*)", following
+        )
+        test.assertIsNotNone(paragraph_match, f"command has no following paragraph: {command}")
+        assert paragraph_match is not None
+        fragments = re.findall(r"`([^`\n]+)`", paragraph_match.group("paragraph"))
+        test.assertGreaterEqual(len(fragments), 1, command)
         completed = subprocess.run(
-            command,
+            shlex.split(command),
             cwd=REPO_ROOT,
-            shell=True,
             check=False,
             text=True,
             capture_output=True,
         )
         test.assertEqual(completed.returncode, 0, completed.stderr)
-        test.assertIn(DOCUMENTED_COMMAND_OUTCOMES[command_hash], completed.stdout)
+        for fragment in fragments:
+            test.assertIn(fragment, completed.stdout)
 
 
 def _assert_placement_anchor_fixture(test: unittest.TestCase, document: str) -> None:
@@ -436,14 +370,21 @@ def _assert_placement_anchor_fixture(test: unittest.TestCase, document: str) -> 
         (match.group("site"), int(match.group("line")), match.group("quote"))
         for match in PLACEMENT_ANCHOR_PATTERN.finditer(document)
     )
-    test.assertEqual(observed, PLACEMENT_ANCHORS)
+    test.assertEqual(
+        tuple(site for site, _, _ in observed), tuple(dependence_sensitivity.DRAFT_LINE_SLOT_BY_SITE)
+    )
     draft_lines = (REPO_ROOT / "docs" / "paper" / "draft-v1.md").read_text(
         encoding="utf-8"
     ).splitlines()
     for site, line_number, quote in observed:
         with test.subTest(site=site):
             test.assertLessEqual(line_number, len(draft_lines))
-            test.assertTrue(draft_lines[line_number - 1].startswith(quote[:40]))
+            matches = [
+                index
+                for index, line in enumerate(draft_lines, start=1)
+                if line.startswith(quote)
+            ]
+            test.assertEqual(matches, [line_number])
 
 
 def _assert_refusal_row_fixture(
@@ -460,6 +401,28 @@ def _assert_refusal_row_fixture(
     for name in names:
         with test.subTest(name=name):
             test.assertIn(REFUSAL_SOURCE_SITES[name], source_sites)
+
+
+def _caught_refusal(
+    argv_or_call: tuple[str, ...] | Any,
+) -> tuple[BaseException, str, str]:
+    stdout = contextlib.redirect_stdout(io.StringIO())
+    stderr_buffer = io.StringIO()
+    try:
+        with stdout, contextlib.redirect_stderr(stderr_buffer):
+            if callable(argv_or_call):
+                argv_or_call()
+            else:
+                dependence_sensitivity.main(argv_or_call)
+    except BaseException as exc:
+        script_frames: list[str] = []
+        traceback = exc.__traceback__
+        while traceback is not None:
+            if Path(traceback.tb_frame.f_code.co_filename).resolve() == SCRIPT:
+                script_frames.append(traceback.tb_frame.f_code.co_name)
+            traceback = traceback.tb_next
+        return exc, stderr_buffer.getvalue(), script_frames[-1] if script_frames else ""
+    raise AssertionError("refusal case returned without raising")
 
 
 def _string_literal_fragments(node: ast.AST) -> list[str]:
@@ -792,14 +755,18 @@ class DependenceSensitivityTests(unittest.TestCase):
         self.assertIsNone(dependence_sensitivity._strict_direction({"lower": 0.0, "upper": 1.0}))
         self.assertIsNone(dependence_sensitivity._strict_direction({"lower": -1.0, "upper": 0.0}))
 
-    def test_reason_keyed_refusal_cases(self) -> None:
+    def test_reason_keyed_refusal_cases_bind_to_innermost_script_frame(self) -> None:
+        _assert_refusal_row_fixture(self, REFUSAL_CASES)
         for name, argv_or_call, expected_reason_regex in REFUSAL_CASES:
             with self.subTest(name=name):
-                if callable(argv_or_call):
-                    with self.assertRaisesRegex(ValueError, expected_reason_regex):
-                        argv_or_call()
+                exception, stderr, source_site = _caught_refusal(argv_or_call)
+                if isinstance(exception, SystemExit):
+                    self.assertEqual(exception.code, 2)
+                    self.assertRegex(stderr, expected_reason_regex)
                 else:
-                    self._assert_cli_refuses(argv_or_call, expected_reason_regex)
+                    self.assertIsInstance(exception, (ValueError, OverflowError))
+                    self.assertRegex(str(exception), expected_reason_regex)
+                self.assertEqual(source_site, REFUSAL_SOURCE_SITES[name])
 
     def test_every_literal_refusal_reason_has_a_reason_keyed_row(self) -> None:
         reason_regexes = [expected_reason_regex for _, _, expected_reason_regex in REFUSAL_CASES]
@@ -1005,6 +972,15 @@ class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
                     f"[{interval['lower']:.6f}, {interval['upper']:.6f}]",
                     prose_line,
                 )
+            self.assertIn(
+                "floor gate " + ("passes" if model["floor_gate"]["passes"] else "fails"),
+                prose_line,
+            )
+            self.assertIn(
+                "direction gate "
+                + ("passes" if model["direction_gate"]["passes"] else "fails"),
+                prose_line,
+            )
 
     def test_tail_replay_formula_values_and_source_locations_are_current(self) -> None:
         document = self._document()
@@ -1019,85 +995,87 @@ class DependenceSensitivitySheetFixtureTests(unittest.TestCase):
                     model["degrees_of_freedom"]
                     / (model["degrees_of_freedom"] + model["t_statistic"] ** 2),
                 )
-        distributions_tree = ast.parse(
-            (REPO_ROOT / "joulewise" / "analysis_engine" / "distributions.py").read_text(
-                encoding="utf-8"
-            )
-        )
-        starts = {
-            node.name: node.lineno
-            for node in ast.walk(distributions_tree)
-            if isinstance(node, ast.FunctionDef)
-        }
-        self.assertEqual(starts["two_sided_student_t_p_value"], 166)
-        self.assertEqual(starts["student_t_quantile"], 131)
-        script_lines = SCRIPT.read_text(encoding="utf-8").splitlines()
-        self.assertIn("critical = round(student_t_quantile", script_lines[193])
+        slots = dependence_sensitivity.sheet_slots(TEMPLATE.read_text(encoding="utf-8"))
+        for slot_name, (path, function_name) in dependence_sensitivity.AST_CITATION_SPECS.items():
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            definitions = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == function_name
+            ]
+            with self.subTest(citation=function_name):
+                self.assertEqual(len(definitions), 1)
+                relative_path = path.resolve().relative_to(REPO_ROOT).as_posix()
+                expected = (
+                    f"`{function_name}` (`{relative_path}`, line {definitions[0].lineno})"
+                )
+                self.assertEqual(slots[slot_name], expected)
+                self.assertIn(expected, document)
         self.assertIn("regularized incomplete beta function", document)
         self.assertIn("iterative numerical fraction evaluation", document)
 
-    def test_every_sheet_numeric_token_is_source_bound_by_the_fixture_rule(self) -> None:
-        document = self._document()
-        self.assertEqual(_sheet_numeric_token_digest(document), SHEET_NUMERIC_TOKEN_SHA256)
-        unmatched = set(re.findall(r"\d+(?:\.\d+)?", document)) - _source_bound_sheet_numbers(
-            self._example_payload()
-        )
-        self.assertEqual(unmatched, set())
-        self.assertEqual(dependence_sensitivity.REGISTERED_N_BLOCKS, 10)
-        self.assertEqual(dependence_sensitivity.REGISTERED_ALPHA, 0.05)
-        self.assertEqual(dependence_sensitivity.EXAMPLE_FLOOR_J, 3.5)
-        self.assertEqual(dependence_sensitivity.EXAMPLE_SE_METROLOGY_J, 0.2)
-        self.assertEqual(dependence_sensitivity.EXAMPLE_DETERMINISTIC_BOUND_TOTAL_J, 4.0)
-        self.assertIn("largest of 118 observed onset and offset excursions from 59", document)
+    def test_rendered_sheet_is_byte_equal_to_the_tracked_document(self) -> None:
+        self.assertEqual(self._document(), dependence_sensitivity.render_sheet())
 
-    def test_mutation_table_has_zero_survivors_across_all_four_surfaces(self) -> None:
-        document = self._document()
-        mutations = (
-            (
-                "sheet-number digit",
-                lambda: self.assertEqual(
-                    _sheet_numeric_token_digest(
-                        document.replace("50.000000", "51.000000", 1)
-                    ),
-                    SHEET_NUMERIC_TOKEN_SHA256,
-                ),
-            ),
-            (
-                "documented command line",
-                lambda: _assert_documented_command_fixture(
-                    self,
-                    document.replace(
-                        "python3 scripts/dependence_sensitivity.py --example",
-                        "python3 scripts/dependence_sensitivity.py --example --floor 3.5",
-                        1,
-                    ),
-                ),
-            ),
-            (
-                "draft anchor line",
-                lambda: _assert_placement_anchor_fixture(
-                    self, document.replace("line 294", "line 293", 1)
-                ),
-            ),
-            (
-                "refusal-row deletion",
-                lambda: _assert_refusal_row_fixture(self, REFUSAL_CASES[1:]),
-            ),
-            (
-                "refusal-row addition",
-                lambda: _assert_refusal_row_fixture(
-                    self, REFUSAL_CASES + (("unmandated_refusal", (), ""),)
-                ),
-            ),
+    def test_check_sheet_returns_two_when_the_tracked_output_drifts(self) -> None:
+        stderr = io.StringIO()
+        with patch.object(dependence_sensitivity, "SHEET_OUTPUT_PATH", TEMPLATE):
+            with contextlib.redirect_stderr(stderr):
+                self.assertEqual(dependence_sensitivity.main(("--check-sheet",)), 2)
+        self.assertIn("DRIFT", stderr.getvalue())
+
+    def test_template_slots_are_exact_and_every_value_is_preformatted_text(self) -> None:
+        template = TEMPLATE.read_text(encoding="utf-8")
+        named_slots = {match.group("name") for match in TEMPLATE_SLOT_PATTERN.finditer(template)}
+        resolved = dependence_sensitivity.sheet_slots(template)
+        self.assertEqual(set(resolved), named_slots)
+        self.assertTrue(all(isinstance(value, str) for value in resolved.values()))
+
+    def test_template_digit_and_code_citation_lint_has_a_closed_shape_allowlist(self) -> None:
+        template = TEMPLATE.read_text(encoding="utf-8")
+        math_spans = [
+            match.group("inline") if match.group("inline") is not None else match.group("display")
+            for match in MATH_SPAN_PATTERN.finditer(template)
+        ]
+        outside_math = MATH_SPAN_PATTERN.sub("", template)
+        outside_math = TEMPLATE_SLOT_PATTERN.sub("", outside_math)
+        for allowed_shape in TEMPLATE_DIGIT_ALLOWLIST:
+            outside_math = re.sub(allowed_shape, "", outside_math)
+        self.assertNotRegex(outside_math, r"\d")
+        for math_span in math_spans:
+            without_slots = TEMPLATE_SLOT_PATTERN.sub("", math_span)
+            without_sum_limits = re.sub(r"_\{[a-z]=\d\}", "", without_slots)
+            with self.subTest(math_span=math_span):
+                self.assertNotRegex(without_sum_limits, r"=\s*-?\d")
+        without_slots = TEMPLATE_SLOT_PATTERN.sub("", template)
+        self.assertNotRegex(
+            without_slots,
+            r"(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.py",
         )
-        for surface, mutation in mutations:
-            with self.subTest(surface=surface):
-                with self.assertRaises(AssertionError):
-                    mutation()
-        print(
-            "MUTATION_TABLE zero survivors: sheet-number=0, command=0, "
-            "draft-anchor=0, refusal-delete-add=0"
-        )
+
+    def test_renderer_refuses_a_missing_ast_function_or_draft_anchor(self) -> None:
+        citation_slot = "citation_two_sided_student_t_p_value"
+        citation_path, _ = dependence_sensitivity.AST_CITATION_SPECS[citation_slot]
+        with patch.dict(
+            dependence_sensitivity.AST_CITATION_SPECS,
+            {citation_slot: (citation_path, "missing_sheet_citation_function")},
+        ):
+            with self.assertRaisesRegex(
+                dependence_sensitivity.SheetRenderError,
+                r"expected exactly one definition",
+            ):
+                dependence_sensitivity.render_sheet()
+        with patch.object(
+            dependence_sensitivity,
+            "DRAFT_PATH",
+            dependence_sensitivity.RETENSING_PLAN_PATH,
+        ):
+            with self.assertRaisesRegex(
+                dependence_sensitivity.SheetRenderError,
+                r"draft anchor .* exactly once",
+            ):
+                dependence_sensitivity.render_sheet()
 
 
 if __name__ == "__main__":
