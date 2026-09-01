@@ -28,6 +28,7 @@ from joulewise.transfer_fiducial import (
     build_capture,
     classify_bundle,
     fit_run,
+    issue_pre_data_receipt,
     summarize_target_edge_radii,
 )
 from joulewise.uncertainty_evidence import CLOCK_METHOD_V3
@@ -171,7 +172,7 @@ def make_synthetic_capture_fixture(root: Path) -> tuple[Path, Path, Path]:
         "status": "valid",
         "reasons": [],
         "validation_id": "synthetic-transfer-calibration",
-        "capture_wall_time_s": 1_777_000_000.0,
+        "capture_wall_time_s": 1.0,
         "protocol_id": PROTOCOL_ID,
         "residual_region_method": RESIDUAL_REGION_METHOD,
         "b_fiducial_s": 0.2,
@@ -223,6 +224,11 @@ def make_synthetic_capture_fixture(root: Path) -> tuple[Path, Path, Path]:
                     "effective_clock_anchor_bound_s": 0.002,
                 }
             },
+            "trace_window_margins": {
+                "requested_post_window_dwell_s": 6.0,
+                "achieved_pre_window_margin_s": 0.0,
+                "achieved_post_window_margin_s": 0.0,
+            },
             "instrument_calibration": {
                 "artifact_path": "calibration/instrument_evidence.json",
                 "artifact_sha256": calibration_sha,
@@ -255,6 +261,9 @@ def make_synthetic_capture_fixture(root: Path) -> tuple[Path, Path, Path]:
                 "output_tokens": 512,
                 "repetitions": 1,
                 "transfer_fiducial_gap_s": 0.5,
+                "minimum_prefill_s": 0.8,
+                "minimum_decode_s": 0.8,
+                "post_window_sampling_dwell_s": 6.0,
                 "planned_runs": 10,
                 "configs": descriptors,
             }
@@ -342,10 +351,31 @@ class TransferFiducialTests(unittest.TestCase):
     def test_transfer_capture_records_estimator_revision_and_both_magnitudes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             plan, runs, calibration = make_synthetic_capture_fixture(Path(tmp))
+            receipt = Path(tmp) / "pre_data_receipt.json"
+            issue_result = subprocess.run(
+                [
+                    str(CI_PYTHON if CI_PYTHON.is_file() else Path(sys.executable)),
+                    str(ROOT / "scripts" / "fit_transfer_fiducial.py"),
+                    "--plan",
+                    str(plan),
+                    "--pulse-calibration-dir",
+                    str(calibration),
+                    "--issue-receipt",
+                    "--receipt",
+                    str(receipt),
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(issue_result.returncode, 0, issue_result.stderr)
+            self.assertEqual(json.loads(receipt.read_text()), json.loads(issue_result.stdout))
             capture = build_capture(
                 plan_path=plan,
                 runs_root=runs,
                 pulse_calibration_dir=calibration,
+                pre_data_receipt_path=receipt,
             )
             self.assertEqual(capture["estimator_revision"], RESIDUAL_REGION_METHOD)
             self.assertEqual(capture["b_pulse_s"], 0.2)
@@ -363,6 +393,7 @@ class TransferFiducialTests(unittest.TestCase):
                     "--plan", str(plan),
                     "--runs-root", str(runs),
                     "--pulse-calibration-dir", str(calibration),
+                    "--receipt", str(receipt),
                     "--output", str(output),
                 ],
                 cwd=ROOT,
@@ -372,6 +403,134 @@ class TransferFiducialTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(output.read_text()), json.loads(result.stdout))
+
+    def test_transfer_fit_refuses_each_pre_data_receipt_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan, runs, calibration = make_synthetic_capture_fixture(root)
+            receipt_path = root / "pre_data_receipt.json"
+            receipt_path.write_text(
+                json.dumps(
+                    issue_pre_data_receipt(
+                        plan_path=plan,
+                        pulse_calibration_dir=calibration,
+                    ),
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+
+            missing = build_capture(
+                plan_path=plan,
+                runs_root=runs,
+                pulse_calibration_dir=calibration,
+            )
+            self.assertEqual(missing["verdict"], "inconclusive")
+            self.assertIn("pre_data_receipt_missing", missing["reasons"])
+
+            mutations = {
+                "config_sha256": "pre_data_receipt_config_sha256_mismatch",
+                "fitter_source": "pre_data_receipt_fitter_source_sha256_mismatch",
+                "estimator_source": "pre_data_receipt_estimator_source_sha256_mismatch",
+                "calibration_directory": "pre_data_receipt_calibration_identity_mismatch",
+                "fit_rule_constants": "pre_data_receipt_fit_rule_constants_mismatch",
+            }
+            original = json.loads(receipt_path.read_text())
+            for field_name, reason in mutations.items():
+                mutated = json.loads(json.dumps(original))
+                if field_name == "config_sha256":
+                    mutated[field_name]["synthetic-transfer-r01"] = "0" * 64
+                elif field_name == "fitter_source":
+                    mutated[field_name]["sha256"] = "0" * 64
+                elif field_name == "estimator_source":
+                    mutated[field_name]["sha256"] = "0" * 64
+                elif field_name == "calibration_directory":
+                    mutated[field_name]["directory"] = "/different/calibration"
+                else:
+                    mutated[field_name]["minimum_prefill_s"] = 0.7
+                receipt_path.write_text(json.dumps(mutated, indent=2) + "\n")
+                capture = build_capture(
+                    plan_path=plan,
+                    runs_root=runs,
+                    pulse_calibration_dir=calibration,
+                    pre_data_receipt_path=receipt_path,
+                )
+                self.assertEqual(capture["verdict"], "inconclusive")
+                self.assertIn(reason, capture["reasons"])
+
+            receipt_path.write_text(json.dumps(original, indent=2) + "\n")
+            plan_value = json.loads(plan.read_text())
+            source_config = Path(plan_value["strata"][0]["configs"][0]["config_path"])
+            original_config = source_config.read_text()
+            changed_config = json.loads(original_config)
+            changed_config["run_metadata"]["notes"] = "changed after receipt"
+            source_config.write_text(json.dumps(changed_config, indent=2) + "\n")
+            source_drift = build_capture(
+                plan_path=plan,
+                runs_root=runs,
+                pulse_calibration_dir=calibration,
+                pre_data_receipt_path=receipt_path,
+            )
+            self.assertEqual(source_drift["verdict"], "inconclusive")
+            self.assertIn(
+                "pre_data_receipt_config_source_sha256_mismatch",
+                source_drift["reasons"],
+            )
+            source_config.write_text(original_config)
+
+            plan_value = json.loads(plan.read_text())
+            plan_value["strata"][0]["minimum_decode_s"] = 0.7
+            plan.write_text(json.dumps(plan_value, indent=2) + "\n")
+            plan_drift = build_capture(
+                plan_path=plan,
+                runs_root=runs,
+                pulse_calibration_dir=calibration,
+                pre_data_receipt_path=receipt_path,
+            )
+            self.assertEqual(plan_drift["verdict"], "inconclusive")
+            self.assertIn(
+                "synthetic-q15:plan_minimum_decode_s_does_not_match_fitter",
+                plan_drift["reasons"],
+            )
+            self.assertIn(
+                "pre_data_receipt_plan_sha256_mismatch", plan_drift["reasons"]
+            )
+
+    def test_transfer_fit_refuses_calibration_after_run_start(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan, runs, calibration = make_synthetic_capture_fixture(root)
+            receipt_path = root / "pre_data_receipt.json"
+            receipt_path.write_text(
+                json.dumps(
+                    issue_pre_data_receipt(
+                        plan_path=plan,
+                        pulse_calibration_dir=calibration,
+                    ),
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+            evidence_path = calibration / "instrument_evidence.json"
+            evidence = json.loads(evidence_path.read_text())
+            evidence["capture_wall_time_s"] = 6.0
+            evidence_path.write_text(json.dumps(evidence, indent=2) + "\n")
+            capture = build_capture(
+                plan_path=plan,
+                runs_root=runs,
+                pulse_calibration_dir=calibration,
+                pre_data_receipt_path=receipt_path,
+            )
+            self.assertEqual(capture["verdict"], "inconclusive")
+            self.assertIn(
+                "pre_data_receipt_calibration_identity_mismatch", capture["reasons"]
+            )
+            self.assertIn(
+                "synthetic-transfer-r01:pre_data_receipt_calibration_not_earlier",
+                capture["reasons"],
+            )
 
     def test_transfer_estimator_source_digest_is_frozen(self) -> None:
         digest = hashlib.sha256(

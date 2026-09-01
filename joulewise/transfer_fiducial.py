@@ -42,6 +42,9 @@ TRANSFER_FIDUCIAL_CLASS_INCONSISTENT = (
 )
 TRANSFER_FIDUCIAL_CAPTURE_SCHEMA = "joulewise.transfer_fiducial_capture.v1"
 TRANSFER_FIDUCIAL_PLAN_SCHEMA = "joulewise.transfer_fiducial_plan.v1"
+TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA = (
+    "joulewise.transfer_fiducial_pre_data_receipt.v1"
+)
 TRANSFER_FIDUCIAL_BOUNDARY_SEMANTICS = "first_yield_one_step_queued"
 TRANSFER_FIDUCIAL_ESTIMATOR_SHA256 = (
     "386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92"
@@ -50,10 +53,30 @@ TRANSFER_FIDUCIAL_ESTIMATOR_SHA256 = (
 _GAP_EVENT_TYPES = frozenset({"fiducial_gap_start", "fiducial_gap_end"})
 _FIT_SUCCESS = "fitted"
 _INCONCLUSIVE = "inconclusive"
+_FITTER_SOURCE_REL = Path("scripts/fit_transfer_fiducial.py")
+_POST_WINDOW_SAMPLING_DWELL_S = 6.0
+_RADIUS_RULE = (
+    "radius = max(abs(residual_lower_s), abs(residual_upper_s)) "
+    "+ effective_clock_anchor_bound_s"
+)
+_SUPPORTED_RULE = "supported iff residual_transfer_s <= b_pulse_s"
 
 
 class TransferFiducialError(ValueError):
     """A malformed plan or capture input that cannot be interpreted."""
+
+
+def transfer_fiducial_rule_constants() -> dict[str, Any]:
+    """Return every value or rule string that can decide a transfer verdict."""
+
+    return {
+        "minimum_prefill_s": MIN_AUTHENTICATED_PULSE_DURATION_S,
+        "minimum_decode_s": MIN_AUTHENTICATED_PULSE_DURATION_S,
+        "post_window_sampling_dwell_s": _POST_WINDOW_SAMPLING_DWELL_S,
+        "minimum_outside_baseline_s": MIN_AUTHENTICATED_BASELINE_S,
+        "radius_rule": _RADIUS_RULE,
+        "supported_rule": _SUPPORTED_RULE,
+    }
 
 
 @dataclass(frozen=True)
@@ -90,6 +113,7 @@ class TransferFiducialRunFit:
     trace_anchor_method: str | None = None
     effective_clock_anchor_bound_s: float | None = None
     outside_baseline_after_margins_s: float | None = None
+    requested_post_window_sampling_dwell_s: float | None = None
     constructed_pulses: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
     pulse_fits: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
     detector: Mapping[str, Any] | None = None
@@ -489,6 +513,16 @@ def fit_run(bundle_path: Path) -> TransferFiducialRunFit:
             str(anchor_method) if isinstance(anchor_method, str) else None
         ),
         "effective_clock_anchor_bound_s": run_bound,
+        "requested_post_window_sampling_dwell_s": (
+            _finite_nonnegative(
+                metadata.get("trace_window_margins", {}).get(
+                    "requested_post_window_dwell_s"
+                )
+            )
+            if isinstance(metadata, Mapping)
+            and isinstance(metadata.get("trace_window_margins"), Mapping)
+            else None
+        ),
         "constructed_pulses": constructed_pulses,
     }
     if reasons or raw_powermetrics is None or first_endpoint is None or run_bound is None:
@@ -661,6 +695,38 @@ def _validate_plan(plan: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return strata
 
 
+def _plan_rule_reasons(
+    plan: Mapping[str, Any], strata: Sequence[Mapping[str, Any]]
+) -> list[str]:
+    """Name every plan rule that differs from the rule the fitter executes."""
+
+    expected = transfer_fiducial_rule_constants()
+    reasons: list[str] = []
+    if plan.get("pre_data_receipt_required") is True and plan.get(
+        "fit_rule_constants"
+    ) != expected:
+        reasons.append("plan_fit_rule_constants_do_not_match_fitter")
+    for stratum in strata:
+        stratum_id = stratum.get("stratum_id", "unknown")
+        for field_name in (
+            "minimum_prefill_s",
+            "minimum_decode_s",
+            "post_window_sampling_dwell_s",
+        ):
+            expected_value = expected[field_name]
+            value = stratum.get(field_name)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int | float)
+                or not math.isfinite(float(value))
+                or float(value) != float(expected_value)
+            ):
+                reasons.append(
+                    f"{stratum_id}:plan_{field_name}_does_not_match_fitter"
+                )
+    return reasons
+
+
 def _git_head() -> str | None:
     try:
         result = subprocess.run(
@@ -739,6 +805,223 @@ def _calibration_record(
     )
 
 
+def _calibration_identity(calibration: Mapping[str, Any]) -> dict[str, Any]:
+    """The calibration directory identity that must survive to the fit."""
+
+    return {
+        "directory": calibration.get("directory"),
+        "instrument_evidence_sha256": calibration.get("instrument_evidence_sha256"),
+        "validation_id": calibration.get("validation_id"),
+        "capture_wall_time_s": calibration.get("capture_wall_time_s"),
+    }
+
+
+def _config_hashes_from_plan(
+    strata: Sequence[Mapping[str, Any]],
+) -> dict[str, str] | None:
+    hashes: dict[str, str] = {}
+    for stratum in strata:
+        descriptors = stratum.get("configs")
+        if not isinstance(descriptors, list):
+            return None
+        for descriptor in descriptors:
+            if not isinstance(descriptor, Mapping):
+                return None
+            bundle_id = descriptor.get("bundle_id")
+            config_sha256 = descriptor.get("config_sha256")
+            if (
+                not isinstance(bundle_id, str)
+                or not bundle_id
+                or bundle_id in hashes
+                or not isinstance(config_sha256, str)
+                or len(config_sha256) != 64
+            ):
+                return None
+            hashes[bundle_id] = config_sha256
+    return hashes if len(hashes) == 10 else None
+
+
+def _config_source_hashes(
+    strata: Sequence[Mapping[str, Any]],
+) -> dict[str, str] | None:
+    """Rehash the ten source configurations named by the plan descriptors."""
+
+    from joulewise.schemas import BenchmarkConfig
+
+    hashes: dict[str, str] = {}
+    for stratum in strata:
+        descriptors = stratum.get("configs")
+        if not isinstance(descriptors, list):
+            return None
+        for descriptor in descriptors:
+            if not isinstance(descriptor, Mapping):
+                return None
+            bundle_id = descriptor.get("bundle_id")
+            config_source = descriptor.get("config_path")
+            if (
+                not isinstance(bundle_id, str)
+                or not bundle_id
+                or bundle_id in hashes
+                or not isinstance(config_source, str)
+                or not config_source
+            ):
+                return None
+            source_path = Path(config_source)
+            if not source_path.is_absolute():
+                source_path = Path(__file__).resolve().parents[1] / source_path
+            try:
+                source_mapping, _ = _load_json_object(
+                    source_path, f"{bundle_id} planned config"
+                )
+                normalized = (
+                    json.dumps(
+                        BenchmarkConfig.from_mapping(source_mapping).to_dict(),
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n"
+                ).encode("utf-8")
+            except (TransferFiducialError, ValueError):
+                return None
+            hashes[bundle_id] = _sha256_bytes(normalized)
+    return hashes if len(hashes) == 10 else None
+
+
+def _fitter_source_sha256() -> str:
+    return _sha256_file(Path(__file__).resolve().parents[1] / _FITTER_SOURCE_REL)
+
+
+def issue_pre_data_receipt(
+    *, plan_path: Path, pulse_calibration_dir: Path
+) -> dict[str, Any]:
+    """Freeze the declared plan, fitter, estimator, calibration, and rules.
+
+    This function is intentionally callable only before the diagnostic bundles
+    are collected.  It reads no run directory, so it cannot select a rule after
+    looking at a result.
+    """
+
+    plan, plan_raw = _load_json_object(Path(plan_path), "transfer plan")
+    strata = _validate_plan(plan)
+    plan_reasons = _plan_rule_reasons(plan, strata)
+    config_hashes = _config_hashes_from_plan(strata)
+    source_config_hashes = _config_source_hashes(strata)
+    calibration, calibration_reasons = _calibration_record(
+        Path(pulse_calibration_dir)
+    )
+    estimator_path = Path(powermetrics_fiducial.__file__).resolve()
+    estimator_sha256 = _sha256_file(estimator_path)
+    reasons = [*plan_reasons, *calibration_reasons]
+    if config_hashes is None:
+        reasons.append("pre_data_receipt_plan_config_hashes_invalid")
+    elif source_config_hashes != config_hashes:
+        reasons.append("pre_data_receipt_config_source_sha256_mismatch")
+    if estimator_sha256 != TRANSFER_FIDUCIAL_ESTIMATOR_SHA256:
+        reasons.append("transfer_estimator_source_digest_mismatch")
+    if reasons:
+        raise TransferFiducialError(
+            "pre_data_receipt_refused:" + ",".join(sorted(dict.fromkeys(reasons)))
+        )
+    return {
+        "schema_version": TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA,
+        "plan_sha256": _sha256_bytes(plan_raw),
+        "config_sha256": config_hashes,
+        "fitter_source": {
+            "path": _FITTER_SOURCE_REL.as_posix(),
+            "sha256": _fitter_source_sha256(),
+        },
+        "estimator_source": {
+            "path": "joulewise/powermetrics_fiducial.py",
+            "sha256": estimator_sha256,
+            "pinned_sha256": TRANSFER_FIDUCIAL_ESTIMATOR_SHA256,
+        },
+        "calibration_directory": _calibration_identity(calibration),
+        "fit_rule_constants": transfer_fiducial_rule_constants(),
+    }
+
+
+def _receipt_record(
+    receipt_path: Path | None,
+    *,
+    plan_raw: bytes,
+    strata: Sequence[Mapping[str, Any]],
+    calibration: Mapping[str, Any],
+    estimator_sha256: str,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Compare a pre-data receipt with the inputs visible when fitting."""
+
+    if receipt_path is None:
+        return None, ["pre_data_receipt_missing"]
+    try:
+        receipt, receipt_raw = _load_json_object(receipt_path, "pre-data receipt")
+    except TransferFiducialError:
+        return None, ["pre_data_receipt_unreadable"]
+    expected_keys = {
+        "schema_version",
+        "plan_sha256",
+        "config_sha256",
+        "fitter_source",
+        "estimator_source",
+        "calibration_directory",
+        "fit_rule_constants",
+    }
+    reasons: list[str] = []
+    if set(receipt) != expected_keys or receipt.get("schema_version") != (
+        TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA
+    ):
+        reasons.append("pre_data_receipt_schema_mismatch")
+    if receipt.get("plan_sha256") != _sha256_bytes(plan_raw):
+        reasons.append("pre_data_receipt_plan_sha256_mismatch")
+    if receipt.get("config_sha256") != _config_hashes_from_plan(strata):
+        reasons.append("pre_data_receipt_config_sha256_mismatch")
+    elif _config_source_hashes(strata) != _config_hashes_from_plan(strata):
+        reasons.append("pre_data_receipt_config_source_sha256_mismatch")
+    if receipt.get("fitter_source") != {
+        "path": _FITTER_SOURCE_REL.as_posix(),
+        "sha256": _fitter_source_sha256(),
+    }:
+        reasons.append("pre_data_receipt_fitter_source_sha256_mismatch")
+    if receipt.get("estimator_source") != {
+        "path": "joulewise/powermetrics_fiducial.py",
+        "sha256": estimator_sha256,
+        "pinned_sha256": TRANSFER_FIDUCIAL_ESTIMATOR_SHA256,
+    }:
+        reasons.append("pre_data_receipt_estimator_source_sha256_mismatch")
+    if receipt.get("calibration_directory") != _calibration_identity(calibration):
+        reasons.append("pre_data_receipt_calibration_identity_mismatch")
+    if receipt.get("fit_rule_constants") != transfer_fiducial_rule_constants():
+        reasons.append("pre_data_receipt_fit_rule_constants_mismatch")
+    return (
+        {
+            "path": str(Path(receipt_path).resolve()),
+            "sha256": _sha256_bytes(receipt_raw),
+        },
+        reasons,
+    )
+
+
+def _calibration_precedes_all_runs(
+    calibration: Mapping[str, Any], fits: Sequence[TransferFiducialRunFit]
+) -> list[str]:
+    """Require calibration capture to predate the prefill start of every run."""
+
+    capture_time = _finite_nonnegative(calibration.get("capture_wall_time_s"))
+    if capture_time is None:
+        return ["pre_data_receipt_calibration_capture_time_invalid"]
+    reasons: list[str] = []
+    for fit in fits:
+        prefill_starts = [
+            _finite_nonnegative(row.get("timestamp_s"))
+            for row in fit.boundary_events
+            if row.get("event_type") == "phase_start" and row.get("phase") == "prefill"
+        ]
+        if len(prefill_starts) != 1 or prefill_starts[0] is None:
+            reasons.append(f"{fit.bundle_id}:pre_data_receipt_run_start_missing")
+        elif capture_time >= prefill_starts[0]:
+            reasons.append(f"{fit.bundle_id}:pre_data_receipt_calibration_not_earlier")
+    return reasons
+
+
 def _mapping_contains(expected: Mapping[str, Any], observed: Any) -> bool:
     return isinstance(observed, Mapping) and all(
         key in observed and observed[key] == value for key, value in expected.items()
@@ -761,7 +1044,6 @@ def _run_binding_reasons(
             reasons.append(f"{fit.bundle_id}:{field_name}_mismatch")
     workload = fit.workload_profile
     for field_name in (
-        "prompt_tokens",
         "output_tokens",
         "repetitions",
         "transfer_fiducial_gap_s",
@@ -771,6 +1053,24 @@ def _run_binding_reasons(
             or workload.get(field_name) != stratum.get(field_name)
         ):
             reasons.append(f"{fit.bundle_id}:workload_{field_name}_mismatch")
+    expected_prompt_tokens = stratum.get("prompt_tokens")
+    prompt_text = workload.get("prompt_text") if isinstance(workload, Mapping) else None
+    if isinstance(prompt_text, str):
+        if (
+            not isinstance(stratum.get("prompt_text_utf8_sha256"), str)
+            or _sha256_bytes(prompt_text.encode("utf-8"))
+            != stratum.get("prompt_text_utf8_sha256")
+        ):
+            reasons.append(f"{fit.bundle_id}:workload_prompt_text_hash_mismatch")
+    elif (
+        not isinstance(workload, Mapping)
+        or workload.get("prompt_tokens") != expected_prompt_tokens
+    ):
+        reasons.append(f"{fit.bundle_id}:workload_prompt_tokens_mismatch")
+    if fit.requested_post_window_sampling_dwell_s != stratum.get(
+        "post_window_sampling_dwell_s"
+    ):
+        reasons.append(f"{fit.bundle_id}:post_window_sampling_dwell_mismatch")
     attachment = fit.instrument_calibration
     calibration_bindings = calibration.get("bindings")
     if not isinstance(attachment, Mapping):
@@ -806,6 +1106,7 @@ def build_capture(
     plan_path: Path,
     runs_root: Path,
     pulse_calibration_dir: Path,
+    pre_data_receipt_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build one fail-closed, non-pooled transfer-fiducial capture record."""
 
@@ -815,10 +1116,19 @@ def build_capture(
     plan, plan_raw = _load_json_object(plan_path, "transfer plan")
     strata = _validate_plan(plan)
     calibration, reasons = _calibration_record(calibration_dir)
+    reasons.extend(_plan_rule_reasons(plan, strata))
     estimator_path = Path(powermetrics_fiducial.__file__).resolve()
     estimator_sha256 = _sha256_file(estimator_path)
     if estimator_sha256 != TRANSFER_FIDUCIAL_ESTIMATOR_SHA256:
         reasons.append("transfer_estimator_source_digest_mismatch")
+    pre_data_receipt, receipt_reasons = _receipt_record(
+        pre_data_receipt_path,
+        plan_raw=plan_raw,
+        strata=strata,
+        calibration=calibration,
+        estimator_sha256=estimator_sha256,
+    )
+    reasons.extend(receipt_reasons)
 
     stratum_records: list[dict[str, Any]] = []
     all_fits: list[TransferFiducialRunFit] = []
@@ -852,13 +1162,16 @@ def build_capture(
                     )
                     + "\n"
                 ).encode("utf-8")
-            except ValueError as exc:
-                raise TransferFiducialError(
-                    f"{bundle_id} planned config is invalid: {exc}"
-                ) from exc
-            if _sha256_bytes(normalized) != descriptor.get("config_sha256"):
-                raise TransferFiducialError(
-                    f"{bundle_id} planned normalized config hash disagrees"
+            except (TransferFiducialError, ValueError):
+                stratum_reasons.append(
+                    f"{bundle_id}:planned_config_unreadable_or_invalid"
+                )
+                normalized = None
+            if normalized is None or _sha256_bytes(normalized) != descriptor.get(
+                "config_sha256"
+            ):
+                stratum_reasons.append(
+                    f"{bundle_id}:planned_config_sha256_mismatch"
                 )
             fit = fit_run(runs_root / bundle_id)
             fit_rows.append(fit)
@@ -928,6 +1241,7 @@ def build_capture(
     )
     if len(commits) != 1:
         reasons.append("source_commit_inconsistent_or_missing")
+    reasons.extend(_calibration_precedes_all_runs(calibration, all_fits))
     # The ruled v1 file contains one stratum.  The schema and record retain a
     # list so a later separately-verdictable stratum can be added without
     # pooling observations.
@@ -963,6 +1277,7 @@ def build_capture(
             "pooling": "forbidden",
             "stratum_count": len(strata),
         },
+        "pre_data_receipt": pre_data_receipt,
         "strata": stratum_records,
         "config_sha256": {
             fit.bundle_id: fit.config_sha256 for fit in all_fits
@@ -1007,6 +1322,7 @@ __all__ = [
     "TRANSFER_FIDUCIAL_ESTIMATOR_SHA256",
     "TRANSFER_FIDUCIAL_GAP_S_V1",
     "TRANSFER_FIDUCIAL_PLAN_SCHEMA",
+    "TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA",
     "TransferFiducialClass",
     "TransferFiducialError",
     "TransferFiducialRunFit",
@@ -1014,5 +1330,7 @@ __all__ = [
     "classification_reason_codes",
     "classify_bundle",
     "fit_run",
+    "issue_pre_data_receipt",
     "summarize_target_edge_radii",
+    "transfer_fiducial_rule_constants",
 ]

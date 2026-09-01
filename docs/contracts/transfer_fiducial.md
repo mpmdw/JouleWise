@@ -23,6 +23,37 @@ its 0.8-second prefill minimum. The plan schema is stratum-shaped so a future
 ruled arm can receive its own ten-run verdict; observations across strata are
 never pooled.
 
+## V2 Qwen3-small successor regime
+
+`transfer_fiducial_v1/` is retained historical evidence. It is not the
+workload for the `_v5` campaign. The successor generator at
+`configs/diagnostics/transfer_fiducial_v2/generate_plan.py` creates one
+separately verdictable Qwen3-small stratum (one fixed model and workload
+group) only after it receives both:
+
+- the successful G2-a selection record emitted by
+  `scripts/select_g2a_prefill_length.py`; and
+- the hash-bound G2-a prompt-pin file, a JSON file containing the exact prompt
+  and its SHA-256 fingerprints, for that record's selected rung.
+
+The record selects one rung from 512, 1,024, 2,048, or 4,096 prompt tokens.
+The record itself has no prompt text or token identifiers, so the generator
+also requires the prompt pin. It refuses a missing, refused, malformed, or
+unauthenticated selection record, a rung outside that four-value ladder, or a
+prompt pin whose `g2a_record_sha256` is not the SHA-256 digest of the supplied
+selection record. The generator imports the Qwen3-small model identity from
+the `_v5` campaign generator; this carries the model revision, tokenizer-file
+digest, and chat-template digest instead of copying those values into a second
+source of truth.
+
+V2 fixes 512 output tokens. It emits `plan.json` and exactly ten configuration
+files named `tf-q3s-p<RUNG>-o512-rNN.json`. The plan records the selected
+prompt's text digest and token-identifier digest, as well as the selection and
+prompt-pin digests. A digest is a SHA-256 value: a 64-character fingerprint of
+the exact bytes. `--check` regenerates into a temporary directory and refuses
+if its plan or any of its ten configuration files differs byte-for-byte from
+the committed set.
+
 ## Runtime boundary and zero-delta rule
 
 `WorkloadProfile.transfer_fiducial_gap_s` is an additive, omission-serialized
@@ -136,22 +167,74 @@ dropped and the pulse bound is never widened after observing the arm.
 The bracket-calibration variant is not built. V1 binds one pulse calibration
 directory named to the fit script, as ruled.
 
-## Post-campaign live procedure
+## Pre-data receipt
 
-These commands are parked until `V4-TRANSACTION-01` closes. Run them only from
-a clean, lead-controlled, agent-free quiet-machine session after the standard
-readiness/idle procedure, with approved power, working `sudo -n powermetrics`,
-and network-time custody.
+Before run 1, the operator must issue a pre-data receipt with
+`scripts/fit_transfer_fiducial.py --issue-receipt`. A receipt is an immutable
+JSON record made before any of the ten diagnostic runs; it prevents selecting a
+more convenient plan, program version, calibration, or decision rule after
+seeing data. It records:
+
+- the plan SHA-256 and the ten planned configuration SHA-256 values;
+- the SHA-256 of `scripts/fit_transfer_fiducial.py` itself, rather than a Git
+  commit label;
+- the imported pulse estimator's current and pinned SHA-256 values;
+- the calibration directory's absolute path, evidence-file SHA-256,
+  validation identifier, and capture timestamp; and
+- the exact rules used by the fitter: minimum prefill and decode duration,
+  post-window sampling dwell, minimum post-margin baseline, the radius rule
+  `radius = max(abs(residual_lower_s), abs(residual_upper_s)) +
+  effective_clock_anchor_bound_s`, and `supported iff residual_transfer_s <=
+  b_pulse_s`.
+
+At fit time the fitter returns `inconclusive` with a named reason if the
+receipt is absent or differs in any pinned value, if calibration was not
+captured before every run's prefill-start timestamp, or if the plan's duration
+or dwell fields differ from the values the fitter actually applies. It also
+checks each bundle's requested sampling dwell against the plan. Thus the plan
+cannot merely state a duration or dwell that the program ignores.
+
+## Operation
+
+These commands are parked until the `_v5` campaign has closed. Run them only
+from a clean, lead-controlled, agent-free quiet-machine session after the
+standard readiness and idle procedure, with approved power, working
+`sudo -n powermetrics`, and network-time custody. `--selection-record`,
+`--prefill-prompt-pin`, `--output-root`, `--check`, `--allow-live`,
+`--arm-countdown-s`, `--sleep-display-before-capture`,
+`--power-policy`, `--runs-dir`, `--instrument-calibration-dir`,
+`--instrument-power-policy`, `--post-window-sampling-dwell-s`,
+`--issue-receipt`, `--receipt`, and `--output` were verified against this
+repository's argument parsers. No flag below is marked `UNVERIFIED`.
 
 ```sh
 JW_REPO=/Users/edr/code/JouleWise
 JW_PY=/Users/edr/code/JouleWise/.venv/bin/python
-TF_ROOT=/Users/edr/JouleWise-transfer-fiducial-01
+TF_ROOT=/Users/edr/JouleWise-transfer-fiducial-v2
 TF_CAL_ROOT="$TF_ROOT/instrument_validation"
 TF_RUNS_ROOT="$TF_ROOT/runs"
 POWER_POLICY=ac_high_power
+G2A_SELECTION_RECORD=/absolute/path/to/g2a-selected-prefill-length.json
+G2A_PREFILL_PROMPT_PIN=/absolute/path/to/g2a-selected-prefill-prompt-pin.json
 
 cd "$JW_REPO"
+
+# The G2-a record is the first input. This refuses if the record or prompt pin
+# is not authenticated, so it cannot silently fall back to an old length.
+"$JW_PY" configs/diagnostics/transfer_fiducial_v2/generate_plan.py \
+  --selection-record "$G2A_SELECTION_RECORD" \
+  --prefill-prompt-pin "$G2A_PREFILL_PROMPT_PIN" \
+  --output-root "$JW_REPO"
+
+"$JW_PY" configs/diagnostics/transfer_fiducial_v2/generate_plan.py \
+  --selection-record "$G2A_SELECTION_RECORD" \
+  --prefill-prompt-pin "$G2A_PREFILL_PROMPT_PIN" \
+  --output-root "$JW_REPO" \
+  --check
+
+# Read the rung only after the two generator checks above accepted the record.
+G2A_RUNG="$("$JW_PY" -c 'import json, sys; print(json.load(open(sys.argv[1]))["selected_prefill_tokens"])' "$G2A_SELECTION_RECORD")"
+
 bash scripts/quiet_mac_prep.sh
 
 "$JW_PY" scripts/validate_powermetrics_fiducial.py \
@@ -165,8 +248,16 @@ bash scripts/quiet_mac_prep.sh
 After selecting the unique successful calibration directory as `TF_CAL_DIR`:
 
 ```sh
-for TF_CONFIG in configs/diagnostics/transfer_fiducial_v1/tf-q15-p4096-o512-r{01,02,03,04,05,06,07,08,09,10}.json
+# Issue this receipt after calibration and before the first diagnostic bundle.
+"$JW_PY" scripts/fit_transfer_fiducial.py \
+  --plan configs/diagnostics/transfer_fiducial_v2/plan.json \
+  --pulse-calibration-dir "$TF_CAL_DIR" \
+  --issue-receipt \
+  --receipt "$TF_ROOT/pre_data_receipt.json"
+
+for TF_RUN in {01,02,03,04,05,06,07,08,09,10}
 do
+  TF_CONFIG="configs/diagnostics/transfer_fiducial_v2/tf-q3s-p${G2A_RUNG}-o512-r${TF_RUN}.json"
   "$JW_PY" -m joulewise run "$TF_CONFIG" \
     --runs-dir "$TF_RUNS_ROOT" \
     --instrument-calibration-dir "$TF_CAL_DIR" \
@@ -175,9 +266,10 @@ do
 done
 
 "$JW_PY" scripts/fit_transfer_fiducial.py \
-  --plan configs/diagnostics/transfer_fiducial_v1/plan.json \
+  --plan configs/diagnostics/transfer_fiducial_v2/plan.json \
   --runs-root "$TF_RUNS_ROOT" \
   --pulse-calibration-dir "$TF_CAL_DIR" \
+  --receipt "$TF_ROOT/pre_data_receipt.json" \
   --output "$TF_ROOT/transfer_fiducial_capture.json"
 ```
 
