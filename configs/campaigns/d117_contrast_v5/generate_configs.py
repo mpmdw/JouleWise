@@ -25,11 +25,19 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.detection_floor import (  # noqa: E402
     CONDITION_FAMILY_DOMAIN,
-    CommonModeEstimatorRefusal,
     canonical_domain_sha256,
-    comparative_false_effect_floor,
-    registered_common_mode_operative_bound,
     two_shared_edge_common_mode_registration,
+)
+from joulewise.dominance_closeout import (  # noqa: E402
+    COMMON_MODE_INPUT_FIELDS,
+    COMMON_MODE_REPLAY_RULE_ID,
+    DOMINANCE_COMPARISON,
+    DOMINANCE_RATIO_ID,
+    DOMINANCE_THRESHOLD,
+    DOMINANCE_ZERO_DENOMINATOR_REASON,
+    dominance_ratio,
+    replay_common_mode_dominance,
+    split_common_mode_block_width,
 )
 from joulewise.provenance import prompt_token_ids_sha256  # noqa: E402
 from joulewise.reduce import MIN_PHASE_SAMPLES as REDUCER_MIN_PHASE_SAMPLES  # noqa: E402
@@ -493,24 +501,6 @@ def generation_hardware() -> dict[str, Any]:
 SAMPLING = {"power_hz": 10.0, "idle_seconds": 30.0, "warmup_seconds": 5.0}
 
 
-DOMINANCE_RATIO_ID = "attribution_dominance_ratio.v1"
-DOMINANCE_THRESHOLD = 2.0
-DOMINANCE_COMPARISON = "greater_than_or_equal"
-DOMINANCE_ZERO_DENOMINATOR_REASON = "dominance_ratio_zero_denominator"
-COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
-COMMON_MODE_INPUT_FIELDS = (
-    "delta_j",
-    "onset_sweep_j",
-    "offset_sweep_j",
-    "zero_point_contrast_j",
-    "bundle_residual_half_widths_j",
-    "member_window_bounds_s",
-    "member_envelope_integral_sum_j",
-    "calibration_bracket",
-    "shared_edge_bound_s",
-)
-
-
 def dominance_criterion_registration() -> dict[str, Any]:
     """Return the frozen D-165 ratio and common-mode replay contract."""
 
@@ -585,190 +575,6 @@ def contrast_floor_estimator_registration() -> dict[str, Any]:
     return {
         **two_shared_edge_common_mode_registration(),
         "dominance_criterion": dominance_criterion_registration(),
-    }
-
-
-def dominance_ratio(
-    *, corner_widened_unguarded_floor_j: float, point_unguarded_floor_j: float
-) -> dict[str, Any]:
-    """Evaluate the frozen R predicate without admitting Inf or NaN."""
-
-    numerator = float(corner_widened_unguarded_floor_j)
-    denominator = float(point_unguarded_floor_j)
-    if not math.isfinite(numerator) or numerator < 0.0:
-        raise ValueError("dominance_ratio_nonfinite_or_negative_numerator")
-    if not math.isfinite(denominator) or denominator < 0.0:
-        raise ValueError("dominance_ratio_nonfinite_or_negative_denominator")
-    if denominator == 0.0:
-        raise ValueError(DOMINANCE_ZERO_DENOMINATOR_REASON)
-    ratio = numerator / denominator
-    if not math.isfinite(ratio):
-        raise ValueError("dominance_ratio_nonfinite_result")
-    return {
-        "ratio": ratio,
-        "threshold": DOMINANCE_THRESHOLD,
-        "comparison": DOMINANCE_COMPARISON,
-        "passes": ratio >= DOMINANCE_THRESHOLD,
-    }
-
-
-def _outward_four(value: float, direction: float) -> float:
-    for _ in range(4):
-        value = math.nextafter(value, direction)
-    return value
-
-
-def _common_mode_replay_finite(value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError("common_mode_replay_input_invalid")
-    converted = float(value)
-    if not math.isfinite(converted):
-        raise ValueError("common_mode_replay_input_invalid")
-    return converted
-
-
-def _common_mode_replay_values(values: object) -> tuple[float, ...]:
-    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
-        raise ValueError("common_mode_replay_input_invalid")
-    return tuple(_common_mode_replay_finite(value) for value in values)
-
-
-def _common_mode_split(block: dict[str, Any]) -> tuple[float, float]:
-    """Replay the registered block-width split before its lossy final sum."""
-
-    try:
-        delta = _common_mode_replay_finite(block["delta_j"])
-        onset = _common_mode_replay_values(block["onset_sweep_j"])
-        offset = _common_mode_replay_values(block["offset_sweep_j"])
-        zero_point = _common_mode_replay_finite(block["zero_point_contrast_j"])
-        residuals = _common_mode_replay_values(
-            block["bundle_residual_half_widths_j"]
-        )
-        envelope = _common_mode_replay_finite(
-            block["member_envelope_integral_sum_j"]
-        )
-    except (KeyError, TypeError) as exc:
-        raise ValueError("common_mode_replay_input_invalid") from exc
-    values = (delta, zero_point, envelope, *onset, *offset, *residuals)
-    if (
-        not onset
-        or not offset
-        or len(residuals) != 4
-        or any(not math.isfinite(value) for value in values)
-        or envelope < 0.0
-        or any(value < 0.0 for value in residuals)
-    ):
-        raise ValueError("common_mode_replay_input_invalid")
-    envelope = max(
-        envelope,
-        1.0,
-        abs(delta),
-        abs(zero_point),
-        *(abs(value) for value in onset),
-        *(abs(value) for value in offset),
-    )
-    extrema_pad = 64.0 * (math.ulp(1.0) / 2.0) * envelope
-    excursion_lower = math.fsum((min(onset), -zero_point, min(offset), -zero_point))
-    excursion_upper = math.fsum((max(onset), -zero_point, max(offset), -zero_point))
-    lower = _outward_four(math.fsum((excursion_lower, -extrema_pad)), -math.inf)
-    upper = _outward_four(math.fsum((excursion_upper, extrema_pad)), math.inf)
-    zero_centred = _outward_four(max(abs(lower), abs(upper)), math.inf)
-    shared = _outward_four(
-        math.fsum((zero_centred, abs(zero_point - delta))), math.inf
-    )
-    local = math.fsum(residuals) / 2.0
-    return shared, local
-
-
-def replay_common_mode_dominance(
-    blocks: list[dict[str, Any]], *, calibration_bracket: object,
-    shared_edge_bound_s: float
-) -> dict[str, Any]:
-    """Compute R_cm from retained pre-mint inputs under the registered fence."""
-
-    if not blocks or len(blocks) > 20:
-        raise ValueError("common_mode_replay_block_count_invalid")
-    if isinstance(shared_edge_bound_s, bool) or not isinstance(
-        shared_edge_bound_s, (int, float)
-    ):
-        raise ValueError("common_mode_replay_authenticated_operative_bound_invalid")
-    bound = float(shared_edge_bound_s)
-    try:
-        authenticated_bound = registered_common_mode_operative_bound(
-            calibration_bracket
-        )
-    except CommonModeEstimatorRefusal as exc:
-        raise ValueError(
-            "common_mode_replay_authenticated_operative_bound_invalid"
-        ) from exc
-    if (
-        not math.isfinite(bound)
-        or bound <= 0.0
-        or not math.isclose(
-            bound,
-            authenticated_bound,
-            rel_tol=0.0,
-            abs_tol=1e-12,
-        )
-    ):
-        raise ValueError("common_mode_replay_authenticated_operative_bound_invalid")
-    deltas: list[float] = []
-    splits: list[tuple[float, float]] = []
-    for block in blocks:
-        windows = block.get("member_window_bounds_s")
-        if (
-            not isinstance(windows, list)
-            or len(windows) != 4
-            or any(
-                not isinstance(window, list)
-                or len(window) != 2
-                or not _common_mode_window_is_strictly_noncollapsed(
-                    window[0], window[1], authenticated_bound
-                )
-                for window in windows
-            )
-        ):
-            raise ValueError("common_mode_replay_window_domain_invalid")
-        split = _common_mode_split(block)
-        delta = _common_mode_replay_finite(block["delta_j"])
-        zero_point = _common_mode_replay_finite(block["zero_point_contrast_j"])
-        onset = _common_mode_replay_values(block["onset_sweep_j"])
-        offset = _common_mode_replay_values(block["offset_sweep_j"])
-        if zero_point not in onset or zero_point not in offset:
-            raise ValueError("common_mode_replay_zero_point_membership_invalid")
-        if not math.isclose(zero_point, delta, rel_tol=1e-9, abs_tol=1e-12):
-            raise ValueError(
-                "common_mode_replay_zero_point_divergence_out_of_domain"
-            )
-        deltas.append(delta)
-        splits.append(split)
-    point_floor = comparative_false_effect_floor(
-        deltas, admissible_half_widths_j=[0.0] * len(deltas)
-    ).unguarded_floor_j
-    common_mode_floor = 0.0
-    for shared_sign in (-1.0, 1.0):
-        for local_mask in range(1 << len(blocks)):
-            corner = [
-                delta
-                + shared_sign * shared
-                + (local if local_mask & (1 << index) else -local)
-                for index, (delta, (shared, local)) in enumerate(
-                    zip(deltas, splits, strict=True)
-                )
-            ]
-            floor = comparative_false_effect_floor(
-                corner, admissible_half_widths_j=[0.0] * len(corner)
-            ).unguarded_floor_j
-            common_mode_floor = max(common_mode_floor, floor)
-    result = dominance_ratio(
-        corner_widened_unguarded_floor_j=common_mode_floor,
-        point_unguarded_floor_j=point_floor,
-    )
-    return {
-        "rule_id": COMMON_MODE_REPLAY_RULE_ID,
-        "point_unguarded_floor_j": point_floor,
-        "common_mode_corner_widened_unguarded_floor_j": common_mode_floor,
-        **result,
     }
 
 PROMPT_SENTENCE = "The plan remains easy to audit."
