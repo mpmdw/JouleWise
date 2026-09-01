@@ -1,5 +1,15 @@
 # Round-7 structural-edit sheet (frozen draft remains read-only)
 
+> **FENCES (cold ruling `../process_traces/2026-08-31-registry-v5/09-COLD-RULING.md` Q3 — binding):**
+> (1) Every restatement of the ratio R anywhere in either sheet resolves to
+> S02's definition — the UNGUARDED floor at the corner divided by the
+> UNGUARDED point floor, no g(n), no window allowance; any wording that
+> reads as the guarded or complete bound is subordinate to S02 (the
+> difference flips the quotient against the threshold of exactly 2).
+> (2) S04's count-≥-2-threshold rule GOVERNS draft lines 96 and 103's
+> surviving predicate language pending the perimeter cure: the predicate at
+> those lines is a diagnostic label, never an accept/refuse criterion.
+
 **STATUS (2026-08-31): READY FOR JOINT PEDAGOGY RE-ADJUDICATION, EXCEPT S04'S PLACEMENT IS PROPOSED PENDING LEAD RULING.**
 
 This sheet supplies the draft-side repairs ordered by D-1 of `05-ADJUDICATION-DISPOSITION.md`. It does not edit `draft-v1.md`. Every quoted passage below is byte-exact in the frozen 672-line draft with SHA-256 `939dfa23730a22d35e02154d7aa7904f396364d55c128e6715c72b849eaf39ab`.

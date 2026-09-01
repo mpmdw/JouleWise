@@ -653,6 +653,9 @@ Every block below is **ADDED-R7** under reviewer-panel synthesis §3. Existing h
 
 ### H46 — §6 prompt-length rationale — draft lines 266–272 — ADDED-R7 (D-166 four-rung ladder)
 
+> **FENCE (cold ruling 09, Q3 — binding): NOT-EXECUTABLE AS WRITTEN.** This block quotes only the heading of draft lines 266–272 and supplies one replacement for a multi-paragraph span containing the retired 256-token extrapolation. Round 7 must NOT execute it until the perimeter round byte-anchors every replaced line; executing it partially leaves the retired arithmetic standing beside the four-rung ladder.
+
+
 **Frozen heading (verbatim):** "### Why 256 prompt tokens were selected"
 
 **Replacement heading:** `### Why [PREFILL_LENGTH] prompt tokens were selected`
