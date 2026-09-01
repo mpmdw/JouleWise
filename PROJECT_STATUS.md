@@ -7,10 +7,21 @@ understand the mechanism.
 
 Plain-language terms used throughout:
 
+- *Frozen* means written to disk, fingerprinted, and thereafter unchangeable,
+  so the rule is fixed on the record before measurement.
+- *Prospective* means the plan, rules, and pass/fail thresholds were written
+  down and fingerprinted before any data they judge were collected.
+- *Admitted* means passed every registered check and therefore permitted to
+  contribute to a result.
+- A *gate* is a mechanical pass/fail check that must succeed before the next
+  step may run; failure stops the work rather than merely warning about it.
+- *Governed* means executed only through a recorded, reviewable procedure with
+  a registered path for refusing invalid evidence.
 - A *measurement window* is one uninterrupted, calibrated collection session.
 - A *run bundle* is one immutable directory containing the exact configuration,
   raw power readings, workload events, outputs, and derived summary for a run.
-- A *pack* is the frozen campaign plan and its authenticated supporting files.
+- A *pack* is the campaign plan and its authenticated supporting files after
+  they are frozen.
 - A *detection floor* is the largest false energy difference that the admitted
   measurement system can create.
 - A *mint* is the governed program that authenticates source evidence and
@@ -38,8 +49,8 @@ Plain-language terms used throughout:
 
 Freshness and authority:
 
-- Live gates and work selection are generated from
-  `docs/process/state_kernel.json` into `RUN_STATE.md` and `TASK_QUEUE.md`.
+- The state kernel, `docs/process/state_kernel.json`, generates live gates and
+  work selection into `RUN_STATE.md` and `TASK_QUEUE.md`.
   This document states the sequence and scientific posture, not volatile task
   or test counts.
 - The first paper draft, `docs/paper/draft-v1.md`, is frozen as a historical
@@ -62,106 +73,153 @@ The campaign now compares the Qwen3 1.7-billion-parameter and
 an Apple M3 Max. Their quantized weights store each numeric value in four bits,
 so they are named Qwen3-1.7B-4bit and Qwen3-8B-4bit. Ed selected this pair on
 2026-08-28. The experimental design did not change: the internal label `_v5`
-means the fifth generated
-configuration family of the same frozen design, and the superseded `_v4`
-family will not be collected (newer-model decision D-164).
+marks a regeneration of the same frozen design under the new model pair, and
+the superseded `_v4` family will not be collected (newer-model decision D-164).
 
 The plan preparation is code-complete, but its final generated pack must wait
 for one measured input: the prompt length for the prompt-processing, or
-*prefill*, arm. The registered semantics carry a SHA-256 content digest, a
-cryptographic fingerprint of their bytes. In addition,
-a golden readback—a test that reads the generated registration back and
-compares it byte-for-byte with an independently frozen copy—pins the exact
-pass/fail threshold and refusal behavior.
+*prefill*, arm. The pack records the pass/fail rule itself—the floor formulas,
+thresholds, and refusal conditions the analysis must use—as a body of text
+called the *registered semantics*. Those bytes are hashed with SHA-256, a
+cryptographic fingerprint that changes if any byte changes, so an edit after
+data arrive would be visible. In addition, a golden readback—a test that reads
+the generated registration back and compares it byte-for-byte with an
+independently frozen copy—pins the exact pass/fail threshold and refusal
+behavior.
 
 **The paper's headline test was made genuinely falsifiable before collection.**
 Three blind reviewers found that the earlier rule would pass almost any
 positive timing uncertainty. The replacement compares two floors:
 
-- the *naive floor*, which uses the observed run-to-run residuals without
-  moving the measurement boundaries through their timing uncertainty; and
-- the *timing-aware floor*, which includes the worst admitted energy change
-  caused by uncertainty in where the workload begins and ends.
+- the *naive floor*, which applies the registered false-difference formula to
+  the measured point values without moving any timing boundary. For an
+  absolute component, a residual is one run's energy minus the mean energy for
+  that cell; the formula keeps the larger of the largest residual magnitude
+  and the 95% prediction from their scatter. For a comparative component, one
+  paired *block* is four consecutive runs in small, large, large, small order,
+  placing each model on both sides of the pair so slow drift tends to cancel.
+  The input is each block's small-versus-large energy difference, and the
+  formula keeps the larger of the largest magnitude of such a difference and
+  the 95% prediction from the differences' mean and scatter; and
+- the *timing-aware floor*. The code independently displaces the start and end
+  boundaries to the negative and positive limits of the calibrated timing
+  bound—the four calibrated timing-bracket corners—and, at each corner, scans
+  the remaining shared clock shift across the exact power-trace breakpoints.
+  This gives each run or block difference an allowed low-to-high energy
+  interval. The floor code then chooses the low or high end of every interval,
+  recomputes the full false-difference floor at each resulting corner, and
+  keeps the largest false energy difference. The timing-aware floor is the
+  larger of that corner result and the naive floor; the two are not added
+  (falsifiability decision D-165).
 
-Their quotient is the *dominance ratio*. For the paper to say that timing
-attribution dominates repeatability, the timing-aware floor must be at least
-twice the naive floor for every component in every registered cell
-(falsifiability decision D-165). A shared-shift replay also asks what happens
-when the same timing displacement is applied to all paired blocks; if its
-comparative ratio is below two, the sentence is withdrawn. A machine-readable
-close-out artifact—not prose judgment—will decide which of the two permitted
-paper wordings may be filled. Missing, unauthenticated, or zero-denominator
-inputs license neither wording and stop the fill (close-out decision D-168).
+The *dominance ratio* is the timing-aware floor divided by the naive floor. For
+the paper to say that timing attribution dominates repeatability, this ratio
+must be at least two for exactly eight ordinary cases—an absolute and a
+comparative component in each of four registered cells. Four additional
+comparative ratios apply one shared timing displacement across all blocks while
+allowing each block's remaining uncertainty to move independently. This
+*replay* is a recomputation from stored, authenticated inputs, not another
+experiment; a shared-shift ratio below two withdraws the sentence.
+
+Illustrative, not campaign data: if an ordinary case has a naive floor of 2.0
+joules and a timing-aware floor of 4.8 joules, its ratio is 4.8 / 2.0 = 2.4 and
+that case passes. If its shared-shift recomputation instead gives 3.6 / 2.0 =
+1.8, the paper sentence is withdrawn even though the ordinary case passed. All
+eight ordinary ratios and all four required shared-shift ratios must pass. A
+machine-readable close-out artifact—not prose judgment—decides which of the
+two permitted paper wordings may be filled. Missing, unauthenticated, or
+zero-denominator inputs license neither wording and stop the fill (close-out
+decision D-168).
 
 **Next machine step: one instrumented evening, waiting on Ed.** The machine
 will measure four candidate prefill lengths—512, 1,024, 2,048, and 4,096
-tokens—with at least five Qwen3-1.7B runs at each length. Qwen3-8B probes are
-also retained but do not choose the length. A checked program then selects the
-shortest length for which every small-model run contains at least five power
-records overlapping prefill. If none qualifies, the campaign still records
-the 4,096-token arm but refuses the prefill claim honestly rather than lowering
-the rule after seeing data (workload decision D-166).
+tokens. Each candidate length is called a *rung*. At least five Qwen3-1.7B runs
+are required at each rung; a rung with fewer than five small-model runs is
+unevaluable and cannot be selected. Qwen3-8B probes are retained but do not
+choose the length. A checked program selects the shortest rung for which every
+small-model run contains at least five power records overlapping prefill. One
+power record physically represents one sampling interval of the Apple power
+meter—requested every 100 milliseconds, with its actual interval stored in the
+run. Five is the reducer's physical minimum of three records plus a declared
+pre-registration safety factor of two. If no rung qualifies, the campaign
+still records the 4,096-token arm but refuses the prefill claim honestly rather
+than lowering the rule after seeing data (workload decision D-166).
 
-The remaining order is fixed, not date-promised: the probe evening; a desk day
-that pins and hashes the selection, generates the final packs, and re-proves
-them in a throwaway clone; a real-pack shakedown followed by Ed's explicit
-authorization for the claim-bearing transaction; about a week of collection
-with a desk check after each night; then floor production, claim close-out,
-and the registered results fill. `RUN_STATE.md` is the live status authority.
+The remaining order is fixed, not date-promised. The probe evening is followed
+by a *desk day*: analysis work done away from the measured machine, with no
+measurement running, so the work cannot contaminate a power reading. That day
+pins and hashes the selection, generates the final packs, and re-proves them in
+a throwaway clone. Next comes a *shakedown*: one short run on the real, frozen
+pack that proves the machine, plan, and refusal checks behave as registered
+before claim-bearing data are collected. Ed then explicitly authorizes the
+claim-bearing transaction; about a week of collection follows with a desk check
+after each night; then floor production, claim close-out, and the registered
+results fill. `RUN_STATE.md` is the live status authority.
 
 **A fresh-model repository review began from scratch on 2026-09-01.** A new
-lead model coordinated four independent reviewers drawn from three model
-families across code, tests, process, paper, and research questions. Their
+lead model coordinated four independent reviewers across code, tests, process,
+paper, and research questions. The reviewers were blind to each other and ran
+as separate sessions across more than one vendor's large-language model. Their
 shared verdict was that the repository can support a defensible undergraduate
 computer-science capstone, provided that the campaign and remaining claim
 gates are completed. Separate branches currently hold in-flight desk work: a
 paper skeleton for the next draft, a dependence-sensitivity analysis for the
 ten-block direction test, a transfer-fiducial plan that inserts a known timing
-marker into real inference work, the dominance close-out core, and producers
-for the four-rung probe. These are not described as landed results.
+marker into real inference work, the dominance close-out core, and programs
+that generate configurations for the four-rung probe. These are not described
+as landed results.
 
 Standing soundness facts remain unchanged:
 
 - Every energy value collected before the timing repair is permanently
   **VOIDED for claim use** because power readings and workload events were
-  joined through a defective time anchor (measurement-soundness decision
-  D-078).
+  timestamped by two different clocks, and the program that joined them—the
+  *time anchor*—could integrate the wrong slice of the power trace against a
+  workload phase (measurement-soundness decision D-078).
 - The repaired instrument is attribution-limited at approximately 1 joule:
-  uncertainty about the exact start and end boundaries matters more than its
-  roughly 0.3-joule repeatability noise. Longer workloads increase signal
-  without pretending that this physical limit disappeared.
+  uncertainty about the exact start and end boundaries, 0.7-1.0 J per run,
+  matters more than its 0.29-0.49 J repeatability noise on ~50 J points. The
+  floor and each claim's decision interval separately charge that attribution
+  bound, so the effective clearable effect is floor plus claim-side bound
+  (~5 J for phase contrasts), not the floor alone. The registered rules require
+  this disclosure wherever an attribution-limited floor is published. Longer
+  workloads increase signal without pretending that this physical limit
+  disappeared.
 - Retained run bundles and corpora are immutable. Validation may re-derive
   their recorded summaries, but it never rewrites the evidence.
 
-### Voided Window-A floor record
+### Voided July 2026 calibration floor record
 
-The 222-bundle Window-A floor table and all associated request, phase, item,
-suite, comparative, and reference-pair energy values are permanently void for
-claims. The physical reason is that power samples and workload events used
-different clocks, and the old anchor could integrate the wrong slice of the
-power trace. The raw record remains immutable evidence of the defect. It was
-replaced by the repaired meter-timestamp alignment, an explicit timing
+The floor table from the July 2026 calibration campaign—222 run bundles,
+internally labelled Window A—and every energy value derived from it at any
+granularity—per request, per workload phase, per item, per suite, and for both
+paired-comparison and reference measurements—are permanently void for claims.
+The raw record remains immutable evidence of the timing defect described
+above. It was replaced by repaired meter-timestamp alignment, explicit timing
 uncertainty in every result, authenticated calibration, and prospective
 collection. Technical record:
 `docs/reviews/2026-07-19-measurement-soundness-audit.md`.
 
-### 2026-07-19 re-calibration under the environment guard — VOIDED
+### 2026-07-19 re-calibration with machine-contamination screening — VOIDED
 
-The guarded re-calibration corpora were structurally valid and repeatable, but
+The machine-environment guard refuses a run if anything else on the machine,
+such as a screensaver or background process, could add power draw. The guarded
+re-calibration corpora were structurally valid and repeatable, but
 their energy values and provisional floors are void for the same pre-repair
 time-anchor defect; one early corpus also came from an uncommitted collection
 tree. A clean source record cannot repair incorrect physical time attribution.
-Fresh collection
-under the repaired timing and calibration path replaced these records.
+Fresh collection under the repaired timing and calibration path replaced these
+records.
 Plain-language account:
 `docs/advisor_briefs/2026-07-20-timing-defect-explainer.md`.
 
 ### Historical exploratory follow-on — energy values voided
 
-Nine unmatched OLMoE and Qwen bundles remain useful only as proof that the live
-runtime and evidence path executed. Their model size, architecture, tokenizer,
-and quantization differ, and their energy values are also void under the same
-time-anchor ruling. They support no efficiency ordering or scaling claim.
+Nine OLMoE and Qwen bundles that were never collected as matched pairs remain
+useful only as proof that the live runtime and evidence path executed. Their
+model size, architecture, tokenizer, and quantization differ, and their energy
+values are also void under the same time-anchor ruling. They support no
+efficiency ordering or scaling claim.
 Custody record:
 `docs/process_traces/2026-07-17-exploratory-block/results.md`.
 
@@ -171,7 +229,7 @@ Custody record:
 
 | date | what changed |
 |---|---|
-| 2026-09-01 | The live work selector was reconciled to the Qwen3 `_v5` chain; the results-fill registry was regenerated; a fresh-model whole-repository review launched the paper skeleton, dependence, timing-marker, close-out, and probe-producer follow-ups. |
+| 2026-09-01 | The live work selector was reconciled to the Qwen3 `_v5` chain; the results-fill registry was regenerated; a fresh-model whole-repository review launched the paper skeleton, dependence, timing-marker, close-out, and probe-configuration follow-ups. |
 | 2026-08-30/31 | The Qwen3 plan preparation completed adversarial review; exact model and tokenizer identities, the two-times dominance rule, and the four-rung checked selector were pinned. |
 | 2026-08-28 | Ed selected Qwen3-1.7B-4bit and Qwen3-8B-4bit; three blind reviewers prompted the pre-data tightening of the paper's pass/fail rule. |
 | 2026-08-20 | The predecessor campaign preparation passed its review gates and merged; its model family was later superseded, while the repaired instrument and frozen-design discipline remained. |
@@ -249,7 +307,7 @@ by the detection floor and its registered claim limit.
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | implemented and repaired | final paper wording against observed campaign behavior |
 | Harness and instrument | `joulewise/` | runnable on mock and Mac; strict validation and claim analysis exist | remote adapters remain provisional until live contact |
 | Current campaign plan | `configs/campaigns/d117_contrast_v5/` | Qwen3 model pair, workload, dominance rule, and generator are pinned | measured prefill choice, final generated packs, and clone re-proof |
-| Machine-to-paper artifact chain | `docs/process/v5-artifact-flow.md` | mapped from probe through results fill | probe and close-out-core producers are in-flight; later mint and rendering links remain ruled follow-ups, not landed |
+| Machine-to-paper artifact chain | `docs/process/v5-artifact-flow.md` | mapped from probe through results fill | programs that generate probe configurations and close-out artifacts are in flight; later mint and rendering links have been decided and scheduled but not yet built |
 | Paper result slots | `docs/paper/results-fill-registry.md` | `_v5` fill contract landed | issued campaign, floor, close-out, and claim artifacts |
 | Current paper prose | `docs/paper/draft-v1.md` | frozen prior draft; not edited for `_v5` | successor skeleton is in-flight; results prose waits on data |
 | Split-inference study | `docs/phase_3/` | planned optional demonstration | portable runtime pairing or the synthetic-transfer fallback |
@@ -264,8 +322,10 @@ Complete and verifiable in the repository:
   and refuses inconsistent bundles.
 - Runtime, telemetry, and transport adapters are separate, so execution and
   power sources can be composed without changing the bundle contract.
-- The analysis path includes frozen prospective manifests, whole-window
-  verdicts, floor extraction and minting, finalization, and a claim engine.
+- The analysis path includes frozen prospective manifests; a *whole-window
+  verdict*, which is one pass/fail check over an entire collection session
+  rather than one run; floor extraction and minting; finalization; and the
+  program that evaluates each registered comparison against the floor.
 - An off-machine backup was restored and passed strict validation with
   byte-identical bundles.
 
@@ -379,15 +439,18 @@ crossover question is meant to measure (reporting-basis decision D-067).
 The live campaign sequence is:
 
 1. **Four-rung prompt probe.** In one bracketed, non-claim evening, collect at
-   least five Qwen3-1.7B members at each of 512, 1,024, 2,048, and 4,096 prompt
+   least five Qwen3-1.7B runs at each of 512, 1,024, 2,048, and 4,096 prompt
    tokens. Retain Qwen3-8B observations without letting them select the rung.
    A *bracket* means calibrated reference measurements before and after the
-   probes so drift and clock alignment are bounded around the work.
+   probes so drift and clock alignment are bounded around the work. This
+   measurement window contains probe data only and cannot carry a claim.
 2. **Checked selection and desk freeze.** A program chooses the shortest rung
-   for which every small-model member has at least five overlapping power
-   records. The desk step stores and hashes that choice, generates the three
-   final Qwen3 packs, verifies byte-for-byte regeneration, and repeats the
-   complete admission proof in a disposable clone of the repository. If no
+   with at least five small-model runs and at least five overlapping power
+   records in every one of those runs. A rung with fewer than five small-model
+   runs is unevaluable and cannot be selected. The desk step stores and hashes
+   that choice, generates the three final Qwen3 packs, verifies byte-for-byte
+   regeneration, and repeats the complete admission proof in a disposable
+   clone of the repository. If no
    rung qualifies, 4,096 tokens is collected with a pre-registration refusal
    attached; the rule is not weakened.
 3. **Real-pack shakedown and authorization.** The next instrumented night first
@@ -396,26 +459,32 @@ The live campaign sequence is:
    confirms that finalization refuses for exactly the expected incomplete-
    campaign reasons. Any other refusal stops. Ed then decides whether to open
    the claim-bearing transaction.
-4. **Claim-bearing collection.** The Qwen3-1.7B and Qwen3-8B arms run with
-   thinking disabled, greedy token choice, a forced 512-token output, and the
-   measured prefill length. Diagnostic and claim roots remain separate. A desk
-   check after every campaign night blocks the next arm on any failure.
-5. **From evidence to prose.** Each bundle passes strict validation; summaries
-   are re-derived without changing the bundle; registered cells are converted
-   to detection-floor reports; the mint authenticates them into an aggregate
-   floor; the prospective manifest is finalized against the collected
-   identities; the claim engine evaluates registered contrasts; the dominance
-   close-out chooses one permitted wording or neither; and the results renderer
-   fills only registered slots.
+4. **Claim-bearing collection.** The Qwen3-1.7B and Qwen3-8B arms use Qwen3's
+   optional reasoning mode switched off, so the model emits no hidden
+   deliberation tokens and output length remains controlled. They choose the
+   highest-probability token at every step, force a 512-token output, and use
+   the measured prefill length. Diagnostic runs and claim-bearing runs are
+   written to separate directories, so no diagnostic bundle can enter a claim.
+   A desk check after every campaign night blocks the next arm on any failure.
+5. **From evidence to prose.** Each bundle passes strict validation, and its
+   summary is re-derived without changing the bundle. Each registered cell is
+   turned into its own floor report. The mint checks those reports against
+   their source evidence and issues one combined floor for the campaign. The
+   frozen plan is then bound to the exact runs actually collected. The
+   comparison program computes each pre-registered comparison against that
+   floor; the close-out program picks one of the two permitted paper sentences,
+   or neither; and the rendering program writes numbers only into the slots the
+   fill contract already named.
 
 The detailed operator-to-artifact chain is in
 `docs/process/v5-artifact-flow.md`. It also names current implementation gaps:
-the prompt-probe configuration producer, final Qwen3 floor-extraction and mint
-inputs, the dominance sidecar—an authenticated companion file carrying replay
-inputs and derived ratios—and close-out path, and the final adapter into the
-successor results renderer. The prompt producer and close-out core have active
-branches. The later mint and rendering links remain ruled follow-ups. None is
-described here as landed evidence.
+the program that generates the prompt-probe configuration files, final Qwen3
+floor-extraction and mint inputs, the dominance sidecar—an authenticated
+companion file carrying replay inputs and derived ratios—and close-out path,
+and the final adapter into the successor results renderer. The probe generator
+and close-out core have active branches. The later mint and rendering links
+have been decided and scheduled but not yet built. None is described here as
+landed evidence.
 
 ### Optional split-inference demonstration
 
@@ -466,7 +535,7 @@ blocker.
 | likely Pydantic schemas | standard-library data classes with the same contract | the core runs without optional packages |
 | implement Mac first | deterministic mock vertical slice first, then Mac | prove controller and arithmetic before real telemetry can confound them |
 | file-backed dashboard, perhaps a database later | static HTML and analysis files; no database planned | smallest tool that supports inspection and progress reporting |
-| offline cache replay before live splitting | three-rung synthetic, offline, then optional live ladder | cache representations are not generally portable across runtime engines |
+| offline cache replay before live splitting | three-stage ladder: synthetic transfer, then offline replay, then an optional live split | cache representations are not generally portable across runtime engines |
 | schedule cross-device pairs directly | require feasibility evidence before borrowed-hardware scheduling | bounds the largest execution risk and preserves a synthetic fallback |
 | measurement boundaries mostly implicit | boundaries, clock discipline, uncertainty, and controller effects explicit | required for defensible physical energy comparisons |
 
@@ -484,7 +553,7 @@ capstone into a different system.
 | Timing attribution does not dominate repeatability by a factor of two | the close-out selects the non-dominance wording; the capstone remains a valid instrument result |
 | Ten paired blocks are more dependent than the direction interval assumes | complete the in-flight dependence-sensitivity analysis and narrow wording if needed |
 | The inserted timing marker cannot be run or does not transfer | keep the headline conditional and report the limitation |
-| Close-out or rendering producers are not ready when data arrive | keep them as explicit desk gates; no hand-filled claim sentence bypasses them |
+| Close-out or rendering programs are not ready when data arrive | keep them as explicit desk gates; no hand-filled claim sentence bypasses them |
 | Remote cache replay or device access fails | use the synthetic-transfer study or omit split inference; neither blocks the core capstone |
 | Academic calendar remains uncertain | sequence dependencies without promising dates; derive targets after dates are known |
 
@@ -499,7 +568,7 @@ This document promises sequence, not dates. Live status is in `RUN_STATE.md`.
 
 | order | stage | start condition |
 |---:|---|---|
-| 1 | four-rung prompt-length evening | Ed and an agent-free, quiet M3 Max window |
+| 1 | four-rung prompt-length evening | Ed present, with no automated agents running on the M3 Max and the machine otherwise idle, so nothing else draws measurable power |
 | 2 | desk selection, final pack generation, and throwaway-clone proof | immutable probe bracket, counts, and selector input |
 | 3 | real-pack one-block shakedown | desk proof passes |
 | 4 | Ed's claim-bearing transaction decision | complete, reviewable shakedown record |
@@ -541,7 +610,7 @@ window belong in `docs/milestones.md` when known.
 | `docs/risk_register.md` | risks, triggers, mitigations, and descope ladder |
 | `docs/milestones.md` | calendar map when dates are known |
 | `docs/run_reports/` | dated work records and verification evidence |
-| `joulewise/`, `scripts/`, `tests/` | instrument package, governed producers, and tests |
+| `joulewise/`, `scripts/`, `tests/` | instrument package, governed artifact-generating programs, and tests |
 
 ## Process Note
 
@@ -560,10 +629,10 @@ dispositions, and no agent performs final live-hardware verification on behalf
 of the human operator. The 2026-09-01 fresh-model review is an example: it
 found a stale live-work selector, missing close-out ownership, a frozen draft
 that names the retired campaign, and dependence wording that needed a dedicated
-sensitivity analysis. The work selector and ownership question are now ruled,
-while the follow-up code and paper work remain visibly in flight. The earlier
-three-seat review on 2026-08-28 separately found and repaired the nearly
-unfalsifiable headline rule before data existed.
+sensitivity analysis. The work selector and ownership question are now decided
+and recorded, while the follow-up code and paper work remain visibly in flight.
+The earlier review by three independent reviewers on 2026-08-28 separately
+found and repaired the nearly unfalsifiable headline rule before data existed.
 
 Each fact has one owning artifact: decisions in `docs/decision_log.md`, live
 work state in `docs/process/state_kernel.json`, deliberation in
