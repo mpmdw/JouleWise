@@ -30,9 +30,12 @@ Plain-language terms used throughout:
 - A *verdict* is the final governed decision to admit or refuse evidence. A
   *refusal* records why no result was issued when evidence or a gate failed.
 - A *cell* is one pre-registered combination of model, workload phase, and
-  which of the two formulas below produces the number. A *component* is either
-  an absolute measurement of one workload or a comparative measurement built
-  from paired workloads.
+  which registered analysis method computes the number: the ordinary method,
+  which treats each paired block on its own, or the shared-shift variant used in
+  the replay described later (`joulewise/floor_extraction.py:1165-1171` admits
+  exactly those two). A *component* is either an absolute measurement of one
+  workload or a comparative measurement built from paired workloads; every cell
+  carries both components.
 - The *state kernel* is the machine-readable table of live tasks, dependencies,
   and machine-access lanes. A *manifest* is a list of required artifacts and
   their content fingerprints.
