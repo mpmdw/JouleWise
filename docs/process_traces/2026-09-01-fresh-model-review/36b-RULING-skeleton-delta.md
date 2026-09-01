@@ -29,4 +29,29 @@ one-liner from V4. Delta: Opus 5 pedagogy lens (a fourth family on this doc).
 
 ## Cold-gate verdict
 
-(appended when the cold seat returns)
+Cold Fable seat: **RESHAPE** — full text in `48c-COLD-GATE-1-verdict-42b-36b.md`. Magistrate
+disposition (2026-09-01, adopted in full after bench-checking the draft at :128/:461-464 and the
+n17 corpus):
+
+- **PED-FU-02 gloss OVERRULED** (the one claim-bearing error in this ruling): the excursion is the
+  spread among the MEAN ENERGIES of the opening/midpoint/closing reference runs (largest minus
+  smallest; draft :461-462), not a power-trace stray from a median; the issued bound is a
+  repeatability bound on reference-run energy issued from an earlier retained window (draft
+  :462-464). Dictated glosses replaced accordingly.
+- **PED-FU-01 wording**: the quantile widens the maximum permitted pre/post DIFFERENCE
+  (`prediction_99_two_draw_s`), not the bracket.
+- **PED-R1-01 amended**: the corpus is 17 per-capture bounds `b_fiducial_s` (not differences);
+  bench-verified: n = 17, sample sd = 2.460856 ms, rule `t(0.995,16) × sd × √2` with
+  `t = 2.92078162242509999197` → 10.164835 ms; 9.724 ms = corpus range 9.723589 ms ROUND_HALF_EVEN
+  to 1 µs. Print the SUFFICIENT STATISTICS in §2 (two sentences); the 17-value table goes to an
+  appendix; cite registry source S17 (r3 file; r3/r6 member lists byte-equal); add one DG row
+  (MEASURED, DIAGNOSTIC_ERA / n17) — so WRITE_SCOPE gains `docs/paper/results-fill-registry.md`.
+- **PED-R6-01 amended**: dictate se_metrology = 0.2 J (the dependence sheet's value); add one
+  clause cross-referencing the sheet's AR(1)-halved computation (ν = 4, t = 7.607258, p = 0.0016)
+  so the two documents do not read as contradictory; pair the fixture p with the existing 0.041
+  example at :504 so Holm runs to completion on two p-values.
+- FU-03, R2-01, REG-COUNT-01, REG-HUNK-01: agreed as ruled (FU-03 gets file:lines
+  `estimators.py:466-469, 369-411, 475, 468`; R2-01 source `_ci_t_critical`, `estimators.py:228`).
+- Structural: rounds 1 and 2 share the "replication" signature, but the bar is moving TOWARD Ed's
+  standard (worked example with real numbers), so no consult; every item in the round-2 brief
+  carries a checkable replay target, and the same targets go verbatim to the Opus delta seat.

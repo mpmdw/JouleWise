@@ -5056,7 +5056,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A1 `WO-LAUNCH-BINDING`: Bind arm-capability consume to immediate frozen-chain exec and require authenticated launch-consumption provenance at downstream claim consumers.
+- CONTINUE — A69 `D165-CLOSEOUT-CORE-01`: Finish the one-home dominance module and close-out builder so one checked source trail produces the exact twelve required decisions without allowing forged names, forged replay inputs, or overwrite of prior evidence.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

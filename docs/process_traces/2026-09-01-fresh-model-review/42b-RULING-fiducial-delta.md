@@ -28,4 +28,35 @@ table re-run on the new inventory.
 
 ## Cold-gate verdict
 
-(appended when the cold seat returns)
+Cold Fable seat (fresh session, packet = this ruling + reports 42/28/23/39b + both worktrees):
+**RESHAPE** — full text in `48c-COLD-GATE-1-verdict-42b-36b.md`. Magistrate disposition
+(2026-09-01, adopted in full after bench-checking each claim):
+
+- **A1**: disposition kept (should-fix, deferred behind the probe merge) but the JUSTIFICATION is
+  replaced. The ladder is the pre-registration record, so pin→ladder binding sits INSIDE D-161's
+  fail-closed carve-out; the deferral reason is sequencing (the 39b loader does not exist on this
+  branch; no data; merge held), not threat model. The generator's run-time re-tokenization STAYS
+  because it is the only fence across the two loader paths (issuer uses `transformers.AutoTokenizer`,
+  generator/runtime use `mlx_lm.load`). Contract sentence at `transfer_fiducial.md:53-55` ("must
+  have the ruled form") overstates the regex shape check until 39b lands — soften now.
+- **A2**: severity agreed; the transitive-import inventory is OVERRULED. Bench-confirmed: `fit_run`
+  lazily imports `bundle_read` (`transfer_fiducial.py:292-295`), whose closure reaches `cli.py`;
+  any unrelated edit would invalidate a receipt that `issue_pre_data_receipt` forbids reissuing
+  after data — a deadlock, not a fence. Cure: a curated closed `RECEIPT_SOURCE_MODULES` (the
+  `ESTIMATOR_CODE_PATHS` pattern, `calibration_bracketing.py:180-185`) = {transfer_fiducial,
+  powermetrics_fiducial, uncertainty_evidence, clock, schemas, validation, adapters/powermetrics,
+  bundle_read}, plus a drift test that runs the one end-to-end fixture fit under `sys.settrace` and
+  asserts every `joulewise/` file with executed lines is in the inventory (closed by execution,
+  not by import graph); bump `TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA` so an old-shape receipt
+  refuses by name. Timing: the fence must close before the first RECEIPT ISSUANCE (closed
+  `expected_keys`, `:1001-1011`), not "before the first fit".
+- **C1**: sequencing agreed; "no contract text change" is AMENDED — the flag-verification
+  sentence at `transfer_fiducial.md:251-257` is false-by-omission on this branch. One-line edit
+  now: the seven producer flags are marked "verified against `feat/2026-09-01-g2a-probe` @
+  `82e7519d`; absent from this branch until merge". The post-merge round is code + tests + contract
+  (`generate_plan.py:217-221` will not compile against the 39b loader signature) and its
+  WRITE_SCOPE must include `scripts/generate_plan.py`-equivalent and
+  `tests/test_transfer_fiducial_v2_plan.py`.
+- B1, C2, A3: agreed as ruled.
+- Round-2 brief rewritten to the reshaped items (luna max; delta Sol xhigh with the mutation table
+  RE-RUN by the seat, not read from report 42).
