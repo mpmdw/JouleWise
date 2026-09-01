@@ -475,10 +475,10 @@ echo "$(timestamp) g2a_boundary_stopped=physical_ahead" >> "$G2A_OPERATOR_LOG_RO
 
 Record every authenticated overlap count and the complete four-row summary.
 The summarizer reads `in_window_sample_count`, the number of power-sample
-intervals that overlap the prefill phase, and records
-`overlap_margin_above_three`, that count minus the reducer's minimum of three.
-Its four-row summary sets `all_small_count_ge_5` to true only when every one
-of the small-model members at that rung has at least five overlapping samples.
+intervals that overlap the prefill phase, and records that field verbatim in
+the counts receipt. Its four-row summary sets `all_small_count_ge_5` to true
+only when every one of the small-model members at that rung has at least five
+overlapping samples.
 The selection rule is evaluated later at the desk; G2-a does not cut a pack:
 
 ```sh
@@ -489,8 +489,7 @@ PYTHONPATH="$REPO" "$PY" "$REPO/scripts/summarize_g2a_prefill_probe.py" \
   --counts-output "$G2A_COUNTS_RECEIPT" \
   --summary-output "$G2A_SUMMARY"
 # Ratified gate: four rungs, >=5 small-model members each; the count floor is
-# overlapping_power_interval_count >= 5 per small member (margin-above-three
-# >= 2), NEVER margin >= 5 — that discarded reading required count >= 8.
+# in_window_sample_count >= 5 per small member, NEVER count >= 8.
 /usr/bin/jq -e 'length == 4 and map(.length) == [512,1024,2048,4096]
   and all(.small_members >= 5)' \
   "$G2A_SUMMARY"
@@ -565,11 +564,30 @@ PYTHONPATH="$REPO" "$PY" "$REPO/scripts/issue_g2a_prefill_prompt_pin.py" \
   "$REPO/configs/campaigns/d117_contrast_v5/prefill_pin/"
 ```
 
-`V5-DESK-DAY-01` is the desk-day queue row that consumes this copied bundle;
-pass `--prefill-prompt-pin
-configs/campaigns/d117_contrast_v5/prefill_pin/prefill-prompt-pin.json` to the
-`_v5` generator.
-Then:
+`V5-DESK-DAY-01` is the desk-day queue row that consumes this copied bundle.
+The existing Qwen3 `_v5` contrast generator is invoked exactly as follows:
+
+```sh
+export G2A_SELECTED_PREFILL_LENGTH="$(/usr/bin/jq -er \
+  '.collection_prefill_tokens' "$G2A_SELECTION_RECORD")"
+cd "$REPO"
+PYTHONPATH="$REPO" "$PY" \
+  configs/campaigns/d117_contrast_v5/generate_configs.py \
+  --output-root "$REPO" \
+  --panel configs/model_panels/qwen3_4bit.json \
+  --model-a qwen3-1p7b \
+  --model-b qwen3-8b \
+  --decode-workload configs/workloads/real_prompts_v1.json \
+  --prefill-length "$G2A_SELECTED_PREFILL_LENGTH" \
+  --prefill-prompt-pin \
+    configs/campaigns/d117_contrast_v5/prefill_pin/prefill-prompt-pin.json
+```
+
+This command emits the contrast pack. At this reviewed head there is no Qwen3
+`_v5` `generate_configs.py` for either floor-pack root named at the top of this
+runsheet, so the desk day must remain blocked rather than substituting either
+retired Qwen2.5 floor generator or a non-executable invented command.
+Then, after both floor-pack producers exist:
 
 1. pin that selected prefill length in the `_v5` inputs;
 2. generate all three real `_v5` packs and their exact freeze/mint supply; and

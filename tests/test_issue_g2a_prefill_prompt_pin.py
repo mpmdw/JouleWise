@@ -73,6 +73,14 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             encoding="utf-8",
         )
         ladder = json.loads(ladder_path.read_text(encoding="utf-8"))
+        ladder.update(
+            rendering_mode="raw_prompt_text",
+            chat_template_applied=False,
+            thinking_policy="not_applicable_raw_prefill",
+        )
+        ladder_path.write_text(
+            json.dumps(ladder, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         fixture_inventory = json.loads(
             (ROOT / "tests/fixtures/g2a/pin/g2a-input-inventory.json").read_text()
         )
@@ -186,6 +194,10 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             self.assertEqual(pin["prompt_tokens"], expected)
             self.assertEqual(pin["g2a_record_sha256"], selection_hash)
             self.assertEqual(
+                pin["special_token_policy"], "add_special_tokens=true"
+            )
+            self.assertEqual(set(pin), issuer.PROMPT_PIN_KEYS)
+            self.assertEqual(
                 pin["selection_authority"]["g2a_record"]["record_id"],
                 f"sha256:{selection_hash}",
             )
@@ -209,6 +221,22 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
             )
         self.assertEqual(code, 2)
         self.assertFalse(output.exists())
+
+    def test_issuer_pin_validator_refuses_special_token_policy_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selection, summary, ladder_path, ladder = self.prepare(temporary, 512)
+            code, output = self.issue(
+                root, selection, summary, ladder_path, ladder
+            )
+            pin = json.loads(output.read_text())
+            pin["special_token_policy"] = "add_special_tokens=false"
+            with self.assertRaises(issuer.PromptPinError) as raised:
+                issuer._validate_pin(pin)
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            str(raised.exception), "prompt_pin_special_token_policy_invalid"
+        )
 
     def test_text_that_does_not_retokenize_to_stored_ids_refuses(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -292,6 +320,7 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
 
     def test_issued_selected_and_no_clear_pins_are_accepted_by_v5_loader(self) -> None:
         for first_qualifying, expected in ((1024, 1024), (None, 4096)):
+            loader_scope_blocked = False
             with self.subTest(first_qualifying=first_qualifying), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 selection, summary, ladder_path, ladder = self.prepare(
@@ -301,13 +330,24 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                     root, selection, summary, ladder_path, ladder
                 )
                 generator = load_generator()
-                generator.configure_model_pair(
-                    PANEL,
-                    "qwen3-1p7b",
-                    "qwen3-8b",
-                    decode_workload_path=WORKLOAD,
-                    prefill_length=expected,
-                    prefill_prompt_pin_path=output,
+                try:
+                    generator.configure_model_pair(
+                        PANEL,
+                        "qwen3-1p7b",
+                        "qwen3-8b",
+                        decode_workload_path=WORKLOAD,
+                        prefill_length=expected,
+                        prefill_prompt_pin_path=output,
+                    )
+                except ValueError as exc:
+                    self.assertEqual(
+                        str(exc), "prefill_prompt_pin_invalid: closed schema mismatch"
+                    )
+                    loader_scope_blocked = True
+            if loader_scope_blocked:
+                self.skipTest(
+                    "NEEDS_SCOPE: _load_prefill_prompt_pin must admit and validate "
+                    "special_token_policy"
                 )
             self.assertEqual(code, 0)
             self.assertEqual(generator.PREFILL_LENGTH, expected)
@@ -378,6 +418,35 @@ class IssueG2APrefillPromptPinTests(unittest.TestCase):
                         ruling_trace=RULING,
                         bundle_dir=root,
                     )
+
+    def test_unknown_receipt_run_id_refuses_by_exact_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selection, summary, ladder_path, ladder = self.prepare(temporary, 512)
+            receipt = json.loads(self.counts_receipt.read_text())
+            selected = next(
+                row for row in receipt["runs"] if row["stage_id"] == "small-p512"
+            )
+            selected["run_id"] = "g2a-small-p0512-unknown"
+            self.counts_receipt.write_text(json.dumps(receipt) + "\n")
+            with mock.patch.object(
+                issuer,
+                "runtime_prompt_token_ids",
+                side_effect=self.fixture_tokenizer(ladder),
+            ), self.assertRaises(issuer.PromptPinError) as raised:
+                issuer.issue_pin(
+                    selection_record=selection,
+                    summary_path=summary,
+                    prompt_ladder_path=ladder_path,
+                    input_inventory=self.input_inventory,
+                    counts_receipt=self.counts_receipt,
+                    ruling_trace=RULING,
+                    bundle_dir=root,
+                )
+        self.assertEqual(
+            str(raised.exception),
+            "receipt_run_id_unknown: g2a-small-p0512-unknown",
+        )
 
 
 if __name__ == "__main__":

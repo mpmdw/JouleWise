@@ -488,6 +488,114 @@ class D117ContrastV5PackTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "prefill_prompt_pin_panel_sha256_mismatch"):
                 self.configure(pin)
 
+    def test_prefill_prompt_pin_refuses_missing_prompt_ladder_exactly(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-loader-refusal-") as temporary:
+            pin = self.write_prefill_pin(Path(temporary))
+            value = json.loads(pin.read_text())
+            value["prompt_ladder"]["path"] = "missing.json"
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(ValueError) as raised:
+                self.configure(pin)
+        self.assertEqual(str(raised.exception), "prompt_ladder_missing")
+
+    def test_prefill_prompt_pin_refuses_prompt_ladder_sha256_exactly(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-loader-refusal-") as temporary:
+            pin = self.write_prefill_pin(Path(temporary))
+            value = json.loads(pin.read_text())
+            value["prompt_ladder"]["sha256"] = "0" * 64
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(ValueError) as raised:
+                self.configure(pin)
+        self.assertEqual(str(raised.exception), "prompt_ladder_sha256_mismatch")
+
+    def test_prefill_prompt_pin_refuses_missing_selected_ladder_rung_exactly(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-loader-refusal-") as temporary:
+            root = Path(temporary)
+            pin = self.write_prefill_pin(root)
+            value = json.loads(pin.read_text())
+            ladder_path = root / value["prompt_ladder"]["path"]
+            ladder = json.loads(ladder_path.read_text())
+            ladder["rungs"] = [
+                rung for rung in ladder["rungs"] if rung["prefill_tokens"] != 512
+            ]
+            ladder_path.write_text(json.dumps(ladder), encoding="utf-8")
+            value["prompt_ladder"]["sha256"] = hashlib.sha256(
+                ladder_path.read_bytes()
+            ).hexdigest()
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(ValueError) as raised:
+                self.configure(pin)
+        self.assertEqual(str(raised.exception), "prompt_ladder_rung_missing")
+
+    def test_prefill_prompt_pin_refuses_ladder_rung_field_mismatch_exactly(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-loader-refusal-") as temporary:
+            root = Path(temporary)
+            pin = self.write_prefill_pin(root)
+            value = json.loads(pin.read_text())
+            ladder_path = root / value["prompt_ladder"]["path"]
+            ladder = json.loads(ladder_path.read_text())
+            selected = next(
+                rung for rung in ladder["rungs"] if rung["prefill_tokens"] == 512
+            )
+            selected["prompt_text"] = "ladder-only mutation"
+            ladder_path.write_text(json.dumps(ladder), encoding="utf-8")
+            value["prompt_ladder"]["sha256"] = hashlib.sha256(
+                ladder_path.read_bytes()
+            ).hexdigest()
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(ValueError) as raised:
+                self.configure(pin)
+        self.assertEqual(
+            str(raised.exception),
+            "prefill_prompt_pin_ladder_rung_mismatch: prompt_text",
+        )
+
+    def test_prefill_prompt_pin_refuses_ladder_tokenizer_sha256_exactly(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-loader-refusal-") as temporary:
+            root = Path(temporary)
+            pin = self.write_prefill_pin(root)
+            value = json.loads(pin.read_text())
+            ladder_path = root / value["prompt_ladder"]["path"]
+            ladder = json.loads(ladder_path.read_text())
+            ladder["tokenizer_json_sha256"] = "0" * 64
+            ladder_path.write_text(json.dumps(ladder), encoding="utf-8")
+            value["prompt_ladder"]["sha256"] = hashlib.sha256(
+                ladder_path.read_bytes()
+            ).hexdigest()
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(ValueError) as raised:
+                self.configure(pin)
+        self.assertEqual(
+            str(raised.exception), "prompt_ladder_tokenizer_sha256_mismatch"
+        )
+
+    def test_prefill_prompt_pin_refuses_joint_construction_mutation_exactly(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-loader-refusal-") as temporary:
+            root = Path(temporary)
+            pin = self.write_prefill_pin(root)
+            value = json.loads(pin.read_text())
+            ladder_path = root / value["prompt_ladder"]["path"]
+            ladder = json.loads(ladder_path.read_text())
+            selected = next(
+                rung for rung in ladder["rungs"] if rung["prefill_tokens"] == 512
+            )
+            changed_text = "pin and ladder agree, but construction does not"
+            changed_hash = hashlib.sha256(changed_text.encode("utf-8")).hexdigest()
+            selected["prompt_text"] = changed_text
+            selected["prompt_text_utf8_sha256"] = changed_hash
+            value["prompt_text"] = changed_text
+            value["prompt_text_utf8_sha256"] = changed_hash
+            ladder_path.write_text(json.dumps(ladder), encoding="utf-8")
+            value["prompt_ladder"]["sha256"] = hashlib.sha256(
+                ladder_path.read_bytes()
+            ).hexdigest()
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(ValueError) as raised:
+                self.configure(pin)
+        self.assertEqual(
+            str(raised.exception), "prefill_prompt_pin_prompt_construction_mismatch"
+        )
+
     def test_configuration_uses_panel_pins_without_model_mirror_reads(self) -> None:
         with tempfile.TemporaryDirectory(prefix="d117-v5-pin-") as temporary:
             pin = self.write_prefill_pin(Path(temporary))

@@ -320,13 +320,14 @@ def _ladder_rungs(inventory: dict[str, Any]) -> dict[int, dict[str, Any]]:
 def _run_provenance(
     *,
     summary: Any,
+    metadata: Any,
     run_id: str,
     stage_id: str,
     expected_config_sha256: str,
     runs_root: Path,
     rung: dict[str, Any],
 ) -> dict[str, Any]:
-    if not isinstance(summary, dict) or summary.get("run_id") != run_id:
+    if not isinstance(metadata, dict) or metadata.get("run_id") != run_id:
         raise ProbeSummaryError(f"run_provenance_mismatch: {run_id}: run_id")
     config_path = runs_root / run_id / "config.json"
     try:
@@ -336,7 +337,7 @@ def _run_provenance(
     if observed_config_sha256 != expected_config_sha256:
         raise ProbeSummaryError(f"run_provenance_mismatch: {run_id}: config_sha256")
     try:
-        prompt = summary["workload_provenance"]["prompt"]
+        prompt = metadata["workload_provenance"]["prompt"]
         realized_count = prompt["realized_token_count"]
         realized_hash = prompt["token_ids_sha256"]
     except (KeyError, TypeError) as exc:
@@ -474,9 +475,13 @@ def summarize(
             if not summary_path.is_file():
                 continue
             summary, _summary_raw = _load_json(summary_path, label="summary")
+            metadata, _metadata_raw = _load_json(
+                runs_root / run_id / "metadata.json", label="metadata"
+            )
             member_rows.append(
                 _run_provenance(
                     summary=summary,
+                    metadata=metadata,
                     run_id=run_id,
                     stage_id=stage_id,
                     expected_config_sha256=member["config_sha256"],

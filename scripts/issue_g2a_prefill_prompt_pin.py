@@ -14,11 +14,41 @@ from typing import Any, Sequence
 from configs.campaigns.d117_contrast_v5 import generate_configs as d117_v5
 from joulewise.adapters.mlx_runtime import _encode
 from joulewise.provenance import prompt_token_ids_sha256
+from scripts.generate_g2a_probe_inputs import LADDER_KEYS as PROMPT_LADDER_KEYS
 from scripts import select_g2a_prefill_length as selector
 
 
 PROMPT_LADDER_SCHEMA = "joulewise.g2a_prefill_prompt_ladder.v1"
 PROMPT_PIN_SCHEMA = "joulewise.prefill_prompt_pin.v2"
+SPECIAL_TOKEN_POLICY = "add_special_tokens=true"
+PROMPT_PIN_KEYS = frozenset(
+    {
+        "schema_version",
+        "selection_authority",
+        "ladder_prompt_tokens",
+        "min_small_model_members_per_rung",
+        "min_overlapping_power_interval_count",
+        "min_phase_samples_pinned",
+        "sample_count_margin_floor",
+        "selection_expression",
+        "g2a_record_sha256",
+        "selection_record",
+        "prompt_ladder",
+        "panel_sha256",
+        "exhausted_ladder_branch",
+        "prefill_length",
+        "tokenizer_json_sha256",
+        "special_token_policy",
+        "prompt_text",
+        "prompt_text_utf8_sha256",
+        "prompt_token_ids",
+        "prompt_token_ids_sha256",
+        "prompt_tokens",
+        "repeat_count",
+        "closing_sentence",
+        "generation_method",
+    }
+)
 DEFAULT_MODEL_MIRROR = Path(
     "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit"
 )
@@ -164,13 +194,7 @@ def _selection_from_inputs(
 def _validate_ladder(ladder: Any) -> tuple[str, dict[int, dict[str, Any]]]:
     value = _require_exact_keys(
         ladder,
-        {
-            "schema_version",
-            "prompt_sentence",
-            "tokenizer_json_sha256",
-            "panel_thinking_policy",
-            "rungs",
-        },
+        set(PROMPT_LADDER_KEYS),
         label="prompt_ladder",
     )
     if value["schema_version"] != PROMPT_LADDER_SCHEMA:
@@ -178,6 +202,12 @@ def _validate_ladder(ladder: Any) -> tuple[str, dict[int, dict[str, Any]]]:
     sentence = value["prompt_sentence"]
     if sentence != d117_v5.PROMPT_SENTENCE:
         raise PromptPinError("prompt_ladder_sentence_mismatch")
+    if (
+        value["rendering_mode"] != "raw_prompt_text"
+        or value["chat_template_applied"] is not False
+        or value["thinking_policy"] != "not_applicable_raw_prefill"
+    ):
+        raise PromptPinError("prompt_ladder_rendering_policy_invalid")
     tokenizer_hash = value["tokenizer_json_sha256"]
     if not _is_sha256(tokenizer_hash):
         raise PromptPinError("prompt_ladder_tokenizer_sha256_invalid")
@@ -263,6 +293,15 @@ def _ruling_trace_paths(path: Path) -> list[str]:
     return list(d117_v5.PREFILL_RULING_TRACE_PATHS)
 
 
+def _validate_pin(pin: Any) -> dict[str, Any]:
+    value = _require_exact_keys(pin, set(PROMPT_PIN_KEYS), label="prompt_pin")
+    if value["schema_version"] != PROMPT_PIN_SCHEMA:
+        raise PromptPinError("prompt_pin_schema_version_invalid")
+    if value["special_token_policy"] != SPECIAL_TOKEN_POLICY:
+        raise PromptPinError("prompt_pin_special_token_policy_invalid")
+    return value
+
+
 def _validate_receipt(
     *,
     input_inventory: Path,
@@ -339,6 +378,8 @@ def _validate_receipt(
             if not isinstance(run["run_id"], str) or run["run_id"] in observed:
                 raise PromptPinError("counts_receipt_run_id_invalid")
             observed.add(run["run_id"])
+            if run["run_id"] not in expected_members:
+                raise PromptPinError(f"receipt_run_id_unknown: {run['run_id']}")
             expected_stage, expected_config_sha = expected_members[run["run_id"]]
             selected_rung = next(
                 item
@@ -418,7 +459,7 @@ def issue_pin(
         prompt_ladder_path, bundle_dir=bundle_dir, label="prompt_ladder"
     )
 
-    return {
+    pin = {
         "schema_version": PROMPT_PIN_SCHEMA,
         "selection_authority": {
             "g2a_record": {
@@ -444,6 +485,7 @@ def issue_pin(
         "exhausted_ladder_branch": d117_v5.PREFILL_EXHAUSTED_LADDER_BRANCH,
         "prefill_length": length,
         "tokenizer_json_sha256": tokenizer_hash,
+        "special_token_policy": SPECIAL_TOKEN_POLICY,
         "prompt_text": rung["prompt_text"],
         "prompt_text_utf8_sha256": rung["prompt_text_utf8_sha256"],
         "prompt_token_ids": list(rung["prompt_token_ids"]),
@@ -453,6 +495,7 @@ def issue_pin(
         "closing_sentence": rung["closing_sentence"],
         "generation_method": rung["generation_method"],
     }
+    return _validate_pin(pin)
 
 
 def _pin_bytes(pin: dict[str, Any]) -> bytes:

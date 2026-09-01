@@ -11,6 +11,7 @@ from unittest import mock
 
 from joulewise.doctor import inspect_configs
 from scripts import generate_g2a_probe_inputs as probe
+from scripts import issue_g2a_prefill_prompt_pin as issuer
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -385,6 +386,48 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
             rung["prompt_text"],
             " ".join([probe.PROMPT_SENTENCE] * 291 + [probe.PROMPT_FINAL_SENTENCE]),
         )
+
+    def test_actual_emitted_ladder_is_accepted_by_issuer_closed_schema(self) -> None:
+        self._build()
+        ladder = json.loads(
+            (self.root / "window-plan/prefill-prompt-ladder.json").read_text()
+        )
+        self.assertEqual(issuer.PROMPT_LADDER_KEYS, probe.LADDER_KEYS)
+        tokenizer_hash, by_length = issuer._validate_ladder(ladder)
+        self.assertEqual(tokenizer_hash, ladder["tokenizer_json_sha256"])
+        self.assertEqual(tuple(sorted(by_length)), probe.PREFILL_LENGTHS)
+
+    def test_actual_emitted_ladder_extra_key_refuses_at_issuer_by_name(self) -> None:
+        self._build()
+        ladder = json.loads(
+            (self.root / "window-plan/prefill-prompt-ladder.json").read_text()
+        )
+        ladder["unexpected"] = True
+        with self.assertRaises(issuer.PromptPinError) as raised:
+            issuer._validate_ladder(ladder)
+        self.assertEqual(str(raised.exception), "prompt_ladder_closed_schema_mismatch")
+
+    def test_probe_workload_shape_matches_v5_prefill_except_diagnostic_name(self) -> None:
+        self._build()
+        config = json.loads(
+            (
+                self.root
+                / "prefill-probe-configs/small-p512/g2a-small-p0512-r01.json"
+            ).read_text()
+        )
+        probe_workload = config["workload_profile"]
+        with mock.patch.multiple(
+            issuer.d117_v5,
+            PREFILL_LENGTH=512,
+            PREFILL_PROMPT_TEXT=probe_workload["prompt_text"],
+        ):
+            v5_workload = issuer.d117_v5.workload_for("prefill")
+        self.assertEqual(
+            {key: value for key, value in probe_workload.items() if key != "name"},
+            {key: value for key, value in v5_workload.items() if key != "name"},
+        )
+        self.assertEqual(probe_workload["name"], "g2a_prefill_p512_diagnostic")
+        self.assertEqual(v5_workload["name"], "df_ph_prefill_p512_candidate")
 
     def test_check_is_read_only(self) -> None:
         self._build_and_bind()
