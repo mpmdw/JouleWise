@@ -3854,3 +3854,42 @@ batch is owed once Phase 1 nears close, carrying **three risk-appetite calls the
 gates deliberately did not decide** (recorder-race threat model, T-0 capture
 provenance, hostile same-UID mid-window injection) plus the contrast-pack
 pending-ratification/TODO-markers ruling.
+
+## T28 (2026-08-29/31) — three full gauntlets in one block; per-layer catch record
+
+Three PR gauntlets ran to completion (#241 `_v5` prep, #229 G2 checker, #246
+`_v6` leg), all merged. Layer-by-layer unique catches, for the rule-5 ledger:
+
+- **Contract-lens refuter (Sol xhigh, round 1 of each):** #241 — tautological
+  golden read-back (registration compared to itself), declared-not-enforced
+  panel pins (D-157 class), absolute-R_cm undefinedness with the derivation
+  that completed D-165 R-5; #246 — fail-open provenance stamping, bypassable
+  pinned-set scoring, branch staleness deleting newer main artifacts. Zero of
+  these were visible to the implementing sessions' own green test matrices.
+- **Delta re-audits (fresh Sol xhigh per fix round):** the fix rounds
+  introduced defects EVERY time they were audited — the one-pin bypass with a
+  test blessing it (#241 round 2), a vacuous interning-based oracle written
+  by the MAGISTRATE at the bench (#229 audit 4 caught the lead's own test),
+  hand-transcription-in-disguise behind an extraction facade (#229 round 2),
+  a forged-line_index validator gap surviving a "fixed" round (#246 audit 2).
+  The delta-re-audit rule (fix rounds introduce defects — now proven ~6 more
+  times) remains the highest-yield layer per token spent.
+- **Lead adjacency replay (magistrate bench):** the ONLY layer that caught
+  the AP-2/mock-family integration break — every focused matrix and all
+  audits validated d117-shaped manifests only; the full
+  `tests.test_analysis_integration` run at the bench found the controller/
+  loader identity seam break, root-caused by a dedicated Sol xhigh session
+  and codified as `docs/process_traces/2026-08-30-t28-v5-prep/adjacency-policy.md`.
+- **Cold gate + Opus refuter (D-166 prefill rule):** the cold Fable seat's
+  two holdings both survived; the Opus refuter refuted three of its
+  supporting premises (a seat HAD stated the discarded convention; the
+  runsheet implemented it executably; the "no scientific cost" claim was
+  contradicted by the seats' own files) and found six unnamed implementation
+  sites — cross-model refutation of a cold ruling earned its cost.
+- **Estate instrument (estate 11):** halted on real procedure drift at §1.1
+  exactly as designed; produced the symbol-pinned-anchors-at-cut reform.
+
+Spend shape: ~14 Sol sessions (2 xhigh implement, 4 high fix, 6 xhigh
+audit/refute, 1 xhigh root-cause, 1 high adopt), 5 Opus/Fable seats, across
+~36 h wall including one machine-sleep loss. No layer had zero unique
+catches; nothing is dropped from the gauntlet.
