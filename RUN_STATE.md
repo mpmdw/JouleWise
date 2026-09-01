@@ -5040,20 +5040,11 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
-
-### `WINDOW-COUNCIL-GATE`
-
-No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; the frozen D-117 packs wait while the council repair program proceeds.
-
-- Scope: `select` in [QUIET-MAC].
-- Allowed kernel task IDs: NONE.
-- Authority: docs/decision_log.md#window-gating-directive--2026-08-13-late-ed-t6-council-audited-instrument-readiness-precedes-any-window; docs/process_traces/2026-08-15-readiness-council/council-verdict.md#verdict.
-- Clearance: docs/process/instrument-readiness-audit-charter.md#verdict-form-amendments-11-12 — a reconvened READY-CANDIDATE council verdict records no NOT-READY, no UNVERIFIED, and all ED-QUALIFICATION rows closed with evidence
+NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-08-28). Latest report: [T23-T24 session 2026-08-24/25: S-0 clone proof COMPLETE - the marker cure through estates 6-10, three consults, eleven PRs merged](docs/run_reports/2026-08-25-t23-t24-session.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-01). Latest report: [T23-T24 session 2026-08-24/25: S-0 clone proof COMPLETE - the marker cure through estates 6-10, three consults, eleven PRs merged](docs/run_reports/2026-08-25-t23-t24-session.md).
 
 ### [ED-EXTERNAL]
 
@@ -5061,7 +5052,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [QUIET-MAC]
 
-- GATED — Q2 `D117-W-ALPHA` (excluded by: WINDOW-COUNCIL-GATE): Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v3 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.
+- READY — Q2 `V5-G2A-PREFILL-PROBE-01`: Run the first quiet-machine evening for G2-a: bracket the four 512, 1024, 2048, and 4096 prefill probes, collect at least five Qwen3-1.7B members per rung, record the Qwen3-8B non-gating probes, and preserve the selector input.
 
 ### [AGENT]
 

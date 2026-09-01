@@ -1,22 +1,5 @@
 {
-  "active_global_gates": [
-    {
-      "allowed_task_ids": [],
-      "authority": [
-        "docs/decision_log.md#window-gating-directive--2026-08-13-late-ed-t6-council-audited-instrument-readiness-precedes-any-window",
-        "docs/process_traces/2026-08-15-readiness-council/council-verdict.md#verdict"
-      ],
-      "clearance": "docs/process/instrument-readiness-audit-charter.md#verdict-form-amendments-11-12 — a reconvened READY-CANDIDATE council verdict records no NOT-READY, no UNVERIFIED, and all ED-QUALIFICATION rows closed with evidence",
-      "id": "WINDOW-COUNCIL-GATE",
-      "scope": {
-        "lanes": [
-          "quiet_mac"
-        ],
-        "operation": "select"
-      },
-      "summary": "No quiet-mac task may start or resume after the 2026-08-15 NOT-READY verdict; the frozen D-117 packs wait while the council repair program proceeds."
-    }
-  ],
+  "active_global_gates": [],
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
@@ -1163,149 +1146,6 @@
       "rank": 59,
       "status": "blocked",
       "status_note": "2026-08-03: minted from the two-week soundness sweep's finding that D-080 has never fired, plus Ed's validated concurrent-audit pattern (memory: concurrent-fable-audit-pattern). Non-blocking hardening.",
-      "stop_card": null
-    },
-    "D117-W-ALPHA": {
-      "acceptance": {
-        "evidence": [
-          "Exact frozen pack d117_floor_qwen25_1p5b_v3 is used only after council READY and separate T-0 GO",
-          "Fresh live brackets, strict-valid collection bundle, whole-window verdict, margin receipt, backup, and custody records land",
-          "The prospective 1.5B decode and prefill floor artifacts trace to the frozen plan and governed close-out chain"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/D117-W-ALPHA/acceptance",
-          "label": "D117-W-ALPHA acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The frozen ALPHA pack produces the fresh 1.5B floor window and its complete governed close-out chain."
-      },
-      "authority": {
-        "label": "D-117 three prospective claim windows",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
-        }
-      ],
-      "flags": [
-        "lead_only"
-      ],
-      "goal": "Run the frozen ALPHA pack d117_floor_qwen25_1p5b_v3 as D-117's fresh 1.5B decode-floor window with its prefill floor rider and governed close-out.",
-      "id": "D117-W-ALPHA",
-      "lane": "quiet_mac",
-      "priority": "p1_phase_gate",
-      "rank": 2,
-      "status": "queued",
-      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
-      "stop_card": null
-    },
-    "D117-W-BETA": {
-      "acceptance": {
-        "evidence": [
-          "Exact frozen pack d117_floor_qwen25_7b_v3 is used only after ALPHA close-out, council READY, and separate T-0 GO",
-          "Fresh live brackets, strict-valid collection bundle, whole-window verdict, margin receipt, backup, and custody records land",
-          "The prospective 7B decode and prefill floor artifacts trace to the frozen plan and governed close-out chain"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/D117-W-BETA/acceptance",
-          "label": "D117-W-BETA acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The frozen BETA pack runs after ALPHA and produces the fresh 7B floor window and its complete governed close-out chain."
-      },
-      "authority": {
-        "label": "D-117 three prospective claim windows",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "ALPHA collection and governed close-out complete",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "D117-W-ALPHA"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
-        }
-      ],
-      "flags": [
-        "lead_only"
-      ],
-      "goal": "Run the frozen BETA pack d117_floor_qwen25_7b_v3 after ALPHA as D-117's fresh 7B decode-floor window with its prefill floor rider and governed close-out.",
-      "id": "D117-W-BETA",
-      "lane": "quiet_mac",
-      "priority": "p1_phase_gate",
-      "rank": 3,
-      "status": "blocked",
-      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
-      "stop_card": null
-    },
-    "D117-W-GAMMA": {
-      "acceptance": {
-        "evidence": [
-          "Exact frozen pack d117_contrast_qwen25_1p5b_vs_7b_v3 is used only after BETA close-out, council READY, and separate T-0 GO",
-          "Fresh live brackets, strict-valid contrast collection bundle, whole-window verdict, backup, and custody records land",
-          "The finalized prospective analysis basis carries the governed decode and p256 prefill contrast outcomes through claim consumption"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/D117-W-GAMMA/acceptance",
-          "label": "D117-W-GAMMA acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The frozen GAMMA pack runs after BETA and produces the governed prospective model-contrast window and complete consumption chain."
-      },
-      "authority": {
-        "label": "D-117 three prospective claim windows",
-        "path": "docs/decision_log.md"
-      },
-      "dependencies": [
-        {
-          "evidence": null,
-          "kind": "task",
-          "required": "BETA collection and governed close-out complete",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "D117-W-BETA"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "D-149 standing conditional T-0 GO (2026-08-19)",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "No arm or collection before a READY-candidate council verdict and the separate perishable T-0 GO; T-0 GO auto-issues per D-149 when its five recorded conditions pass (no-hands windows); hands-required work remains Ed’s"
-        }
-      ],
-      "flags": [
-        "lead_only"
-      ],
-      "goal": "Run the frozen GAMMA pack d117_contrast_qwen25_1p5b_vs_7b_v3 after BETA as D-117's prospective 1.5B-versus-7B contrast window and governed consumption chain.",
-      "id": "D117-W-GAMMA",
-      "lane": "quiet_mac",
-      "priority": "p1_phase_gate",
-      "rank": 4,
-      "status": "blocked",
-      "status_note": "Successor family frozen (freeze-0003, 2026-08-19); awaits READY-candidate council + D-149 GO conditions",
       "stop_card": null
     },
     "D144-SEATPASS-FOLLOWUPS": {
@@ -3788,37 +3628,6 @@
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). ROW RE-SCOPED TO COMMIT 1 ONLY: the host-wide quiet lease + process census, installed-INACTIVE. Retained because it has non-t3 value — mechanical refuse-at-arm for the ordinary guarded window launcher, replacing procedural eyeballing. SHELVED: commit 2 (launcher interception), commit 3 (t3 handoff + resident watcher), commit 4 (t3-relaunch + README banner projection + all credential handling). In flight at checkpoint: Sol fix round closing 7 audit blockers; work UNCOMMITTED in scratchpad/quietguard (branch impl/quiet-guard); harvest scratchpad/qg-fix-out.md.",
       "stop_card": null
     },
-    "READY-WO-BATCH-01": {
-      "acceptance": {
-        "evidence": [
-          "Each closed B-row cites its executed evidence in custody",
-          "B-22 (margin-receipt binding + consumer) lands before any claim-window close-out (claim-admission gate checks it; shakedown exempt, no retrospective promotion)",
-          "B-16 regex widening lands BEFORE ED-Q-L9-3's agent-free fixture capture"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/READY-WO-BATCH-01/acceptance",
-          "label": "READY-WO-BATCH-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Every group-(b) row is closed, superseded by a ruled disposition, or re-homed with a recorded reason; the UNVERIFIED register is NOT discharged by this row (see UNVERIFIED-REAUDIT-01)."
-      },
-      "authority": {
-        "label": "READY sitting ruling + VERDICT-PACKET group (b)",
-        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Work down the READY sitting's group-(b) work-order enumeration (B-1..B-47, severities and seat sourcing in the sealed verdict packet): coverage re-enumerations, runbook retarget, window.env reconciliation, census/teardown repairs, custody/receipt bindings, doc corrections.",
-      "id": "READY-WO-BATCH-01",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 68,
-      "status": "queued",
-      "status_note": "The enumeration (not a count) is ratified; splits into individual rows as work starts. 2026-08-24: first desk batch LANDED on PR #168 (B-9, B-27, B-43, B-45, B-47, B-33; B-46 verified already cured in ae82a392) — workflow-implemented, per-shard verified, magistrate-reviewed. Residuals carried: window_runbook.md:995,:1161 similar needs_pin_commit phrasings.",
-      "stop_card": null
-    },
     "RECORDER-SINGLE-OPERATOR-PREAMBLE-01": {
       "acceptance": {
         "evidence": [
@@ -3984,38 +3793,6 @@
       "rank": 15,
       "status": "shelved",
       "status_note": "2026-08-05: DESCOPED by Ed's directive (t3 control-plane build-out not worth its cost; t3 stays the INTERACTIVE control plane, t3-resident-during-windows dropped; windows return to the zero-agent guarded-shell path). Shelved with the guard's shelved commits: the programmatic substrate this amendment needed lived in the dropped watcher/handoff scope.",
-      "stop_card": null
-    },
-    "SITTING2-PRECONDITIONS-01": {
-      "acceptance": {
-        "evidence": [
-          "All three _v1 manifest digests superseded by a worded supersession at the ruled head",
-          "Charter v3 (or ruled carrier) contains the sitting-type language the kernel clearance cites",
-          "validate_gate_packet.py accepts the next packet incl. the rule-11 finalization-gate enumeration (faithful transcription)",
-          "The next sitting's head is frozen with the fleet quiesced and recorded"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/SITTING2-PRECONDITIONS-01/acceptance",
-          "label": "SITTING2-PRECONDITIONS-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "A charter-conforming READY sitting can be convened at the frozen _v4 head."
-      },
-      "authority": {
-        "label": "READY sitting ruling + VERDICT-PACKET group (a)",
-        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Cure the six gates on HOLDING the next READY sitting (H-1..H-6): next-sitting-at-frozen-_v4-head convening rule (ruled), baseline-manifest supersession, charter v3 + kernel clearance repoint, sealed-packet protocol (validator grammar + extraction script + mechanical recount + cold pairing), frozen-head discipline, and the H-6 packet-finalization gate homed in the charter + validate_gate_packet.py.",
-      "id": "SITTING2-PRECONDITIONS-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 67,
-      "status": "queued",
-      "status_note": "H-1 already resolved by the ruled convening rule; H-6 adoption ruled by the cold pass (charter home; decision-log entry owed; Ed visibility line in the packet).",
       "stop_card": null
     },
     "SUPERSESSION-CHAINED-RECOVERY-01": {
@@ -4587,28 +4364,56 @@
         {
           "evidence": null,
           "kind": "task",
-          "required": "the frozen _v4 campaign completes; this row runs in the FIRST POST-CAMPAIGN diagnostic window and must not enter or perturb _v4",
+          "required": "the _v5 campaign closes with every nightly G3 desk check passed; this row then runs in the first post-campaign diagnostic window",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "V4-TRANSACTION-01"
+          "target": "V5-NIGHTLY-G3-01"
         }
       ],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "label": "T26 paper-goal ruling item 16 (transfer is left untested by _v4; this arm tests it diagnostically)",
+            "label": "D-078 no-retry rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-078 no-retry: each diagnostic occurrence is preserved as observed and cannot be repeated until the transfer residual looks favorable"
+        },
+        {
+          "authority": {
+            "label": "D-149 T-0 mechanical conditions",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-149 T-0 conditions (2)-(5): this real-workload diagnostic passes the same mechanical perishable checks before collection"
+        },
+        {
+          "authority": {
+            "label": "T26 paper-goal ruling item 16 (transfer is left untested by the campaign; this arm tests it diagnostically)",
             "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
           },
           "rule": "Diagnostic and non-claim-bearing. Mints no floor, licenses no claim, and does not re-scope any issued floor or any published label."
         },
         {
           "authority": {
-            "label": "T26 paper-goal ruling item 16 (does not enter _v4; the pack is frozen)",
+            "label": "D-167 evidence-immutability fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence immutability: gap commands, fitted edges, residuals, estimator revision, and pulse-derived bound are retained unchanged"
+        },
+        {
+          "authority": {
+            "label": "D-167 post-_v5 sequencing",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Must not enter or perturb the _v5 pack or campaign; this row runs only after the final nightly G3 check closes the campaign"
+        },
+        {
+          "authority": {
+            "label": "T26 paper-goal ruling item 16 (does not enter the campaign pack)",
             "path": "docs/process_traces/2026-08-27-t26/paper-goal-consult/03-MAGISTRATE-RULING.md"
           },
-          "rule": "Must not enter or perturb the _v4 pack. The pack is frozen and any non-config change is a new family generation; this row runs only in a post-campaign diagnostic window."
+          "rule": "Pre-registration: the approximately 500 ms commanded gap, approximately 10 real-workload runs, existing estimator, and residual comparison are fixed before collection"
         },
         {
           "authority": {
@@ -4627,7 +4432,7 @@
       "priority": "p2_next_slice",
       "rank": 12,
       "status": "blocked",
-      "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from the paper director's draft (docs/paper/TRANSFER-FIDUCIAL-01-kernel-row-draft.md). Ruled Future Work #1 by the T26 paper-goal ruling item 16; queued for the first post-campaign diagnostic window. Ed-hands (hardware window), hence the quiet_mac lane. Priority p2_next_slice per the draft's enumeration (p3_research_expansion is the defensible alternative). The draft's fence anchors were dropped at registration because the ruling file has no 'rulings' heading; the labels name item 16 directly.",
+      "status_note": "Reconciled by D-167 from the historical _v4 dependency to the live _v5 chain. It runs in the first post-campaign diagnostic window after the final nightly G3 pass. PR #239 remains held; no held code is promoted by this kernel change.",
       "stop_card": null
     },
     "UNATTENDED-LAUNCH-01": {
@@ -4679,37 +4484,6 @@
       "status_note": "Registered 2026-08-23 by the T0 synthesis ruling (both seats co-signed the separation). Design round required before implementation. RULED ADDITION 2026-08-26 (magistrate, from T0-UNATTENDED-01's G7 gap and the separately-raised 'window launches with no T-0 GO receipt' finding — they are ONE missing mechanism seen from two ends): this row also owns the PRODUCTION CONSUMER of the D-149 GO receipt. Nothing in scripts/ or joulewise/ consumes a GO receipt at HEAD, so there is no launch precondition to weaken — it was never built. The consumer is scripts/launch_window.py's launch-capability consumption: a window launches ONLY against a valid, non-rehearsal GO receipt, and a receipt whose class is T0_UNATTENDED_SUPERVISED_REHEARSAL is refused BY CLASS. That class refusal is what discharges the T0 ruling's 'production-side mechanical REJECTION of the valid rehearsal receipt' requirement and closes rehearsal gate G7, which T0-UNATTENDED-01 correctly ships as first-class UNRULED rather than faking. The refusal code is this row's to select and must be fully registered before it emits (the T0 delta document's §4.5 gives the exhaustive R1 family/type/role/registry path if a new spelling is chosen; reusing an existing registered spelling avoids that churn). Do NOT implement it inside T0-UNATTENDED-01 — the T0 ruling's scope fence reserves every launch-side mechanism to this row. Evidence pointer: docs/process_traces/2026-08-23-t22/t0-unattended/impl/reason-code-coverage-delta.md §6.2.",
       "stop_card": null
     },
-    "UNVERIFIED-REAUDIT-01": {
-      "acceptance": {
-        "evidence": [
-          "Eleven universe re-enumerations custodied with denominators and attack records",
-          "Sweep ledger adjudicates all 23 findings incl. B7's claim-bearing numbers",
-          "The falsely-clean attack targets the cleanest-reading row"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/UNVERIFIED-REAUDIT-01/acceptance",
-          "label": "UNVERIFIED-REAUDIT-01 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Every U-item carries a fresh, attacked enumeration or an executed re-audit at the ruled head; no fix round substitutes."
-      },
-      "authority": {
-        "label": "READY sitting ruling (UNVERIFIED carried distinctly) + VERDICT-PACKET section 4",
-        "path": "docs/process_traces/2026-08-20-go-session/readiness-sitting/VERDICT-PACKET.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Discharge the sitting's UNVERIFIED register (U-1..U-17): re-enumerate all eleven evidence universes at the frozen _v4 head with at least one adversarial falsely-clean attack; re-run the 23-finding sweep with a per-finding ledger; close the named coverage gaps.",
-      "id": "UNVERIFIED-REAUDIT-01",
-      "lane": "agent",
-      "priority": "p1_phase_gate",
-      "rank": 69,
-      "status": "queued",
-      "status_note": "Mandatory re-audit class: work orders cannot discharge these; scheduled against the next sitting's convening.",
-      "stop_card": null
-    },
     "V4-TRANSACTION-01": {
       "acceptance": {
         "evidence": [
@@ -4754,6 +4528,494 @@
       "rank": 66,
       "status": "partial",
       "status_note": "S-0 CLONE PROOF COMPLETE (2026-08-25): estate 10 ran END TO END with zero failures at BASE f125ae70 (runsheet r6 head), CI run 32915894409 green, fifth _v4 mint, clone mint head 9a6f8880. Executed: the scripted band 1.1-3.7 with three real MLX U11 freezes; 3.8 marker build with the S0-O2 deferral disclosed and candidate verify PASS; Ed's step-6 YES over hC adbd116d7dcaa3dd5b0d6f1e5c9127282232b29ea74b03b9c6b8077ec9da36bc; 3.9 all three packs ARMED and verified with the C+hC pair, clean-arm residue empty, eleven-kind census PASS; 3.10 local green in the clone (published half deferred BY DESIGN); 4 probe battery ALL GREEN including the six r6 re-derived probes and the post-fixation shape-preserving re-mint byte pin; 4.10 fixation equal to the mint-time record; magistrate 5 acceptance read ALL BOXES PASS. Record: docs/process_traces/2026-08-22-t20/S0-COMPLETION-RECORD.md. Ten estates were cut; estates 1-9 each terminated on a real instrument defect now cured on main (S0-O2 marker build, S0-O3 successor-digest siting, the confirmation-supply family, D-154 pack_root, the anchor remaps, probe reachability), with estate 6 STRUCK under the D-153 sweep synthesis, estate 7 STRUCK as instrument failure under D-154 R-4 (its positive results retained as executability evidence, never claim custody), and estate 9's probe-block failures dispositioned ordinary-defect - every struck estate's custody preserved READ-ONLY. REMAINING SCOPE IS THE REAL TRANSACTION ONLY: Ed's D-150(1) live permission prompts and the D-150a reboot; a quiet machine window; the real commit-freeze window close; the published-green half that 3.10 deferred, at the real published head; and post-window fixation ordering per D-153. Retained verbatim: BIG per D-144, and the magistrate's own reading of the transaction transcript remains the final verification gate.",
+      "stop_card": null
+    },
+    "V5-DESK-DAY-01": {
+      "acceptance": {
+        "evidence": [
+          "The reviewed physical-ahead calibration candidate becomes the tracked ledger head before pack authoring",
+          "scripts/select_g2a_prefill_length.py writes and hashes the shortest qualifying rung decision, or the ruled collect-at-4096 refusal record",
+          "The selected collection length and G2-a record hash are pinned into all three Qwen3 _v5 packs",
+          "All three _v5 packs are generated and a throwaway clone repeats the freeze, arm-admission, and receipt proof without using campaign evidence"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-DESK-DAY-01/acceptance",
+          "label": "V5-DESK-DAY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The G2-a record selects one prefill length, all three _v5 packs bind that decision, and a throwaway clone proves the generated packs can pass the same admission path."
+      },
+      "authority": {
+        "label": "D-167 live _v5 kernel reconciliation and D-162 G2 desk-day runsheet",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "G2-a finishes with immutable bracket, probe-summary, and selector-input evidence",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-G2A-PREFILL-PROBE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-167 evidence-immutability fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence immutability: G2-a bytes and their hashes are copied into the pack record, never rewritten to fit a desired rung"
+        },
+        {
+          "authority": {
+            "label": "D-166 pre-registered prefill-selection rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration: scripts/select_g2a_prefill_length.py applies the fixed 512, 1024, 2048, 4096 ladder and count floor before pack generation; no rung is chosen by outcome"
+        }
+      ],
+      "flags": [],
+      "goal": "Run the desk day after G2-a: advance the reviewed calibration-ledger pin, select and hash the prefill rung, generate the three Qwen3 _v5 packs, and repeat their admission proof in a throwaway clone.",
+      "id": "V5-DESK-DAY-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 67,
+      "status": "blocked",
+      "status_note": "Installed by D-167 from the G2 runsheet Phase D preparation. This row re-homes the still-open pack-readiness work that applies to _v5; it does not revive the retired readiness sittings.",
+      "stop_card": null
+    },
+    "V5-G2A-PREFILL-PROBE-01": {
+      "acceptance": {
+        "evidence": [
+          "Governed pre and post calibration brackets enclose every diagnostic probe and the terminal physical-ahead candidate is preserved",
+          "Each rung 512, 1024, 2048, and 4096 contains at least five small-model members using mlx-community/Qwen3-1.7B-4bit",
+          "Every member records the prefill overlapping-power-record count; large-model Qwen3-8B-4bit probes are preserved but do not select the rung",
+          "The four-rung summary and its campaign log remain diagnostic, non-claim, and outside every later campaign or mint input"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-G2A-PREFILL-PROBE-01/acceptance",
+          "label": "V5-G2A-PREFILL-PROBE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A bracketed, non-claim G2-a evening measures at least five small-model members at each of four prefill lengths and preserves the selector input without choosing a rung."
+      },
+      "authority": {
+        "label": "D-167 live _v5 kernel reconciliation, D-166 prefill rule, and D-162 G2 runsheet",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-078 no-retry rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-078 no-retry: a failed or invalid member is preserved and handled by the governed disposition path, never silently rerun until it passes"
+        },
+        {
+          "authority": {
+            "label": "D-149 T-0 mechanical conditions",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-149 T-0 conditions (2)-(5): the perishable pre-launch checks must pass mechanically at the live head before collection begins"
+        },
+        {
+          "authority": {
+            "label": "D-167 evidence-immutability fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence immutability: bracket, member, campaign-log, and summary bytes are retained unchanged and never reused as claim or mint inputs"
+        },
+        {
+          "authority": {
+            "label": "D-166 pre-registered prefill-selection rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration: all four fixed rungs and at least five small-model members per rung are collected before the selector can choose the shortest rung whose every count is at least five"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Run the first quiet-machine evening for G2-a: bracket the four 512, 1024, 2048, and 4096 prefill probes, collect at least five Qwen3-1.7B members per rung, record the Qwen3-8B non-gating probes, and preserve the selector input.",
+      "id": "V5-G2A-PREFILL-PROBE-01",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 2,
+      "status": "queued",
+      "status_note": "Installed by D-167 as the first live _v5 step. It replaces the retired Qwen2.5 _v3 Q2 row at the same lane rank but carries no old-window evidence forward.",
+      "stop_card": null
+    },
+    "V5-G2B-SHAKEDOWN-01": {
+      "acceptance": {
+        "evidence": [
+          "A separate throwaway T-0 set arms once, never launches, expires, and writes no bundle",
+          "The real _v5 pack then launches once on its own non-claim runs root and collects exactly one complete A/B/B/A block",
+          "The bracket binding is built before the one authoritative passed verdict row and the reusable desk checker passes on the real bytes",
+          "The finalizer refuses for exactly the registered incomplete-campaign reasons, and any other refusal blocks the transaction"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-G2B-SHAKEDOWN-01/acceptance",
+          "label": "V5-G2B-SHAKEDOWN-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "G2-b proves the real _v5 launch-to-claim path on one isolated, non-claim block and accepts only the exact registered incomplete-campaign refusal set."
+      },
+      "authority": {
+        "label": "D-167 live _v5 kernel reconciliation and D-162 G2-b proof",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the desk day pins the rung, generates all three _v5 packs, and completes throwaway-clone re-proof",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-DESK-DAY-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-078 no-retry rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-078 no-retry: G2-b has one governed consuming launch; an unexpected result is preserved and stops the transaction instead of being retried into success"
+        },
+        {
+          "authority": {
+            "label": "D-149 T-0 mechanical conditions",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-149 T-0 conditions (2)-(5): a fresh perishable check set is required after the rehearsal has fully expired and before the consuming arm"
+        },
+        {
+          "authority": {
+            "label": "D-167 evidence-immutability fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence immutability: the shakedown root is isolated from the campaign root, retained unchanged, and never consumed by a floor, mint, or claim"
+        },
+        {
+          "authority": {
+            "label": "D-166 pre-registered _v5 workload",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration: G2-b uses the estate-proved _v5 pack with the already-hashed G2-a selection; it cannot substitute another length, model, prompt, or refusal set"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Run G2-b on the real _v5 pack: expire a throwaway arm, make one consuming non-claim launch, collect one A/B/B/A block, build the verdict and bracket binding, run the desk checker, and prove exact finalizer refusal.",
+      "id": "V5-G2B-SHAKEDOWN-01",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 3,
+      "status": "blocked",
+      "status_note": "Installed by D-167 and re-homed from the G2 portion of PIPELINE-SMOKE-LIVE-01 because the runnable proof is now the reviewed _v5 runsheet, not a separate diagnostic family.",
+      "stop_card": null
+    },
+    "V5-NIGHTLY-G3-01": {
+      "acceptance": {
+        "evidence": [
+          "After each campaign night, the same read-only checker used in G2-b runs over that night's immutable bundles before another arm is allowed",
+          "Each nightly record reports every D-162 G3 provenance assertion and contains no failure",
+          "The final campaign-night check closes before TRANSFER-FIDUCIAL-01 begins"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-NIGHTLY-G3-01/acceptance",
+          "label": "V5-NIGHTLY-G3-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The G3 desk checker validates each immutable _v5 campaign night before the next arm and records a final pass at campaign close."
+      },
+      "authority": {
+        "label": "D-167 live _v5 kernel reconciliation and D-162 nightly G3 proof",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Ed-authorized _v5 transaction starts from the G2-b-proved head",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-TRANSACTION-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-167 evidence-immutability fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence immutability: G3 reads each night's bundles and custody records without rewriting them; a failed check costs the next night and never edits prior evidence"
+        },
+        {
+          "authority": {
+            "label": "D-162 G3 desk-script rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration: G3 is the same fixed checker proved in G2-b, run after every night before any next arm; the assertion set cannot be narrowed after seeing data"
+        }
+      ],
+      "flags": [],
+      "goal": "Run the D-162 G3 desk script after every _v5 campaign night, block the next arm on any failure, and record the final clean pass that closes the campaign chain.",
+      "id": "V5-NIGHTLY-G3-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 68,
+      "status": "blocked",
+      "status_note": "Installed by D-167 and re-homed from the G3 portion of PIPELINE-SMOKE-LIVE-01. A desk script is agent-lane work; the quiet-machine collection it checks remains in V5-TRANSACTION-01.",
+      "stop_card": null
+    },
+    "V5-TRANSACTION-01": {
+      "acceptance": {
+        "evidence": [
+          "The transaction starts only from the reviewed head that passed G2-b and only after Ed records GO",
+          "The real Qwen3-1.7B-4bit and Qwen3-8B-4bit _v5 packs use the G2-a-selected prefill length and the D-166 forced-512 decode workload",
+          "Claim-bearing campaign custody is separate from G2-a and G2-b roots, and the first launch records the immutable campaign identity needed by nightly G3"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-TRANSACTION-01/acceptance",
+          "label": "V5-TRANSACTION-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed's GO opens the claim-bearing _v5 transaction at the G2-b-proved head with isolated, immutable campaign custody."
+      },
+      "authority": {
+        "label": "D-167 transaction-on-Ed's-go ruling and D-164 through D-166 _v5 campaign",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Ed records GO for the _v5 transaction after reviewing the G2-b result",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-TRANSACTION-GO-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-078 no-retry rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-078 no-retry: every claimed occurrence keeps its first governed outcome and any replacement follows the registered supersession record rather than silent recollection"
+        },
+        {
+          "authority": {
+            "label": "D-149 T-0 mechanical conditions",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-149 T-0 conditions (2)-(5): each live arm requires the mechanical quiet-state, clock, ledger, and readiness checks at its own perishable boundary"
+        },
+        {
+          "authority": {
+            "label": "D-167 evidence-immutability fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence immutability: claim-bearing _v5 custody is append-only and separate from both diagnostic roots; no diagnostic byte is promoted into the transaction"
+        },
+        {
+          "authority": {
+            "label": "D-164 through D-166 _v5 pre-registration",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration: the Qwen3 pair, prompt bytes, thinking-off mode, greedy decode, forced 512 decode tokens, selected prefill length, dominance rule, and family size are frozen before the first claim launch"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Open and execute the claim-bearing _v5 Qwen3 transaction after G2-b and Ed's GO, keeping diagnostic and campaign custody separate and handing each completed night to G3 before another arm.",
+      "id": "V5-TRANSACTION-01",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 4,
+      "status": "blocked",
+      "status_note": "Installed by D-167 as the live successor to the retired Qwen2.5 Q2-Q4 windows. Completion here means the transaction is opened at the proved head; V5-NIGHTLY-G3-01 owns the checks through campaign close.",
+      "stop_card": null
+    },
+    "V5-TRANSACTION-GO-01": {
+      "acceptance": {
+        "evidence": [
+          "Ed reviews the preserved G2-b verdict, bracket binding, desk-check result, and exact finalizer-refusal result",
+          "Ed records an explicit GO for the claim-bearing _v5 transaction at the reviewed head"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V5-TRANSACTION-GO-01/acceptance",
+          "label": "V5-TRANSACTION-GO-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Ed explicitly authorizes the claim-bearing _v5 transaction after reviewing the complete G2-b proof record."
+      },
+      "authority": {
+        "label": "D-167 separates lead-discretion diagnostic windows from the transaction on Ed's GO",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "G2-b passes on the real _v5 pack and its immutable review packet is available",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-G2B-SHAKEDOWN-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Obtain Ed's explicit GO for the claim-bearing _v5 transaction after the real-pack G2-b proof passes and its evidence is reviewable.",
+      "id": "V5-TRANSACTION-GO-01",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 7,
+      "status": "blocked",
+      "status_note": "Installed by D-167 to make the authorization boundary explicit: G2 diagnostic windows are at lead discretion, but the claim-bearing transaction waits for Ed's GO.",
+      "stop_card": null
+    },
+    "V6-SCORED-LEG-01": {
+      "acceptance": {
+        "evidence": [
+          "The post-fiducial pack uses the reviewed GSM8K eight-item set per member, output cap 384, pinned checker, and four-way outcome table",
+          "The scored leg uses the Qwen3 pair and affine_mod_ladder_v1 contamination-free control with accuracy reported only as a quarantined set property",
+          "A dedicated _v6 council, contract review, throwaway estate, and all governed collection records complete before any claim"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V6-SCORED-LEG-01/acceptance",
+          "label": "V6-SCORED-LEG-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "After the transfer fiducial and token-pin repair, the _v6 GSM8K scored leg runs under its own reviewed pack, estate, and claim boundary."
+      },
+      "authority": {
+        "label": "D-167 post-fiducial _v6 row and D-166 scored-workload ruling",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the post-campaign transfer fiducial completes first",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "TRANSFER-FIDUCIAL-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "prompt token numbers are independently verified against the reviewed tokenizer bytes before collection",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V6-TOKEN-PIN-BINDING-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-078 no-retry rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-078 no-retry: scored occurrences retain their governed first outcome and cannot be repeated until correctness or energy looks favorable"
+        },
+        {
+          "authority": {
+            "label": "D-149 T-0 mechanical conditions",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "D-149 T-0 conditions (2)-(5): each _v6 live arm passes the same mechanical perishable checks before collection"
+        },
+        {
+          "authority": {
+            "label": "D-167 evidence-immutability fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence immutability: imported items, expected-answer quarantine, token pins, scored outcomes, and energy bundles remain hash-bound and append-only"
+        },
+        {
+          "authority": {
+            "label": "D-166 scored-workload pre-registration",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration: the eight-item set, 384-token cap, checker, four outcomes, control leg, and accuracy quarantine are fixed before _v6 collection"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Run the post-fiducial _v6 scored GSM8K leg only after the prompt-token binding closes, using its own council, contract review, throwaway estate, and contamination-free control.",
+      "id": "V6-SCORED-LEG-01",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 14,
+      "status": "blocked",
+      "status_note": "Installed by D-167 after TRANSFER-FIDUCIAL-01. This is a future scored campaign, not an extension of _v5, and it remains blocked on V6-TOKEN-PIN-BINDING-01.",
+      "stop_card": null
+    },
+    "V6-TOKEN-PIN-BINDING-01": {
+      "acceptance": {
+        "evidence": [
+          "The admission tool re-renders each reviewed prompt through the pinned Qwen3 tokenizer and chat-template bytes",
+          "Every stored prompt_token_ids array and planned prompt length must match the independent rendering exactly",
+          "A changed token number, tokenizer byte, chat-template byte, or prompt byte refuses before any _v6 collection"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/V6-TOKEN-PIN-BINDING-01/acceptance",
+          "label": "V6-TOKEN-PIN-BINDING-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The _v6 admission path proves that every stored prompt token number comes from the reviewed prompt, tokenizer, and chat-template bytes."
+      },
+      "authority": {
+        "label": "D-167 _v6 blocker registration and WORKLOAD-SCORED-01 delta-audit F4 disposition",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-167 evidence-immutability fence",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence immutability: the reviewed prompt, tokenizer, chat-template, and token-array bytes are hash-bound inputs; verification never rewrites them"
+        },
+        {
+          "authority": {
+            "label": "D-166 scored-workload pre-registration",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration: token binding closes before collection and refuses any independently rendered token mismatch"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the _v6 pre-collection blocker by independently rebuilding every prompt token array from the reviewed Qwen3 tokenizer and chat-template bytes at the admission boundary.",
+      "id": "V6-TOKEN-PIN-BINDING-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 69,
+      "status": "queued",
+      "status_note": "Installed by D-167 from the WORKLOAD-SCORED-01 delta-audit F4 disposition. It is required before any _v6 collection but does not block _v5.",
       "stop_card": null
     },
     "WO-CENSUS-SEMANTICS": {
@@ -4996,5 +5258,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-08-28"
+  "updated": "2026-09-01"
 }

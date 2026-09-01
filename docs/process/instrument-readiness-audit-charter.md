@@ -1,3 +1,6 @@
+> **SUPERSEDED AS A WINDOW GATE by D-167 (2026-09-01).**
+> **Retained as record.**
+
 # INSTRUMENT-READINESS AUDIT CHARTER — v2, RATIFIED 2026-08-14
 
 Ratification: magistrate adoption of the design consult's thirteen
