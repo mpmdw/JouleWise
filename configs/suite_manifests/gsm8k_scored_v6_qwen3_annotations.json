@@ -1,0 +1,102 @@
+{
+  "annotations": [
+    {
+      "execution_index": 0,
+      "expected_answer": "3140",
+      "expected_answer_sha256": "d5f997b1d359da5ebfe6e2cbc0ffc896fc5cd220c6f5bd8742054bfd3eb42489",
+      "item_id": "gsm8k_test_0417",
+      "line_index": 417,
+      "scorer_id": "gsm8k_scored_v6/score_v1",
+      "source_answer": "In the first four days, Tom made 4 * 200 = <<4*200=800>>800 kilometers.\nFor the next two days, he made only 30/100 * 800 = <<30/100*800=240>>240 kilometers.\nDuring the second week, Tom made 300 kilometers every day, which means 7 * 300 = <<7*300=2100>>2100 kilometers during the whole week.\nDuring his whole trip, Tom made 800 + 240 + 2100 = <<800+240+2100=3140>>3140 kilometers.\n#### 3140",
+      "source_item_id": "gsm8k_test_0417",
+      "source_sha256": "e97a8ff462f464db99ebb87b14a904a9111f60a5223b649d3f6433fc1bcc49da"
+    },
+    {
+      "execution_index": 1,
+      "expected_answer": "3",
+      "expected_answer_sha256": "6ac58744e3819720c6e4a75075e8c6c3fafb709b69077a52e911b7f4829d3373",
+      "item_id": "gsm8k_test_0296",
+      "line_index": 296,
+      "scorer_id": "gsm8k_scored_v6/score_v1",
+      "source_answer": "Each person eats 0.2 kg/meal x 2 meals/day = <<0.2*2=0.4>>0.4 kg of rice per day.\nSo, the 5 members consume 0.4 kg/day/person x 5 people = <<0.4*5=2>>2 kg of rice per day.\nIn a week, the household consumes 2 kg/day x 7 days/week = <<2*7=14>>14kg of rice.\nThus, 42 kg of rice will last 42 kg / 14 kg/week = <<42/14=3>>3 weeks.\n#### 3",
+      "source_item_id": "gsm8k_test_0296",
+      "source_sha256": "dd5f3480a80da605edd0204d8814d506a8b1810e6a1a24478500028068c0aa02"
+    },
+    {
+      "execution_index": 2,
+      "expected_answer": "156",
+      "expected_answer_sha256": "72ceaf80f3cdc66c2c9dcb49fc2ff97cbe37b1b954f3e80a4d9d6d42f763bf3a",
+      "item_id": "gsm8k_test_0316",
+      "line_index": 316,
+      "scorer_id": "gsm8k_scored_v6/score_v1",
+      "source_answer": "After buying twenty marbles from his friend Johanna, Solomon had 20+50 = <<20+50=70>>70 marbles.\nSolomon's father gave him 2/5*20 = <<2/5*20=8>>8 more marbles.\nAdding Johanna's and Solomon's marbles, he has a total of 8+70 = <<8+70=78>>78 marbles.\nIf each marble weigh 2 kgs, the total weight of marbles Solomon has in store is 78 * 2 kgs = <<78*2=156>>156 kgs\n#### 156",
+      "source_item_id": "gsm8k_test_0316",
+      "source_sha256": "5163b8e6f498d959af46d197a558dd1ec54bdfe0a11d2f659ab0c39cc0369b1a"
+    },
+    {
+      "execution_index": 3,
+      "expected_answer": "10",
+      "expected_answer_sha256": "bf5c7fe5afc654d2ddd9cc76def9b0e528fc21a6babc7a52f3a3f409df961323",
+      "item_id": "gsm8k_test_0714",
+      "line_index": 714,
+      "scorer_id": "gsm8k_scored_v6/score_v1",
+      "source_answer": "He paid 30*1.5=$<<30*1.5=45>>45 for the blueberries he picked\nSo after the entrance fee it was 45+20=$<<45+20=65>>65\nTo buy them at the grocery store it would cost 30*2.5=$<<30*2.5=75>>75\nSo he saved 75-65=$<<75-65=10>>10\n#### 10",
+      "source_item_id": "gsm8k_test_0714",
+      "source_sha256": "00d956120da6e1608f36994a9a2a980547d92b5e3c34fbc6536eb674bc1c54d8"
+    },
+    {
+      "execution_index": 4,
+      "expected_answer": "60",
+      "expected_answer_sha256": "899b51af6621222eec36c4a592fa0cd2e3bec0461fc682f1e8c1ea279d81a4bb",
+      "item_id": "gsm8k_test_0069",
+      "line_index": 69,
+      "scorer_id": "gsm8k_scored_v6/score_v1",
+      "source_answer": "In 8 weeks, Bailey receives $5 * 8 = $<<5*8=40>>40 in allowance\nBailey started with $100 - $40 = $<<100-40=60>>60\n#### 60",
+      "source_item_id": "gsm8k_test_0069",
+      "source_sha256": "2a47a6dfc6f2c7dc54ebabe3cdeea055d58384cdbbb6dfb20d6c30752e8dda49"
+    },
+    {
+      "execution_index": 5,
+      "expected_answer": "5",
+      "expected_answer_sha256": "037ec547e20835af7734b19efc6c8978986df127ea1feabc79feb86fbda288ae",
+      "item_id": "gsm8k_test_1106",
+      "line_index": 1106,
+      "scorer_id": "gsm8k_scored_v6/score_v1",
+      "source_answer": "The 100-centimeter ribbon is cut into 4 equal parts in pieces of 100 / 4 = <<100/4=25>>25 cm\nFrom each piece of 25 cm, he gets 5 equal parts of 25 / 5 = <<25/5=5>>5 cm each.\n#### 5",
+      "source_item_id": "gsm8k_test_1106",
+      "source_sha256": "9303f7fb40445014d88aba174c721a18db0c07e34695cdb5ee212e261678bc18"
+    },
+    {
+      "execution_index": 6,
+      "expected_answer": "2",
+      "expected_answer_sha256": "d0cf613f056ee41a6241d5c64517a5b5e06419a39b529d25ecefafd9bf2f269d",
+      "item_id": "gsm8k_test_1082",
+      "line_index": 1082,
+      "scorer_id": "gsm8k_scored_v6/score_v1",
+      "source_answer": "He walked 4/2=<<4/2=2>>2 miles there before turning around\nSo in total he walked 2+2+4=<<2+2+4=8>>8 miles, he walked 2 miles to the halfway point than 2 miles home.\nThat means it took him 8/4=<<8/4=2>>2 hours\n#### 2",
+      "source_item_id": "gsm8k_test_1082",
+      "source_sha256": "29e373320a848387ffee1e0a7329feda45b95393cf0e1b818a0bea8c3c0666b9"
+    },
+    {
+      "execution_index": 7,
+      "expected_answer": "131250",
+      "expected_answer_sha256": "70fe6e37095d3b5875cc89963d467db51d924f281d6365093c26c91c4ef21715",
+      "item_id": "gsm8k_test_1086",
+      "line_index": 1086,
+      "scorer_id": "gsm8k_scored_v6/score_v1",
+      "source_answer": "First, let's calculate the price of the BMX bike which is half of the price of one MTB, so it's 500 * 0.5 = $<<500*0.5=250>>250.\nHalf of the sold bikes were Trekking bikes, which means 300 * 0.5 = <<300*0.5=150>>150 bikes.\n15% of the sold bikes were BMX bikes, which means 300 * 15/100 = <<300*15/100=45>>45 bikes.\nThe remaining bicycles sold were of the MTB type and there were 300 - 150 - 45 = <<300-150-45=105>>105 bikes of this type sold.\nThat means Marcel earned 150 * 450 = $<<150*450=67500>>67500 from Trekking bikes.\nHe also earned 45 * 250 = $<<45*250=11250>>11250 from BMX bikes.\nMTB bikes got him 105 * 500 = $<<105*500=52500>>52500\nIn total Marcel earned 67500 + 11250 + 52500 = $<<67500+11250+52500=131250>>131250 during that month.\n#### 131250",
+      "source_item_id": "gsm8k_test_1086",
+      "source_sha256": "afbb9731f7b00135bc7e6da1243ad7ffd0471d03778a06116be5f60b5b24125a"
+    }
+  ],
+  "consumer_note": "Use this sidecar as the gsm8k_scored_v6 scorer input; expected answers and raw source answers remain quarantined from the suite manifest.",
+  "manifest_sha256": "1ad902f8ec64c737ee80f76b9b2dc6989b9e2d49ca267d5cb685b6f4c645c7f5",
+  "quarantine": "expected answers are scorer inputs, not manifest fields",
+  "schema_version": "gsm8k_scored_annotations.v1",
+  "scorer": {
+    "answer_hash_domain": "joulewise.gsm8k_answer.v1",
+    "prompt_template_id": "gsm8k_scored_v6/qwen3_chat_nothink_v1",
+    "scorer_id": "gsm8k_scored_v6/score_v1"
+  },
+  "suite_id": "gsm8k_scored_v6"
+}

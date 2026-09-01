@@ -33,6 +33,9 @@ from joulewise.suite import (
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json"
+GSM8K_MANIFEST_PATH = (
+    ROOT / "configs" / "suite_manifests" / "gsm8k_scored_v6_qwen3.json"
+)
 SUITE_CONFIG_PATH = ROOT / "configs" / "examples" / "mock_suite_local.json"
 PINNED_MOCK_SUITE_MANIFEST_SHA256 = (
     "16c2d67f8c5e84b369938ee8d633dec01c594f5f7fcbf22fcaa2301d986e1267"
@@ -151,7 +154,7 @@ class SuiteManifestTests(unittest.TestCase):
 
         data = manifest_data()
         data["items"][0]["source"]["benchmark_import"] = "later"
-        with self.assertRaisesRegex(SchemaError, "deferred"):
+        with self.assertRaisesRegex(SchemaError, "unknown key"):
             SuiteManifest.from_mapping(data)
 
         data = manifest_data()
@@ -164,6 +167,99 @@ class SuiteManifestTests(unittest.TestCase):
         data["items"][0]["source"]["prompt_text"] = "hello"
         data["items"][0]["source"]["prompt_token_ids"] = [1, 2]
         with self.assertRaisesRegex(SchemaError, "mutually exclusive"):
+            SuiteManifest.from_mapping(data)
+
+    def test_v2_ids_native_prompt_may_retain_rendered_audit_text(self) -> None:
+        data = migrate_suite_manifest(manifest_data())
+        item = data["items"][0]
+        item["source"]["prompt_text"] = "rendered audit text"
+        item["source"]["prompt_token_ids"] = [1, 2, 3, 4]
+        parsed = SuiteManifest.from_mapping(data)
+        self.assertEqual(parsed.items[0].prompt_source_kind(), "prompt_token_ids")
+        self.assertEqual(parsed.to_dict(), data)
+
+    def test_v2_scoring_and_benchmark_import_are_exact_and_hash_validated(self) -> None:
+        data = json.loads(GSM8K_MANIFEST_PATH.read_text())
+        parsed = SuiteManifest.from_mapping(data)
+        self.assertEqual(parsed.to_dict(), data)
+        self.assertIsNotNone(parsed.benchmark_import)
+        self.assertIsNotNone(parsed.items[0].scoring)
+
+        unknown_scoring = copy.deepcopy(data)
+        unknown_scoring["items"][0]["scoring"]["surprise"] = True
+        with self.assertRaisesRegex(SchemaError, r"items\[\]\.scoring.*unknown key"):
+            SuiteManifest.from_mapping(unknown_scoring)
+
+        bad_scoring_hash = copy.deepcopy(data)
+        bad_scoring_hash["items"][0]["scoring"]["expected_answer_hash"] = "bad"
+        with self.assertRaisesRegex(SchemaError, "expected_answer_hash.*64-hex"):
+            SuiteManifest.from_mapping(bad_scoring_hash)
+
+        unknown_import = copy.deepcopy(data)
+        unknown_import["benchmark_import"]["surprise"] = True
+        with self.assertRaisesRegex(SchemaError, "benchmark_import.*unknown key"):
+            SuiteManifest.from_mapping(unknown_import)
+
+        unknown_rendered_with = copy.deepcopy(data)
+        unknown_rendered_with["benchmark_import"]["rendered_with"]["surprise"] = True
+        with self.assertRaisesRegex(
+            SchemaError, r"benchmark_import\.rendered_with.*unknown key"
+        ):
+            SuiteManifest.from_mapping(unknown_rendered_with)
+
+        bad_import_hash = copy.deepcopy(data)
+        bad_import_hash["benchmark_import"]["selected_item_ids_sha256"] = "f" * 63
+        with self.assertRaisesRegex(SchemaError, "selected_item_ids_sha256.*64-hex"):
+            SuiteManifest.from_mapping(bad_import_hash)
+
+        reordered_ids = copy.deepcopy(data)
+        selected_ids = reordered_ids["benchmark_import"]["selected_item_ids"]
+        selected_ids[0], selected_ids[1] = selected_ids[1], selected_ids[0]
+        reordered_ids["benchmark_import"]["selected_item_ids_sha256"] = (
+            hashlib.sha256(
+                json.dumps(
+                    selected_ids, sort_keys=True, separators=(",", ":")
+                ).encode("utf-8")
+            ).hexdigest()
+        )
+        with self.assertRaisesRegex(
+            SchemaError, "selected_item_ids must match items"
+        ):
+            SuiteManifest.from_mapping(reordered_ids)
+
+        mismatched_subset = copy.deepcopy(data)
+        mismatched_subset["source_manifest"]["subset_sha256"] = "0" * 64
+        with self.assertRaisesRegex(
+            SchemaError, "subset_sha256 must match benchmark_import"
+        ):
+            SuiteManifest.from_mapping(mismatched_subset)
+
+        missing_scoring = copy.deepcopy(data)
+        del missing_scoring["items"][0]["scoring"]
+        with self.assertRaisesRegex(SchemaError, "requires items\\[\\]\\.scoring"):
+            SuiteManifest.from_mapping(missing_scoring)
+
+        mismatched_template = copy.deepcopy(data)
+        mismatched_template["items"][0]["source"]["prompt_template_id"] = "other"
+        with self.assertRaisesRegex(SchemaError, "prompt_template_id must match"):
+            SuiteManifest.from_mapping(mismatched_template)
+
+        with self.assertRaisesRegex(SchemaError, "benchmark_import requires suite_manifest.v2"):
+            parsed.to_dict(schema_version=LEGACY_SUITE_SCHEMA_VERSION)
+
+    def test_v1_still_defers_v2_scoring_and_benchmark_import(self) -> None:
+        data = manifest_data()
+        data["benchmark_import"] = {"dataset": "later"}
+        with self.assertRaisesRegex(SchemaError, "deferred"):
+            SuiteManifest.from_mapping(data)
+
+        data = manifest_data()
+        data["items"][0]["scoring"] = {
+            "scorer_id": "later",
+            "expected_answer_hash": "0" * 64,
+            "correctness_quarantine": "later",
+        }
+        with self.assertRaisesRegex(SchemaError, "deferred"):
             SuiteManifest.from_mapping(data)
 
     def test_ids_native_shape_mismatch_rejected(self) -> None:

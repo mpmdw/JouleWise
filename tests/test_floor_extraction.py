@@ -66,6 +66,8 @@ from joulewise.calibration_ledger import (
 from joulewise.floor_extraction import (
     CAP_HIT_POLICY_EXCLUDE_SAME_SLOT,
     CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION,
+    CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1,
+    CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V2,
     EXTRACTION_SPEC_SCHEMA_VERSION,
     FloorExtractionError,
     CellReport,
@@ -4570,6 +4572,130 @@ class FloorMintSpecValidationTests(unittest.TestCase):
         return json.loads(
             (self.CONFIG_ROOT / name).read_text(encoding="utf-8")
         )
+
+    def _suite_definition(self) -> dict:
+        return {
+            "schema_version": CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V2,
+            "condition_family_id": "df-suite-gsm8k-v6",
+            "workload_profile": {
+                "name": "gsm8k_scored_v6",
+                "suite_manifest_sha256": "a" * 64,
+                "suite_item_count": 8,
+                "output_cap_tokens": 384,
+                "output_policy": "natural_eos",
+                "repetitions": 1,
+                "warmup_runs": 1,
+            },
+            "measurement_target": {
+                "metric": "phase_energy_j.decode",
+                "window_class": "phase",
+            },
+            "comparison_policy": "same_condition_repeat_and_null_abba_alias",
+            "abba_alias_relation": "A_equals_B",
+        }
+
+    def test_v1_definition_bytes_and_domain_digest_remain_golden(self) -> None:
+        path = self.CONFIG_ROOT / "condition_family_df_ph_decode.json"
+        self.assertEqual(
+            hashlib.sha256(path.read_bytes()).hexdigest(),
+            "c9054d11a2bf9c4b1718d93ededc44864cfffb34417d19f1178a9d18addcf8a8",
+        )
+        definition = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            definition["schema_version"],
+            CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1,
+        )
+        self.assertEqual(
+            canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition),
+            "e38e2a2f3e76b8cdd6b3ef4f5d3d7090ef4846dbf83279001ff4df8a9a762bfe",
+        )
+
+    def test_v2_suite_definition_validates_and_hashes_deterministically(self) -> None:
+        definition = self._suite_definition()
+        self.assertEqual(validate_condition_family_definition(definition), [])
+        expected = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition)
+        reordered = dict(reversed(list(definition.items())))
+        reordered["workload_profile"] = dict(
+            reversed(list(definition["workload_profile"].items()))
+        )
+        self.assertEqual(
+            canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, reordered),
+            expected,
+        )
+        for key, replacement in (
+            ("suite_manifest_sha256", "b" * 64),
+            ("suite_item_count", 9),
+            ("output_cap_tokens", 385),
+            ("output_policy", "fixed_budget_exact"),
+        ):
+            with self.subTest(key=key):
+                changed = copy.deepcopy(definition)
+                changed["workload_profile"][key] = replacement
+                self.assertNotEqual(
+                    canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, changed),
+                    expected,
+                )
+
+    def test_condition_family_schema_version_selects_exact_workload_key_set(self) -> None:
+        suite_as_v1 = self._suite_definition()
+        suite_as_v1["schema_version"] = (
+            CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V1
+        )
+        suite_errors = validate_condition_family_definition(suite_as_v1)
+        self.assertTrue(
+            any("unrecognized key 'suite_manifest_sha256'" in error for error in suite_errors),
+            suite_errors,
+        )
+        self.assertTrue(
+            any("missing key 'prompt_tokens'" in error for error in suite_errors),
+            suite_errors,
+        )
+
+        scalar_as_v2 = self._load("condition_family_df_ph_decode.json")
+        scalar_as_v2["schema_version"] = (
+            CONDITION_FAMILY_DEFINITION_SCHEMA_VERSION_V2
+        )
+        scalar_errors = validate_condition_family_definition(scalar_as_v2)
+        self.assertTrue(
+            any("unrecognized key 'prompt_tokens'" in error for error in scalar_errors),
+            scalar_errors,
+        )
+        self.assertTrue(
+            any("missing key 'suite_manifest_sha256'" in error for error in scalar_errors),
+            scalar_errors,
+        )
+
+    def test_unknown_condition_family_version_refuses_without_guessing_shape(self) -> None:
+        definition = self._suite_definition()
+        definition["schema_version"] = "joulewise.condition_family_definition.v3"
+        errors = validate_condition_family_definition(definition)
+        self.assertTrue(any("unsupported" in error for error in errors), errors)
+
+    def test_v2_suite_fields_fail_closed(self) -> None:
+        cases = (
+            ("suite_manifest_sha256", "A" * 64, "64 lowercase hex chars"),
+            ("suite_item_count", True, "positive integer"),
+            ("output_cap_tokens", 0, "positive integer"),
+            ("output_policy", "unbounded", "must be one of"),
+        )
+        for key, value, expected in cases:
+            with self.subTest(key=key):
+                definition = self._suite_definition()
+                definition["workload_profile"][key] = value
+                errors = validate_condition_family_definition(definition)
+                self.assertTrue(any(expected in error for error in errors), errors)
+
+    def test_v2_definition_is_accepted_in_extraction_spec_binding(self) -> None:
+        spec = self._load("window_c_extraction_spec.json")
+        cell = next(cell for cell in spec["cells"] if cell["kind"] == "comparative")
+        cell["condition_family_id"] = "df-suite-gsm8k-v6"
+        definition = self._suite_definition()
+        digest = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition)
+        for binding in cell["condition_family_definitions"].values():
+            binding["condition_family_id"] = definition["condition_family_id"]
+            binding["condition_family_definition"] = copy.deepcopy(definition)
+            binding["condition_family_sha256"] = digest
+        self.assertEqual(validate_extraction_spec(spec), [])
 
     def test_definition_and_specs_round_trip_through_validators(self) -> None:
         definition = self._load("condition_family_df_ph_decode.json")

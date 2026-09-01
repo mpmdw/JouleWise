@@ -79,6 +79,7 @@ from joulewise.calibration_ledger import (
 )
 from joulewise.publication_privacy import source_provenance_problems
 from joulewise.schemas import BenchmarkConfig, SchemaError
+from joulewise.suite import SuiteManifest
 from joulewise.uncertainty_evidence import capture_pipeline_refusal
 
 from .claims import REDUCER_REASON_CODES, ordered_reason_codes
@@ -2551,6 +2552,7 @@ def realized_scientific_identity(
 def _realized_identity_matches_config(
     raw_config: Mapping[str, Any] | None,
     metadata: Mapping[str, Any] | None,
+    suite_manifest: SuiteManifest | None = None,
 ) -> bool:
     identity = realized_scientific_identity(raw_config, metadata)
     typed = _typed_config(raw_config) if isinstance(raw_config, Mapping) else None
@@ -2579,6 +2581,31 @@ def _realized_identity_matches_config(
         )
     ):
         return False
+    if workload_config.get("suite_manifest_sha256") is not None:
+        suite = workload.get("suite") if isinstance(workload, Mapping) else None
+        output_caps = (
+            {item.shape.planned_output_tokens for item in suite_manifest.items}
+            if suite_manifest is not None
+            else set()
+        )
+        suite_item_count = suite.get("item_count") if isinstance(suite, Mapping) else None
+        output_identity_matches = bool(
+            isinstance(suite, Mapping)
+            and suite_manifest is not None
+            and suite.get("manifest_sha256")
+            == workload_config.get("suite_manifest_sha256")
+            and isinstance(suite_item_count, int)
+            and not isinstance(suite_item_count, bool)
+            and suite_item_count == len(suite_manifest.items)
+            and len(output_caps) == 1
+            and output_policy.get("requested_tokens")
+            == suite_item_count * next(iter(output_caps))
+        )
+    else:
+        output_identity_matches = (
+            output_policy.get("requested_tokens")
+            == workload_config.get("output_tokens")
+        )
     return bool(
         identity["runtime"]["name"] == hardware.get("runtime_backend")
         and identity["telemetry"]["name"] == hardware.get("telemetry_backend")
@@ -2587,7 +2614,7 @@ def _realized_identity_matches_config(
         and connection.get("transport") == hardware.get("transport")
         and dict(observed_model) == dict(expected_model)
         and dict(observed_quantization) == dict(expected_quantization)
-        and output_policy.get("requested_tokens") == workload_config.get("output_tokens")
+        and output_identity_matches
     )
 
 
@@ -2738,7 +2765,11 @@ def _read_bundle(
     )
     if expected is None or observed is None or expected != observed:
         reasons.append("config_hash_mismatch")
-    if not _realized_identity_matches_config(raw_config, metadata):
+    try:
+        suite_manifest = reader.suite_manifest()
+    except BundleReadError:
+        suite_manifest = None
+    if not _realized_identity_matches_config(raw_config, metadata, suite_manifest):
         reasons.append("config_hash_mismatch")
     if (
         not allow_replacement_tags
