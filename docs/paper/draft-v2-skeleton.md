@@ -125,7 +125,7 @@ For each commanded pulse, the detector estimates resting GPU power from samples 
 
 The clock anchor uses five wall-clock readings, each bracketed by readings from a monotonic clock—a counter that advances but is never corrected to civil time—together with every whole-second label embedded in the native power records. It retains the complete set of straight-line clock mappings whose rate, offset, first-record endpoint, stamp brackets, native labels, and launch-to-first-parse ordering agree. The method permits the two clocks to run at slightly different fixed rates and charges the full allowed departure of a native label from that line. It refuses missing or malformed inputs, an empty or unbounded set, inadequate capture span, implausible clock rate, active automatic network-time correction, or a bound outside the accepted range. Otherwise it finds the earliest and latest allowed first-record endpoint and adds four separately named allowances. This corrected rate-aware model replaced the false equal-rate assumption, which could move every fitted edge in the same direction.
 
-Finally, the pre-window and post-window capture bounds form a bracket. The calibration policy derives two constants from its retained 17-capture corpus. Student-\(t\) is a small-sample bell curve whose 99% quantile—larger than the normal curve's because the spread is estimated from only 17 captures—sets the maximum permitted pre/post difference. For \(n=17\) per-capture bounds, the sample standard deviation is \(2.460856\) ms (unrounded, \(2.460856207694636\) ms) and \(t_{0.995,16}=2.92078162242509999197\); the two-draw rule \(t_{0.995,16}\times s_b\times\sqrt{2}\) records \(10.164834757777545\) ms, printed as the \(10.164835\)-ms maximum permitted pre/post difference. The separately retained **minimum allowance** starts from the corpus range, \(9.723589288793850\) ms, and applies `ROUND_HALF_EVEN` to a 1-µs quantum, giving \(9.724\) ms; Appendix A.3.8 prints the 17 bounds from the calibration acceptance file registered as source S17. The minimum prevents two numerically matching captures from erasing the finite change allowance fixed from that corpus. A larger difference refuses the window. Appendix A.3.6 calls one capture's pulse-plus-anchor bound \(B_{\mathrm{fiducial}}\). The window's distinct **operative timing bound** \(b\) is the larger capture bound plus \(\max(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. For example, a 25-ms pre-window bound and a 29-ms post-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
+Finally, the pre-window and post-window capture bounds form a bracket. The calibration policy derives two constants from its retained 17-capture corpus. Student-\(t\) is a small-sample bell curve whose 99% quantile—larger than the normal curve's because the spread is estimated from only 17 captures—sets the maximum permitted pre/post difference. For \(n=17\) per-capture bounds, the sample standard deviation is \(s_b = 2.460856\) ms (unrounded, \(2.460856207694636\) ms) and \(t_{0.995,16}=2.92078162242509999197\); the two-draw rule—two fresh capture bounds are drawn, and the spread of their difference is \(\sqrt{2}\) times one capture's spread—so \(t_{0.995,16}\times s_b\times\sqrt{2}\) records \(10.164834757777545\) ms, printed as the \(10.164835\)-ms maximum permitted pre/post difference. The separately retained **minimum allowance** starts from the corpus range, \(9.723589288793850\) ms, rounded to the nearest microsecond, with an exact tie going to the even digit (`ROUND_HALF_EVEN`), giving \(9.724\) ms; Appendix A.3.8 prints the 17 bounds from the retained calibration acceptance file `configs/calibration/calibration_acceptance_d079_v2_n17_r3.json` (registry source S17). The minimum prevents two numerically matching captures from erasing the finite change allowance fixed from that corpus. A larger difference refuses the window. Appendix A.3.6 calls one capture's pulse-plus-anchor bound \(B_{\mathrm{fiducial}}\). The window's distinct **operative timing bound** \(b\) is the larger capture bound plus \(\max(|B_{\mathrm{post}}-B_{\mathrm{pre}}|,9.724\ \mathrm{ms})\), added once. For example, a 25-ms pre-window bound and a 29-ms post-window bound differ by 4 ms, pass the 10.164835-ms limit, and give \(b=29+\max(4,9.724)=38.724\) ms. If the post-window calibration widens a bound already used, the affected phase energies are recomputed with the wider bound or refused. Appendix A.3 formally defines the complete sets of pulse-edge positions and clock mappings that satisfy every fixed constraint, along with objectives, ranges, and refusal conditions.
 
 Commanded GPU pulses calibrate edge placement, but applying that bound to sustained mixed inference is an assumption. The before-and-after bracket tests for change across the measurement window; it does not test whether the pulse-derived bound applies to inference.
 
@@ -422,8 +422,10 @@ subtracts the cell mean, so a uniform shared shift cancels from every residual.
 
 A retained two-block fixture makes the replay checkable without becoming
 campaign evidence. The Student-\(t\) critical used by the two-block interval is
-\(t_{0.975,1}=12.706\), the three-decimal value returned for one degree of
-freedom by `_ci_t_critical` in `joulewise/analysis_engine/estimators.py`.
+\(t_{0.975,1}=12.706\), the fixed-table value `_T_CRITICAL_95[1] = 12.706` in
+`joulewise/aggregate.py:41–42`, returned by `student_t_critical_95` and used by
+`joulewise/detection_floor.py:696`; the artifact records
+`t_critical_source: joulewise.aggregate.student_t_critical_95.v1`.
 Block 1 has
 \(\delta_1=z_1=0.2146256513\) J, onset values from 0.1098764207 to
 0.2243993676 J, and offset values from 0.0576055478 to 0.3349382543 J. Hence
@@ -437,8 +439,9 @@ inputs from `tests/fixtures/fcm_r4_real_blocks/measured_pair.json`. Enumerating 
 shared signs and all four local-sign pairs yields
 \(U_{\mathrm{cmp,point}}=2.4305766103\) J and
 \(U_{\mathrm{cmp,shared}}=8.8304376431\) J, so
-\(R_{cm}=3.6330628732\), which passes 2. The fixture demonstrates the
-arithmetic only.
+\(R_{cm}=3.6330628732\), which passes 2. A replay from the printed
+10-decimal operands agrees to nine significant figures. The fixture demonstrates
+the arithmetic only.
 
 ### Adding publication safeguards after the ratio
 
@@ -501,9 +504,13 @@ direction claim across the pair at 0.05. For each block \(i\), first form its
 paired difference \(d_i=B_i-A_i\), condition B's mean energy in that A/B/B/A
 block minus condition A's mean energy. Ordinary repeat-to-repeat scatter gives
 the repeat standard error \(se_{\mathrm{repeat}}=s/\sqrt{n}\), where \(s\) is
-the sample standard deviation of the ten \(d_i\). For every recorded stochastic
-energy term, the metrology standard error carries the paired measurement
-variance remaining after shared A/B covariance cancels:
+the sample standard deviation of the ten \(d_i\). For every recorded energy term
+that carries its own measurement variance—the gross repetition term is left out
+because its scatter is already counted in \(se_{\mathrm{repeat}}\)—the metrology
+standard error carries the paired measurement variance that remains once the
+shared A/B covariance—the part of the two conditions' measurement error that
+moves together and therefore drops out when B is differenced against A—is
+subtracted:
 
 \[
 se_{\mathrm{metrology}}^2=
@@ -533,18 +540,25 @@ and dividing by \(n^2=100\) gives \(0.04\ \mathrm{J}^2\). Thus
 \(t=5.0/0.485798=10.2923\) on 9 degrees of freedom, with two-sided
 \(p=2.8\times10^{-6}\). The separate dependence-sensitivity sheet,
 `docs/paper/round7/dependence-sensitivity.md`, works the same ten differences
-on its separate branch under an AR(1) dependence model—one that treats adjacent
-block errors as serially correlated—and halves the effective sample size; it
-obtains \(\nu=4\), \(t=7.607258\), and \(p=0.0016\). The documents
-differ in that dependence assumption, not in their data.
+on its separate branch under a stipulated halving of the effective sample
+size—the number of independent blocks that would give the same repeat
+scatter—to five blocks, so its degrees of freedom \(\nu\) fall to \(5 - 1 = 4\)—a
+named pessimistic scenario, not an estimate—obtaining \(t=7.607258\) and
+\(p=0.0016\); its separately estimated AR(1) model, which treats adjacent block
+errors as serially correlated, leaves \(n_{\mathrm{eff}}=5.76\) and gives
+\(t=8.111070\), \(p=0.0013\). The documents differ in that dependence
+assumption, not in their data.
 
 Order the two raw probabilities \(p_{(1)}\le p_{(2)}\). Compare the first with
 0.025; only if it passes, compare the second with 0.05. Pairing the fixture's
-\(2.8\times10^{-6}\) with the existing illustrative \(0.041\) orders them as
-\(2.8\times10^{-6}<0.041\): the smaller passes 0.025, then 0.041 passes 0.05,
-so both directional comparisons pass Holm. If one contrast is missing, its slot
-remains: a sole value 0.041 is compared with 0.025 and fails, while the missing
-contrast cannot pass.
+\(2.8\times10^{-6}\) with a second illustrative raw probability of \(0.041\) for
+the other comparison orders them as \(2.8\times10^{-6}<0.041\): the smaller
+passes 0.025, then 0.041 passes 0.05, so both directional comparisons pass
+Holm. If one contrast is missing, its slot remains: a sole value 0.041 is
+compared with 0.025 and fails, while the missing contrast cannot pass. Holm is
+one step; the decision-interval sign test (the direction gate) in the next
+paragraph is the other, and the sheet's \(\nu=9\) row fails that direction gate
+on these same deltas while both comparisons pass Holm.
 
 A directional result then faces two different checks. The magnitude check
 requires the absolute point estimate to exceed \(F_{\mathrm{cell}}\); failure
@@ -1124,11 +1138,13 @@ The branch-and-bound of A.3.5 must terminate on a flat loss surface. Two shared 
 
 **Origin of the 120 s work clock.** The clock starts at the moment the budget object is created, which is inside the detection routine immediately after the baseline set, *b*, and σ have been computed and immediately before the first pulse's fit begins. It is a monotonic-clock reading, not a wall-clock one, and it is not reset between pulses. It excludes the anchor estimation, trace anchoring, trimming, and schedule authentication of A.3.3–A.3.4, all of which finish before the budget exists.
 
-#### A.3.8 Retained calibration corpus (2026-07-22 instrument-validation captures), diagnostic, not campaign data
+#### A.3.8 Retained calibration corpus (2026-07-22 to 2026-07-25 instrument-validation captures), diagnostic, not campaign data
 
 These are the 17 per-capture \(b_{\mathrm{fiducial}}\) bounds used by the n17
 acceptance generation, not pre/post differences. Values reproduce the retained
-decimal strings in registry source S17.
+decimal strings in the retained calibration acceptance file
+`configs/calibration/calibration_acceptance_d079_v2_n17_r3.json` (registry
+source S17).
 
 | Capture member | \(b_{\mathrm{fiducial}}\) (s) |
 |---|---:|
