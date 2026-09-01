@@ -30,8 +30,9 @@ Plain-language terms used throughout:
 - A *verdict* is the final governed decision to admit or refuse evidence. A
   *refusal* records why no result was issued when evidence or a gate failed.
 - A *cell* is one pre-registered combination of model, workload phase, and
-  estimator. A *component* is either an absolute measurement of one workload
-  or a comparative measurement built from paired workloads.
+  which of the two formulas below produces the number. A *component* is either
+  an absolute measurement of one workload or a comparative measurement built
+  from paired workloads.
 - The *state kernel* is the machine-readable table of live tasks, dependencies,
   and machine-access lanes. A *manifest* is a list of required artifacts and
   their content fingerprints.
@@ -80,12 +81,13 @@ The plan preparation is code-complete, but its final generated pack must wait
 for one measured input: the prompt length for the prompt-processing, or
 *prefill*, arm. The pack records the pass/fail rule itself—the floor formulas,
 thresholds, and refusal conditions the analysis must use—as a body of text
-called the *registered semantics*. Those bytes are hashed with SHA-256, a
+called the *frozen analysis semantics*. Those bytes are hashed with SHA-256, a
 cryptographic fingerprint that changes if any byte changes, so an edit after
 data arrive would be visible. In addition, a golden readback—a test that reads
 the generated registration back and compares it byte-for-byte with an
 independently frozen copy—pins the exact pass/fail threshold and refusal
-behavior.
+behavior
+(`configs/campaigns/d117_contrast_v5/generate_configs.py:2597-2603`).
 
 **The paper's headline test was made genuinely falsifiable before collection.**
 Three blind reviewers found that the earlier rule would pass almost any
@@ -101,35 +103,37 @@ positive timing uncertainty. The replacement compares two floors:
   The input is each block's small-versus-large energy difference, and the
   formula keeps the larger of the largest magnitude of such a difference and
   the 95% prediction from the differences' mean and scatter; and
-- the *timing-aware floor*. The code independently displaces the start and end
-  boundaries to the negative and positive limits of the calibrated timing
-  bound—the four calibrated timing-bracket corners—and, at each corner, scans
-  the remaining shared clock shift across the exact power-trace breakpoints.
+- the *timing-aware floor*. The code displaces the start boundary and the end
+  boundary independently to the low and high limits of the calibrated timing
+  uncertainty—two boundaries at two limits each, so four combinations—and at
+  each combination scans the remaining shared clock shift across the exact
+  power-trace breakpoints.
   This gives each run or block difference an allowed low-to-high energy
   interval. The floor code then chooses the low or high end of every interval,
-  recomputes the full false-difference floor at each resulting corner, and
-  keeps the largest false energy difference. The timing-aware floor is the
-  larger of that corner result and the naive floor; the two are not added
+  recomputes the full false-difference floor for every resulting combination,
+  and keeps the largest false energy difference. The timing-aware floor is the
+  larger of that result and the naive floor; the two are not added
   (falsifiability decision D-165).
 
 The *dominance ratio* is the timing-aware floor divided by the naive floor. For
-the paper to say that timing attribution dominates repeatability, this ratio
-must be at least two for exactly eight ordinary cases—an absolute and a
-comparative component in each of four registered cells. Four additional
-comparative ratios apply one shared timing displacement across all blocks while
-allowing each block's remaining uncertainty to move independently. This
-*replay* is a recomputation from stored, authenticated inputs, not another
+the paper to say that error in placing the measurement boundaries in time
+matters more than the spread seen when the same run is repeated with nothing
+changed, this ratio must be at least two for exactly eight ordinary cases—an
+absolute and a comparative component in each of four registered cells. Four
+additional comparative ratios apply one shared timing displacement across all
+blocks while allowing each block's remaining uncertainty to move independently.
+This *replay* is a recomputation from stored, authenticated inputs, not another
 experiment; a shared-shift ratio below two withdraws the sentence.
 
 Illustrative, not campaign data: if an ordinary case has a naive floor of 2.0
 joules and a timing-aware floor of 4.8 joules, its ratio is 4.8 / 2.0 = 2.4 and
 that case passes. If its shared-shift recomputation instead gives 3.6 / 2.0 =
 1.8, the paper sentence is withdrawn even though the ordinary case passed. All
-eight ordinary ratios and all four required shared-shift ratios must pass. A
+eight ordinary ratios and all four required shared-shift ratios must pass
+(close-out decision D-168). A
 machine-readable close-out artifact—not prose judgment—decides which of the
 two permitted paper wordings may be filled. Missing, unauthenticated, or
-zero-denominator inputs license neither wording and stop the fill (close-out
-decision D-168).
+zero-denominator inputs license neither wording and stop the fill.
 
 **Next machine step: one instrumented evening, waiting on Ed.** The machine
 will measure four candidate prefill lengths—512, 1,024, 2,048, and 4,096
@@ -140,8 +144,11 @@ choose the length. A checked program selects the shortest rung for which every
 small-model run contains at least five power records overlapping prefill. One
 power record physically represents one sampling interval of the Apple power
 meter—requested every 100 milliseconds, with its actual interval stored in the
-run. Five is the reducer's physical minimum of three records plus a declared
-pre-registration safety factor of two. If no rung qualifies, the campaign
+run (`configs/campaigns/d117_contrast_v5/generate_configs.py:494`;
+`joulewise/adapters/powermetrics.py:1461-1462`). Five is three plus two: three
+is the fewest power samples the energy-integration program can compute a
+phase's energy from at all, and two is a safety factor declared in advance. If
+no rung qualifies, the campaign
 still records the 4,096-token arm but refuses the prefill claim honestly rather
 than lowering the rule after seeing data (workload decision D-166).
 
@@ -163,11 +170,13 @@ as separate sessions across more than one vendor's large-language model. Their
 shared verdict was that the repository can support a defensible undergraduate
 computer-science capstone, provided that the campaign and remaining claim
 gates are completed. Separate branches currently hold in-flight desk work: a
-paper skeleton for the next draft, a dependence-sensitivity analysis for the
-ten-block direction test, a transfer-fiducial plan that inserts a known timing
-marker into real inference work, the dominance close-out core, and programs
-that generate configurations for the four-rung probe. These are not described
-as landed results.
+paper skeleton for the next draft; a dependence-sensitivity analysis for the
+ten-block direction test, which is the ten-block test of *which* model uses
+more energy—its direction, not its size—and checks whether relationships among
+the blocks could change that result; a transfer-fiducial plan that inserts a
+known timing marker into real inference work; the dominance close-out core; and
+programs that generate configurations for the four-rung probe. These are not
+described as landed results.
 
 Standing soundness facts remain unchanged:
 
@@ -181,19 +190,20 @@ Standing soundness facts remain unchanged:
   matters more than its 0.29-0.49 J repeatability noise on ~50 J points. The
   floor and each claim's decision interval separately charge that attribution
   bound, so the effective clearable effect is floor plus claim-side bound
-  (~5 J for phase contrasts), not the floor alone. The registered rules require
-  this disclosure wherever an attribution-limited floor is published. Longer
-  workloads increase signal without pretending that this physical limit
-  disappeared.
+  (~5 J for phase contrasts), not the floor alone (measurement-soundness
+  decision D-078, clause 11). The registered rules require this disclosure
+  wherever an attribution-limited floor is published. Longer workloads increase
+  signal without pretending that this physical limit disappeared.
 - Retained run bundles and corpora are immutable. Validation may re-derive
   their recorded summaries, but it never rewrites the evidence.
 
 ### Voided July 2026 calibration floor record
 
-The floor table from the July 2026 calibration campaign—222 run bundles,
-internally labelled Window A—and every energy value derived from it at any
-granularity—per request, per workload phase, per item, per suite, and for both
-paired-comparison and reference measurements—are permanently void for claims.
+The floor table from the July 2026 calibration campaign—222 run bundles
+(`docs/council_log.md:1536`), internally labelled Window A—and every energy
+value derived from it at any granularity—per request, per workload phase, per
+item, per suite, and for both paired-comparison and reference measurements—are
+permanently void for claims.
 The raw record remains immutable evidence of the timing defect described
 above. It was replaced by repaired meter-timestamp alignment, explicit timing
 uncertainty in every result, authenticated calibration, and prospective
@@ -260,9 +270,10 @@ The first working target is an Apple M3 Max running MLX and Apple's
 controller and arithmetic without hardware. Remote NVIDIA and Jetson targets
 fit the same interfaces but remain provisional until live device access.
 
-The current paper is metrology-centered: it asks whether timing attribution,
-repeatability, drift, linearity, and additivity are controlled well enough for
-a model comparison to be meaningful. Split inference—processing the prompt on
+The current paper is metrology-centered: it asks whether the instrument places
+measurement boundaries correctly in time, repeated runs agree when nothing is
+changed, and drift, linearity, and additivity are controlled well enough for a
+model comparison to be meaningful. Split inference—processing the prompt on
 one machine, transferring the model's attention cache, then generating output
 on another—is an optional demonstration rather than a capstone completion
 requirement. The claim hierarchy and minimum viable stop line are in
@@ -405,18 +416,21 @@ crossover question is meant to measure (reporting-basis decision D-067).
   separate clocks. Calibration estimates their relationship, and the allowed
   clock and boundary-placement uncertainty is propagated into energy. The
   repaired instrument's approximately 1-joule attribution limit is a physical
-  claim boundary, not a software nuisance to subtract away.
+  claim boundary, not a software nuisance to subtract away
+  (measurement-soundness decision D-078, clause 11).
 - **Uncertainty is quantified.** Registered comparisons use repeated paired or
   blocked measurements, report raw points, means and scatter, and use a 95%
   interval based on Student's t distribution when that model is admitted.
   Outliers are flagged, never silently deleted. Dependence sensitivity for the
-  ten-block direction screen is being prepared separately so that independence
+  ten-block direction test is being prepared separately so that independence
   is not assumed without examination.
 - **A result must clear the right floor.** The confidence interval of the
-  predeclared paired or blocked difference—not separation between two unrelated
-  marginal intervals—controls a direction claim. A difference below the floor
-  is not resolvable; an above-floor but non-directional result remains
-  unresolved; practical equivalence requires its own predeclared gate.
+  predeclared paired or blocked difference—not the fact that two separately
+  computed one-model intervals happen not to overlap—controls a direction
+  claim. A difference below the floor is not resolvable; an above-floor but
+  non-directional result remains unresolved; a claim that two models are
+  practically the same requires its own threshold, declared in advance, for
+  how close counts as the same.
 - **The headline attribution sentence has a stronger pre-data gate.** For
   every component and cell, the timing-aware floor divided by the naive floor
   must be at least two. Comparative cells also disclose the shared-shift replay
@@ -430,7 +444,8 @@ crossover question is meant to measure (reporting-basis decision D-067).
   refusal reasons travel with the evidence.
 - **Evidence is immutable and retries are governed.** Failed or invalid runs
   remain in custody. They are never silently overwritten or rerun until they
-  pass; any replacement follows the registered supersession procedure.
+  pass; any replacement follows the recorded procedure for replacing a
+  superseded run, which keeps the original in place.
 
 ## Experiment Plan
 
@@ -551,7 +566,7 @@ capstone into a different system.
 | The four prompt lengths provide too few overlapping power records | retain every probe and issue the registered refusal instead of lowering the count floor |
 | A machine night is lost to contamination or a failed gate | fail closed, preserve the evidence, and require a governed disposition; no silent retry |
 | Timing attribution does not dominate repeatability by a factor of two | the close-out selects the non-dominance wording; the capstone remains a valid instrument result |
-| Ten paired blocks are more dependent than the direction interval assumes | complete the in-flight dependence-sensitivity analysis and narrow wording if needed |
+| Relationships among blocks affect the ten-block direction test more than its confidence interval assumes | complete the sensitivity analysis and narrow wording if needed |
 | The inserted timing marker cannot be run or does not transfer | keep the headline conditional and report the limitation |
 | Close-out or rendering programs are not ready when data arrive | keep them as explicit desk gates; no hand-filled claim sentence bypasses them |
 | Remote cache replay or device access fails | use the synthetic-transfer study or omit split inference; neither blocks the core capstone |
