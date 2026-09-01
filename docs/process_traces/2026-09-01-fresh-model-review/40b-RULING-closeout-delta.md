@@ -36,4 +36,27 @@ green is consistent with the delta seat's REFUTE: F1 is a missing check, not a f
 
 ## Cold-gate verdict
 
-(appended when the cold seat returns)
+Cold Fable seat (fresh session): **RESHAPE** — full text in `48d-COLD-GATE-2-verdict-40b-45b.md`.
+The seat REPRODUCED F1 with a probe (self-consistent forged mapping + authentic bytes → Branch A
+licensed, validator errors `[]`); the CLI (`scripts/build_d165_dominance_closeout.py:197-237`)
+is single-source, so the exposure is API-only. Magistrate disposition (2026-09-01, adopted):
+
+- **F1 label AMENDED**: a C-mistake under D-161's mistake-vs-deliberate test ("tool's own bugs"
+  stay fail-closed), not an "evidence fence"; severity = must-fix API soundness, no claim
+  exposure at `88e96f60`. **Cure = bytes-only for ALL THREE sources** (`finalized_manifest_bytes`,
+  `replay_sidecar_bytes`, and `floor_artifact_bytes` — the floor is currently mapping-only and its
+  digest is already sealed at `analysis_manifest_v3.py:3649-3654`; check it, three lines). The
+  keyword-only-object alternative and report 40's "compare decoded objects" alternative are
+  **STRUCK** (deliberate-only guards). Tests mutate the dict and re-encode via a named
+  `mutate_then_encode` helper.
+- **F2 cure AMENDED**: one `try/except TypeError` per entry path → one named refusal
+  `closeout_input_malformed: <path>` (neither branch); one regression per entry path, not per site.
+- F3, F4, fixer Sol xhigh, delta Opus: agreed. Delta brief adds an API-surface assertion (no
+  mapping parameter remains public) and the forged-pair probe re-expressed as "built from bytes X,
+  validated against bytes Y".
+- Missed 2 acted on at the bench: `main` merged into the branch (`057660e1`, suite OK) before
+  round 3 launches. Missed 3 (producer→finalizer custody unproven until `D165-SIDECAR-EMIT-01`;
+  paper cannot cite a close-out before it) → kernel-row check queued.
+- Structural: no shared defect signature across rounds (round 1 NEEDS_RULING, round 2 faithful,
+  delta caught the cure's defect); the repeated META-pattern is briefs leaving interface SHAPE to
+  the fixer → round 3 carries the shape as a decision.
