@@ -252,7 +252,12 @@ at least one function, method, lambda, or comprehension whose code object
 names that module's file receives a call while the regression test (i) runs
 `fit_run` on the synthetic fixture bundle `synthetic-transfer-r01` and (ii)
 runs `build_capture` over the fixture plan with that fit and nine fixture
-fits. Code the interpreter cannot attribute to a file—dataclass-generated
+fits. The regression test is
+`tests/test_transfer_fiducial.py::TransferFiducialTests::test_transfer_capture_records_estimator_revision_and_both_magnitudes`
+(run with `python3 -m unittest
+tests.test_transfer_fiducial.TransferFiducialTests.test_transfer_capture_records_estimator_revision_and_both_magnitudes`);
+its tracer records a file on the first line event of such a code object,
+which for ordinary in-file Python code is the same event as receiving a call. Code the interpreter cannot attribute to a file—dataclass-generated
 methods, whose code objects report `<string>`—is invisible to this
 measurement; a module whose only contribution is such code is listed by name
 in `RECEIPT_TRACE_BLIND_MODULES` with its reason (`joulewise/clock.py`:
