@@ -1,91 +1,29 @@
 # Results fill registry
 
-Revised 2026-08-22 against `docs/paper/draft-v1.md` at commit `3f931d5`
-(551 lines; the draft was verified unchanged through current HEAD `73764f0`).
-This revision supersedes the `0e35990` authoring. Re-bind custody is
-`docs/process_traces/2026-08-22-t20/registry-rebind-r2.md` (all seventeen
-PROPOSED bindings ratified by the lead 2026-08-22); the
-prior audit is
-`docs/process_traces/2026-08-19-prep-sprint/paper-staging/registry-audit.md`.
+Regenerated 2026-08-31 for the never-collected `_v4` to `_v5` transition.
+The frozen source is `docs/paper/draft-v1.md`, SHA-256
+`939dfa23730a22d35e02154d7aa7904f396364d55c128e6715c72b849eaf39ab`,
+672 lines. Its bytes are read-only. The current census is 34 literal
+`[PENDING...]` sites carrying 36 semantic slots, 37 sites and 39 slots across
+the complete result-marker family, and two `[[NEEDS-VALUE:...]]` sites.
 
-Revised again 2026-08-24 against `docs/paper/draft-v1.md` at commit `a591a91`
-(602 lines). This revision binds every characterization token to the frozen
-characterization result specification landed at `ec11f3f`, and re-derives every
-draft-site line locator by searching for that site's own anchor text. The
-locators carried by the 2026-08-22 revision were already stale before the
-Section 5 rewrite and the rewrite moved them again, so no single offset would
-have repaired them. The change list this revision implements is
-`docs/process_traces/2026-08-24-p06-codesign/06-registry-template-changes-needed.md`.
+This registry binds the `_v5` production pair selected by D-164:
+`qwen3-1p7b` (`mlx-community/Qwen3-1.7B-4bit`) and `qwen3-8b`
+(`mlx-community/Qwen3-8B-4bit`). The identifier spellings come from
+`configs/model_panels/qwen3_4bit.json` and
+`configs/campaigns/d117_contrast_v5/generate_configs.py`; no Qwen2.5 `_v4`
+artifact may supply a prospective row. Retained calibration, excursion, and
+anchor-correction rows in the diagnostic-era section remain historical,
+non-claim-bearing evidence and are generation-independent.
 
-Locators re-derived again 2026-08-25 against `docs/paper/draft-v1.md` at 818
-lines. Two Section 2 pointer comments were added to the draft on that date, both
-above every draft site listed below, so all forty-two line locators moved down by
-two lines. Each new number was re-derived the same way as the 2026-08-24
-revision — by searching the draft for that site's own anchor text — rather than
-by applying the offset blind, and every one of the forty-two was confirmed to sit
-on its stated line. That pass changed nothing else: no marker string, supplier,
-fill rule, freeze status, or census figure was touched, and the draft's rendered
-prose and bracket-marker count were unchanged.
-
-DS-08 marker re-bind, 2026-08-25. The magistrate ruled that Section 5 may carry
-the retained point-floor and corner-widened-floor energies as labelled instrument
-diagnostics, which requires DS-08's hold sentence to name the section it now
-exempts. The exact-marker cell below therefore reads "Sections 3, 5, and 7" where
-it read "Sections 3 and 7", byte-identical to the amended sentence at its draft
-site; DS-08's supplier, campaign/cell, fill rule (`DERIVE`), freeze status, and
-sources are unchanged, and no other row is affected. The Section 5 and Section 6
-edits behind it are in-place text changes that added no lines to the draft, so
-every line locator below still resolves — re-confirmed by anchor-text search over
-all forty-two after the edit. The bracket-marker census is unaffected: the draft
-still carries the same thirty-five `PENDING`-family marker sites, with DS-08's
-site changing its text rather than the set gaining or losing a site.
-**HISTORICAL — superseded.** The thirty-five figure above describes the draft as it
-stood on 2026-08-25 and is retained only as the record of that pass. It was carried
-forward unchecked through round 2, which rewrote every section and changed the real
-count. The binding census is the MEASURED one in the census section below: 34
-bracket-marker sites and 36 semantic fill slots, with the recount command recorded
-beside it. Do not cite the thirty-five figure as current.
-
-Locators re-derived again 2026-08-27 against the current
-`docs/paper/draft-v1.md` at 533 lines. Round 2 restructured and renumbered every
-section, and round 3 restored Table 1's caption, inserted the Figure 2 and Figure
-3 blocks, and added two `PENDING` markers, so the earlier locators were stale.
-Each of the 141 existing line locators was checked by searching the current draft
-for that row's own anchor text, never by applying an offset; 134 moved, and 138
-were confirmed by re-reading the stated draft line. The DS-03
-“Identical-condition null response,” DS-04 “Deliberate small-difference
-challenge,” and DS-07 “Between-session stability” anchors no longer occur in
-the draft, so their stale locators remain unchanged pending a ruling rather than
-being guessed. Apart from the confirmed locator line and section numbers and
-this note, this pass changed nothing else: no marker string, supplier, campaign
-or cell, fill rule, freeze status, source list, or census figure was touched.
-
-Locators re-derived again 2026-08-27 after Section 2 was compressed and
-Appendix A.3.3 was rewritten wholesale from the code. Those changes invalidated
-essentially every physical locator. Each of the 139 pre-existing explicit line
-locators was checked by searching the current draft for that row's own anchor
-text, never by applying an offset; 135 moved, and 136 live anchors were
-confirmed by re-reading the stated line. DG-063's `10.818 ms` anchor no longer
-occurs; ruling item 58 retired the row with a superseded note (round 6). DS-04 and DS-07 remain the already-retired, absent-anchor
-provenance rows, byte-for-byte. This locator-only pass changed nothing else: no
-marker string, supplier, campaign or cell, fill rule, freeze status, source
-list, or census figure was touched. The additive appendix bindings required by
-Addendum 5 item 50 are recorded separately in the diagnostic-era section.
-
-This is the binding crosswalk for result rendering. It inventories the generic
-markers in `docs/paper/draft-v1.md` by site and the exact fill-key vocabulary in
-`docs/process_traces/2026-08-07-plan-factory/DRAFT-RESULTS_PROSE.md` by distinct
-token. It does not authorize a value. A renderer must stop when the named
-artifact, field, branch predicate, or authentication condition is absent.
-Numeric characters in this document occur only inside binding identifiers,
-model names, source locators, and the required census; no measured result or
-demonstration value appears.
-
-No historical result is a supplier for this registry. Under D-117, claim
-authority can arise only from prospective alpha, beta, and gamma evidence;
-D-122 adds a prospectively frozen prompt-processing contrast to gamma; and
-D-123 adds reported phase-energy mean cells to alpha and beta, conditional on
-the required no-semantics-change check.
+The crosswalk does not authorize a value merely by naming it. A renderer stops
+when an authenticated artifact, exact field, registered replay, branch
+predicate, or identity pin is absent. `STOP_FILL` rows remain stopped unless a
+named ruling and a built supplier both exist. D-165 replaces the old headline
+predicate with the registered ratio R while preserving TERM A / TERM B only as
+the coded cell-label diagnostic. D-166 replaces the synthetic decode prompt
+with the hash-bound `real_prompts_v1` profile and leaves the prefill length
+unresolved until the G2-a selection record issues.
 
 ## Rules and source index
 
@@ -158,18 +96,59 @@ Every row cites one or more of these defining sources:
   alpha and beta as four-cell floor producers and gamma as the prospective
   contrast producer. Its decode-only gamma description is superseded by
   D-122.
+- `V5GEN` — `configs/campaigns/d117_contrast_v5/generate_configs.py`, the
+  authority for `_v5` pack, contrast, floor-artifact, cell, and family naming;
+  its `dominance_criterion` is the frozen D-165 ratio/replay contract.
+- `PANEL` — `configs/model_panels/qwen3_4bit.json`, which pins model IDs,
+  revisions, tokenizer and chat-template SHA-256 values, thinking policy, and
+  the rendering pinset.
+- `WORKLOAD` — `configs/workloads/real_prompts_v1.json`, the ordered eight-prompt
+  profile with prompt-set SHA-256
+  `20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474`.
+- `G2A` — `scripts/select_g2a_prefill_length.py` and the hash-pinned
+  `joulewise.g2a_prefill_selection.v1` output it will issue. D-166 as amended
+  and its ratification at
+  `docs/process_traces/2026-08-30-prefill-margin-coldgate/03-MAGISTRATE-RATIFICATION.md`
+  own the four-rung rule and split refusal branch.
+- `D165` — D-165 as cold-gate-amended, including R-5 completion in
+  `docs/process_traces/2026-08-30-t28-v5-prep/REFUTER-ROUND-1-DISPOSITION.md`:
+  independent-corner R is gated, comparative R_cm is mandatory with the
+  `< 2.0` withdrawal, and absolute R_cm is registered not applicable.
 
-Campaign shorthand used below is semantic, not a claim that final artifact
-identifiers already exist:
+Campaign shorthand used below is semantic:
 
-- `alpha`: prospective Qwen2.5-1.5B floor window; prompt-processing and
-  token-generation absolute and comparative cells; D-123 reported means.
-- `beta`: prospective Qwen2.5-7B floor window; the same four floor-cell roles;
-  D-123 reported means.
-- `gamma`: prospective Qwen2.5 model-size contrast window; token-generation
-  contrast plus the D-122 prompt-processing contrast arm.
+- `alpha`: prospective `qwen3-1p7b` floor window, artifact IDs
+  `d117-qwen3-1p7b-decode-floor-v5` and
+  `d117-qwen3-1p7b-prefill-p[PREFILL_LENGTH]-floor-v5`.
+- `beta`: prospective `qwen3-8b` floor window, artifact IDs
+  `d117-qwen3-8b-decode-floor-v5` and
+  `d117-qwen3-8b-prefill-p[PREFILL_LENGTH]-floor-v5`.
+- `gamma`: prospective pack
+  `d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5`, with decode contrast
+  `ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b` and prefill contrast
+  `ctr-d117-prefill-p[PREFILL_LENGTH]-qwen3-1p7b-vs-qwen3-8b`.
 - `characterization`: the separately governed Window C characterization
   campaign, not any historical window called C.
+
+`[PREFILL_LENGTH]` is a parameter placeholder, not a guessed value. It resolves
+only to `collection_prefill_tokens` in the hash-pinned G2-a selection record,
+and must equal `prefill_length` and `prompt_tokens` in the subsequently issued
+`joulewise.prefill_prompt_pin.v2`. Every row containing it is
+`UNRESOLVED-UNTIL-G2A`; textual substitution before that record and hash exist
+is `STOP_FILL`.
+
+## `_v5` identity and workload bindings
+
+| Registry row | Binding | Frozen supplier | Status | Authority |
+|---|---|---|---|---|
+| V5-ID-001 | Small-model ID `qwen3-1p7b`, revision `3b1b1768f8f8cf8351c712464f906e86c2b8269e` | `configs/model_panels/qwen3_4bit.json` entry `qwen3-1p7b` | KEY_FROZEN | D-164, PANEL |
+| V5-ID-002 | Large-model ID `qwen3-8b`, revision `545dc4251c05440727734bcd94334791f6ab0192` | `configs/model_panels/qwen3_4bit.json` entry `qwen3-8b` | KEY_FROZEN | D-164, PANEL |
+| V5-WL-001 | Decode profile `real_prompts_v1`, eight ordered prompts, prompt-set SHA-256 `20debdb41eb4983339a160176dcf4e475153b5d6f16b1ef3ada39447e99f3474` | Workload profile plus panel rendering pinset `qwen3-real-prompts-v1-thinking-off` | KEY_FROZEN | D-166, WORKLOAD, PANEL |
+| V5-WL-002 | Shared `tokenizer.json` SHA-256 `aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4` | Both panel entries and the rendering pinset | KEY_FROZEN | D-164, D-166, PANEL |
+| V5-WL-003 | Shared chat-template SHA-256 `87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5`; template applied; `enable_thinking=false` | Both panel entries and the rendering pinset | KEY_FROZEN | D-166, PANEL |
+| V5-WL-004 | Greedy generation, forced 512 output tokens, one rendered prompt per member | `_v5` generator decode workload and D-166 R-1 | KEY_FROZEN | D-166, V5GEN |
+| V5-G2A-001 | `[PREFILL_LENGTH]` = G2-a record `collection_prefill_tokens`; shortest clearing rung in 512/1024/2048/4096, otherwise 4096 | `scripts/select_g2a_prefill_length.py` output; exact output path and its SHA-256 are not yet issued | UNRESOLVED-UNTIL-G2A / STOP_FILL | D-166 as amended, G2A |
+| V5-WL-005 | Prefill text, token IDs, repeat count, generation method, and selection authority | Post-selection `joulewise.prefill_prompt_pin.v2`, including `g2a_record_sha256` | UNRESOLVED-UNTIL-G2A / STOP_FILL | D-166 as amended, V5GEN, G2A |
 
 ## Exact template-token registry
 
@@ -177,29 +156,33 @@ There is one row for every distinct bracket token recognized by the template
 census. Repeated occurrences of a token share this row and therefore the same
 source value.
 
+| Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
+|---|---|---|---|---|---|
+| `[PREFILL_LENGTH]` | Hash-pinned `joulewise.g2a_prefill_selection.v1` output from `scripts/select_g2a_prefill_length.py`, field `collection_prefill_tokens`; cross-check the post-selection prompt pin's `prefill_length` and `prompt_tokens` | all `_v5` prefill suppliers and identifiers | MEASURED | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; no path, hash, or rung may be guessed | G2A, V5GEN |
+
 ### Alpha and beta floor-cell values
 
 | Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
 |---|---|---|---|---|---|
-| `[F_1p5B_prompt_abs_J]` | Prospective aggregate floor artifact, alpha prompt cell `floor_abs_j` | alpha / prompt absolute component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier freezes with the alpha pack and post-collection pinset | TPL, DF, MINT, PLAN |
-| `[F_1p5B_prompt_cmp_J]` | Same cell, `floor_cmp_j` | alpha / prompt comparative component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
-| `[F_1p5B_prompt_operative_J]` | `max(F_1p5B_prompt_abs_J, F_1p5B_prompt_cmp_J)`; verify against the same cell's `floor_gate_j` | alpha / prompt aggregate cell | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, MINT |
-| `[F_1p5B_decode_abs_J]` | Prospective aggregate floor artifact, alpha decode cell `floor_abs_j` | alpha / decode absolute component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
-| `[F_1p5B_decode_cmp_J]` | Same cell, `floor_cmp_j` | alpha / decode comparative component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
-| `[F_1p5B_decode_operative_J]` | `max(F_1p5B_decode_abs_J, F_1p5B_decode_cmp_J)`; verify against `floor_gate_j` | alpha / decode aggregate cell | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, MINT |
-| `[F_7B_prompt_abs_J]` | Prospective aggregate floor artifact, beta prompt cell `floor_abs_j` | beta / prompt absolute component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
-| `[F_7B_prompt_cmp_J]` | Same cell, `floor_cmp_j` | beta / prompt comparative component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
-| `[F_7B_prompt_operative_J]` | `max(F_7B_prompt_abs_J, F_7B_prompt_cmp_J)`; verify against `floor_gate_j` | beta / prompt aggregate cell | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, MINT |
-| `[F_7B_decode_abs_J]` | Prospective aggregate floor artifact, beta decode cell `floor_abs_j` | beta / decode absolute component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
-| `[F_7B_decode_cmp_J]` | Same cell, `floor_cmp_j` | beta / decode comparative component | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact cell identifier pending | TPL, DF, MINT, PLAN |
-| `[F_7B_decode_operative_J]` | `max(F_7B_decode_abs_J, F_7B_decode_cmp_J)`; verify against `floor_gate_j` | beta / decode aggregate cell | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, MINT |
+| `[F_1p7B_prefill_p[PREFILL_LENGTH]_abs_J]` | Aggregate floor artifact `d117-qwen3-1p7b-prefill-p[PREFILL_LENGTH]-floor-v5`, selected cell `floor_abs_j` | alpha / prefill-p[PREFILL_LENGTH] absolute component | MEASURED | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; exact cell ID comes only from the generated floor pack | DF, MINT, V5GEN, G2A |
+| `[F_1p7B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Same selected cell, `floor_cmp_j`; estimator identity must match its frozen registration | alpha / prefill-p[PREFILL_LENGTH] comparative component | MEASURED | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, MINT, V5GEN, G2A |
+| `[F_1p7B_prefill_p[PREFILL_LENGTH]_operative_J]` | `max(F_1p7B_prefill_p[PREFILL_LENGTH]_abs_J, F_1p7B_prefill_p[PREFILL_LENGTH]_cmp_J)`; require exact equality with `floor_gate_j` | alpha / prefill-p[PREFILL_LENGTH] aggregate cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, MINT, V5GEN, G2A |
+| `[F_1p7B_decode_abs_J]` | Aggregate floor artifact `d117-qwen3-1p7b-decode-floor-v5`, selected decode cell `floor_abs_j` | alpha / decode absolute component; `real_prompts_v1` | MEASURED | KEY_FROZEN / VALUE_UNISSUED; prompt, tokenizer, template, and thinking pins must match V5-WL-001 through V5-WL-004 | DF, MINT, V5GEN, PANEL, WORKLOAD |
+| `[F_1p7B_decode_cmp_J]` | Same selected decode cell, `floor_cmp_j`; estimator identity must match its frozen registration | alpha / decode comparative component; `real_prompts_v1` | MEASURED | KEY_FROZEN / VALUE_UNISSUED | DF, MINT, V5GEN, PANEL, WORKLOAD |
+| `[F_1p7B_decode_operative_J]` | `max(F_1p7B_decode_abs_J, F_1p7B_decode_cmp_J)`; require exact equality with `floor_gate_j` | alpha / decode aggregate cell | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, MINT, V5GEN |
+| `[F_8B_prefill_p[PREFILL_LENGTH]_abs_J]` | Aggregate floor artifact `d117-qwen3-8b-prefill-p[PREFILL_LENGTH]-floor-v5`, selected cell `floor_abs_j` | beta / prefill-p[PREFILL_LENGTH] absolute component | MEASURED | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; exact cell ID comes only from the generated floor pack | DF, MINT, V5GEN, G2A |
+| `[F_8B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Same selected cell, `floor_cmp_j`; estimator identity must match its frozen registration | beta / prefill-p[PREFILL_LENGTH] comparative component | MEASURED | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, MINT, V5GEN, G2A |
+| `[F_8B_prefill_p[PREFILL_LENGTH]_operative_J]` | `max(F_8B_prefill_p[PREFILL_LENGTH]_abs_J, F_8B_prefill_p[PREFILL_LENGTH]_cmp_J)`; require exact equality with `floor_gate_j` | beta / prefill-p[PREFILL_LENGTH] aggregate cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, MINT, V5GEN, G2A |
+| `[F_8B_decode_abs_J]` | Aggregate floor artifact `d117-qwen3-8b-decode-floor-v5`, selected decode cell `floor_abs_j` | beta / decode absolute component; `real_prompts_v1` | MEASURED | KEY_FROZEN / VALUE_UNISSUED; prompt, tokenizer, template, and thinking pins must match V5-WL-001 through V5-WL-004 | DF, MINT, V5GEN, PANEL, WORKLOAD |
+| `[F_8B_decode_cmp_J]` | Same selected decode cell, `floor_cmp_j`; estimator identity must match its frozen registration | beta / decode comparative component; `real_prompts_v1` | MEASURED | KEY_FROZEN / VALUE_UNISSUED | DF, MINT, V5GEN, PANEL, WORKLOAD |
+| `[F_8B_decode_operative_J]` | `max(F_8B_decode_abs_J, F_8B_decode_cmp_J)`; require exact equality with `floor_gate_j` | beta / decode aggregate cell | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, MINT, V5GEN |
 
-### Attribution-dominance test terms (T26 ruling item 34)
+### Cell-label terms and D-165 attribution-dominance ratios
 
-The primary research question replays the code's dominance predicate separately for
-each claim-bearing cell's absolute and comparative components. There is no
-component-to-cell aggregation for TERM A or TERM B. For component \(j\), TERM A is
-the guarded point-only repeatability value:
+D-165 reversed ruling item 34. TERM A and TERM B remain reproducible because
+the coded predicate survives as the cell label, but `TERM B > TERM A` is not
+the paper's headline falsifier. For component \(j\), the retained label terms
+are:
 
 ```text
 A_unguarded_abs = max(max_abs_residual_j, prediction_component_j)
@@ -224,52 +207,69 @@ comparative: d_i = cells[].comparative.block_deltas_j[i]
              B_cmp = max_i(abs(d_i) + w_i)
 ```
 
-The falsifier is verbatim code behavior: each component passes only when
-`B_component > A_guarded_component`; equality fails. The emitted
-`corner_widened_guarded_floor_j` is a different quantity: it is the published
-component floor, includes the complete corner-maximized point formula, and is at
-least TERM B. The cell's `floor_gate_j` is different again: it is the maximum of
-the two component floors after each has received its whole-window drift allowance.
-That drift allowance is not a timing term, so neither the published floor nor the
-gate may replace TERM B in the dominance predicate.
+The headline ratio is instead
+`R = corner_widened_unguarded_floor_j / point_unguarded_floor_j`, evaluated
+separately for the absolute and comparative component of every cell. The point
+denominator is re-derived from unconditional parents as
+`max(max_abs_residual_j, prediction_component_j)` for absolute or
+`max(max_abs_delta_j, prediction_component_j)` for comparative. The numerator
+is the complete emitted `corner_widened_unguarded_floor_j`, not TERM B and not
+the guarded or drift-widened published floor. The gate is `R >= 2.0`; exact
+equality passes. A zero denominator refuses with
+`dominance_ratio_zero_denominator`. Every registered component in every cell
+must pass; mixed outcomes are printed per component and use null framing.
 
-TERM A remains a desk derivation because `point_floor_diagnostic` is conditional on
-the predicate already being true. The Sol custody seat and blind Fable custody seat under
-`docs/process_traces/2026-08-27-t26/term-a-derivation/` reproduced every emitted
-diagnostic byte-for-value from the unconditional parents. The item-34 replay fence
-must repeat that self-consistency check and independently derive TERM B for every
-issued component. Until the authenticated four-cell artifact, its final pinset, and
-the fence all pass, the rows remain `VALUE_UNISSUED` and rendering stops.
+Comparative R_cm is mandatory per cell. Its supplier is the registered
+`d165_shared_sign_local_corner_replay.v1` rule over authenticated custodied
+block inputs, before the producer's shared-plus-local composition destroys the
+split. `R_cm < 2.0` withdraws the dominance sentence even if independent-corner
+R passed. Absolute R_cm is not a missing value: it is registered
+`not_applicable` because the deviations-from-mean absolute estimator cancels a
+uniform shared fiducial shift exactly and the replay is comparative-only.
 
 | Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
 |---|---|---|---|---|---|
-| `[TERM_A_1p5B_prompt_abs_J]` | Desk derivation over the alpha prompt cell's `cells[].absolute`: `guard_factor * max(max_abs_residual_j, prediction_component_j)` | alpha / prompt absolute dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
-| `[TERM_B_1p5B_prompt_abs_J]` | Same component; with `n = n`, `r_i = residuals_j[i]`, `w_i = admissible_half_widths_j[i]`, and `W = math.fsum(w_i)`, derive `max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)` | alpha / prompt absolute dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
-| `[TERM_A_1p5B_prompt_cmp_J]` | Desk derivation over the alpha prompt cell's `cells[].comparative`: `guard_factor * max(max_abs_delta_j, prediction_component_j)` | alpha / prompt comparative dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
-| `[TERM_B_1p5B_prompt_cmp_J]` | Same component; derive `max_i(abs(block_deltas_j[i]) + admissible_half_widths_j[i])` with the two emitted arrays paired in their stored order | alpha / prompt comparative dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
-| `[TERM_A_1p5B_decode_abs_J]` | Desk derivation over the alpha decode cell's `cells[].absolute`: `guard_factor * max(max_abs_residual_j, prediction_component_j)` | alpha / decode absolute dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
-| `[TERM_B_1p5B_decode_abs_J]` | Same component; with `n = n`, `r_i = residuals_j[i]`, `w_i = admissible_half_widths_j[i]`, and `W = math.fsum(w_i)`, derive `max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)` | alpha / decode absolute dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
-| `[TERM_A_1p5B_decode_cmp_J]` | Desk derivation over the alpha decode cell's `cells[].comparative`: `guard_factor * max(max_abs_delta_j, prediction_component_j)` | alpha / decode comparative dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
-| `[TERM_B_1p5B_decode_cmp_J]` | Same component; derive `max_i(abs(block_deltas_j[i]) + admissible_half_widths_j[i])` with the two emitted arrays paired in their stored order | alpha / decode comparative dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
-| `[TERM_A_7B_prompt_abs_J]` | Desk derivation over the beta prompt cell's `cells[].absolute`: `guard_factor * max(max_abs_residual_j, prediction_component_j)` | beta / prompt absolute dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
-| `[TERM_B_7B_prompt_abs_J]` | Same component; with `n = n`, `r_i = residuals_j[i]`, `w_i = admissible_half_widths_j[i]`, and `W = math.fsum(w_i)`, derive `max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)` | beta / prompt absolute dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
-| `[TERM_A_7B_prompt_cmp_J]` | Desk derivation over the beta prompt cell's `cells[].comparative`: `guard_factor * max(max_abs_delta_j, prediction_component_j)` | beta / prompt comparative dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
-| `[TERM_B_7B_prompt_cmp_J]` | Same component; derive `max_i(abs(block_deltas_j[i]) + admissible_half_widths_j[i])` with the two emitted arrays paired in their stored order | beta / prompt comparative dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
-| `[TERM_A_7B_decode_abs_J]` | Desk derivation over the beta decode cell's `cells[].absolute`: `guard_factor * max(max_abs_residual_j, prediction_component_j)` | beta / decode absolute dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
-| `[TERM_B_7B_decode_abs_J]` | Same component; with `n = n`, `r_i = residuals_j[i]`, `w_i = admissible_half_widths_j[i]`, and `W = math.fsum(w_i)`, derive `max_i(abs(r_i) + w_i*(n-1)/n + (W-w_i)/n)` | beta / decode absolute dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
-| `[TERM_A_7B_decode_cmp_J]` | Desk derivation over the beta decode cell's `cells[].comparative`: `guard_factor * max(max_abs_delta_j, prediction_component_j)` | beta / decode comparative dominance TERM A | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; replay fence required; STOP_FILL on a missing, null, refused, unauthenticated, or method-mismatched parent | TPL, DF, MINT, PLAN |
-| `[TERM_B_7B_decode_cmp_J]` | Same component; derive `max_i(abs(block_deltas_j[i]) + admissible_half_widths_j[i])` with the two emitted arrays paired in their stored order | beta / decode comparative dominance TERM B | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; exact array order and replay fence required; STOP_FILL on any unavailable parent | TPL, DF, MINT, PLAN |
+| `[TERM_A_1p7B_prefill_p[PREFILL_LENGTH]_abs_J]` | Alpha prefill absolute parents; guarded point-only label term | alpha / prefill-p[PREFILL_LENGTH] absolute label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
+| `[TERM_B_1p7B_prefill_p[PREFILL_LENGTH]_abs_J]` | Alpha prefill absolute arrays; exact legacy corner label formula above | alpha / prefill-p[PREFILL_LENGTH] absolute label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
+| `[R_1p7B_prefill_p[PREFILL_LENGTH]_abs]` | `cells[].absolute.corner_widened_unguarded_floor_j / max(max_abs_residual_j, prediction_component_j)` | alpha / prefill-p[PREFILL_LENGTH] absolute R column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN, G2A |
+| `[R_cm_1p7B_prefill_p[PREFILL_LENGTH]_abs]` | Literal `not_applicable` plus the registered deviations-from-mean cancellation reason | alpha / prefill-p[PREFILL_LENGTH] absolute R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / REGISTERED_NOT_APPLICABLE | D165, V5GEN, G2A |
+| `[TERM_A_1p7B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Alpha prefill comparative parents; guarded point-only label term | alpha / prefill-p[PREFILL_LENGTH] comparative label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
+| `[TERM_B_1p7B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Alpha prefill comparative arrays; exact legacy corner label formula above | alpha / prefill-p[PREFILL_LENGTH] comparative label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
+| `[R_1p7B_prefill_p[PREFILL_LENGTH]_cmp]` | `cells[].comparative.corner_widened_unguarded_floor_j / max(max_abs_delta_j, prediction_component_j)` | alpha / prefill-p[PREFILL_LENGTH] comparative R column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN, G2A |
+| `[R_cm_1p7B_prefill_p[PREFILL_LENGTH]_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v1` over the alpha prefill cell's authenticated custodied block inputs | alpha / prefill-p[PREFILL_LENGTH] comparative R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN, G2A |
+| `[TERM_A_1p7B_decode_abs_J]` | Alpha decode absolute parents; guarded point-only label term | alpha / decode absolute label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
+| `[TERM_B_1p7B_decode_abs_J]` | Alpha decode absolute arrays; exact legacy corner label formula above | alpha / decode absolute label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
+| `[R_1p7B_decode_abs]` | `cells[].absolute.corner_widened_unguarded_floor_j / max(max_abs_residual_j, prediction_component_j)` | alpha / decode absolute R column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN |
+| `[R_cm_1p7B_decode_abs]` | Literal `not_applicable`: the absolute estimator uses deviations from the mean, so a uniform shared fiducial shift cancels exactly; the replay is registered only for comparative ABBA block inputs | alpha / decode absolute R_cm column | DERIVE | REGISTERED_NOT_APPLICABLE | D165, V5GEN |
+| `[TERM_A_1p7B_decode_cmp_J]` | Alpha decode comparative parents; guarded point-only label term | alpha / decode comparative label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
+| `[TERM_B_1p7B_decode_cmp_J]` | Alpha decode comparative arrays; exact legacy corner label formula above | alpha / decode comparative label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
+| `[R_1p7B_decode_cmp]` | `cells[].comparative.corner_widened_unguarded_floor_j / max(max_abs_delta_j, prediction_component_j)` | alpha / decode comparative R column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN |
+| `[R_cm_1p7B_decode_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v1` over the alpha decode cell's authenticated custodied block inputs | alpha / decode comparative R_cm column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN |
+| `[TERM_A_8B_prefill_p[PREFILL_LENGTH]_abs_J]` | Beta prefill absolute parents; guarded point-only label term | beta / prefill-p[PREFILL_LENGTH] absolute label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
+| `[TERM_B_8B_prefill_p[PREFILL_LENGTH]_abs_J]` | Beta prefill absolute arrays; exact legacy corner label formula above | beta / prefill-p[PREFILL_LENGTH] absolute label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
+| `[R_8B_prefill_p[PREFILL_LENGTH]_abs]` | `cells[].absolute.corner_widened_unguarded_floor_j / max(max_abs_residual_j, prediction_component_j)` | beta / prefill-p[PREFILL_LENGTH] absolute R column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN, G2A |
+| `[R_cm_8B_prefill_p[PREFILL_LENGTH]_abs]` | Literal `not_applicable` plus the registered deviations-from-mean cancellation reason | beta / prefill-p[PREFILL_LENGTH] absolute R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / REGISTERED_NOT_APPLICABLE | D165, V5GEN, G2A |
+| `[TERM_A_8B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Beta prefill comparative parents; guarded point-only label term | beta / prefill-p[PREFILL_LENGTH] comparative label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
+| `[TERM_B_8B_prefill_p[PREFILL_LENGTH]_cmp_J]` | Beta prefill comparative arrays; exact legacy corner label formula above | beta / prefill-p[PREFILL_LENGTH] comparative label | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DF, V5GEN, G2A |
+| `[R_8B_prefill_p[PREFILL_LENGTH]_cmp]` | `cells[].comparative.corner_widened_unguarded_floor_j / max(max_abs_delta_j, prediction_component_j)` | beta / prefill-p[PREFILL_LENGTH] comparative R column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN, G2A |
+| `[R_cm_8B_prefill_p[PREFILL_LENGTH]_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v1` over the beta prefill cell's authenticated custodied block inputs | beta / prefill-p[PREFILL_LENGTH] comparative R_cm column | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN, G2A |
+| `[TERM_A_8B_decode_abs_J]` | Beta decode absolute parents; guarded point-only label term | beta / decode absolute label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
+| `[TERM_B_8B_decode_abs_J]` | Beta decode absolute arrays; exact legacy corner label formula above | beta / decode absolute label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
+| `[R_8B_decode_abs]` | `cells[].absolute.corner_widened_unguarded_floor_j / max(max_abs_residual_j, prediction_component_j)` | beta / decode absolute R column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN |
+| `[R_cm_8B_decode_abs]` | Literal `not_applicable`: the absolute estimator uses deviations from the mean, so a uniform shared fiducial shift cancels exactly; the replay is registered only for comparative ABBA block inputs | beta / decode absolute R_cm column | DERIVE | REGISTERED_NOT_APPLICABLE | D165, V5GEN |
+| `[TERM_A_8B_decode_cmp_J]` | Beta decode comparative parents; guarded point-only label term | beta / decode comparative label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
+| `[TERM_B_8B_decode_cmp_J]` | Beta decode comparative arrays; exact legacy corner label formula above | beta / decode comparative label | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | DF, V5GEN |
+| `[R_8B_decode_cmp]` | `cells[].comparative.corner_widened_unguarded_floor_j / max(max_abs_delta_j, prediction_component_j)` | beta / decode comparative R column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; `>= 2.0`, equality passes | D165, DF, V5GEN |
+| `[R_cm_8B_decode_cmp]` | Registered replay `d165_shared_sign_local_corner_replay.v1` over the beta decode cell's authenticated custodied block inputs | beta / decode comparative R_cm column | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; mandatory; `< 2.0` withdraws dominance sentence | D165, V5GEN |
 
-### Held title pair (T26 ruling item 28)
+### Protocol-first title and contingent subtitle (D-165)
 
-Neither title is typeset before `_v4` issues. The draft carries a neutral placeholder
-H1 and both candidates as non-rendering comments. The choice is made by the outcome of
-the attribution-dominance test, not by preference.
-
-| Slot | Condition of use | Title |
-|---|---|---|
-| PRIMARY | `_v4` reproduces attribution dominance | Held in the draft's non-rendering title block; built around attribution-limited resolution of phase energy, and readable without prior exposure to either term. |
-| NULL-OUTCOME | `_v4` does not reproduce dominance | Held in the same block; the protocol-first framing, under which the capstone is a calibration that corrected its own clock-model error followed by a prospective null. |
+One protocol-first title is fixed before collection and does not branch on the
+result. “Attribution-limited” may appear only as a gate-contingent subtitle after
+every independent-corner component in every cell has `R >= 2.0` and no mandatory
+comparative R_cm is below 2.0. A missing/refused R or R_cm does not select the
+subtitle. The methods sentence must disclose this branch rule; `R_cm < 2.0`
+withdraws the dominance sentence and the subtitle.
 
 ### Floor-cell branch text and diagnostics
 
@@ -277,36 +277,44 @@ For each row below, the cell selector must first validate both component
 records exactly as the template requires. Generic absence or nullness is never
 converted into a nonterminal no-exact-floor state.
 
+D-166's exhausted-ladder branch is also exact. The prefill arm is collected at
+4096 when no rung clears the count-at-least-five gate. If the reducer emits
+`not_resolvable_sample_count` with count below 3, print that reducer refusal as
+itself. If the reducer resolves at count 3 or 4, print the separate
+pre-registration refusal “below the pre-registered count floor of 5” and
+disclose the reducer's resolvable result alongside it. Never relabel one branch
+as the other, and keep the Holm family at two.
+
 | Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
 |---|---|---|---|---|---|
-| `[TERMINAL_REFUSAL_REASON_1p5B_prompt]` | Conservative rendering of terminal codes from alpha prompt extraction `cells[].refusal_reasons`, plus governing verdict failures | alpha / prompt cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; STOP_FILL on unknown code or malformed metadata | TPL, LINT, FX, WV, AUTH |
-| `[TERMINAL_REFUSAL_REASON_1p5B_decode]` | Same source class for alpha decode | alpha / decode cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; STOP_FILL on invalid selector input | TPL, LINT, FX, WV, AUTH |
-| `[TERMINAL_REFUSAL_REASON_7B_prompt]` | Same source class for beta prompt | beta / prompt cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; STOP_FILL on invalid selector input | TPL, LINT, FX, WV, AUTH |
-| `[TERMINAL_REFUSAL_REASON_7B_decode]` | Same source class for beta decode | beta / decode cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; STOP_FILL on invalid selector input | TPL, LINT, FX, WV, AUTH |
-| `[NO_EXACT_FLOOR_REASON_1p5B_prompt]` | Renderer-normalized explanation from alpha prompt component reports when the permitted exact-floor-unavailable state is proven | alpha / prompt cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; all unmatched absences STOP_FILL | TPL, LINT, FX |
-| `[NO_EXACT_FLOOR_REASON_1p5B_decode]` | Same normalization for alpha decode | alpha / decode cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; all unmatched absences STOP_FILL | TPL, LINT, FX |
-| `[NO_EXACT_FLOOR_REASON_7B_prompt]` | Same normalization for beta prompt | beta / prompt cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; all unmatched absences STOP_FILL | TPL, LINT, FX |
-| `[NO_EXACT_FLOOR_REASON_7B_decode]` | Same normalization for beta decode | beta / decode cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; all unmatched absences STOP_FILL | TPL, LINT, FX |
-| `[AVAILABLE_DIAGNOSTIC_CLAUSE_1p5B_prompt]` | Fixed-order renderer over available alpha prompt `floor_abs_j`, `floor_cmp_j`, and `point_floor_diagnostics` | alpha / prompt cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED; emit the template's no-diagnostic sentence if all are absent | TPL, DF, LINT |
-| `[AVAILABLE_DIAGNOSTIC_CLAUSE_1p5B_decode]` | Same renderer for alpha decode | alpha / decode cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
-| `[AVAILABLE_DIAGNOSTIC_CLAUSE_7B_prompt]` | Same renderer for beta prompt | beta / prompt cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
-| `[AVAILABLE_DIAGNOSTIC_CLAUSE_7B_decode]` | Same renderer for beta decode | beta / decode cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
-| `[POINT_DIAGNOSTIC_CLAUSE_1p5B_prompt]` | Component-specific renderer over alpha prompt `point_floor_diagnostics` entries; `published_claim_floor` must be false | alpha / prompt cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
-| `[POINT_DIAGNOSTIC_CLAUSE_1p5B_decode]` | Same renderer for alpha decode | alpha / decode cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
-| `[POINT_DIAGNOSTIC_CLAUSE_7B_prompt]` | Same renderer for beta prompt | beta / prompt cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
-| `[POINT_DIAGNOSTIC_CLAUSE_7B_decode]` | Same renderer for beta decode | beta / decode cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
-| `[REFUSAL_REASON_1p5B_floor_window]` | Alpha whole-window verdict `status` with conservative rendering of `idle_admission_core.conditions` and `member_failures` | alpha / whole window | MEASURED | KEY_FROZEN / VERDICT_UNISSUED; never synthesize a passing value from extraction | TPL, WV, AUTH |
-| `[REFUSAL_REASON_7B_floor_window]` | Beta whole-window verdict, same fields | beta / whole window | MEASURED | KEY_FROZEN / VERDICT_UNISSUED | TPL, WV, AUTH |
+| `[TERMINAL_REFUSAL_REASON_1p7B_prefill_p[PREFILL_LENGTH]]` | Conservative rendering of terminal codes from alpha prefill-p[PREFILL_LENGTH] extraction `cells[].refusal_reasons`, plus governing verdict failures | alpha / prefill-p[PREFILL_LENGTH] cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; STOP_FILL on unknown code or malformed metadata | TPL, LINT, FX, WV, AUTH |
+| `[TERMINAL_REFUSAL_REASON_1p7B_decode]` | Same source class for alpha decode | alpha / decode cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; STOP_FILL on invalid selector input | TPL, LINT, FX, WV, AUTH |
+| `[TERMINAL_REFUSAL_REASON_8B_prefill_p[PREFILL_LENGTH]]` | Same source class for beta prefill-p[PREFILL_LENGTH] | beta / prefill-p[PREFILL_LENGTH] cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; STOP_FILL on invalid selector input | TPL, LINT, FX, WV, AUTH |
+| `[TERMINAL_REFUSAL_REASON_8B_decode]` | Same source class for beta decode | beta / decode cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; STOP_FILL on invalid selector input | TPL, LINT, FX, WV, AUTH |
+| `[NO_EXACT_FLOOR_REASON_1p7B_prefill_p[PREFILL_LENGTH]]` | Renderer-normalized explanation from alpha prefill-p[PREFILL_LENGTH] component reports when the permitted exact-floor-unavailable state is proven | alpha / prefill-p[PREFILL_LENGTH] cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; all unmatched absences STOP_FILL | TPL, LINT, FX |
+| `[NO_EXACT_FLOOR_REASON_1p7B_decode]` | Same normalization for alpha decode | alpha / decode cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; all unmatched absences STOP_FILL | TPL, LINT, FX |
+| `[NO_EXACT_FLOOR_REASON_8B_prefill_p[PREFILL_LENGTH]]` | Same normalization for beta prefill-p[PREFILL_LENGTH] | beta / prefill-p[PREFILL_LENGTH] cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; all unmatched absences STOP_FILL | TPL, LINT, FX |
+| `[NO_EXACT_FLOOR_REASON_8B_decode]` | Same normalization for beta decode | beta / decode cell | DERIVE | KEY_FROZEN / VALUE_UNISSUED; all unmatched absences STOP_FILL | TPL, LINT, FX |
+| `[AVAILABLE_DIAGNOSTIC_CLAUSE_1p7B_prefill_p[PREFILL_LENGTH]]` | Fixed-order renderer over available alpha prefill-p[PREFILL_LENGTH] `floor_abs_j`, `floor_cmp_j`, and `point_floor_diagnostics` | alpha / prefill-p[PREFILL_LENGTH] cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED; emit the template's no-diagnostic sentence if all are absent | TPL, DF, LINT |
+| `[AVAILABLE_DIAGNOSTIC_CLAUSE_1p7B_decode]` | Same renderer for alpha decode | alpha / decode cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
+| `[AVAILABLE_DIAGNOSTIC_CLAUSE_8B_prefill_p[PREFILL_LENGTH]]` | Same renderer for beta prefill-p[PREFILL_LENGTH] | beta / prefill-p[PREFILL_LENGTH] cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | TPL, DF, LINT |
+| `[AVAILABLE_DIAGNOSTIC_CLAUSE_8B_decode]` | Same renderer for beta decode | beta / decode cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
+| `[POINT_DIAGNOSTIC_CLAUSE_1p7B_prefill_p[PREFILL_LENGTH]]` | Component-specific renderer over alpha prefill-p[PREFILL_LENGTH] `point_floor_diagnostics` entries; `published_claim_floor` must be false | alpha / prefill-p[PREFILL_LENGTH] cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | TPL, DF, LINT |
+| `[POINT_DIAGNOSTIC_CLAUSE_1p7B_decode]` | Same renderer for alpha decode | alpha / decode cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
+| `[POINT_DIAGNOSTIC_CLAUSE_8B_prefill_p[PREFILL_LENGTH]]` | Same renderer for beta prefill-p[PREFILL_LENGTH] | beta / prefill-p[PREFILL_LENGTH] cell | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | TPL, DF, LINT |
+| `[POINT_DIAGNOSTIC_CLAUSE_8B_decode]` | Same renderer for beta decode | beta / decode cell | DERIVE | RENDERER_FROZEN / VALUE_UNISSUED | TPL, DF, LINT |
+| `[REFUSAL_REASON_1p7B_floor_window]` | Alpha whole-window verdict `status` with conservative rendering of `idle_admission_core.conditions` and `member_failures` | alpha / whole window | MEASURED | KEY_FROZEN / VERDICT_UNISSUED; never synthesize a passing value from extraction | TPL, WV, AUTH |
+| `[REFUSAL_REASON_8B_floor_window]` | Beta whole-window verdict, same fields | beta / whole window | MEASURED | KEY_FROZEN / VERDICT_UNISSUED | TPL, WV, AUTH |
 
 #### Terminal-refusal known-code set (F1 fold)
 
 The conservative renderer's closed known-code set for
-`[TERMINAL_REFUSAL_REASON_1p5B_prompt]`,
-`[TERMINAL_REFUSAL_REASON_1p5B_decode]`,
-`[TERMINAL_REFUSAL_REASON_7B_prompt]`,
-`[TERMINAL_REFUSAL_REASON_7B_decode]`,
-`[REFUSAL_REASON_1p5B_floor_window]`, and
-`[REFUSAL_REASON_7B_floor_window]` includes these exact codes:
+`[TERMINAL_REFUSAL_REASON_1p7B_prefill_p[PREFILL_LENGTH]]`,
+`[TERMINAL_REFUSAL_REASON_1p7B_decode]`,
+`[TERMINAL_REFUSAL_REASON_8B_prefill_p[PREFILL_LENGTH]]`,
+`[TERMINAL_REFUSAL_REASON_8B_decode]`,
+`[REFUSAL_REASON_1p7B_floor_window]`, and
+`[REFUSAL_REASON_8B_floor_window]` includes these exact codes:
 
 | Exact code | Producing source lines | Consumer reason registries |
 |---|---|---|
@@ -329,42 +337,44 @@ would silently choose a basis and is forbidden.
 
 | Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
 |---|---|---|---|---|---|
-| `[E_1p5B_prompt_J_per_request]` | UNKNOWN — D-123 reported-mean artifact field not yet defined | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN; resolve by landing the alpha reported-mean schema and exact member basis | TPL, AUTH, FX |
-| `[E_1p5B_prompt_lower_J]` | UNKNOWN — fully composed lower endpoint not yet defined | alpha / prompt reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN; resolve in the D-123 extractor contract | TPL, AUTH |
-| `[E_1p5B_prompt_upper_J]` | UNKNOWN — fully composed upper endpoint not yet defined | alpha / prompt reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN; resolve in the D-123 extractor contract | TPL, AUTH |
-| `[E_1p5B_prompt_J_per_token]` | UNKNOWN — runtime-observed prompt-token companion field not yet defined | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN; bind the denominator provenance in the D-123 output schema | TPL, AUTH |
-| `[N_bundles_1p5B_prompt]` | UNKNOWN — admitted independent-bundle count for the D-123 mean basis not yet defined | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN; do not substitute a floor-component count | TPL, AUTH, FX |
-| `[E_1p5B_decode_J_per_request]` | UNKNOWN — D-123 reported-mean artifact field not yet defined | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; resolve by landing the alpha reported-mean schema and basis | TPL, AUTH, FX |
-| `[E_1p5B_decode_lower_J]` | UNKNOWN — fully composed lower endpoint not yet defined | alpha / decode reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
-| `[E_1p5B_decode_upper_J]` | UNKNOWN — fully composed upper endpoint not yet defined | alpha / decode reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
-| `[E_1p5B_decode_J_per_token]` | UNKNOWN — runtime-observed output-token companion field not yet defined | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; denominator provenance must be authenticated | TPL, AUTH |
-| `[N_bundles_1p5B_decode]` | UNKNOWN — admitted independent-bundle count for the D-123 mean basis not yet defined | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; do not substitute a floor-component count | TPL, AUTH, FX |
-| `[E_7B_prompt_J_per_request]` | UNKNOWN — D-123 reported-mean artifact field not yet defined | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN; resolve by landing the beta reported-mean schema and basis | TPL, AUTH, FX |
-| `[E_7B_prompt_lower_J]` | UNKNOWN — fully composed lower endpoint not yet defined | beta / prompt reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
-| `[E_7B_prompt_upper_J]` | UNKNOWN — fully composed upper endpoint not yet defined | beta / prompt reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
-| `[E_7B_prompt_J_per_token]` | UNKNOWN — runtime-observed prompt-token companion field not yet defined | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN; denominator provenance must be authenticated | TPL, AUTH |
-| `[N_bundles_7B_prompt]` | UNKNOWN — admitted independent-bundle count for the D-123 mean basis not yet defined | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN; do not substitute a floor-component count | TPL, AUTH, FX |
-| `[E_7B_decode_J_per_request]` | UNKNOWN — D-123 reported-mean artifact field not yet defined | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; resolve by landing the beta reported-mean schema and basis | TPL, AUTH, FX |
-| `[E_7B_decode_lower_J]` | UNKNOWN — fully composed lower endpoint not yet defined | beta / decode reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
-| `[E_7B_decode_upper_J]` | UNKNOWN — fully composed upper endpoint not yet defined | beta / decode reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
-| `[E_7B_decode_J_per_token]` | UNKNOWN — runtime-observed output-token companion field not yet defined | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; denominator provenance must be authenticated | TPL, AUTH |
-| `[N_bundles_7B_decode]` | UNKNOWN — admitted independent-bundle count for the D-123 mean basis not yet defined | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; do not substitute a floor-component count | TPL, AUTH, FX |
+| `[E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_request]` | UNKNOWN — D-123 reported-mean artifact field not yet defined | alpha / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN; resolve by landing the alpha reported-mean schema and exact member basis | TPL, AUTH, FX |
+| `[E_1p7B_prefill_p[PREFILL_LENGTH]_lower_J]` | UNKNOWN — fully composed lower endpoint not yet defined | alpha / prefill-p[PREFILL_LENGTH] reported-mean interval | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN; resolve in the D-123 extractor contract | TPL, AUTH |
+| `[E_1p7B_prefill_p[PREFILL_LENGTH]_upper_J]` | UNKNOWN — fully composed upper endpoint not yet defined | alpha / prefill-p[PREFILL_LENGTH] reported-mean interval | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN; resolve in the D-123 extractor contract | TPL, AUTH |
+| `[E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_token]` | UNKNOWN — runtime-observed prompt-token companion field not yet defined | alpha / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN; bind the denominator provenance in the D-123 output schema | TPL, AUTH |
+| `[N_bundles_1p7B_prefill_p[PREFILL_LENGTH]]` | UNKNOWN — admitted independent-bundle count for the D-123 mean basis not yet defined | alpha / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN; do not substitute a floor-component count | TPL, AUTH, FX |
+| `[E_1p7B_decode_J_per_request]` | UNKNOWN — D-123 reported-mean artifact field not yet defined | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; resolve by landing the alpha reported-mean schema and basis | TPL, AUTH, FX |
+| `[E_1p7B_decode_lower_J]` | UNKNOWN — fully composed lower endpoint not yet defined | alpha / decode reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
+| `[E_1p7B_decode_upper_J]` | UNKNOWN — fully composed upper endpoint not yet defined | alpha / decode reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
+| `[E_1p7B_decode_J_per_token]` | UNKNOWN — runtime-observed output-token companion field not yet defined | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; denominator provenance must be authenticated | TPL, AUTH |
+| `[N_bundles_1p7B_decode]` | UNKNOWN — admitted independent-bundle count for the D-123 mean basis not yet defined | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; do not substitute a floor-component count | TPL, AUTH, FX |
+| `[E_8B_prefill_p[PREFILL_LENGTH]_J_per_request]` | UNKNOWN — D-123 reported-mean artifact field not yet defined | beta / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN; resolve by landing the beta reported-mean schema and basis | TPL, AUTH, FX |
+| `[E_8B_prefill_p[PREFILL_LENGTH]_lower_J]` | UNKNOWN — fully composed lower endpoint not yet defined | beta / prefill-p[PREFILL_LENGTH] reported-mean interval | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN | TPL, AUTH |
+| `[E_8B_prefill_p[PREFILL_LENGTH]_upper_J]` | UNKNOWN — fully composed upper endpoint not yet defined | beta / prefill-p[PREFILL_LENGTH] reported-mean interval | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN | TPL, AUTH |
+| `[E_8B_prefill_p[PREFILL_LENGTH]_J_per_token]` | UNKNOWN — runtime-observed prompt-token companion field not yet defined | beta / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN; denominator provenance must be authenticated | TPL, AUTH |
+| `[N_bundles_8B_prefill_p[PREFILL_LENGTH]]` | UNKNOWN — admitted independent-bundle count for the D-123 mean basis not yet defined | beta / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN; do not substitute a floor-component count | TPL, AUTH, FX |
+| `[E_8B_decode_J_per_request]` | UNKNOWN — D-123 reported-mean artifact field not yet defined | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; resolve by landing the beta reported-mean schema and basis | TPL, AUTH, FX |
+| `[E_8B_decode_lower_J]` | UNKNOWN — fully composed lower endpoint not yet defined | beta / decode reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
+| `[E_8B_decode_upper_J]` | UNKNOWN — fully composed upper endpoint not yet defined | beta / decode reported-mean interval | STOP_FILL | SUPPLIER_UNKNOWN | TPL, AUTH |
+| `[E_8B_decode_J_per_token]` | UNKNOWN — runtime-observed output-token companion field not yet defined | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; denominator provenance must be authenticated | TPL, AUTH |
+| `[N_bundles_8B_decode]` | UNKNOWN — admitted independent-bundle count for the D-123 mean basis not yet defined | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN; do not substitute a floor-component count | TPL, AUTH, FX |
 
-### Gamma token-generation contrast
+### Gamma `_v5` contrasts
 
-These rows name the token-generation contrast because that is the landed
-template vocabulary. D-122 additionally requires a prompt-processing contrast;
-the missing prompt token family is recorded under discrepancies rather than
-invented here.
+The decode rows bind the known generator identifier
+`ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b`. The `_v5` generator also emits a
+prefill contrast, but its identifier contains `[PREFILL_LENGTH]`; the frozen
+draft has no exact professor-facing prefill token family. PG placement rows
+therefore remain `STOP_FILL` and `UNRESOLVED-UNTIL-G2A` rather than receiving
+guessed token names.
 
 | Exact token | Producing artifact and output field | Campaign / cell role | Fill rule | Freeze status and resolution | Sources |
 |---|---|---|---|---|---|
-| `[E_decode_contrast_signed_J_per_request]` | Prospective claim-verdict artifact `contrasts[decode].estimator.estimate`; orientation must remain condition B minus condition A | gamma / decode contrast | MEASURED | KEY_FROZEN / VALUE_UNISSUED; exact contrast identifier freezes with the D-122-compliant gamma pack | TPL, CV, AUTH |
-| `[E_decode_contrast_lower_J]` | `contrasts[decode].deterministic_bounds.decision_interval.lower` | gamma / decode contrast | MEASURED | KEY_FROZEN / VALUE_UNISSUED | TPL, CV |
-| `[E_decode_contrast_upper_J]` | `contrasts[decode].deterministic_bounds.decision_interval.upper` | gamma / decode contrast | MEASURED | KEY_FROZEN / VALUE_UNISSUED | TPL, CV |
+| `[E_decode_contrast_signed_J_per_request]` | `_v5` claim-verdict artifact `contrasts[contrast_id=ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b].estimator.estimate`; orientation is condition B minus condition A | gamma / decode contrast over `real_prompts_v1` | MEASURED | KEY_FROZEN / VALUE_UNISSUED | CV, V5GEN, PANEL, WORKLOAD |
+| `[E_decode_contrast_lower_J]` | Same contrast, `deterministic_bounds.decision_interval.lower` | gamma / decode contrast | MEASURED | KEY_FROZEN / VALUE_UNISSUED | CV, V5GEN |
+| `[E_decode_contrast_upper_J]` | Same contrast, `deterministic_bounds.decision_interval.upper` | gamma / decode contrast | MEASURED | KEY_FROZEN / VALUE_UNISSUED | CV, V5GEN |
 | `[M_decode_contrast_abs_J_per_request]` | `abs(E_decode_contrast_signed_J_per_request)` | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
-| `[F_claim_decode_armwise_max_J]` | `max(F_1p5B_decode_operative_J, F_7B_decode_operative_J)`; verify against the claim artifact's armwise floor gate | gamma consumer of alpha and beta decode floors | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, CV, MINT |
-| `[B_decode_claim_J]` | NO SUPPLIER EXISTS. The registry's own rule governs and is unchanged: "Do not assume that the complete deterministic-bound total is identical to the template's clock-anchor claim-side term." T26 ruling Addendum 2 item 25 briefly ruled otherwise and was WITHDRAWN on verification by Addendum 3 item 33: `scripts/render_results_fills.py:977` carries a deliberate guard, `_supplier_unknown("[B_decode_claim_J]")`, whose comment states that the registry explicitly forbids binding the tempting deterministic total, and that code was right. The column is the CLAIM-SIDE bound as this registry defines it; the supplier is built post-`_v4`, and the sizing sum renders only then. | gamma / decode claim interval | STOP_FILL | SUPPLIER_UNKNOWN; supplier to be built post-`_v4` | TPL, CV, DF |
+| `[F_claim_decode_armwise_max_J]` | `max(F_1p7B_decode_operative_J, F_8B_decode_operative_J)`; verify against the claim artifact's armwise floor gate | gamma consumer of alpha and beta decode floors | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL, DF, CV, MINT |
+| `[B_decode_claim_J]` | NO SUPPLIER EXISTS. Do not assume that `deterministic_bounds.total` is the template's separately registered claim-side term. The deliberate `_supplier_unknown("[B_decode_claim_J]")` guard in `scripts/render_results_fills.py` remains correct. | gamma / decode claim interval | STOP_FILL | SUPPLIER_UNKNOWN; ruling item 33 expressly preserves this stop | TPL, CV, DF |
 | `[C_decode_floor_clearance_J]` | `M_decode_contrast_abs_J_per_request - F_claim_decode_armwise_max_J`, only after floor-gate passage | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
 | `[S_decode_floor_shortfall_J]` | `F_claim_decode_armwise_max_J - M_decode_contrast_abs_J_per_request`, only on floor-gate refusal | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED | TPL |
 | `[R_decode_effect_x_floor]` | `M_decode_contrast_abs_J_per_request / F_claim_decode_armwise_max_J` | gamma / decode contrast | DERIVE | DERIVATION_FROZEN / VALUE_UNISSUED; denominator must be exact and nonzero | TPL |
@@ -525,11 +535,15 @@ number the reader has no way to judge.
 Addendum 3 item 38 ruled that every diagnostic-era value in the draft is traced to an
 actual artifact path or becomes a registered `[PENDING]` with the diagnostic-era label:
 no number stands on seat prose. A sweep of all 101 diagnostic numeric value-sites in the
-draft traced 98, left one (DG-097) narrowed to what its source supports, and converted 2. The two conversions are the Section 6 resolvability
-example's realized record spacing: the draft asserted about 112 ms, and no issued artifact
-supplies it — the measured all-trace median spacing for that bundle is about 120.9 ms.
-Both sites remain `[PENDING]` markers (rows DG-071 and DG-075, renamed under Addendum 5 item 48 to the two DISTINCT quantities they actually denote) and the marker census rose
-from 35 to 37 accordingly.
+draft traced 98, left one (DG-097) narrowed to what its source supports, and converted 2.
+The two conversions are the Section 6 resolvability example's width and spacing
+descriptions. Both remain `[PENDING]` markers. Reviewer synthesis C7 requires a
+declared statistic; the round-7 resolvability projection then corrected the old
+mechanism: 328,522 retained records tile with no meaningful gap, so spacing and
+width are the same record-period distribution rather than quantities separated
+by sampler pauses. The old 111.8–112.5 ms observation is the bottom of the cited
+bundle's width distribution, not its range. Rows DG-071 and DG-075 therefore
+register the same proposed summary family without issuing either value.
 
 Path abbreviations below are exact:
 
@@ -549,6 +563,8 @@ Path abbreviations below are exact:
 - DL = docs/decision_log.md, D-122 and its retained sizing record
 - DF = joulewise/detection_floor.py, guarded point diagnostic and absolute_false_effect_floor/corner computation
 - RF = scripts/check_paper_replay_fence.py
+- PROJ = docs/paper/round7/prefill-resolvability-projection.md, especially Sections 4 and 11
+- SYN = docs/process_traces/2026-08-28-reviewer-panel/04-SYNTHESIS.md, C7
 
 #### Rows
 
@@ -624,11 +640,11 @@ Path abbreviations below are exact:
 | DG-068 — Section 6 repeated population denominator, line 247 | 50 | same NR#bundle_count | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-069 — Section 6 diagnostic passes, line 247 | 13 | NR#stack_summaries[stack=1.5B].resolvability.identifiable | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-070 — Section 6 concrete prefill duration, line 256 | 0.121034145 s | NR#bundles[bundle=p2015-df-ph-decode-abs-r03].boundary.prefill_duration_s; verify R03E phase_end - phase_start; round 9 decimals | historical a10 / decode-abs-r03 prefill | DERIVE | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
-| DG-071 — Section 6 sampling-record interval width, line 256 | [PENDING] (DIAGNOSTIC-ERA VALUE: sampling-record interval width for p2015-df-ph-decode-abs-r03) | `interval_end_s - interval_start_s` per record in that bundle's `power_trace.csv`; Addendum 5 item 48 establishes this is a REAL and distinct quantity — measured 111.8-112.5 ms — and that the paper's original "112 ms" named it correctly. A single representative value and its statistic are not yet declared, so the site stays unrendered. | historical a10 diagnostic / resolvability example | STOP_FILL | SUPPLIER_UNKNOWN pending a declared statistic (single record, median, or range) over the bundle's interval widths | DRAFT, DF |
+| DG-071 — Section 6 sampling-record interval width, line 256 | [PENDING] (DIAGNOSTIC-ERA VALUE: sampling-record interval width for p2015-df-ph-decode-abs-r03) | PROPOSED statistic: median with IQR of `interval_end_s - interval_start_s` over every retained record in the cited R03P, with the exact file path and SHA-256 recorded by a ratification artifact. Records tile; the former 111.8–112.5 ms band is only the bottom of this width distribution, not its range. | historical a10 diagnostic / resolvability example | STOP_FILL | RATIFIED-STATISTIC (magistrate 2026-08-31, `docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md`) / VALUE_UNISSUED; no desk-computed value may fill the marker | DRAFT, DF, PROJ, SYN |
 | DG-072 — Section 6 two-overlap count, line 256 | two; 2 | NR#bundles[...r03].power.prefill_overlap_sample_count and NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[2] | historical a10 / r03 and population | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-073 — Section 6 three-sample threshold/count, line 256 | three; 3 | NR#bundles[...r03].resolvability.minimum_samples and NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[3] | historical a10 / r03 and population | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-074 — Section 6 rounded duration operand, line 256 | 0.121 | round NR r03 boundary.prefill_duration_s to 3 decimals | historical a10 / decode-abs-r03 prefill | DERIVE | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
-| DG-075 — Section 6 record spacing, line 256 | [PENDING] (DIAGNOSTIC-ERA VALUE: median record spacing for p2015-df-ph-decode-abs-r03) | Median difference between consecutive unique `timestamp_s` values in that bundle's `power_trace.csv`; measured 120.922 ms, which is the quantity Addendum 4 item 46 had assumed was the cadence. Distinct from DG-071: spacing exceeds width because the sampler pauses between records. | historical a10 diagnostic / resolvability example | STOP_FILL | SUPPLIER_UNKNOWN pending a declared statistic and an issued artifact; the value here was computed at the desk, not issued | DRAFT, DF |
+| DG-075 — Section 6 record spacing, line 256 | [PENDING] (DIAGNOSTIC-ERA VALUE: median record spacing for p2015-df-ph-decode-abs-r03) | PROPOSED statistic: median with IQR of differences between consecutive unique `timestamp_s` values over every retained record in the cited R03P, with the exact file path and SHA-256 recorded by a ratification artifact. The records tile with no sampler pause, so this is the same record-period distribution as DG-071 apart from endpoint convention and any merged intervals. | historical a10 diagnostic / resolvability example | STOP_FILL | RATIFIED-STATISTIC (magistrate 2026-08-31, `docs/process_traces/2026-08-31-registry-v5/02-dg071-dg075-ratification.md`) / VALUE_UNISSUED; no desk-computed value may fill the marker | DRAFT, DF, PROJ, SYN |
 | DG-076 — Section 6 population with two overlaps, line 256 | 37 | NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[2] | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-077 — Section 6 population with three overlaps, line 256 | 13 | NR#stack_summaries[stack=1.5B].prefill_overlap_sample_count[3] | historical a10 / short-prefill resolvability | MEASURED | DIAGNOSTIC_ERA / ISSUED_RESULT; NON_CLAIM_BEARING | DRAFT, AUTH |
 | DG-078 — Section 6 historical ABBA block count, line 268 | Ten | count AB block indices b01 through b10, each with a1,a2,b1,b2 | historical contrast / prefill | DERIVE | DIAGNOSTIC_ERA / AUTHENTICATED_PRIMARY; SIZING_ONLY | DRAFT, AUTH |
@@ -779,22 +795,22 @@ placeholders; no energy value from superseded artifacts is carried into these ta
 appears anywhere in this paper except the explicitly labeled instrument diagnostics of Sections 3,
 5, and 7.]`
 
-| DS-09 — Table 2 prompt/1.5B gross cell, line 280, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_request` with lower and upper interval endpoints | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-10 — Table 2 prompt/1.5B per-token cell, line 280, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p5B_prompt_J_per_token` | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-11 — Table 2 prompt/1.5B floor cell, line 280, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `F_1p5B_prompt_operative_J` plus cell label branch | alpha / prompt floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-12 — Table 2 prompt/1.5B count cell, line 280, col 7 under `n` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `N_bundles_1p5B_prompt` | alpha / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-13 — Table 2 prompt/7B gross cell, line 281, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `E_7B_prompt_J_per_request` with lower and upper interval endpoints | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-14 — Table 2 prompt/7B per-token cell, line 281, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `E_7B_prompt_J_per_token` | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-15 — Table 2 prompt/7B floor cell, line 281, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `F_7B_prompt_operative_J` plus cell label branch | beta / prompt floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-16 — Table 2 prompt/7B count cell, line 281, col 7 under `n` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `N_bundles_7B_prompt` | beta / prompt reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-17 — Table 2 decode/1.5B gross cell, line 282, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `E_1p5B_decode_J_per_request` with lower and upper interval endpoints | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-18 — Table 2 decode/1.5B per-token cell, line 282, col 5 under `J per output token` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `E_1p5B_decode_J_per_token` | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-19 — Table 2 decode/1.5B floor cell, line 282, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `F_1p5B_decode_operative_J` plus cell label branch | alpha / decode floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-20 — Table 2 decode/1.5B count cell, line 282, col 7 under `n` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `N_bundles_1p5B_decode` | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-21 — Table 2 decode/7B gross cell, line 283, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `E_7B_decode_J_per_request` with lower and upper interval endpoints | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-22 — Table 2 decode/7B per-token cell, line 283, col 5 under `J per output token` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `E_7B_decode_J_per_token` | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
-| DS-23 — Table 2 decode/7B floor cell, line 283, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `F_7B_decode_operative_J` plus cell label branch | beta / decode floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
-| DS-24 — Table 2 decode/7B count cell, line 283, col 7 under `n` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `N_bundles_7B_decode` | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-09 — Table 2 prompt/1.5B gross cell, line 280, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_request` with lower and upper interval endpoints | alpha / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-10 — Table 2 prompt/1.5B per-token cell, line 280, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `E_1p7B_prefill_p[PREFILL_LENGTH]_J_per_token` | alpha / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-11 — Table 2 prompt/1.5B floor cell, line 280, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `F_1p7B_prefill_p[PREFILL_LENGTH]_operative_J` plus cell label branch | alpha / prefill-p[PREFILL_LENGTH] floor | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DRAFT, TPL, DF, G2A |
+| DS-12 — Table 2 prompt/1.5B count cell, line 280, col 7 under `n` | `[PENDING]`; row anchor `\| prompt processing \| 1.5B \|` | `N_bundles_1p7B_prefill_p[PREFILL_LENGTH]` | alpha / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-13 — Table 2 prompt/7B gross cell, line 281, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `E_8B_prefill_p[PREFILL_LENGTH]_J_per_request` with lower and upper interval endpoints | beta / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-14 — Table 2 prompt/7B per-token cell, line 281, col 4 under `J per prompt token` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `E_8B_prefill_p[PREFILL_LENGTH]_J_per_token` | beta / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-15 — Table 2 prompt/7B floor cell, line 281, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `F_8B_prefill_p[PREFILL_LENGTH]_operative_J` plus cell label branch | beta / prefill-p[PREFILL_LENGTH] floor | DERIVE | UNRESOLVED-UNTIL-G2A / VALUE_UNISSUED | DRAFT, TPL, DF, G2A |
+| DS-16 — Table 2 prompt/7B count cell, line 281, col 7 under `n` | `[PENDING]`; row anchor `\| prompt processing \| 7B \|` | `N_bundles_8B_prefill_p[PREFILL_LENGTH]` | beta / prefill-p[PREFILL_LENGTH] reported mean | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-17 — Table 2 decode/1.5B gross cell, line 282, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `E_1p7B_decode_J_per_request` with lower and upper interval endpoints | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-18 — Table 2 decode/1.5B per-token cell, line 282, col 5 under `J per output token` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `E_1p7B_decode_J_per_token` | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-19 — Table 2 decode/1.5B floor cell, line 282, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `F_1p7B_decode_operative_J` plus cell label branch | alpha / decode floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
+| DS-20 — Table 2 decode/1.5B count cell, line 282, col 7 under `n` | `[PENDING]`; row anchor `\| token generation \| 1.5B \|` | `N_bundles_1p7B_decode` | alpha / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-21 — Table 2 decode/7B gross cell, line 283, col 3 under `Gross J/request (lower, upper)` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `E_8B_decode_J_per_request` with lower and upper interval endpoints | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-22 — Table 2 decode/7B per-token cell, line 283, col 5 under `J per output token` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `E_8B_decode_J_per_token` | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
+| DS-23 — Table 2 decode/7B floor cell, line 283, col 6 under `Cell floor (labeled)` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `F_8B_decode_operative_J` plus cell label branch | beta / decode floor | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
+| DS-24 — Table 2 decode/7B count cell, line 283, col 7 under `n` | `[PENDING]`; row anchor `\| token generation \| 7B \|` | `N_bundles_8B_decode` | beta / decode reported mean | STOP_FILL | SUPPLIER_UNKNOWN under D-123 | DRAFT, TPL, AUTH |
 | DS-25 — Table 3 decode point estimate, line 289, col 2 under `Point estimate` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `E_decode_contrast_signed_J_per_request` | gamma / decode contrast | MEASURED | VALUE_UNISSUED | DRAFT, TPL, CV |
 | DS-26 — Table 3 decode interval, line 289, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `E_decode_contrast_lower_J`, `E_decode_contrast_upper_J` | gamma / decode contrast | MEASURED | VALUE_UNISSUED; one bracket marker contains two semantic fills | DRAFT, TPL, CV |
 | DS-27 — Table 3 decode floor, line 289, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | `F_claim_decode_armwise_max_J` | gamma consuming alpha/beta decode floors | DERIVE | VALUE_UNISSUED | DRAFT, TPL, DF |
@@ -803,16 +819,20 @@ appears anywhere in this paper except the explicitly labeled instrument diagnost
 | DS-30 — Table 3 decode floor-gate outcome, line 289, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from authenticated magnitude and claim floor, consistent with claim verdict | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; renderer contract must add a binding without renaming existing tokens | DRAFT, TPL, CV |
 | DS-31 — Table 3 decode direction-gate outcome, line 289, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; derive only from the fully composed interval and registered direction | gamma / decode contrast | STOP_FILL | TOKEN_MISSING | DRAFT, TPL, CV |
 | DS-32 — Table 3 decode verdict, line 289, col 9 under `Verdict` | `[PENDING]`; row anchor `\| token generation, 7B − 1.5B \|` | No exact template token; candidate source `contrasts[decode].claim_evaluation.outcome` | gamma / decode contrast | STOP_FILL | TOKEN_MISSING; bind a professor-facing conservative rendering | DRAFT, TPL, CV, AUTH |
-| DS-33 — Table 3 prompt floor, line 290, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No prompt claim-floor token exists; the draft arm is live and the template family is missing | gamma consuming alpha/beta prompt floors | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, AUTH |
+| DS-33 — Table 3 prompt floor, line 290, col 4 under `Cell floor` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | `_v5` prefill contrast `ctr-d117-prefill-p[PREFILL_LENGTH]-qwen3-1p7b-vs-qwen3-8b` needs a professor-facing claim-floor token; no such token exists | gamma consuming alpha/beta prefill-p[PREFILL_LENGTH] floors | STOP_FILL | UNRESOLVED-UNTIL-G2A / TOKEN_FAMILY_MISSING | DRAFT, TPL, AUTH, V5GEN, G2A |
 | DS-34 — Section 9 evidence/code-availability locator hold, line 348 | `[REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST]` | UNKNOWN release-manifest fields for repository commit, archive locator, and published digest manifest | release / artifact availability | STOP_FILL | SUPPLIER_UNKNOWN; resolve only after the release checklist issues the locators | DRAFT, AUTH |
-| PG-01 — Table 3 prompt point estimate, line 290, col 2 under `Point estimate` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated prompt-contrast estimator field | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
-| PG-02 — Table 3 prompt interval lower endpoint, line 290, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed lower endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
-| PG-03 — Table 3 prompt interval upper endpoint, line 290, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future authenticated fully composed upper endpoint | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
-| PG-04 — Table 3 prompt sizing sum and signed clearance, line 290, col 5 under `Sizing sum F+B; signed clearance` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future branch-explicit clearance or shortfall derivation | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING; shape contract required | DRAFT, TPL, CV |
-| PG-05 — Table 3 prompt contrast claim-side bound, line 290, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token and no named claim-side-bound output field | gamma / prompt contrast | STOP_FILL | SUPPLIER_UNKNOWN | DRAFT, TPL, CV, AUTH |
-| PG-06 — Table 3 prompt floor-gate outcome, line 290, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering consistent with authenticated magnitude, floor, and verdict | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV |
-| PG-07 — Table 3 prompt direction-gate outcome, line 290, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt token; future conservative rendering from the fully composed interval and registered direction | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
-| PG-08 — Table 3 prompt verdict, line 290, col 9 under `Verdict` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact prompt rendering token; future authenticated claim-evaluation outcome | gamma / prompt contrast | STOP_FILL | TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH |
+| PG-01 — Table 3 prompt point estimate, line 290, col 2 under `Point estimate` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | Future authenticated estimator for `_v5` contrast `ctr-d117-prefill-p[PREFILL_LENGTH]-qwen3-1p7b-vs-qwen3-8b`; no exact professor-facing token exists | gamma / prefill-p[PREFILL_LENGTH] contrast | STOP_FILL | UNRESOLVED-UNTIL-G2A / TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH, V5GEN, G2A |
+| PG-02 — Table 3 prompt interval, line 290, col 3 under `Interval [lower, upper]` | `[PENDING, PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | Future authenticated fully composed lower and upper endpoints for `_v5` contrast `ctr-d117-prefill-p[PREFILL_LENGTH]-qwen3-1p7b-vs-qwen3-8b`; no exact professor-facing endpoint tokens exist | gamma / prefill-p[PREFILL_LENGTH] contrast | STOP_FILL | UNRESOLVED-UNTIL-G2A / TOKEN_FAMILY_MISSING; one marker site contains two semantic slots | DRAFT, TPL, CV, AUTH, V5GEN, G2A |
+| PG-04 — Table 3 prompt sizing sum and signed clearance, line 290, col 5 under `Sizing sum F+B; signed clearance` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | Future branch-explicit clearance or shortfall derivation for the selected `_v5` prefill contrast; no exact token exists | gamma / prefill-p[PREFILL_LENGTH] contrast | STOP_FILL | UNRESOLVED-UNTIL-G2A / TOKEN_FAMILY_MISSING; shape contract required | DRAFT, TPL, CV, V5GEN, G2A |
+| PG-05 — Table 3 prompt contrast claim-side bound, line 290, col 6 under `Claim-side bound` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | No exact professor-facing token and no named claim-side-bound field for the selected `_v5` prefill contrast | gamma / prefill-p[PREFILL_LENGTH] contrast | STOP_FILL | UNRESOLVED-UNTIL-G2A / SUPPLIER_UNKNOWN | DRAFT, TPL, CV, AUTH, V5GEN, G2A |
+| PG-06 — Table 3 prompt floor-gate outcome, line 290, col 7 under `Floor-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | Future conservative rendering consistent with the selected prefill magnitude, floor, and verdict; no exact token exists | gamma / prefill-p[PREFILL_LENGTH] contrast | STOP_FILL | UNRESOLVED-UNTIL-G2A / TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, V5GEN, G2A |
+| PG-07 — Table 3 prompt direction-gate outcome, line 290, col 8 under `Direction-gate outcome` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | Future conservative rendering from the selected prefill contrast's fully composed interval and registered direction | gamma / prefill-p[PREFILL_LENGTH] contrast | STOP_FILL | UNRESOLVED-UNTIL-G2A / TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH, V5GEN, G2A |
+| PG-08 — Table 3 prompt verdict, line 290, col 9 under `Verdict` | `[PENDING]`; row anchor `\| prompt processing, 7B − 1.5B \|` | Future authenticated claim-evaluation outcome for the selected `_v5` prefill contrast; no exact rendering token exists | gamma / prefill-p[PREFILL_LENGTH] contrast | STOP_FILL | UNRESOLVED-UNTIL-G2A / TOKEN_FAMILY_MISSING | DRAFT, TPL, CV, AUTH, V5GEN, G2A |
+
+**PG-03 RETIRED (round-7 R-6 regeneration).** PG-02 now owns the one physical
+`[PENDING, PENDING]` site and both of its semantic endpoints. Keeping a second
+live row for that same site would violate the one-site/one-row census. No value,
+supplier, or fill authority changed in this consolidation.
 
 ## Authority discrepancies and non-token gaps
 
@@ -821,9 +841,10 @@ read-only and the template vocabulary is binding.
 
 | Gap | Conflict | Required resolution | Sources |
 |---|---|---|---|
-| Gamma prompt-processing contrast | The current draft registers both contrast arms, while the template remains decode-only | The lead-owned template train must add the guarded prompt token family and exact identifiers for the point estimate, interval endpoints, claim floor, branch-explicit clearance or shortfall, claim-side bound, floor and direction outcomes, verdict, and refusal branches before rendering; DS-33 and PG-01 through PG-08 state this one-sided gap | DRAFT, TPL, AUTH |
+| Gamma prefill contrast | The frozen draft registers both contrast arms and the `_v5` generator names the selected prefill contrast, while the renderer/template remain decode-only | After G2-a resolves `[PREFILL_LENGTH]`, the lead-owned renderer/template train must add the guarded prefill token family for the point estimate, both interval endpoints, claim floor, branch-explicit clearance or shortfall, claim-side bound, floor and direction outcomes, verdict, and D-166's split refusal branch; DS-33, PG-01, PG-02, and PG-04 through PG-08 remain stopped | DRAFT, TPL, AUTH, V5GEN, G2A |
 | D-123 reported means | D-123 authorizes mean cells, while no current extraction/report schema fixes their member basis or output field names | Land and audit the reported-mean schema in the alpha/beta packs and extraction output; prove floor outputs remain byte-identical; then replace `SUPPLIER_UNKNOWN` statuses | AUTH, FX, PLAN |
 | Generic draft table outcomes | Draft Table 3 has generic cells for decode and prompt gate outcomes and verdicts, but the template has no exact tokens for them | Add binding tokens or a machine renderer contract in the lead-owned template train; do not infer strings from variant headings | DRAFT, TPL, CV |
+| DG-071 / DG-075 ratification | The retained bytes support a record-period distribution, but no issued statistic artifact exists | Ratify or replace the proposed median-with-IQR summaries, then issue a path- and SHA-pinned artifact; until both steps occur the rows stay `STOP_FILL` | PROJ, SYN |
 | Characterization outputs | RESOLVED 2026-08-24 as to the field contract: the frozen characterization result specification defines every named token's producing field, and this registry now binds each one. The draft's Section 5 still holds protocol-specification rows rather than claim-bearing result cells, which is by design | Issue an authenticated characterization report; until then every characterization row stays `KEY_FROZEN / VALUE_UNISSUED`. Ratify or replace the two-limb derivation recorded above | DRAFT, TPL, SPEC |
 
 The folded capture-method-era and estimator-provenance preconditions authorize
@@ -831,68 +852,58 @@ no value.
 
 ## Census and reconciliation
 
-Census command shape: scan every non-newline bracket pair in the draft and
-retain markers beginning with `PENDING`, `RESULT PENDING ISSUED ARTIFACTS`,
-or `REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST`; scan the
-template with `\[([A-Z][A-Za-z0-9_*.-]*)\]`; sort for the distinct vocabulary
-while retaining the unsorted stream for occurrence counts. Markdown citations
-such as `[1]` are excluded by construction.
+Census command shape: scan every non-newline bracket pair in the frozen draft
+and retain markers beginning with `PENDING`, `RESULT PENDING ISSUED ARTIFACTS`,
+or `REPOSITORY AND ARCHIVE LOCATORS PENDING RELEASE CHECKLIST`; count a comma
+inside a result marker as a second semantic slot. Markdown citations and the
+two explanatory `[[NEEDS-VALUE:...]]` notes are outside the result-marker
+family and are counted separately.
 
-- Draft: **34 bracket-marker sites, representing 36 semantic fill slots**, because the two
-  interval markers `[PENDING, PENDING]` each contain two endpoints. MEASURED 2026-08-27
-  against the current draft, not carried forward.
-  **The previously stated 35/37 figures were stale and are corrected here.** They were last
-  re-counted on 2026-08-24, before the round-2 restructure rewrote every section; that
-  restructure changed the count to 32 sites / 34 slots and no pass re-counted it, so the
-  stale pair survived into round 3 and was briefly propagated as 37/39. Addendum 3 item 38
-  then added two sites — the Section 6 resolvability example's realized record spacing,
-  which no issued artifact supplies (the measured all-trace median spacing for that bundle
-  is about 120.9 ms, not the 112 ms the draft asserted), became registered `PENDING`
-  markers with the diagnostic-era label (rows DG-071 and DG-075). 32 + 2 = 34 sites,
-  34 + 2 = 36 slots.
-  Recount command: count matches of `\[PENDING[^\]]*\]` in `docs/paper/draft-v1.md`,
-  scoring a match containing a comma as two slots. The rewritten
-  Section 5 carries square brackets only inside LaTeX math, which the census
-  command's marker prefixes exclude.
-- Template: 437 token occurrences and 91 distinct exact tokens. The count
-  rose by one on 2026-08-24: `[B_C_prompt_invariance_J_per_token]` was added
-  to the Section 6 Variant B phase-attribution sentence, which is an added
-  occurrence of an already-registered token, so the distinct vocabulary is
-  unchanged.
-- Registry: 91 exact template-token rows plus 42 draft-site rows, for 133
-  census rows. The two swap-block-only rows are separately registered, have no
-  landed template counterpart, and are excluded from the template-key census.
-  The discrepancy table contains no additional fill token.
-- Reconciliation: all 91 template tokens occur literally in the exact-token
-  tables. Draft-site rows DS-02, DS-05 and DS-06 bind content anchors whose former
-  markers are absent; DS-03 was re-anchored and DS-04 and DS-07 retired under Addendum 4
-  item 40.
-  **Marker-bound row recount, MEASURED 2026-08-27 under Addendum 4 item 45** (nothing here
-  is carried forward). Command:
+- Frozen draft SHA-256:
+  `939dfa23730a22d35e02154d7aa7904f396364d55c128e6715c72b849eaf39ab`;
+  **34 literal `[PENDING...]` sites / 36 semantic slots**, **37 complete-family
+  result-marker sites / 39 semantic slots**, and **2 `[[NEEDS-VALUE:...]]`
+  notes**. These are measured against the current 672-line source, not
+  carried forward.
+- Registry exact-key rows: **126**. This is the prior 109-row key inventory
+  regenerated one-for-one (66 model-bearing keys renamed and 43 retained) plus
+  17 new keys: `[PREFILL_LENGTH]`, eight independent-corner R columns, four
+  comparative R_cm columns, and four absolute R_cm not-applicable columns.
+  The count includes the six explicitly labelled renderer metatokens.
+- Registry live marker-site rows: **37**, exactly one for each complete-family
+  draft site, carrying the same 39 semantic slots. PG-02 owns both slots at its
+  interval site; PG-03 is retired. The `[PENDING...]` subset is therefore 34
+  rows for 34 sites and 36 slots. No live site is duplicated and no site-to-row
+  gap is silently supplied.
+- The current renderer/template vocabulary still spells the pre-`_v5` model
+  keys. It is not a fill supplier for renamed keys and must fail closed until a
+  lead-owned regeneration binds the 126-row registry vocabulary. This scoped
+  documentation change does not edit that implementation.
+
+Measured marker-row command:
 
   ```sh
-  grep -cE '^\| (DS|PG|DG)-[0-9]+[a-z]? — .*\[PENDING' docs/paper/results-fill-registry.md
+  grep -cE '^\| (DS|PG|DG)-[0-9]+[a-z]? — .*[[]PENDING' docs/paper/results-fill-registry.md
   ```
 
-  Result: **35 marker-bound rows** (25 DS, 8 PG, 2 DG). These reconcile exactly with the
-  measured draft census of 34 bracket-marker sites and 36 semantic fill slots: 35 rows less
-  the one site that carries two rows (PG-02 and PG-03 share a single interval marker) gives
-  34 sites; and 32 single-slot sites plus the 2 interval sites at two endpoints each gives
-  36 slots. DS-26 carries two semantic fills in one row, which changes neither total. No
-  site-to-token gap is silently supplied.
+Result: **34 `[PENDING...]` rows**. Including DS-01, DS-08a, and DS-34 gives
+the complete-family total of 37.
 
 ## Lead double-checks before renderer implementation
 
-- Confirm the final alpha/beta cell and artifact identifiers after their packs
-  and post-collection pinsets land; this registry currently binds semantic
-  roles plus stable output fields, not invented identifiers.
+- Verify the G2-a selection output path and SHA-256, bind
+  `[PREFILL_LENGTH]` to `collection_prefill_tokens`, and require the prompt-pin
+  v2 cross-check before generating any prefill identifier.
 - Rule the exact D-123 reported-mean member basis and output schema; none of the
   twenty mean/interval/companion/count tokens is fillable yet.
 - Name the gamma claim-side-bound field. Do not assume that the complete
   deterministic-bound total is identical to the template's clock-anchor
   claim-side term.
-- For D-122, add the guarded prompt token family to the template train; the
-  draft arm is live. Add the missing Table 3 outcome tokens.
+- Regenerate the guarded prefill token family and the missing Table 3 outcome
+  tokens only after G2-a; implement D-166's two distinct exhausted-ladder
+  refusal renderings verbatim.
+- Ratify or replace DG-071 and DG-075's proposed median-with-IQR statistics and
+  issue their path- and SHA-pinned diagnostic artifact before either fill.
 - The characterization result schema is frozen; what remains is an issued,
   authenticated characterization report. Ratify or replace the PROPOSED
   two-limb derivation for `[R_C_linearity_limit_J]` and
