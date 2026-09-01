@@ -1179,6 +1179,176 @@
       "status_note": "Minted 2026-08-20 from the D-144 pre-merge seat pass (both seats GO; nits recorded in the ruling, not queued).",
       "stop_card": null
     },
+    "D165-CLOSEOUT-CORE-01": {
+      "acceptance": {
+        "evidence": [
+          "The close-out, the artifact that decides whether the paper may use the dominance sentence, contains exactly eight ordinary ratio records and four shared-error ratio records; an unknown, missing, or extra cell or component name is refused",
+          "The replay sidecar, a separate hash-bound file emitted alongside the detection-floor artifact, is tied to the finalized manifest by its SHA-256 file digest, its block names, and every per-block input used in the replay",
+          "The builder refuses to replace an existing output file",
+          "Regression tests, tests that preserve a previously observed failure as an example, refuse both relabelled cell names and a self-consistent forged sidecar in tests/test_d165_dominance_closeout.py",
+          "The _v5 pack generator imports the three decision rules from joulewise/dominance_closeout.py, while the generated registration bytes stay exactly unchanged"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D165-CLOSEOUT-CORE-01/acceptance",
+          "label": "D165-CLOSEOUT-CORE-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "One module owns the dominance calculations and the close-out builder refuses any wrong cell list, broken source trail, zero denominator, or existing output file."
+      },
+      "authority": {
+        "label": "D-168 clauses 3-5 and the D-165 close-out fix-round ruling",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-161 evidence-lineage rule carried into D-168",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Evidence lineage, the recorded chain from each input block to the issued result, fails closed; hashes detect changed bytes but do not defend against an operator who supplies a wholly forged yet internally consistent input set"
+        },
+        {
+          "authority": {
+            "label": "D-168 clause 2 neither-branch rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Neither branch may be selected from an untruthful or incomplete input: the sentence and subtitle permissions remain false and filling stops"
+        },
+        {
+          "authority": {
+            "label": "D-165 pre-registration rule",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Pre-registration, fixing the decision rule before campaign results exist: every component in every cell must have R at least 2; R equal to 2.0 passes, there must be at least two repeated observations for each component in each cell, and a zero denominator is refused"
+        }
+      ],
+      "flags": [],
+      "goal": "Finish the one-home dominance module and close-out builder so one checked source trail produces the exact twelve required decisions without allowing forged names, forged replay inputs, or overwrite of prior evidence.",
+      "id": "D165-CLOSEOUT-CORE-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 69,
+      "status": "active",
+      "status_note": "The implementation is on branch feat/d165-dominance-closeout-core. Two independent reviews found relabelled-cell and forged-sidecar failures; the ruled repair round is in progress.",
+      "stop_card": null
+    },
+    "D165-E2E-REPLAY-01": {
+      "acceptance": {
+        "evidence": [
+          "Committed fixtures, fixed example input files kept with the tests, reproduce a finalized manifest through sidecar emission, close-out building, and paper-row rendering",
+          "A second run from the same fixtures reproduces every emitted byte exactly",
+          "The rendered dominance sentence is filled only after the final V5-NIGHTLY-G3-01 campaign check has closed"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D165-E2E-REPLAY-01/acceptance",
+          "label": "D165-E2E-REPLAY-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Fixed example inputs replay the complete source-to-paper path twice with identical bytes, and the live sentence fill remains after campaign close."
+      },
+      "authority": {
+        "label": "D-168 clauses 4-5 fixture-backed end-to-end order",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the mint emits the sanctioned separate replay file without changing the detection-floor artifact",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D165-SIDECAR-EMIT-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the successor renderer can turn the 126 registered fill keys and the close-out decision into paper rows",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "RENDERER-V5-SUCCESSOR-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-168 clause 4 fixture replay boundary",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Fixture proof is a repeatable code-path check, not live campaign evidence and not permission to fill the paper before the campaign closes"
+        }
+      ],
+      "flags": [],
+      "goal": "Prove with fixed example inputs that a finalized manifest produces the separate replay file, the close-out decision, and the rendered paper rows with exactly repeatable bytes.",
+      "id": "D165-E2E-REPLAY-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 72,
+      "status": "blocked",
+      "status_note": "This is the post-campaign consumer of the close-out for the dominance-sentence fill. It starts only after both the sidecar emitter and successor renderer exist; fixture proof does not move the live fill before the final G3 check.",
+      "stop_card": null
+    },
+    "D165-SIDECAR-EMIT-01": {
+      "acceptance": {
+        "evidence": [
+          "The mint, the authenticated step that issues the detection-floor result, emits joulewise.d165_dominance_replay.v1 only through the sanctioned adapter in joulewise/dominance_closeout.py",
+          "The sidecar, a separate hash-bound file emitted alongside the floor result, carries the shared-edge bound, every replay block and input, each split shared and local width, and both the ordinary and shared-error ratio decisions",
+          "The existing joulewise.detection_floor_artifact.v2 bytes remain exactly unchanged",
+          "Finalization, the step that seals the campaign manifest, remains outcome-blind and does not read dominance results at joulewise/analysis_manifest_v3.py:3624"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/D165-SIDECAR-EMIT-01/acceptance",
+          "label": "D165-SIDECAR-EMIT-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The authenticated mint emits one separately bound replay file through the shared adapter while leaving both the floor artifact and outcome-blind finalization unchanged."
+      },
+      "authority": {
+        "label": "D-168 clauses 1 and 4 sidecar ownership",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the shared dominance rules and strict close-out checks finish their ruled repair round",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "D165-CLOSEOUT-CORE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-168 outcome-blind finalization boundary",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Finalization seals identities and hashes but never reads a ratio, pass flag, or paper branch"
+        },
+        {
+          "authority": {
+            "label": "D-168 unchanged floor-artifact ruling",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The existing detection-floor artifact keeps its present meaning and bytes; replay detail is emitted only in the separate file"
+        }
+      ],
+      "flags": [],
+      "goal": "Add the one sanctioned mint adapter that emits the separately hash-bound replay file while preserving the existing floor artifact byte for byte and keeping manifest finalization blind to results.",
+      "id": "D165-SIDECAR-EMIT-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 70,
+      "status": "blocked",
+      "status_note": "This emission step waits for the active close-out core repair so the mint has only one implementation of each decision rule.",
+      "stop_card": null
+    },
     "DOC-008": {
       "acceptance": {
         "evidence": [
@@ -3580,7 +3750,7 @@
       "id": "PREWINDOW-REGEX-01",
       "lane": "agent",
       "priority": "p2_next_slice",
-      "rank": 71,
+      "rank": 74,
       "status": "queued",
       "status_note": "Owning-seat (L9) assent to be solicited at the next council touch (S-7 residual).",
       "stop_card": null
@@ -3742,6 +3912,56 @@
       "rank": 112,
       "status": "queued",
       "status_note": "Registered 2026-08-27 in the 2026-08-27 T26 end-of-sprint kernel wave (docs/process_traces/2026-08-27-t26/WAVE-ROWS.md) from S9-11 of the ruled-not-installed sweep (status C, cure CODE; does not gate the mint but writes the mint's estimator pin).",
+      "stop_card": null
+    },
+    "RENDERER-V5-SUCCESSOR-01": {
+      "acceptance": {
+        "evidence": [
+          "The renderer, the script that turns issued result files into paper-table text, reads the close-out artifact and the other governed fill sources",
+          "The successor renders all 126 registered fill keys, including keys whose names contain the selected prefill length, into docs/paper/results-fill-registry.md rows",
+          "The close-out branch alone decides whether the dominance sentence and subtitle are filled or withheld",
+          "The frozen 109-key renderer remains unedited"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/RENDERER-V5-SUCCESSOR-01/acceptance",
+          "label": "RENDERER-V5-SUCCESSOR-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A new renderer covers the 126-key _v5 fill registry and uses the issued close-out decision without changing the frozen 109-key renderer."
+      },
+      "authority": {
+        "label": "D-168 clauses 4-5 and the ratio close-out scout renderer finding",
+        "path": "docs/process_traces/2026-09-01-fresh-model-review/06b-RULING-d165-artifact-ownership.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the G2-a selection record fixes the prefill length represented in the 126-key fill registry",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "V5-G2A-PREFILL-PROBE-01"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-168 frozen-renderer ruling",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "The existing 109-key renderer is frozen and is never edited; the 126-key registry is handled by a successor"
+        }
+      ],
+      "flags": [],
+      "goal": "Build the successor script that combines the issued close-out with the governed fill sources and renders every row in the 126-key _v5 results-fill registry.",
+      "id": "RENDERER-V5-SUCCESSOR-01",
+      "lane": "agent",
+      "priority": "p1_phase_gate",
+      "rank": 71,
+      "status": "blocked",
+      "status_note": "The frozen renderer cannot represent the live 126-key registry. This successor waits for G2-a because that selection record fixes the prefill length embedded in the registry keys.",
       "stop_card": null
     },
     "SEC5A-REMOTE-01": {
@@ -4553,6 +4773,16 @@
         {
           "evidence": null,
           "kind": "task",
+          "note": "Advisory cross-link only: D165-E2E-REPLAY-01 is the row that later consumes the close-out with the successor renderer to fill the dominance sentence after V5-NIGHTLY-G3-01 closes the campaign; this does not block desk-day work.",
+          "required": "the shared dominance decision rule used by the _v5 pack remains coordinated with the later paper-fill path",
+          "scope": "start",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "D165-CLOSEOUT-CORE-01"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
           "required": "G2-a finishes with immutable bracket, probe-summary, and selector-input evidence",
           "scope": "start",
           "state": "pending",
@@ -4742,6 +4972,16 @@
         "path": "docs/decision_log.md"
       },
       "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "note": "Advisory cross-link only: D165-E2E-REPLAY-01 consumes the close-out with RENDERER-V5-SUCCESSOR-01 for the dominance-sentence fill after this row closes the campaign; the consumer is not a prerequisite for G3.",
+          "required": "the post-campaign paper-fill consumer remains explicitly linked to the final nightly check",
+          "scope": "start",
+          "state": "pending",
+          "strength": "advisory",
+          "target": "D165-E2E-REPLAY-01"
+        },
         {
           "evidence": null,
           "kind": "task",
@@ -5013,7 +5253,7 @@
       "id": "V6-TOKEN-PIN-BINDING-01",
       "lane": "agent",
       "priority": "p1_phase_gate",
-      "rank": 69,
+      "rank": 73,
       "status": "queued",
       "status_note": "Installed by D-167 from the WORKLOAD-SCORED-01 delta-audit F4 disposition. It is required before any _v6 collection but does not block _v5.",
       "stop_card": null
