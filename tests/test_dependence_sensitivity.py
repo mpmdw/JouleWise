@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import math
+import re
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from joulewise.aggregate import student_t_critical_95
 from joulewise.analysis_engine.estimators import (
@@ -37,6 +40,210 @@ EXAMPLE_ARGS = (
     "4.0",
 )
 
+REFUSAL_BASE_ARGS = (
+    "--floor",
+    "1.0",
+    "--se-metrology",
+    "0.2",
+    "--deterministic-bound-total",
+    "0.1",
+)
+OVERFLOW_DELTAS = "[1e308,1e308,1e308,1e308,1e308,1e308,1e308,1e308,1e308,1e308]"
+MISSING_DELTAS_FILE = str(REPO_ROOT / "tests" / "not-a-real-dependence-sensitivity-input.json")
+
+
+def _analyze_string_deltas() -> object:
+    return dependence_sensitivity.analyze_deltas(
+        "0123456789",
+        floor_j=1.0,
+        se_metrology_j=0.2,
+        deterministic_bound_total_j=0.1,
+    )
+
+
+def _analyze_with_zero_total_standard_error() -> object:
+    return dependence_sensitivity._model_result(
+        name="zero_standard_error",
+        description="test",
+        mean_j=1.0,
+        sample_stddev_j=0.0,
+        n_blocks=10,
+        effective_n=10.0,
+        variance_inflation_factor=1.0,
+        se_metrology_j=0.0,
+        deterministic_bound_total_j=0.0,
+        floor_j=0.0,
+    )
+
+
+def _analyze_with_nonfinite_sample_standard_deviation() -> object:
+    with patch.object(dependence_sensitivity.math, "sqrt", return_value=math.inf):
+        return dependence_sensitivity.analyze_deltas(
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0],
+            floor_j=1.0,
+            se_metrology_j=0.2,
+            deterministic_bound_total_j=0.1,
+        )
+
+
+REFUSAL_CASES = (
+    # name, argv-or-call, expected_reason_regex
+    (
+        "finite_boolean",
+        ("--block-deltas", "[true,2,3,4,5,6,7,8,9,10]", *REFUSAL_BASE_ARGS),
+        r"must be a finite number",
+    ),
+    ("finite_string", lambda: dependence_sensitivity._finite_number("1", "value"), r"must be a finite number"),
+    ("dict_deltas", ("--block-deltas", '{"a":1}', *REFUSAL_BASE_ARGS), r"must be a JSON list"),
+    ("string_deltas", _analyze_string_deltas, r"must be a JSON list"),
+    (
+        "four_blocks",
+        ("--block-deltas", "[1,2,3,4]", *REFUSAL_BASE_ARGS),
+        r"exactly ten complete block deltas are required",
+    ),
+    (
+        "eleven_blocks",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,10,11]", *REFUSAL_BASE_ARGS),
+        r"exactly ten complete block deltas are required",
+    ),
+    (
+        "invalid_json",
+        ("--block-deltas", "[1,]", *REFUSAL_BASE_ARGS),
+        r"is not valid JSON",
+    ),
+    (
+        "missing_deltas_file",
+        ("--block-deltas-file", MISSING_DELTAS_FILE, *REFUSAL_BASE_ARGS),
+        r"cannot read block-delta JSON",
+    ),
+    (
+        "nonfinite_delta",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,NaN]", *REFUSAL_BASE_ARGS),
+        r"block_deltas_j\[9\] must be a finite number",
+    ),
+    (
+        "constant_sequence",
+        ("--block-deltas", "[1,1,1,1,1,1,1,1,1,1]", *REFUSAL_BASE_ARGS),
+        r"rho is undefined",
+    ),
+    (
+        "perfect_alternation",
+        ("--block-deltas", "[1,-1,1,-1,1,-1,1,-1,1,-1]", *REFUSAL_BASE_ARGS),
+        r"abs\(rho\) < 1",
+    ),
+    (
+        "ar1_one_block",
+        lambda: dependence_sensitivity.ar1_variance_inflation_factor(1, 0.0),
+        r"at least two blocks",
+    ),
+    (
+        "ar1_nonfinite_rho",
+        lambda: dependence_sensitivity.ar1_variance_inflation_factor(10, math.nan),
+        r"must be a finite number",
+    ),
+    (
+        "ar1_out_of_range",
+        lambda: dependence_sensitivity.ar1_variance_inflation_factor(10, 1.0),
+        r"abs\(rho\) < 1",
+    ),
+    (
+        "estimated_rho_constant",
+        lambda: dependence_sensitivity.estimate_ar1_rho([1.0] * 10, 1.0),
+        r"rho is undefined",
+    ),
+    (
+        "estimated_rho_out_of_range",
+        lambda: dependence_sensitivity.estimate_ar1_rho([1.0, -1.0] * 5, 0.0),
+        r"abs\(rho\) < 1",
+    ),
+    (
+        "five_blocks",
+        ("--block-deltas", "[0.461096,0.575454,0.238990,0.073144,-0.228373]", *REFUSAL_BASE_ARGS),
+        r"exactly ten complete block deltas are required",
+    ),
+    (
+        "negative_floor",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "-0.1", "--se-metrology", "0.2", "--deterministic-bound-total", "0.1"),
+        r"must be non-negative",
+    ),
+    (
+        "nonfinite_metrology_se",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0", "--se-metrology", "nan", "--deterministic-bound-total", "0.1"),
+        r"se_metrology_j must be a finite number",
+    ),
+    (
+        "negative_metrology_se",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0", "--se-metrology", "-0.1", "--deterministic-bound-total", "0.1"),
+        r"must be non-negative",
+    ),
+    (
+        "negative_deterministic_total",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0", "--se-metrology", "0.2", "--deterministic-bound-total", "-0.1"),
+        r"must be non-negative",
+    ),
+    (
+        "infinite_interval",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0", "--se-metrology", "1e308", "--deterministic-bound-total", "0.1"),
+        r"interval is not finite",
+    ),
+    (
+        "infinite_decision_interval",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0", "--se-metrology", "5e307", "--deterministic-bound-total", "1.7e308"),
+        r"decision interval is not finite",
+    ),
+    ("effective_n_not_finite", lambda: dependence_sensitivity._degrees_of_freedom(10, math.inf), r"not positive and finite"),
+    ("too_few_effective_blocks", lambda: dependence_sensitivity._degrees_of_freedom(10, 1.9), r"fewer than two usable blocks"),
+    ("sample_stddev_not_finite", _analyze_with_nonfinite_sample_standard_deviation, r"sample standard deviation is not finite"),
+    ("zero_total_standard_error", _analyze_with_zero_total_standard_error, r"total standard error must be positive"),
+    ("example_with_floor", ("--example", "--floor", "3.5"), r"cannot be combined"),
+    (
+        "caller_alpha",
+        ("--example", "--alpha", "0.10"),
+        r"unrecognized arguments: --alpha",
+    ),
+    (
+        "missing_source",
+        ("--floor", "1.0", "--se-metrology", "0.2", "--deterministic-bound-total", "0.1"),
+        r"is required unless --example",
+    ),
+    (
+        "missing_metrology",
+        ("--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0"),
+        r"are required unless --example",
+    ),
+    (
+        "overflow",
+        ("--block-deltas", OVERFLOW_DELTAS, *REFUSAL_BASE_ARGS),
+        r"overflow",
+    ),
+)
+
+
+def _string_literal_fragments(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    if isinstance(node, ast.JoinedStr):
+        return [part.value for part in node.values if isinstance(part, ast.Constant) and isinstance(part.value, str)]
+    return []
+
+
+def _source_refusal_literals() -> list[str]:
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    literals: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        is_value_error = isinstance(node.func, ast.Name) and node.func.id == "ValueError"
+        is_parser_error = (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "error"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "parser"
+        )
+        if is_value_error or is_parser_error:
+            literals.extend(_string_literal_fragments(node.args[0]))
+    return [literal for literal in literals if literal]
+
 
 class DependenceSensitivityTests(unittest.TestCase):
     def _run(self, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -48,10 +255,13 @@ class DependenceSensitivityTests(unittest.TestCase):
             capture_output=True,
         )
 
-    def _assert_cli_refuses(self, *arguments: str) -> None:
+    def _assert_cli_refuses(
+        self, arguments: tuple[str, ...], expected_reason_regex: str
+    ) -> None:
         completed = self._run(*arguments)
         self.assertEqual(completed.returncode, 2, completed.stderr)
         self.assertEqual(completed.stdout, "")
+        self.assertRegex(completed.stderr, expected_reason_regex)
 
     def _example_payload(self) -> dict[str, Any]:
         completed = self._run("--example")
@@ -61,102 +271,94 @@ class DependenceSensitivityTests(unittest.TestCase):
     def test_worked_example_golden_every_documented_intermediate(self) -> None:
         """Keep every number printed in the worked example aligned with the document."""
 
-        payload = self._example_payload()
+        document = DOCUMENT.read_text(encoding="utf-8")
+        delta_match = re.search(
+            r"^\| Ordered block deltas \(J\) \| `(?P<deltas>\[[^`\n]+\])` \|$",
+            document,
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(delta_match)
+        assert delta_match is not None
+        self.assertEqual(
+            len(re.findall(r"^\| Ordered block deltas \(J\) \| `\[[^`\n]+\]` \|$", document, re.MULTILINE)),
+            1,
+        )
+        parsed_deltas = json.loads(delta_match.group("deltas"))
+        self.assertEqual(parsed_deltas, dependence_sensitivity.EXAMPLE_BLOCK_DELTAS_J)
+        self.assertEqual(self._example_payload()["input"]["block_deltas_j"], parsed_deltas)
+
+        payload = dependence_sensitivity.analyze_deltas(
+            parsed_deltas,
+            floor_j=3.5,
+            se_metrology_j=0.2,
+            deterministic_bound_total_j=4.0,
+        )
         self.assertEqual(payload["schema_version"], "joulewise.dependence_sensitivity.v1")
         self.assertEqual(payload["input"]["registered_alpha"], 0.05)
         self.assertEqual(payload["input"]["se_metrology_j"], 0.2)
         self.assertEqual(payload["input"]["deterministic_bound_total_j"], 4.0)
 
+        worked_inputs = document[document.index("These invented values") : document.index("Their sum is")]
+        for value in (3.5, 0.2, 4.0):
+            self.assertIn(f"{value:.6f}", worked_inputs)
+
         summary = payload["summary"]
-        self.assertEqual(round(summary["sum_j"], 6), 50.000000)
-        self.assertEqual(round(summary["mean_j"], 6), 5.000000)
-        self.assertEqual(round(summary["squared_deviations_sum_j2"], 6), 20.250000)
-        self.assertEqual(round(summary["sample_stddev_j"], 6), 1.500000)
+        worked_example = document[document.index("Their sum is") : document.index("| Model |")]
+        for value in (
+            summary["sum_j"],
+            summary["mean_j"],
+            summary["squared_deviations_sum_j2"],
+            summary["sample_stddev_j"],
+        ):
+            self.assertIn(f"{value:.6f}", worked_example)
 
         rho = payload["ar1_rho_estimator"]
-        self.assertEqual(round(rho["numerator"], 6), 4.657971)
-        self.assertEqual(round(rho["denominator"], 6), 15.526569)
-        self.assertEqual(round(rho["rho_hat"], 6), 0.300000)
-        self.assertEqual(
-            [round(row["term"], 6) for row in payload["ar1_variance_terms"]],
-            [0.270000, 0.072000, 0.018900, 0.004860, 0.001215, 0.000292, 0.000066, 0.000013, 0.000002],
-        )
+        for value in (
+            rho["numerator"],
+            rho["denominator"],
+            rho["rho_hat"],
+            math.fsum(row["term"] for row in payload["ar1_variance_terms"]),
+            *(row["term"] for row in payload["ar1_variance_terms"]),
+        ):
+            self.assertIn(f"{value:.6f}", worked_example)
 
-        expected_models = {
-            "independent_blocks": {
-                "effective_n": 10.000000,
-                "degrees_of_freedom": 9,
-                "variance_inflation_factor": 1.000000,
-                "se_repeat_j": 0.474342,
-                "se_total_j": 0.514782,
-                "t_critical_95": 2.262,
-                "half_width_j": 1.164436,
-                "repeat": (3.927039, 6.072961),
-                "metrology": (3.835564, 6.164436),
-                "decision": (-0.164436, 10.164436),
-                "t_statistic": 9.712859,
-                "raw_two_sided_p": 0.000004558,
-            },
-            "ar1_estimated_rho": {
-                "effective_n": 5.764703,
-                "degrees_of_freedom": 4,
-                "variance_inflation_factor": 1.734695,
-                "se_repeat_j": 0.624745,
-                "se_total_j": 0.655977,
-                "t_critical_95": 2.776,
-                "half_width_j": 1.820993,
-                "repeat": (3.265708, 6.734292),
-                "metrology": (3.179007, 6.820993),
-                "decision": (-0.820993, 10.820993),
-                "t_statistic": 7.622214,
-                "raw_two_sided_p": 0.001590617,
-            },
-            "fixed_effective_n_halving": {
-                "effective_n": 5.000000,
-                "degrees_of_freedom": 4,
-                "variance_inflation_factor": 2.000000,
-                "se_repeat_j": 0.670820,
-                "se_total_j": 0.700000,
-                "t_critical_95": 2.776,
-                "half_width_j": 1.943200,
-                "repeat": (3.137803, 6.862197),
-                "metrology": (3.056800, 6.943200),
-                "decision": (-0.943200, 10.943200),
-                "t_statistic": 7.142857,
-                "raw_two_sided_p": 0.002032095,
-            },
-        }
-        for name, expected in expected_models.items():
+        for name, model in payload["models"].items():
             with self.subTest(model=name):
-                model = payload["models"][name]
-                self.assertEqual(round(model["effective_n"], 6), expected["effective_n"])
-                self.assertEqual(model["degrees_of_freedom"], expected["degrees_of_freedom"])
-                self.assertEqual(
-                    round(model["variance_inflation_factor"], 6),
-                    expected["variance_inflation_factor"],
-                )
-                self.assertEqual(round(model["se_repeat_j"], 6), expected["se_repeat_j"])
-                self.assertEqual(model["se_metrology_j"], 0.2)
-                self.assertEqual(round(model["se_total_j"], 6), expected["se_total_j"])
-                self.assertEqual(model["deterministic_bound_total_j"], 4.0)
-                self.assertEqual(model["t_critical_95"], expected["t_critical_95"])
-                self.assertEqual(round(model["half_width_j"], 6), expected["half_width_j"])
-                self.assertEqual(
-                    tuple(round(model["repeat_only_interval_j"][edge], 6) for edge in ("lower", "upper")),
-                    expected["repeat"],
-                )
-                self.assertEqual(
-                    tuple(round(model["metrology_aware_interval_j"][edge], 6) for edge in ("lower", "upper")),
-                    expected["metrology"],
-                )
-                self.assertEqual(
-                    tuple(round(model["decision_interval_j"][edge], 6) for edge in ("lower", "upper")),
-                    expected["decision"],
-                )
-                self.assertEqual(round(model["t_statistic"], 6), expected["t_statistic"])
-                self.assertEqual(round(model["raw_two_sided_p"], 9), expected["raw_two_sided_p"])
+                for value in (
+                    model["variance_inflation_factor"],
+                    model["effective_n"],
+                    model["se_repeat_j"],
+                    model["se_total_j"],
+                    model["t_critical_95"],
+                    model["half_width_j"],
+                    model["t_statistic"],
+                ):
+                    self.assertIn(f"{value:.6f}", worked_example)
+                for interval_name in (
+                    "repeat_only_interval_j",
+                    "metrology_aware_interval_j",
+                    "decision_interval_j",
+                ):
+                    interval = model[interval_name]
+                    self.assertIn(
+                        f"[{interval['lower']:.6f}, {interval['upper']:.6f}]",
+                        worked_example,
+                    )
+                self.assertIn(f"{model['raw_two_sided_p']:.9f}", worked_example)
                 self.assertTrue(model["floor_gate"]["passes"])
                 self.assertFalse(model["direction_gate"]["passes"])
+
+        disagreement = dependence_sensitivity.analyze_deltas(
+            parsed_deltas,
+            floor_j=3.5,
+            se_metrology_j=0.2,
+            deterministic_bound_total_j=3.5,
+        )
+        self.assertTrue(disagreement["models"]["independent_blocks"]["direction_gate"]["passes"])
+        self.assertFalse(disagreement["models"]["ar1_estimated_rho"]["direction_gate"]["passes"])
+        self.assertFalse(disagreement["models"]["fixed_effective_n_halving"]["direction_gate"]["passes"])
+        self.assertFalse(disagreement["comparison"]["direction_gate_outcomes_agree"])
+        self.assertIn('"direction_gate_outcomes_agree": false', document)
 
     def test_artifact_hashes_and_omits_holm_or_claim_verdict(self) -> None:
         payload = self._example_payload()
@@ -339,7 +541,7 @@ class DependenceSensitivityTests(unittest.TestCase):
                 n_blocks=10,
                 effective_n=10.0,
                 variance_inflation_factor=1.0,
-                se_metrology_j=0.0,
+                se_metrology_j=0.1,
                 deterministic_bound_total_j=0.0,
                 floor_j=3.5,
             )["floor_gate"]["passes"]
@@ -347,64 +549,23 @@ class DependenceSensitivityTests(unittest.TestCase):
         self.assertIsNone(dependence_sensitivity._strict_direction({"lower": 0.0, "upper": 1.0}))
         self.assertIsNone(dependence_sensitivity._strict_direction({"lower": -1.0, "upper": 0.0}))
 
-    def test_public_ar1_guards_are_directly_exercised(self) -> None:
-        with self.assertRaisesRegex(ValueError, "at least two blocks"):
-            dependence_sensitivity.ar1_variance_inflation_factor(1, 0.0)
-        with self.assertRaisesRegex(ValueError, "finite number"):
-            dependence_sensitivity.ar1_variance_inflation_factor(10, float("nan"))
-        with self.assertRaisesRegex(ValueError, "abs\\(rho\\) < 1"):
-            dependence_sensitivity.ar1_variance_inflation_factor(10, 1.0)
-        with self.assertRaisesRegex(ValueError, "rho is undefined"):
-            dependence_sensitivity.estimate_ar1_rho([1.0] * 10, 1.0)
-        with self.assertRaisesRegex(ValueError, "abs\\(rho\\) < 1"):
-            dependence_sensitivity.estimate_ar1_rho([1.0, -1.0] * 5, 0.0)
-
-    def test_analyze_guards_are_directly_exercised(self) -> None:
-        good = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
-        with self.assertRaisesRegex(ValueError, "block_deltas_j\\[9\\] must be a finite number"):
-            dependence_sensitivity.analyze_deltas(
-                good[:-1] + [float("nan")],
-                floor_j=1.0,
-                se_metrology_j=0.0,
-                deterministic_bound_total_j=0.0,
-            )
-        with self.assertRaisesRegex(ValueError, "exactly ten"):
-            dependence_sensitivity.analyze_deltas(good[:-1], floor_j=1.0, se_metrology_j=0.0, deterministic_bound_total_j=0.0)
-        with self.assertRaisesRegex(ValueError, "exactly ten"):
-            dependence_sensitivity.analyze_deltas(good + [11.0], floor_j=1.0, se_metrology_j=0.0, deterministic_bound_total_j=0.0)
-        with self.assertRaisesRegex(ValueError, "floor_j must be non-negative"):
-            dependence_sensitivity.analyze_deltas(good, floor_j=-0.1, se_metrology_j=0.0, deterministic_bound_total_j=0.0)
-        with self.assertRaisesRegex(ValueError, "se_metrology_j must be a finite number"):
-            dependence_sensitivity.analyze_deltas(good, floor_j=1.0, se_metrology_j=float("nan"), deterministic_bound_total_j=0.0)
-        with self.assertRaisesRegex(ValueError, "se_metrology_j must be non-negative"):
-            dependence_sensitivity.analyze_deltas(good, floor_j=1.0, se_metrology_j=-0.1, deterministic_bound_total_j=0.0)
-        with self.assertRaisesRegex(ValueError, "deterministic_bound_total_j must be non-negative"):
-            dependence_sensitivity.analyze_deltas(good, floor_j=1.0, se_metrology_j=0.0, deterministic_bound_total_j=-0.1)
-        with self.assertRaisesRegex(ValueError, "rho is undefined"):
-            dependence_sensitivity.analyze_deltas([1.0] * 10, floor_j=1.0, se_metrology_j=0.0, deterministic_bound_total_j=0.0)
-        with self.assertRaisesRegex(ValueError, "abs\\(rho\\) < 1"):
-            dependence_sensitivity.analyze_deltas([1.0, -1.0] * 5, floor_j=1.0, se_metrology_j=0.0, deterministic_bound_total_j=0.0)
-        with self.assertRaisesRegex(ValueError, "effective sample size leaves fewer"):
-            dependence_sensitivity._degrees_of_freedom(10, 1.9)
-
-    def test_cli_refuses_each_invalid_input_with_exit_two_and_empty_stdout(self) -> None:
-        base = ["--floor", "1.0", "--se-metrology", "0.2", "--deterministic-bound-total", "0.1"]
-        refusal_cases = {
-            "four_blocks": ["--block-deltas", "[1,2,3,4]", *base],
-            "eleven_blocks": ["--block-deltas", "[1,2,3,4,5,6,7,8,9,10,11]", *base],
-            "nonfinite_delta": ["--block-deltas", "[1,2,3,4,5,6,7,8,9,NaN]", *base],
-            "constant_sequence": ["--block-deltas", "[1,1,1,1,1,1,1,1,1,1]", *base],
-            "perfect_alternation": ["--block-deltas", "[1,-1,1,-1,1,-1,1,-1,1,-1]", *base],
-            "five_blocks_effective_n": ["--block-deltas", "[0.461096,0.575454,0.238990,0.073144,-0.228373]", *base],
-            "negative_floor": ["--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "-0.1", "--se-metrology", "0.2", "--deterministic-bound-total", "0.1"],
-            "nonfinite_metrology_se": ["--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0", "--se-metrology", "nan", "--deterministic-bound-total", "0.1"],
-            "negative_deterministic_total": ["--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0", "--se-metrology", "0.2", "--deterministic-bound-total", "-0.1"],
-            "caller_alpha": ["--example", "--alpha", "0.10"],
-            "missing_metrology": ["--block-deltas", "[1,2,3,4,5,6,7,8,9,10]", "--floor", "1.0"],
-        }
-        for name, arguments in refusal_cases.items():
+    def test_reason_keyed_refusal_cases(self) -> None:
+        for name, argv_or_call, expected_reason_regex in REFUSAL_CASES:
             with self.subTest(name=name):
-                self._assert_cli_refuses(*arguments)
+                if callable(argv_or_call):
+                    with self.assertRaisesRegex(ValueError, expected_reason_regex):
+                        argv_or_call()
+                else:
+                    self._assert_cli_refuses(argv_or_call, expected_reason_regex)
+
+    def test_every_literal_refusal_reason_has_a_reason_keyed_row(self) -> None:
+        reason_regexes = [expected_reason_regex for _, _, expected_reason_regex in REFUSAL_CASES]
+        for literal in _source_refusal_literals():
+            with self.subTest(literal=literal):
+                self.assertTrue(
+                    any(re.search(pattern, literal) for pattern in reason_regexes),
+                    f"no refusal row matches source literal: {literal!r}",
+                )
 
     def test_fixed_alpha_is_printed_and_cli_has_no_alpha_option(self) -> None:
         result = dependence_sensitivity.analyze_deltas(
@@ -415,7 +576,10 @@ class DependenceSensitivityTests(unittest.TestCase):
         )
         self.assertEqual(result["input"]["registered_alpha"], dependence_sensitivity.REGISTERED_ALPHA)
         self.assertEqual(dependence_sensitivity.REGISTERED_ALPHA, 0.05)
-        self._assert_cli_refuses(*EXAMPLE_ARGS, "--alpha", "0.05")
+        self._assert_cli_refuses(
+            EXAMPLE_ARGS + ("--alpha", "0.05"),
+            r"unrecognized arguments: --alpha",
+        )
 
     def test_ar1_multiplier_widens_as_rho_grows(self) -> None:
         low_rho = dependence_sensitivity.ar1_variance_inflation_factor(10, 0.1)

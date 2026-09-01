@@ -39,19 +39,19 @@ EXAMPLE_FLOOR_J = 3.5
 # PairedEstimate.deterministic_bound_total in analysis_engine/estimators.py.
 EXAMPLE_SE_METROLOGY_J = 0.2
 EXAMPLE_DETERMINISTIC_BOUND_TOTAL_J = 4.0
-# Mean 5 J, sample standard deviation 1.5 J, and centred lag-one slope 0.3
-# to the printed precision.
+# Mean 5 J, sample standard deviation 1.4 J, and centred lag-one slope 0.3
+# exactly.
 EXAMPLE_BLOCK_DELTAS_J = [
-    7.456660508865,
-    5.631869605023,
-    6.945943923885,
-    4.707358851097,
-    5.876049545908,
-    4.075489246075,
-    5.082017947228,
-    3.378380063429,
-    4.019575803654,
-    2.826654504835,
+    5.0,
+    7.6,
+    5.5,
+    4.2,
+    4.7,
+    6.8,
+    5.5,
+    3.6,
+    3.9,
+    3.2,
 ]
 
 
@@ -137,8 +137,7 @@ def ar1_variance_inflation_factor(n_blocks: int, rho: float) -> float:
 
     terms = _ar1_variance_terms(n_blocks, rho)
     multiplier = 1.0 + 2.0 * math.fsum(float(row["term"]) for row in terms)
-    if not math.isfinite(multiplier) or multiplier <= 0.0:
-        raise ValueError("AR(1) variance multiplier is not positive and finite")
+    # V*n = 1ᵀR1 > 0 because R is positive definite for |rho| < 1.
     return multiplier
 
 
@@ -202,14 +201,10 @@ def _model_result(
     if not all(math.isfinite(value) for value in decision_interval.values()):
         raise ValueError(f"{name} decision interval is not finite")
     half_width = critical * se_total
-    if se_total == 0.0:
-        statistic: float | None = None
-        raw_p = 0.0 if mean_j != 0.0 else 1.0
-    else:
-        statistic = mean_j / se_total
-        raw_p = two_sided_student_t_p_value(statistic, degrees)
-    if not math.isfinite(raw_p) or (statistic is not None and not math.isfinite(statistic)):
-        raise ValueError(f"{name} test evidence is not finite")
+    if se_total <= 0.0:
+        raise ValueError("total standard error must be positive")
+    statistic = mean_j / se_total
+    raw_p = two_sided_student_t_p_value(statistic, degrees)
     metrology_direction = _strict_direction(metrology_aware_interval)
     decision_direction = _strict_direction(decision_interval)
     return {
@@ -370,8 +365,6 @@ def _json_list_from_text(text: str, source: str) -> object:
         value = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ValueError(f"{source} is not valid JSON: {exc.msg}") from exc
-    if not isinstance(value, list):
-        raise ValueError(f"{source} must contain a JSON list")
     return value
 
 
@@ -442,7 +435,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 deltas = _json_list_from_text(args.block_deltas, "--block-deltas")
         except OSError as exc:
             parser.error(f"cannot read block-delta JSON: {exc}")
-        except ValueError as exc:
+        except (ValueError, OverflowError) as exc:
             parser.error(str(exc))
         floor = args.floor
         se_metrology = args.se_metrology
@@ -454,7 +447,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             se_metrology_j=se_metrology,
             deterministic_bound_total_j=deterministic_total,
         )
-    except ValueError as exc:
+    except (ValueError, OverflowError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False))
     return 0
