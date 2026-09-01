@@ -570,6 +570,8 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertEqual(runsheet[start:end].encode(), expected.encode())
         g2a = runsheet[start:end]
         for token in (
+            'generate_g2a_probe_inputs.py" check',
+            'PYTHONPATH="$REPO"',
             'readiness \\\n  --phase pre-reserve',
             'reserve_calibration_window_bracket.py" \\',
             'G2A_PRE_CAL_CUSTODY="$(calibrate_slot pre',
@@ -579,6 +581,14 @@ class CheckWindowProvenanceTests(unittest.TestCase):
             '.terminal_head_pin_candidate != null',
         ):
             self.assertIn(token, g2a)
+        self.assertLess(
+            g2a.index('generate_g2a_probe_inputs.py" check'),
+            g2a.index('recover_calibration_ledger.py" readiness'),
+        )
+        self.assertLess(
+            g2a.index('generate_g2a_probe_inputs.py" check'),
+            g2a.index('reserve_calibration_window_bracket.py"'),
+        )
 
     def test_phase_d_generation_rejects_runbook_settle_mutation(self) -> None:
         repo = Path(__file__).resolve().parents[1]
@@ -686,6 +696,22 @@ class CheckWindowProvenanceTests(unittest.TestCase):
         self.assertIn("all(.small_members >= 5)", runsheet)
         self.assertNotIn("all_margin_ge_5", runsheet)
         self.assertIn("select_g2a_prefill_length.py", runsheet)
+        self.assertIn(
+            'PYTHONPATH="$REPO" "$PY" "$REPO/scripts/select_g2a_prefill_length.py"',
+            runsheet,
+        )
+        self.assertIn(
+            'PYTHONPATH="$REPO" "$PY" "$REPO/scripts/summarize_g2a_prefill_probe.py"',
+            runsheet,
+        )
+        self.assertIn(
+            "The panel thinking-off policy and the MLX greedy runtime are hash-bound",
+            runsheet,
+        )
+        self.assertNotIn(
+            "thinking disabled, greedy\ndecode, and the indicated prompt length",
+            runsheet,
+        )
         self.assertIn("G2A_SELECTION_RECORD_SHA256", runsheet)
         self.assertIn('> "$G2A_SELECTION_RECORD.sha256"', runsheet)
         self.assertIn('and .collection_prefill_tokens == 4096', runsheet)
