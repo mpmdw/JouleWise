@@ -1,9 +1,12 @@
 # TRANSFER-FIDUCIAL-01 inserted-gap diagnostic contract
 
-Status: implemented but parked behind `V4-TRANSACTION-01`. Live execution is
-`[QUIET-MAC]`, lead/Ed-owned, and must not occur while an agent session is
-active. This protocol is diagnostic and non-claim-bearing. It mints no floor,
-licenses no claim, and changes no `_v4` artifact.
+Status: implemented but parked behind the D-167 `_v5` chain, including the
+final `V5-NIGHTLY-G3-01` pass. Live execution is `[QUIET-MAC]`, meaning a
+measurement window with no agent process competing for the machine. It is
+lead/Ed-owned and must not occur while an agent session is active. This
+protocol is diagnostic and non-claim-bearing: it can expose a timing problem,
+but it mints no floor, licenses no scientific claim, and changes no `_v5`
+artifact.
 
 ## Purpose and fixed v1 regime
 
@@ -29,24 +32,41 @@ never pooled.
 workload for the `_v5` campaign. The successor generator at
 `configs/diagnostics/transfer_fiducial_v2/generate_plan.py` creates one
 separately verdictable Qwen3-small stratum (one fixed model and workload
-group) only after it receives both:
+group) only after it receives all three permanent inputs:
 
+- the four-row G2-a summary emitted by
+  `scripts/summarize_g2a_prefill_probe.py`;
 - the successful G2-a selection record emitted by
   `scripts/select_g2a_prefill_length.py`; and
 - the hash-bound G2-a prompt-pin file, a JSON file containing the exact prompt
-  and its SHA-256 fingerprints, for that record's selected rung.
+  and its SHA-256 fingerprints, emitted by
+  `scripts/issue_g2a_prefill_prompt_pin.py` for that record's selected rung.
 
 The record selects one rung from 512, 1,024, 2,048, or 4,096 prompt tokens.
 The record itself has no prompt text or token identifiers, so the generator
-also requires the prompt pin. It refuses a missing, refused, malformed, or
-unauthenticated selection record, a rung outside that four-value ladder, or a
-prompt pin whose `g2a_record_sha256` is not the SHA-256 digest of the supplied
-selection record. The generator imports the Qwen3-small model identity from
-the `_v5` campaign generator; this carries the model revision, tokenizer-file
-digest, and chat-template digest instead of copying those values into a second
-source of truth.
+also requires the prompt pin. It hashes the exact summary bytes and requires
+that value to equal the selection record's `summary_sha256`. It refuses a
+missing, refused, malformed, or unauthenticated selection record, a rung
+outside that four-value ladder, or any summary mismatch. It then requires the
+pin's `g2a_record_sha256` and its `record_id` (`sha256:` followed by that
+digest) to name the supplied selection bytes, and requires the recorded path
+to match the supplied record. The `generation_method` must have the ruled
+form `N x 'repeated sentence' + 'closing sentence' under tokenizer
+sha256:DIGEST`. Finally, the generator loads the model mirror named by
+`configs/model_panels/qwen3_4bit.json` and passes `prompt_text` through the
+same raw-text encode function used by the MLX runtime, with special tokens
+enabled. The resulting integer token identifiers must exactly equal
+`prompt_token_ids`. Thus separately self-hashed text and identifiers cannot
+pose as one runtime workload.
 
-V2 fixes 512 output tokens. It emits `plan.json` and exactly ten configuration
+The generator imports the Qwen3-small model identity from the `_v5` campaign
+generator; this carries the model revision, tokenizer-file digest, and
+chat-template digest instead of copying those values into a second source of
+truth.
+
+V2 uses plan schema `joulewise.transfer_fiducial_plan.v2` and diagnostic kind
+`transfer_fiducial_v2`; V1 retains its original schema and kind. V2 fixes 512
+output tokens. It emits `plan.json` and exactly ten configuration
 files named `tf-q3s-p<RUNG>-o512-rNN.json`. The plan records the selected
 prompt's text digest and token-identifier digest, as well as the selection and
 prompt-pin digests. A digest is a SHA-256 value: a 64-character fingerprint of
@@ -169,15 +189,18 @@ directory named to the fit script, as ruled.
 
 ## Pre-data receipt
 
-Before run 1, the operator must issue a pre-data receipt with
+This section applies only to the explicit V2 plan. V1 keeps its original
+library and command-line behavior and neither requires nor evaluates a
+receipt. Before V2 run 1, the operator must issue a pre-data receipt with
 `scripts/fit_transfer_fiducial.py --issue-receipt`. A receipt is an immutable
-JSON record made before any of the ten diagnostic runs; it prevents selecting a
-more convenient plan, program version, calibration, or decision rule after
+JSON record made before any of the ten diagnostic runs; it prevents selecting
+a more convenient plan, program version, calibration, or decision rule after
 seeing data. It records:
 
-- the plan SHA-256 and the ten planned configuration SHA-256 values;
-- the SHA-256 of `scripts/fit_transfer_fiducial.py` itself, rather than a Git
-  commit label;
+- the SHA-256 of the exact plan bytes and the exact bytes of every one of the
+  ten named configuration files;
+- the exact-byte SHA-256 values of `scripts/fit_transfer_fiducial.py` and
+  `joulewise/transfer_fiducial.py`, which contains the fit and verdict logic;
 - the imported pulse estimator's current and pinned SHA-256 values;
 - the calibration directory's absolute path, evidence-file SHA-256,
   validation identifier, and capture timestamp; and
@@ -187,19 +210,45 @@ seeing data. It records:
   effective_clock_anchor_bound_s`, and `supported iff residual_transfer_s <=
   b_pulse_s`.
 
-At fit time the fitter returns `inconclusive` with a named reason if the
-receipt is absent or differs in any pinned value, if calibration was not
-captured before every run's prefill-start timestamp, or if the plan's duration
-or dwell fields differ from the values the fitter actually applies. It also
-checks each bundle's requested sampling dwell against the plan. Thus the plan
-cannot merely state a duration or dwell that the program ignores.
+The receipt file is canonical JSON: its keys are sorted, its indentation is
+fixed, and it ends with exactly one newline. Issuance uses operating-system
+create-new semantics, so an existing receipt refuses as
+`pre_data_receipt_already_exists` instead of being overwritten. Issuance also
+creates `<receipt>.sha256`, a sidecar (a separate small file) containing the
+receipt file's exact-byte SHA-256 and one newline.
+
+At fit time the V2 fitter recomputes the sidecar binding and every recorded
+input digest. It returns `inconclusive` with a named reason if the receipt is
+absent, noncanonical, changed by even one byte, or differs in any pinned value;
+if calibration was not captured before every run's prefill-start timestamp;
+or if the plan's duration or dwell fields differ from the values the fitter
+actually applies. It also checks each bundle's requested sampling dwell
+against the plan. Thus the plan cannot merely state a duration or dwell that
+the program ignores.
 
 ## Operation
 
-These commands are parked until the `_v5` campaign has closed. Run them only
-from a clean, lead-controlled, agent-free quiet-machine session after the
-standard readiness and idle procedure, with approved power, working
-`sudo -n powermetrics`, and network-time custody. `--selection-record`,
+These commands are parked until D-167's `_v5` chain and
+`V5-NIGHTLY-G3-01` have passed. The complete readiness and idle procedure is
+[window runbook §5](../phase_2/window_runbook.md#5-machine-and-operator-preflight):
+connect the approved charger and cable, record the power policy, stop noisy
+background work, prove `sudo -n powermetrics` works, complete the clock steps,
+leave the machine untouched for the required idle period, use fresh output
+roots, confirm backup capacity, and close every agent and browser-automation
+session. “Network-time custody” means recording the prior automatic-time
+state, disabling automatic adjustment for the window, retaining the clock
+evidence, and restoring the prior state only after close-out; the exact Ed-only
+commands and evidence requirements are in
+[window runbook §5A](../phase_2/window_runbook.md#5a-pre-window-clock-stabilization-administrator-step-ed-performs-it).
+“Verification” below means the V2 fitter exits zero and its capture has no
+unexpected reason; “backup” means `scripts/backup_runs.sh` exits zero while
+the source run root remains unchanged, as built in
+[window runbook §11](../phase_2/window_runbook.md#11-record-duration-margins-back-up-then-extract-in-the-same-custody-session).
+
+The two G2-a producer programs named below are owned by the parallel G2-a
+producer stream. Their ruled command shapes come from producer designs 2–3 in
+`docs/process_traces/2026-09-01-fresh-model-review/16-sol-g2a-executability-scout.md`
+and ruling 16b. `--summary`, `--selection-record`,
 `--prefill-prompt-pin`, `--output-root`, `--check`, `--allow-live`,
 `--arm-countdown-s`, `--sleep-display-before-capture`,
 `--power-policy`, `--runs-dir`, `--instrument-calibration-dir`,
@@ -213,20 +262,49 @@ JW_PY=/Users/edr/code/JouleWise/.venv/bin/python
 TF_ROOT=/Users/edr/JouleWise-transfer-fiducial-v2
 TF_CAL_ROOT="$TF_ROOT/instrument_validation"
 TF_RUNS_ROOT="$TF_ROOT/runs"
+TF_BACKUP_DEST=/absolute/existing/backup/destination
 POWER_POLICY=ac_high_power
-G2A_SELECTION_RECORD=/absolute/path/to/g2a-selected-prefill-length.json
-G2A_PREFILL_PROMPT_PIN=/absolute/path/to/g2a-selected-prefill-prompt-pin.json
+G2A_CONFIG_ROOT=/absolute/path/to/g2a-probe-config-root
+G2A_WINDOW_PLAN_ROOT=/absolute/path/to/g2a-window-plan-root
+G2A_RUNS_ROOT=/absolute/path/to/g2a-runs-root
+G2A_SUMMARY="$G2A_WINDOW_PLAN_ROOT/g2a-prefill-summary.json"
+G2A_COUNTS="$G2A_WINDOW_PLAN_ROOT/g2a-prefill-counts.jsonl"
+G2A_SELECTION_RECORD="$G2A_WINDOW_PLAN_ROOT/g2a-selected-prefill-length.json"
+G2A_PROMPT_LADDER="$G2A_WINDOW_PLAN_ROOT/prefill-prompt-ladder.json"
+G2A_PREFILL_PROMPT_PIN="$G2A_WINDOW_PLAN_ROOT/g2a-selected-prefill-prompt-pin.json"
 
 cd "$JW_REPO"
 
-# The G2-a record is the first input. This refuses if the record or prompt pin
-# is not authenticated, so it cannot silently fall back to an old length.
+# Build the four-row summary from authenticated probe inputs and run bundles.
+PYTHONPATH="$JW_REPO" "$JW_PY" scripts/summarize_g2a_prefill_probe.py \
+  --config-root "$G2A_CONFIG_ROOT" \
+  --input-inventory "$G2A_WINDOW_PLAN_ROOT/g2a-input-inventory.json" \
+  --runs-root "$G2A_RUNS_ROOT" \
+  --counts-output "$G2A_COUNTS" \
+  --summary-output "$G2A_SUMMARY"
+
+PYTHONPATH="$JW_REPO" "$JW_PY" scripts/select_g2a_prefill_length.py \
+  --summary "$G2A_SUMMARY" \
+  --output "$G2A_SELECTION_RECORD"
+
+# Bind the selected record, its exact summary, and the selected ladder prompt.
+PYTHONPATH="$JW_REPO" "$JW_PY" scripts/issue_g2a_prefill_prompt_pin.py \
+  --selection-record "$G2A_SELECTION_RECORD" \
+  --summary "$G2A_SUMMARY" \
+  --prompt-ladder "$G2A_PROMPT_LADDER" \
+  --ruling-trace docs/process_traces/2026-08-30-prefill-margin-coldgate/03-MAGISTRATE-RATIFICATION.md \
+  --output "$G2A_PREFILL_PROMPT_PIN"
+
+# The generator authenticates all three permanent inputs and re-tokenizes the
+# prompt through the model mirror that the runtime will use.
 "$JW_PY" configs/diagnostics/transfer_fiducial_v2/generate_plan.py \
+  --summary "$G2A_SUMMARY" \
   --selection-record "$G2A_SELECTION_RECORD" \
   --prefill-prompt-pin "$G2A_PREFILL_PROMPT_PIN" \
   --output-root "$JW_REPO"
 
 "$JW_PY" configs/diagnostics/transfer_fiducial_v2/generate_plan.py \
+  --summary "$G2A_SUMMARY" \
   --selection-record "$G2A_SELECTION_RECORD" \
   --prefill-prompt-pin "$G2A_PREFILL_PROMPT_PIN" \
   --output-root "$JW_REPO" \
@@ -243,11 +321,25 @@ bash scripts/quiet_mac_prep.sh
   --sleep-display-before-capture \
   --output-root "$TF_CAL_ROOT" \
   --power-policy "$POWER_POLICY"
-```
 
-After selecting the unique successful calibration directory as `TF_CAL_DIR`:
+# Select exactly one valid calibration, in sorted path order, or stop.
+TF_CAL_DIR="$($JW_PY - "$TF_CAL_ROOT" <<'PY'
+import json
+import pathlib
+import sys
 
-```sh
+root = pathlib.Path(sys.argv[1])
+valid = []
+for evidence_path in sorted(root.glob("*/instrument_evidence.json")):
+    evidence = json.loads(evidence_path.read_bytes())
+    if evidence.get("status") == "valid" and evidence.get("reasons") in ([], None):
+        valid.append(evidence_path.parent.resolve())
+if len(valid) != 1:
+    raise SystemExit(f"expected exactly one valid calibration, found {len(valid)}")
+print(valid[0])
+PY
+)" || exit 1
+
 # Issue this receipt after calibration and before the first diagnostic bundle.
 "$JW_PY" scripts/fit_transfer_fiducial.py \
   --plan configs/diagnostics/transfer_fiducial_v2/plan.json \
@@ -271,7 +363,27 @@ done
   --pulse-calibration-dir "$TF_CAL_DIR" \
   --receipt "$TF_ROOT/pre_data_receipt.json" \
   --output "$TF_ROOT/transfer_fiducial_capture.json"
+
+# Verify that the fit reached one of the two conclusive diagnostic outcomes.
+"$JW_PY" - "$TF_ROOT/transfer_fiducial_capture.json" <<'PY'
+import json
+import pathlib
+import sys
+
+capture = json.loads(pathlib.Path(sys.argv[1]).read_bytes())
+if capture.get("verdict") not in {"supported", "exceeds_bound"}:
+    raise SystemExit(f"transfer fit is not conclusive: {capture.get('reasons')}")
+if capture.get("reasons") != []:
+    raise SystemExit(f"transfer fit has refusal reasons: {capture.get('reasons')}")
+print(capture["verdict"])
+PY
+
+bash scripts/backup_runs.sh "$TF_RUNS_ROOT" "$TF_BACKUP_DEST"
+
+# Restore the pre-window automatic-time state only after fit and backup pass.
+/usr/bin/sudo -n /usr/sbin/systemsetup -setusingnetworktime on
 ```
 
-Restore network time only after verification and backup. Review the capture
-without promoting its diagnostic verdict into any claim or floor artifact.
+Review the capture without promoting its diagnostic verdict into any claim or
+floor artifact. Preserve the receipt, its `.sha256` sidecar, the capture, the
+backup log, and the recorded network-time off/on timestamps together.

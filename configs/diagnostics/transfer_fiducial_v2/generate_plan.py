@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Generate the Qwen3-small TRANSFER-FIDUCIAL-01 successor plan.
 
-The generator deliberately needs two G2-a artifacts.  The selection record
-chooses a prefill rung, while the prompt pin supplies the exact text and its
-token-identifier hash at that rung.  The selection record does not contain
-prompt text, so accepting it alone could not bind the workload that runs.
+The generator deliberately needs three G2-a artifacts.  The four-row summary
+contains the measured sample counts, the selection record chooses a prefill
+rung and authenticates those exact summary bytes, and the prompt pin supplies
+the exact text and token identifiers at that rung.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -26,9 +27,9 @@ if str(REPO_ROOT) not in sys.path:
 from configs.campaigns.d117_contrast_v5 import generate_configs as v5  # noqa: E402
 from joulewise.schemas import BenchmarkConfig  # noqa: E402
 from joulewise.transfer_fiducial import (  # noqa: E402
-    TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND,
+    TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND_V2,
     TRANSFER_FIDUCIAL_GAP_S_V1,
-    TRANSFER_FIDUCIAL_PLAN_SCHEMA,
+    TRANSFER_FIDUCIAL_PLAN_SCHEMA_V2,
     transfer_fiducial_rule_constants,
 )
 
@@ -40,6 +41,9 @@ MODEL_PANEL = REPO_ROOT / "configs/model_panels/qwen3_4bit.json"
 SMALL_MODEL_ID = "qwen3-1p7b"
 RUN_COUNT = 10
 OUTPUT_TOKENS = 512
+GENERATION_METHOD_RE = re.compile(
+    r"^\d+ x '.+' \+ '.+' under tokenizer sha256:[0-9a-f]{64}$"
+)
 
 
 class PlanGenerationError(ValueError):
@@ -85,7 +89,16 @@ def _is_sha256(value: Any) -> bool:
     )
 
 
-def load_authenticated_selection(path: Path) -> tuple[dict[str, Any], bytes]:
+def _read_bytes(path: Path, label: str) -> bytes:
+    try:
+        return path.read_bytes()
+    except OSError as exc:
+        raise PlanGenerationError(f"{label}_missing") from exc
+
+
+def load_authenticated_selection(
+    path: Path, summary_path: Path
+) -> tuple[dict[str, Any], bytes]:
     """Load exactly the successful selector record shape, or name a refusal."""
 
     record, raw = _read_json(path, "selection_record")
@@ -130,6 +143,9 @@ def load_authenticated_selection(path: Path) -> tuple[dict[str, Any], bytes]:
         raise PlanGenerationError("selection_record_unauthenticated_rule")
     if not _is_sha256(record["summary_sha256"]):
         raise PlanGenerationError("selection_record_unauthenticated_summary_sha256")
+    summary_raw = _read_bytes(summary_path, "summary")
+    if _sha256(summary_raw) != record["summary_sha256"]:
+        raise PlanGenerationError("selection_record_summary_sha256_mismatch")
     return record, raw
 
 
@@ -148,8 +164,51 @@ def v5_small_model_identity() -> tuple[dict[str, Any], dict[str, Any]]:
     return model, dict(entry["quantization"])
 
 
+def _runtime_tokenize_prompt(
+    model: Mapping[str, Any], prompt_text: str
+) -> list[int]:
+    """Load the panel-named local mirror and use the runtime's encode helper."""
+
+    try:
+        import mlx_lm
+
+        from joulewise.adapters.mlx_runtime import _encode
+
+        loaded = mlx_lm.load(
+            str(model["source"]),
+            revision=str(model["revision"]),
+            return_config=True,
+        )
+        if not isinstance(loaded, tuple) or len(loaded) != 3:
+            raise TypeError("mlx_lm.load did not return model, tokenizer, config")
+        return _encode(loaded[1], prompt_text, add_special_tokens=True)
+    except (ImportError, KeyError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise PlanGenerationError(
+            f"prefill_prompt_pin_runtime_tokenization_unavailable:{exc}"
+        ) from exc
+
+
+def _selection_authority_path_matches(recorded: str, supplied: Path) -> bool:
+    """Match an absolute path or the ruled path relative to its plan root."""
+
+    recorded_path = Path(recorded)
+    if recorded_path.is_absolute():
+        return recorded_path.resolve() == supplied.resolve()
+    if not recorded_path.parts or any(part in ("", ".", "..") for part in recorded_path.parts):
+        return False
+    supplied_parts = supplied.resolve().parts
+    return len(supplied_parts) >= len(recorded_path.parts) and (
+        supplied_parts[-len(recorded_path.parts) :] == recorded_path.parts
+    )
+
+
 def _load_prompt_pin(
-    path: Path, *, rung: int, model: Mapping[str, Any], selection_sha256: str
+    path: Path,
+    *,
+    rung: int,
+    model: Mapping[str, Any],
+    selection_path: Path,
+    selection_sha256: str,
 ) -> tuple[dict[str, Any], bytes]:
     """Use the v5 validator, then bind its authority to this exact record."""
 
@@ -164,6 +223,16 @@ def _load_prompt_pin(
         raise PlanGenerationError(f"prefill_prompt_pin_unauthenticated:{exc}") from exc
     if pin.get("g2a_record_sha256") != selection_sha256:
         raise PlanGenerationError("prefill_prompt_pin_selection_record_mismatch")
+    authority = pin["selection_authority"]["g2a_record"]
+    if authority["record_id"] != f"sha256:{selection_sha256}":
+        raise PlanGenerationError("prefill_prompt_pin_record_id_mismatch")
+    if not _selection_authority_path_matches(authority["path"], selection_path):
+        raise PlanGenerationError("prefill_prompt_pin_selection_record_path_mismatch")
+    if GENERATION_METHOD_RE.fullmatch(pin["generation_method"]) is None:
+        raise PlanGenerationError("prefill_prompt_pin_generation_method_invalid")
+    observed_ids = _runtime_tokenize_prompt(model, pin["prompt_text"])
+    if observed_ids != pin["prompt_token_ids"]:
+        raise PlanGenerationError("prefill_prompt_pin_runtime_token_ids_mismatch")
     return value, raw
 
 
@@ -218,17 +287,19 @@ def generate(
     output_root: Path,
     *,
     selection_record: Path,
+    summary: Path,
     prefill_prompt_pin: Path,
 ) -> dict[str, str]:
     """Write one successor plan and its ten normalised configuration files."""
 
-    selection, selection_raw = load_authenticated_selection(selection_record)
+    selection, selection_raw = load_authenticated_selection(selection_record, summary)
     rung = int(selection["selected_prefill_tokens"])
     model, quantization = v5_small_model_identity()
     prompt_pin, prompt_pin_raw = _load_prompt_pin(
         prefill_prompt_pin,
         rung=rung,
         model=model,
+        selection_path=selection_record,
         selection_sha256=_sha256(selection_raw),
     )
     destination = Path(output_root) / OUTPUT_REL
@@ -255,10 +326,10 @@ def generate(
         )
     constants = transfer_fiducial_rule_constants()
     plan = {
-        "schema_version": TRANSFER_FIDUCIAL_PLAN_SCHEMA,
+        "schema_version": TRANSFER_FIDUCIAL_PLAN_SCHEMA_V2,
         "diagnostic": True,
         "claim_bearing": False,
-        "diagnostic_kind": TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND,
+        "diagnostic_kind": TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND_V2,
         "pooling": "forbidden",
         "pre_data_receipt_required": True,
         "fit_rule_constants": constants,
@@ -309,6 +380,7 @@ def check(
     committed_root: Path,
     *,
     selection_record: Path,
+    summary: Path,
     prefill_prompt_pin: Path,
 ) -> dict[str, str]:
     """Regenerate in a temporary directory and require byte-identical output."""
@@ -319,6 +391,7 @@ def check(
         result = generate(
             temporary_root,
             selection_record=selection_record,
+            summary=summary,
             prefill_prompt_pin=prefill_prompt_pin,
         )
         generated = temporary_root / OUTPUT_REL
@@ -335,6 +408,7 @@ def check(
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--selection-record", required=True, type=Path)
+    parser.add_argument("--summary", required=True, type=Path)
     parser.add_argument("--prefill-prompt-pin", required=True, type=Path)
     parser.add_argument("--output-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--check", action="store_true")
@@ -348,12 +422,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             check(
                 args.output_root,
                 selection_record=args.selection_record,
+                summary=args.summary,
                 prefill_prompt_pin=args.prefill_prompt_pin,
             )
             if args.check
             else generate(
                 args.output_root,
                 selection_record=args.selection_record,
+                summary=args.summary,
                 prefill_prompt_pin=args.prefill_prompt_pin,
             )
         )
