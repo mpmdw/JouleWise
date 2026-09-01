@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from joulewise import detection_floor, floor_mint_estimator
+from joulewise import detection_floor, dominance_closeout, floor_mint_estimator
 from joulewise.analysis_manifest_v3 import (
     analysis_semantics_sha256_v1,
     validate_prospective_analysis_manifest_v3,
@@ -567,6 +567,34 @@ class D117ContrastV5PackTests(unittest.TestCase):
         )
         self.assertEqual(replay["point_unguarded_floor_j"], point)
         self.assertEqual(replay["ratio"], independent / point)
+
+    def test_common_mode_replay_uses_canonical_exact_corner_cap_before_enumeration(self) -> None:
+        fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
+        bracket = authenticated_bracket(fixture["operative_bound_s"])
+
+        # The replay now lives in the one-home module (D-168); the cap must
+        # refuse before that module ever calls the floor estimator.
+        with mock.patch.object(
+            dominance_closeout, "comparative_false_effect_floor"
+        ) as floor:
+            with self.assertRaisesRegex(
+                ValueError, "common_mode_replay_block_count_invalid"
+            ):
+                self.generator.replay_common_mode_dominance(
+                    [{}] * (detection_floor.MAX_EXACT_ADMISSIBLE_CORNER_N + 1),
+                    calibration_bracket=bracket,
+                    shared_edge_bound_s=fixture["operative_bound_s"],
+                )
+        floor.assert_not_called()
+
+        with self.assertRaisesRegex(
+            ValueError, "common_mode_replay_window_domain_invalid"
+        ):
+            self.generator.replay_common_mode_dominance(
+                [{}] * detection_floor.MAX_EXACT_ADMISSIBLE_CORNER_N,
+                calibration_bracket=bracket,
+                shared_edge_bound_s=fixture["operative_bound_s"],
+            )
 
     def test_common_mode_replay_last_ulp_caller_bound_does_not_govern(self) -> None:
         fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))

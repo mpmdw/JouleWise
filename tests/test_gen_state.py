@@ -61,10 +61,18 @@ EXPECTED_IDS = {
     # deterministic failure does not reproduce at the bench.)
     "PREWINDOW-REGEX-01",
     "REGISTRY-ID-NAMING-01",
-    "READY-WO-BATCH-01",
-    "SITTING2-PRECONDITIONS-01",
-    "UNVERIFIED-REAUDIT-01",
     "V4-TRANSACTION-01",
+    # D-167 replaces the retired Qwen2.5 _v3 windows and the three unstarted
+    # readiness-sitting rows with the live Qwen3 _v5 chain and the later _v6
+    # scored leg.
+    "V5-G2A-PREFILL-PROBE-01",
+    "V5-DESK-DAY-01",
+    "V5-G2B-SHAKEDOWN-01",
+    "V5-TRANSACTION-GO-01",
+    "V5-TRANSACTION-01",
+    "V5-NIGHTLY-G3-01",
+    "V6-TOKEN-PIN-BINDING-01",
+    "V6-SCORED-LEG-01",
     # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
     # rulings reserved for the kernel — synthesis R-5 (epoch lint), synthesis
     # R-4's registration of Opus finding 3f (consume-side supply line), and
@@ -164,7 +172,6 @@ EXPECTED_IDS = {
     "T3-PROV-SCHEMA-01",
     "COLDGATE-HANDOFF-01", "CGV-HARDEN-01",
     # [QUIET-MAC]
-    "D117-W-ALPHA", "D117-W-BETA", "D117-W-GAMMA",
     "MET-WINDOW-C-01",
     "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-046B", "P2-047B",
@@ -214,12 +221,13 @@ def _adapt_retired_quiet_mac_head(task_ids):
 
     The oracles are hand-written and frozen; P2-015 was retired from the
     kernel on 2026-07-31, and R3 formally retired its former successor
-    P2-006 on 2026-08-15. D117-W-ALPHA (rank 2) is now the dependency-ready
-    quiet-Mac head. Patching here keeps the historical fixtures unchanged.
+    P2-006 on 2026-08-15. D-167 then retired D117-W-ALPHA and installed
+    V5-G2A-PREFILL-PROBE-01 at rank 2 as the dependency-ready quiet-Mac
+    head. Patching here keeps the historical fixtures unchanged.
     """
     for index, task_id in enumerate(task_ids):
-        if task_id in ("P2-015", "P2-006"):
-            task_ids[index] = "D117-W-ALPHA"
+        if task_id in ("P2-015", "P2-006", "D117-W-ALPHA"):
+            task_ids[index] = "V5-G2A-PREFILL-PROBE-01"
     return task_ids
 
 
@@ -329,16 +337,16 @@ class TestKernelValidity(unittest.TestCase):
                 gen_state.validate(kernel)
 
     def test_cycle_rejected(self):
-        # D117-W-BETA already carries a pending hard start edge to ALPHA;
-        # closing the loop back from ALPHA makes a genuine cycle. Both ends
-        # are blocked so invariant 3 passes and the cycle check is what fires.
+        # The desk day already carries a pending hard start edge to G2-a;
+        # closing the edge back from G2-a makes a genuine cycle. Both ends are
+        # blocked so invariant 3 passes and the cycle check is what fires.
         kernel = copy.deepcopy(load_kernel())
-        kernel["tasks"]["D117-W-ALPHA"]["dependencies"] = [
-            {"kind": "task", "target": "D117-W-BETA", "required": "cycle",
+        kernel["tasks"]["V5-G2A-PREFILL-PROBE-01"]["dependencies"] = [
+            {"kind": "task", "target": "V5-DESK-DAY-01", "required": "cycle",
              "state": "pending", "strength": "hard", "scope": "start",
              "evidence": None}
         ]
-        kernel["tasks"]["D117-W-ALPHA"]["status"] = "blocked"
+        kernel["tasks"]["V5-G2A-PREFILL-PROBE-01"]["status"] = "blocked"
         with self.assertRaisesRegex(gen_state.KernelError, "dependency cycle"):
             gen_state.validate(kernel)
 
@@ -515,9 +523,11 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # CONSUMPTION-SESSION-IDENTITY-PARAM-01 (D-160 addendum F2/F3
         # drafts), and PINSET-REFRESH-LANE-01 as partial on PR #228
         # (D-161 (1)); PIPELINE-SMOKE-LIVE-01 re-scoped to D-162 G1/G2/G3:
-        # 105 - 1 + 4 = 108 exact live records.
+        # 105 - 1 + 4 = 108. D-167 retires the three D-117 windows and the
+        # three unstarted readiness-sitting rows, then installs eight _v5/_v6
+        # rows: 108 - 6 + 8 = 110 exact live records.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 108)
+        self.assertEqual(len(self.tasks), 110)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -534,31 +544,13 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         for tid in sorted(TERMINAL_IDS):
             self.assertIn(f"| {tid} |", completed)
 
-    def test_stop_card_cleared_and_window_council_gate_live(self):
-        # Earlier audit and T3 gates are cleared; their mechanics remain
-        # covered by frozen fixtures below. The readiness council installed
-        # the current quiet-Mac-only gate without reviving shelved T3 rows.
+    def test_stop_card_cleared_and_no_global_gate_live(self):
+        # Earlier audit, T3, and readiness-council gates are cleared; their
+        # mechanics remain covered by frozen fixtures below.
         self.assertIsNone(self.kernel["active_stop_card"])
         for task in self.tasks.values():
             self.assertIsNone(task["stop_card"])
-        # 2026-08-15 council verdict: no quiet-Mac task may be selected until
-        # a READY-CANDIDATE verdict closes every named readiness condition.
-        gates = self.kernel["active_global_gates"]
-        self.assertEqual(len(gates), 1)
-        gate = gates[0]
-        self.assertEqual(gate["id"], "WINDOW-COUNCIL-GATE")
-        self.assertEqual(
-            gate["scope"], {"operation": "select", "lanes": ["quiet_mac"]}
-        )
-        self.assertEqual(gate["allowed_task_ids"], [])
-        self.assertEqual(
-            set(gate["authority"]),
-            {
-                "docs/decision_log.md#window-gating-directive--2026-08-13-late-ed-t6-council-audited-instrument-readiness-precedes-any-window",
-                "docs/process_traces/2026-08-15-readiness-council/council-verdict.md#verdict",
-            },
-        )
-        self.assertIn("READY-CANDIDATE council verdict", gate["clearance"])
+        self.assertEqual(self.kernel["active_global_gates"], [])
         for tid in ("T3-CHAR-PAIR-01", "WO-T3-VIS-01", "SEC5A-REMOTE-01"):
             self.assertEqual(self.tasks[tid]["status"], "shelved")
 
@@ -681,17 +673,15 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertEqual(min(task["rank"] for task in external), 1)
         self.assertEqual(self.tasks["P1-008"]["rank"], 1)
 
-    def test_quiet_mac_all_lead_only_and_d117_alpha_is_queued_lane_head(self):
+    def test_quiet_mac_all_lead_only_and_v5_g2a_is_queued_lane_head(self):
         # P2-015 (rank 1) retired 2026-07-31; MET-WINDOW-C-01 took rank 1
         # on 2026-08-01 but sits BLOCKED behind the D-100 repair + Ed 5A,
-        # The 2026-08-15 reconciliation formally retired P2-006 and installed
-        # the D-117 ALPHA/BETA/GAMMA sequence at ranks 2/3/4. ALPHA is the
-        # dependency-ready lane head, but WINDOW-COUNCIL-GATE suppresses it.
-        # 11 + 2 = 13: the 2026-08-27 T26 end-of-sprint wave added
-        # TRANSFER-FIDUCIAL-01 (Q12) and PIPELINE-SMOKE-LIVE-01 (Q13), both
-        # blocked, so the lane head is unchanged.
+        # D-167 retired the D-117 sequence and installed G2-a, G2-b, and the
+        # transaction at ranks 2/3/4. G2-a is the dependency-ready lane head.
+        # The later scored _v6 leg adds one net quiet-Mac row, so 13 becomes
+        # 14 after the D-167 replacement.
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 13)
+        self.assertEqual(len(quiet), 14)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertEqual(self.tasks["MET-WINDOW-C-01"]["rank"], 1)
@@ -703,26 +693,42 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertEqual(
             {
                 tid: (self.tasks[tid]["rank"], self.tasks[tid]["status"])
-                for tid in ("D117-W-ALPHA", "D117-W-BETA", "D117-W-GAMMA")
+                for tid in (
+                    "V5-G2A-PREFILL-PROBE-01",
+                    "V5-G2B-SHAKEDOWN-01",
+                    "V5-TRANSACTION-01",
+                )
             },
             {
-                "D117-W-ALPHA": (2, "queued"),
-                "D117-W-BETA": (3, "blocked"),
-                "D117-W-GAMMA": (4, "blocked"),
+                "V5-G2A-PREFILL-PROBE-01": (2, "queued"),
+                "V5-G2B-SHAKEDOWN-01": (3, "blocked"),
+                "V5-TRANSACTION-01": (4, "blocked"),
             },
         )
         self.assertEqual(
-            self._hard_start_targets("D117-W-BETA"), {"D117-W-ALPHA"}
+            self._hard_start_targets("V5-DESK-DAY-01"),
+            {"V5-G2A-PREFILL-PROBE-01"},
         )
         self.assertEqual(
-            self._hard_start_targets("D117-W-GAMMA"), {"D117-W-BETA"}
+            self._hard_start_targets("V5-G2B-SHAKEDOWN-01"),
+            {"V5-DESK-DAY-01"},
+        )
+        self.assertEqual(
+            self._hard_start_targets("V5-TRANSACTION-GO-01"),
+            {"V5-G2B-SHAKEDOWN-01"},
+        )
+        self.assertEqual(
+            self._hard_start_targets("V5-TRANSACTION-01"),
+            {"V5-TRANSACTION-GO-01"},
         )
         queued = [t for t in quiet if t["status"] == "queued"]
         self.assertEqual(
-            self.tasks["D117-W-ALPHA"]["rank"],
+            self.tasks["V5-G2A-PREFILL-PROBE-01"]["rank"],
             min(task["rank"] for task in queued),
         )
-        self.assertEqual(self.tasks["D117-W-ALPHA"]["status"], "queued")
+        self.assertEqual(
+            self.tasks["V5-G2A-PREFILL-PROBE-01"]["status"], "queued"
+        )
 
     def test_new_hardening_followups(self):
         self.assertEqual(self._hard_start_targets("P2-046B"), set())
@@ -1074,24 +1080,28 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         self.assertNotIn("| READY |", queue)
         self.assertNotIn("PARTIAL; READY", queue)
 
-    def test_live_window_gate_and_synthetic_gate_both_render_exactly(self):
-        # The live WINDOW-COUNCIL-GATE suppresses quiet-Mac selection. The
-        # synthetic all-lane allowlist below separately pins gate mechanics.
+    def test_live_empty_gate_state_and_synthetic_gate_both_render_exactly(self):
+        # The live kernel has no global gate. The synthetic all-lane allowlist
+        # below separately pins gate mechanics.
         kernel = load_kernel()
         run_state = gen_state.render_run_state(kernel)
         queue = gen_state.render_queue(kernel)
         for rendered in (run_state, queue):
             self.assertNotIn("T3-2026-08-09-DAY", rendered)
-            self.assertIn("WINDOW-COUNCIL-GATE", rendered)
-            self.assertNotIn(
+            self.assertNotIn("WINDOW-COUNCIL-GATE", rendered)
+            self.assertIn(
                 "NONE — no global work-selection gate is active", rendered
             )
         self.assertEqual(
             gen_state.selectable_task_ids(kernel),
-            {"P1-008", "WO-LAUNCH-BINDING"},
+            {
+                "P1-008",
+                "V5-G2A-PREFILL-PROBE-01",
+                "WO-LAUNCH-BINDING",
+            },
         )
-        self.assertIn("excluded by: WINDOW-COUNCIL-GATE", run_state)
-        self.assertIn("GATED — WINDOW-COUNCIL-GATE", queue)
+        self.assertNotIn("excluded by:", run_state)
+        self.assertNotIn("GATED —", queue)
 
         gated = copy.deepcopy(kernel)
         gated["active_global_gates"] = [
