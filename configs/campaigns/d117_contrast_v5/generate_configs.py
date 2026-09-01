@@ -90,6 +90,11 @@ PREFILL_RULING_TRACE_PATH = (
     "docs/process_traces/2026-08-30-prefill-margin-coldgate/"
     "03-MAGISTRATE-RATIFICATION.md"
 )
+PREFILL_RULING_TRACE_PATHS = (
+    PREFILL_RULING_TRACE_PATH,
+    "docs/process_traces/2026-09-01-fresh-model-review/"
+    "16b-RULING-g2a-producers.md",
+)
 PREFILL_EXHAUSTED_LADDER_BRANCH = {
     "condition": "no_rung_clears_pre_registered_count_floor",
     "collection_prompt_tokens": 4096,
@@ -463,6 +468,7 @@ PREFILL_PIN_FILE_ARGUMENT = ""
 PREFILL_PROMPT_TEXT = ""
 PREFILL_PROMPT_SHA256 = ""
 PREFILL_REPEAT_COUNT = 0
+PREFILL_CLOSING_SENTENCE = ""
 PREFILL_SELECTION_AUTHORITY: dict[str, Any] = {}
 PREFILL_GENERATION_METHOD = ""
 PREFILL_TOKEN_IDS: dict[str, list[int]] = {}
@@ -811,7 +817,7 @@ def _token_ids_sha256(token_ids: list[int]) -> str:
 
 
 def _load_prefill_prompt_pin(
-    path: Path, *, prefill_length: int, tokenizer_json_sha256: str
+    path: Path, *, prefill_length: int, tokenizer_json_sha256: str, panel_sha256: str
 ) -> dict[str, Any]:
     """Load the post-G2 prompt pin without consulting a tokenizer or model."""
 
@@ -841,6 +847,9 @@ def _load_prefill_prompt_pin(
         "sample_count_margin_floor",
         "selection_expression",
         "g2a_record_sha256",
+        "selection_record",
+        "prompt_ladder",
+        "panel_sha256",
         "exhausted_ladder_branch",
         "prefill_length",
         "tokenizer_json_sha256",
@@ -850,6 +859,7 @@ def _load_prefill_prompt_pin(
         "prompt_token_ids_sha256",
         "prompt_tokens",
         "repeat_count",
+        "closing_sentence",
         "generation_method",
     }
     if not isinstance(value, dict) or set(value) != keys:
@@ -891,7 +901,7 @@ def _load_prefill_prompt_pin(
     selection_authority = value["selection_authority"]
     if (
         not isinstance(selection_authority, dict)
-        or set(selection_authority) != {"g2a_record", "ruling_trace_path"}
+        or set(selection_authority) != {"g2a_record", "ruling_trace_paths"}
         or not isinstance(selection_authority["g2a_record"], dict)
         or set(selection_authority["g2a_record"]) != {"record_id", "path"}
         or any(
@@ -899,7 +909,7 @@ def _load_prefill_prompt_pin(
             or not selection_authority["g2a_record"][key].strip()
             for key in ("record_id", "path")
         )
-        or selection_authority["ruling_trace_path"] != PREFILL_RULING_TRACE_PATH
+        or selection_authority["ruling_trace_paths"] != list(PREFILL_RULING_TRACE_PATHS)
     ):
         raise ValueError("prefill_prompt_pin_invalid: selection_authority")
     if not isinstance(value["g2a_record_sha256"], str) or not value[
@@ -914,6 +924,73 @@ def _load_prefill_prompt_pin(
         for character in value["g2a_record_sha256"]
     ):
         raise ValueError("prefill_prompt_pin_invalid: g2a_record_sha256")
+    if (
+        selection_authority["g2a_record"]["record_id"]
+        != f"sha256:{value['g2a_record_sha256']}"
+    ):
+        raise ValueError("selection_authority_mismatch")
+
+    def bundle_bytes(field: str) -> bytes:
+        reference = value[field]
+        if (
+            not isinstance(reference, dict)
+            or set(reference) != {"path", "sha256"}
+            or not isinstance(reference["path"], str)
+            or not reference["path"].strip()
+            or not isinstance(reference["sha256"], str)
+        ):
+            raise ValueError(f"prefill_prompt_pin_invalid: {field}")
+        relative = Path(reference["path"])
+        if relative.is_absolute():
+            raise ValueError(f"prefill_prompt_pin_invalid: {field}.path")
+        target = (path.parent / relative).resolve()
+        try:
+            target.relative_to(path.parent.resolve())
+        except ValueError as exc:
+            raise ValueError(f"prefill_prompt_pin_invalid: {field}.path") from exc
+        try:
+            raw = target.read_bytes()
+        except OSError as exc:
+            raise ValueError(f"{field}_missing") from exc
+        if hashlib.sha256(raw).hexdigest() != reference["sha256"]:
+            raise ValueError(f"{field}_sha256_mismatch")
+        return raw
+
+    selection_raw = bundle_bytes("selection_record")
+    if hashlib.sha256(selection_raw).hexdigest() != value["g2a_record_sha256"]:
+        raise ValueError("selection_record_sha256_mismatch")
+    ladder_raw = bundle_bytes("prompt_ladder")
+    try:
+        ladder = json.loads(
+            ladder_raw,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=lambda token: (_ for _ in ()).throw(ValueError(token)),
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(f"prefill_prompt_pin_invalid: prompt_ladder: {exc}") from exc
+    if not isinstance(ladder, dict) or not isinstance(ladder.get("rungs"), list):
+        raise ValueError("prefill_prompt_pin_invalid: prompt_ladder")
+    if ladder.get("tokenizer_json_sha256") != tokenizer_json_sha256:
+        raise ValueError("prompt_ladder_tokenizer_sha256_mismatch")
+    ladder_policy = ladder.get("panel_thinking_policy")
+    ladder_panel_sha = (
+        ladder_policy.get("panel_sha256") if isinstance(ladder_policy, dict) else None
+    )
+    if value["panel_sha256"] != ladder_panel_sha or ladder_panel_sha != panel_sha256:
+        raise ValueError(
+            "prefill_prompt_pin_panel_sha256_mismatch: "
+            f"pin={value['panel_sha256']} ladder={ladder_panel_sha} panel={panel_sha256}"
+        )
+    rung = next(
+        (
+            item
+            for item in ladder["rungs"]
+            if isinstance(item, dict) and item.get("prefill_tokens") == prefill_length
+        ),
+        None,
+    )
+    if rung is None:
+        raise ValueError("prompt_ladder_rung_missing")
     if (
         value["prefill_length"] != prefill_length
         or value["prompt_tokens"] != prefill_length
@@ -943,11 +1020,40 @@ def _load_prefill_prompt_pin(
         raise ValueError("prefill_prompt_pin_token_ids_sha256_mismatch")
     if not isinstance(value["repeat_count"], int) or value["repeat_count"] <= 0:
         raise ValueError("prefill_prompt_pin_invalid: repeat_count")
+    if not isinstance(value["closing_sentence"], str) or not value["closing_sentence"].strip():
+        raise ValueError("prefill_prompt_pin_invalid: closing_sentence")
     if (
         not isinstance(value["generation_method"], str)
         or not value["generation_method"].strip()
     ):
         raise ValueError("prefill_prompt_pin_invalid: generation_method")
+    rung_fields = {
+        "prompt_text": "prompt_text",
+        "prompt_text_utf8_sha256": "prompt_text_utf8_sha256",
+        "prompt_token_ids": "prompt_token_ids",
+        "prompt_token_ids_sha256": "prompt_token_ids_sha256",
+        "prompt_tokens": "prefill_tokens",
+        "repeat_count": "repeat_count",
+        "closing_sentence": "closing_sentence",
+        "generation_method": "generation_method",
+    }
+    for pin_field, ladder_field in rung_fields.items():
+        if value[pin_field] != rung.get(ladder_field):
+            raise ValueError(f"prefill_prompt_pin_ladder_rung_mismatch: {pin_field}")
+    if value["tokenizer_json_sha256"] != ladder.get("tokenizer_json_sha256"):
+        raise ValueError("prefill_prompt_pin_ladder_rung_mismatch: tokenizer_json_sha256")
+    expected_text = " ".join(
+        [PROMPT_SENTENCE] * value["repeat_count"] + [value["closing_sentence"]]
+    )
+    if text != expected_text:
+        raise ValueError("prefill_prompt_pin_prompt_construction_mismatch")
+    expected_method = (
+        f"{value['repeat_count']} x '{PROMPT_SENTENCE}' + "
+        f"'{value['closing_sentence']}' under tokenizer "
+        f"sha256:{value['tokenizer_json_sha256']}"
+    )
+    if value["generation_method"] != expected_method:
+        raise ValueError("prefill_prompt_pin_generation_method_construction_mismatch")
     return value
 
 
@@ -968,6 +1074,7 @@ def configure_model_pair(
     global QUANTIZATION, PAIR_TOKEN, RUN_PREFIX, CONSUMER_FAMILY_ID
     global PANEL_FILE_ARGUMENT, PREFILL_PIN_FILE_ARGUMENT
     global PREFILL_PROMPT_TEXT, PREFILL_PROMPT_SHA256, PREFILL_REPEAT_COUNT
+    global PREFILL_CLOSING_SENTENCE
     global PREFILL_SELECTION_AUTHORITY, PREFILL_GENERATION_METHOD
     global PREFILL_TOKEN_IDS, PREFILL_TOKEN_IDS_SHA256
     global SHARED_TOKENIZER_JSON_SHA256
@@ -994,6 +1101,10 @@ def configure_model_pair(
         selected = {"A": dict(panel.get(model_a_id)), "B": dict(panel.get(model_b_id))}
     except ModelPanelError as exc:
         raise ValueError(f"model_panel_refused: {exc}") from exc
+    try:
+        panel_sha256 = hashlib.sha256(panel_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise ValueError(f"model_panel_unreadable: {exc}") from exc
     if model_a_id == model_b_id:
         raise ValueError("model_pair_duplicate: model A and model B must differ")
     for arm, entry in selected.items():
@@ -1085,6 +1196,7 @@ def configure_model_pair(
         prefill_prompt_pin_path,
         prefill_length=prefill_length,
         tokenizer_json_sha256=tokenizer_hashes["A"],
+        panel_sha256=panel_sha256,
     )
     prompt_text = prefill_pin["prompt_text"]
     repeat_count = prefill_pin["repeat_count"]
@@ -1126,6 +1238,7 @@ def configure_model_pair(
     PREFILL_PROMPT_TEXT = prompt_text
     PREFILL_PROMPT_SHA256 = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
     PREFILL_REPEAT_COUNT = repeat_count
+    PREFILL_CLOSING_SENTENCE = prefill_pin["closing_sentence"]
     PREFILL_SELECTION_AUTHORITY = prefill_pin["selection_authority"]
     PREFILL_GENERATION_METHOD = prefill_pin["generation_method"]
     PREFILL_TOKEN_IDS = token_ids
@@ -1642,7 +1755,7 @@ def prompt_candidate() -> dict[str, Any]:
             "shared_tokenizer_json_sha256": SHARED_TOKENIZER_JSON_SHA256,
             "repeat_count": PREFILL_REPEAT_COUNT,
             "repeated_sentence": PROMPT_SENTENCE,
-            "final_sentence": PROMPT_FINAL_SENTENCE,
+            "final_sentence": PREFILL_CLOSING_SENTENCE,
             "model_panel_entries_bound": [MODEL_A["name"], MODEL_B["name"]],
             "per_model": [
                 {

@@ -16,7 +16,6 @@ from scripts import generate_g2a_probe_inputs as probe
 ROOT = Path(__file__).resolve().parents[1]
 PANEL = ROOT / "configs/model_panels/qwen3_4bit.json"
 POLICY = ROOT / "configs/campaign_policies/quiet_mac_p2_production.json"
-SHORT_CORPUS = ROOT / "tests/fixtures/g2a/probes/short-prompt-corpus.txt"
 TOKENIZER_JSON = Path(
     "/Users/edr/jw_models/mlx-community/Qwen3-1.7B-4bit/tokenizer.json"
 )
@@ -92,8 +91,6 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name) / "g2a"
-        self.corpus = Path(self.temporary.name) / "prompt-source.txt"
-        self.corpus.write_text("LONG TEST PROMPT SOURCE", encoding="utf-8")
         self.tokenizer_patch = mock.patch.object(
             probe, "_load_runtime_tokenizer", return_value=_FakeRuntimeTokenizer()
         )
@@ -104,7 +101,6 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
         arguments = {
             "root": self.root,
             "panel_path": PANEL,
-            "prompt_corpus": self.corpus,
             "small_members": 5,
             "large_members": 1,
             "lengths": probe.PREFILL_LENGTHS,
@@ -154,6 +150,7 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
                 panel_path=PANEL,
                 ledger=Path("/test/calibration_observation_ledger.jsonl"),
                 head_pin=ROOT / "configs/calibration/calibration_ledger_head.json",
+                campaign_policy=POLICY,
             )
 
     def _build_and_bind(self) -> None:
@@ -209,12 +206,6 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
         with self.assertRaisesRegex(probe.G2AProbeError, "prefill_length_set_invalid"):
             self._build(lengths=(512, 1024, 2048, 8192))
 
-    def test_prompt_source_shorter_than_longest_rung_refuses(self) -> None:
-        with self.assertRaisesRegex(
-            probe.G2AProbeError, "prompt_source_shorter_than_4096_tokens"
-        ):
-            self._build(prompt_corpus=SHORT_CORPUS)
-
     def test_panel_revision_mismatch_refuses(self) -> None:
         path = self._mutated_panel(
             lambda value: value["entries"][0].__setitem__("revision", "0" * 40)
@@ -263,6 +254,42 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
         path.write_bytes(path.read_bytes() + b" ")
         with self.assertRaisesRegex(probe.G2AProbeError, "config_sha256_mismatch"):
             self._check()
+
+    def test_runtime_adapter_and_campaign_policy_bindings_refuse_drift(self) -> None:
+        self._build_and_bind()
+        inventory_path = self.root / "window-plan/g2a-input-inventory.json"
+        inventory = json.loads(inventory_path.read_text())
+        inventory["runtime_adapter"]["sha256"] = "0" * 64
+        _write_json(inventory_path, inventory)
+        with self.assertRaisesRegex(probe.G2AProbeError, "runtime_adapter_sha256_mismatch"):
+            self._check()
+
+        inventory["runtime_adapter"]["sha256"] = _sha256(
+            ROOT / "joulewise/adapters/mlx_runtime.py"
+        )
+        _write_json(inventory_path, inventory)
+        alternate = Path(self.temporary.name) / "same-policy.json"
+        alternate.write_bytes(POLICY.read_bytes())
+        with (
+            mock.patch.object(
+                probe,
+                "_derive_live_vectors",
+                return_value=(copy.deepcopy(IDENTITY), copy.deepcopy(T1), copy.deepcopy(ACCEPTANCE)),
+            ),
+            mock.patch.object(
+                probe,
+                "_authenticate_ledger_and_acceptance",
+                return_value=copy.deepcopy(LEDGER_BINDING),
+            ),
+            self.assertRaisesRegex(probe.G2AProbeError, "campaign_policy_mismatch"),
+        ):
+            probe.check_inputs(
+                root=self.root,
+                panel_path=PANEL,
+                ledger=Path("/test/calibration_observation_ledger.jsonl"),
+                head_pin=ROOT / "configs/calibration/calibration_ledger_head.json",
+                campaign_policy=alternate,
+            )
 
     def test_marker_bearing_config_refuses_even_when_hashes_are_rebound(self) -> None:
         self._build_and_bind()
@@ -322,12 +349,18 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
         for name in (
             "panel",
             "campaign_policy",
+            "runtime_adapter",
             "prompt_ladder",
             "identity_epoch",
             "t1_bindings",
         ):
             self.assertEqual(set(inventory[name]), probe.HASH_REFERENCE_KEYS)
         self.assertEqual(set(inventory["calibration_plan"]), probe.PLAN_REFERENCE_KEYS)
+        self.assertEqual(inventory["runtime_adapter"]["path"], "joulewise/adapters/mlx_runtime.py")
+        self.assertRegex(inventory["repo_head"], r"^[0-9a-f]{40}$")
+        self.assertEqual(inventory["rendering_mode"], "raw_prompt_text")
+        self.assertFalse(inventory["chat_template_applied"])
+        self.assertEqual(inventory["thinking_policy"], "not_applicable_raw_prefill")
         for stage in inventory["stages"]:
             self.assertEqual(set(stage), probe.STAGE_KEYS)
             self.assertEqual(set(stage["manifest"]), probe.HASH_REFERENCE_KEYS)
@@ -340,6 +373,9 @@ class GenerateG2AProbeInputsTests(unittest.TestCase):
             (self.root / "window-plan/prefill-prompt-ladder.json").read_text()
         )
         self.assertEqual(set(ladder), probe.LADDER_KEYS)
+        self.assertEqual(ladder["rendering_mode"], "raw_prompt_text")
+        self.assertFalse(ladder["chat_template_applied"])
+        self.assertEqual(ladder["thinking_policy"], "not_applicable_raw_prefill")
         for rung in ladder["rungs"]:
             self.assertEqual(set(rung), probe.RUNG_KEYS)
         rung = next(row for row in ladder["rungs"] if row["prefill_tokens"] == 2048)

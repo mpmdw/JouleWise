@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Sequence
@@ -246,7 +247,7 @@ def _validate_ladder(ladder: Any) -> tuple[str, dict[int, dict[str, Any]]]:
     return tokenizer_hash, by_length
 
 
-def _ruling_trace_relative(path: Path) -> str:
+def _ruling_trace_paths(path: Path) -> list[str]:
     resolved = path.resolve()
     try:
         relative = resolved.relative_to(REPO_ROOT).as_posix()
@@ -254,7 +255,118 @@ def _ruling_trace_relative(path: Path) -> str:
         raise PromptPinError("ruling_trace_outside_repository") from exc
     if relative != d117_v5.PREFILL_RULING_TRACE_PATH or not resolved.is_file():
         raise PromptPinError("ruling_trace_path_mismatch_or_missing")
-    return relative
+    required = [
+        REPO_ROOT / trace for trace in d117_v5.PREFILL_RULING_TRACE_PATHS
+    ]
+    if not all(item.is_file() for item in required):
+        raise PromptPinError("ruling_trace_path_mismatch_or_missing")
+    return list(d117_v5.PREFILL_RULING_TRACE_PATHS)
+
+
+def _validate_receipt(
+    *,
+    input_inventory: Path,
+    counts_receipt: Path,
+    summary_raw: bytes,
+    ladder_raw: bytes,
+    ladder: dict[str, Any],
+    selected_length: int,
+) -> None:
+    inventory, inventory_raw = _load_json(input_inventory, label="input_inventory")
+    receipt, _receipt_raw = _load_json(counts_receipt, label="counts_receipt")
+    if not isinstance(inventory, dict) or not isinstance(receipt, dict):
+        raise PromptPinError("input_inventory_or_counts_receipt_malformed")
+    if receipt.get("schema_version") != "joulewise.g2a_probe_counts_receipt.v1":
+        raise PromptPinError("counts_receipt_schema_version_invalid")
+    if receipt.get("input_inventory_sha256") != _sha256(inventory_raw):
+        raise PromptPinError("counts_receipt_input_inventory_sha256_mismatch")
+    if receipt.get("summary_output_sha256") != _sha256(summary_raw):
+        raise PromptPinError("counts_receipt_summary_output_sha256_mismatch")
+    if not isinstance(receipt.get("runs_root"), str) or not receipt["runs_root"].strip():
+        raise PromptPinError("counts_receipt_runs_root_invalid")
+    prompt_ladder = inventory.get("prompt_ladder")
+    panel = inventory.get("panel")
+    if (
+        not isinstance(prompt_ladder, dict)
+        or prompt_ladder.get("sha256") != _sha256(ladder_raw)
+        or receipt.get("prompt_ladder_sha256") != _sha256(ladder_raw)
+    ):
+        raise PromptPinError("input_inventory_prompt_ladder_sha256_mismatch")
+    if (
+        not isinstance(panel, dict)
+        or not _is_sha256(panel.get("sha256"))
+        or ladder["panel_thinking_policy"]["panel_sha256"] != panel["sha256"]
+    ):
+        raise PromptPinError("ladder_panel_binding_mismatch")
+    stages = inventory.get("stages")
+    runs = receipt.get("runs")
+    if not isinstance(stages, list) or not isinstance(runs, list):
+        raise PromptPinError("counts_receipt_runs_malformed")
+    expected: set[str] = set()
+    expected_members: dict[str, tuple[str, str]] = {}
+    for role in ("small", "large"):
+        stage_id = f"{role}-p{selected_length}"
+        stage = next(
+            (item for item in stages if isinstance(item, dict) and item.get("stage_id") == stage_id),
+            None,
+        )
+        if not isinstance(stage, dict) or not isinstance(stage.get("members"), list):
+            raise PromptPinError("input_inventory_selected_stage_missing")
+        expected.update(
+            member.get("run_id")
+            for member in stage["members"]
+            if isinstance(member, dict) and isinstance(member.get("run_id"), str)
+        )
+        for member in stage["members"]:
+            if isinstance(member, dict) and isinstance(member.get("run_id"), str):
+                expected_members[member["run_id"]] = (
+                    stage_id,
+                    member.get("config_sha256"),
+                )
+    observed: set[str] = set()
+    run_keys = {
+        "run_id",
+        "stage_id",
+        "config_sha256",
+        "realized_prompt_token_count",
+        "realized_prompt_token_ids_sha256",
+        "in_window_sample_count",
+    }
+    for run in runs:
+        if not isinstance(run, dict) or set(run) != run_keys:
+            raise PromptPinError("counts_receipt_run_malformed")
+        if run["stage_id"] in {f"small-p{selected_length}", f"large-p{selected_length}"}:
+            if not isinstance(run["run_id"], str) or run["run_id"] in observed:
+                raise PromptPinError("counts_receipt_run_id_invalid")
+            observed.add(run["run_id"])
+            expected_stage, expected_config_sha = expected_members[run["run_id"]]
+            selected_rung = next(
+                item
+                for item in ladder["rungs"]
+                if item["prefill_tokens"] == selected_length
+            )
+            if (
+                run["stage_id"] != expected_stage
+                or run["config_sha256"] != expected_config_sha
+                or run["realized_prompt_token_count"] != selected_length
+                or run["realized_prompt_token_ids_sha256"]
+                != selected_rung["prompt_token_ids_sha256"]
+                or isinstance(run["in_window_sample_count"], bool)
+                or not isinstance(run["in_window_sample_count"], int)
+                or run["in_window_sample_count"] < 0
+            ):
+                raise PromptPinError("counts_receipt_run_provenance_mismatch")
+    if observed != expected:
+        raise PromptPinError("counts_receipt_selected_rung_run_set_mismatch")
+
+
+def _bundle_reference(path: Path, *, bundle_dir: Path, label: str) -> tuple[str, str]:
+    destination = bundle_dir / path.name
+    try:
+        relative = destination.resolve().relative_to(bundle_dir.resolve()).as_posix()
+    except ValueError as exc:
+        raise PromptPinError(f"{label}_relative_path_invalid") from exc
+    return relative, _sha256(path.read_bytes())
 
 
 def issue_pin(
@@ -262,11 +374,14 @@ def issue_pin(
     selection_record: Path,
     summary_path: Path,
     prompt_ladder_path: Path,
+    input_inventory: Path,
+    counts_receipt: Path,
     ruling_trace: Path,
+    bundle_dir: Path,
 ) -> dict[str, Any]:
     selection, selection_raw = _load_json(selection_record, label="selection_record")
     summary, summary_raw = _load_json(summary_path, label="summary")
-    ladder, _ladder_raw = _load_json(prompt_ladder_path, label="prompt_ladder")
+    ladder, ladder_raw = _load_json(prompt_ladder_path, label="prompt_ladder")
     summary_hash = _sha256(summary_raw)
     length = _selection_from_inputs(
         selection,
@@ -275,6 +390,14 @@ def issue_pin(
     )
     tokenizer_hash, rungs = _validate_ladder(ladder)
     rung = rungs[length]
+    _validate_receipt(
+        input_inventory=input_inventory,
+        counts_receipt=counts_receipt,
+        summary_raw=summary_raw,
+        ladder_raw=ladder_raw,
+        ladder=ladder,
+        selected_length=length,
+    )
     observed_ids = runtime_prompt_token_ids(
         rung["prompt_text"], tokenizer_json_sha256=tokenizer_hash
     )
@@ -282,24 +405,27 @@ def issue_pin(
         raise PromptPinError(f"runtime_prompt_token_ids_mismatch:{length}")
     if len(observed_ids) != length:
         raise PromptPinError(f"runtime_prompt_token_count_mismatch:{length}")
-    ruling_relative = _ruling_trace_relative(ruling_trace)
+    ruling_paths = _ruling_trace_paths(ruling_trace)
     selection_hash = _sha256(selection_raw)
-    window_plan_root = prompt_ladder_path.resolve().parent
     try:
-        selection_relative = selection_record.resolve().relative_to(window_plan_root)
+        selection_record.resolve().relative_to(prompt_ladder_path.resolve().parent)
     except ValueError as exc:
         raise PromptPinError("selection_record_outside_window_plan_root") from exc
-    if not selection_relative.parts:
-        raise PromptPinError("selection_record_relative_path_invalid")
+    selection_relative, selection_copy_hash = _bundle_reference(
+        selection_record, bundle_dir=bundle_dir, label="selection_record"
+    )
+    ladder_relative, ladder_copy_hash = _bundle_reference(
+        prompt_ladder_path, bundle_dir=bundle_dir, label="prompt_ladder"
+    )
 
     return {
         "schema_version": PROMPT_PIN_SCHEMA,
         "selection_authority": {
             "g2a_record": {
                 "record_id": f"sha256:{selection_hash}",
-                "path": selection_relative.as_posix(),
+                "path": selection_relative,
             },
-            "ruling_trace_path": ruling_relative,
+            "ruling_trace_paths": ruling_paths,
         },
         "ladder_prompt_tokens": list(d117_v5.PREFILL_LADDER_PROMPT_TOKENS),
         "min_small_model_members_per_rung": (
@@ -312,6 +438,9 @@ def issue_pin(
         "sample_count_margin_floor": d117_v5.PREFILL_SAMPLE_COUNT_MARGIN_FLOOR,
         "selection_expression": d117_v5.PREFILL_SELECTION_EXPRESSION,
         "g2a_record_sha256": selection_hash,
+        "selection_record": {"path": selection_relative, "sha256": selection_copy_hash},
+        "prompt_ladder": {"path": ladder_relative, "sha256": ladder_copy_hash},
+        "panel_sha256": ladder["panel_thinking_policy"]["panel_sha256"],
         "exhausted_ladder_branch": d117_v5.PREFILL_EXHAUSTED_LADDER_BRANCH,
         "prefill_length": length,
         "tokenizer_json_sha256": tokenizer_hash,
@@ -321,6 +450,7 @@ def issue_pin(
         "prompt_token_ids_sha256": rung["prompt_token_ids_sha256"],
         "prompt_tokens": length,
         "repeat_count": rung["repeat_count"],
+        "closing_sentence": rung["closing_sentence"],
         "generation_method": rung["generation_method"],
     }
 
@@ -336,6 +466,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--selection-record", required=True, type=Path)
     parser.add_argument("--summary", required=True, type=Path)
     parser.add_argument("--prompt-ladder", required=True, type=Path)
+    parser.add_argument("--input-inventory", required=True, type=Path)
+    parser.add_argument("--counts-receipt", required=True, type=Path)
     parser.add_argument("--ruling-trace", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser
@@ -350,8 +482,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             selection_record=args.selection_record,
             summary_path=args.summary,
             prompt_ladder_path=args.prompt_ladder,
+            input_inventory=args.input_inventory,
+            counts_receipt=args.counts_receipt,
             ruling_trace=args.ruling_trace,
+            bundle_dir=args.output.parent,
         )
+        for source in (args.selection_record, args.prompt_ladder):
+            destination = args.output.parent / source.name
+            raw = source.read_bytes()
+            if destination.exists():
+                if destination.read_bytes() != raw:
+                    raise PromptPinError(f"bundle_copy_mismatch:{destination}")
+                continue
+            try:
+                with destination.open("xb") as handle:
+                    handle.write(raw)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            except OSError as exc:
+                raise PromptPinError(f"bundle_copy_unwritable:{destination}:{exc}") from exc
         try:
             with args.output.open("xb") as handle:
                 handle.write(_pin_bytes(pin))

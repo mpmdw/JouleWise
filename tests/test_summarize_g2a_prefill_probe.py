@@ -24,6 +24,49 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
         inventory_path = root / "g2a-input-inventory.json"
         inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
         inventory["config_root"] = str(root / "config-root")
+        ladder_path = root / "prefill-prompt-ladder.json"
+        ladder = json.loads(ladder_path.read_text(encoding="utf-8"))
+        ladder.update(
+            rendering_mode="raw_prompt_text",
+            chat_template_applied=False,
+            thinking_policy="not_applicable_raw_prefill",
+        )
+        ladder_path.write_text(json.dumps(ladder) + "\n", encoding="utf-8")
+        inventory.update(
+            runtime_adapter={
+                "path": "joulewise/adapters/mlx_runtime.py",
+                "sha256": hashlib.sha256(
+                    (ROOT / "joulewise/adapters/mlx_runtime.py").read_bytes()
+                ).hexdigest(),
+            },
+            repo_head="a" * 40,
+            rendering_mode="raw_prompt_text",
+            chat_template_applied=False,
+            thinking_policy="not_applicable_raw_prefill",
+        )
+        inventory["prompt_ladder"]["path"] = str(ladder_path)
+        inventory["prompt_ladder"]["sha256"] = hashlib.sha256(
+            ladder_path.read_bytes()
+        ).hexdigest()
+        by_length = {rung["prefill_tokens"]: rung for rung in ladder["rungs"]}
+        for stage in inventory["stages"]:
+            rung = by_length[stage["prefill_tokens"]]
+            for member in stage["members"]:
+                run_root = root / "summary-root" / member["run_id"]
+                config_raw = (root / "config-root" / member["config_path"]).read_bytes()
+                (run_root / "config.json").write_bytes(config_raw)
+                summary_path = run_root / "summary_metrics.json"
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+                summary.update(
+                    run_id=member["run_id"],
+                    workload_provenance={
+                        "prompt": {
+                            "realized_token_count": rung["prefill_tokens"],
+                            "token_ids_sha256": rung["prompt_token_ids_sha256"],
+                        }
+                    },
+                )
+                summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
         inventory_path.write_text(
             json.dumps(inventory, separators=(",", ":")) + "\n",
             encoding="utf-8",
@@ -74,19 +117,18 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
                 root, config_root, inventory, runs_root
             )
             rows = json.loads(summary_path.read_text(encoding="utf-8"))
-            counts = [
-                json.loads(line)
-                for line in counts_path.read_text(encoding="utf-8").splitlines()
-            ]
+            counts = json.loads(counts_path.read_text(encoding="utf-8"))
         self.assertEqual(code, 0)
-        self.assertEqual(len(counts), 24)
+        self.assertEqual(counts["schema_version"], "joulewise.g2a_probe_counts_receipt.v1")
+        self.assertEqual(len(counts["runs"]), 24)
         self.assertEqual([row["length"] for row in rows], [512, 1024, 2048, 4096])
         self.assertTrue(rows[0]["all_small_count_ge_5"])
         self.assertEqual(rows[0]["small_minimum_count"], 6)
         self.assertEqual(rows[0]["large_members"], 1)
-        large = next(row for row in counts if row["run_id"] == "g2a-large-p0512-r01")
-        self.assertEqual(large["overlapping_power_interval_count"], 0)
-        self.assertEqual(large["overlap_margin_above_three"], -3)
+        large = next(
+            row for row in counts["runs"] if row["run_id"] == "g2a-large-p0512-r01"
+        )
+        self.assertEqual(large["in_window_sample_count"], 0)
 
     def test_one_small_member_below_five_makes_only_that_rung_nonqualifying(
         self,
@@ -114,64 +156,55 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
             code, counts_path, summary_path = self.run_summary(
                 root, config_root, inventory, runs_root
             )
-            counts = [
-                json.loads(line)
-                for line in counts_path.read_text(encoding="utf-8").splitlines()
-            ]
+            counts = json.loads(counts_path.read_text(encoding="utf-8"))["runs"]
             rows = json.loads(summary_path.read_text(encoding="utf-8"))
         self.assertEqual(code, 0)
         member = next(row for row in counts if row["run_id"] == run_id)
-        self.assertEqual(member["overlapping_power_interval_count"], 2)
-        self.assertEqual(member["overlap_margin_above_three"], -1)
+        self.assertEqual(member["in_window_sample_count"], 2)
         rung = next(row for row in rows if row["length"] == 2048)
         self.assertEqual(rung["small_minimum_count"], 2)
         self.assertFalse(rung["all_small_count_ge_5"])
 
-    def test_fewer_than_five_small_members_is_hard_malformed_input_refusal(self) -> None:
+    def test_missing_small_run_remains_a_below_floor_row(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config_root, inventory_path, runs_root = self.copy_fixture(temporary)
-            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-            inventory["stages"][0]["members"].pop()
-            inventory_path.write_text(json.dumps(inventory) + "\n", encoding="utf-8")
+            (runs_root / "g2a-small-p0512-r05" / "summary_metrics.json").unlink()
             code, counts, summary = self.run_summary(
                 root, config_root, inventory_path, runs_root
             )
-        self.assertEqual(code, 2)
-        self.assertFalse(counts.exists())
-        self.assertFalse(summary.exists())
+            row = next(
+                item for item in json.loads(summary.read_text()) if item["length"] == 512
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(row["small_members"], 4)
+        self.assertEqual(row["small_minimum_count"], 0)
+        self.assertFalse(row["all_small_count_ge_5"])
 
-    def test_missing_summary_refuses(self) -> None:
+    def test_missing_summary_emits_zero_below_floor_row(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config_root, inventory, runs_root = self.copy_fixture(temporary)
             (runs_root / "g2a-small-p2048-r02" / "summary_metrics.json").unlink()
-            code, _counts, _summary = self.run_summary(
+            code, _counts, summary = self.run_summary(
                 root, config_root, inventory, runs_root
             )
-        self.assertEqual(code, 2)
+            row = next(
+                item for item in json.loads(summary.read_text()) if item["length"] == 2048
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(row["small_minimum_count"], 0)
+        self.assertFalse(row["all_small_count_ge_5"])
 
     def test_wrong_run_id_refuses_even_when_the_mutated_config_hash_is_rebound(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config_root, inventory_path, runs_root = self.copy_fixture(temporary)
-            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-            stage = inventory["stages"][0]
-            member = stage["members"][0]
-            config_path = config_root / member["config_path"]
-            config = json.loads(config_path.read_text(encoding="utf-8"))
-            config["run_id"] = "wrong-run-id"
-            raw = (json.dumps(config, separators=(",", ":")) + "\n").encode()
-            config_path.write_bytes(raw)
-            digest = hashlib.sha256(raw).hexdigest()
-            member["config_sha256"] = digest
-            manifest_path = config_root / stage["manifest"]["path"]
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["executed_order"][0]["config_sha256"] = digest
-            manifest_raw = (json.dumps(manifest, separators=(",", ":")) + "\n").encode()
-            manifest_path.write_bytes(manifest_raw)
-            stage["manifest"]["sha256"] = hashlib.sha256(manifest_raw).hexdigest()
-            inventory_path.write_text(json.dumps(inventory) + "\n", encoding="utf-8")
+            run_id = "g2a-small-p0512-r01"
+            summary_path = runs_root / run_id / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["run_id"] = "wrong-run-id"
+            summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
             code, _counts, _summary = self.run_summary(
                 root, config_root, inventory_path, runs_root
             )
@@ -183,6 +216,18 @@ class SummarizeG2APrefillProbeTests(unittest.TestCase):
             config_root, inventory, runs_root = self.copy_fixture(temporary)
             path = config_root / "large-p4096/g2a-large-p4096-r01.json"
             path.write_bytes(path.read_bytes() + b" \n")
+            code, _counts, _summary = self.run_summary(
+                root, config_root, inventory, runs_root
+            )
+        self.assertEqual(code, 2)
+
+    def test_recorded_run_config_hash_mismatch_refuses(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config_root, inventory, runs_root = self.copy_fixture(temporary)
+            run_id = "g2a-small-p0512-r01"
+            path = runs_root / run_id / "config.json"
+            path.write_bytes(path.read_bytes() + b" ")
             code, _counts, _summary = self.run_summary(
                 root, config_root, inventory, runs_root
             )

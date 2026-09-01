@@ -15,6 +15,7 @@ import importlib
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -62,6 +63,7 @@ EXPECTED_REVISIONS = {
 EXPECTED_QUANTIZATION = {"name": "int4", "bits": 4, "group_size": 64}
 
 CANONICAL_PANEL_PATH = REPO_ROOT / "configs/model_panels/qwen3_4bit.json"
+RUNTIME_ADAPTER_PATH = REPO_ROOT / "joulewise/adapters/mlx_runtime.py"
 CONFIG_ROOT_LEAF = "prefill-probe-configs"
 WINDOW_PLAN_LEAF = "window-plan"
 PROMPT_LADDER_NAME = "prefill-prompt-ladder.json"
@@ -79,6 +81,9 @@ LADDER_KEYS = frozenset(
         "prompt_sentence",
         "tokenizer_json_sha256",
         "panel_thinking_policy",
+        "rendering_mode",
+        "chat_template_applied",
+        "thinking_policy",
         "rungs",
     }
 )
@@ -100,6 +105,11 @@ INVENTORY_KEYS = frozenset(
         "config_root",
         "panel",
         "campaign_policy",
+        "runtime_adapter",
+        "repo_head",
+        "rendering_mode",
+        "chat_template_applied",
+        "thinking_policy",
         "prompt_ladder",
         "identity_epoch",
         "t1_bindings",
@@ -379,15 +389,6 @@ def _token_ids(tokenizer: Any, text: str) -> list[int]:
     return ids
 
 
-def _validate_prompt_corpus(path: Path, tokenizer: Any) -> None:
-    try:
-        source = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise G2AProbeError(f"prompt_source_unreadable: {path}: {exc}") from exc
-    if len(_token_ids(tokenizer, source)) < max(PREFILL_LENGTHS):
-        raise G2AProbeError("prompt_source_shorter_than_4096_tokens")
-
-
 def _build_prompt_ladder(
     *, tokenizer: Any, tokenizer_hash: str, panel_sha256: str
 ) -> dict[str, Any]:
@@ -440,6 +441,9 @@ def _build_prompt_ladder(
             "enable_thinking": "false",
             "panel_sha256": panel_sha256,
         },
+        "rendering_mode": "raw_prompt_text",
+        "chat_template_applied": False,
+        "thinking_policy": "not_applicable_raw_prefill",
         "rungs": rungs,
     }
 
@@ -587,7 +591,6 @@ def build_probes(
     *,
     root: Path,
     panel_path: Path,
-    prompt_corpus: Path,
     small_members: int,
     large_members: int,
     lengths: Sequence[int] = PREFILL_LENGTHS,
@@ -596,7 +599,6 @@ def build_probes(
     _validate_member_counts(small_members, large_members)
     models, tokenizer_hash = _validate_panel(panel_path)
     tokenizer = _load_runtime_tokenizer(models["small"])
-    _validate_prompt_corpus(prompt_corpus, tokenizer)
     panel_sha = _sha256_path(panel_path)
     ladder = _build_prompt_ladder(
         tokenizer=tokenizer,
@@ -693,6 +695,12 @@ def _read_ladder(path: Path) -> dict[str, Any]:
         raise G2AProbeError("prompt_ladder_schema_mismatch")
     if ladder.get("prompt_sentence") != PROMPT_SENTENCE:
         raise G2AProbeError("prompt_ladder_sentence_mismatch")
+    if (
+        ladder.get("rendering_mode") != "raw_prompt_text"
+        or ladder.get("chat_template_applied") is not False
+        or ladder.get("thinking_policy") != "not_applicable_raw_prefill"
+    ):
+        raise G2AProbeError("prompt_ladder_rendering_policy_mismatch")
     policy = ladder.get("panel_thinking_policy")
     if not isinstance(policy, dict) or set(policy) != {"enable_thinking", "panel_sha256"}:
         raise G2AProbeError("prompt_ladder_thinking_policy_malformed")
@@ -707,6 +715,20 @@ def _read_ladder(path: Path) -> dict[str, Any]:
             raise G2AProbeError("prompt_ladder_rung_malformed")
         _require_exact_keys(row, RUNG_KEYS, "prompt_ladder_rung")
     return ladder
+
+
+def _repo_head() -> str:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise G2AProbeError(f"repo_head_unavailable: {exc}") from exc
+    return _require_nonempty(completed.stdout.strip(), "repo_head")
 
 
 def _collect_stage_bindings(
@@ -787,6 +809,14 @@ def _probe_plan(
             "path": _display_path(campaign_policy),
             "sha256": _sha256_path(campaign_policy),
         },
+        "runtime_adapter": {
+            "path": "joulewise/adapters/mlx_runtime.py",
+            "sha256": _sha256_path(RUNTIME_ADAPTER_PATH),
+        },
+        "repo_head": _repo_head(),
+        "rendering_mode": "raw_prompt_text",
+        "chat_template_applied": False,
+        "thinking_policy": "not_applicable_raw_prefill",
         "prompt_ladder": {"path": str(ladder_path.resolve()), "sha256": _sha256_path(ladder_path)},
         "identity_epoch": {
             "path": str(identity_path.resolve()),
@@ -914,6 +944,14 @@ def bind_window(
             "path": _display_path(campaign_policy),
             "sha256": _sha256_path(campaign_policy),
         },
+        "runtime_adapter": {
+            "path": "joulewise/adapters/mlx_runtime.py",
+            "sha256": _sha256_path(RUNTIME_ADAPTER_PATH),
+        },
+        "repo_head": _repo_head(),
+        "rendering_mode": "raw_prompt_text",
+        "chat_template_applied": False,
+        "thinking_policy": "not_applicable_raw_prefill",
         "prompt_ladder": {"path": str(ladder_path.resolve()), "sha256": _sha256_path(ladder_path)},
         "identity_epoch": {"path": str(identity_path.resolve()), "sha256": identity_sha},
         "t1_bindings": {"path": str(t1_path.resolve()), "sha256": t1_sha},
@@ -1099,7 +1137,14 @@ def _check_stage(
     return config_paths
 
 
-def check_inputs(*, root: Path, panel_path: Path, ledger: Path, head_pin: Path) -> None:
+def check_inputs(
+    *,
+    root: Path,
+    panel_path: Path,
+    ledger: Path,
+    head_pin: Path,
+    campaign_policy: Path,
+) -> None:
     root = root.resolve()
     inventory_path = root / WINDOW_PLAN_LEAF / INVENTORY_NAME
     inventory = _read_json(inventory_path, label="input_inventory")
@@ -1125,10 +1170,20 @@ def check_inputs(*, root: Path, panel_path: Path, ledger: Path, head_pin: Path) 
     campaign_policy_path = _validate_hash_reference(
         inventory.get("campaign_policy"), label="campaign_policy", root=root
     )
+    if campaign_policy_path.resolve() != campaign_policy.resolve():
+        raise G2AProbeError("campaign_policy_mismatch")
     try:
         CampaignPolicy.from_mapping(_read_json(campaign_policy_path, label="campaign_policy"))
     except SchemaError as exc:
         raise G2AProbeError(f"campaign_policy_refused: {exc}") from exc
+    runtime_adapter = inventory.get("runtime_adapter")
+    if not isinstance(runtime_adapter, dict) or set(runtime_adapter) != {"path", "sha256"}:
+        raise G2AProbeError("runtime_adapter_malformed")
+    if runtime_adapter.get("path") != "joulewise/adapters/mlx_runtime.py":
+        raise G2AProbeError("runtime_adapter_path_mismatch")
+    if runtime_adapter.get("sha256") != _sha256_path(RUNTIME_ADAPTER_PATH):
+        raise G2AProbeError("runtime_adapter_sha256_mismatch")
+    _require_nonempty(inventory.get("repo_head"), "repo_head")
     ladder_path = _validate_hash_reference(
         inventory.get("prompt_ladder"), label="prompt_ladder", root=root
     )
@@ -1147,6 +1202,12 @@ def check_inputs(*, root: Path, panel_path: Path, ledger: Path, head_pin: Path) 
 
     if inventory.get("power_policy") != POWER_POLICY:
         raise G2AProbeError("input_inventory_power_policy_mismatch")
+    if (
+        inventory.get("rendering_mode") != "raw_prompt_text"
+        or inventory.get("chat_template_applied") is not False
+        or inventory.get("thinking_policy") != "not_applicable_raw_prefill"
+    ):
+        raise G2AProbeError("input_inventory_rendering_policy_mismatch")
     identity = _read_json(identity_path, label="identity_epoch")
     t1 = _read_json(t1_path, label="t1_bindings")
     current_identity, current_t1, acceptance = _derive_live_vectors(POWER_POLICY)
@@ -1225,7 +1286,6 @@ def build_parser() -> argparse.ArgumentParser:
     build = commands.add_parser("build-probes", help="create prompt, config, and manifest bytes")
     build.add_argument("--root", type=Path, required=True)
     build.add_argument("--panel", type=Path, required=True)
-    build.add_argument("--prompt-corpus", type=Path, required=True)
     build.add_argument("--small-members", type=int, default=5)
     build.add_argument("--large-members", type=int, default=1)
     build.add_argument("--lengths", type=int, nargs="+", default=list(PREFILL_LENGTHS))
@@ -1245,6 +1305,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--panel", type=Path, required=True)
     check.add_argument("--ledger", type=Path, required=True)
     check.add_argument("--head-pin", type=Path, required=True)
+    check.add_argument("--campaign-policy", type=Path, required=True)
     return parser
 
 
@@ -1255,7 +1316,6 @@ def main(argv: list[str] | None = None) -> int:
             build_probes(
                 root=args.root,
                 panel_path=args.panel,
-                prompt_corpus=args.prompt_corpus,
                 small_members=args.small_members,
                 large_members=args.large_members,
                 lengths=args.lengths,
@@ -1279,6 +1339,7 @@ def main(argv: list[str] | None = None) -> int:
                 panel_path=args.panel,
                 ledger=args.ledger,
                 head_pin=args.head_pin,
+                campaign_policy=args.campaign_policy,
             )
             print("PASS G2-a inputs authenticate with no config warnings")
         return 0

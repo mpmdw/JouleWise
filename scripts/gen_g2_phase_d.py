@@ -65,7 +65,8 @@ G2A_INPUT_CHECK = (
     '  --root "$G2A_ROOT" \\\n'
     '  --panel "$REPO/configs/model_panels/qwen3_4bit.json" \\\n'
     '  --ledger "$CALIBRATION_LEDGER" \\\n'
-    '  --head-pin "$LEDGER_HEAD_PIN"\n'
+    '  --head-pin "$LEDGER_HEAD_PIN" \\\n'
+    '  --campaign-policy "$POLICY"\n'
 )
 
 

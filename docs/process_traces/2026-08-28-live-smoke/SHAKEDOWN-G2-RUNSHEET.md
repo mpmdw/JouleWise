@@ -232,6 +232,8 @@ the pinned `mlx-community/Qwen3-1.7B-4bit` and
 harness. The resolvability probes use the small pinned model; the large pin is
 checked now so the pair cannot drift between evenings.
 
+The probe sends raw prompt text with no chat template, so the model's thinking switch is never rendered; the panel file (whose thinking-off policy governs the decode arm the selected rung will feed) and the MLX runtime adapter are bound by file hash in the G2-a input inventory, and the adapter's greedy sampler is its fail-closed default.
+
 ```sh
 export G2A_ROOT=/Users/edr/JouleWise-shakedown-g2/g2-a-20260830
 export G2A_RUNS_ROOT="$G2A_ROOT/runs"
@@ -245,9 +247,9 @@ export G2A_FROZEN_PLAN="$G2A_WINDOW_PLAN_ROOT/calibration_plan.json"
 export G2A_IDENTITY_EPOCH_JSON="$G2A_WINDOW_PLAN_ROOT/identity-epoch.json"
 export G2A_T1_BINDINGS_JSON="$G2A_WINDOW_PLAN_ROOT/t1-bindings.json"
 export G2A_INPUT_INVENTORY="$G2A_WINDOW_PLAN_ROOT/g2a-input-inventory.json"
-# Lead supplies a reviewed plain-text repeated-sentence source with at least
-# 4096 tokenizer units; the producer refuses a shorter file.
-export G2A_PROMPT_CORPUS='NEEDS-REVIEWED-PATH'
+export G2A_PROMPT_LADDER="$G2A_WINDOW_PLAN_ROOT/prefill-prompt-ladder.json"
+export G2A_SUMMARY="$G2A_WINDOW_PLAN_ROOT/d166-prefill-resolvability-summary.json"
+export G2A_COUNTS_RECEIPT="$G2A_WINDOW_PLAN_ROOT/d166-prefill-counts-receipt.json"
 export G2A_WINDOW_ID=d117-g2a-prefill-probe-20260830
 export G2A_BRACKET_SESSION_ID=d117-g2a-prefill-probe-20260830-calibration
 export G2A_PRE_ATTEMPT_ID=d117-g2a-prefill-probe-20260830-cal-pre
@@ -257,7 +259,13 @@ export G2A_EVIDENCE_ROOT_ID=evidence-d117-g2a-prefill-probe-20260830
 test "$G2A_RUNS_ROOT" != "$RUNS_ROOT"
 ```
 
-The probe configs are ordinary harness configs, not a draft or subset pack.
+The probe configs are ordinary harness configs, not a draft or subset pack. The
+producer builds each raw prompt from one fixed seven-token sentence repeated a
+whole-number number of times followed by that rung's fixed closing sentence;
+it re-tokenizes the completed text and refuses unless its count is exact. The
+last 8–11 tokens therefore differ between rungs, as each rung's
+`generation_method` names; this is disclosed as a non-effect for this
+length-only resolvability probe.
 The panel thinking-off policy and the MLX greedy runtime are hash-bound—fixed
 by exact file fingerprints—in the G2-a input inventory. Each config carries
 the exact direct prompt text, which bypasses the chat template, and the output
@@ -276,7 +284,6 @@ slots run every length, including the ratified 4096 fallback rung:
 PYTHONPATH="$REPO" "$PY" "$REPO/scripts/generate_g2a_probe_inputs.py" build-probes \
   --root "$G2A_ROOT" \
   --panel "$REPO/configs/model_panels/qwen3_4bit.json" \
-  --prompt-corpus "$G2A_PROMPT_CORPUS" \
   --small-members 5 --large-members 1
 PYTHONPATH="$REPO" "$PY" "$REPO/scripts/generate_g2a_probe_inputs.py" bind-window \
   --root "$G2A_ROOT" \
@@ -405,7 +412,8 @@ PYTHONPATH="$REPO" "$PY" "$REPO/scripts/generate_g2a_probe_inputs.py" check \
   --root "$G2A_ROOT" \
   --panel "$REPO/configs/model_panels/qwen3_4bit.json" \
   --ledger "$CALIBRATION_LEDGER" \
-  --head-pin "$LEDGER_HEAD_PIN"
+  --head-pin "$LEDGER_HEAD_PIN" \
+  --campaign-policy "$POLICY"
 
 "$PY" "$REPO/scripts/recover_calibration_ledger.py" readiness \
   --phase pre-reserve \
@@ -478,21 +486,33 @@ PYTHONPATH="$REPO" "$PY" "$REPO/scripts/summarize_g2a_prefill_probe.py" \
   --config-root "$G2A_CONFIG_ROOT" \
   --input-inventory "$G2A_INPUT_INVENTORY" \
   --runs-root "$G2A_RUNS_ROOT" \
-  --counts-output "$G2A_TRANSCRIPT_ROOT/d166-prefill-overlap-counts.jsonl" \
-  --summary-output "$G2A_TRANSCRIPT_ROOT/d166-prefill-resolvability-summary.json"
+  --counts-output "$G2A_COUNTS_RECEIPT" \
+  --summary-output "$G2A_SUMMARY"
 # Ratified gate: four rungs, >=5 small-model members each; the count floor is
 # overlapping_power_interval_count >= 5 per small member (margin-above-three
 # >= 2), NEVER margin >= 5 — that discarded reading required count >= 8.
 /usr/bin/jq -e 'length == 4 and map(.length) == [512,1024,2048,4096]
   and all(.small_members >= 5)' \
-  "$G2A_TRANSCRIPT_ROOT/d166-prefill-resolvability-summary.json"
+  "$G2A_SUMMARY"
 ```
 
 After the post slot, record the terminal head candidate and stop with the
-tracked pin unchanged. At the desk, run the G1 assertions: estate 11 green at
-the reviewed head; W-11’s regenerated-manifest finalize/claim-edge refusal
-tests; the D-157 contract mutation refusal; and the reusable S11/F-5 checker
-test module. Any red assertion blocks the desk-day pin and `_v5` generation.
+tracked pin unchanged. At the desk, run the G1 assertions (the estate-11
+pre-shakedown checks in
+`docs/process_traces/2026-08-27-t26/s11-collector-manifest-id/estate11-assertions.md`)
+at the reviewed head. Also run W-11, the regenerated-manifest
+finalize/claim-edge refusal check (`python3 -m unittest
+tests.test_check_window_provenance`); D-157, the condition-family contract
+mutation refusal (`docs/decision_log.md` D-157); and S11/F-5, the reusable
+estate-11 and finalizer-layout checker in that same test module. Any red
+assertion blocks the desk-day pin and `_v5` generation.
+
+The preparation budget is approximately 2.5–3 hours against the available
+2–4 hour evening: eight 600-second settles plus one pre-calibration settle are
+about 90 minutes; 24 members at the historical approximately 148-second
+cadence are about 59 minutes (the cadence is recorded by the `run_stage`
+command above); and two 59-pulse calibrations fill the remaining time. This is
+a planning disclosure, not a mechanical admission guard.
 
 ## Desk day — reviewed pin, pack generation, estate 12
 
@@ -504,9 +524,9 @@ and is the ruled collection length when no rung qualifies). Materialize and
 hash the decision before any `_v5` input is authored:
 
 ```sh
-export G2A_SELECTION_RECORD="$G2A_TRANSCRIPT_ROOT/d166-prefill-selection.json"
+export G2A_SELECTION_RECORD="$G2A_WINDOW_PLAN_ROOT/d166-prefill-selection.json"
 PYTHONPATH="$REPO" "$PY" "$REPO/scripts/select_g2a_prefill_length.py" \
-  --summary "$G2A_TRANSCRIPT_ROOT/d166-prefill-resolvability-summary.json" \
+  --summary "$G2A_SUMMARY" \
   --output "$G2A_SELECTION_RECORD"
 export G2A_SELECTION_RECORD_SHA256="$(/usr/bin/shasum -a 256 \
   "$G2A_SELECTION_RECORD" | /usr/bin/awk '{print $1}')"
@@ -526,6 +546,29 @@ On `selected`, pin `selected_prefill_tokens`. On the ruled no-clear refusal,
 pin `collection_prefill_tokens=4096` and carry the record’s split reporting:
 counts below 3 retain `not_resolvable_sample_count`; resolvable counts 3–4 use
 `below the pre-registered count floor of 5` and disclose the reducer result.
+Issue the prompt pin only after that decision. The issuer writes one bundle in
+`$G2A_WINDOW_PLAN_ROOT`: the pin plus verbatim copies of the selection record
+and prompt ladder, with every copy's SHA-256 (a file fingerprint) in the pin.
+
+```sh
+export G2A_PROMPT_PIN="$G2A_WINDOW_PLAN_ROOT/prefill-prompt-pin.json"
+PYTHONPATH="$REPO" "$PY" "$REPO/scripts/issue_g2a_prefill_prompt_pin.py" \
+  --selection-record "$G2A_SELECTION_RECORD" \
+  --summary "$G2A_SUMMARY" \
+  --prompt-ladder "$G2A_PROMPT_LADDER" \
+  --input-inventory "$G2A_INPUT_INVENTORY" \
+  --counts-receipt "$G2A_COUNTS_RECEIPT" \
+  --ruling-trace "$REPO/docs/process_traces/2026-08-30-prefill-margin-coldgate/03-MAGISTRATE-RATIFICATION.md" \
+  --output "$G2A_PROMPT_PIN"
+/bin/mkdir -p "$REPO/configs/campaigns/d117_contrast_v5/prefill_pin"
+/bin/cp "$G2A_PROMPT_PIN" "$G2A_SELECTION_RECORD" "$G2A_PROMPT_LADDER" \
+  "$REPO/configs/campaigns/d117_contrast_v5/prefill_pin/"
+```
+
+`V5-DESK-DAY-01` is the desk-day queue row that consumes this copied bundle;
+pass `--prefill-prompt-pin
+configs/campaigns/d117_contrast_v5/prefill_pin/prefill-prompt-pin.json` to the
+`_v5` generator.
 Then:
 
 1. pin that selected prefill length in the `_v5` inputs;

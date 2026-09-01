@@ -211,16 +211,58 @@ class D117ContrastV5PackTests(unittest.TestCase):
         self.generator = load_generator()
 
     def write_prefill_pin(self, root: Path, length: int = 512) -> Path:
-        token_ids = [7] * length
-        text = "TEST FIXTURE ONLY: post-G2 prompt-pin plumbing."
+        tokenizer_sha = (
+            "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+        )
+        panel_sha = hashlib.sha256(PANEL.read_bytes()).hexdigest()
+        selection_path = root / "selection-record.json"
+        selection_path.write_text('{"fixture":"selection"}\n', encoding="utf-8")
+        selection_sha = hashlib.sha256(selection_path.read_bytes()).hexdigest()
+
+        def rung(token_count: int) -> dict[str, object]:
+            closing = f"Fixture closing sentence for {token_count}."
+            text = " ".join([self.generator.PROMPT_SENTENCE, closing])
+            token_ids = [token_count] * token_count
+            return {
+                "prefill_tokens": token_count,
+                "repeat_count": 1,
+                "closing_sentence": closing,
+                "prompt_text": text,
+                "prompt_text_utf8_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                "prompt_token_ids": token_ids,
+                "prompt_token_ids_sha256": prompt_token_ids_sha256(token_ids),
+                "generation_method": (
+                    f"1 x '{self.generator.PROMPT_SENTENCE}' + '{closing}' under "
+                    f"tokenizer sha256:{tokenizer_sha}"
+                ),
+            }
+
+        target = rung(length)
+        companion = rung(1024 if length != 1024 else 512)
+        ladder_path = root / "prompt-ladder.json"
+        ladder_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.g2a_prefill_prompt_ladder.v1",
+                    "prompt_sentence": self.generator.PROMPT_SENTENCE,
+                    "tokenizer_json_sha256": tokenizer_sha,
+                    "panel_thinking_policy": {
+                        "enable_thinking": "false",
+                        "panel_sha256": panel_sha,
+                    },
+                    "rungs": [target, companion],
+                }
+            ),
+            encoding="utf-8",
+        )
         value = {
             "schema_version": "joulewise.prefill_prompt_pin.v2",
             "selection_authority": {
                 "g2a_record": {
-                    "record_id": "test_fixture_only_not_production_evidence",
-                    "path": "test-fixtures/g2a-record.json",
+                    "record_id": f"sha256:{selection_sha}",
+                    "path": selection_path.name,
                 },
-                "ruling_trace_path": PREFILL_RULING_TRACE_PATH,
+                "ruling_trace_paths": list(self.generator.PREFILL_RULING_TRACE_PATHS),
             },
             "ladder_prompt_tokens": [512, 1024, 2048, 4096],
             "min_small_model_members_per_rung": 5,
@@ -228,19 +270,24 @@ class D117ContrastV5PackTests(unittest.TestCase):
             "min_phase_samples_pinned": 3,
             "sample_count_margin_floor": 2,
             "selection_expression": PREFILL_SELECTION_EXPRESSION,
-            "g2a_record_sha256": "b" * 64,
+            "g2a_record_sha256": selection_sha,
+            "selection_record": {"path": selection_path.name, "sha256": selection_sha},
+            "prompt_ladder": {
+                "path": ladder_path.name,
+                "sha256": hashlib.sha256(ladder_path.read_bytes()).hexdigest(),
+            },
+            "panel_sha256": panel_sha,
             "exhausted_ladder_branch": copy.deepcopy(PREFILL_EXHAUSTED_LADDER_BRANCH),
             "prefill_length": length,
-            "tokenizer_json_sha256": (
-                "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
-            ),
-            "prompt_text": text,
-            "prompt_text_utf8_sha256": hashlib.sha256(text.encode()).hexdigest(),
-            "prompt_token_ids": token_ids,
-            "prompt_token_ids_sha256": prompt_token_ids_sha256(token_ids),
+            "tokenizer_json_sha256": tokenizer_sha,
+            "prompt_text": target["prompt_text"],
+            "prompt_text_utf8_sha256": target["prompt_text_utf8_sha256"],
+            "prompt_token_ids": target["prompt_token_ids"],
+            "prompt_token_ids_sha256": target["prompt_token_ids_sha256"],
             "prompt_tokens": length,
-            "repeat_count": 1,
-            "generation_method": "test_fixture_only",
+            "repeat_count": target["repeat_count"],
+            "closing_sentence": target["closing_sentence"],
+            "generation_method": target["generation_method"],
         }
         path = root / "prefill-pin.json"
         path.write_text(json.dumps(value), encoding="utf-8")
@@ -373,6 +420,72 @@ class D117ContrastV5PackTests(unittest.TestCase):
             pin = self.write_prefill_pin(Path(temporary))
             self.rewrite_prefill_pin(pin, g2a_record_sha256=None)
             with self.assertRaisesRegex(ValueError, "prefill_g2a_record_hash_unresolved"):
+                self.configure(pin)
+
+    def test_prefill_prompt_pin_bundle_and_ladder_mutations_refuse(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="d117-v5-pin-bundle-") as temporary:
+            root = Path(temporary)
+            pin = self.write_prefill_pin(root)
+            value = json.loads(pin.read_text())
+            ladder_path = root / value["prompt_ladder"]["path"]
+
+            value["panel_sha256"] = "0" * 64
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "prefill_prompt_pin_panel_sha256_mismatch"):
+                self.configure(pin)
+
+        cases = {
+            "token_ids": (
+                lambda value: (
+                    value["prompt_token_ids"].__setitem__(0, 999),
+                    value.__setitem__(
+                        "prompt_token_ids_sha256",
+                        prompt_token_ids_sha256(value["prompt_token_ids"]),
+                    ),
+                ),
+                "prefill_prompt_pin_ladder_rung_mismatch: prompt_token_ids",
+            ),
+            "generation_method": (
+                lambda value: value.__setitem__("generation_method", "edited"),
+                "prefill_prompt_pin_ladder_rung_mismatch: generation_method",
+            ),
+            "repeat_count": (
+                lambda value: value.__setitem__("repeat_count", 2),
+                "prefill_prompt_pin_ladder_rung_mismatch: repeat_count",
+            ),
+            "selection_path": (
+                lambda value: value["selection_record"].__setitem__("path", "missing.json"),
+                "selection_record_missing",
+            ),
+            "selection_hash": (
+                lambda value: value["selection_record"].__setitem__("sha256", "0" * 64),
+                "selection_record_sha256_mismatch",
+            ),
+        }
+        for name, (mutate, reason) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory(
+                prefix="d117-v5-pin-bundle-"
+            ) as temporary:
+                pin = self.write_prefill_pin(Path(temporary))
+                value = json.loads(pin.read_text())
+                mutate(value)
+                pin.write_text(json.dumps(value), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, reason):
+                    self.configure(pin)
+
+        with tempfile.TemporaryDirectory(prefix="d117-v5-pin-bundle-") as temporary:
+            root = Path(temporary)
+            pin = self.write_prefill_pin(root)
+            value = json.loads(pin.read_text())
+            ladder_path = root / value["prompt_ladder"]["path"]
+            ladder = json.loads(ladder_path.read_text())
+            ladder["panel_thinking_policy"]["panel_sha256"] = "0" * 64
+            ladder_path.write_text(json.dumps(ladder), encoding="utf-8")
+            value["prompt_ladder"]["sha256"] = hashlib.sha256(
+                ladder_path.read_bytes()
+            ).hexdigest()
+            pin.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "prefill_prompt_pin_panel_sha256_mismatch"):
                 self.configure(pin)
 
     def test_configuration_uses_panel_pins_without_model_mirror_reads(self) -> None:
