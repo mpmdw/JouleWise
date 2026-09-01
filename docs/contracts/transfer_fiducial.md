@@ -227,35 +227,59 @@ seeing data. It records:
   effective_clock_anchor_bound_s`, and `supported iff residual_transfer_s <=
   b_pulse_s`.
 
-The source inventory is a fixed, hand-curated tuple of repository-relative
-paths: `joulewise/transfer_fiducial.py`,
-`joulewise/powermetrics_fiducial.py`, `joulewise/uncertainty_evidence.py`,
-`joulewise/clock.py`, `joulewise/schemas.py`, `joulewise/validation.py`,
-`joulewise/adapters/powermetrics.py`, `joulewise/bundle_read.py`,
-`joulewise/adapters/__init__.py`, `joulewise/adapters/local_transport.py`,
-`joulewise/adapters/mock_runtime.py`,
-`joulewise/adapters/mock_spec_runtime.py`,
-`joulewise/adapters/mock_telemetry.py`,
-`joulewise/adapters/suite_control.py`, `joulewise/arm_readiness.py`,
-`joulewise/authentication_io.py`, `joulewise/axi_decode_config.py`,
-`joulewise/bundle.py`, `joulewise/clock_reference.py`,
-`joulewise/cooldown_anchor.py`, `joulewise/identity_pins.py`,
-`joulewise/interfaces.py`, `joulewise/provenance.py`, and
-`joulewise/suite.py`. `source_inventory` maps each path to the SHA-256 of
-its exact bytes. `source_inventory_sha256` is the SHA-256 of the UTF-8 bytes
-of that mapping rendered as JSON with keys sorted, compact separators `,` and
-`:`, `ensure_ascii=false`, and no trailing newline. The inventory is closed
-by execution: the regression runs the one fixture fit while recording every
-`joulewise/` file for which at least one source line executes, and asserts
-that this observed set is a subset of the tuple; it also asserts that every
-listed path exists and that no path is duplicated. This is an execution
-check, not a transitive import-graph walk. Without this inventory, an edit to
+The source inventory is a fixed, hand-curated tuple of nine
+repository-relative paths, each present because the fit runs its code:
+`joulewise/transfer_fiducial.py` (the fit, the receipt, and the capture),
+`joulewise/powermetrics_fiducial.py` (the pulse-edge estimator),
+`joulewise/uncertainty_evidence.py` (the metrology standard-error term
+`se_metrology`), `joulewise/clock.py` (`ClockStamp`, the shape every clock
+stamp is parsed into), `joulewise/schemas.py` (`BenchmarkConfig`, the planned
+configuration the capture binds each run to), `joulewise/validation.py`
+(reason-name checks), `joulewise/adapters/powermetrics.py` (the power-sample
+reader), `joulewise/bundle_read.py` (retained-bundle reading), and
+`joulewise/authentication_io.py` (reading the evidence bytes the fit
+consumes). `source_inventory` maps each path to the SHA-256 of its exact
+bytes. `source_inventory_sha256` is the SHA-256 of the UTF-8 bytes of that
+mapping rendered as JSON with keys sorted, compact separators `,` and `:`,
+`ensure_ascii=false`, and no trailing newline.
+
+The inventory is *closed by execution*, meaning the following procedure
+reproduces exactly these nine paths. A `joulewise/` module is executed by the
+fit when, with every module under `joulewise/` except `joulewise/__main__.py`
+already imported before tracing starts (so that no module body runs during
+the trace and the result cannot depend on what the process imported earlier),
+at least one function, method, lambda, or comprehension whose code object
+names that module's file receives a call while the regression test (i) runs
+`fit_run` on the synthetic fixture bundle `synthetic-transfer-r01` and (ii)
+runs `build_capture` over the fixture plan with that fit and nine fixture
+fits. Code the interpreter cannot attribute to a file—dataclass-generated
+methods, whose code objects report `<string>`—is invisible to this
+measurement; a module whose only contribution is such code is listed by name
+in `RECEIPT_TRACE_BLIND_MODULES` with its reason (`joulewise/clock.py`:
+`ClockStamp`, constructed by `stamp_from_mapping`). The test asserts, in both
+directions, `executed ∪ RECEIPT_TRACE_BLIND_MODULES == set(RECEIPT_SOURCE_MODULES)`:
+nothing the fit runs escapes the receipt, and nothing the fit does not run is
+frozen by it. It also asserts that every listed path exists, that no path is
+duplicated, and that no trace-blind member is ever observed executing.
+Without the pre-import step the same trace reports 22 files, because the lazy
+imports inside `fit_run` execute the module bodies of fifteen import-closure
+modules (mock adapters, `bundle.py`, ...) that the fit never calls; those
+fifteen were frozen by an earlier revision of this inventory and are
+deliberately excluded now.
+
+Why a closed fence: without this inventory, an edit to
 `uncertainty_evidence.py` on the day after the receipt is issued could change
-the metrology standard-error term `se_metrology` used for validation without
-changing the old receipt, so the receipt would no longer identify the program
-that fit the data. The inventory fence
-closes before the first receipt is issued, not before the first fit; receipt
-publication is create-new and a receipt is not reissued after data.
+`se_metrology` without changing the old receipt, so the receipt would no
+longer identify the program that fit the data. Why not a wider one: freezing a
+file the fit never runs lets an unrelated edit—a mock adapter, a bundle
+writer—invalidate a receipt that is never reissued. The two largest members,
+`bundle_read.py` and `adapters/powermetrics.py`, are frozen whole although the
+fit executes a small fraction of each; an edit to either between receipt
+issuance and the fit invalidates the receipt by design. Before any data
+exists the operator re-issues the receipt from the edited tree; after data
+there is no cure, and the fit refuses. The inventory fence closes before the
+first receipt is issued, not before the first fit; receipt publication is
+create-new and a receipt is not reissued after data.
 At verification, a changed recorded hash refuses as
 `pre_data_receipt_<repo-relative-path>_source_sha256_mismatch`, with the path
 filled in literally.
