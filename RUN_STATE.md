@@ -10,6 +10,21 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
+**T29 (2026-09-01) — DESK BLOCK CLOSED (#248 merged: the `_v5` fill registry
++ DG-071/075 statistics); FRESH-MODEL REPO REVIEW IN FLIGHT.** Ed's 3-day
+`/loop` mandate (paper + research questions; new lead model reviews the whole
+repo first and says what it would change). Four read-only seats launched
+under `caffeinate -i` with distinct lenses — terra xhigh (code/tests), luna
+max (process doctrine), sol xhigh (paper/RQ set as PC reviewer + advisor),
+Opus (cross-cutting/newcomer path) — reporting into
+`docs/process_traces/2026-09-01-fresh-model-review/`; the magistrate
+synthesis + "would change" disposition follows there. Housekeeping: 17
+worktrees hold squash-merged branches (all but `wt-fiducial`, #239 held, and
+the dirty `.claude/worktrees/cs-pedagogy-*`) — removal is Ed's (classifier
+blocks deletes): `git worktree remove` each, then `git worktree prune`.
+NEXT MACHINE STEP unchanged: G2-a evening → desk day → transaction
+≈ 09-02/03.**
+
 **T28b (2026-08-30/31) — THE STALLED QUEUE IS FULLY LANDED; the `_v5` desk
 block is code-complete.** MERGED: #241 (the `_v5` production-pack prep — Qwen3
 pair pinned with runtime identity enforcement, D-165 dominance_criterion +

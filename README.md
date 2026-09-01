@@ -22,7 +22,7 @@ Live state, gates, and work selection are owned by
 [`RUN_STATE.md`](RUN_STATE.md) and its generated state-kernel regions
 (`docs/process/state_kernel.json`); this summary does not duplicate them.
 
-## Current activity (refreshed each work block; last: 2026-08-30)
+## Current activity (refreshed each work block; last: 2026-09-01)
 
 **Just completed (2026-08-28/30): the campaign switched to newer models,
 and the paper's pass/fail rule got teeth.** Ed chose to run the
@@ -47,8 +47,14 @@ loads, the new pass/fail ratio is registered into the plan, and a
 fresh-eyes review board settled how the prompt-length rung is chosen
 (four candidate lengths, a hard count floor, and an honest refusal if
 none qualifies — with the selection done by a checked program, not a
-judgment call on the night). The paper-side fill contract is being
-re-issued against the new plan.
+judgment call on the night). The paper-side fill contract — the list of
+every number the results section will need, each tied to the plan file
+that produces it — has been re-issued against the new plan and merged
+(2026-09-01), so the desk side of the campaign is complete. With the
+machine steps waiting on Ed, a new lead model is running a cold review
+of the whole repository (code, tests, process, paper) with four
+independent reviewers from three model families; its "what I would
+change" assessment lands under `docs/process_traces/`.
 
 **Next:** one instrumented evening at the machine measures the four
 candidate prompt lengths; a desk day then pins the choice, generates
