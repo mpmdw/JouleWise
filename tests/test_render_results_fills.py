@@ -1,12 +1,17 @@
-"""Fail-closed tests for the Results fill renderer.
+"""Fail-closed tests for the INTERIM Results fill renderer contract.
 
 All numeric inputs in this module and its fixtures are deliberately obvious
 synthetic magnitudes.  They are not historical or measured JouleWise results.
+
+This suite pins the pre-``_v5`` renderer vocabulary during the interim.  The
+lead-owned successor renderer, after G2-a, replaces the pinned-frozen
+assertions with live-registry synchronization.
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -42,6 +47,137 @@ LINTER = importlib.util.module_from_spec(LINTER_SPEC)
 LINTER_SPEC.loader.exec_module(LINTER)
 
 
+# The renderer implementation is deliberately frozen while the live registry
+# advances to _v5.  Bind its historical mechanics to the last synchronized
+# pre-_v5 vocabulary rather than allowing the imported module's registry read
+# to reinterpret old row-building code under the successor namespace.
+_FROZEN_CELL_STEMS = tuple(
+    f"{model}_{phase}"
+    for model in ("1p5B", "7B")
+    for phase in ("prompt", "decode")
+)
+FROZEN_SUPPLIER_UNKNOWN_ROWS = frozenset(
+    {
+        "[B_decode_claim_J]",
+        "[F_decode_contrast_cmp_worst_case_J]",
+    }
+    | {
+        f"[E_{stem}_{suffix}]"
+        for stem in _FROZEN_CELL_STEMS
+        for suffix in (
+            "J_per_request",
+            "J_per_token",
+            "lower_J",
+            "upper_J",
+        )
+    }
+    | {f"[N_bundles_{stem}]" for stem in _FROZEN_CELL_STEMS}
+)
+FROZEN_VALUE_UNISSUED_ROWS = frozenset(
+    {
+        "[B_C_prompt_invariance_J_per_token]",
+        "[CELL_NONPUBLICATION_SUMMARY]",
+        "[C_decode_floor_clearance_J]",
+        "[D_C_additivity_J]",
+        "[D_C_drift_diagnostic_J]",
+        "[D_C_linearity_diagnostic_J_per_token]",
+        "[D_C_micro_diagnostic_x_floor]",
+        "[D_C_null_diagnostic_J]",
+        "[D_C_null_max_abs_J]",
+        "[D_C_phase_diagnostic_J]",
+        "[D_C_reference_excursion_J]",
+        "[E_decode_contrast_lower_J]",
+        "[E_decode_contrast_signed_J_per_request]",
+        "[E_decode_contrast_upper_J]",
+        "[F_claim_decode_armwise_max_J]",
+        "[F_decode_contrast_cmp_two_edge_J]",
+        "[M_decode_contrast_abs_J_per_request]",
+        "[N_C_eligible_sessions]",
+        "[PLAIN_LANGUAGE_RESULT_between_sessions]",
+        "[PLAIN_LANGUAGE_RESULT_drift]",
+        "[PLAIN_LANGUAGE_RESULT_floor]",
+        "[PLAIN_LANGUAGE_RESULT_linearity]",
+        "[PLAIN_LANGUAGE_RESULT_null]",
+        "[PLAIN_LANGUAGE_RESULT_phase]",
+        "[R_C_linearity_limit_J]",
+        "[R_C_micro_max_x_floor]",
+        "[R_C_micro_min_x_floor]",
+        "[R_decode_effect_x_floor]",
+        "[S_C_linearity_decode_J_per_token]",
+        "[S_C_linearity_request_J_per_token]",
+        "[S_C_prompt_invariance_J_per_token]",
+        "[S_decode_floor_shortfall_J]",
+        "[S_decode_joint_J]",
+        "[T_C_recovery_s]",
+    }
+    | {
+        f"[{prefix}_{stem}{suffix}]"
+        for stem in _FROZEN_CELL_STEMS
+        for prefix, suffix in (
+            ("AVAILABLE_DIAGNOSTIC_CLAUSE", ""),
+            ("F", "_abs_J"),
+            ("F", "_cmp_J"),
+            ("F", "_operative_J"),
+            ("NO_EXACT_FLOOR_REASON", ""),
+            ("POINT_DIAGNOSTIC_CLAUSE", ""),
+            ("TERMINAL_REFUSAL_REASON", ""),
+            ("TERM_A", "_abs_J"),
+            ("TERM_A", "_cmp_J"),
+            ("TERM_B", "_abs_J"),
+            ("TERM_B", "_cmp_J"),
+        )
+    }
+)
+FROZEN_OTHER_ROWS = frozenset(
+    {
+        "[ABSENT_DIAGNOSTIC_ROW_LIST]",
+        "[NO_EXACT_FLOOR_REASON_*]",
+        "[PLAIN_LANGUAGE_RESULT_*]",
+        "[PRESENT_DIAGNOSTIC_LIST]",
+        "[REFUSAL_REASON_1p5B_floor_window]",
+        "[REFUSAL_REASON_7B_floor_window]",
+        "[REFUSAL_REASON_window_C]",
+        "[TERMINAL_REFUSAL_REASON_*]",
+        "[VALUE]",
+    }
+)
+FROZEN_RENDERER_ROWS = frozenset(
+    FROZEN_SUPPLIER_UNKNOWN_ROWS
+    | FROZEN_VALUE_UNISSUED_ROWS
+    | FROZEN_OTHER_ROWS
+)
+
+RENDERER.REGISTRY_ROWS = FROZEN_RENDERER_ROWS
+RENDERER.SUPPLIER_UNKNOWN_ROWS = FROZEN_SUPPLIER_UNKNOWN_ROWS
+RENDERER.VALUE_UNISSUED_ROWS = FROZEN_VALUE_UNISSUED_ROWS
+
+
+def renderer_row(row: str) -> str:
+    """Return a row only when it belongs to the frozen renderer vocabulary."""
+
+    if row not in RENDERER.REGISTRY_ROWS:
+        raise AssertionError(f"test requested non-renderer row {row}")
+    return row
+
+
+def renderer_token(row: str) -> str:
+    return renderer_row(row)[1:-1]
+
+
+def renderer_cli(*args: str) -> list[str]:
+    """Invoke ``main`` with this module's frozen renderer constants bound."""
+
+    return [
+        sys.executable,
+        "-c",
+        (
+            "from tests.test_render_results_fills import RENDERER; "
+            "raise SystemExit(RENDERER.main())"
+        ),
+        *args,
+    ]
+
+
 def fixture(name: str) -> Path:
     return FIXTURES / name
 
@@ -71,7 +207,7 @@ def write_json(directory: Path, name: str, value) -> Path:
     return path
 
 
-class VocabularySyncTests(unittest.TestCase):
+class InterimVocabularyContractTests(unittest.TestCase):
     def test_renderer_vocabulary_is_pinned_to_canonical_linter(self) -> None:
         self.assertEqual(
             RENDERER.TERMINAL_REASON_CODES,
@@ -88,21 +224,36 @@ class VocabularySyncTests(unittest.TestCase):
     def test_canonical_unfilled_template_still_passes_custodied_linter(self) -> None:
         LINTER.lint_text(LINTER.TEMPLATE_PATH.read_text(encoding="utf-8"))
 
-    def test_supplier_unknown_rows_match_registry(self) -> None:
-        expected = set()
-        for line in RENDERER.REGISTRY_PATH.read_text(encoding="utf-8").splitlines():
-            if line.startswith("| `[") and "SUPPLIER_UNKNOWN" in line:
-                expected.add(line.split("`", 2)[1])
-        self.assertTrue(expected)
-        self.assertEqual(RENDERER.SUPPLIER_UNKNOWN_ROWS, frozenset(expected))
+    def test_renderer_vocabulary_is_frozen_pre_v5(self) -> None:
+        rows = tuple(sorted(RENDERER.REGISTRY_ROWS))
+        digest = hashlib.sha256(repr(rows).encode("utf-8")).hexdigest()
+        self.assertEqual(len(rows), 109)
+        self.assertEqual(
+            digest,
+            "0882cf7240e137adeea12a9ec2c074856fabd83d96383d1af5134f5b8a636c85",
+        )
+        self.assertEqual(len(RENDERER.SUPPLIER_UNKNOWN_ROWS), 22)
+        self.assertEqual(len(RENDERER.VALUE_UNISSUED_ROWS), 78)
 
-    def test_value_unissued_rows_match_registry(self) -> None:
-        expected = set()
-        for line in RENDERER.REGISTRY_PATH.read_text(encoding="utf-8").splitlines():
-            if line.startswith("| `[") and "VALUE_UNISSUED" in line:
-                expected.add(line.split("`", 2)[1])
-        self.assertTrue(expected)
-        self.assertEqual(RENDERER.VALUE_UNISSUED_ROWS, frozenset(expected))
+    def test_v5_registry_rows_are_unknown_to_frozen_renderer(self) -> None:
+        # Round-7 fill-checklist ruling: the pre-_v5 renderer is not fill
+        # authority for renamed rows and must fail closed.  Its lead-owned
+        # successor restores live-registry synchronization after G2-a.
+        registry_bytes = RENDERER.REGISTRY_PATH.read_bytes()
+        live_v5_rows = (
+            "[F_8B_decode_operative_J]",
+            "[R_8B_decode_abs]",
+        )
+        for row in live_v5_rows:
+            with self.subTest(row=row):
+                self.assertIn(f"`{row}`".encode("utf-8"), registry_bytes)
+                self.assertNotIn(row, RENDERER.REGISTRY_ROWS)
+                with self.assertRaises(ValueError) as caught:
+                    RENDERER.StopFill(row, "VALUE_UNISSUED", "synthetic")
+                self.assertEqual(
+                    str(caught.exception),
+                    f"unknown Results fill registry row: {row}",
+                )
 
 
 class VariantSelectionTests(unittest.TestCase):
@@ -168,11 +319,7 @@ class RendererHappyPathTests(unittest.TestCase):
 
     def test_cli_emits_only_validated_prose(self) -> None:
         completed = subprocess.run(
-            [
-                sys.executable,
-                str(RENDERER_PATH),
-                str(fixture("synthetic_d_and_0_manifest.json")),
-            ],
+            renderer_cli(str(fixture("synthetic_d_and_0_manifest.json"))),
             cwd=ROOT,
             text=True,
             capture_output=True,
@@ -212,30 +359,31 @@ class DerivationTests(unittest.TestCase):
         middle = Decimal("222222")
         high = Decimal("888888")
         operative = RENDERER.derive_numeric(
-            "F_1p5B_prompt_operative_J",
+            renderer_token("[F_1p5B_prompt_operative_J]"),
             (low, middle),
             stored=middle,
         )
         claim_floor = RENDERER.derive_numeric(
-            "F_claim_decode_armwise_max_J",
+            renderer_token("[F_claim_decode_armwise_max_J]"),
             (middle, Decimal("333333")),
             stored=Decimal("333333"),
         )
         magnitude = RENDERER.derive_numeric(
-            "M_decode_contrast_abs_J_per_request", (Decimal("-888888"),)
+            renderer_token("[M_decode_contrast_abs_J_per_request]"),
+            (Decimal("-888888"),),
         )
         clearance = RENDERER.derive_numeric(
-            "C_decode_floor_clearance_J",
+            renderer_token("[C_decode_floor_clearance_J]"),
             (high, claim_floor),
             predicate="floor_gate_pass",
         )
         shortfall = RENDERER.derive_numeric(
-            "S_decode_floor_shortfall_J",
+            renderer_token("[S_decode_floor_shortfall_J]"),
             (high, Decimal("333333")),
             predicate="floor_gate_refused",
         )
         ratio = RENDERER.derive_numeric(
-            "R_decode_effect_x_floor", (high, middle)
+            renderer_token("[R_decode_effect_x_floor]"), (high, middle)
         )
         self.assertEqual(operative, middle)
         self.assertEqual(claim_floor, Decimal("333333"))
@@ -247,36 +395,45 @@ class DerivationTests(unittest.TestCase):
     def test_independently_supplied_derived_value_is_rejected(self) -> None:
         with self.assertRaises(RENDERER.StopFill) as caught:
             RENDERER.derive_numeric(
-                "F_7B_decode_operative_J",
+                renderer_token("[F_7B_decode_operative_J]"),
                 (Decimal("111111"), Decimal("222222")),
                 stored=Decimal("999999"),
             )
-        self.assertEqual(caught.exception.registry_row, "[F_7B_decode_operative_J]")
+        self.assertEqual(
+            caught.exception.registry_row,
+            renderer_row("[F_7B_decode_operative_J]"),
+        )
         self.assertEqual(caught.exception.label, "FAILED_PREDICATE")
 
     def test_branch_predicates_and_zero_ratio_denominator_fail_closed(self) -> None:
         with self.assertRaises(RENDERER.StopFill):
             RENDERER.derive_numeric(
-                "C_decode_floor_clearance_J",
+                renderer_token("[C_decode_floor_clearance_J]"),
                 (Decimal("888888"), Decimal("222222")),
                 predicate="floor_gate_refused",
             )
         with self.assertRaises(RENDERER.StopFill):
             RENDERER.derive_numeric(
-                "R_decode_effect_x_floor", (Decimal("888888"), Decimal("0"))
+                renderer_token("[R_decode_effect_x_floor]"),
+                (Decimal("888888"), Decimal("0")),
             )
         with self.assertRaises(RENDERER.StopFill) as nonterminating:
             RENDERER.derive_numeric(
-                "R_decode_effect_x_floor", (Decimal("111111"), Decimal("333333"))
+                renderer_token("[R_decode_effect_x_floor]"),
+                (Decimal("111111"), Decimal("333333")),
             )
         self.assertIn("no rounding rule", nonterminating.exception.reason)
 
     def test_joint_sizing_stops_on_supplier_unknown_parent(self) -> None:
         with self.assertRaises(RENDERER.StopFill) as caught:
             RENDERER.derive_numeric(
-                "S_decode_joint_J", (Decimal("333333"), Decimal("111111"))
+                renderer_token("[S_decode_joint_J]"),
+                (Decimal("333333"), Decimal("111111")),
             )
-        self.assertEqual(caught.exception.registry_row, "[B_decode_claim_J]")
+        self.assertEqual(
+            caught.exception.registry_row,
+            renderer_row("[B_decode_claim_J]"),
+        )
         self.assertEqual(caught.exception.label, "SUPPLIER_UNKNOWN")
 
 
@@ -286,16 +443,15 @@ class StopFillTests(unittest.TestCase):
             RENDERER.render_from_manifest(
                 fixture("synthetic_absent_artifact_manifest.json")
             )
-        self.assertEqual(caught.exception.registry_row, "[F_1p5B_prompt_abs_J]")
+        self.assertEqual(
+            caught.exception.registry_row,
+            renderer_row("[F_1p5B_prompt_abs_J]"),
+        )
         self.assertEqual(caught.exception.label, "ABSENT_ARTIFACT")
 
     def test_malformed_json_stops_without_placeholder_output(self) -> None:
         completed = subprocess.run(
-            [
-                sys.executable,
-                str(RENDERER_PATH),
-                str(fixture("synthetic_malformed_input.json.invalid")),
-            ],
+            renderer_cli(str(fixture("synthetic_malformed_input.json.invalid"))),
             cwd=ROOT,
             text=True,
             capture_output=True,
@@ -304,7 +460,11 @@ class StopFillTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 2)
         self.assertEqual(completed.stdout, "")
         self.assertIn('"label": "MALFORMED_INPUT"', completed.stderr)
-        self.assertIn('"registry_row": "[REFUSAL_REASON_1p5B_floor_window]"', completed.stderr)
+        expected_row = renderer_row("[REFUSAL_REASON_1p5B_floor_window]")
+        self.assertIn(
+            f'"registry_row": "{expected_row}"',
+            completed.stderr,
+        )
 
     def test_supplier_unknown_mean_row_hard_stops(self) -> None:
         with self.assertRaises(RENDERER.StopFill) as caught:
@@ -313,15 +473,13 @@ class StopFillTests(unittest.TestCase):
             )
         self.assertEqual(
             caught.exception.registry_row,
-            "[E_1p5B_prompt_J_per_request]",
+            renderer_row("[E_1p5B_prompt_J_per_request]"),
         )
         self.assertEqual(caught.exception.label, "SUPPLIER_UNKNOWN")
         completed = subprocess.run(
-            [
-                sys.executable,
-                str(RENDERER_PATH),
-                str(fixture("synthetic_c1_supplier_unknown_manifest.json")),
-            ],
+            renderer_cli(
+                str(fixture("synthetic_c1_supplier_unknown_manifest.json"))
+            ),
             cwd=ROOT,
             text=True,
             capture_output=True,
@@ -394,15 +552,21 @@ class StopFillTests(unittest.TestCase):
             manifest_path = write_json(root, "manifest.json", manifest)
             with self.assertRaises(RENDERER.StopFill) as caught:
                 RENDERER.render_from_manifest(manifest_path)
-        self.assertEqual(caught.exception.registry_row, "[B_decode_claim_J]")
+        self.assertEqual(
+            caught.exception.registry_row,
+            renderer_row("[B_decode_claim_J]"),
+        )
         self.assertEqual(caught.exception.label, "SUPPLIER_UNKNOWN")
 
     def test_section6_pass_and_refusal_both_stop_on_unissued_report(self) -> None:
         for verdict, expected_row in (
-            ("synthetic_pass_verdict.json", "[PLAIN_LANGUAGE_RESULT_linearity]"),
+            (
+                "synthetic_pass_verdict.json",
+                renderer_row("[PLAIN_LANGUAGE_RESULT_linearity]"),
+            ),
             (
                 "synthetic_refused_verdict.json",
-                "[D_C_linearity_diagnostic_J_per_token]",
+                renderer_row("[D_C_linearity_diagnostic_J_per_token]"),
             ),
         ):
             with self.subTest(verdict=verdict):
@@ -435,7 +599,10 @@ class StopFillTests(unittest.TestCase):
             path = write_json(root, "manifest.json", manifest)
             with self.assertRaises(RENDERER.StopFill) as caught:
                 RENDERER.render_from_manifest(path)
-        self.assertEqual(caught.exception.registry_row, "[F_1p5B_prompt_operative_J]")
+        self.assertEqual(
+            caught.exception.registry_row,
+            renderer_row("[F_1p5B_prompt_operative_J]"),
+        )
         self.assertEqual(caught.exception.label, "FAILED_PREDICATE")
 
     def test_unknown_component_reason_code_is_rejected(self) -> None:
@@ -452,7 +619,10 @@ class StopFillTests(unittest.TestCase):
             path = write_json(root, "manifest.json", manifest)
             with self.assertRaises(RENDERER.StopFill) as caught:
                 RENDERER.render_from_manifest(path)
-        self.assertEqual(caught.exception.registry_row, "[F_1p5B_prompt_abs_J]")
+        self.assertEqual(
+            caught.exception.registry_row,
+            renderer_row("[F_1p5B_prompt_abs_J]"),
+        )
         self.assertEqual(caught.exception.label, "UNKNOWN_FIELD")
 
 

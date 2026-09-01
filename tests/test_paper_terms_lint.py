@@ -94,6 +94,14 @@ class FixtureLintTests(unittest.TestCase):
 
 
 class RealDocumentRegressionTests(unittest.TestCase):
+    """Standing contract: the retensing plan stays lint-clean.
+
+    Historically this class asserted the HELD plan's known findings; the
+    2026-08-31 lexicon-constrained rewrite (magistrate ruling R-1/R-2)
+    brought the plan to zero findings, so the standing regression inverts:
+    any reintroduced early-insertion vocabulary must turn this red.
+    """
+
     @classmethod
     def setUpClass(cls) -> None:
         result = run_cli(
@@ -104,51 +112,43 @@ class RealDocumentRegressionTests(unittest.TestCase):
             str(REAL_PLAN),
             "--json",
         )
-        if result.returncode != 1:
-            raise AssertionError(f"expected real-plan findings: {result.stderr}\n{result.stdout}")
+        if result.returncode != 0:
+            raise AssertionError(
+                f"retensing plan must stay lint-clean: {result.stderr}\n{result.stdout}"
+            )
         cls.payload = json.loads(result.stdout)
 
-    def test_audit_terms_are_reported_at_early_insertion_lines(self) -> None:
-        findings = self.payload["findings"]
-        pairs = {(item["line"], item["term"]) for item in findings}
+    def test_plan_is_lint_clean(self) -> None:
+        self.assertEqual(self.payload["finding_count"], 0)
+        self.assertGreaterEqual(self.payload["sentence_count"], 80)
 
-        # Round 1's whole-window wording was replaced by floor-window wording;
-        # at least the wording actually present must remain mechanically caught.
-        self.assertTrue(
-            any(
-                line in {11, 31} and term in {"whole-window gate", "floor window"}
-                for line, term in pairs
-            )
-        )
-        self.assertTrue(any(line in {11, 31} and term == "claim gate" for line, term in pairs))
-        self.assertIn((11, "claim-anchored limit"), pairs)
-
-        for line in (11, 31, 243):
-            self.assertIn((line, "1.5B"), pairs)
-            self.assertIn((line, "7B"), pairs)
-
-    def test_term_a_and_b_are_findings_if_a_variant_uses_them(self) -> None:
+    def test_reintroduced_early_vocabulary_is_caught(self) -> None:
+        # The gate itself must still catch the historical failure class: a
+        # variant sentence using unbuilt registry vocabulary at the Abstract
+        # insertion line goes red.
         plan_text = REAL_PLAN.read_text(encoding="utf-8")
-        variant_lines = [
-            line
-            for line in plan_text.splitlines()
-            if line.startswith(("**A —", "**B —", "**C —", "**D —", "**A = B —"))
-        ]
-        finding_terms = {item["term"] for item in self.payload["findings"]}
-        for term in ("TERM A", "TERM B"):
-            if any(term in line for line in variant_lines):
-                self.assertIn(term, finding_terms)
-
-    def test_real_lexicon_pins_first_build_lines(self) -> None:
-        result = run_cli("lexicon", "--draft", str(REAL_DRAFT), "--json")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        terms = {item["term"]: item["first_line"] for item in json.loads(result.stdout)["terms"]}
-
-        # Pinned with:
-        # rg -n -i -m 1 'resolution bound|detection floor' docs/paper/draft-v1.md
-        self.assertEqual(terms["resolution bound"], 11)
-        self.assertEqual(terms["detection floor"], 11)
-
+        target = "**A = B — admitted evidence:** For each group"
+        self.assertIn(target, plan_text)
+        poisoned = plan_text.replace(
+            target,
+            "**A = B — admitted evidence:** TERM A exceeds the "
+            "whole-window gate; for each group",
+            1,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            poisoned_path = Path(tmp) / "poisoned-plan.md"
+            poisoned_path.write_text(poisoned, encoding="utf-8")
+            result = run_cli(
+                "lint",
+                "--draft",
+                str(REAL_DRAFT),
+                "--plan",
+                str(poisoned_path),
+                "--json",
+            )
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertGreater(payload["finding_count"], 0)
 
 if __name__ == "__main__":
     unittest.main()
