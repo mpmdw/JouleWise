@@ -25,6 +25,11 @@ absolute R_cm: a uniform shared shift cancels when the absolute estimator
 subtracts its mean. Absolute R_cm is therefore the text value
 `not_applicable`, never a number.
 
+A **manifest attachment** is an evidence record inside the finalized manifest
+that names an external file and seals its exact bytes with SHA-256, a 256-bit
+content digest. The attachment lets the finalized manifest authenticate the
+replay sidecar without copying its measurement operands into the manifest.
+
 ## Shared arithmetic
 
 `joulewise.dominance_closeout.dominance_ratio` is the only production
@@ -171,6 +176,29 @@ result, `schema_version`, and `sidecar_id`; it may not hand-build or rewrite a
 block record. Sidecar emission itself remains a separate mint stream and does
 not change the floor-artifact schema.
 
+### Finalized-manifest attachment
+
+The finalized manifest's `evidence` object must contain
+`dominance_replay_sidecar`, with exactly these fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `path` | nonempty string | Manifest-relative path to the replay-sidecar file. |
+| `sha256` | 64-character lowercase hexadecimal string | SHA-256 of the replay-sidecar file bytes, not its re-rendered JSON. |
+| `schema_version` | string | Exact replay-sidecar schema version. |
+| `sidecar_id` | nonempty string | Exact replay-sidecar identity. |
+
+The producer side—emitting this entry from the finalizer—is the work of
+`D165-SIDECAR-EMIT-01`.
+
+For every finalized-manifest contrast, the exact per-contrast membership field
+is `contrasts[].block_ids` at `joulewise/analysis_manifest_v3.py:3696`; each
+of those identities is materialized as a top-level `blocks[].block_id` row at
+`joulewise/analysis_manifest_v3.py:3167`. The consumer requires the set of
+sidecar block IDs for both contrast cells to equal that manifest set. The
+attachment hash authenticates every sidecar operand together, so the consumer
+does not compare per-block operands against the manifest.
+
 ## Close-out: `joulewise.d165_dominance_closeout.v1`
 
 The close-out is a JSON object with exactly these top-level fields:
@@ -179,6 +207,8 @@ The close-out is a JSON object with exactly these top-level fields:
 |---|---|---|
 | `schema_version` | string | Exact value `joulewise.d165_dominance_closeout.v1`. |
 | `sources` | object | SHA-256 bindings for the finalized manifest, floor artifact, and replay sidecar. |
+| `finalized_manifest_sha256` | 64-character lowercase hexadecimal string | SHA-256 of the exact finalized-manifest file bytes supplied to the builder. |
+| `replay_sidecar_sha256` | 64-character lowercase hexadecimal string | SHA-256 of the exact replay-sidecar file bytes supplied to the builder. |
 | `independent_ratios` | array of exactly eight records | Four cells times absolute and comparative components. |
 | `comparative_common_mode_ratios` | array of exactly four records | One comparative R_cm slot for each cell; there are no absolute R_cm records. |
 | `all_independent_pass` | Boolean or null | True only when all eight completed ordinary ratios pass; false when all complete and at least one fails; null on a stop. |
@@ -196,6 +226,11 @@ The close-out is a JSON object with exactly these top-level fields:
 | `schema_version` | string | The source's exact schema version. |
 | `identity` | nonempty string | `manifest_id`, `artifact_id`, or `sidecar_id`, respectively. |
 | `canonical_json_sha256` | 64-character lowercase hexadecimal string | SHA-256 of the complete source object's canonical JSON. `validate_d165_closeout` requires the three source objects and recomputes every digest. |
+
+The two top-level file-byte digests intentionally complement these canonical
+JSON source references: `validate_d165_closeout` rechecks them whenever the
+caller supplies the corresponding file bytes, so whitespace, order, or content
+drift in a committed fixture is not silently accepted.
 
 Every `independent_ratios[]` record is the sidecar independent-ratio record
 plus `cell_id` and `component`. `component` is `absolute` or `comparative`.
@@ -242,6 +277,17 @@ are:
 - a derived split or replay result that does not reproduce;
 - any of the three close-out source identities or SHA-256 digests failing to
   match the supplied source object.
+- `manifest_lacks_replay_sidecar`: `evidence.dominance_replay_sidecar` is
+  absent or lacks one of `path`, `sha256`, `schema_version`, or `sidecar_id`.
+- `replay_sidecar_digest_mismatch`: the supplied replay-sidecar file bytes do
+  not hash to the attachment's `sha256`.
+- `replay_sidecar_identity_mismatch`: the attachment's `sidecar_id` or
+  `schema_version` differs from the replay sidecar's own field.
+- `manifest_block_membership_mismatch`: a contrast cell's sidecar block-ID set
+  differs from the set selected by the finalized manifest.
+
+Each named attachment failure is a stop: it selects neither branch, leaves both
+prose licenses false, and records that exact name as `refusal_reason`.
 
 A floor artifact with other than four unique complete cells cannot support the
 required eight-record ordinary census. The builder refuses to emit a close-out
@@ -250,5 +296,6 @@ at all; this is also a neither-branch stop, not branch B.
 `validate_d165_closeout` rejects missing or extra keys, a census other than
 eight ordinary plus four comparative common-mode records, non-finite completed
 values, inconsistent ratios or pass flags, incorrect branch fields, source
-operand/result drift, or a source-hash mismatch. Validation is fail-closed: an
-empty error list is required before a close-out can be consumed.
+operand/result drift, a source-hash mismatch, or either supplied file-byte
+digest mismatch. Validation is fail-closed: an empty error list is required
+before a close-out can be consumed.

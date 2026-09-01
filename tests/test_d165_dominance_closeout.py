@@ -108,6 +108,31 @@ def finalized_manifest() -> dict:
     return copy.deepcopy(_production_finalized_manifest())
 
 
+def _file_json_bytes(value: object) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, allow_nan=False, indent=2, sort_keys=True)
+        + "\n"
+    ).encode("utf-8")
+
+
+def _attach_replay_sidecar(
+    manifest: dict, sidecar: dict
+) -> tuple[bytes, bytes]:
+    sidecar_bytes = _file_json_bytes(sidecar)
+    evidence = manifest["evidence"]
+    # injected pending D165-SIDECAR-EMIT-01
+    evidence["dominance_replay_sidecar"] = {
+        "path": "dominance_replay_sidecar.json",
+        "sha256": hashlib.sha256(sidecar_bytes).hexdigest(),
+        "schema_version": sidecar["schema_version"],
+        "sidecar_id": sidecar["sidecar_id"],
+    }
+    with tempfile.TemporaryDirectory() as temporary:
+        manifest_path = Path(temporary) / "finalized_manifest.json"
+        manifest_path.write_bytes(_file_json_bytes(manifest))
+        return manifest_path.read_bytes(), sidecar_bytes
+
+
 def independent_from_component(component: dict, parent_key: str) -> dict:
     point = core._point_unguarded_floor_from_component(
         component, parent_key=parent_key
@@ -148,9 +173,22 @@ def fixture_replay_inputs(
                 ],
             )
         )
-    selected_ids = source_block_ids if block_ids is None else block_ids
+    if block_ids is None:
+        selected_ids = source_block_ids
+        selected_deltas = block_deltas_j
+        selected_inputs = block_inputs
+    else:
+        selected_ids = block_ids
+        selected_deltas = [
+            block_deltas_j[index % len(block_deltas_j)]
+            for index in range(len(selected_ids))
+        ]
+        selected_inputs = [
+            block_inputs[index % len(block_inputs)]
+            for index in range(len(selected_ids))
+        ]
     blocks = core.d165_replay_blocks_from_mint_inputs(
-        selected_ids, block_deltas_j, block_inputs
+        selected_ids, selected_deltas, selected_inputs
     )
     raw_blocks = [core._raw_replay_block(block) for block in blocks]
     result = core.replay_common_mode_dominance(
@@ -166,7 +204,7 @@ def replay_sidecar(floor: dict, manifest: dict | None = None) -> dict:
     block_ids_by_cell: dict[str, list[str]] = {}
     for contrast in manifest["contrasts"]:
         for cell_key in ("cell_a_id", "cell_b_id"):
-            block_ids_by_cell[contrast[cell_key]] = contrast["block_ids"][:2]
+            block_ids_by_cell[contrast[cell_key]] = contrast["block_ids"]
     cells = []
     for floor_cell in floor["cells"]:
         blocks, bracket, bound, result = fixture_replay_inputs(
@@ -229,7 +267,14 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         floor = floor_artifact() if floor is None else floor
         manifest = finalized_manifest()
         sidecar = replay_sidecar(floor, manifest)
-        closeout = build_d165_dominance_closeout(manifest, floor, sidecar)
+        manifest_bytes, sidecar_bytes = _attach_replay_sidecar(manifest, sidecar)
+        closeout = build_d165_dominance_closeout(
+            manifest,
+            floor,
+            sidecar,
+            finalized_manifest_bytes=manifest_bytes,
+            replay_sidecar_bytes=sidecar_bytes,
+        )
         return closeout, manifest, floor, sidecar
 
     def assert_valid_closeout(
@@ -241,6 +286,8 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 finalized_manifest=manifest,
                 floor_artifact=floor,
                 replay_sidecar=sidecar,
+                finalized_manifest_bytes=_file_json_bytes(manifest),
+                replay_sidecar_bytes=_file_json_bytes(sidecar),
             ),
             [],
         )
@@ -348,7 +395,14 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         manifest = finalized_manifest()
         sidecar = replay_sidecar(floor)
         missing_id = sidecar["cells"].pop()["cell_id"]
-        closeout = build_d165_dominance_closeout(manifest, floor, sidecar)
+        manifest_bytes, sidecar_bytes = _attach_replay_sidecar(manifest, sidecar)
+        closeout = build_d165_dominance_closeout(
+            manifest,
+            floor,
+            sidecar,
+            finalized_manifest_bytes=manifest_bytes,
+            replay_sidecar_bytes=sidecar_bytes,
+        )
         self.assertIsNone(closeout["branch"])
         self.assertFalse(closeout["dominance_sentence_licensed"])
         missing = [
@@ -373,6 +427,22 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             replay_sidecar=sidecar,
         )
         self.assertTrue(any("source-hash mismatch" in error for error in errors))
+
+        edited_manifest = copy.deepcopy(manifest)
+        edited_manifest["evidence"]["dominance_replay_sidecar"]["path"] = (
+            "moved-sidecar.json"
+        )
+        errors = core.validate_d165_closeout(
+            closeout,
+            finalized_manifest=edited_manifest,
+            floor_artifact=floor,
+            replay_sidecar=sidecar,
+            finalized_manifest_bytes=_file_json_bytes(edited_manifest),
+            replay_sidecar_bytes=_file_json_bytes(sidecar),
+        )
+        self.assertIn(
+            "closeout.finalized_manifest_sha256: source-byte-hash mismatch", errors
+        )
 
     def test_validators_reject_missing_extra_and_nonfinite_fields(self) -> None:
         floor = floor_artifact()
@@ -673,10 +743,138 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
         for guard, manifest_value, floor_value, sidecar_value, expected in cases:
             with self.subTest(guard=guard):
+                manifest_for_case = copy.deepcopy(manifest_value)
+                sidecar_for_case = copy.deepcopy(sidecar_value)
+                manifest_bytes, sidecar_bytes = _attach_replay_sidecar(
+                    manifest_for_case, sidecar_for_case
+                )
                 with self.assertRaisesRegex(ValueError, expected):
                     build_d165_dominance_closeout(
-                        manifest_value, floor_value, sidecar_value
+                        manifest_for_case,
+                        floor_value,
+                        sidecar_for_case,
+                        finalized_manifest_bytes=manifest_bytes,
+                        replay_sidecar_bytes=sidecar_bytes,
                     )
+
+        attachment_cases: list[tuple[str, dict, dict, bytes, bytes, str]] = []
+
+        absent_manifest = copy.deepcopy(manifest)
+        attachment_cases.append(
+            (
+                "manifest attachment",
+                absent_manifest,
+                sidecar,
+                _file_json_bytes(absent_manifest),
+                _file_json_bytes(sidecar),
+                "manifest_lacks_replay_sidecar",
+            )
+        )
+
+        digest_manifest = copy.deepcopy(manifest)
+        _, original_sidecar_bytes = _attach_replay_sidecar(digest_manifest, sidecar)
+        forged_sidecar = copy.deepcopy(sidecar)
+        forged_sidecar["cells"][0]["absolute"]["independent"].update(
+            core._build_independent_record(
+                point_unguarded_floor_j=2.0,
+                corner_widened_unguarded_floor_j=4.0,
+            )
+        )
+        attachment_cases.append(
+            (
+                "sidecar digest",
+                digest_manifest,
+                forged_sidecar,
+                _file_json_bytes(digest_manifest),
+                _file_json_bytes(forged_sidecar),
+                "replay_sidecar_digest_mismatch",
+            )
+        )
+        self.assertNotEqual(
+            _file_json_bytes(forged_sidecar), original_sidecar_bytes
+        )
+
+        campaign_manifest = copy.deepcopy(manifest)
+        campaign_sidecar = copy.deepcopy(sidecar)
+        contrasts = campaign_manifest["contrasts"]
+        for target, other in (
+            (contrasts[0], contrasts[1]),
+            (contrasts[1], contrasts[0]),
+        ):
+            for cell_id in (target["cell_a_id"], target["cell_b_id"]):
+                cell = next(
+                    row
+                    for row in campaign_sidecar["cells"]
+                    if row["cell_id"] == cell_id
+                )
+                blocks = cell["comparative"]["common_mode_replay"]["inputs"][
+                    "blocks"
+                ]
+                for block, block_id in zip(
+                    blocks, other["block_ids"], strict=True
+                ):
+                    block["block_id"] = block_id
+        campaign_manifest_bytes, campaign_sidecar_bytes = _attach_replay_sidecar(
+            campaign_manifest, campaign_sidecar
+        )
+        attachment_cases.append(
+            (
+                "manifest block membership",
+                campaign_manifest,
+                campaign_sidecar,
+                campaign_manifest_bytes,
+                campaign_sidecar_bytes,
+                "manifest_block_membership_mismatch",
+            )
+        )
+
+        identity_manifest = copy.deepcopy(manifest)
+        _, identity_sidecar_bytes = _attach_replay_sidecar(identity_manifest, sidecar)
+        identity_manifest["evidence"]["dominance_replay_sidecar"]["sidecar_id"] = (
+            "other-sidecar"
+        )
+        attachment_cases.append(
+            (
+                "sidecar identity",
+                identity_manifest,
+                sidecar,
+                _file_json_bytes(identity_manifest),
+                identity_sidecar_bytes,
+                "replay_sidecar_identity_mismatch",
+            )
+        )
+
+        for (
+            guard,
+            manifest_value,
+            sidecar_value,
+            manifest_bytes,
+            sidecar_bytes,
+            expected,
+        ) in attachment_cases:
+            with self.subTest(guard=guard):
+                closeout = build_d165_dominance_closeout(
+                    manifest_value,
+                    floor,
+                    sidecar_value,
+                    finalized_manifest_bytes=manifest_bytes,
+                    replay_sidecar_bytes=sidecar_bytes,
+                )
+                self.assertIsNone(closeout["branch"])
+                self.assertFalse(closeout["dominance_sentence_licensed"])
+                self.assertFalse(closeout["subtitle_licensed"])
+                self.assertEqual(closeout["refusal_reason"], expected)
+                self.assertEqual(
+                    core.validate_d165_closeout(
+                        closeout,
+                        finalized_manifest=manifest_value,
+                        floor_artifact=floor,
+                        replay_sidecar=sidecar_value,
+                        finalized_manifest_bytes=manifest_bytes,
+                        replay_sidecar_bytes=sidecar_bytes,
+                    ),
+                    [],
+                )
 
     def test_branch_a_and_branch_b_fixtures(self) -> None:
         branch_a, manifest_a, floor_a, sidecar_a = self.build()
@@ -725,14 +923,17 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 "sidecar.json": sidecar,
             }
             for name, value in sources.items():
-                (root / name).write_text(json.dumps(value), encoding="utf-8")
+                (root / name).write_bytes(_file_json_bytes(value))
             output = root / "closeout.json"
             completed = subprocess.run(
                 [
                     sys.executable,
                     str(ROOT / "scripts/build_d165_dominance_closeout.py"),
+                    "--finalized-manifest",
                     str(root / "manifest.json"),
+                    "--floor-artifact",
                     str(root / "floor.json"),
+                    "--replay-sidecar",
                     str(root / "sidecar.json"),
                     "--output",
                     str(output),
@@ -754,7 +955,7 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 "floor.json": floor,
                 "sidecar.json": sidecar,
             }.items():
-                (root / name).write_text(json.dumps(value), encoding="utf-8")
+                (root / name).write_bytes(_file_json_bytes(value))
             output = root / "closeout.json"
             original = b"pre-existing output\n"
             output.write_bytes(original)
@@ -763,8 +964,11 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 [
                     sys.executable,
                     str(ROOT / "scripts/build_d165_dominance_closeout.py"),
+                    "--finalized-manifest",
                     str(root / "manifest.json"),
+                    "--floor-artifact",
                     str(root / "floor.json"),
+                    "--replay-sidecar",
                     str(root / "sidecar.json"),
                     "--output",
                     str(output),

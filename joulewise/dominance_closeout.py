@@ -101,6 +101,8 @@ _COMMON_MODE_RESULT_KEYS = {
 _CLOSEOUT_TOP_KEYS = {
     "schema_version",
     "sources",
+    "finalized_manifest_sha256",
+    "replay_sidecar_sha256",
     "independent_ratios",
     "comparative_common_mode_ratios",
     "all_independent_pass",
@@ -115,6 +117,12 @@ _SOURCE_REFERENCE_KEYS = {
     "schema_version",
     "identity",
     "canonical_json_sha256",
+}
+_REPLAY_SIDECAR_ATTACHMENT_KEYS = {
+    "path",
+    "sha256",
+    "schema_version",
+    "sidecar_id",
 }
 _CLOSEOUT_INDEPENDENT_KEYS = {
     "cell_id",
@@ -172,6 +180,12 @@ def canonical_json_sha256(value: object) -> str:
     """Hash the closed artifact value rather than its incidental whitespace."""
 
     return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
+
+
+def _raw_sha256(value: bytes) -> str:
+    """Return the SHA-256 of the exact bytes read from an artifact file."""
+
+    return hashlib.sha256(value).hexdigest()
 
 
 def dominance_ratio(
@@ -841,6 +855,24 @@ def _validate_source_reference(
             errors.append(f"{where}: source-hash mismatch")
 
 
+def _validate_source_byte_digest(
+    digest: object,
+    source_bytes: bytes | None,
+    *,
+    where: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(digest, str) or _SHA256_RE.fullmatch(digest) is None:
+        errors.append(f"{where}: must be lowercase SHA-256")
+        return
+    if source_bytes is None:
+        return
+    if not isinstance(source_bytes, bytes):
+        errors.append(f"{where}: supplied source must be bytes")
+    elif digest != _raw_sha256(source_bytes):
+        errors.append(f"{where}: source-byte-hash mismatch")
+
+
 def _validate_closeout_independent_record(
     value: object,
     where: str,
@@ -1095,10 +1127,115 @@ def _sidecar_floor_alignment_errors(
     return errors
 
 
+def _manifest_replay_sidecar_attachment_errors(
+    finalized_manifest: object,
+    replay_sidecar: object,
+    replay_sidecar_bytes: bytes | None,
+) -> list[str]:
+    """Authenticate the manifest's outcome-blind replay-sidecar attachment."""
+
+    if not isinstance(finalized_manifest, Mapping):
+        return []
+    evidence = finalized_manifest.get("evidence")
+    attachment = (
+        evidence.get("dominance_replay_sidecar")
+        if isinstance(evidence, Mapping)
+        else None
+    )
+    if not isinstance(attachment, Mapping) or set(attachment) != (
+        _REPLAY_SIDECAR_ATTACHMENT_KEYS
+    ):
+        return ["manifest_lacks_replay_sidecar"]
+    if not isinstance(attachment["path"], str) or not attachment["path"]:
+        return ["manifest_lacks_replay_sidecar"]
+    if not isinstance(attachment["sha256"], str) or _SHA256_RE.fullmatch(
+        attachment["sha256"]
+    ) is None:
+        return ["replay_sidecar_digest_mismatch"]
+    if not isinstance(attachment["schema_version"], str) or not isinstance(
+        attachment["sidecar_id"], str
+    ):
+        return ["replay_sidecar_identity_mismatch"]
+    if replay_sidecar_bytes is not None and (
+        not isinstance(replay_sidecar_bytes, bytes)
+        or attachment["sha256"] != _raw_sha256(replay_sidecar_bytes)
+    ):
+        return ["replay_sidecar_digest_mismatch"]
+    if not isinstance(replay_sidecar, Mapping) or (
+        attachment["sidecar_id"] != replay_sidecar.get("sidecar_id")
+        or attachment["schema_version"] != replay_sidecar.get("schema_version")
+    ):
+        return ["replay_sidecar_identity_mismatch"]
+    return []
+
+
+def _sidecar_block_id_set(cell: Mapping[str, Any]) -> set[str] | None:
+    try:
+        blocks = cell["comparative"]["common_mode_replay"]["inputs"]["blocks"]
+    except (KeyError, TypeError):
+        return None
+    if not isinstance(blocks, list):
+        return None
+    block_ids = {
+        block.get("block_id")
+        for block in blocks
+        if isinstance(block, Mapping) and isinstance(block.get("block_id"), str)
+    }
+    if len(block_ids) != len(blocks):
+        return None
+    return block_ids
+
+
+def _manifest_block_membership_error(
+    finalized_manifest: object,
+    replay_sidecar: object,
+) -> str | None:
+    """Compare each sidecar cell with its finalized contrast's block census."""
+
+    if not isinstance(finalized_manifest, Mapping) or not isinstance(
+        replay_sidecar, Mapping
+    ):
+        return "manifest_block_membership_mismatch"
+    blocks = finalized_manifest.get("blocks")
+    contrasts = finalized_manifest.get("contrasts")
+    if not isinstance(blocks, list) or not isinstance(contrasts, list):
+        return "manifest_block_membership_mismatch"
+    finalized_block_ids = {
+        block.get("block_id")
+        for block in blocks
+        if isinstance(block, Mapping) and isinstance(block.get("block_id"), str)
+    }
+    if len(finalized_block_ids) != len(blocks):
+        return "manifest_block_membership_mismatch"
+    sidecar_cells = _sidecar_cell_map(replay_sidecar)
+    for contrast in contrasts:
+        if not isinstance(contrast, Mapping) or not isinstance(
+            contrast.get("block_ids"), list
+        ):
+            return "manifest_block_membership_mismatch"
+        expected = set(contrast["block_ids"])
+        if (
+            len(expected) != len(contrast["block_ids"])
+            or not all(isinstance(block_id, str) and block_id for block_id in expected)
+            or not expected <= finalized_block_ids
+        ):
+            return "manifest_block_membership_mismatch"
+        for cell_key in ("cell_a_id", "cell_b_id"):
+            cell_id = contrast.get(cell_key)
+            if not isinstance(cell_id, str) or not cell_id:
+                return "manifest_block_membership_mismatch"
+            sidecar_cell = sidecar_cells.get(cell_id)
+            if sidecar_cell is None or _sidecar_block_id_set(sidecar_cell) != expected:
+                return "manifest_block_membership_mismatch"
+    return None
+
+
 def _source_precondition_errors(
     finalized_manifest: object,
     floor_artifact: object,
     replay_sidecar: object,
+    *,
+    replay_sidecar_bytes: bytes | None = None,
 ) -> list[str]:
     errors: list[str] = []
     if not isinstance(finalized_manifest, Mapping):
@@ -1125,13 +1262,26 @@ def _source_precondition_errors(
         or not floor_artifact.get("artifact_id")
     ):
         errors.append("floor_artifact: artifact_id is invalid")
+    attachment_errors = _manifest_replay_sidecar_attachment_errors(
+        finalized_manifest, replay_sidecar, replay_sidecar_bytes
+    )
+    errors.extend(attachment_errors)
     if not isinstance(replay_sidecar, Mapping):
         errors.append("replay_sidecar: source object is required")
     else:
         sidecar_errors = validate_d165_replay_sidecar(replay_sidecar)
         if sidecar_errors:
             errors.append(f"d165_replay_sidecar_invalid: {sidecar_errors[0]}")
-    errors.extend(_sidecar_floor_alignment_errors(floor_artifact, replay_sidecar))
+    alignment_errors = _sidecar_floor_alignment_errors(
+        floor_artifact, replay_sidecar
+    )
+    errors.extend(alignment_errors)
+    if not errors:
+        membership_error = _manifest_block_membership_error(
+            finalized_manifest, replay_sidecar
+        )
+        if membership_error is not None:
+            errors.append(membership_error)
     return errors
 
 
@@ -1175,8 +1325,10 @@ def validate_d165_closeout(
     finalized_manifest: Mapping[str, Any] | None = None,
     floor_artifact: Mapping[str, Any] | None = None,
     replay_sidecar: Mapping[str, Any] | None = None,
+    finalized_manifest_bytes: bytes | None = None,
+    replay_sidecar_bytes: bytes | None = None,
 ) -> list[str]:
-    """Validate a close-out and reauthenticate all three source objects."""
+    """Validate a close-out and reauthenticate its sources and supplied bytes."""
 
     errors: list[str] = []
     if not _check_keys(value, _CLOSEOUT_TOP_KEYS, "closeout", errors):
@@ -1185,6 +1337,18 @@ def validate_d165_closeout(
         errors.append(
             f"closeout.schema_version: must be {CLOSEOUT_SCHEMA_VERSION!r}"
         )
+    _validate_source_byte_digest(
+        value["finalized_manifest_sha256"],
+        finalized_manifest_bytes,
+        where="closeout.finalized_manifest_sha256",
+        errors=errors,
+    )
+    _validate_source_byte_digest(
+        value["replay_sidecar_sha256"],
+        replay_sidecar_bytes,
+        where="closeout.replay_sidecar_sha256",
+        errors=errors,
+    )
     sources = value["sources"]
     if _check_keys(sources, _SOURCE_KEYS, "closeout.sources", errors):
         _validate_source_reference(
@@ -1281,7 +1445,10 @@ def validate_d165_closeout(
             errors.append("closeout: ordinary and common-mode cell census differs")
 
     source_errors = _source_precondition_errors(
-        finalized_manifest, floor_artifact, replay_sidecar
+        finalized_manifest,
+        floor_artifact,
+        replay_sidecar,
+        replay_sidecar_bytes=replay_sidecar_bytes,
     )
     floor_cells, _ = _floor_cell_map(floor_artifact)
     census_errors = _closeout_census_errors(
