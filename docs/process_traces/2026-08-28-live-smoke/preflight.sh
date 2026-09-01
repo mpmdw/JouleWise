@@ -4,6 +4,11 @@
 
 set -uo pipefail
 
+if [ "$#" -ne 1 ]; then
+  printf 'usage: %s /Users/edr/JouleWise-measurement-20260813\n' "$0" >&2
+  exit 2
+fi
+
 export GIT_OPTIONAL_LOCKS=0
 export PYTHONDONTWRITEBYTECODE=1
 
@@ -32,7 +37,8 @@ else
   pass 'REVIEWED_HEAD is present and well formed'
 fi
 
-SMOKE_ROOT=/Users/edr/JouleWise-smoke
+SMOKE_CHECKOUT="$1"
+required_checkout=/Users/edr/JouleWise-measurement-20260813
 source_python='/Users/edr/code/JouleWise/.venv/bin/python'
 if [ "${PY:-}" != "$source_python" ]; then
   fail 'PY must name the exact source venv interpreter'
@@ -48,14 +54,12 @@ else
   pass 'PYTHONPATH equals SMOKE_CHECKOUT for every Python command'
 fi
 
-if [ -z "${SMOKE_CHECKOUT:-}" ]; then
-  fail 'SMOKE_CHECKOUT is required'
-elif [ "$SMOKE_CHECKOUT" != "$SMOKE_ROOT/checkout" ]; then
-  fail 'SMOKE_CHECKOUT must be the smoke-dedicated checkout below the quarantine root'
+if [ "$SMOKE_CHECKOUT" != "$required_checkout" ]; then
+  fail 'checkout argument must be /Users/edr/JouleWise-measurement-20260813'
 elif [ ! -d "$SMOKE_CHECKOUT/.git" ] && [ ! -f "$SMOKE_CHECKOUT/.git" ]; then
   fail 'SMOKE_CHECKOUT is not a Git checkout'
 else
-  pass 'SMOKE_CHECKOUT is a Git checkout'
+  pass 'checkout argument is the documented measurement Git checkout'
 fi
 
 if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
@@ -117,17 +121,42 @@ if [ -n "${SMOKE_CHECKOUT:-}" ] && [ -e "$SMOKE_CHECKOUT" ]; then
   else
     fail 'mlx or mlx_lm is not importable in the source venv'
   fi
+
+  # B10: authenticate the physical calibration ledger against the committed
+  # tracked pin with the production loader. This deliberately disables only
+  # custody-artifact replay (observation artifacts re-hashed at their custody
+  # locators; `_custody_reasons`, calibration_ledger.py:1773/:2073); it does not
+  # weaken ledger parsing, chain, head-pin,
+  # rollback, stale-head, or committed-pin checks.
+  ledger_path="$SMOKE_CHECKOUT/runs/calibration_observation_ledger.jsonl"
+  ledger_pin="$SMOKE_CHECKOUT/configs/calibration/calibration_ledger_head.json"
+  if "$source_python" - "$ledger_path" "$ledger_pin" "$SMOKE_CHECKOUT" <<'PY'
+import sys
+from pathlib import Path
+
+from joulewise.calibration_ledger import load_calibration_ledger_snapshot
+
+snapshot = load_calibration_ledger_snapshot(
+    Path(sys.argv[1]),
+    Path(sys.argv[2]),
+    repo_root=Path(sys.argv[3]),
+    verify_custody=False,
+)
+if snapshot.refusal_reasons:
+    raise SystemExit(",".join(snapshot.refusal_reasons))
+PY
+  then
+    pass 'B10 calibration ledger head authenticates against the tracked pin'
+  else
+    fail 'B10 calibration ledger is missing, rolled back, stale, malformed, or not pinned by committed bytes'
+  fi
 fi
 
-if [ ! -e "$SMOKE_ROOT" ]; then
-  pass 'quarantine root does not exist (fresh pre-provisioning state)'
-elif ! smoke_entries="$(/usr/bin/find "$SMOKE_ROOT" -mindepth 1 -maxdepth 1 -print 2>/dev/null)"; then
-  fail 'quarantine-root census failed'
-elif [ "$smoke_entries" = "$SMOKE_ROOT/checkout" ] && [ -d "$SMOKE_ROOT/checkout" ]; then
-  pass 'quarantine root contains exactly the fresh checkout'
-else
-  fail 'quarantine root contains something other than the fresh checkout (never reuse it)'
-fi
+# ARM-ABORT REHEARSAL — MANUAL ONLY; preflight never arms or consumes.
+# Use a separate earlier arm on the real frozen _v5 pack, with throwaway
+# attempt/session ids and the registry-governed 300 s arm-to-consume budget.
+# Let that arm expire/refuse without launch and verify that no bundle was
+# written. Never let this rehearsal arm straddle the later T-0 clean dwell.
 
 # Interim private helper only. B5 requires the governed prewindow gate and this
 # script to consume one shared helper contract: exact case-sensitive vocabulary
