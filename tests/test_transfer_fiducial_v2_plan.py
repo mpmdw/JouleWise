@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from contextlib import redirect_stderr
 from unittest.mock import patch
 
 from joulewise.provenance import prompt_token_ids_sha256
@@ -234,6 +236,22 @@ class TransferFiducialV2PlanTests(unittest.TestCase):
             "scripts/issue_g2a_prefill_prompt_pin.py",
             "--prompt-ladder \"$G2A_PROMPT_LADDER\"",
             "--ruling-trace docs/process_traces/2026-08-30-prefill-margin-coldgate/03-MAGISTRATE-RATIFICATION.md",
+            "regex SHAPE check only",
+            "ruling-39b construction check lands",
+            "### Sequencing note",
+            "Pin-to-ladder binding from ruling 39b",
+            "not a threat-model deferral",
+            "ladder is the pre-registration record",
+            "D-161's fail-closed carve-out",
+            "`transformers.AutoTokenizer`",
+            "`mlx_lm.load`",
+            "The post-merge round's `WRITE_SCOPE` must include",
+            "`--config-root`,",
+            "`--input-inventory`,",
+            "`--runs-root`,",
+            "`--counts-output`,",
+            "`--summary-output`",
+            "verified against `feat/2026-09-01-g2a-probe` @ `82e7519d`; absent from this branch until that branch merges.",
             'TF_CAL_DIR="$($JW_PY - "$TF_CAL_ROOT"',
             "expected exactly one valid calibration",
             'bash scripts/backup_runs.sh "$TF_RUNS_ROOT" "$TF_BACKUP_DEST"',
@@ -381,8 +399,9 @@ class TransferFiducialV2PlanTests(unittest.TestCase):
                 "_runtime_tokenize_prompt",
                 return_value=[9999, *_fixture_tokenize(None, pin["prompt_text"])[1:]],
             ):
-                self.assertEqual(
-                    generator.main(
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    result = generator.main(
                         [
                             "--summary",
                             str(summary),
@@ -393,8 +412,11 @@ class TransferFiducialV2PlanTests(unittest.TestCase):
                             "--output-root",
                             str(root),
                         ]
-                    ),
-                    2,
+                    )
+                self.assertEqual(result, 2)
+                self.assertIn(
+                    "prefill_prompt_pin_runtime_token_ids_mismatch",
+                    stderr.getvalue(),
                 )
 
     def test_prompt_pin_rung_and_tokenizer_mismatches_refuse(self) -> None:

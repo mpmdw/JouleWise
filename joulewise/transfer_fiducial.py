@@ -45,18 +45,47 @@ TRANSFER_FIDUCIAL_PLAN_SCHEMA = "joulewise.transfer_fiducial_plan.v1"
 TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND_V2 = "transfer_fiducial_v2"
 TRANSFER_FIDUCIAL_PLAN_SCHEMA_V2 = "joulewise.transfer_fiducial_plan.v2"
 TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA = (
-    "joulewise.transfer_fiducial_pre_data_receipt.v1"
+    "joulewise.transfer_fiducial_pre_data_receipt.v2"
 )
 TRANSFER_FIDUCIAL_BOUNDARY_SEMANTICS = "first_yield_one_step_queued"
 TRANSFER_FIDUCIAL_ESTIMATOR_SHA256 = (
     "386e825440e02bb0720e7b74f0f7503d785fb543a08c45386014eeb4216bab92"
+)
+# This is a hand-curated, closed receipt fence.  The first eight paths are the
+# ruled starting set; the remaining paths were observed executing during the
+# one-bundle fixture fit and are retained so the execution drift test is
+# authoritative without freezing the entire joulewise import closure.
+RECEIPT_SOURCE_MODULES: tuple[str, ...] = (
+    "joulewise/transfer_fiducial.py",
+    "joulewise/powermetrics_fiducial.py",
+    "joulewise/uncertainty_evidence.py",
+    "joulewise/clock.py",
+    "joulewise/schemas.py",
+    "joulewise/validation.py",
+    "joulewise/adapters/powermetrics.py",
+    "joulewise/bundle_read.py",
+    "joulewise/adapters/__init__.py",
+    "joulewise/adapters/local_transport.py",
+    "joulewise/adapters/mock_runtime.py",
+    "joulewise/adapters/mock_spec_runtime.py",
+    "joulewise/adapters/mock_telemetry.py",
+    "joulewise/adapters/suite_control.py",
+    "joulewise/arm_readiness.py",
+    "joulewise/authentication_io.py",
+    "joulewise/axi_decode_config.py",
+    "joulewise/bundle.py",
+    "joulewise/clock_reference.py",
+    "joulewise/cooldown_anchor.py",
+    "joulewise/identity_pins.py",
+    "joulewise/interfaces.py",
+    "joulewise/provenance.py",
+    "joulewise/suite.py",
 )
 
 _GAP_EVENT_TYPES = frozenset({"fiducial_gap_start", "fiducial_gap_end"})
 _FIT_SUCCESS = "fitted"
 _INCONCLUSIVE = "inconclusive"
 _FITTER_SOURCE_REL = Path("scripts/fit_transfer_fiducial.py")
-_FITTER_MODULE_REL = Path("joulewise/transfer_fiducial.py")
 _POST_WINDOW_SAMPLING_DWELL_S = 6.0
 _RADIUS_RULE = (
     "radius = max(abs(residual_lower_s), abs(residual_upper_s)) "
@@ -171,6 +200,47 @@ def _sha256_bytes(raw: bytes) -> str:
 
 def _sha256_file(path: Path) -> str:
     return _sha256_bytes(path.read_bytes())
+
+
+def _source_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return candidate
+    return Path(__file__).resolve().parents[1] / candidate
+
+
+def _source_inventory_sha256(inventory: Mapping[str, Any]) -> str:
+    """Hash the compact canonical JSON representation of a source map."""
+
+    raw = json.dumps(
+        dict(inventory),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return _sha256_bytes(raw)
+
+
+def _source_inventory() -> dict[str, str]:
+    """Return the fixed repository-relative source inventory and its hashes."""
+
+    if len(RECEIPT_SOURCE_MODULES) != len(set(RECEIPT_SOURCE_MODULES)):
+        raise TransferFiducialError("pre_data_receipt_source_inventory_duplicate")
+    inventory: dict[str, str] = {}
+    for relative in RECEIPT_SOURCE_MODULES:
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise TransferFiducialError(
+                f"pre_data_receipt_source_inventory_path_invalid:{relative}"
+            )
+        try:
+            inventory[relative] = _sha256_file(_source_path(relative))
+        except OSError as exc:
+            raise TransferFiducialError(
+                f"pre_data_receipt_source_inventory_missing:{relative}"
+            ) from exc
+    return inventory
 
 
 def _finite_nonnegative(value: Any) -> float | None:
@@ -915,10 +985,7 @@ def _config_source_hashes(
 
 
 def _source_record(path: Path) -> dict[str, str]:
-    source_path = path
-    if not source_path.is_absolute():
-        source_path = Path(__file__).resolve().parents[1] / source_path
-    return {"path": path.as_posix(), "sha256": _sha256_file(source_path)}
+    return {"path": path.as_posix(), "sha256": _sha256_file(_source_path(path))}
 
 
 def canonical_receipt_bytes(receipt: Mapping[str, Any]) -> bytes:
@@ -954,6 +1021,7 @@ def issue_pre_data_receipt(
     )
     estimator_path = Path(powermetrics_fiducial.__file__).resolve()
     estimator_sha256 = _sha256_file(estimator_path)
+    source_inventory = _source_inventory()
     reasons = [*plan_reasons, *calibration_reasons]
     if config_hashes is None:
         reasons.append("pre_data_receipt_plan_config_hashes_invalid")
@@ -971,12 +1039,8 @@ def issue_pre_data_receipt(
         "config_sha256": config_hashes,
         "config_source_sha256": source_config_hashes,
         "fitter_source": _source_record(_FITTER_SOURCE_REL),
-        "fitter_module_source": _source_record(_FITTER_MODULE_REL),
-        "estimator_source": {
-            "path": "joulewise/powermetrics_fiducial.py",
-            "sha256": estimator_sha256,
-            "pinned_sha256": TRANSFER_FIDUCIAL_ESTIMATOR_SHA256,
-        },
+        "source_inventory": source_inventory,
+        "source_inventory_sha256": _source_inventory_sha256(source_inventory),
         "calibration_directory": _calibration_identity(calibration),
         "fit_rule_constants": transfer_fiducial_rule_constants(),
     }
@@ -988,7 +1052,6 @@ def _receipt_record(
     plan_raw: bytes,
     strata: Sequence[Mapping[str, Any]],
     calibration: Mapping[str, Any],
-    estimator_sha256: str,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """Compare a pre-data receipt with the inputs visible when fitting."""
 
@@ -1004,8 +1067,8 @@ def _receipt_record(
         "config_sha256",
         "config_source_sha256",
         "fitter_source",
-        "fitter_module_source",
-        "estimator_source",
+        "source_inventory",
+        "source_inventory_sha256",
         "calibration_directory",
         "fit_rule_constants",
     }
@@ -1021,9 +1084,15 @@ def _receipt_record(
     expected_sidecar = (_sha256_bytes(receipt_raw) + "\n").encode("ascii")
     if sidecar_raw is not None and sidecar_raw != expected_sidecar:
         reasons.append("pre_data_receipt_sha256_sidecar_mismatch")
-    if set(receipt) != expected_keys or receipt.get("schema_version") != (
-        TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA
-    ):
+    receipt_record = {
+        "path": str(Path(receipt_path).resolve()),
+        "sha256": _sha256_bytes(receipt_raw),
+        "sha256_sidecar_path": str(sidecar_path.resolve()),
+    }
+    if receipt.get("schema_version") != TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA:
+        reasons.append("pre_data_receipt_schema_unsupported")
+        return receipt_record, reasons
+    if set(receipt) != expected_keys:
         reasons.append("pre_data_receipt_schema_mismatch")
     if receipt.get("plan_sha256") != _sha256_bytes(plan_raw):
         reasons.append("pre_data_receipt_plan_sha256_mismatch")
@@ -1037,26 +1106,33 @@ def _receipt_record(
         reasons.append("pre_data_receipt_config_source_sha256_mismatch")
     if receipt.get("fitter_source") != _source_record(_FITTER_SOURCE_REL):
         reasons.append("pre_data_receipt_fitter_source_sha256_mismatch")
-    if receipt.get("fitter_module_source") != _source_record(_FITTER_MODULE_REL):
-        reasons.append("pre_data_receipt_fitter_module_source_sha256_mismatch")
-    if receipt.get("estimator_source") != {
-        "path": "joulewise/powermetrics_fiducial.py",
-        "sha256": estimator_sha256,
-        "pinned_sha256": TRANSFER_FIDUCIAL_ESTIMATOR_SHA256,
-    }:
-        reasons.append("pre_data_receipt_estimator_source_sha256_mismatch")
+    try:
+        source_inventory = _source_inventory()
+    except TransferFiducialError:
+        source_inventory = {}
+        reasons.append("pre_data_receipt_source_inventory_unavailable")
+    recorded_inventory = receipt.get("source_inventory")
+    if not isinstance(recorded_inventory, Mapping):
+        reasons.append("pre_data_receipt_source_inventory_sha256_mismatch")
+    else:
+        for relative, source_sha256 in source_inventory.items():
+            if recorded_inventory.get(relative) != source_sha256:
+                reasons.append(
+                    f"pre_data_receipt_{relative}_source_sha256_mismatch"
+                )
+        if set(recorded_inventory) != set(source_inventory):
+            reasons.append("pre_data_receipt_source_inventory_sha256_mismatch")
+        try:
+            recorded_inventory_sha256 = _source_inventory_sha256(recorded_inventory)
+        except (TypeError, ValueError):
+            recorded_inventory_sha256 = None
+        if receipt.get("source_inventory_sha256") != recorded_inventory_sha256:
+            reasons.append("pre_data_receipt_source_inventory_sha256_mismatch")
     if receipt.get("calibration_directory") != _calibration_identity(calibration):
         reasons.append("pre_data_receipt_calibration_identity_mismatch")
     if receipt.get("fit_rule_constants") != transfer_fiducial_rule_constants():
         reasons.append("pre_data_receipt_fit_rule_constants_mismatch")
-    return (
-        {
-            "path": str(Path(receipt_path).resolve()),
-            "sha256": _sha256_bytes(receipt_raw),
-            "sha256_sidecar_path": str(sidecar_path.resolve()),
-        },
-        reasons,
-    )
+    return receipt_record, reasons
 
 
 def _calibration_precedes_all_runs(
@@ -1211,7 +1287,6 @@ def build_capture(
             plan_raw=plan_raw,
             strata=strata,
             calibration=calibration,
-            estimator_sha256=estimator_sha256,
         )
         reasons.extend(receipt_reasons)
 
@@ -1441,6 +1516,7 @@ __all__ = [
     "TRANSFER_FIDUCIAL_PLAN_SCHEMA",
     "TRANSFER_FIDUCIAL_PLAN_SCHEMA_V2",
     "TRANSFER_FIDUCIAL_PRE_DATA_RECEIPT_SCHEMA",
+    "RECEIPT_SOURCE_MODULES",
     "TransferFiducialClass",
     "TransferFiducialError",
     "TransferFiducialRunFit",

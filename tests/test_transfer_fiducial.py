@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import plistlib
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import tempfile
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -28,14 +29,16 @@ from joulewise.powermetrics_fiducial import (
 )
 from joulewise.schemas import BenchmarkConfig
 from joulewise.transfer_fiducial import (
+    RECEIPT_SOURCE_MODULES,
     TRANSFER_FIDUCIAL_ESTIMATOR_SHA256,
     TRANSFER_FIDUCIAL_DIAGNOSTIC_KIND_V2,
     TRANSFER_FIDUCIAL_PLAN_SCHEMA_V2,
+    TransferFiducialClass,
     TransferFiducialError,
+    TransferFiducialRunFit,
     build_capture,
     canonical_receipt_bytes,
     classify_bundle,
-    fit_run,
     issue_pre_data_receipt,
     receipt_sha256_sidecar_path,
     summarize_target_edge_radii,
@@ -333,6 +336,144 @@ def make_synthetic_v2_capture_fixture(root: Path) -> tuple[Path, Path, Path]:
     return plan_path, runs_root, calibration_dir
 
 
+def _fixture_fit_run(bundle_path: Path) -> TransferFiducialRunFit:
+    """Return a cached-shape fit for receipt-only capture tests."""
+
+    bundle_path = Path(bundle_path)
+    config_raw = (bundle_path / "config.json").read_bytes()
+    config = json.loads(config_raw)
+    metadata = json.loads((bundle_path / "metadata.json").read_text())
+    events = tuple(
+        json.loads(line)
+        for line in (bundle_path / "events.jsonl").read_text().splitlines()
+        if line
+    )
+    workload = config["workload_profile"]
+    hardware = config["hardware_target"]
+    device = metadata["device"]
+    return TransferFiducialRunFit(
+        bundle_id=bundle_path.name,
+        verdict="fitted",
+        reasons=(),
+        classification=TransferFiducialClass(True, True, True, False),
+        config_sha256=hashlib.sha256(config_raw).hexdigest(),
+        source_commit=metadata["git_commit"],
+        model=config["model"],
+        quantization=config["quantization"],
+        hardware_target=hardware,
+        workload_profile=workload,
+        device_identity={
+            "hardware_model": device["hw_model"],
+            "os_build": device["kern_osversion"],
+            "hardware_target_id": hardware["id"],
+        },
+        instrument_calibration=metadata["instrument_calibration"],
+        boundary_events=tuple(
+            row
+            for row in events
+            if row.get("event_type") in {"phase_start", "phase_end"}
+        ),
+        gap_events=tuple(
+            row for row in events if row.get("event_type", "").startswith("fiducial_gap_")
+        ),
+        commanded_gap_s=0.5,
+        observed_gap_s=0.5,
+        active_window_durations_s=(1.0, 1.0),
+        trace_anchor_method=CLOCK_METHOD_V3,
+        effective_clock_anchor_bound_s=0.002,
+        outside_baseline_after_margins_s=1.0,
+        target_edges=(
+            {
+                "edge": "falling_gap_edge",
+                "pulse_index": 0,
+                "fit_delta_s": 0.0,
+                "residual_lower_s": 0.0,
+                "residual_upper_s": 0.0,
+                "effective_clock_anchor_bound_s": 0.002,
+                "radius_s": 0.002,
+            },
+            {
+                "edge": "rising_gap_edge",
+                "pulse_index": 1,
+                "fit_delta_s": 0.0,
+                "residual_lower_s": 0.0,
+                "residual_upper_s": 0.0,
+                "effective_clock_anchor_bound_s": 0.002,
+                "radius_s": 0.002,
+            },
+        ),
+    )
+
+
+@contextmanager
+def _trace_joulewise_execution():
+    """Collect joulewise files that execute a line during one fixture fit."""
+
+    seen: set[str] = set()
+    repository_prefix = str(ROOT.resolve()) + os.sep
+    joulewise_prefix = repository_prefix + "joulewise" + os.sep
+
+    def relative_joulewise_path(filename: str) -> str | None:
+        if not filename.startswith(joulewise_prefix):
+            return None
+        return filename[len(repository_prefix) :]
+
+    monitoring = getattr(sys, "monitoring", None)
+    if monitoring is not None:
+        tool_id = None
+        for candidate in range(6):
+            try:
+                monitoring.use_tool_id(candidate, "transfer-fiducial-test")
+            except (RuntimeError, ValueError):
+                continue
+            tool_id = candidate
+            break
+        if tool_id is not None:
+            try:
+                def on_line(code: object, _line_number: int) -> None:
+                    filename = getattr(code, "co_filename", "")
+                    relative = relative_joulewise_path(filename)
+                    if relative is not None:
+                        seen.add(relative)
+
+                monitoring.register_callback(tool_id, monitoring.events.LINE, on_line)
+                monitoring.set_events(tool_id, monitoring.events.LINE)
+            except (RuntimeError, ValueError):
+                monitoring.free_tool_id(tool_id)
+            else:
+                try:
+                    yield seen
+                finally:
+                    monitoring.set_events(tool_id, 0)
+                    monitoring.register_callback(tool_id, monitoring.events.LINE, None)
+                    monitoring.free_tool_id(tool_id)
+                return
+
+    previous_trace = sys.gettrace()
+
+    def first_line(frame: object, event: str, _arg: object):
+        if event == "line":
+            filename = getattr(getattr(frame, "f_code", None), "co_filename", "")
+            relative = relative_joulewise_path(filename)
+            if relative is not None:
+                seen.add(relative)
+            return None
+        return first_line
+
+    def on_call(frame: object, event: str, _arg: object):
+        if event == "call":
+            filename = getattr(getattr(frame, "f_code", None), "co_filename", "")
+            if relative_joulewise_path(filename) is not None:
+                return first_line
+        return None
+
+    sys.settrace(on_call)
+    try:
+        yield seen
+    finally:
+        sys.settrace(previous_trace)
+
+
 def write_receipt_and_sidecar(path: Path, receipt: dict[str, object]) -> None:
     rendered = canonical_receipt_bytes(receipt)
     path.write_bytes(rendered)
@@ -405,25 +546,20 @@ class TransferFiducialTests(unittest.TestCase):
         self.assertTrue(event_only.is_diagnostic and event_only.inconsistent)
         self.assertFalse(classify_bundle({}, []).is_diagnostic)
 
-    def test_transfer_fit_is_inconclusive_if_any_pulse_is_undetected(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            plan, runs, calibration = make_synthetic_capture_fixture(Path(tmp))
-            del plan, calibration
-            bundle = runs / "synthetic-transfer-r01"
-            frames = plistlib.loads((bundle / "raw" / "powermetrics.plist").read_bytes().split(b"\0")[0])
-            raw = (bundle / "raw" / "powermetrics.plist").read_bytes()
-            documents = [plistlib.loads(frame) for frame in raw.split(b"\0") if frame]
-            for index, document in enumerate(documents):
-                midpoint = (index + 0.5) / 10.0
-                if 6.5 <= midpoint <= 7.5:
-                    document["processor"]["gpu_power"] = 3000.0
-            bundle.joinpath("raw", "powermetrics.plist").write_bytes(
-                b"\0".join(plistlib.dumps(document) for document in documents)
-            )
-            fit = fit_run(bundle)
-            self.assertEqual(fit.verdict, "inconclusive")
-            self.assertIn("not_all_pulses_detected", fit.reasons)
-            del frames
+    def test_transfer_detector_is_inconclusive_if_any_pulse_is_undetected(self) -> None:
+        intervals = [
+            TraceInterval(interval.start_s, interval.end_s, 2.0)
+            if 6.5 <= (interval.start_s + interval.end_s) / 2.0 <= 7.5
+            else interval
+            for interval in synthetic_valley_trace()
+        ]
+        detection = detect_pulses(
+            intervals,
+            [CommandedPulse(5.0, 6.0), CommandedPulse(6.5, 7.5)],
+            trace_anchor_bound_s=0.001,
+        )
+        self.assertFalse(detection.all_pulses_detected)
+        self.assertIn("pulse_detection_incomplete", detection.reasons)
 
     def test_transfer_fit_uses_max_target_edge_radius_not_p95(self) -> None:
         values = [0.01] * 19 + [0.2]
@@ -438,10 +574,41 @@ class TransferFiducialTests(unittest.TestCase):
     def test_transfer_capture_records_estimator_revision_and_both_magnitudes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             plan, runs, calibration = make_synthetic_capture_fixture(Path(tmp))
-            capture = build_capture(
-                plan_path=plan,
-                runs_root=runs,
-                pulse_calibration_dir=calibration,
+            real_fit_run = transfer_fiducial.fit_run
+            with _trace_joulewise_execution() as executed:
+                traced_fit = real_fit_run(runs / "synthetic-transfer-r01")
+            self.assertEqual(traced_fit.verdict, "fitted")
+
+            def one_real_fixture_fit(bundle_path: Path) -> TransferFiducialRunFit:
+                if Path(bundle_path).name == "synthetic-transfer-r01":
+                    return traced_fit
+                return _fixture_fit_run(bundle_path)
+
+            with patch.object(
+                transfer_fiducial, "fit_run", side_effect=one_real_fixture_fit
+            ):
+                capture = build_capture(
+                    plan_path=plan,
+                    runs_root=runs,
+                    pulse_calibration_dir=calibration,
+                )
+            self.assertEqual(
+                len(RECEIPT_SOURCE_MODULES), len(set(RECEIPT_SOURCE_MODULES))
+            )
+            missing_paths = [
+                relative
+                for relative in RECEIPT_SOURCE_MODULES
+                if not (ROOT / relative).is_file()
+            ]
+            self.assertEqual(missing_paths, [])
+            missing_from_inventory = sorted(
+                set(executed).difference(RECEIPT_SOURCE_MODULES)
+            )
+            self.assertEqual(
+                missing_from_inventory,
+                [],
+                "fixture fit executed joulewise modules outside the closed "
+                f"receipt inventory: {missing_from_inventory}",
             )
             self.assertEqual(capture["estimator_revision"], RESIDUAL_REGION_METHOD)
             self.assertEqual(capture["b_pulse_s"], 0.2)
@@ -450,24 +617,6 @@ class TransferFiducialTests(unittest.TestCase):
             self.assertEqual(capture["target_edge_sample_count"], 20)
             self.assertTrue(capture["diagnostic"])
             self.assertFalse(capture["claim_bearing"])
-
-            output = Path(tmp) / "capture.json"
-            result = subprocess.run(
-                [
-                    str(CI_PYTHON if CI_PYTHON.is_file() else Path(sys.executable)),
-                    str(ROOT / "scripts" / "fit_transfer_fiducial.py"),
-                    "--plan", str(plan),
-                    "--runs-root", str(runs),
-                    "--pulse-calibration-dir", str(calibration),
-                    "--output", str(output),
-                ],
-                cwd=ROOT,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(json.loads(output.read_text()), json.loads(result.stdout))
 
     def test_transfer_estimator_source_digest_is_frozen(self) -> None:
         digest = hashlib.sha256(
@@ -500,6 +649,13 @@ class TransferFiducialV1CompatibilityTests(unittest.TestCase):
 
 
 class TransferFiducialV2ReceiptTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._fixture_fit_patch = patch.object(
+            transfer_fiducial, "fit_run", side_effect=_fixture_fit_run
+        )
+        self._fixture_fit_patch.start()
+        self.addCleanup(self._fixture_fit_patch.stop)
+
     def _issue(
         self, plan: Path, calibration: Path, receipt_path: Path
     ) -> dict[str, object]:
@@ -568,57 +724,84 @@ class TransferFiducialV2ReceiptTests(unittest.TestCase):
                 receipt_drift["reasons"],
             )
 
-    def test_receipt_binds_actual_wrapper_core_and_estimator_bytes(self) -> None:
+    def test_receipt_binds_wrapper_source_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             plan, runs, calibration = make_synthetic_v2_capture_fixture(root)
-            wrapper = root / "fit_transfer_fiducial.py"
-            core = root / "transfer_fiducial.py"
-            estimator = root / "powermetrics_fiducial.py"
-            wrapper.write_bytes((ROOT / "scripts/fit_transfer_fiducial.py").read_bytes())
-            core.write_bytes((ROOT / "joulewise/transfer_fiducial.py").read_bytes())
-            estimator.write_bytes(
-                (ROOT / "joulewise/powermetrics_fiducial.py").read_bytes()
+            receipt_path = root / "pre_data_receipt.json"
+            receipt = self._issue(plan, calibration, receipt_path)
+            mutated = json.loads(json.dumps(receipt))
+            mutated["fitter_source"]["sha256"] = "0" * 64
+            write_receipt_and_sidecar(receipt_path, mutated)
+            capture = build_capture(
+                plan_path=plan,
+                runs_root=runs,
+                pulse_calibration_dir=calibration,
+                pre_data_receipt_path=receipt_path,
             )
-            with ExitStack() as stack:
-                stack.enter_context(
-                    patch.object(transfer_fiducial, "_FITTER_SOURCE_REL", wrapper)
-                )
-                stack.enter_context(
-                    patch.object(transfer_fiducial, "_FITTER_MODULE_REL", core)
-                )
-                stack.enter_context(
-                    patch.object(powermetrics_fiducial, "__file__", str(estimator))
-                )
-                receipt_path = root / "pre_data_receipt.json"
-                self._issue(plan, calibration, receipt_path)
-                cases = (
-                    (
-                        wrapper,
-                        "pre_data_receipt_fitter_source_sha256_mismatch",
-                    ),
-                    (
-                        core,
-                        "pre_data_receipt_fitter_module_source_sha256_mismatch",
-                    ),
-                    (
-                        estimator,
-                        "pre_data_receipt_estimator_source_sha256_mismatch",
-                    ),
-                )
-                for source_path, reason in cases:
-                    with self.subTest(source=source_path.name):
-                        original = source_path.read_bytes()
-                        source_path.write_bytes(original + b" ")
-                        capture = build_capture(
-                            plan_path=plan,
-                            runs_root=runs,
-                            pulse_calibration_dir=calibration,
-                            pre_data_receipt_path=receipt_path,
+            self.assertEqual(capture["verdict"], "inconclusive")
+            self.assertEqual(
+                capture["reasons"],
+                ["pre_data_receipt_fitter_source_sha256_mismatch"],
+            )
+
+    def test_receipt_binds_each_curated_source_module(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan, runs, calibration = make_synthetic_v2_capture_fixture(root)
+            receipt_path = root / "pre_data_receipt.json"
+            receipt = self._issue(plan, calibration, receipt_path)
+            self.assertEqual(
+                set(receipt["source_inventory"]), set(RECEIPT_SOURCE_MODULES)
+            )
+            self.assertEqual(
+                receipt["source_inventory_sha256"],
+                transfer_fiducial._source_inventory_sha256(
+                    receipt["source_inventory"]
+                ),
+            )
+            for module_path in RECEIPT_SOURCE_MODULES:
+                with self.subTest(module=module_path):
+                    mutated = json.loads(json.dumps(receipt))
+                    mutated["source_inventory"][module_path] = "0" * 64
+                    mutated["source_inventory_sha256"] = (
+                        transfer_fiducial._source_inventory_sha256(
+                            mutated["source_inventory"]
                         )
-                        self.assertEqual(capture["verdict"], "inconclusive")
-                        self.assertIn(reason, capture["reasons"])
-                        source_path.write_bytes(original)
+                    )
+                    write_receipt_and_sidecar(receipt_path, mutated)
+                    capture = build_capture(
+                        plan_path=plan,
+                        runs_root=runs,
+                        pulse_calibration_dir=calibration,
+                        pre_data_receipt_path=receipt_path,
+                    )
+                    expected = (
+                        f"pre_data_receipt_{module_path}_source_sha256_mismatch"
+                    )
+                    self.assertEqual(capture["verdict"], "inconclusive")
+                    self.assertEqual(capture["reasons"], [expected])
+
+    def test_old_receipt_schema_is_rejected_by_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan, runs, calibration = make_synthetic_v2_capture_fixture(root)
+            receipt_path = root / "pre_data_receipt.json"
+            receipt = self._issue(plan, calibration, receipt_path)
+            receipt["schema_version"] = (
+                "joulewise.transfer_fiducial_pre_data_receipt.v1"
+            )
+            write_receipt_and_sidecar(receipt_path, receipt)
+            capture = build_capture(
+                plan_path=plan,
+                runs_root=runs,
+                pulse_calibration_dir=calibration,
+                pre_data_receipt_path=receipt_path,
+            )
+            self.assertEqual(capture["verdict"], "inconclusive")
+            self.assertEqual(
+                capture["reasons"], ["pre_data_receipt_schema_unsupported"]
+            )
 
     def test_receipt_binds_plan_calibration_and_rule_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

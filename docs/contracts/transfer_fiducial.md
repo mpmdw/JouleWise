@@ -50,9 +50,12 @@ missing, refused, malformed, or unauthenticated selection record, a rung
 outside that four-value ladder, or any summary mismatch. It then requires the
 pin's `g2a_record_sha256` and its `record_id` (`sha256:` followed by that
 digest) to name the supplied selection bytes, and requires the recorded path
-to match the supplied record. The `generation_method` must have the ruled
-form `N x 'repeated sentence' + 'closing sentence' under tokenizer
-sha256:DIGEST`. Finally, the generator loads the model mirror named by
+to match the supplied record. The generator's current check of
+`generation_method` is a regex SHAPE check only: it requires the form
+`N x 'repeated sentence' + 'closing sentence' under tokenizer
+sha256:DIGEST`, but does not yet prove the ruling-39b construction. The
+ruling-39b construction check lands in the post-probe-merge round. Finally,
+the generator loads the model mirror named by
 `configs/model_panels/qwen3_4bit.json` and passes `prompt_text` through the
 same raw-text encode function used by the MLX runtime, with special tokens
 enabled. The resulting integer token identifiers must exactly equal
@@ -63,6 +66,21 @@ The generator imports the Qwen3-small model identity from the `_v5` campaign
 generator; this carries the model revision, tokenizer-file digest, and
 chat-template digest instead of copying those values into a second source of
 truth.
+
+### Sequencing note
+
+Pin-to-ladder binding from ruling 39b (the loader check that compares a pin
+field by field with the selected ladder rung) lands in the post-probe-merge
+round. This is a sequencing deferral, not a threat-model deferral: the 39b
+loader is absent on this branch, no data exists, and the merge is held. The
+ladder is the pre-registration record, so this binding check sits inside
+D-161's fail-closed carve-out. Run-time re-tokenization remains because it is
+the only fence across the two tokenizer loader paths: the issuer uses
+`transformers.AutoTokenizer`, while the generator and runtime use
+`mlx_lm.load`. The post-merge round's `WRITE_SCOPE` must include the plan
+generator at `configs/diagnostics/transfer_fiducial_v2/generate_plan.py` and
+`tests/test_transfer_fiducial_v2_plan.py`, because the 39b loader signature
+changes.
 
 V2 uses plan schema `joulewise.transfer_fiducial_plan.v2` and diagnostic kind
 `transfer_fiducial_v2`; V1 retains its original schema and kind. V2 fixes 512
@@ -199,9 +217,8 @@ seeing data. It records:
 
 - the SHA-256 of the exact plan bytes and the exact bytes of every one of the
   ten named configuration files;
-- the exact-byte SHA-256 values of `scripts/fit_transfer_fiducial.py` and
-  `joulewise/transfer_fiducial.py`, which contains the fit and verdict logic;
-- the imported pulse estimator's current and pinned SHA-256 values;
+- the exact-byte SHA-256 value of `scripts/fit_transfer_fiducial.py` and a
+  source inventory for the fit program;
 - the calibration directory's absolute path, evidence-file SHA-256,
   validation identifier, and capture timestamp; and
 - the exact rules used by the fitter: minimum prefill and decode duration,
@@ -210,12 +227,49 @@ seeing data. It records:
   effective_clock_anchor_bound_s`, and `supported iff residual_transfer_s <=
   b_pulse_s`.
 
+The source inventory is a fixed, hand-curated tuple of repository-relative
+paths: `joulewise/transfer_fiducial.py`,
+`joulewise/powermetrics_fiducial.py`, `joulewise/uncertainty_evidence.py`,
+`joulewise/clock.py`, `joulewise/schemas.py`, `joulewise/validation.py`,
+`joulewise/adapters/powermetrics.py`, `joulewise/bundle_read.py`,
+`joulewise/adapters/__init__.py`, `joulewise/adapters/local_transport.py`,
+`joulewise/adapters/mock_runtime.py`,
+`joulewise/adapters/mock_spec_runtime.py`,
+`joulewise/adapters/mock_telemetry.py`,
+`joulewise/adapters/suite_control.py`, `joulewise/arm_readiness.py`,
+`joulewise/authentication_io.py`, `joulewise/axi_decode_config.py`,
+`joulewise/bundle.py`, `joulewise/clock_reference.py`,
+`joulewise/cooldown_anchor.py`, `joulewise/identity_pins.py`,
+`joulewise/interfaces.py`, `joulewise/provenance.py`, and
+`joulewise/suite.py`. `source_inventory` maps each path to the SHA-256 of
+its exact bytes. `source_inventory_sha256` is the SHA-256 of the UTF-8 bytes
+of that mapping rendered as JSON with keys sorted, compact separators `,` and
+`:`, `ensure_ascii=false`, and no trailing newline. The inventory is closed
+by execution: the regression runs the one fixture fit while recording every
+`joulewise/` file for which at least one source line executes, and asserts
+that this observed set is a subset of the tuple; it also asserts that every
+listed path exists and that no path is duplicated. This is an execution
+check, not a transitive import-graph walk. Without this inventory, an edit to
+`uncertainty_evidence.py` on the day after the receipt is issued could change
+the metrology standard-error term `se_metrology` used for validation without
+changing the old receipt, so the receipt would no longer identify the program
+that fit the data. The inventory fence
+closes before the first receipt is issued, not before the first fit; receipt
+publication is create-new and a receipt is not reissued after data.
+At verification, a changed recorded hash refuses as
+`pre_data_receipt_<repo-relative-path>_source_sha256_mismatch`, with the path
+filled in literally.
+
 The receipt file is canonical JSON: its keys are sorted, its indentation is
 fixed, and it ends with exactly one newline. Issuance uses operating-system
 create-new semantics, so an existing receipt refuses as
 `pre_data_receipt_already_exists` instead of being overwritten. Issuance also
 creates `<receipt>.sha256`, a sidecar (a separate small file) containing the
 receipt file's exact-byte SHA-256 and one newline.
+
+A receipt carrying the former schema version is refused by name as
+`pre_data_receipt_schema_unsupported`, before the new closed key set is
+compared.
 
 At fit time the V2 fitter recomputes the sidecar binding and every recorded
 input digest. It returns `inconclusive` with a named reason if the receipt is
@@ -254,7 +308,11 @@ and ruling 16b. `--summary`, `--selection-record`,
 `--power-policy`, `--runs-dir`, `--instrument-calibration-dir`,
 `--instrument-power-policy`, `--post-window-sampling-dwell-s`,
 `--issue-receipt`, `--receipt`, and `--output` were verified against this
-repository's argument parsers. No flag below is marked `UNVERIFIED`.
+repository's argument parsers. The producer flags `--config-root`,
+`--input-inventory`, `--runs-root`, `--counts-output`, and `--summary-output`
+of `scripts/summarize_g2a_prefill_probe.py`, plus `--selection-record`,
+`--summary`, `--prompt-ladder`, `--ruling-trace`, and `--output` of
+`scripts/issue_g2a_prefill_prompt_pin.py`, were verified against `feat/2026-09-01-g2a-probe` @ `82e7519d`; absent from this branch until that branch merges.
 
 ```sh
 JW_REPO=/Users/edr/code/JouleWise
