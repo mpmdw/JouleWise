@@ -49,9 +49,11 @@ shared-edge bound, validates every four-member window, calculates every split,
 holds one shared sign across the blocks, enumerates every local-sign
 combination, and calls the existing comparative false-effect floor. A
 false-effect floor is the smallest energy difference the registered noise
-calculation can distinguish from zero. The block count is at most
-`MAX_EXACT_ADMISSIBLE_CORNER_N`; this named production constant, not a copied
-number, owns the exact-enumeration limit.
+calculation can distinguish from zero. The supplied shared-edge bound must
+match the authenticated bound with zero relative tolerance and an absolute
+tolerance of exactly `1e-12` seconds. The exact-corner cap is exactly 16 blocks:
+the implementation reads `MAX_EXACT_ADMISSIBLE_CORNER_N`, whose registered
+value is 16, and rejects 17 or more.
 
 For an ordinary point floor, the close-out builder calls
 `joulewise.detection_floor._point_floor_diagnostic` on the floor artifact's
@@ -144,28 +146,30 @@ invalid member windows, or a stored result that differs from a fresh replay.
 
 ### Stage-2 mint interface
 
-Stage 2 owns the implementation of this exact per-cell interface:
+`joulewise.dominance_closeout.d165_replay_blocks_from_mint_inputs` is the only
+sanctioned constructor for sidecar block records. It accepts exactly the three
+values the mint holds at the call to
+`floor_extraction._common_mode_floor_from_block_inputs`: the finalized block
+identities, the block deltas in joules, and the extraction-owned
+`_CommonModeBlockInputs` records:
 
 ```python
-def build_d165_replay_record(
-    *,
-    cell_id: str,
-    absolute_component: Mapping[str, Any],
-    comparative_component: Mapping[str, Any],
-    blocks: Sequence[Mapping[str, Any]],
-    calibration_bracket: Mapping[str, Any],
-    shared_edge_bound_s: float,
-) -> dict[str, Any]:
+def d165_replay_blocks_from_mint_inputs(
+    block_ids: Sequence[str],
+    block_deltas_j: Sequence[float],
+    block_inputs: Sequence[_CommonModeBlockInputs],
+) -> list[dict[str, Any]]:
     ...
 ```
 
-`absolute_component` and `comparative_component` are the two just-built floor
-artifact component records. `blocks` are the raw records produced from
-`_common_mode_block_inputs_from_evidence`, extended with their finalized block
-identities. The bracket and bound are the same authenticated evidence already
-used by the mint. The function returns one closed `cells[]` object described
-above. Stage 2 wraps four such records with `schema_version` and `sidecar_id`;
-it does not change the floor-artifact schema.
+The adapter checks aligned lengths, unique nonempty block identities, the
+16-block cap, and finite deltas. It copies the six fields held by each
+`_CommonModeBlockInputs` record, adds `block_id` and `delta_j`, and computes
+`derived_split` through `split_common_mode_block_width`. Stage 2 may wrap those
+records with the cell's independent records, authenticated bracket, bound,
+result, `schema_version`, and `sidecar_id`; it may not hand-build or rewrite a
+block record. Sidecar emission itself remains a separate mint stream and does
+not change the floor-artifact schema.
 
 ## Close-out: `joulewise.d165_dominance_closeout.v1`
 
@@ -248,4 +252,3 @@ eight ordinary plus four comparative common-mode records, non-finite completed
 values, inconsistent ratios or pass flags, incorrect branch fields, source
 operand/result drift, or a source-hash mismatch. Validation is fail-closed: an
 empty error list is required before a close-out can be consumed.
-

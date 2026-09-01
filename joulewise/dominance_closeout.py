@@ -150,6 +150,7 @@ __all__ = [
     "ABSOLUTE_COMMON_MODE_REASON",
     "dominance_ratio",
     "split_common_mode_block_width",
+    "d165_replay_blocks_from_mint_inputs",
     "replay_common_mode_dominance",
     "canonical_json_sha256",
     "validate_d165_replay_sidecar",
@@ -289,6 +290,75 @@ def _raw_replay_block(block: Mapping[str, Any]) -> dict[str, Any]:
             "member_envelope_integral_sum_j",
         )
     }
+
+
+def d165_replay_blocks_from_mint_inputs(
+    block_ids: Sequence[str],
+    block_deltas_j: Sequence[float],
+    block_inputs: Sequence[Any],
+) -> list[dict[str, Any]]:
+    """Adapt the three extraction-owned mint values into replay blocks.
+
+    ``block_inputs`` contains ``floor_extraction._CommonModeBlockInputs``
+    instances.  The loose annotation avoids an import cycle while the exact
+    attribute census below keeps this boundary closed.
+    """
+
+    reason = "d165_mint_adapter_input_invalid"
+    if (
+        isinstance(block_ids, (str, bytes))
+        or isinstance(block_deltas_j, (str, bytes))
+        or isinstance(block_inputs, (str, bytes))
+        or not isinstance(block_ids, Sequence)
+        or not isinstance(block_deltas_j, Sequence)
+        or not isinstance(block_inputs, Sequence)
+        or not block_ids
+        or len(block_ids) != len(block_deltas_j)
+        or len(block_ids) != len(block_inputs)
+        or len(block_ids) > MAX_EXACT_ADMISSIBLE_CORNER_N
+        or len(set(block_ids)) != len(block_ids)
+        or any(not isinstance(block_id, str) or not block_id for block_id in block_ids)
+    ):
+        raise ValueError(reason)
+
+    records: list[dict[str, Any]] = []
+    for block_id, raw_delta, item in zip(
+        block_ids, block_deltas_j, block_inputs, strict=True
+    ):
+        try:
+            delta = _finite_number(raw_delta, reason)
+            record = {
+                "block_id": block_id,
+                "delta_j": delta,
+                "onset_sweep_j": list(item.onset_values_j),
+                "offset_sweep_j": list(item.offset_values_j),
+                "zero_point_contrast_j": item.zero_point_contrast_j,
+                "bundle_residual_half_widths_j": list(
+                    item.bundle_residual_half_widths_j
+                ),
+                "member_window_bounds_s": [
+                    list(window) for window in item.member_window_bounds_s
+                ],
+                "member_envelope_integral_sum_j": (
+                    item.member_envelope_integral_sum_j
+                ),
+            }
+            record["derived_split"] = split_common_mode_block_width(
+                delta_j=delta,
+                onset_sweep_j=record["onset_sweep_j"],
+                offset_sweep_j=record["offset_sweep_j"],
+                zero_point_contrast_j=record["zero_point_contrast_j"],
+                bundle_residual_half_widths_j=record[
+                    "bundle_residual_half_widths_j"
+                ],
+                member_envelope_integral_sum_j=record[
+                    "member_envelope_integral_sum_j"
+                ],
+            )
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(reason) from exc
+        records.append(record)
+    return records
 
 
 def replay_common_mode_dominance(
@@ -928,6 +998,54 @@ def _sidecar_cell_map(
     }
 
 
+def _closeout_census_errors(
+    independent: Sequence[Mapping[str, Any]],
+    common: Sequence[Mapping[str, Any]],
+    floor_cells: Mapping[str, Mapping[str, Any]],
+) -> list[str]:
+    """Require the twelve close-out identities to equal the floor census."""
+
+    errors: list[str] = []
+    expected_independent = {
+        (cell_id, component)
+        for cell_id in floor_cells
+        for component in ("absolute", "comparative")
+    }
+    actual_independent = {
+        (record.get("cell_id"), record.get("component")) for record in independent
+    }
+    for cell_id, component in sorted(
+        actual_independent - expected_independent,
+        key=lambda item: (repr(item[0]), repr(item[1])),
+    ):
+        if isinstance(cell_id, str):
+            errors.append(
+                "closeout.independent_ratios.cell_id: "
+                f"unknown {cell_id!r} for component {component!r}"
+            )
+    for cell_id, component in sorted(expected_independent - actual_independent):
+        errors.append(
+            "closeout.independent_ratios.cell_id: "
+            f"missing {cell_id!r} for component {component!r}"
+        )
+
+    expected_common = set(floor_cells)
+    actual_common = {
+        record.get("cell_id")
+        for record in common
+        if isinstance(record.get("cell_id"), str)
+    }
+    for cell_id in sorted(actual_common - expected_common):
+        errors.append(
+            f"closeout.comparative_common_mode_ratios.cell_id: unknown {cell_id!r}"
+        )
+    for cell_id in sorted(expected_common - actual_common):
+        errors.append(
+            f"closeout.comparative_common_mode_ratios.cell_id: missing {cell_id!r}"
+        )
+    return errors
+
+
 def _sidecar_floor_alignment_errors(
     floor_artifact: object,
     replay_sidecar: object,
@@ -1165,15 +1283,12 @@ def validate_d165_closeout(
     source_errors = _source_precondition_errors(
         finalized_manifest, floor_artifact, replay_sidecar
     )
+    floor_cells, _ = _floor_cell_map(floor_artifact)
+    census_errors = _closeout_census_errors(
+        independent_records, common_records, floor_cells
+    )
+    errors.extend(census_errors)
     if len(independent_records) == 8 and len(common_records) == 4:
-        expected_globals = _expected_global_fields(
-            independent_records, common_records, source_errors
-        )
-        for key, expected in expected_globals.items():
-            if value[key] != expected:
-                errors.append(f"closeout.{key}: does not match branch rule")
-
-        floor_cells, _ = _floor_cell_map(floor_artifact)
         expected_independent: dict[tuple[str, str], Mapping[str, Any]] = {}
         for cell_id, floor_cell in floor_cells.items():
             for component, parent_key in (
@@ -1202,7 +1317,13 @@ def validate_d165_closeout(
         for record in independent_records:
             key = (record.get("cell_id"), record.get("component"))
             expected = expected_independent.get(key)
-            if expected is not None and dict(record) != dict(expected):
+            if expected is None:
+                if isinstance(key[0], str):
+                    errors.append(
+                        "closeout.independent_ratios.cell_id: "
+                        f"unknown {key[0]!r} for component {key[1]!r}"
+                    )
+            elif dict(record) != dict(expected):
                 errors.append(
                     f"closeout.independent_ratios[{key!r}]: source operand mismatch"
                 )
@@ -1215,6 +1336,11 @@ def validate_d165_closeout(
                     sidecar_cells.get(cell_id) if isinstance(cell_id, str) else None
                 )
                 if sidecar_cell is None:
+                    if isinstance(cell_id, str):
+                        errors.append(
+                            "closeout.comparative_common_mode_ratios.cell_id: "
+                            f"unknown {cell_id!r}"
+                        )
                     continue
                 try:
                     result = sidecar_cell["comparative"]["common_mode_replay"][
@@ -1230,4 +1356,10 @@ def validate_d165_closeout(
                         "closeout.comparative_common_mode_ratios"
                         f"[{cell_id!r}]: source result mismatch"
                     )
+        expected_globals = _expected_global_fields(
+            independent_records, common_records, [*source_errors, *errors]
+        )
+        for key, expected in expected_globals.items():
+            if value[key] != expected:
+                errors.append(f"closeout.{key}: does not match branch rule")
     return errors

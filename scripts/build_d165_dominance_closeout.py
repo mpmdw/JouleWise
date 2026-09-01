@@ -221,7 +221,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.output is None:
         sys.stdout.write(rendered)
     else:
-        args.output.write_text(rendered, encoding="utf-8")
+        try:
+            with args.output.open("x", encoding="utf-8") as output_handle:
+                output_handle.write(rendered)
+        except FileExistsError:
+            print(
+                "d165_dominance_closeout_refused: output_already_exists",
+                file=sys.stderr,
+            )
+            return 2
     return 0
 
 
