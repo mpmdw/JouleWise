@@ -129,6 +129,48 @@ kernel; the `_v5` results prose waits for data by design.
    fiducial night. The kernel rows from stream 05 will state the order; the
    dates are Ed's.
 
-## Addendum — luna (process seat)
+## Addendum — luna (process seat, `02-luna-process.md`, landed 13:14)
 
-_Pending; to be appended when `02-luna-process.md` lands._
+Verdict: the same conditional yes, with the sharpest statement of the C1
+danger of any seat — the kernel "is fail-closed enough to stop a silent wrong
+run, but unclear enough to cause delay or invite a manual bypass." Its F1
+(reconcile the live work selector before G2-a, then require one independent
+review of the resulting state) is exactly stream 05 / D-167, whose PR #250
+received that review (Sol implementation in two sessions + lead verification).
+Open question 1 (is `WINDOW-COUNCIL-GATE` intentionally still absolute for
+G2-a?) is answered by D-167: no — retired by supersession, G2-a is a kernel
+row with its own gate.
+
+Findings the magistrate adopts:
+
+- F3 (tier the review by consequence: full chain only for physics / claim /
+  pre-registration changes, targeted review + tests for ordinary code, one
+  light review for bookkeeping). Adopted as the operating rule for this wave
+  — it is what the stream table in §3 already does (refuters on 07/08/12/13,
+  lead+CI on 05/09/11) and it now has a written justification. luna's
+  spend evidence (711 first-parent commits since 08-01: 146 code/config/paper,
+  559 process docs; the two layers that paid — C-058 arm-author delta, T28
+  contract+delta reviews — and the two that did not — C-039's dead
+  background refuter, C-058's seven wedged relay hours) is the first
+  quantified instrumentation of rule 5 in the doctrine.
+- F4 (one immutable manifest per G2-a run: head, pack digest, raw-root
+  digest, command, verdict, producer checks). Folded into the G2-a
+  executability work now scouting (stream 16); the release-check half waits
+  for post-campaign.
+- F2 narrowed: not "close the 460 T26 clauses" but "audit only the
+  transaction-relevant `_v5` clauses at current head". Queued behind the
+  executability ledger; the ledger will show which clauses touch the
+  transaction path.
+- Anomaly: `git log --merges` is not a PR counter here (squash landings) —
+  recorded so nobody re-derives it.
+
+Declined for this submission: F5 (newcomer reader path + archive), F6
+(semantic kernel check), both correctly self-labelled post-campaign; F7 is a
+prohibition the magistrate already operates under (no new orchestration
+layer). Open questions 3 (advisor's bar = the D-164/165/166 set?) and 4
+(process traces in Git vs archived copy) are Ed's and join §6.
+
+Where luna and the magistrate disagree: luna would add "a time-bounded
+exception" to the kernel as an alternative to a real `_v5` row. Rejected —
+an exception is the bypass its own verdict warns about; D-167 installed the
+rows.
