@@ -1,6 +1,6 @@
 # Round-7 retensing plan (prepared while draft-v1.md is frozen)
 
-> **STATUS (2026-08-31, rewrite executed): HELD — lexicon-constrained rewrite complete; first-use lint exits 0; awaiting the fresh pedagogy adjudication seat before mechanical substitution.**
+> **STATUS (2026-08-31, structural fix round executed): HELD — D-1 structural sheet and D-2 plan repairs complete; first-use lint exits 0; awaiting one fresh joint pedagogy adjudication before mechanical substitution.**
 > The rewrite implements the magistrate's R-1 through R-6 rulings, D-164, D-165 including its completed R-5, D-166 as amended, and reviewer-panel desk items 6, 10, 12, 13, and 16. The `_v5` registry is the only token vocabulary. `[PREFILL_LENGTH]` and every token containing it remain parameterized until the authenticated G2-a selection record issues.
 > Verified and preserved: every pre-existing frozen quote remains byte-exact on its named draft line. Item 60 now opens with the D-161 sentence, retains only the ruled internal-consistency clause after it, and drops the old first sentence. Outcome D is a prefix that combines with A, B, or C rather than a fourth exclusive result.
 
@@ -57,15 +57,15 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** A/B/C: every round-7 outcome presupposes that collection ran and issued a verdict.
 
-**A — dominance reproduced:** The model comparison collection completed, and the Results opening states first whether the separate identical-workload test was collected, then reports that every required ratio was at least 2.
+**A — dominance reproduced:** Superseded by Item 10; insert no sentence from H02 at this site.
 
-**B — dominance not reproduced:** The model comparison collection completed, and the Results opening states first whether the separate identical-workload test was collected, then reports every component whose independent-edge or shared-error ratio was below 2.
+**B — dominance not reproduced:** Superseded by Item 10; insert no sentence from H02 at this site.
 
-**C — contrast refused:** The collection attempt completed with required comparison records excluded; the Results opening states first whether the separate identical-workload test was collected, then gives the exclusion reason and reports no directional model result from those records.
+**C — contrast refused:** Superseded by Item 10; insert no sentence from H02 at this site.
 
-**D — prefix: characterization not run:** The separate identical-workload block was not collected, so no null value is reported; prepend this sentence to the selected A, B, or C sentence.
+**D — prefix: characterization not run:** Superseded by Item 10; insert no sentence from H02 at this site.
 
-**Notes:** Item 10 supplies the complete Results opening. D is a prefix, not an exclusive contrast result.
+**Notes:** Item 10 supplies the complete insertable Results opening, including the D prefix. H02 is routing metadata only, exactly like H10, and contributes no paper sentence.
 
 ### H03 — §1 Introduction — draft line 30 — FIXED
 
@@ -113,9 +113,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** C: admission refusal leaves the dominance predicate unevaluated.
 
-**A — dominance reproduced:** In both prompt processing and token generation, the bound after allowing every registered boundary movement was at least twice the bound from repeated point measurements alone, and the same was true when timing error shared within each four-run comparison moved together.
+**A — dominance reproduced:** In both prompt processing and token generation, the bound after allowing every registered boundary movement—that is, every movement allowed by the rule fixed before collection—was at least twice the bound from repeated point measurements alone, and the same was true when timing error shared within each four-run comparison moved together.
 
-**B — dominance not reproduced:** In at least one phase, a bound after allowing registered boundary movement was less than twice its point-measurement bound, or the quotient fell below 2 when timing error shared within a four-run comparison moved together; the paper identifies each failed component instead of calling it dominated by boundary placement.
+**B — dominance not reproduced:** In at least one phase, a bound after allowing registered boundary movement—movement allowed by the rule fixed before collection—was less than twice its point-measurement bound, or the quotient fell below 2 when timing error shared within a four-run comparison moved together; the paper identifies each failed component instead of calling it dominated by boundary placement.
 
 **C — contrast refused:** A required record was missing or failed a check fixed before collection, so the comparison was not calculated and the paper reports no direction between the models and no conclusion about whether boundary placement at least doubled the bound.
 
@@ -221,9 +221,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** some C cases: refusal can occur before any admitted token-generation run.
 
-**A = B — admitted comparison:** As registered, each token-generation member rendered one of eight fixed real prompts through the Qwen3 chat template with thinking disabled, then generated exactly 512 output tokens greedily, always choosing the highest-scored next token.
+**A = B — admitted comparison:** As fixed before collection, each token-generation member rendered one of eight real prompts through the Qwen3 chat template—the fixed formatting rule that converts a prompt into the model's input sequence—with thinking disabled, meaning that the model's optional reasoning-output mode was switched off. It then generated exactly 512 output tokens by always choosing the highest-scored next token.
 
-**C — contrast refused:** The token-generation workload still used one of the same eight rendered real prompts, thinking disabled, and a forced 512-token output, but a required-record failure prevented the model comparison from being evaluated.
+**C — contrast refused:** The token-generation workload still used one of the same eight real prompts, the same fixed input-formatting rule, the model's optional reasoning-output mode switched off, and a forced 512-token output, but a required-record failure prevented the model comparison from being evaluated.
 
 **Notes:** The sentence makes the execution reproducible: prompt set, rendering method, thinking policy, selection rule, and output count are all fixed by V5-WL-001 through V5-WL-004.
 
@@ -233,11 +233,11 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** some C cases: refusal can occur before that arm runs.
 
-**A = B — admitted comparison:** Prompt processing used `[PREFILL_LENGTH]` prompt tokens, the unresolved parameter chosen before collection as the shortest rung in 512, 1024, 2048, and 4096 for which each of at least five Qwen3-1.7B probe runs contained at least five overlapping power records; the prompt text and token identifiers were then fixed by the authenticated selection record.
+**A = B — admitted comparison:** Prompt processing used `[PREFILL_LENGTH]` prompt tokens. Before collection, the G2-a rule tested 512, 1024, 2048, and 4096 tokens in that order with at least five Qwen3-1.7B probe runs per length; a length passed only when every probe had at least five power records overlapping prompt processing. Five was a two-record safety margin above the three overlapping records needed to calculate a phase. The shortest passing length became `[PREFILL_LENGTH]`; if none passed, collection used 4096, and that fallback alone was not a comparison refusal. The authenticated selection record then fixed the prompt text and token identifiers.
 
-**C — contrast refused:** If no rung cleared, prompt processing still used `[PREFILL_LENGTH]` = 4096: a final overlap count below 3 printed the program's `not_resolvable_sample_count` reason, while a count of 3 or 4 printed “below the pre-registered count floor of 5” and disclosed the otherwise calculable result; a separate required-record failure printed its own issued reason.
+**C — contrast refused:** The same rule selected `[PREFILL_LENGTH]`, using 4096 when no shorter length passed; using that fallback did not itself select refusal. The comparison was refused only for its issued failure: a final overlap count below 3 printed the program's `not_resolvable_sample_count` reason, while a count of 3 or 4 printed the recorded reason “below the pre-registered count floor of 5,” meaning that the phase was calculable but missed the stricter five-record design minimum, and disclosed the calculable result beside it. Any other required-record failure printed its own issued reason.
 
-**Notes:** `[PREFILL_LENGTH]` stays parameterized until G2-a. Example: five probe runs with counts 6, 5, 7, 5, and 8 clear the rung, while 6, 5, 4, 7, and 8 do not because every one of the five runs must reach five records. Large-model probes are recorded but do not select the rung. The final count split preserves the two ruled refusal meanings and keeps the two-comparison Holm family unchanged.
+**Notes:** `[PREFILL_LENGTH]` stays parameterized until G2-a. Example: five probe runs with counts 6, 5, 7, 5, and 8 pass a length, while 6, 5, 4, 7, and 8 do not because every one of the five runs must reach five records. Large-model probes are recorded but do not select the length. The final count split preserves the two ruled refusal meanings and keeps the two-comparison Holm family unchanged.
 
 ### H16 — §6 Demonstration fixed before collection — draft line 262 — FIXED
 
@@ -269,9 +269,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** C: an unevaluated contrast has no raw p-value.
 
-**A = B — admitted contrast:** The registered analysis forms each raw two-sided Student-*t* p-value from the contrast estimate divided by its total standard error and issued degrees of freedom.
+**A = B — admitted contrast:** The registered analysis formed each raw two-sided Student-*t* p-value from the contrast estimate divided by its total standard error and issued degrees of freedom.
 
-**C — contrast refused:** When required comparison records are excluded, no raw p-value is formed and neither a directional model result nor a boundary-movement quotient is reported from them.
+**C — contrast refused:** When required comparison records were excluded, no raw p-value was formed and neither a directional model result nor a boundary-movement quotient was reported from them.
 
 **Notes:** Two-sided Student-*t* p-value, contrast estimate, total standard error, and issued degrees of freedom are built at draft line 198.
 
@@ -281,9 +281,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** C: refusal can leave no two p-values to order.
 
-**A = B — admitted contrasts:** As registered, the two raw p-values are ordered; the smaller is compared with 0.025 and, only after it passes, the larger with 0.05.
+**A = B — admitted contrasts:** As registered, the two raw p-values were ordered; the smaller was compared with 0.025 and, only after it passed, the larger was compared with 0.05.
 
-**C — contrast refused:** When required comparison records are excluded, there are no two p-values to order and neither a directional model result nor a boundary-movement quotient is reported from them.
+**C — contrast refused:** When required comparison records were excluded, there were no two p-values to order and neither a directional model result nor a boundary-movement quotient was reported from them.
 
 **Notes:** Raw p-values and ordered Holm thresholds are built at draft lines 198 and 264; U08 supplies the retensed family sentence.
 
@@ -293,9 +293,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** C and currently A/B: refusal issues no claim-bearing cell, and the admitted branches still have no issued reported-mean fields or composed endpoints.
 
-**A = B — issued artifacts:** No gross phase-energy value is reported: the issued artifacts define no field for the mean energy of the selected runs and no lower or upper endpoint around that mean, and no floor component is substituted for either quantity.
+**A = B — issued artifacts:** The Gross J/request column was defined as the mean phase energy per selected request with lower and upper endpoints after the known uncertainties were included. No value was reported because the issued artifacts defined neither that mean-energy field nor its endpoints, and no floor component was substituted for either quantity.
 
-**C — contrast refused:** No gross phase-energy value is reported from excluded records: the issued artifacts define no field for the mean energy of the selected runs and no lower or upper endpoint around that mean, and no floor component is substituted for either quantity.
+**C — contrast refused:** The Gross J/request column was defined as the mean phase energy per selected request with lower and upper endpoints after the known uncertainties were included. No value was reported from excluded records because the issued artifacts defined neither that mean-energy field nor its endpoints, and no floor component was substituted for either quantity.
 
 **Notes:** First-use audit: gross phase-energy value / reported mean — table context at draft lines 276–283 and glossed inline by the missing field; composed endpoints — draft lines 193–200; floor component — draft lines 178–189. Registry rows DS-09, DS-13, DS-17, and DS-21 move to bookkeeping here. The table columns remain; their fill is governed by the checklist's exact STOP_FILL sentences for those four rows. “Under the same refusal” is four words.
 
@@ -305,9 +305,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** A/B/C currently: the promised producing schema and authenticated denominator fields do not exist.
 
-**A = B — issued artifacts:** No per-token value is reported: the issued artifacts define no runtime-observed numerator and denominator field for these cells, and no requested maximum or generator estimate is substituted for one.
+**A = B — issued artifacts:** Each per-token column was defined as phase energy divided by the prompt- or output-token count observed while that run executed. No value was reported because the issued artifacts defined neither the runtime-observed energy numerator nor the observed token-count denominator, and neither a prompt- or output-token count requested of the runtime nor a count reported by the generation library was substituted for the count observed during execution.
 
-**C — contrast refused:** No per-token value is reported from excluded records: the issued artifacts define no runtime-observed numerator and denominator field for these cells, and no requested maximum or generator estimate is substituted for one.
+**C — contrast refused:** Each per-token column was defined as phase energy divided by the prompt- or output-token count observed while that run executed. No value was reported from excluded records because the issued artifacts defined neither the runtime-observed energy numerator nor the observed token-count denominator, and neither a prompt- or output-token count requested of the runtime nor a count reported by the generation library was substituted for the count observed during execution.
 
 **Notes:** First-use audit: per-token value / runtime-observed numerator and denominator — table context and inline gloss at draft line 276; tokenizer scope — draft lines 260 and 276. Registry rows DS-10, DS-14, DS-18, and DS-22 move to bookkeeping here. The table columns remain; their fill is governed by the checklist's exact STOP_FILL sentences for those four rows. “Under the same refusal” is four words.
 
@@ -317,11 +317,11 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** C: a refused cell may publish neither magnitude nor label.
 
-**A — dominance reproduced:** Each published floor cell reports its magnitude, its independent-edge ratio, and its code-generated diagnostic label; absolute rows report the shared-error ratio as `not_applicable` because a uniform shared shift cancels after subtracting the cell mean, comparative rows report the replayed shared-error ratio, and n counts independent run bundles that passed every entry check rather than power records.
+**A — dominance reproduced:** Each published floor cell reported its magnitude, independent-edge ratio, and code-generated diagnostic label, and n counted independent run bundles that passed every entry check rather than power records. Absolute rows printed the shared-error ratio as `not_applicable` because, under the registered replay's idealization that one shared timing error moves every run's energy by the same amount, subtracting the cell mean cancels that energy displacement exactly; comparative rows reported the replayed shared-error ratio.
 
-**B — dominance not reproduced:** Each published floor cell reports the same magnitude and ratio columns, but the paper identifies every independent-edge ratio below 2 and every comparative shared-error ratio below 2 and withdraws the boundary-doubling sentence for those components; the code-generated label remains a diagnostic rather than the headline test.
+**B — dominance not reproduced:** Each published floor cell reported the same magnitude, ratio, diagnostic-label, and independent-bundle-count columns. Absolute rows printed the shared-error ratio as `not_applicable` because, under the registered replay's idealization that one shared timing error moves every run's energy by the same amount, subtracting the cell mean cancels that energy displacement exactly; comparative rows reported the replayed shared-error ratio. The paper identified every independent-edge ratio below 2 and every comparative shared-error ratio below 2 and withdrew the boundary-doubling sentence for those components; the code-generated label remained diagnostic rather than the headline test.
 
-**C — contrast refused:** A cell whose records failed a required check publishes no magnitude, ratio, or label, and those records support neither a boundary-doubling sentence nor a directional model result.
+**C — contrast refused:** A cell whose records failed a required check published no magnitude, ratio, label, or independent-bundle count, and those records supported neither a boundary-doubling sentence nor a directional model result.
 
 **Notes:** Magnitude precedes ratios and diagnostic label. The absolute `not_applicable` value is a registered mathematical result, not missing data.
 
@@ -331,9 +331,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** C and prompt A/B currently: the contrast may be unevaluated, and the prompt token family is missing.
 
-**A = B — admitted contrast:** The token-generation point estimate is `[E_decode_contrast_signed_J_per_request]` J per request; no issued artifact supplies a prompt-processing point estimate.
+**A = B — admitted contrast:** The point-estimate column was defined as the mean of ten block differences. The token-generation mean was `[E_decode_contrast_signed_J_per_request]` J per request; no issued artifact supplied a prompt-processing point estimate.
 
-**C — contrast refused:** No contrast point estimate is reported from records that failed a required check, and those records support neither a directional model result nor a boundary-movement quotient.
+**C — contrast refused:** The point-estimate column would have contained the mean of ten block differences, but no point estimate was reported from records that failed a required check, and those records supported neither a directional model result nor a boundary-movement quotient.
 
 **Notes:** Point estimate and mean of ten block differences are built at draft lines 227–229 and 285; token generation and prompt processing are built at draft line 15. Registry line 372 supplies `[E_decode_contrast_signed_J_per_request]`. `[[NO-TOKEN: PG-01 — authenticated prompt contrast estimate]]` records the missing prompt token family in Notes only; registry line 824 is the stopped row.
 
@@ -343,9 +343,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** C and prompt A/B currently: no admitted interval is guaranteed, and prompt endpoints lack tokens.
 
-**A = B — admitted contrast:** The token-generation decision interval is [`[E_decode_contrast_lower_J]`, `[E_decode_contrast_upper_J]`] J; no issued artifact supplies a prompt-processing interval, and, because the registered direction is positive, the lower endpoint is the one that decides the direction gate.
+**A = B — admitted contrast:** The token-generation decision interval was [`[E_decode_contrast_lower_J]`, `[E_decode_contrast_upper_J]`] J; no issued artifact supplied a prompt-processing interval, and, because the registered direction was positive, the lower endpoint was the one that decided the direction gate.
 
-**C — contrast refused:** No composed interval is reported from records that failed a required check, so those records support neither a direction nor a boundary-movement quotient.
+**C — contrast refused:** No composed interval was reported from records that failed a required check, so those records supported neither a direction nor a boundary-movement quotient.
 
 **Notes:** Decision interval, complete endpoints, and registered positive direction are built at draft lines 193–204 and 285. The interval is widened by the deterministic total built at draft line 196; it is not equated to the separately registered claim-side bound. Registry row DS-26 supplies `[E_decode_contrast_lower_J]` and `[E_decode_contrast_upper_J]`. `[[NO-TOKEN: PG-02 — authenticated prompt lower and upper endpoints]]` stays in Notes only; PG-03 is retired because PG-02 owns both slots at the one interval site.
 
@@ -355,9 +355,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** C and prompt A/B currently: refusal supplies no claim floor; the prompt claim-floor token is missing.
 
-**A = B — admitted contrast:** The token-generation claim floor is `[F_claim_decode_armwise_max_J]` J, the larger arm-specific exact-cell floor; no issued artifact supplies a prompt-processing claim floor.
+**A = B — admitted contrast:** The token-generation claim floor was `[F_claim_decode_armwise_max_J]` J, the larger arm-specific exact-cell floor; no issued artifact supplied a prompt-processing claim floor.
 
-**C — contrast refused:** No claim floor is reported from records that failed a required check, so those records support neither a direction nor a boundary-movement quotient.
+**C — contrast refused:** No claim floor was reported from records that failed a required check, so those records supported neither a direction nor a boundary-movement quotient.
 
 **Notes:** Claim floor and larger arm-specific exact-cell floor are built at draft lines 193–204 and 285. Registry line 376 supplies `[F_claim_decode_armwise_max_J]`. `[[NO-TOKEN: DS-33 — authenticated prompt armwise claim floor]]` stays in Notes only; registry line 822 is the stopped row.
 
@@ -367,9 +367,9 @@ Every token containing `[PREFILL_LENGTH]` remains unresolved until the G2-a reco
 
 **Fails:** A/B/C currently: decode `B_decode_claim_J` has no supplier, the prompt family is absent, and C supplies no admissible estimate/floor.
 
-**A = B — admitted contrast:** The sizing sum `C = F + B` is not formed because no issued artifact supplies the claim-side bound; only the check of whether the measured magnitude exceeds the cell floor is reported when its authenticated outcome issues.
+**A = B — admitted contrast:** The sizing column was defined as `C = F + B`, where F is the applicable cell floor and B is the separately registered claim-side bound; its signed planning clearance was the measured magnitude minus C. The sum was not formed because no issued artifact supplied B, and no floor-gate outcome was reported because no authenticated artifact issued the result of checking whether the measured magnitude exceeded F.
 
-**C — contrast refused:** For records that failed a required check, the sizing sum `C = F + B` is not formed and neither a directional model result nor a boundary-movement quotient is reported.
+**C — contrast refused:** For records that failed a required check, the sizing sum `C = F + B` was not formed and neither a directional model result nor a boundary-movement quotient was reported.
 
 **Notes:** The sizing sum, signed planning clearance, and floor gate are built at draft lines 272 and 285; draft lines 196 and 285 distinguish the claim-side bound from the deterministic total. Registry lines 818 and 827 govern the absent claim-side bounds. `[[NO-TOKEN: DS-30 — authenticated decode floor-gate outcome]]` and `[[NO-TOKEN: PG-06 — authenticated prompt floor-gate outcome]]` stay in Notes only; registry lines 819 and 828 are the stopped rows.
 
@@ -537,9 +537,9 @@ R-5 approved U01–U06 and the two additional census sentences as round-7 scope.
 
 Use the following as the opening of “### Results.” If characterization ran, print this lead sentence before the selected A, B, or C continuation: “The largest authenticated absolute A/B/B/A difference in the identical-condition null block was `[D_C_null_max_abs_J]` J, and its registered outcome was `[PLAIN_LANGUAGE_RESULT_null]`.” Neither token may be filled without the authenticated characterization report.
 
-**A — dominance reproduced:** Every independent-edge component ratio was at least 2, and every comparative ratio remained at least 2 when timing error shared within each four-run block moved together, so the registered boundary-doubling result held in both phases.
+**A — dominance reproduced:** For every absolute and comparative component, the complete bound after full interval-edge corner re-evaluation was divided by the same complete bound calculated from the observed point values alone. Every resulting independent-edge quotient was at least 2, and every comparative quotient remained at least 2 when timing error shared within each four-run block moved together, so the registered boundary-doubling result held in both phases.
 
-**B — dominance not reproduced:** At least one independent-edge component ratio was below 2, or one comparative ratio fell below 2 when timing error shared within each four-run block moved together; the Results identify each failed component and make the boundary-doubling statement only for a phase whose required ratios all passed.
+**B — dominance not reproduced:** For every absolute and comparative component with usable evidence, the complete bound after full interval-edge corner re-evaluation was divided by the same complete bound calculated from the observed point values alone. At least one resulting independent-edge quotient was below 2, or one comparative quotient fell below 2 when timing error shared within each four-run block moved together; the Results identify each failed component and make the boundary-doubling statement only for a phase whose required ratios all passed.
 
 **C — contrast refused:** A required model-comparison record failed a check fixed before collection, so the opening prints only the issued reason for the affected records and reports neither a directional model result nor a boundary-movement quotient from them.
 
@@ -561,11 +561,11 @@ Every block below is **ADDED-R7** under reviewer-panel synthesis §3. Existing h
 
 **Why and worked example:** The old calculation (1-0.95^{59}=0.9515) requires 59 independent draws. A trend shared across pulse order or correlated onset/offset errors breaks that premise, so the observed maximum remains factual while the population label is withdrawn.
 
-### H31 — §3 Table 1 workload-response row — draft line 94 — ADDED-R7 (item 10: n=40 versus n=16)
+### H31 — §3 prose after Table 1 — insertion before draft line 99; source phrase at draft line 94 — ADDED-R7 (item 10: n=40 versus n=16)
 
-**Frozen quote (verbatim):** "Evaluate each slope at every joint corner of the authenticated energy intervals."
+**Frozen source quote (verbatim; draft line 94):** "Evaluate each slope at every joint corner of the authenticated energy intervals."
 
-**Replacement after that sentence:** Here “every corner” is evaluated analytically rather than by listing `2^40 = 1,099,511,627,776` endpoint combinations: the ordinary-least-squares slope is a weighted sum of the 40 energies, so its minimum uses the lower endpoint for every positive weight and the upper endpoint for every negative weight and its maximum reverses those choices; the separate component calculation described later refuses exact enumeration above `n=16` because it recomputes a mean and standard deviation at each corner, a step this linear slope does not require.
+**Insertion as prose immediately after Table 1 and before the paragraph at draft line 99; do not insert inside the workload-response table cell:** In the workload-response row, “every corner” is evaluated analytically rather than by listing `2^40 = 1,099,511,627,776` endpoint combinations. The ordinary-least-squares slope is a weighted sum of the 40 energies, so its minimum uses the lower endpoint for every positive weight and the upper endpoint for every negative weight, and its maximum reverses those choices. The separate component calculation described later refuses exact enumeration above `n=16` because it recomputes a mean and standard deviation at each corner, a step this linear slope does not require.
 
 **Why:** This states the executable distinction. Forty intervals are tractable here because only two sign-selected endpoint vectors are needed; the nonlinear component formula retains the enumeration cap.
 
@@ -573,9 +573,9 @@ Every block below is **ADDED-R7** under reviewer-panel synthesis §3. Existing h
 
 **Frozen quote (verbatim):** "Until FLOOR-BIND-01 closes, a floor may support a claim only when governed extraction and the consuming analysis run in the same lead-controlled custody session under the same manifest, with the extraction gates demonstrably executed."
 
-**Replacement:** Independent re-reduction requires a separate consumer that starts from the released primary bytes and fixed manifest, rederives every included member and every allowed timing width, compares that complete set with the floor artifact, and refuses any mismatch before the comparison analysis—for example, if the floor artifact lists ten four-run blocks but the manifest-derived set contains nine, the consumer must stop rather than use the floor—and because that consumer is not yet built, this limitation remains open for camera-ready unless the implementation and its independent audit close it first.
+**Replacement:** Independent re-reduction requires a separate consumer that starts from the released primary bytes and fixed manifest. It must rederive every included member and every allowed timing width, compare that complete set with the floor artifact, and refuse any mismatch before comparison analysis; for example, if the floor artifact lists ten four-run blocks but the manifest-derived set contains nine, the consumer must stop rather than use the floor. Because that consumer does not yet exist, a floor may support a claim only when governed extraction and the consuming analysis run in the same lead-controlled custody session under the same manifest, with the extraction checks demonstrably executed.
 
-**Why:** The replacement states the missing mechanism, its failure behavior, and the present camera-ready status without exposing the internal work-order name.
+**Why:** The replacement states the missing mechanism, its failure behavior, and the present limitation without exposing the internal work-order name.
 
 ### H33 — §1 resolution-bound paragraph — draft line 19 — ADDED-R7 (item 13: one physical glossary)
 
@@ -589,13 +589,13 @@ Every block below is **ADDED-R7** under reviewer-panel synthesis §3. Existing h
 
 **Frozen quote (verbatim):** "This calibrates edge placement under commanded GPU pulses and then transports that bound to sustained mixed inference load. That load-regime transfer is an applicability assumption, not a result: the pre/post bracket tests change across a window, but it does not test whether the pulse-derived bound transfers to inference."
 
-**Replacement:** Delete these two sentences; the preceding algorithm already states what the calibration measures, and the Abstract, Discussion, and Conclusion carry the untested application to inference.
+**Replacement:** Commanded GPU pulses calibrated edge placement, but applying that bound to sustained mixed inference remained an untested assumption. The before-and-after bracket tested change across the measurement window; it did not test whether the pulse-derived bound applied to inference.
 
 ### H35 — §4 bracket paragraph — draft line 164 — ADDED-R7 (item 13)
 
 **Frozen quote (verbatim):** "This screen was characterized with commanded GPU pulses and is transported to sustained mixed inference load; the frozen `_v4` campaign does not test that transfer."
 
-**Replacement:** Delete this sentence. U07, the Discussion limitation, and the Conclusion state the same limitation with `_v5` vocabulary.
+**Replacement:** The timing envelopes applied a bound characterized with commanded GPU pulses to sustained mixed inference; this collection did not test that transfer.
 
 ### H36 — §7 repeated physical glossary — draft line 298 — ADDED-R7 (item 13)
 
@@ -621,17 +621,17 @@ Every block below is **ADDED-R7** under reviewer-panel synthesis §3. Existing h
 
 **Frozen quote 2 (verbatim):** "The pale lower inset expands one A/B/B/A block."
 
-**Replacement for the prose between the Figure 2 introduction and image:** Figure 2 orders the before-and-after pulse calibrations, entry check, reference runs, and A/B/B/A science blocks within one measurement window. Its inset shows why the average time of A matches the average time of B, cancelling steady linear drift in `(B1 + B2 - A1 - A2)/2` while leaving curvature to the separately measured window allowance.
+**Replacement for both quoted draft passages, aligned with structural sheet S05:** Figure 2 orders the before-and-after pulse calibrations, entry check, reference runs, and science blocks within one measurement window. Each science block uses A/B/B/A order—condition A, condition B, condition B, condition A—and names the four measured energies \(A_1,B_1,B_2,A_2\) in that order. Its block difference is \((B_1+B_2-A_1-A_2)/2\); a positive value means condition B used more energy than condition A. Matching the average run time of the two A members to that of the two B members cancels steady linear drift, while curvature remains covered by the separately measured whole-window allowance.
 
 ### H40 — Figure 3 prose walk — draft lines 202–204 — ADDED-R7 (item 13)
 
 **Frozen quote (verbatim):** "Figure 3 separates evidence refusal from the two claim gates."
 
-**Replacement for the three prose paragraphs before the Figure 3 image:** Figure 3 sends missing, stale, contaminated, duplicated, inconsistent, or unauthenticated records directly to a printed exclusion reason before either comparison check. Usable records first test whether the measured magnitude exceeds the cell floor and then whether the complete uncertainty range points in the registered direction, producing a direction only when both checks pass.
+**Replacement for the three prose paragraphs before the Figure 3 image:** Figure 3 sends missing, stale, contaminated, duplicated, inconsistent, or unauthenticated records directly to a printed exclusion reason before either comparison check. Usable records first test whether the measured magnitude exceeds the cell floor: failure is *not resolvable*; if it passes but the complete uncertainty range does not settle the registered direction, the result is *direction unresolved* and no claim is made; only passage of both checks produces a direction.
 
 ### H41 — §2 channel timing — draft line 35 — ADDED-R7 (item 16, channel sentence)
 
-**Insertion after the first sentence:** CPU, GPU, and neural-engine power are three fields in the same sampling record and therefore share its start and end time when clipped to a phase; in the worked record, 0.9169149999999999 W CPU, 0.00898937 W GPU, and 0.0 W neural-engine power all occupy the same 0.111242541 s interval, so no separate channel clock is assumed.
+**Insertion after the first sentence:** CPU, GPU, and neural-engine power are three fields in the same sampling record and therefore share its start and end time when clipped to a phase; in the worked record in Appendix A.3.1, approximately 0.917 W CPU, 0.009 W GPU, and 0.000 W neural-engine power all occupy the same 0.111 s interval, so no separate channel clock is assumed.
 
 **Why:** The pulse fit uses GPU power to locate the shared record edge; phase integration then clips all three simultaneously sampled channel fields at that edge.
 
@@ -639,17 +639,17 @@ Every block below is **ADDED-R7** under reviewer-panel synthesis §3. Existing h
 
 **Insertion after step 6:** The absolute component remains in the paired-comparison floor because it covers energy variation within either model arm that A/B/B/A ordering does not remove, while each component's `A_k` covers curved or otherwise non-linear change across the measurement window after the order cancels only a steady linear trend; in the synthetic example below, the 0.4 J window allowance is added once to the 2.4984 J absolute and 2.6484 J comparative guarded terms, yielding 2.8984 J and 3.0484 J, after which the cell uses their maximum, 3.0484 J, rather than their sum.
 
-### H43 — §3 null-test power — draft line 95 — ADDED-R7 (item 16, null power)
+### H43 — §3 prose after Table 1 — draft line 99 — ADDED-R7 (item 16, null power)
 
-**Insertion after the identical-condition row:** Each magnitude tests only five fresh A/B/B/A blocks, so passage shows that those five manufactured differences and their intervals fit inside the earlier comparator but does not establish a 95% population-coverage claim or rule out a rare larger false difference—for example, with a 3 J comparator, five intervals inside `[-3, 3]` J pass the registered containment rule, while the paper makes no claim about what fraction of future blocks will remain inside that range.
+**Insertion as prose immediately after Table 1 and before the paragraph at draft line 99; do not insert inside the identical-condition table row:** Each magnitude tests only five fresh A/B/B/A blocks, so passage shows that those five manufactured differences and their intervals fit inside the earlier comparator but does not establish a 95% population-coverage claim or rule out a rare larger false difference. For example, with a 3 J comparator, five intervals inside `[-3, 3]` J pass the registered containment rule, while the paper makes no claim about what fraction of future blocks will remain inside that range.
 
 ### H44 — §7 further limitations — draft line 308 — ADDED-R7 (item 16, joule-versus-counter framing)
 
-**Insertion after the first sentence:** The reported joules are internal integrals of the counter's CPU, GPU, and neural-engine channels, not an independently gain-checked measurement of physical energy: the worked record's 0.103 J counter total agrees with 0.10299995484180416 J computed from the same record's power fields, but that internal agreement is not a comparison with a separate meter, so the supported result is phase attribution within this counter's stated boundary rather than absolute-joule accuracy against wall power.
+**Insertion after the first sentence:** The reported joules are internal integrals of the counter's CPU, GPU, and neural-engine channels, not an independently gain-checked measurement of physical energy. In Appendix A.3.1's worked record, the 0.103 J counter total agrees after rounding with 0.103 J computed from the same record's power fields; that internal agreement is not a comparison with a separate meter, so the supported result is phase attribution within this counter's stated boundary rather than absolute-joule accuracy against wall power.
 
 ### H45 — §6 model and table labels — draft lines 278–290 — ADDED-R7 (D-164/D-166)
 
-**Replacement rule:** In Table 2, replace every `1.5B` row label with `Qwen3-1.7B`, every `7B` row label with `Qwen3-8B`, and identify prompt processing as `[PREFILL_LENGTH]` prompt tokens. In Table 3, replace `7B − 1.5B` with `Qwen3-8B − Qwen3-1.7B`; identify the token-generation arm as `real_prompts_v1`, chat template applied, thinking disabled, greedy 512-token output, and identify the prompt-processing arm by `[PREFILL_LENGTH]`. Do not resolve `[PREFILL_LENGTH]` before the authenticated G2-a record and prompt-pin cross-check exist.
+**Replacement rule:** In Table 2, replace every `1.5B` row label with `Qwen3-1.7B`, every `7B` row label with `Qwen3-8B`, and identify prompt processing as `[PREFILL_LENGTH]` prompt tokens. In Table 3, replace `7B − 1.5B` with `Qwen3-8B − Qwen3-1.7B`; identify the token-generation arm in words as eight fixed real prompts formatted by Qwen3's fixed conversation rule, the optional reasoning-output mode switched off, and 512 output tokens generated by always choosing the highest-scored next token; identify the prompt-processing arm by `[PREFILL_LENGTH]`. Do not resolve `[PREFILL_LENGTH]` before the authenticated G2-a record and prompt-pin cross-check exist.
 
 ### H46 — §6 prompt-length rationale — draft lines 266–272 — ADDED-R7 (D-166 four-rung ladder)
 
@@ -657,7 +657,7 @@ Every block below is **ADDED-R7** under reviewer-panel synthesis §3. Existing h
 
 **Replacement heading:** `### Why [PREFILL_LENGTH] prompt tokens were selected`
 
-**Replacement paragraph:** Before collection, a four-rung shakedown tests 512, 1024, 2048, and 4096 prompt tokens in that order with at least five Qwen3-1.7B probe runs at every rung. A rung clears only when every small-model probe contains at least five power records whose time supports overlap prompt processing; for example, counts 5, 6, 7, 5, and 8 clear, while 5, 6, 4, 7, and 8 do not. The shortest clearing rung becomes `[PREFILL_LENGTH]`; Qwen3-8B probes are recorded but do not select it. If no rung clears, collection still uses 4096. A final count below 3 prints the reduction program's `not_resolvable_sample_count` reason; a count of 3 or 4 remains calculable but prints the distinct pre-registration refusal “below the pre-registered count floor of 5” beside that result. This split keeps an instrument failure distinct from a stricter design choice and leaves the two-comparison Holm family unchanged.
+**Replacement paragraph:** Before collection, a four-length shakedown tested 512, 1024, 2048, and 4096 prompt tokens in that order with at least five Qwen3-1.7B probe runs at every length. A length passed only when every small-model probe contained at least five power records whose time overlapped prompt processing; five provided a safety margin of two records above the three needed to calculate a phase. For example, counts 5, 6, 7, 5, and 8 passed, while 5, 6, 4, 7, and 8 did not. The shortest passing length became `[PREFILL_LENGTH]`; Qwen3-8B probes were recorded but did not select it. If no length passed, collection still used 4096, and that fallback alone was not a refusal. A final count below 3 printed the reduction program's `not_resolvable_sample_count` reason; a count of 3 or 4 remained calculable but printed the recorded reason “below the pre-registered count floor of 5,” meaning that it missed the stricter five-record design minimum, beside that result. In the later sizing notation, F means the applicable cell floor and B means the separately registered claim-side bound. This split kept an instrument failure distinct from a stricter design choice and left the two-comparison Holm family unchanged.
 
 ### H47 — §10 demonstration identity — draft line 356 — ADDED-R7 (D-164/D-166)
 
@@ -669,7 +669,11 @@ Every block below is **ADDED-R7** under reviewer-panel synthesis §3. Existing h
 
 **Replacement title:** `JouleWise — Measuring Phase Energy in LLM Inference on Apple Silicon`
 
-**Subtitle rule:** Drop the two-title device and every `_v4` condition. The subtitle word “attribution-limited” may appear only if every independent-edge component ratio in every cell is at least 2 and no required comparative shared-error ratio is below 2; a missing or excluded ratio does not select the subtitle. The Methods text must disclose this branch rule in the same words before results are shown.
+**Subtitle rule:** Drop the two-title device and every `_v4` condition. The subtitle word “attribution-limited” may appear only if every independent-edge component ratio in every cell is at least 2 and no required comparative shared-error ratio is below 2; a missing or excluded ratio does not select the subtitle.
+
+**Methods sentence (ruled content):** The subtitle uses *attribution-limited* only when every independent-edge component ratio in every cell is at least 2 and no required comparative shared-error ratio is below 2; a missing or excluded ratio does not select that subtitle.
+
+**Methods home — PROPOSED, not ruled:** Insert this sentence after the shared/local replay construction in structural sheet S03 and before the identical-condition-null sentence at frozen draft line 187. Structural sheet S04 marks the same placement PROPOSED. D-165 rules the sentence's content but does not choose its exact Methods location; the lead must accept or relocate it before substitution.
 
 ## Fidelity ledger
 
