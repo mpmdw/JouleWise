@@ -1190,61 +1190,169 @@ transfer assumption. -->
 
 ## First-use audit ledger
 
-The first-use test was rerun over the final successor text. For each term below,
-the first reader-facing use either builds it from physical inputs, glosses it in
-plain words, or occurs only inside a build note that orders the definition
-first. The audit excludes literal field names and reason names inside quoted
-omission sentences: they identify a registry row and do not assert a mechanism.
+`built-before` means the body constructs the referent from physical inputs before its first named use.
+`glossed-at-first-use` means the first named use supplies a plain-word definition or an equivalent calculation in the same sentence or paragraph.
+`audience-vocabulary` means a textbook-statistics or plain-English expression the intended metrology/CS professor uses without definition; that class here is exactly: repeatability, repetition, random scatter, complete, completeness, sampler cadence, refused, refuses, missing, malformed, corpus range, threshold, exact equality, null hypothesis, tail area, quarantine, append-only, run bundle, full-history checkout, third-party dependencies, linear programme, infeasible, and detected.
+`forward-pointer-next-paragraph` means the first use carries an explicit cross-reference to a definition in the immediately following paragraph.
+`FAILS` means the term is neither built before nor glossed at first use and therefore requires a prose cure or deletion.
+The inventory excludes literal field names and reason names inside quoted omission sentences, and all text inside `<!-- -->` build notes.
 
-| Term checked | First reader-facing home | Definition or disposition |
-|---|---|---|
-| large-language model / LLM | Title | Full phrase precedes the abbreviation. |
-| prompt processing / prefill | Section 2 | Prompt work through the first output token; shorthand follows the phrase. |
-| token generation / decode | Section 2 | Later output-token emission; shorthand follows the phrase. |
-| sampling record | Section 2 | One average-power record covers one stated start-to-end interval. |
-| phase boundary | Section 2 | Runtime-recorded time separating prompt processing and token generation. |
-| `powermetrics` | Section 2 | macOS built-in sampler emitting CPU, GPU, and neural-engine interval averages. |
-| SHA-256 fingerprint | Section 2 | Digest identifying exact file bytes. |
-| pulse plateau | Section 2 | Flat high-power portion of a commanded pulse. |
-| monotonic clock | Section 2 | Counter that advances but is never corrected to civil time. |
-| \(B_{\mathrm{fiducial}}\), \(b\), and minimum allowance | Section 2 bracket | One-capture pulse-plus-anchor bound, distinct window operative bound, and 9.724-ms lower allowance; formula and 25/29-ms example are printed together. |
-| stage / block member | Figure 2 text | Back-to-back declared run group / one of the four individual runs in an A/B/B/A block. |
-| energy family / whole-window allowance | Figure 2 text | One energy definition and the once-added maximum of named reference excursion and repeatability bound. |
-| record clipping | Section 4 opening | Keep the record time inside a phase and multiply by its average power; the 30-W, 100-ms example is worked. |
-| cell | Section 4 | Runs sharing phase, workload, model, hardware, software, and power definition. |
-| absolute / comparative component | Section 4 | Same-model repeated-run spread / A/B/B/A block-difference spread. |
-| admitted energy / independent unit | Section 4 | Energy passing Section 5 entry checks / one run for absolute or one block for comparative. |
-| point-only unguarded bound | Section 4 | Complete component formula at recorded points before multiplier and allowance. |
-| sample standard deviation / Student-\(t\) prediction amount | Section 4 | Printed \(n-1\) formula and 97.5% small-sample prediction term. |
-| corner | Section 4 | One joint lower-or-upper endpoint choice for every admitted interval. |
-| independent-edge ratio \(R\) / dominates | Section 4 | Complete corner bound divided by matching point bound; “dominates” means \(R\ge2\). |
-| authenticated / unauthenticated | Section 4 | SHA-256 fingerprints and named input agreement are present / a required fingerprint, match, or check is absent. |
-| registered rounding | Section 4 pilot arithmetic | Rounding fixed before collection in plan bytes identified by a SHA-256 fingerprint. |
-| shared / local edge movement and \(R_{cm}\) | Section 4 replay | One common shift for all four block members versus remaining member-specific movement; replay quotient and two-block fixture are printed. |
-| member-envelope integral sum / binary64 padding | Section 4 replay | Coefficient-weighted four-trace integral / 64-bit float format, `ulp(1.0)`, scale \(M\), pad formula, 103.0615-J worked value, and four outward steps. |
-| `not_applicable` absolute \(R_{cm}\) | Section 4 replay | Uniform shared shift cancels when the absolute formula subtracts its cell mean. |
-| resolution bound / cell floor | Section 4 safeguards | Largest false difference the cell permits / maximum of its guarded components. |
-| small-sample multiplier \(g(n)\) | Section 4 safeguards | \(\max(1,\sqrt{9/(n-1)})\), derived from 10-unit versus observed residual degrees of freedom; unavailable below five. |
-| reference-trajectory excursion / issued repeatability bound / \(A_k\) | Section 4 safeguards | Largest-minus-smallest opening/midpoint/closing reference means / retained `replicated_endpoint_bound_j` or `single_member_endpoint_bound_j` / their maximum, with a 10.0/10.6/10.2-J example. |
-| raw probability / Holm correction | Section 4 gates | Two-sided Student-\(t\) tail probability from ten block differences; ordered 0.025 then 0.05 procedure. |
-| measurement interval / decision interval / deterministic bound | Section 4 gates | Total-standard-error interval / that interval extended by authenticated non-random maximum displacements, whose per-kind calculation and 0.25-J example are printed. |
-| not resolvable | Section 4 gates | Estimate does not clear the cell floor; it is not zero. |
-| signed clearance or shortfall | Section 4 gates | Absolute estimate minus cell floor, with a 10.0 − 3.0484-J example. |
-| outcome A, outcome B, and refusal | Section 4 close-out | All ratios pass / every ratio evaluable with one below 2 / missing, unauthenticated, or zero-denominator ratio selects neither and stops filling. |
-| inserted-gap check | Section 4 close-out | Approximately 500-ms no-work gap with independently known edges compared against the power record. |
-| fail-closed | Section 5 | Missing or inconsistent evidence stops and records why. |
-| freeze receipt | Section 5 | Record fixing plan bytes and the time those bytes were frozen. |
-| G2-a / hash-bound / prompt pin | Section 6 results lead | Fixed prompt-length shakedown / SHA-256-bound selection record / retained prompt text, token IDs, tokenizer, and generation rules. |
-| record support / IQR / resolvability | Section 6 negative build | Record start-to-end interval / middle-half spread of sorted values / at least three supports must overlap the phase. |
-| reducer | Section 6 selection passage | Program turning a retained run bundle into phase energies. |
-| Running Average Power Limit / RAPL | Related work | Processor-exposed energy counter; full phrase precedes the abbreviation. |
-| NVIDIA Management Library / NVML | Related work | Software power counter; full phrase precedes the abbreviation. |
-| fiducial | Appendix A.3.2 | Commanded reference edge timed independently of the instrument. |
-| set membership | Appendix A.3.3 | Complete set of clock mappings consistent with every constraint. |
-| accepted region | Appendix A.3.5 | All pulse-edge pairs whose loss remains within the fixed limit. |
-| observed sample maximum | Appendix A.3.6 | Largest of the 118 observed edge excursions; no population-coverage label. |
+| Term | First reader-facing home | Status | Definition or disposition |
+|---|---|---|---|
+| prompt processing / prefill | 2. In-window calibration method | glossed-at-first-use | Prompt work through the first output token; the shorthand follows the physical phrase. |
+| token generation / decode | 2. In-window calibration method | glossed-at-first-use | Later output-token emission; the shorthand follows the physical phrase. |
+| phase boundary | 2. In-window calibration method | glossed-at-first-use | Runtime-recorded time separating prompt processing and token generation. |
+| powermetrics | 2. In-window calibration method | glossed-at-first-use | The macOS sampler and its shared interval-average CPU, GPU, and neural-engine record are stated at first use. |
+| sampling record | 2. In-window calibration method | built-before | The preceding clause builds the one start-to-end average-power record before naming its use in phase assignment. |
+| repeatability / repetition / random scatter | 2. In-window calibration method | audience-vocabulary | Ordinary metrology words for between-repeat spread and repeated observation. |
+| systematic reassignment | 2. In-window calibration method | built-before | The joule moved from one phase to the other is worked physically before this label. |
+| science window / measurement window | Bracketed pulse-train algorithm | glossed-at-first-use | One uninterrupted measurement session; Figure 2 later diagrams the same window. |
+| SHA-256 / SHA-256 fingerprint | Bracketed pulse-train algorithm | glossed-at-first-use | A digest that identifies exact file bytes. |
+| warm-up pulses | Bracketed pulse-train algorithm | glossed-at-first-use | The first use says the three pulses are discarded. |
+| base-two varied-gap schedule | Bracketed pulse-train algorithm | glossed-at-first-use | Its gaps step through powers of two to keep pulse edges from repeatedly aligning with samples. |
+| sampler cadence | Bracketed pulse-train algorithm | audience-vocabulary | Requested 100-ms sampling cadence is textbook/plain-English measurement vocabulary. |
+| quiet trace | Bracketed pulse-train algorithm | glossed-at-first-use | The parenthesis defines quiet as no commanded pulse. |
+| resting GPU power / pulse height / plateau / pulse plateau | Bracketed pulse-train algorithm | glossed-at-first-use | Resting level, pulse height, and the flat high-power portion are built in physical words. |
+| accepted capture bound / capture bound | Bracketed pulse-train algorithm | built-before | The pulse search, surviving rectangles, stamp widening, and refusal checks precede the largest-displacement label. |
+| clock-anchor bound | Bracketed pulse-train algorithm | glossed-at-first-use | The appositive gives the uncertainty in placing the trace on wall-clock time and points to the construction next. |
+| complete / completeness | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English criteria words; the surrounding lists state what must be present. |
+| refused / refuses | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English rejection verbs used consistently for a calculation that cannot authorize evidence. |
+| monotonic clock | Bracketed pulse-train algorithm | glossed-at-first-use | A counter that advances but is never corrected to civil time. |
+| straight-line clock mappings / rate-aware model | Bracketed pulse-train algorithm | glossed-at-first-use | The retained linear rate-and-offset mappings and the unequal fixed-rate correction are stated in the same paragraph. |
+| missing / malformed | Bracketed pulse-train algorithm | audience-vocabulary | Plain-English input rejection conditions. |
+| Student-\(t\) | Bracketed pulse-train algorithm | glossed-at-first-use | A small-sample bell curve, wider because spread is estimated from 17 captures. |
+| 99% quantile / \(t_{0.995,16}\) | Bracketed pulse-train algorithm | glossed-at-first-use | Two-sided 99% is tied to the 0.995 one-sided point with 16 degrees of freedom. |
+| sample standard deviation / prediction amount | Bracketed pulse-train algorithm | glossed-at-first-use | The pointer clause identifies the \(n-1\) formula of Section 4; the same paragraph supplies the value and prediction construction. |
+| two-draw rule | Bracketed pulse-train algorithm | glossed-at-first-use | Two fresh bounds make the difference spread \(\sqrt{2}\) times one capture's spread. |
+| corpus range | Bracketed pulse-train algorithm | audience-vocabulary | Textbook largest-minus-smallest range of the retained corpus. |
+| ROUND_HALF_EVEN / nearest microsecond | Bracketed pulse-train algorithm | glossed-at-first-use | Nearest-microsecond rounding with an exact tie going to the even digit. |
+| minimum allowance / operative timing bound / \(B_{\mathrm{fiducial}}\) / \(b\) | Bracketed pulse-train algorithm | glossed-at-first-use | The corpus lower allowance, one-capture pulse-plus-anchor bound, and distinct window bound are separated and numerically worked. |
+| stage / block member | Bracketed pulse-train algorithm | glossed-at-first-use | A back-to-back declared run group and one of its four individual A/B/B/A runs. |
+| A/B/B/A order / block difference | Bracketed pulse-train algorithm | glossed-at-first-use | The four-member order and \((B_1+B_2-A_1-A_2)/2\) contrast are printed together. |
+| whole-window allowance / energy family | Bracketed pulse-train algorithm | glossed-at-first-use | A once-added joule allowance for a group reduced under one energy definition. |
+| reference-trajectory excursion / issued repeatability bound | Bracketed pulse-train algorithm | glossed-at-first-use | Largest-minus-smallest reference means versus a retained earlier-window repeatability bound. |
+| Worked current-capture arithmetic | One diagnostic reconstruction | glossed-at-first-use | The bold label introduces a raw-stamp-to-maximal-pulse diagnostic calculation. |
+| onset lag / offset lag / pulse residual | One diagnostic reconstruction | glossed-at-first-use | Observed edge minus its matching commanded edge; the residual is the largest endpoint magnitude before the anchor term. |
+| record clipping / clip a record | 4. How the method bounds a false phase-energy difference | glossed-at-first-use | Keep only record time inside the phase and multiply duration by average power; the joule example is worked. |
+| cell | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Runs sharing phase, workload, model, hardware, software, and processor-power definition. |
+| false-difference components / false-difference | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The next two sentences split the cell's false-difference sources into absolute and comparative components. |
+| absolute component / comparative component | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Same-model repeat spread versus A/B/B/A block-difference spread. |
+| point-only unguarded bound | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The complete component formula at recorded energies before the multiplier and allowance. |
+| admitted energy | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Energy from a run that passed Section 5 entry checks and may bear a claim. |
+| independent units | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | One run for the absolute component or one four-run block for the comparative component. |
+| independent-edge corner bound / corner | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Every joint lower-or-upper endpoint choice is enumerated and the complete formula recalculated. |
+| independent-edge ratio \(R\) / dominates | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Complete corner bound divided by the matching point bound; dominates means \(R\ge2\). |
+| threshold / exact equality | Comparing the boundary-moved and point-only bounds | audience-vocabulary | Plain-English comparison words; the fixed threshold is 2 and equality passes. |
+| authenticated / unauthenticated | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Expected SHA-256 fingerprints and named inputs agree, or a required fingerprint, match, or check is absent. |
+| registered rounding / registered | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Rounding fixed before collection in fingerprinted plan bytes. |
+| onset set / offset set / zero-shift value | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | Reintegrated common-start values, analogous common-end values, and their included zero-shift value. |
+| shared lower and upper excursions | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The displayed equations define the lower and upper common start-plus-end movements. |
+| binary64 / member-envelope integral sum | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The usual 64-bit float format and a nonnegative four-member joule scale that covers the integrals before contrast. |
+| local half-width / shared sign / local sign | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | The member-local changes form one block half-width; enumeration uses one common sign and one per-block local sign. |
+| shared-error ratio / \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | built-before | The complete shared/local replay quotient is constructed immediately before it is named. |
+| not_applicable / absolute \(R_{cm}\) | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A uniform shared shift cancels when the absolute formula subtracts its cell mean. |
+| two-block fixture / Student-\(t\) critical | Comparing the boundary-moved and point-only bounds | glossed-at-first-use | A retained arithmetic-only example and its fixed-table critical value. |
+| resolution bound / cell floor | Adding publication safeguards after the ratio | glossed-at-first-use | Largest false phase-energy difference the cell admits; artifact name for the maximum guarded component. |
+| small-sample multiplier / \(g(n)\) | Adding publication safeguards after the ratio | glossed-at-first-use | The adjacent displayed formula widens five-to-nine-unit results and returns no publishable component below five. |
+| directional comparison / directional comparisons | Adding publication safeguards after the ratio | glossed-at-first-use | The expected direction is fixed before collection. |
+| Holm step-down correction / raw probability | Adding publication safeguards after the ratio | glossed-at-first-use | One two-comparison correction controls any false direction claim at 0.05; the later worked ordering supplies mechanics. |
+| repeat standard error | Adding publication safeguards after the ratio | glossed-at-first-use | Repeat-to-repeat scatter divided by \(\sqrt n\). |
+| measurement variance | Adding publication safeguards after the ratio | glossed-at-first-use | Instrument uncertainty in a recorded energy term, explicitly separate from repeat scatter. |
+| metrology standard error / paired measurement variance | Adding publication safeguards after the ratio | glossed-at-first-use | The paired measurement variance remaining after shared A/B covariance is removed. |
+| covariance | Adding publication safeguards after the ratio | glossed-at-first-use | The two conditions' measurement error that moves together and drops out on differencing. |
+| total standard error | Adding publication safeguards after the ratio | glossed-at-first-use | Independent repeat and metrology sources combine on the variance scale before the square root. |
+| null hypothesis / tail area | Adding publication safeguards after the ratio | audience-vocabulary | Textbook statistics vocabulary for zero mean difference and the resulting two-sided probability. |
+| effective sample size / n_{\mathrm{eff}} | Adding publication safeguards after the ratio | glossed-at-first-use | Number of independent blocks giving the same repeat scatter. |
+| AR(1) model | Adding publication safeguards after the ratio | glossed-at-first-use | Adjacent block errors are treated as serially correlated. |
+| decision-interval sign check / direction gate | Adding publication safeguards after the ratio | forward-pointer-next-paragraph | The first use explicitly says the direction gate is in the next paragraph, which defines both intervals and the fixed direction. |
+| magnitude check / direction check | Adding publication safeguards after the ratio | glossed-at-first-use | Absolute estimate must clear the cell floor; both complete intervals must remain on the fixed direction. |
+| not resolvable | Adding publication safeguards after the ratio | glossed-at-first-use | The estimate does not clear the cell floor; it is not zero. |
+| measurement interval / decision interval / deterministic bound | Adding publication safeguards after the ratio | glossed-at-first-use | Total-standard-error interval; that interval extended by authenticated non-random maximum displacements. |
+| signed clearance or shortfall | Adding publication safeguards after the ratio | glossed-at-first-use | Absolute point estimate minus cell floor, with positive clearance and nonpositive shortfall. |
+| A — every required ratio passes / B — an authenticated, evaluable ratio is below 2 / Refusal — a required ratio is missing, unauthenticated, or has a zero denominator / outcome A / outcome B | Outcome sentence forms | glossed-at-first-use | The three bold forms state all-pass, evaluable-below-two, and cannot-evaluate dispositions. |
+| inserted-gap check | Outcome sentence forms | glossed-at-first-use | An approximately 500-ms no-work gap whose independently known edges are compared with the power record. |
+| Figure 3 is required here | Outcome sentence forms | glossed-at-first-use | The following sentence enumerates the exclusion, magnitude, and direction paths the required figure must show. |
+| fail-closed | 5. Collection stops when required evidence fails | built-before | Missing, malformed, out-of-limit, or inconsistent evidence stops collection and records why. |
+| measured admission rules / admit a stage | Measured admission rules | glossed-at-first-use | Recorded fields and limits evaluated immediately before the stage's first measured member. |
+| idle baseline / nearest-rank p95 | Measured admission rules | glossed-at-first-use | Thirty-second no-run sample; sort \(n\) values and select item \(\lceil0.95n\rceil\). |
+| cooldown rule | Measured admission rules | glossed-at-first-use | Inter-member recovery must pass before 300 s; an override makes the member diagnostic only and prevents claim bearing. |
+| window closes | Measured admission rules | glossed-at-first-use | The third same-cause stage failure closes the full window, not merely the stage. |
+| first-order balance / measured contrast | Counterbalanced order | glossed-at-first-use | Equal sums of A and B run midpoints; the A/B/B/A difference is printed. |
+| quarantine / append-only | Every input and every refusal remains visible | audience-vocabulary | Plain-English custody words for retained failed slots and non-overwriting replacement records. |
+| tamper-evident / tamper-proof / trusted operator | Every input and every refusal remains visible | glossed-at-first-use | Mistake detection and post-hoc-choice defense, not protection against another actor. |
+| freeze receipt / freeze receipts | Every input and every refusal remains visible | glossed-at-first-use | Records fixing plan bytes and the time those bytes were frozen. |
+| G2-a / hash-bound / prompt pin | Results | glossed-at-first-use | Fixed prompt-length shakedown; digest-bound selection record; retained prompt, token, tokenizer, and generation-rule record. |
+| overlapping record / record support / IQR / resolvability | Why the selected prompt length is not yet stated | built-before | The body builds boundary-to-sampler overlap; the other legacy alternatives occur only in excluded build notes. |
+| two-record safety margin / design floor | Why the selected prompt length is not yet stated | glossed-at-first-use | Five overlaps are two above the three-overlap phase minimum; the design floor is stricter than reducer calculability. |
+| reducer | Why the selected prompt length is not yet stated | glossed-at-first-use | Program that turns a retained run bundle into phase energies. |
+| Running Average Power Limit / RAPL | From counter gain to counter time | glossed-at-first-use | Processor-exposed energy counter; full phrase precedes the abbreviation. |
+| NVIDIA Management Library / NVML | From counter gain to counter time | glossed-at-first-use | Software power counter; full phrase precedes the abbreviation. |
+| large-language model / LLM | LLM energy measurement | built-before | The document title expands the abbreviation before its first body use. |
+| minimum-detectable-effect / pre-registration | Benchmark and metrology lineage | glossed-at-first-use | Paired variation estimates a prospectively detectable effect; the threshold is fixed before results. |
+| disaggregated inference / disaggregation | Benchmark and metrology lineage | glossed-at-first-use | Split inference across endpoints is named as a future application requiring two boundaries and clock alignment. |
+| re-derivation / fresh collection | Appendix A. Reproducing this work | glossed-at-first-use | Recompute from preserved bytes versus create new evidence under the named machine conditions. |
+| not presently open to independent re-reduction | Appendix A. Reproducing this work | built-before | The unreleased archive and open floor-binding limitation support the bold disposition. |
+| claim-bearing evidence archive / floor-binding limitation | Appendix A. Reproducing this work | glossed-at-first-use | Evidence that may support a claim and the consumer's incomplete binding back to governed extraction evidence. |
+| full-history checkout / third-party dependencies | A.1 What a reader needs | audience-vocabulary | Plain software-reproduction vocabulary for repository history and externally supplied packages. |
+| run bundle | Why the selected prompt length is not yet stated | audience-vocabulary | Plain-English software packaging vocabulary; Appendix A.2 later enumerates its files. |
+| strict validation | A.2 Scientific artifacts and their bindings | glossed-at-first-use | Independently rebuilds the trace and summary rather than trusting derived files. |
+| scientific binding | A.2 Scientific artifacts and their bindings | glossed-at-first-use | Removing a calibration input breaks the connection from primary bytes to the bound. |
+| whole-window verdict / floor extraction / claim verdict | A.2 Scientific artifacts and their bindings | glossed-at-first-use | Successive artifacts bind admitted membership, each cell floor, and the final contrast decision. |
+| clock-anchor estimator / pulse-fit (accepted-region) algorithm | A.3 Formal calibration algorithms | glossed-at-first-use | One places the trace on wall time; the other encloses edge timing consistent with a commanded pulse. |
+| exact floating summation | A.3 Formal calibration algorithms | glossed-at-first-use | Correctly rounded compensated sum whose order cannot change the binary64 result. |
+| The instrument and its records | A.3 Formal calibration algorithms | glossed-at-first-use | Expository label for the powermetrics record definition that follows. |
+| combined power | A.3 Formal calibration algorithms | glossed-at-first-use | CPU, GPU, and neural-engine channel watts summed after conversion. |
+| record energy | A.3 Formal calibration algorithms | glossed-at-first-use | Three integer millijoule counters summed and divided by 1000. |
+| Cumulative elapsed time | A.3 Formal calibration algorithms | glossed-at-first-use | Instrument-counted time from the end of record 0 to a later record end. |
+| Clock stamps / paired stamp | A.3 Formal calibration algorithms | glossed-at-first-use | Monotonic-wall-monotonic readings; their half-width covers bracket timing plus reported clock resolution. |
+| Trace intervals | A.3 Formal calibration algorithms | glossed-at-first-use | Anchored record start-to-end intervals carrying one GPU-power value. |
+| Commanded pulses | A.3 Formal calibration algorithms | glossed-at-first-use | Stamped on/off pairs numbered 0 through 58. |
+| fiducial | Bracketed pulse-train algorithm | built-before | The pulse-plus-anchor capture construction is built before its \(B_{\mathrm{fiducial}}\) label; Appendix A.3 later gives the general reference-edge gloss. |
+| 59 measured pulses | A.3 Formal calibration algorithms | glossed-at-first-use | Protocol pulses after warm-up; their schedule and one-second duration are built in the same step. |
+| end of record 0 | A.3 Formal calibration algorithms | glossed-at-first-use | Wall-clock time of record 0's end, called the anchor in the same sentence. |
+| set membership | A.3 Formal calibration algorithms | glossed-at-first-use | Exact set of anchor-rate pairs consistent with every evidence constraint. |
+| The model | A.3 Formal calibration algorithms | glossed-at-first-use | Expository label for the affine wall-versus-monotonic relation immediately below. |
+| Model condition (stated because the containment claim depends on it) | A.3 Formal calibration algorithms | glossed-at-first-use | The same sentence states the fixed-rate and 250-µs-residual conditions for containment. |
+| Inputs and their admission checks | A.3 Formal calibration algorithms | glossed-at-first-use | The following sentence lists stamp, trace, and elapsed-value requirements. |
+| Wall-minus-monotonic span | A.3 Formal calibration algorithms | glossed-at-first-use | Largest raw upper clock offset minus smallest raw lower clock offset across five stamps. |
+| Numeric-padding check | A.3 Formal calibration algorithms | glossed-at-first-use | Four ulps at the epoch magnitude must fit inside the one-microsecond pad. |
+| Stamp constraints | A.3 Formal calibration algorithms | glossed-at-first-use | Inequalities force each wall reading inside its padded monotonic bracket. |
+| Native-label constraints | A.3 Formal calibration algorithms | glossed-at-first-use | Whole-second record labels bound the modeled end time with a 250-µs allowance. |
+| Causal constraints, and the two symbols k_pre and k_parse | A.3 Formal calibration algorithms | glossed-at-first-use | Spawn-before-window and parsed-after-write facts give lower and upper anchor constraints. |
+| k_pre equals e_0 minus one resolution unit r_pre | A.3 Formal calibration algorithms | glossed-at-first-use | The identity follows from choosing the first pre-spawn monotonic read as the origin. |
+| Eliminating α | A.3 Formal calibration algorithms | glossed-at-first-use | Fourier–Motzkin removes the coefficient-one offset and leaves constraints in rate and anchor. |
+| The feasible set and the solver | A.3 Formal calibration algorithms | glossed-at-first-use | Boxed rate-anchor polygon optimized by an exact two-variable solver. |
+| linear programme / infeasible | A.3 Formal calibration algorithms | audience-vocabulary | Textbook optimization vocabulary for an exact constrained optimum or an empty constraint set. |
+| Composing the bound | A.3 Formal calibration algorithms | glossed-at-first-use | The displayed sum combines anchor half-width, span, clock resolution, and numeric padding. |
+| Anchoring | A.3 Formal calibration algorithms | built-before | The earlier estimator has built the point anchor before this trace-placement label. |
+| Reading the pulses | A.3 Formal calibration algorithms | glossed-at-first-use | Scan and pair command on/off events for warm-up and measured pulses. |
+| Trimming warm-ups | A.3 Formal calibration algorithms | glossed-at-first-use | Discard every interval starting before the last warm-up off-stamp. |
+| warm-up pulses do not participate in the baseline set and are never fitted | A.3 Formal calibration algorithms | built-before | The immediately preceding trimming rule entails the emphasized disposition. |
+| Authenticating the executed schedule | A.3 Formal calibration algorithms | glossed-at-first-use | Duration, varied-gap, and quiet-support checks consume stamps and trace extent rather than planned metadata. |
+| Baseline set and robust scale / baseline set | A.3 Formal calibration algorithms | glossed-at-first-use | Intervals outside all pulse margins; median power and floored MAD scale are then defined. |
+| median absolute deviation / robust scale | A.3 Formal calibration algorithms | glossed-at-first-use | Median distance from the median, scaled to a Gaussian standard-deviation equivalent with a 1-mW floor. |
+| Spurious-plateau check on the baseline set / spurious plateau | A.3 Formal calibration algorithms | glossed-at-first-use | Two or more consecutive quiet intervals above the fixed threshold indicate uncommanded work. |
+| Per-pulse fit | A.3 Formal calibration algorithms | glossed-at-first-use | The numbered procedure defines the local data, plateau, model, search, and acceptance checks. |
+| Local set | A.3 Formal calibration algorithms | glossed-at-first-use | Trace intervals overlapping one pulse's margin window. |
+| Interior set | A.3 Formal calibration algorithms | glossed-at-first-use | Local intervals wholly inside the plateau inset. |
+| robust SNR | A.3 Formal calibration algorithms | glossed-at-first-use | Fitted plateau amplitude divided by robust baseline scale. |
+| Edge coverage | A.3 Formal calibration algorithms | glossed-at-first-use | Local trace must extend through both fixed pulse-edge margins. |
+| The model and the objective | A.3 Formal calibration algorithms | glossed-at-first-use | Shifted rectangular-pulse interval average scored by standardized Huber residual loss. |
+| Huber loss | A.3 Formal calibration algorithms | glossed-at-first-use | Quadratic for small residuals and linear for large ones so one wild sample cannot dominate. |
+| The search (constrained coordinate descent) | A.3 Formal calibration algorithms | glossed-at-first-use | Alternate explicit onset and offset grid minimizations at coarse then fine steps. |
+| Shift limit | A.3 Formal calibration algorithms | glossed-at-first-use | Both fitted shifts must remain strictly below 0.5 s in magnitude. |
+| The set of acceptable edge pairs / loss limit | A.3 Formal calibration algorithms | glossed-at-first-use | Edge pairs with loss no more than best loss plus the fixed tolerance. |
+| accepted region | A.3 Formal calibration algorithms | glossed-at-first-use | All pulse-edge pairs whose loss is within that limit. |
+| Cell lower bound | A.3 Formal calibration algorithms | glossed-at-first-use | Sum of least attainable per-interval Huber values over one shift rectangle. |
+| interval branch-and-bound / region's enclosure | A.3 Formal calibration algorithms | glossed-at-first-use | Reject a rectangle only by a rigorous lower bound and retain passing resolution cells whole. |
+| Widening by stamp uncertainty | A.3 Formal calibration algorithms | glossed-at-first-use | Subtract or add each command stamp's half-width from its projected edge limits. |
+| detected | One diagnostic reconstruction | audience-vocabulary | Plain-English observation that all 59 pulses passed detection. |
+| worst excursion | A.3 Formal calibration algorithms | glossed-at-first-use | An edge's largest widened-region endpoint magnitude. |
+| observed sample maximum | A.3 Formal calibration algorithms | glossed-at-first-use | Largest of 118 observed edge excursions, without a population-coverage guarantee. |
+| Origin of the 120 s work clock | A.3 Formal calibration algorithms | glossed-at-first-use | The budget clock starts after baseline computation and before the first pulse fit. |
+| matching refusal / reproduced result | A.5 Interpreting a refusal | glossed-at-first-use | Identical bytes and plan should reproduce the same reason name; that refusal is a result. |
 
 The audit also searched the successor text for the retired campaign tag,
 retired model family, retired fixed-prompt labels, the false between-record
 pause mechanism, and the retired any-exceedance falsifier. Any occurrence is
-a failure. Terms the final first-use audit could not build: none.
+a failure. Terms inventoried: 152; FAILS: 0.
