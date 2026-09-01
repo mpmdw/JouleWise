@@ -568,6 +568,32 @@ class D117ContrastV5PackTests(unittest.TestCase):
         self.assertEqual(replay["point_unguarded_floor_j"], point)
         self.assertEqual(replay["ratio"], independent / point)
 
+    def test_common_mode_replay_uses_canonical_exact_corner_cap_before_enumeration(self) -> None:
+        fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
+        bracket = authenticated_bracket(fixture["operative_bound_s"])
+
+        with mock.patch.object(
+            self.generator, "comparative_false_effect_floor"
+        ) as floor:
+            with self.assertRaisesRegex(
+                ValueError, "common_mode_replay_block_count_invalid"
+            ):
+                self.generator.replay_common_mode_dominance(
+                    [{}] * (detection_floor.MAX_EXACT_ADMISSIBLE_CORNER_N + 1),
+                    calibration_bracket=bracket,
+                    shared_edge_bound_s=fixture["operative_bound_s"],
+                )
+        floor.assert_not_called()
+
+        with self.assertRaisesRegex(
+            ValueError, "common_mode_replay_window_domain_invalid"
+        ):
+            self.generator.replay_common_mode_dominance(
+                [{}] * detection_floor.MAX_EXACT_ADMISSIBLE_CORNER_N,
+                calibration_bracket=bracket,
+                shared_edge_bound_s=fixture["operative_bound_s"],
+            )
+
     def test_common_mode_replay_last_ulp_caller_bound_does_not_govern(self) -> None:
         fixture = json.loads(REAL_BLOCK_FIXTURE.read_text(encoding="utf-8"))
         authenticated_bound = float(fixture["operative_bound_s"])
