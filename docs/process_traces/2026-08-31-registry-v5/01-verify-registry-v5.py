@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Fail-closed census for the 2026-08-31 `_v5` registry regeneration."""
+"""POINT-IN-TIME MIGRATION VERIFIER (2026-08-31): validates the _v4->_v5
+regeneration diff against the pre-regeneration registry state. It is custody
+evidence, not a standing gate; re-running it after later registry commits
+compares the wrong baseline and its historical assertions may fail.
+
+Fail-closed census for the 2026-08-31 `_v5` registry regeneration."""
 
 from __future__ import annotations
 
