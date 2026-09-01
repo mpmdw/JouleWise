@@ -1,5 +1,12 @@
 # Round-7 retensing plan (prepared while draft-v1.md is frozen)
 
+> **PARKED (cold ruling, 2026-08-31): usable ONLY through the campaign fill
+> session's live adjudication.** The final pre-data adjudication returned 3
+> blockers / 13 should-fixes (`docs/process_traces/2026-08-31-registry-v5/11-final-adjudication-opus.md`);
+> the fill session cures that worklist FIRST (`12-PARK-DISPOSITION.md`), then
+> applies these sheets under a fresh seat. No further pre-data rounds.
+
+
 > **STATUS (2026-08-31, cold-ruled perimeter round executed): HELD — the six adjudication-2 blockers and eight should-fixes are installed; awaiting the one final fresh joint pedagogy adjudication before mechanical substitution.**
 > The rewrite implements the magistrate's R-1 through R-6 rulings, D-164, D-165 including its completed R-5, D-166 as amended, and reviewer-panel desk items 6, 10, 12, 13, and 16. The `_v5` registry is the only token vocabulary. `[PREFILL_LENGTH]` and every token containing it remain parameterized until the authenticated G2-a selection record issues.
 > Verified and preserved: every pre-existing frozen quote remains byte-exact on its named draft line. Item 60 now opens with the D-161 sentence, retains only the ruled internal-consistency clause after it, and drops the old first sentence. Outcome D is a prefix that combines with A, B, or C rather than a fourth exclusive result.

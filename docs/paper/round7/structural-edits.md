@@ -1,5 +1,12 @@
 # Round-7 structural-edit sheet (frozen draft remains read-only)
 
+> **PARKED (cold ruling, 2026-08-31): usable ONLY through the campaign fill
+> session's live adjudication.** The final pre-data adjudication returned 3
+> blockers / 13 should-fixes (`docs/process_traces/2026-08-31-registry-v5/11-final-adjudication-opus.md`);
+> the fill session cures that worklist FIRST (`12-PARK-DISPOSITION.md`), then
+> applies these sheets under a fresh seat. No further pre-data rounds.
+
+
 **PERIMETER CURES INSTALLED (cold ruling `../../process_traces/2026-08-31-registry-v5/09-COLD-RULING.md` Q2–Q3 — binding):** Every ratio construction in either sheet uses the unguarded corner and point floors before (g(n)) and the window allowance. S12–S13 replace the formerly fenced Table 1 and diagnostic-era predicate language with the diagnostic-label framing; no temporary fence remains.
 
 **STATUS (2026-08-31): PERIMETER ROUND COMPLETE; READY FOR THE ONE FINAL FRESH JOINT PEDAGOGY ADJUDICATION BEFORE MECHANICAL SUBSTITUTION.**
