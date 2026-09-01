@@ -507,5 +507,26 @@ class MixedWireAnchorTermIntersectionTests(unittest.TestCase):
             )
 
 
+class TransferFiducialAnalysisInputTests(unittest.TestCase):
+    def test_transfer_bundle_refused_by_analysis_inputs(self) -> None:
+        from joulewise.analysis_engine.inputs import (
+            _transfer_classification_reason_codes,
+        )
+        from joulewise.transfer_fiducial import TransferFiducialClass
+
+        class Reader:
+            @staticmethod
+            def transfer_fiducial_class():
+                return TransferFiducialClass(True, True, False, True)
+
+        self.assertEqual(
+            _transfer_classification_reason_codes(Reader()),
+            (
+                "transfer_fiducial_claim_ineligible",
+                "transfer_fiducial_class_inconsistent",
+            ),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

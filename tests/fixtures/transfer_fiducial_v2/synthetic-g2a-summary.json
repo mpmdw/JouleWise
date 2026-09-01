@@ -1,0 +1,26 @@
+[
+  {
+    "all_small_count_ge_5": true,
+    "length": 512,
+    "small_members": 5,
+    "small_minimum_count": 5
+  },
+  {
+    "all_small_count_ge_5": true,
+    "length": 1024,
+    "small_members": 5,
+    "small_minimum_count": 5
+  },
+  {
+    "all_small_count_ge_5": true,
+    "length": 2048,
+    "small_members": 5,
+    "small_minimum_count": 5
+  },
+  {
+    "all_small_count_ge_5": true,
+    "length": 4096,
+    "small_members": 5,
+    "small_minimum_count": 5
+  }
+]

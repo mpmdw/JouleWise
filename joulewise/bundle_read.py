@@ -403,6 +403,19 @@ class BundleReader:
     def raw_summary(self) -> dict[str, Any] | None:
         return self._tolerant_json("summary_metrics.json")
 
+    def transfer_fiducial_class(self):
+        """Return the central structural diagnostic classification."""
+
+        from joulewise.transfer_fiducial import classify_bundle
+
+        try:
+            events = self.events()
+        except BundleReadError:
+            # Preserve config-side diagnostic classification even when the
+            # ordinary strict-validation path separately rejects event damage.
+            events = ()
+        return classify_bundle(self.raw_config(), events)
+
     def is_event_v2(self) -> bool:
         metadata = self.raw_metadata()
         return isinstance(metadata, dict) and metadata.get(

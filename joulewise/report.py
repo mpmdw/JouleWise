@@ -98,6 +98,7 @@ class _Bundle:
     reader: BundleReader
     strict_validation: str
     strict_problems: tuple[str, ...]
+    transfer_fiducial: bool = False
 
     @property
     def status(self) -> str:
@@ -206,6 +207,10 @@ def _discover_bundles(runs_dir: Path) -> list[_Bundle]:
             continue
         reader = BundleReader(child)
         strict_validation, strict_problems = _strict_validation(child)
+        try:
+            transfer_fiducial = reader.transfer_fiducial_class().is_diagnostic
+        except Exception:
+            transfer_fiducial = False
         bundles.append(
             _Bundle(
                 run_id=child.name,
@@ -217,6 +222,7 @@ def _discover_bundles(runs_dir: Path) -> list[_Bundle]:
                 reader=reader,
                 strict_validation=strict_validation,
                 strict_problems=strict_problems,
+                transfer_fiducial=transfer_fiducial,
             )
         )
     return bundles
@@ -459,7 +465,14 @@ def _render_index(bundles: list[_Bundle]) -> str:
             link = _esc(bundle.run_id)
         rows.append(
             "<tr>"
-            f"<td><code>{_esc(bundle.run_id)}</code></td>"
+            f"<td><code>{_esc(bundle.run_id)}</code>"
+            + (
+                "<br><strong>DIAGNOSTIC — non-claim-bearing "
+                "(transfer fiducial)</strong>"
+                if bundle.transfer_fiducial
+                else ""
+            )
+            + "</td>"
             f"<td>{_esc(bundle.target)}</td>"
             f"<td>{_esc(bundle.model)}</td>"
             f'<td class="{_status_class(bundle.status)}">{_esc(bundle.status)}</td>'
@@ -539,6 +552,11 @@ def _summary_metric_pairs(summary: dict[str, Any]) -> list[tuple[str, str]]:
 def _render_run_page(bundle: _Bundle, chart_rel: str | None) -> str:
     parts: list[str] = [f"<h1>Run <code>{_esc(bundle.run_id)}</code></h1>"]
     parts.append(_diagnostic_notice())
+    if bundle.transfer_fiducial:
+        parts.append(
+            '<div class="diagnostic-box"><p><strong>DIAGNOSTIC — '
+            "non-claim-bearing (transfer fiducial)</strong></p></div>"
+        )
     parts.append(
         f'<p>status: <span class="{_status_class(bundle.status)}">'
         f"{_esc(bundle.status)}</span></p>"

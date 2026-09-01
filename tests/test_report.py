@@ -26,7 +26,13 @@ from unittest import mock
 
 from joulewise.clock import FakeClock
 from joulewise.controller import run_benchmark
-from joulewise.report import ReportError, generate_report
+from joulewise.report import (
+    ReportError,
+    _discover_bundles,
+    _render_index,
+    _render_run_page,
+    generate_report,
+)
 from joulewise.schemas import BenchmarkConfig
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -57,6 +63,32 @@ class ReportTestCase(unittest.TestCase):
         # One succeeded run and one unsupported run, the contract's two shapes.
         _build_bundle(self.runs_dir, "report-success")
         _build_bundle(self.runs_dir, "report-unsupported", unsupported=True)
+
+    def test_transfer_report_labels_bundle_diagnostic_nonclaim(self) -> None:
+        bundle = self.runs_dir / "report-success"
+        config_path = bundle / "config.json"
+        config = json.loads(config_path.read_text())
+        config["workload_profile"]["transfer_fiducial_gap_s"] = 0.5
+        config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+        rows = [
+            {
+                "timestamp_s": 1.0,
+                "event_type": "fiducial_gap_start",
+                "phase": "fiducial_gap",
+                "message": "synthetic gap",
+                "metadata": {},
+            }
+        ]
+        (bundle / "events.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in rows)
+        )
+        bundles = _discover_bundles(self.runs_dir)
+        transfer = next(row for row in bundles if row.run_id == "report-success")
+        label = "DIAGNOSTIC — non-claim-bearing (transfer fiducial)"
+        self.assertTrue(transfer.transfer_fiducial)
+        self.assertIn(label, _render_index(bundles))
+        self.assertIn(label, _render_run_page(transfer, None))
+        self.assertEqual(len(bundles), 2)
 
 
 # ---------------------------------------------------------------------------

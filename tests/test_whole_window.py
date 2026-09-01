@@ -1382,5 +1382,37 @@ class LaunchLineageWholeWindowTests(unittest.TestCase):
                 )
 
 
+class TransferFiducialWholeWindowTests(unittest.TestCase):
+    def test_transfer_bundle_refused_by_whole_window(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "transfer"
+            bundle.mkdir()
+            (bundle / "config.json").write_text(
+                json.dumps(
+                    {"workload_profile": {"transfer_fiducial_gap_s": 0.5}}
+                )
+                + "\n"
+            )
+            (bundle / "events.jsonl").write_text("")
+            session = AuthenticatedConsumptionSession(
+                root,
+                {"transfer"},
+                calibration_ledger_snapshot=SimpleNamespace(refusal_reasons=()),
+            )
+            session._prepare(
+                bundle_paths={"transfer": bundle},
+                policy=SimpleNamespace(calibration_bracketing=object()),
+            )
+        self.assertFalse(session.ready)
+        self.assertEqual(
+            session.refusal_reasons,
+            (
+                "transfer_fiducial_claim_ineligible",
+                "transfer_fiducial_class_inconsistent",
+            ),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,27 @@
+{
+  "collection_prefill_tokens": 512,
+  "qualifying_prefill_tokens": [
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "refusal": null,
+  "rule": {
+    "all_small_count_ge_5_required": true,
+    "ladder_prefill_tokens": [
+      512,
+      1024,
+      2048,
+      4096
+    ],
+    "minimum_overlapping_power_interval_count": 5,
+    "minimum_small_members_per_rung": 5,
+    "reducer_min_phase_samples": 3,
+    "selection": "shortest_qualifying_rung"
+  },
+  "schema_version": "joulewise.g2a_prefill_selection.v1",
+  "selected_prefill_tokens": 512,
+  "status": "selected",
+  "summary_sha256": "874389fdace7ac2e54827a1a8dc285213a2366969528d12e87ab219c680e6a59"
+}

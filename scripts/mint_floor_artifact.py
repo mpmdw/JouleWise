@@ -368,6 +368,14 @@ def _strict_bundle(
         bundle_path.relative_to(resolved_root)
     except ValueError as exc:
         raise MintError(f"{bundle_id}: bundle path escapes its evidence root") from exc
+    from joulewise.bundle_read import BundleReader
+    from joulewise.transfer_fiducial import classification_reason_codes
+
+    transfer_reasons = classification_reason_codes(
+        BundleReader(bundle_path).transfer_fiducial_class()
+    )
+    if transfer_reasons:
+        raise MintError(f"{bundle_id}: {transfer_reasons[0]}")
     try:
         problems = tuple(strict_validator(bundle_path, True))
     except Exception as exc:
