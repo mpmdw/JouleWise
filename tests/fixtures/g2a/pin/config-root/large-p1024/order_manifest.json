@@ -1,0 +1,1 @@
+{"schema_version":"joulewise.order_manifest.v1","manifest_id":"fixture-large-p1024-order-v1","planned_n_bundles":1,"executed_order":[{"index":1,"config":"g2a-large-p1024-r01.json","config_sha256":"0f3aaeaf7ec79dfdd1526e217090aeeff13708c10f3badcb2492de106c66ed9f","run_id":"g2a-large-p1024-r01","model_role":"large","prefill_tokens":1024,"rep":1}]}
