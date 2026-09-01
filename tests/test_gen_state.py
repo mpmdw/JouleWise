@@ -71,6 +71,11 @@ EXPECTED_IDS = {
     "V5-TRANSACTION-GO-01",
     "V5-TRANSACTION-01",
     "V5-NIGHTLY-G3-01",
+    # D-168 registers the close-out chain and the 126-key renderer successor.
+    "D165-CLOSEOUT-CORE-01",
+    "D165-SIDECAR-EMIT-01",
+    "RENDERER-V5-SUCCESSOR-01",
+    "D165-E2E-REPLAY-01",
     "V6-TOKEN-PIN-BINDING-01",
     "V6-SCORED-LEG-01",
     # 2026-08-25 T23-night kernel wave: the three D-153-sweep follow-ups the
@@ -525,9 +530,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         # (D-161 (1)); PIPELINE-SMOKE-LIVE-01 re-scoped to D-162 G1/G2/G3:
         # 105 - 1 + 4 = 108. D-167 retires the three D-117 windows and the
         # three unstarted readiness-sitting rows, then installs eight _v5/_v6
-        # rows: 108 - 6 + 8 = 110 exact live records.
+        # rows: 108 - 6 + 8 = 110 exact live records. D-168 then registers
+        # four close-out and renderer rows: 110 + 4 = 114.
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 110)
+        self.assertEqual(len(self.tasks), 114)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -730,6 +736,31 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.tasks["V5-G2A-PREFILL-PROBE-01"]["status"], "queued"
         )
 
+    def test_d168_closeout_rows_status_and_hard_start_dependencies(self):
+        expected = {
+            "D165-CLOSEOUT-CORE-01": ("active", set()),
+            "D165-SIDECAR-EMIT-01": (
+                "blocked", {"D165-CLOSEOUT-CORE-01"}
+            ),
+            "RENDERER-V5-SUCCESSOR-01": (
+                "blocked", {"V5-G2A-PREFILL-PROBE-01"}
+            ),
+            "D165-E2E-REPLAY-01": (
+                "blocked",
+                {"D165-SIDECAR-EMIT-01", "RENDERER-V5-SUCCESSOR-01"},
+            ),
+        }
+        for tid, (status, hard_dependencies) in expected.items():
+            with self.subTest(tid=tid):
+                self.assertEqual(
+                    (
+                        tid in self.tasks,
+                        self.tasks[tid]["status"],
+                        self._hard_start_targets(tid),
+                    ),
+                    (True, status, hard_dependencies),
+                )
+
     def test_new_hardening_followups(self):
         self.assertEqual(self._hard_start_targets("P2-046B"), set())
         p2_038_dep = next(
@@ -901,7 +932,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
         selected = gen_state.selectable_task_ids(kernel)
         self.assertTrue(set(oracle["must_suppress_task_ids"]).isdisjoint(selected))
 
-    def test_run_state_suppressed_lane_heads_are_exactly_one_gated_entry_per_lane(self):
+    def test_run_state_gate_suppresses_lane_heads_but_active_work_continues(self):
         gate_oracle = load_fixture("historical_audit_gate.json")
         head_oracle = load_fixture("cleared_audit_gate.json")
         head_oracle["expected_selectable_task_ids"][0] = "WO-LAUNCH-BINDING"
@@ -913,6 +944,7 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             kernel["tasks"][task_id]["lane"]: task_id
             for task_id in head_oracle["expected_selectable_task_ids"]
         }
+        expected_by_lane["agent"] = "D165-CLOSEOUT-CORE-01"
         self.assertEqual(set(expected_by_lane), set(gen_state.LANES))
 
         restart = rendered.split("## Restart By Machine-State Lane", 1)[1]
@@ -926,13 +958,22 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             self.assertEqual(len(entries), 1, lane)
             task_id = expected_by_lane[lane]
             task = kernel["tasks"][task_id]
-            self.assertTrue(
-                entries[0].startswith(
-                    f"- GATED — {gen_state.LANE_PREFIX[lane]}{task['rank']} `{task_id}` "
-                ),
-                entries[0],
-            )
-            self.assertIn(f"(excluded by: {gate_id})", entries[0])
+            if task["status"] == "active":
+                self.assertTrue(
+                    entries[0].startswith(
+                        f"- CONTINUE — {gen_state.LANE_PREFIX[lane]}{task['rank']} `{task_id}`:"
+                    ),
+                    entries[0],
+                )
+                self.assertNotIn("excluded by:", entries[0])
+            else:
+                self.assertTrue(
+                    entries[0].startswith(
+                        f"- GATED — {gen_state.LANE_PREFIX[lane]}{task['rank']} `{task_id}` "
+                    ),
+                    entries[0],
+                )
+                self.assertIn(f"(excluded by: {gate_id})", entries[0])
             self.assertNotIn("READY", entries[0])
 
     def test_clearing_gate_restores_exact_dependency_rank_heads(self):
