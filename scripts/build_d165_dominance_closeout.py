@@ -18,10 +18,12 @@ if str(REPO_ROOT) not in sys.path:
 
 from joulewise.dominance_closeout import (  # noqa: E402
     CLOSEOUT_SCHEMA_VERSION,
+    CLOSEOUT_INPUT_MALFORMED_SOURCE,
     FINALIZED_MANIFEST_SCHEMA_VERSION,
     FLOOR_ARTIFACT_SCHEMA_VERSION,
     REPLAY_SCHEMA_VERSION,
     _build_independent_record,
+    _decode_json_object_bytes,
     _expected_closeout_common_record,
     _expected_global_fields,
     _floor_cell_map,
@@ -50,24 +52,21 @@ def _source_reference(
 
 
 def build_d165_dominance_closeout(
-    finalized_manifest: Mapping[str, Any],
-    floor_artifact: Mapping[str, Any],
-    replay_sidecar: Mapping[str, Any],
-    *,
     finalized_manifest_bytes: bytes,
+    floor_artifact_bytes: bytes,
     replay_sidecar_bytes: bytes,
 ) -> dict[str, Any]:
-    """Build twelve ratio slots and apply the registered A/B/stop rule."""
+    """Decode three exact source files and apply the registered A/B/stop rule."""
 
-    if not all(
-        isinstance(value, Mapping)
-        for value in (finalized_manifest, floor_artifact, replay_sidecar)
-    ):
-        raise TypeError("D-165 close-out sources must be JSON objects")
-    if not isinstance(finalized_manifest_bytes, bytes):
-        raise TypeError("finalized_manifest_bytes must be exact file bytes")
-    if not isinstance(replay_sidecar_bytes, bytes):
-        raise TypeError("replay_sidecar_bytes must be exact file bytes")
+    finalized_manifest = _decode_json_object_bytes(
+        finalized_manifest_bytes, label="finalized_manifest"
+    )
+    floor_artifact = _decode_json_object_bytes(
+        floor_artifact_bytes, label="floor_artifact"
+    )
+    replay_sidecar = _decode_json_object_bytes(
+        replay_sidecar_bytes, label="replay_sidecar"
+    )
 
     floor_cells, floor_errors = _floor_cell_map(floor_artifact)
     if floor_errors:
@@ -143,12 +142,16 @@ def build_d165_dominance_closeout(
                 )
             )
 
-    source_errors = _source_precondition_errors(
-        finalized_manifest,
-        floor_artifact,
-        replay_sidecar,
-        replay_sidecar_bytes=replay_sidecar_bytes,
-    )
+    try:
+        source_errors = _source_precondition_errors(
+            finalized_manifest,
+            floor_artifact,
+            replay_sidecar,
+            floor_artifact_bytes=floor_artifact_bytes,
+            replay_sidecar_bytes=replay_sidecar_bytes,
+        )
+    except TypeError:
+        source_errors = [CLOSEOUT_INPUT_MALFORMED_SOURCE]
     global_fields = _expected_global_fields(
         independent_ratios,
         common_mode_ratios,
@@ -183,10 +186,8 @@ def build_d165_dominance_closeout(
     }
     errors = validate_d165_closeout(
         closeout,
-        finalized_manifest=finalized_manifest,
-        floor_artifact=floor_artifact,
-        replay_sidecar=replay_sidecar,
         finalized_manifest_bytes=finalized_manifest_bytes,
+        floor_artifact_bytes=floor_artifact_bytes,
         replay_sidecar_bytes=replay_sidecar_bytes,
     )
     if errors:
@@ -194,15 +195,11 @@ def build_d165_dominance_closeout(
     return closeout
 
 
-def _read_json_object(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
+def _read_source_bytes(path: Path, label: str) -> bytes:
     try:
-        raw = path.read_bytes()
-        value = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return path.read_bytes()
+    except OSError as exc:
         raise ValueError(f"{label} is unreadable: {exc}") from exc
-    if not isinstance(value, dict):
-        raise ValueError(f"{label} must contain one JSON object")
-    return value, raw
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -221,19 +218,19 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        finalized_manifest, finalized_manifest_bytes = _read_json_object(
+        finalized_manifest_bytes = _read_source_bytes(
             args.finalized_manifest, "finalized manifest"
         )
-        floor_artifact, _ = _read_json_object(args.floor_artifact, "floor artifact")
-        replay_sidecar, replay_sidecar_bytes = _read_json_object(
+        floor_artifact_bytes = _read_source_bytes(
+            args.floor_artifact, "floor artifact"
+        )
+        replay_sidecar_bytes = _read_source_bytes(
             args.replay_sidecar, "replay sidecar"
         )
         closeout = build_d165_dominance_closeout(
-            finalized_manifest,
-            floor_artifact,
-            replay_sidecar,
-            finalized_manifest_bytes=finalized_manifest_bytes,
-            replay_sidecar_bytes=replay_sidecar_bytes,
+            finalized_manifest_bytes,
+            floor_artifact_bytes,
+            replay_sidecar_bytes,
         )
     except (TypeError, ValueError) as exc:
         print(f"d165_dominance_closeout_refused: {exc}", file=sys.stderr)

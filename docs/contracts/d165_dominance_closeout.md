@@ -11,6 +11,18 @@ condition, and a **comparative component**, which measures A/B/B/A blocks. An
 **A/B/B/A block** is four measurements ordered A1, B1, B2, A2; that order lets
 the comparative estimator cancel a slow linear drift.
 
+A **replay sidecar** (shortened to **sidecar**) is the separate JSON file that
+holds the physical A/B/B/A operands needed to replay the common-mode result.
+The **close-out builder** is the function that reads the exact bytes of the
+finalized manifest, floor artifact, and sidecar and produces the one decision
+record defined below. **Lineage** is the chain of custody between those physical
+files: each link names an identity and digest so a later reader can prove which
+bytes fed the next link. A **census** is an exact inventory—both membership and
+count—such as four cell identities producing eight ordinary records. **Neither
+branch** is the fail-closed state used when the evidence cannot truthfully select
+A or B: `branch` and both `all_*_pass` fields are null, both prose licenses are
+false, and `refusal_reason` names the broken link.
+
 An **ordinary dominance ratio**, written R, divides the corner-widened
 unguarded floor by the point unguarded floor. A **corner** selects an allowed
 low or high endpoint for every uncertainty. “Unguarded” means the small-sample
@@ -29,6 +41,21 @@ A **manifest attachment** is an evidence record inside the finalized manifest
 that names an external file and seals its exact bytes with SHA-256, a 256-bit
 content digest. The attachment lets the finalized manifest authenticate the
 replay sidecar without copying its measurement operands into the manifest.
+
+## Forcing problems and worked examples
+
+Each mechanism exists because a simpler construction can state a result that
+the physical files do not support:
+
+| Mechanism | Forcing problem | Worked example |
+|---|---|---|
+| Ordinary R | A widened floor alone does not say whether attribution uncertainty dominates repeatability. | A 2.0 J corner-widened floor divided by a 1.0 J point floor gives R = 2.0 and passes; 1.5 J / 1.0 J gives R = 1.5 and selects B when every record is complete. |
+| Shared/local split and replay | Giving every block an independent timing sign can claim combinations that one shared clock edge cannot physically take. | Measured block `b01` has `delta_j = 0.21462565134537215`, `shared_width_j = 0.2617693341828027`, and `local_width_j = 0.048579253149402035`. With the authenticated `shared_edge_bound_s = 0.03678263869781979`, the two-block replay gives point 2.430576610260499 J, corner 8.830437643102993 J, and R_cm = 3.6330628731577335. |
+| Attachment lineage | A sidecar identity without its bytes lets a different file reuse the name. | The worked sidecar bytes hash to `735863a0514611d4a326ea225663027623d5f119fa6cf5d58b9557d230814be7`; changing one operand changes that digest and yields `replay_sidecar_digest_mismatch`. |
+| Exact census | Twelve plausible records can still omit a physical cell and duplicate another. | Cells `cell-decode-a`, `cell-decode-b`, `cell-prefill_p256-a`, and `cell-prefill_p256-b` must yield exactly eight ordinary slots (4 × 2 components) and four R_cm slots (4 × 1 comparative component). |
+| Byte-only source custody | A parsed object and an authenticated byte string supplied through two channels can describe different artifacts. | A close-out built from sidecar bytes X must validate against X. If block 0's energy operands are multiplied by 0.9 and its split/result are recomputed into bytes Y, validation still refuses because X's stored file digest does not equal Y's digest, even though Y is internally consistent. |
+| Manifest-sealed floor | A close-out canonical digest can authenticate a newly rendered floor Y while the finalized manifest separately seals floor X; both digests can be individually valid but authenticate different artifacts. | The worked manifest seals floor X as `5be2fdc561e93b40810d6707f531e1d8668f2a675586a2d6ddbeccbc4dbe8a8c`. Changing one corner from 2.0 J to 2.1 J produces floor Y at `39221b0503af3479db2bad595c2e7201a522b0e5e1dc4b426562e7b538854099`; the builder records `floor_artifact_source_hash_mismatch` and selects neither branch. |
+| Exclusive output creation | Overwriting an older close-out destroys the physical record needed to explain a published decision. | If `closeout.json` already contains 1,024 bytes, `--output closeout.json` writes zero bytes and returns `output_already_exists`; the original 1,024 bytes remain. |
 
 ## Shared arithmetic
 
@@ -60,7 +87,7 @@ tolerance of exactly `1e-12` seconds. The exact-corner cap is exactly 16 blocks:
 the implementation reads `MAX_EXACT_ADMISSIBLE_CORNER_N`, whose registered
 value is 16, and rejects 17 or more.
 
-For an ordinary point floor, the close-out builder calls
+For an ordinary point floor, the already-defined close-out builder calls
 `joulewise.detection_floor._point_floor_diagnostic` on the floor artifact's
 unconditional parents. It does not copy that function's maximum calculation.
 The absolute parent is `max_abs_residual_j`; the comparative parent is
@@ -68,7 +95,7 @@ The absolute parent is `max_abs_residual_j`; the comparative parent is
 
 ## Replay sidecar: `joulewise.d165_dominance_replay.v1`
 
-The sidecar is a JSON object with exactly these top-level fields:
+The replay sidecar is a JSON object with exactly these top-level fields:
 
 | Field | Type | Meaning and producer |
 |---|---|---|
@@ -168,7 +195,10 @@ def d165_replay_blocks_from_mint_inputs(
 ```
 
 The adapter checks aligned lengths, unique nonempty block identities, the
-16-block cap, and finite deltas. It copies the six fields held by each
+16-block cap, and finite deltas. An unhashable block identity, for example
+`block_ids=[[]]`, is caught at this entry boundary and becomes
+`closeout_input_malformed: replay.block_ids`; Python's incidental `TypeError`
+does not escape. The adapter copies the six fields held by each
 `_CommonModeBlockInputs` record, adds `block_id` and `delta_j`, and computes
 `derived_split` through `split_common_mode_block_width`. Stage 2 may wrap those
 records with the cell's independent records, authenticated bracket, bound,
@@ -188,8 +218,8 @@ The finalized manifest's `evidence` object must contain
 | `schema_version` | string | Exact replay-sidecar schema version. |
 | `sidecar_id` | nonempty string | Exact replay-sidecar identity. |
 
-The producer side—emitting this entry from the finalizer—is the work of
-`D165-SIDECAR-EMIT-01`.
+Producer→finalizer sidecar custody is unproven until
+`D165-SIDECAR-EMIT-01` lands; the paper cannot cite a close-out before then.
 
 For every finalized-manifest contrast, the exact per-contrast membership field
 is `contrasts[].block_ids` at `joulewise/analysis_manifest_v3.py:3696`; each
@@ -198,6 +228,65 @@ of those identities is materialized as a top-level `blocks[].block_id` row at
 sidecar block IDs for both contrast cells to equal that manifest set. The
 attachment hash authenticates every sidecar operand together, so the consumer
 does not compare per-block operands against the manifest.
+
+## Byte-only builder, validator, and command line
+
+The Python API has one source channel. It never accepts a decoded manifest,
+floor, or sidecar object alongside separately authenticated bytes:
+
+```python
+build_d165_dominance_closeout(
+    finalized_manifest_bytes: bytes,
+    floor_artifact_bytes: bytes,
+    replay_sidecar_bytes: bytes,
+) -> dict[str, Any]
+
+validate_d165_closeout(
+    value: Mapping[str, Any],
+    *,
+    finalized_manifest_bytes: bytes,
+    floor_artifact_bytes: bytes,
+    replay_sidecar_bytes: bytes,
+) -> list[str]
+```
+
+Both functions decode all three UTF-8 JSON objects internally. The forcing
+problem is the split-channel pair in the worked table: authenticating bytes X
+while calculating from object Y would let Y license A without ever appearing
+in the authenticated file. With one channel, calculation and authentication
+necessarily consume the same decoded bytes.
+
+After decoding, both entry paths perform their census and block-membership
+computations inside one `TypeError` boundary. A malformed source set records
+`closeout_input_malformed: source.census_or_block_membership`; a malformed
+close-out record census records
+`closeout_input_malformed: closeout.independent_ratios`. For example,
+`contrasts[0].block_ids=[[]]` cannot be hashed, so the builder emits the first
+reason with neither branch selected instead of crashing. Likewise, replacing
+one close-out `component` string with `[]` requires the second reason and the
+same neither-branch fields.
+
+The floor byte check is independent of the close-out's canonical JSON source
+reference. The builder and validator hash `floor_artifact_bytes` exactly as
+read and compare that value with
+`finalized_manifest.evidence.aggregate_floor_artifact.sha256`. The two-digest
+forcing problem is concrete: without this comparison, the manifest can
+correctly authenticate floor X while `closeout.sources.floor_artifact`
+correctly authenticates a different floor Y. A mismatch records
+`floor_artifact_source_hash_mismatch` before an operand-alignment message, so
+the refusal says the supplied floor is not the artifact the manifest sealed.
+
+The runnable command is:
+
+```text
+python3 scripts/build_d165_dominance_closeout.py --finalized-manifest … --floor-artifact … --replay-sidecar … [--output …]
+```
+
+The command reads each named file once as bytes and passes only those three
+byte strings to the builder. Without `--output`, it prints the close-out to
+standard output. With `--output`, it creates the named file exclusively. If
+that path already exists, it preserves the existing bytes, writes no close-out,
+returns exit status 2, and prints the named refusal `output_already_exists`.
 
 ## Close-out: `joulewise.d165_dominance_closeout.v1`
 
@@ -225,16 +314,18 @@ The close-out is a JSON object with exactly these top-level fields:
 |---|---|---|
 | `schema_version` | string | The source's exact schema version. |
 | `identity` | nonempty string | `manifest_id`, `artifact_id`, or `sidecar_id`, respectively. |
-| `canonical_json_sha256` | 64-character lowercase hexadecimal string | SHA-256 of the complete source object's canonical JSON. `validate_d165_closeout` requires the three source objects and recomputes every digest. |
+| `canonical_json_sha256` | 64-character lowercase hexadecimal string | SHA-256 of the complete source object's canonical JSON. `validate_d165_closeout` decodes the three required byte strings internally and recomputes every digest. |
 
 The two top-level file-byte digests intentionally complement these canonical
-JSON source references: `validate_d165_closeout` rechecks them whenever the
-caller supplies the corresponding file bytes, so whitespace, order, or content
-drift in a committed fixture is not silently accepted.
+JSON source references: `validate_d165_closeout` always rechecks the required
+manifest and sidecar bytes, so whitespace, order, or content drift in a
+committed fixture is not silently accepted. The floor's exact file bytes are
+bound by the finalized manifest's aggregate-floor attachment as described
+above.
 
 Every `independent_ratios[]` record is the sidecar independent-ratio record
 plus `cell_id` and `component`. `component` is `absolute` or `comparative`.
-The census must contain each of the four cell identities exactly twice, once
+The already-defined census must contain each of the four cell identities exactly twice, once
 per component. The close-out builder reads the operands again from the floor
 artifact rather than trusting the sidecar copy.
 
@@ -263,7 +354,8 @@ Branch B requires all twelve values to be complete and at least one value to
 be below 2.0. Both prose licenses are false. A completed mix of passing and
 failing cells therefore selects B, not a stop.
 
-Neither branch is selected when a result cannot be truthfully completed. The
+The already-defined neither branch is selected when a result cannot be
+truthfully completed. The
 builder sets both `all_*_pass` fields and `branch` to null, both licenses to
 false, and `refusal_reason` to the first deterministic reason. Stop conditions
 are:
@@ -285,6 +377,11 @@ are:
   `schema_version` differs from the replay sidecar's own field.
 - `manifest_block_membership_mismatch`: a contrast cell's sidecar block-ID set
   differs from the set selected by the finalized manifest.
+- `floor_artifact_source_hash_mismatch`: the supplied floor bytes differ from
+  the aggregate floor artifact sealed by the finalized manifest.
+- `closeout_input_malformed: source.census_or_block_membership` or
+  `closeout_input_malformed: closeout.independent_ratios`: an unhashable JSON
+  element prevents a required set/map census at the named entry path.
 
 Each named attachment failure is a stop: it selects neither branch, leaves both
 prose licenses false, and records that exact name as `refusal_reason`.
@@ -293,9 +390,11 @@ A floor artifact with other than four unique complete cells cannot support the
 required eight-record ordinary census. The builder refuses to emit a close-out
 at all; this is also a neither-branch stop, not branch B.
 
-`validate_d165_closeout` rejects missing or extra keys, a census other than
+`validate_d165_closeout` decodes its three required source-byte arguments, then
+rejects missing or extra keys, a census other than
 eight ordinary plus four comparative common-mode records, non-finite completed
 values, inconsistent ratios or pass flags, incorrect branch fields, source
-operand/result drift, a source-hash mismatch, or either supplied file-byte
-digest mismatch. Validation is fail-closed: an empty error list is required
+operand/result drift, a canonical source-hash mismatch, a manifest or sidecar
+file-byte digest mismatch, or a floor byte digest different from the one sealed
+by the manifest. Validation is fail-closed: an empty error list is required
 before a close-out can be consumed.

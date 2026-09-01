@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import functools
 import hashlib
+import inspect
 import json
 import subprocess
 import sys
@@ -115,11 +116,23 @@ def _file_json_bytes(value: object) -> bytes:
     ).encode("utf-8")
 
 
+def mutate_then_encode(source_bytes: bytes, mutator) -> bytes:
+    """Decode, mutate, and canonical-file encode one JSON source."""
+
+    value = json.loads(source_bytes.decode("utf-8"))
+    mutator(value)
+    return _file_json_bytes(value)
+
+
 def _attach_replay_sidecar(
-    manifest: dict, sidecar: dict
-) -> tuple[bytes, bytes]:
+    manifest: dict, floor: dict, sidecar: dict
+) -> tuple[bytes, bytes, bytes]:
+    floor_bytes = _file_json_bytes(floor)
     sidecar_bytes = _file_json_bytes(sidecar)
     evidence = manifest["evidence"]
+    evidence["aggregate_floor_artifact"]["sha256"] = hashlib.sha256(
+        floor_bytes
+    ).hexdigest()
     # injected pending D165-SIDECAR-EMIT-01
     evidence["dominance_replay_sidecar"] = {
         "path": "dominance_replay_sidecar.json",
@@ -127,10 +140,7 @@ def _attach_replay_sidecar(
         "schema_version": sidecar["schema_version"],
         "sidecar_id": sidecar["sidecar_id"],
     }
-    with tempfile.TemporaryDirectory() as temporary:
-        manifest_path = Path(temporary) / "finalized_manifest.json"
-        manifest_path.write_bytes(_file_json_bytes(manifest))
-        return manifest_path.read_bytes(), sidecar_bytes
+    return _file_json_bytes(manifest), floor_bytes, sidecar_bytes
 
 
 def independent_from_component(component: dict, parent_key: str) -> dict:
@@ -267,13 +277,13 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         floor = floor_artifact() if floor is None else floor
         manifest = finalized_manifest()
         sidecar = replay_sidecar(floor, manifest)
-        manifest_bytes, sidecar_bytes = _attach_replay_sidecar(manifest, sidecar)
+        manifest_bytes, floor_bytes, sidecar_bytes = _attach_replay_sidecar(
+            manifest, floor, sidecar
+        )
         closeout = build_d165_dominance_closeout(
-            manifest,
-            floor,
-            sidecar,
-            finalized_manifest_bytes=manifest_bytes,
-            replay_sidecar_bytes=sidecar_bytes,
+            manifest_bytes,
+            floor_bytes,
+            sidecar_bytes,
         )
         return closeout, manifest, floor, sidecar
 
@@ -283,10 +293,8 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         self.assertEqual(
             core.validate_d165_closeout(
                 closeout,
-                finalized_manifest=manifest,
-                floor_artifact=floor,
-                replay_sidecar=sidecar,
                 finalized_manifest_bytes=_file_json_bytes(manifest),
+                floor_artifact_bytes=_file_json_bytes(floor),
                 replay_sidecar_bytes=_file_json_bytes(sidecar),
             ),
             [],
@@ -309,9 +317,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 "exactly eight" in error
                 for error in core.validate_d165_closeout(
                     malformed,
-                    finalized_manifest=manifest,
-                    floor_artifact=floor,
-                    replay_sidecar=sidecar,
+                    finalized_manifest_bytes=_file_json_bytes(manifest),
+                    floor_artifact_bytes=_file_json_bytes(floor),
+                    replay_sidecar_bytes=_file_json_bytes(sidecar),
                 )
             )
         )
@@ -332,9 +340,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
         errors = core.validate_d165_closeout(
             closeout,
-            finalized_manifest=manifest,
-            floor_artifact=floor,
-            replay_sidecar=sidecar,
+            finalized_manifest_bytes=_file_json_bytes(manifest),
+            floor_artifact_bytes=_file_json_bytes(floor),
+            replay_sidecar_bytes=_file_json_bytes(sidecar),
         )
         self.assertIn(reason, errors)
         self.assertIsNone(closeout["branch"])
@@ -352,9 +360,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
         errors = core.validate_d165_closeout(
             closeout,
-            finalized_manifest=manifest,
-            floor_artifact=floor,
-            replay_sidecar=sidecar,
+            finalized_manifest_bytes=_file_json_bytes(manifest),
+            floor_artifact_bytes=_file_json_bytes(floor),
+            replay_sidecar_bytes=_file_json_bytes(sidecar),
         )
         self.assertIn(reason, errors)
         self.assertIn(
@@ -395,13 +403,13 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         manifest = finalized_manifest()
         sidecar = replay_sidecar(floor)
         missing_id = sidecar["cells"].pop()["cell_id"]
-        manifest_bytes, sidecar_bytes = _attach_replay_sidecar(manifest, sidecar)
+        manifest_bytes, floor_bytes, sidecar_bytes = _attach_replay_sidecar(
+            manifest, floor, sidecar
+        )
         closeout = build_d165_dominance_closeout(
-            manifest,
-            floor,
-            sidecar,
-            finalized_manifest_bytes=manifest_bytes,
-            replay_sidecar_bytes=sidecar_bytes,
+            manifest_bytes,
+            floor_bytes,
+            sidecar_bytes,
         )
         self.assertIsNone(closeout["branch"])
         self.assertFalse(closeout["dominance_sentence_licensed"])
@@ -416,33 +424,251 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
     def test_source_hash_mutation_refuses_validation(self) -> None:
         closeout, manifest, floor, sidecar = self.build()
-        mutated_floor = copy.deepcopy(floor)
-        mutated_floor["cells"][0]["absolute"][
-            "corner_widened_unguarded_floor_j"
-        ] = 2.1
-        errors = core.validate_d165_closeout(
-            closeout,
-            finalized_manifest=manifest,
-            floor_artifact=mutated_floor,
-            replay_sidecar=sidecar,
-        )
-        self.assertTrue(any("source-hash mismatch" in error for error in errors))
+        manifest_bytes = _file_json_bytes(manifest)
+        floor_bytes = _file_json_bytes(floor)
+        sidecar_bytes = _file_json_bytes(sidecar)
 
-        edited_manifest = copy.deepcopy(manifest)
-        edited_manifest["evidence"]["dominance_replay_sidecar"]["path"] = (
-            "moved-sidecar.json"
+        def mutate_floor(value: dict) -> None:
+            value["cells"][0]["absolute"][
+                "corner_widened_unguarded_floor_j"
+            ] = 2.1
+
+        mutated_floor_bytes = mutate_then_encode(floor_bytes, mutate_floor)
+        errors = core.validate_d165_closeout(
+            closeout,
+            finalized_manifest_bytes=manifest_bytes,
+            floor_artifact_bytes=mutated_floor_bytes,
+            replay_sidecar_bytes=sidecar_bytes,
+        )
+        self.assertIn(core.FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH, errors)
+
+        edited_manifest_bytes = mutate_then_encode(
+            manifest_bytes,
+            lambda value: value["evidence"]["dominance_replay_sidecar"].update(
+                {"path": "moved-sidecar.json"}
+            ),
         )
         errors = core.validate_d165_closeout(
             closeout,
-            finalized_manifest=edited_manifest,
-            floor_artifact=floor,
-            replay_sidecar=sidecar,
-            finalized_manifest_bytes=_file_json_bytes(edited_manifest),
-            replay_sidecar_bytes=_file_json_bytes(sidecar),
+            finalized_manifest_bytes=edited_manifest_bytes,
+            floor_artifact_bytes=floor_bytes,
+            replay_sidecar_bytes=sidecar_bytes,
         )
         self.assertIn(
             "closeout.finalized_manifest_sha256: source-byte-hash mismatch", errors
         )
+
+    def test_floor_bytes_must_match_the_artifact_digest_sealed_by_manifest(self) -> None:
+        _, manifest, floor, sidecar = self.build()
+        manifest_bytes = _file_json_bytes(manifest)
+        floor_bytes = _file_json_bytes(floor)
+        sidecar_bytes = _file_json_bytes(sidecar)
+        reminted_floor_bytes = mutate_then_encode(
+            floor_bytes,
+            lambda value: value["cells"][0]["absolute"].update(
+                {"corner_widened_unguarded_floor_j": 2.1}
+            ),
+        )
+        closeout = build_d165_dominance_closeout(
+            manifest_bytes, reminted_floor_bytes, sidecar_bytes
+        )
+        self.assertEqual(
+            closeout["refusal_reason"],
+            core.FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH,
+        )
+        self.assertIsNone(closeout["branch"])
+        self.assertFalse(closeout["dominance_sentence_licensed"])
+        self.assertFalse(closeout["subtitle_licensed"])
+        self.assertEqual(
+            core.validate_d165_closeout(
+                closeout,
+                finalized_manifest_bytes=manifest_bytes,
+                floor_artifact_bytes=reminted_floor_bytes,
+                replay_sidecar_bytes=sidecar_bytes,
+            ),
+            [],
+        )
+
+    def test_forged_sidecar_bytes_cannot_pair_with_closeout_built_from_other_bytes(
+        self,
+    ) -> None:
+        closeout, manifest, floor, sidecar = self.build()
+        manifest_bytes = _file_json_bytes(manifest)
+        floor_bytes = _file_json_bytes(floor)
+        sidecar_bytes = _file_json_bytes(sidecar)
+
+        def forge_self_consistent_pair(value: dict) -> None:
+            replay = value["cells"][0]["comparative"]["common_mode_replay"]
+            block = replay["inputs"]["blocks"][0]
+            block["delta_j"] *= 0.9
+            for field in (
+                "onset_sweep_j",
+                "offset_sweep_j",
+                "bundle_residual_half_widths_j",
+            ):
+                block[field] = [operand * 0.9 for operand in block[field]]
+            block["zero_point_contrast_j"] *= 0.9
+            block["member_envelope_integral_sum_j"] *= 0.9
+            block["derived_split"] = core.split_common_mode_block_width(
+                delta_j=block["delta_j"],
+                onset_sweep_j=block["onset_sweep_j"],
+                offset_sweep_j=block["offset_sweep_j"],
+                zero_point_contrast_j=block["zero_point_contrast_j"],
+                bundle_residual_half_widths_j=block[
+                    "bundle_residual_half_widths_j"
+                ],
+                member_envelope_integral_sum_j=block[
+                    "member_envelope_integral_sum_j"
+                ],
+            )
+            inputs = replay["inputs"]
+            replay["result"] = core.replay_common_mode_dominance(
+                [core._raw_replay_block(item) for item in inputs["blocks"]],
+                calibration_bracket=inputs["calibration_bracket"],
+                shared_edge_bound_s=inputs["shared_edge_bound_s"],
+            )
+
+        forged_sidecar_bytes = mutate_then_encode(
+            sidecar_bytes, forge_self_consistent_pair
+        )
+        self.assertEqual(
+            core.validate_d165_replay_sidecar(
+                json.loads(forged_sidecar_bytes.decode("utf-8"))
+            ),
+            [],
+        )
+        self.assertEqual(
+            core.validate_d165_closeout(
+                closeout,
+                finalized_manifest_bytes=manifest_bytes,
+                floor_artifact_bytes=floor_bytes,
+                replay_sidecar_bytes=sidecar_bytes,
+            ),
+            [],
+        )
+        errors = core.validate_d165_closeout(
+            closeout,
+            finalized_manifest_bytes=manifest_bytes,
+            floor_artifact_bytes=floor_bytes,
+            replay_sidecar_bytes=forged_sidecar_bytes,
+        )
+        self.assertIn(
+            "closeout.replay_sidecar_sha256: source-byte-hash mismatch", errors
+        )
+
+    def test_public_closeout_apis_expose_only_source_byte_channels(self) -> None:
+        forbidden = {"finalized_manifest", "floor_artifact", "replay_sidecar"}
+        for function in (
+            build_d165_dominance_closeout,
+            core.validate_d165_closeout,
+        ):
+            with self.subTest(function=function.__name__):
+                parameters = inspect.signature(function).parameters
+                self.assertTrue(
+                    {
+                        "finalized_manifest_bytes",
+                        "floor_artifact_bytes",
+                        "replay_sidecar_bytes",
+                    }
+                    <= set(parameters)
+                )
+                self.assertTrue(forbidden.isdisjoint(parameters))
+
+    def test_build_catches_unhashable_source_membership_as_named_neither(self) -> None:
+        _, manifest, floor, sidecar = self.build()
+        malformed_manifest_bytes = mutate_then_encode(
+            _file_json_bytes(manifest),
+            lambda value: value["contrasts"][0]["block_ids"].__setitem__(0, []),
+        )
+        floor_bytes = _file_json_bytes(floor)
+        sidecar_bytes = _file_json_bytes(sidecar)
+        closeout = build_d165_dominance_closeout(
+            malformed_manifest_bytes, floor_bytes, sidecar_bytes
+        )
+        self.assertEqual(
+            closeout["refusal_reason"], core.CLOSEOUT_INPUT_MALFORMED_SOURCE
+        )
+        self.assertIsNone(closeout["branch"])
+        self.assertFalse(closeout["dominance_sentence_licensed"])
+        self.assertFalse(closeout["subtitle_licensed"])
+        self.assertEqual(
+            core.validate_d165_closeout(
+                closeout,
+                finalized_manifest_bytes=malformed_manifest_bytes,
+                floor_artifact_bytes=floor_bytes,
+                replay_sidecar_bytes=sidecar_bytes,
+            ),
+            [],
+        )
+
+    def test_validate_catches_unhashable_closeout_census_as_named_neither(self) -> None:
+        closeout, manifest, floor, sidecar = self.build()
+        closeout["independent_ratios"][0]["component"] = []
+        self.set_neither_branch(closeout, core.CLOSEOUT_INPUT_MALFORMED_RECORDS)
+        self.assertEqual(
+            closeout["refusal_reason"], core.CLOSEOUT_INPUT_MALFORMED_RECORDS
+        )
+        self.assertEqual(
+            core.validate_d165_closeout(
+                closeout,
+                finalized_manifest_bytes=_file_json_bytes(manifest),
+                floor_artifact_bytes=_file_json_bytes(floor),
+                replay_sidecar_bytes=_file_json_bytes(sidecar),
+            ),
+            [],
+        )
+
+    def test_replay_sidecar_source_byte_hash_guard_is_isolated(self) -> None:
+        closeout, manifest, floor, sidecar = self.build()
+        closeout["replay_sidecar_sha256"] = "0" * 64
+        errors = core.validate_d165_closeout(
+            closeout,
+            finalized_manifest_bytes=_file_json_bytes(manifest),
+            floor_artifact_bytes=_file_json_bytes(floor),
+            replay_sidecar_bytes=_file_json_bytes(sidecar),
+        )
+        self.assertIn(
+            "closeout.replay_sidecar_sha256: source-byte-hash mismatch", errors
+        )
+
+    def test_each_partial_replay_attachment_refuses_as_manifest_lacks_sidecar(
+        self,
+    ) -> None:
+        _, manifest, floor, sidecar = self.build()
+        manifest_bytes = _file_json_bytes(manifest)
+        floor_bytes = _file_json_bytes(floor)
+        sidecar_bytes = _file_json_bytes(sidecar)
+        for missing_key in ("path", "sha256", "schema_version", "sidecar_id"):
+            with self.subTest(missing_key=missing_key):
+                partial_manifest_bytes = mutate_then_encode(
+                    manifest_bytes,
+                    lambda value, key=missing_key: value["evidence"][
+                        "dominance_replay_sidecar"
+                    ].pop(key),
+                )
+                closeout = build_d165_dominance_closeout(
+                    partial_manifest_bytes, floor_bytes, sidecar_bytes
+                )
+                self.assertEqual(
+                    closeout["refusal_reason"], "manifest_lacks_replay_sidecar"
+                )
+                self.assertIsNone(closeout["branch"])
+
+    def test_sidecar_attachment_schema_mismatch_has_identity_reason(self) -> None:
+        _, manifest, floor, sidecar = self.build()
+        manifest_bytes = mutate_then_encode(
+            _file_json_bytes(manifest),
+            lambda value: value["evidence"]["dominance_replay_sidecar"].update(
+                {"schema_version": "forged-schema"}
+            ),
+        )
+        closeout = build_d165_dominance_closeout(
+            manifest_bytes, _file_json_bytes(floor), _file_json_bytes(sidecar)
+        )
+        self.assertEqual(
+            closeout["refusal_reason"], "replay_sidecar_identity_mismatch"
+        )
+        self.assertIsNone(closeout["branch"])
 
     def test_validators_reject_missing_extra_and_nonfinite_fields(self) -> None:
         floor = floor_artifact()
@@ -681,9 +907,9 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 self.assertEqual(
                     core.validate_d165_closeout(
                         artifact,
-                        finalized_manifest=manifest,
-                        floor_artifact=floor,
-                        replay_sidecar=sidecar,
+                        finalized_manifest_bytes=_file_json_bytes(manifest),
+                        floor_artifact_bytes=_file_json_bytes(floor),
+                        replay_sidecar_bytes=_file_json_bytes(sidecar),
                     ),
                     [expected],
                 )
@@ -745,34 +971,44 @@ class D165DominanceCloseoutTests(unittest.TestCase):
             with self.subTest(guard=guard):
                 manifest_for_case = copy.deepcopy(manifest_value)
                 sidecar_for_case = copy.deepcopy(sidecar_value)
-                manifest_bytes, sidecar_bytes = _attach_replay_sidecar(
-                    manifest_for_case, sidecar_for_case
+                manifest_bytes, floor_bytes, sidecar_bytes = (
+                    _attach_replay_sidecar(
+                        manifest_for_case, floor_value, sidecar_for_case
+                    )
                 )
                 with self.assertRaisesRegex(ValueError, expected):
                     build_d165_dominance_closeout(
-                        manifest_for_case,
-                        floor_value,
-                        sidecar_for_case,
-                        finalized_manifest_bytes=manifest_bytes,
-                        replay_sidecar_bytes=sidecar_bytes,
+                        manifest_bytes,
+                        floor_bytes,
+                        sidecar_bytes,
                     )
 
-        attachment_cases: list[tuple[str, dict, dict, bytes, bytes, str]] = []
+        attachment_cases: list[
+            tuple[str, bytes, bytes, bytes, str]
+        ] = []
 
-        absent_manifest = copy.deepcopy(manifest)
+        attached_manifest = copy.deepcopy(manifest)
+        attached_manifest_bytes, floor_bytes, sidecar_bytes = (
+            _attach_replay_sidecar(attached_manifest, floor, sidecar)
+        )
+        absent_manifest_bytes = mutate_then_encode(
+            attached_manifest_bytes,
+            lambda value: value["evidence"].pop("dominance_replay_sidecar"),
+        )
         attachment_cases.append(
             (
                 "manifest attachment",
-                absent_manifest,
-                sidecar,
-                _file_json_bytes(absent_manifest),
-                _file_json_bytes(sidecar),
+                absent_manifest_bytes,
+                floor_bytes,
+                sidecar_bytes,
                 "manifest_lacks_replay_sidecar",
             )
         )
 
         digest_manifest = copy.deepcopy(manifest)
-        _, original_sidecar_bytes = _attach_replay_sidecar(digest_manifest, sidecar)
+        digest_manifest_bytes, digest_floor_bytes, original_sidecar_bytes = (
+            _attach_replay_sidecar(digest_manifest, floor, sidecar)
+        )
         forged_sidecar = copy.deepcopy(sidecar)
         forged_sidecar["cells"][0]["absolute"]["independent"].update(
             core._build_independent_record(
@@ -783,9 +1019,8 @@ class D165DominanceCloseoutTests(unittest.TestCase):
         attachment_cases.append(
             (
                 "sidecar digest",
-                digest_manifest,
-                forged_sidecar,
-                _file_json_bytes(digest_manifest),
+                digest_manifest_bytes,
+                digest_floor_bytes,
                 _file_json_bytes(forged_sidecar),
                 "replay_sidecar_digest_mismatch",
             )
@@ -814,31 +1049,34 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                     blocks, other["block_ids"], strict=True
                 ):
                     block["block_id"] = block_id
-        campaign_manifest_bytes, campaign_sidecar_bytes = _attach_replay_sidecar(
-            campaign_manifest, campaign_sidecar
+        campaign_manifest_bytes, campaign_floor_bytes, campaign_sidecar_bytes = (
+            _attach_replay_sidecar(campaign_manifest, floor, campaign_sidecar)
         )
         attachment_cases.append(
             (
                 "manifest block membership",
-                campaign_manifest,
-                campaign_sidecar,
                 campaign_manifest_bytes,
+                campaign_floor_bytes,
                 campaign_sidecar_bytes,
                 "manifest_block_membership_mismatch",
             )
         )
 
         identity_manifest = copy.deepcopy(manifest)
-        _, identity_sidecar_bytes = _attach_replay_sidecar(identity_manifest, sidecar)
-        identity_manifest["evidence"]["dominance_replay_sidecar"]["sidecar_id"] = (
-            "other-sidecar"
+        identity_manifest_bytes, identity_floor_bytes, identity_sidecar_bytes = (
+            _attach_replay_sidecar(identity_manifest, floor, sidecar)
+        )
+        identity_manifest_bytes = mutate_then_encode(
+            identity_manifest_bytes,
+            lambda value: value["evidence"]["dominance_replay_sidecar"].update(
+                {"sidecar_id": "other-sidecar"}
+            ),
         )
         attachment_cases.append(
             (
                 "sidecar identity",
-                identity_manifest,
-                sidecar,
-                _file_json_bytes(identity_manifest),
+                identity_manifest_bytes,
+                identity_floor_bytes,
                 identity_sidecar_bytes,
                 "replay_sidecar_identity_mismatch",
             )
@@ -846,19 +1084,16 @@ class D165DominanceCloseoutTests(unittest.TestCase):
 
         for (
             guard,
-            manifest_value,
-            sidecar_value,
             manifest_bytes,
+            floor_bytes,
             sidecar_bytes,
             expected,
         ) in attachment_cases:
             with self.subTest(guard=guard):
                 closeout = build_d165_dominance_closeout(
-                    manifest_value,
-                    floor,
-                    sidecar_value,
-                    finalized_manifest_bytes=manifest_bytes,
-                    replay_sidecar_bytes=sidecar_bytes,
+                    manifest_bytes,
+                    floor_bytes,
+                    sidecar_bytes,
                 )
                 self.assertIsNone(closeout["branch"])
                 self.assertFalse(closeout["dominance_sentence_licensed"])
@@ -867,10 +1102,8 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 self.assertEqual(
                     core.validate_d165_closeout(
                         closeout,
-                        finalized_manifest=manifest_value,
-                        floor_artifact=floor,
-                        replay_sidecar=sidecar_value,
                         finalized_manifest_bytes=manifest_bytes,
+                        floor_artifact_bytes=floor_bytes,
                         replay_sidecar_bytes=sidecar_bytes,
                     ),
                     [],
@@ -1028,6 +1261,12 @@ class D165DominanceCloseoutTests(unittest.TestCase):
                 [block["block_id"] for block in blocks],
                 [block["delta_j"] for block in blocks[:-1]],
                 [object() for _ in blocks],
+            )
+        with self.assertRaisesRegex(
+            ValueError, core.CLOSEOUT_INPUT_MALFORMED_ADAPTER
+        ):
+            core.d165_replay_blocks_from_mint_inputs(
+                [[]], [blocks[0]["delta_j"]], [object()]
             )
 
 

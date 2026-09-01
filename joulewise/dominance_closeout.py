@@ -35,6 +35,14 @@ COMMON_MODE_RATIO_ID = "attribution_dominance_ratio_common_mode.v1"
 DOMINANCE_THRESHOLD = 2.0
 DOMINANCE_COMPARISON = "greater_than_or_equal"
 DOMINANCE_ZERO_DENOMINATOR_REASON = "dominance_ratio_zero_denominator"
+FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH = "floor_artifact_source_hash_mismatch"
+CLOSEOUT_INPUT_MALFORMED_SOURCE = (
+    "closeout_input_malformed: source.census_or_block_membership"
+)
+CLOSEOUT_INPUT_MALFORMED_RECORDS = (
+    "closeout_input_malformed: closeout.independent_ratios"
+)
+CLOSEOUT_INPUT_MALFORMED_ADAPTER = "closeout_input_malformed: replay.block_ids"
 COMMON_MODE_REPLAY_RULE_ID = "d165_shared_sign_local_corner_replay.v1"
 ABSOLUTE_COMMON_MODE_REASON = (
     "the absolute estimator uses deviations from the mean, so a uniform shared "
@@ -153,6 +161,10 @@ __all__ = [
     "DOMINANCE_THRESHOLD",
     "DOMINANCE_COMPARISON",
     "DOMINANCE_ZERO_DENOMINATOR_REASON",
+    "FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH",
+    "CLOSEOUT_INPUT_MALFORMED_SOURCE",
+    "CLOSEOUT_INPUT_MALFORMED_RECORDS",
+    "CLOSEOUT_INPUT_MALFORMED_ADAPTER",
     "COMMON_MODE_REPLAY_RULE_ID",
     "COMMON_MODE_INPUT_FIELDS",
     "ABSOLUTE_COMMON_MODE_REASON",
@@ -186,6 +198,20 @@ def _raw_sha256(value: bytes) -> str:
     """Return the SHA-256 of the exact bytes read from an artifact file."""
 
     return hashlib.sha256(value).hexdigest()
+
+
+def _decode_json_object_bytes(value: bytes, *, label: str) -> dict[str, Any]:
+    """Decode one exact UTF-8 JSON source without accepting an object channel."""
+
+    if not isinstance(value, bytes):
+        raise TypeError(f"{label}_bytes must be exact file bytes")
+    try:
+        decoded = json.loads(value.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{label}_bytes must contain one UTF-8 JSON object") from exc
+    if not isinstance(decoded, dict):
+        raise ValueError(f"{label}_bytes must contain one UTF-8 JSON object")
+    return decoded
 
 
 def dominance_ratio(
@@ -319,20 +345,27 @@ def d165_replay_blocks_from_mint_inputs(
     """
 
     reason = "d165_mint_adapter_input_invalid"
-    if (
-        isinstance(block_ids, (str, bytes))
-        or isinstance(block_deltas_j, (str, bytes))
-        or isinstance(block_inputs, (str, bytes))
-        or not isinstance(block_ids, Sequence)
-        or not isinstance(block_deltas_j, Sequence)
-        or not isinstance(block_inputs, Sequence)
-        or not block_ids
-        or len(block_ids) != len(block_deltas_j)
-        or len(block_ids) != len(block_inputs)
-        or len(block_ids) > MAX_EXACT_ADMISSIBLE_CORNER_N
-        or len(set(block_ids)) != len(block_ids)
-        or any(not isinstance(block_id, str) or not block_id for block_id in block_ids)
-    ):
+    try:
+        invalid = (
+            isinstance(block_ids, (str, bytes))
+            or isinstance(block_deltas_j, (str, bytes))
+            or isinstance(block_inputs, (str, bytes))
+            or not isinstance(block_ids, Sequence)
+            or not isinstance(block_deltas_j, Sequence)
+            or not isinstance(block_inputs, Sequence)
+            or not block_ids
+            or len(block_ids) != len(block_deltas_j)
+            or len(block_ids) != len(block_inputs)
+            or len(block_ids) > MAX_EXACT_ADMISSIBLE_CORNER_N
+            or len(set(block_ids)) != len(block_ids)
+            or any(
+                not isinstance(block_id, str) or not block_id
+                for block_id in block_ids
+            )
+        )
+    except TypeError as exc:
+        raise ValueError(CLOSEOUT_INPUT_MALFORMED_ADAPTER) from exc
+    if invalid:
         raise ValueError(reason)
 
     records: list[dict[str, Any]] = []
@@ -1169,6 +1202,30 @@ def _manifest_replay_sidecar_attachment_errors(
     return []
 
 
+def _manifest_floor_artifact_digest_error(
+    finalized_manifest: object,
+    floor_artifact_bytes: bytes,
+) -> str | None:
+    """Bind the supplied floor file to the exact bytes sealed by the manifest."""
+
+    if not isinstance(finalized_manifest, Mapping):
+        return None
+    evidence = finalized_manifest.get("evidence")
+    attachment = (
+        evidence.get("aggregate_floor_artifact")
+        if isinstance(evidence, Mapping)
+        else None
+    )
+    sealed_digest = attachment.get("sha256") if isinstance(attachment, Mapping) else None
+    if (
+        not isinstance(sealed_digest, str)
+        or _SHA256_RE.fullmatch(sealed_digest) is None
+        or sealed_digest != _raw_sha256(floor_artifact_bytes)
+    ):
+        return FLOOR_ARTIFACT_SOURCE_HASH_MISMATCH
+    return None
+
+
 def _sidecar_block_id_set(cell: Mapping[str, Any]) -> set[str] | None:
     try:
         blocks = cell["comparative"]["common_mode_replay"]["inputs"]["blocks"]
@@ -1235,7 +1292,8 @@ def _source_precondition_errors(
     floor_artifact: object,
     replay_sidecar: object,
     *,
-    replay_sidecar_bytes: bytes | None = None,
+    floor_artifact_bytes: bytes,
+    replay_sidecar_bytes: bytes,
 ) -> list[str]:
     errors: list[str] = []
     if not isinstance(finalized_manifest, Mapping):
@@ -1262,6 +1320,11 @@ def _source_precondition_errors(
         or not floor_artifact.get("artifact_id")
     ):
         errors.append("floor_artifact: artifact_id is invalid")
+    floor_digest_error = _manifest_floor_artifact_digest_error(
+        finalized_manifest, floor_artifact_bytes
+    )
+    if floor_digest_error is not None:
+        errors.append(floor_digest_error)
     attachment_errors = _manifest_replay_sidecar_attachment_errors(
         finalized_manifest, replay_sidecar, replay_sidecar_bytes
     )
@@ -1322,13 +1385,24 @@ def _expected_global_fields(
 def validate_d165_closeout(
     value: Mapping[str, Any],
     *,
-    finalized_manifest: Mapping[str, Any] | None = None,
-    floor_artifact: Mapping[str, Any] | None = None,
-    replay_sidecar: Mapping[str, Any] | None = None,
-    finalized_manifest_bytes: bytes | None = None,
-    replay_sidecar_bytes: bytes | None = None,
+    finalized_manifest_bytes: bytes,
+    floor_artifact_bytes: bytes,
+    replay_sidecar_bytes: bytes,
 ) -> list[str]:
-    """Validate a close-out and reauthenticate its sources and supplied bytes."""
+    """Decode and reauthenticate the three exact source files for a close-out."""
+
+    try:
+        finalized_manifest = _decode_json_object_bytes(
+            finalized_manifest_bytes, label="finalized_manifest"
+        )
+        floor_artifact = _decode_json_object_bytes(
+            floor_artifact_bytes, label="floor_artifact"
+        )
+        replay_sidecar = _decode_json_object_bytes(
+            replay_sidecar_bytes, label="replay_sidecar"
+        )
+    except (TypeError, ValueError) as exc:
+        return [str(exc)]
 
     errors: list[str] = []
     if not _check_keys(value, _CLOSEOUT_TOP_KEYS, "closeout", errors):
@@ -1378,151 +1452,180 @@ def validate_d165_closeout(
 
     independent = value["independent_ratios"]
     common = value["comparative_common_mode_ratios"]
-    if not isinstance(independent, list) or len(independent) != 8:
-        errors.append("closeout.independent_ratios: must contain exactly eight records")
-        independent_records: list[Mapping[str, Any]] = []
-    else:
-        independent_records = [
-            record for record in independent if isinstance(record, Mapping)
-        ]
-        for index, record in enumerate(independent):
-            _validate_closeout_independent_record(
-                record, f"closeout.independent_ratios[{index}]", errors
+    independent_records: list[Mapping[str, Any]] = (
+        [record for record in independent if isinstance(record, Mapping)]
+        if isinstance(independent, list)
+        else []
+    )
+    common_records: list[Mapping[str, Any]] = (
+        [record for record in common if isinstance(record, Mapping)]
+        if isinstance(common, list)
+        else []
+    )
+    source_errors: list[str] = []
+    malformed_path = "closeout.independent_ratios"
+    try:
+        if not isinstance(independent, list) or len(independent) != 8:
+            errors.append(
+                "closeout.independent_ratios: must contain exactly eight records"
             )
-        census = [
-            (
+            independent_records = []
+        else:
+            for index, record in enumerate(independent):
+                _validate_closeout_independent_record(
+                    record, f"closeout.independent_ratios[{index}]", errors
+                )
+            census = [
+                (
+                    record.get("cell_id")
+                    if isinstance(record.get("cell_id"), str)
+                    else None,
+                    record.get("component"),
+                )
+                for record in independent_records
+            ]
+            if len(set(census)) != 8:
+                errors.append(
+                    "closeout.independent_ratios: duplicate or missing "
+                    "cell/component census"
+                )
+            component_counts = {
+                component: sum(
+                    record.get("component") == component
+                    for record in independent_records
+                )
+                for component in ("absolute", "comparative")
+            }
+            if component_counts != {"absolute": 4, "comparative": 4}:
+                errors.append(
+                    "closeout.independent_ratios: census must be 4 absolute + "
+                    "4 comparative"
+                )
+
+        malformed_path = "closeout.comparative_common_mode_ratios"
+        if not isinstance(common, list) or len(common) != 4:
+            errors.append(
+                "closeout.comparative_common_mode_ratios: must contain exactly "
+                "four records"
+            )
+            common_records = []
+        else:
+            for index, record in enumerate(common):
+                _validate_closeout_common_record(
+                    record,
+                    f"closeout.comparative_common_mode_ratios[{index}]",
+                    errors,
+                )
+            cell_ids = [
                 record.get("cell_id")
                 if isinstance(record.get("cell_id"), str)
-                else None,
-                record.get("component"),
-            )
-            for record in independent_records
-        ]
-        if len(set(census)) != 8:
-            errors.append(
-                "closeout.independent_ratios: duplicate or missing "
-                "cell/component census"
-            )
-        component_counts = {
-            component: sum(
-                record.get("component") == component
-                for record in independent_records
-            )
-            for component in ("absolute", "comparative")
-        }
-        if component_counts != {"absolute": 4, "comparative": 4}:
-            errors.append(
-                "closeout.independent_ratios: census must be 4 absolute + "
-                "4 comparative"
-            )
-    if not isinstance(common, list) or len(common) != 4:
-        errors.append(
-            "closeout.comparative_common_mode_ratios: must contain exactly four records"
-        )
-        common_records: list[Mapping[str, Any]] = []
-    else:
-        common_records = [record for record in common if isinstance(record, Mapping)]
-        for index, record in enumerate(common):
-            _validate_closeout_common_record(
-                record,
-                f"closeout.comparative_common_mode_ratios[{index}]",
-                errors,
-            )
-        cell_ids = [
-            record.get("cell_id")
-            if isinstance(record.get("cell_id"), str)
-            else None
-            for record in common_records
-        ]
-        if len(set(cell_ids)) != 4:
-            errors.append(
-                "closeout.comparative_common_mode_ratios: cell census must be unique"
-            )
-        independent_cell_ids = {
-            record.get("cell_id") for record in independent_records
-        }
-        if set(cell_ids) != independent_cell_ids:
-            errors.append("closeout: ordinary and common-mode cell census differs")
-
-    source_errors = _source_precondition_errors(
-        finalized_manifest,
-        floor_artifact,
-        replay_sidecar,
-        replay_sidecar_bytes=replay_sidecar_bytes,
-    )
-    floor_cells, _ = _floor_cell_map(floor_artifact)
-    census_errors = _closeout_census_errors(
-        independent_records, common_records, floor_cells
-    )
-    errors.extend(census_errors)
-    if len(independent_records) == 8 and len(common_records) == 4:
-        expected_independent: dict[tuple[str, str], Mapping[str, Any]] = {}
-        for cell_id, floor_cell in floor_cells.items():
-            for component, parent_key in (
-                ("absolute", "max_abs_residual_j"),
-                ("comparative", "max_abs_delta_j"),
-            ):
-                try:
-                    component_record = floor_cell[component]
-                    point = _point_unguarded_floor_from_component(
-                        component_record,
-                        parent_key=parent_key,
-                    )
-                    corner = float(
-                        component_record["corner_widened_unguarded_floor_j"]
-                    )
-                except (KeyError, TypeError, ValueError):
-                    continue
-                expected_independent[(cell_id, component)] = {
-                    "cell_id": cell_id,
-                    "component": component,
-                    **_build_independent_record(
-                        point_unguarded_floor_j=point,
-                        corner_widened_unguarded_floor_j=corner,
-                    ),
-                }
-        for record in independent_records:
-            key = (record.get("cell_id"), record.get("component"))
-            expected = expected_independent.get(key)
-            if expected is None:
-                if isinstance(key[0], str):
-                    errors.append(
-                        "closeout.independent_ratios.cell_id: "
-                        f"unknown {key[0]!r} for component {key[1]!r}"
-                    )
-            elif dict(record) != dict(expected):
+                else None
+                for record in common_records
+            ]
+            if len(set(cell_ids)) != 4:
                 errors.append(
-                    f"closeout.independent_ratios[{key!r}]: source operand mismatch"
+                    "closeout.comparative_common_mode_ratios: cell census must "
+                    "be unique"
                 )
+            independent_cell_ids = {
+                record.get("cell_id") for record in independent_records
+            }
+            if set(cell_ids) != independent_cell_ids:
+                errors.append("closeout: ordinary and common-mode cell census differs")
 
-        if not source_errors:
-            sidecar_cells = _sidecar_cell_map(replay_sidecar)
-            for record in common_records:
-                cell_id = record.get("cell_id")
-                sidecar_cell = (
-                    sidecar_cells.get(cell_id) if isinstance(cell_id, str) else None
-                )
-                if sidecar_cell is None:
-                    if isinstance(cell_id, str):
-                        errors.append(
-                            "closeout.comparative_common_mode_ratios.cell_id: "
-                            f"unknown {cell_id!r}"
+        malformed_path = "source.census_or_block_membership"
+        source_errors = _source_precondition_errors(
+            finalized_manifest,
+            floor_artifact,
+            replay_sidecar,
+            floor_artifact_bytes=floor_artifact_bytes,
+            replay_sidecar_bytes=replay_sidecar_bytes,
+        )
+        floor_cells, _ = _floor_cell_map(floor_artifact)
+        errors.extend(
+            _closeout_census_errors(
+                independent_records, common_records, floor_cells
+            )
+        )
+
+        malformed_path = "closeout.independent_ratios"
+        if len(independent_records) == 8 and len(common_records) == 4:
+            expected_independent: dict[tuple[str, str], Mapping[str, Any]] = {}
+            for cell_id, floor_cell in floor_cells.items():
+                for component, parent_key in (
+                    ("absolute", "max_abs_residual_j"),
+                    ("comparative", "max_abs_delta_j"),
+                ):
+                    try:
+                        component_record = floor_cell[component]
+                        point = _point_unguarded_floor_from_component(
+                            component_record,
+                            parent_key=parent_key,
                         )
-                    continue
-                try:
-                    result = sidecar_cell["comparative"]["common_mode_replay"][
-                        "result"
-                    ]
-                except (KeyError, TypeError):
-                    continue
-                expected = _expected_closeout_common_record(
-                    cell_id=cell_id, result=result
-                )
-                if dict(record) != expected:
+                        corner = float(
+                            component_record["corner_widened_unguarded_floor_j"]
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    expected_independent[(cell_id, component)] = {
+                        "cell_id": cell_id,
+                        "component": component,
+                        **_build_independent_record(
+                            point_unguarded_floor_j=point,
+                            corner_widened_unguarded_floor_j=corner,
+                        ),
+                    }
+            for record in independent_records:
+                key = (record.get("cell_id"), record.get("component"))
+                expected = expected_independent.get(key)
+                if expected is None:
+                    if isinstance(key[0], str):
+                        errors.append(
+                            "closeout.independent_ratios.cell_id: "
+                            f"unknown {key[0]!r} for component {key[1]!r}"
+                        )
+                elif dict(record) != dict(expected):
                     errors.append(
-                        "closeout.comparative_common_mode_ratios"
-                        f"[{cell_id!r}]: source result mismatch"
+                        f"closeout.independent_ratios[{key!r}]: source operand "
+                        "mismatch"
                     )
+
+            if not source_errors:
+                sidecar_cells = _sidecar_cell_map(replay_sidecar)
+                for record in common_records:
+                    cell_id = record.get("cell_id")
+                    sidecar_cell = (
+                        sidecar_cells.get(cell_id)
+                        if isinstance(cell_id, str)
+                        else None
+                    )
+                    if sidecar_cell is None:
+                        if isinstance(cell_id, str):
+                            errors.append(
+                                "closeout.comparative_common_mode_ratios.cell_id: "
+                                f"unknown {cell_id!r}"
+                            )
+                        continue
+                    try:
+                        result = sidecar_cell["comparative"][
+                            "common_mode_replay"
+                        ]["result"]
+                    except (KeyError, TypeError):
+                        continue
+                    expected = _expected_closeout_common_record(
+                        cell_id=cell_id, result=result
+                    )
+                    if dict(record) != expected:
+                        errors.append(
+                            "closeout.comparative_common_mode_ratios"
+                            f"[{cell_id!r}]: source result mismatch"
+                        )
+    except TypeError:
+        source_errors = [f"closeout_input_malformed: {malformed_path}"]
+
+    if len(independent_records) == 8 and len(common_records) == 4:
+        if source_errors and value["refusal_reason"] != source_errors[0]:
+            errors.append(source_errors[0])
         expected_globals = _expected_global_fields(
             independent_records, common_records, [*source_errors, *errors]
         )
